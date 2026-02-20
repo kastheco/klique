@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+
 	"github.com/kastheco/klique/app"
 	cmd2 "github.com/kastheco/klique/cmd"
 	"github.com/kastheco/klique/config"
 	"github.com/kastheco/klique/daemon"
+	initcmd "github.com/kastheco/klique/internal/initcmd"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
 	"github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/session/tmux"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 )
 
@@ -161,9 +162,33 @@ func init() {
 		panic(err)
 	}
 
+	var forceFlag bool
+	var cleanFlag bool
+
+	kqInitCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Configure agent harnesses, install superpowers, and scaffold project files",
+		Long: `Run an interactive wizard to:
+  1. Detect and select agent CLIs (claude, opencode, codex)
+  2. Configure agent roles (coder, reviewer, planner) with model and tuning
+  3. Map lifecycle phases to agent roles
+  4. Install superpowers skills into each harness
+  5. Write ~/.klique/config.toml and scaffold project-level agent files`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return initcmd.Run(initcmd.Options{
+				Force: forceFlag,
+				Clean: cleanFlag,
+			})
+		},
+	}
+
+	kqInitCmd.Flags().BoolVar(&forceFlag, "force", false, "Overwrite existing project scaffold files")
+	kqInitCmd.Flags().BoolVar(&cleanFlag, "clean", false, "Ignore existing config, start with factory defaults")
+
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(kqInitCmd)
 }
 
 func main() {
