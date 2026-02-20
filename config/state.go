@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os"
 	"path/filepath"
 )

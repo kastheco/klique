@@ -1,4 +1,4 @@
-module github.com/ByteMirror/hivemind
+module github.com/kastheco/klique
 
 go 1.24.4
 

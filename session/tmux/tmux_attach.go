@@ -3,7 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"io"
 	"os"
 	"sync"

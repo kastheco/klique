@@ -1,13 +1,13 @@
 .PHONY: run build test clean
 
 run: build
-	./hivemind $(ARGS)
+	./klique $(ARGS)
 
 build:
-	go build -o hivemind .
+	go build -o klique .
 
 test:
 	go test ./... -v
 
 clean:
-	rm -f hivemind
+	rm -f klique

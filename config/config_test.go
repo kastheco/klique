@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,34 +14,23 @@ import (
 
 // TestMain runs before all tests to set up the test environment
 func TestMain(m *testing.M) {
-	// Initialize the logger before any tests run
 	log.Initialize(false)
-	defer log.Close()
-
-	exitCode := m.Run()
-	os.Exit(exitCode)
+	code := m.Run()
+	log.Close()
+	os.Exit(code)
 }
 
 func TestGetClaudeCommand(t *testing.T) {
-	originalShell := os.Getenv("SHELL")
-	originalPath := os.Getenv("PATH")
-	defer func() {
-		os.Setenv("SHELL", originalShell)
-		os.Setenv("PATH", originalPath)
-	}()
-
 	t.Run("finds claude in PATH", func(t *testing.T) {
-		// Create a temporary directory with a mock claude executable
+		originalPath := os.Getenv("PATH")
 		tempDir := t.TempDir()
 		claudePath := filepath.Join(tempDir, "claude")
 
-		// Create a mock executable
 		err := os.WriteFile(claudePath, []byte("#!/bin/bash\necho 'mock claude'"), 0755)
 		require.NoError(t, err)
 
-		// Set PATH to include our temp directory
-		os.Setenv("PATH", tempDir+":"+originalPath)
-		os.Setenv("SHELL", "/bin/bash")
+		t.Setenv("PATH", tempDir+":"+originalPath)
+		t.Setenv("SHELL", "/bin/bash")
 
 		result, err := GetClaudeCommand()
 
@@ -50,10 +39,9 @@ func TestGetClaudeCommand(t *testing.T) {
 	})
 
 	t.Run("handles missing claude command", func(t *testing.T) {
-		// Set PATH to a directory that doesn't contain claude
 		tempDir := t.TempDir()
-		os.Setenv("PATH", tempDir)
-		os.Setenv("SHELL", "/bin/bash")
+		t.Setenv("PATH", tempDir)
+		t.Setenv("SHELL", "/bin/bash")
 
 		result, err := GetClaudeCommand()
 
@@ -63,17 +51,21 @@ func TestGetClaudeCommand(t *testing.T) {
 	})
 
 	t.Run("handles empty SHELL environment", func(t *testing.T) {
-		// Create a temporary directory with a mock claude executable
+		originalPath := os.Getenv("PATH")
+		originalShell := os.Getenv("SHELL")
 		tempDir := t.TempDir()
 		claudePath := filepath.Join(tempDir, "claude")
 
-		// Create a mock executable
 		err := os.WriteFile(claudePath, []byte("#!/bin/bash\necho 'mock claude'"), 0755)
 		require.NoError(t, err)
 
-		// Set PATH and unset SHELL
-		os.Setenv("PATH", tempDir+":"+originalPath)
+		t.Setenv("PATH", tempDir+":"+originalPath)
 		os.Unsetenv("SHELL")
+		t.Cleanup(func() {
+			if originalShell != "" {
+				os.Setenv("SHELL", originalShell)
+			}
+		})
 
 		result, err := GetClaudeCommand()
 
@@ -82,16 +74,13 @@ func TestGetClaudeCommand(t *testing.T) {
 	})
 
 	t.Run("handles alias parsing", func(t *testing.T) {
-		// Test core alias formats
 		aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
 
-		// Standard alias format
 		output := "claude: aliased to /usr/local/bin/claude"
 		matches := aliasRegex.FindStringSubmatch(output)
 		assert.Len(t, matches, 2)
 		assert.Equal(t, "/usr/local/bin/claude", matches[1])
 
-		// Direct path (no alias)
 		output = "/usr/local/bin/claude"
 		matches = aliasRegex.FindStringSubmatch(output)
 		assert.Len(t, matches, 0)
@@ -109,29 +98,81 @@ func TestDefaultConfig(t *testing.T) {
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.True(t, strings.HasSuffix(config.BranchPrefix, "/"))
 	})
-
 }
 
 func TestGetConfigDir(t *testing.T) {
 	t.Run("returns valid config directory", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+
 		configDir, err := GetConfigDir()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, configDir)
-		assert.True(t, strings.HasSuffix(configDir, ".hivemind"))
-
-		// Verify it's an absolute path
+		assert.True(t, strings.HasSuffix(configDir, ".klique"))
 		assert.True(t, filepath.IsAbs(configDir))
+	})
+
+	t.Run("migrates legacy .hivemind to .klique", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+
+		oldDir := filepath.Join(tempHome, ".hivemind")
+		require.NoError(t, os.MkdirAll(oldDir, 0755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, "config.json"),
+			[]byte(`{"auto_yes":true}`), 0644))
+
+		configDir, err := GetConfigDir()
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(configDir, ".klique"))
+
+		// Old dir should be gone
+		_, err = os.Stat(oldDir)
+		assert.True(t, os.IsNotExist(err))
+
+		// New dir should contain the migrated file with original contents intact
+		data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+		require.NoError(t, err)
+		assert.Equal(t, `{"auto_yes":true}`, string(data))
+	})
+
+	t.Run("skips migration when .klique already exists", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+
+		newDir := filepath.Join(tempHome, ".klique")
+		oldDir := filepath.Join(tempHome, ".hivemind")
+		require.NoError(t, os.MkdirAll(newDir, 0755))
+		require.NoError(t, os.MkdirAll(oldDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "config.json"), []byte(`{"auto_yes":false}`), 0644))
+
+		configDir, err := GetConfigDir()
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(configDir, ".klique"))
+
+		// Old dir should still exist with original contents untouched
+		_, err = os.Stat(oldDir)
+		assert.NoError(t, err)
+		data, err := os.ReadFile(filepath.Join(oldDir, "config.json"))
+		require.NoError(t, err)
+		assert.Equal(t, `{"auto_yes":false}`, string(data))
+	})
+
+	t.Run("no-ops when neither dir exists", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+
+		configDir, err := GetConfigDir()
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(configDir, ".klique"))
 	})
 }
 
 func TestLoadConfig(t *testing.T) {
 	t.Run("returns default config when file doesn't exist", func(t *testing.T) {
-		// Use a temporary home directory to avoid interfering with real config
-		originalHome := os.Getenv("HOME")
 		tempHome := t.TempDir()
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		t.Setenv("HOME", tempHome)
 
 		config := LoadConfig()
 
@@ -143,13 +184,11 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("loads valid config file", func(t *testing.T) {
-		// Create a temporary config directory
 		tempHome := t.TempDir()
-		configDir := filepath.Join(tempHome, ".hivemind")
+		configDir := filepath.Join(tempHome, ".klique")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
-		// Create a test config file
 		configPath := filepath.Join(configDir, ConfigFileName)
 		configContent := `{
 			"default_program": "test-claude",
@@ -160,10 +199,7 @@ func TestLoadConfig(t *testing.T) {
 		err = os.WriteFile(configPath, []byte(configContent), 0644)
 		require.NoError(t, err)
 
-		// Override HOME environment
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		t.Setenv("HOME", tempHome)
 
 		config := LoadConfig()
 
@@ -175,44 +211,32 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {
-		// Create a temporary config directory
 		tempHome := t.TempDir()
-		configDir := filepath.Join(tempHome, ".hivemind")
+		configDir := filepath.Join(tempHome, ".klique")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
-		// Create an invalid config file
 		configPath := filepath.Join(configDir, ConfigFileName)
 		invalidContent := `{"invalid": json content}`
 		err = os.WriteFile(configPath, []byte(invalidContent), 0644)
 		require.NoError(t, err)
 
-		// Override HOME environment
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		t.Setenv("HOME", tempHome)
 
 		config := LoadConfig()
 
-		// Should return default config when JSON is invalid
 		assert.NotNil(t, config)
 		assert.NotEmpty(t, config.DefaultProgram)
-		assert.False(t, config.AutoYes)                  // Default value
-		assert.Equal(t, 1000, config.DaemonPollInterval) // Default value
+		assert.False(t, config.AutoYes)
+		assert.Equal(t, 1000, config.DaemonPollInterval)
 	})
 }
 
 func TestSaveConfig(t *testing.T) {
 	t.Run("saves config to file", func(t *testing.T) {
-		// Create a temporary config directory
 		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
 
-		// Override HOME environment
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
-
-		// Create a test config
 		testConfig := &Config{
 			DefaultProgram:     "test-program",
 			AutoYes:            true,
@@ -223,13 +247,11 @@ func TestSaveConfig(t *testing.T) {
 		err := SaveConfig(testConfig)
 		assert.NoError(t, err)
 
-		// Verify the file was created
-		configDir := filepath.Join(tempHome, ".hivemind")
+		configDir := filepath.Join(tempHome, ".klique")
 		configPath := filepath.Join(configDir, ConfigFileName)
 
 		assert.FileExists(t, configPath)
 
-		// Load and verify the content
 		loadedConfig := LoadConfig()
 		assert.Equal(t, testConfig.DefaultProgram, loadedConfig.DefaultProgram)
 		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)

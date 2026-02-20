@@ -3,7 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
+	"github.com/kastheco/klique/config"
 	"time"
 )
 

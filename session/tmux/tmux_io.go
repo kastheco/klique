@@ -3,7 +3,7 @@ package tmux
 import (
 	"bytes"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os"
 	"os/exec"
 	"strconv"

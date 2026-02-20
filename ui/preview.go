@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
+	"github.com/kastheco/klique/session"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"

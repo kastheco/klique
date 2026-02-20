@@ -2,10 +2,10 @@ package app
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/keys"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/ui"
+	"github.com/kastheco/klique/config"
+	"github.com/kastheco/klique/keys"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/ui"
 	"path/filepath"
 	"sort"
 	"strings"

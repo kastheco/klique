@@ -2,8 +2,8 @@ package git
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/config"
+	"github.com/kastheco/klique/log"
 	"path/filepath"
 	"time"
 )

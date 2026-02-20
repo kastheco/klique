@@ -2,11 +2,11 @@ package app
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/keys"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/ui"
-	"github.com/ByteMirror/hivemind/ui/overlay"
+	"github.com/kastheco/klique/keys"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/klique/ui/overlay"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -449,7 +449,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.pendingPRToastID = m.toastManager.Loading("Creating PR...")
 					prToastID := m.pendingPRToastID
 					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
-						commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+						commitMsg := fmt.Sprintf("[klique] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 						worktree, err := selected.GetGitWorktree()
 						if err != nil {
 							return prErrorMsg{id: prToastID, err: err}
@@ -1010,7 +1010,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
 			// Default commit message with timestamp
-			commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+			commitMsg := fmt.Sprintf("[klique] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
 				return err

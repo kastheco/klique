@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
+	"github.com/kastheco/klique/session"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 	"github.com/creack/pty"
 )
 
-const lazygitTmuxPrefix = "hivemind_lazygit_"
+const lazygitTmuxPrefix = "klique_lazygit_"
 
 // GitPane manages an interactive lazygit subprocess inside a tmux session,
 // rendered via tmux capture-pane through an EmbeddedTerminal.
@@ -189,7 +189,7 @@ func tmuxSessionExists(name string) bool {
 // 'Q' (quit without cd), and Ctrl+C (quit-alt1). Users navigate back with
 // Escape instead.
 func lazygitOverrideConfig() string {
-	path := filepath.Join(os.TempDir(), "hivemind-lazygit-override.yml")
+	path := filepath.Join(os.TempDir(), "klique-lazygit-override.yml")
 	content := []byte("keybinding:\n  universal:\n    quit: ''\n    quit-alt1: ''\n    quitWithoutChangingDirectory: ''\n")
 	_ = os.WriteFile(path, content, 0644)
 	return path

@@ -46,7 +46,7 @@ const features = [
     icon: "\u{1F310}",
     title: "Universal Agent Support",
     description:
-      "Works with any CLI-based AI agent. If it runs in a terminal, Hivemind can manage it.",
+      "Works with any CLI-based AI agent. If it runs in a terminal, klique can manage it.",
   },
 ];
 
@@ -73,7 +73,7 @@ export default function PageContent() {
         <section className={styles.hero}>
           <PixelBee scale={3} bob className={styles.heroBee} />
           <GradientText as="h1" className={styles.heroTitle}>
-            hivemind
+            klique
           </GradientText>
           <p className={styles.heroSubtitle}>
             The agent-driven IDE for your terminal
@@ -86,7 +86,7 @@ export default function PageContent() {
               Install Now
             </a>
             <a
-              href="https://github.com/ByteMirror/hivemind"
+              href="https://github.com/kastheco/klique"
               target="_blank"
               rel="noopener noreferrer"
               className={styles.ctaSecondary}
@@ -114,7 +114,7 @@ export default function PageContent() {
         {/* Features */}
         <section className={styles.section}>
           <ScrollReveal>
-            <h2 className={styles.sectionTitle}>Why Hivemind?</h2>
+            <h2 className={styles.sectionTitle}>Why klique?</h2>
             <p className={styles.sectionSubtitle}>
               Everything you need to manage multiple AI coding agents from one
               place.
@@ -134,7 +134,7 @@ export default function PageContent() {
           <ScrollReveal className={styles.installSection}>
             <h2 className={styles.sectionTitle}>Get Started</h2>
             <p className={styles.sectionSubtitle}>
-              Install Hivemind in seconds. Works on macOS, Linux, and Windows.
+              Install klique in seconds. Works on macOS, Linux, and Windows.
             </p>
             <InstallTabs />
             <p className={styles.installPrereqs}>
@@ -147,17 +147,17 @@ export default function PageContent() {
         <footer className={styles.footer}>
           <div className={styles.footerGradientLine} />
           <p className={styles.footerText}>
-            &copy; {new Date().getFullYear()} Hivemind by{" "}
+            &copy; {new Date().getFullYear()} klique by{" "}
             <a
-              href="https://github.com/ByteMirror"
+              href="https://github.com/kastheco"
               target="_blank"
               rel="noopener noreferrer"
             >
-              ByteMirror
+              kastheco
             </a>
             . Licensed under{" "}
             <a
-              href="https://github.com/ByteMirror/hivemind/blob/main/LICENSE.md"
+              href="https://github.com/kastheco/klique/blob/main/LICENSE.md"
               target="_blank"
               rel="noopener noreferrer"
             >

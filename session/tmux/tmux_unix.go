@@ -3,7 +3,7 @@
 package tmux
 
 import (
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os"
 	"os/signal"
 	"syscall"

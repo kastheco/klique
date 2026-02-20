@@ -6,19 +6,19 @@ import styles from "./InstallTabs.module.css";
 const installMethods = [
   {
     label: "Homebrew",
-    command: "brew install ByteMirror/tap/hivemind",
+    command: "brew install kastheco/tap/klique",
   },
   {
     label: "Scoop",
-    command: "scoop bucket add bytemirror https://github.com/ByteMirror/scoop-bucket\nscoop install hivemind",
+    command: "scoop bucket add kastheco https://github.com/kastheco/scoop-bucket\nscoop install klique",
   },
   {
     label: "Go Install",
-    command: "go install github.com/ByteMirror/hivemind@latest",
+    command: "go install github.com/kastheco/klique@latest",
   },
   {
     label: "Shell Script",
-    command: "curl -fsSL https://raw.githubusercontent.com/ByteMirror/hivemind/main/install.sh | bash",
+    command: "curl -fsSL https://raw.githubusercontent.com/kastheco/klique/main/install.sh | bash",
   },
 ];
 

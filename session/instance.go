@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ByteMirror/hivemind/session/git"
-	"github.com/ByteMirror/hivemind/session/tmux"
+	"github.com/kastheco/klique/session/git"
+	"github.com/kastheco/klique/session/tmux"
 )
 
 type Status int
@@ -228,7 +228,7 @@ func (i *Instance) GetRepoPath() string {
 func (i *Instance) SetStatus(status Status) {
 	if i.Status == Running && status == Ready {
 		i.Notified = true
-		SendNotification("Hivemind", fmt.Sprintf("'%s' has finished", i.Title))
+		SendNotification("klique", fmt.Sprintf("'%s' has finished", i.Title))
 	}
 	if status == Running || status == Loading {
 		i.LastActiveAt = time.Now()

@@ -2,9 +2,9 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
+	"github.com/kastheco/klique/config"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -89,7 +89,7 @@ func RunDaemon(cfg *config.Config) error {
 
 // LaunchDaemon launches the daemon process.
 func LaunchDaemon() error {
-	// Find the claude squad binary.
+	// Find the klique binary.
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)

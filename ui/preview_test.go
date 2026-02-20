@@ -2,10 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/cmd/cmd_test"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/session/tmux"
+	"github.com/kastheco/klique/cmd/cmd_test"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/session/tmux"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +42,7 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 	sessionName := fmt.Sprintf("test-preview-%s-%d-%d", t.Name(), time.Now().UnixNano(), random)
 
 	// Clean up any existing tmux session
-	cleanupCmd := exec.Command("tmux", "kill-session", "-t", "hivemind_"+sessionName)
+	cleanupCmd := exec.Command("tmux", "kill-session", "-t", "klique_"+sessionName)
 	_ = cleanupCmd.Run() // Ignore errors if session doesn't exist
 
 	// Create instance

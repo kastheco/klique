@@ -21,24 +21,24 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Hivemind - Agent-Driven IDE for AI Pair Programming",
+  title: "klique - Agent-Driven IDE for AI Pair Programming",
   description:
     "A TUI-based agent-driven IDE that manages multiple AI agents (Claude Code, Codex, Aider, Gemini) in isolated workspaces, so you can work on multiple tasks simultaneously.",
   keywords: [
-    "hivemind", "tui", "ai", "ide", "agent", "terminal", "tmux",
+    "klique", "tui", "ai", "ide", "agent", "terminal", "tmux",
     "claude code", "codex", "aider", "pair programming",
   ],
-  authors: [{ name: "ByteMirror" }],
+  authors: [{ name: "kastheco" }],
   openGraph: {
-    title: "Hivemind",
+    title: "klique",
     description:
       "A TUI-based agent-driven IDE for managing multiple AI agents in isolated workspaces",
-    url: "https://github.com/ByteMirror/hivemind",
+    url: "https://github.com/kastheco/klique",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hivemind",
+    title: "klique",
     description:
       "A TUI-based agent-driven IDE for managing multiple AI agents in isolated workspaces",
   },

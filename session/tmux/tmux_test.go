@@ -2,7 +2,8 @@ package tmux
 
 import (
 	"fmt"
-	cmd2 "github.com/ByteMirror/hivemind/cmd"
+	cmd2 "github.com/kastheco/klique/cmd"
+	"github.com/kastheco/klique/log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -10,10 +11,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ByteMirror/hivemind/cmd/cmd_test"
+	"github.com/kastheco/klique/cmd/cmd_test"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	log.Initialize(false)
+	code := m.Run()
+	log.Close()
+	os.Exit(code)
+}
 
 type MockPtyFactory struct {
 	t *testing.T
@@ -72,9 +80,9 @@ func TestStartTmuxSession(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s claude", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s claude", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
-	require.Equal(t, "tmux attach-session -t hivemind_test-session",
+	require.Equal(t, "tmux attach-session -t klique_test-session",
 		cmd2.ToString(ptyFactory.cmds[1]))
 
 	require.Equal(t, 2, len(ptyFactory.files))
@@ -110,8 +118,61 @@ func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s claude --dangerously-skip-permissions", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s claude --dangerously-skip-permissions", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
+}
+
+func recordKilledSessions(killedSessions *[]string) func(cmd *exec.Cmd) error {
+	return func(cmd *exec.Cmd) error {
+		args := cmd.Args
+		// Only record sessions killed by kill-session, not other tmux subcommands
+		if len(args) >= 2 && args[1] == "kill-session" {
+			for i, arg := range args {
+				if arg == "-t" && i+1 < len(args) {
+					*killedSessions = append(*killedSessions, args[i+1])
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func TestCleanupSessions(t *testing.T) {
+	t.Run("kills klique, legacy hivemind, and lazygit sessions", func(t *testing.T) {
+		var killedSessions []string
+		cmdExec := cmd_test.MockCmdExec{
+			RunFunc: recordKilledSessions(&killedSessions),
+			OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+				output := "klique_session1: 1 windows (created Thu Feb 20 10:00:00 2026)\n" +
+					"klique_lazygit_session1: 1 windows (created Thu Feb 20 10:00:01 2026)\n" +
+					"hivemind_legacy: 1 windows (created Thu Feb 20 09:00:00 2026)\n" +
+					"unrelated_session: 1 windows (created Thu Feb 20 08:00:00 2026)\n"
+				return []byte(output), nil
+			},
+		}
+
+		err := CleanupSessions(cmdExec)
+		require.NoError(t, err)
+		require.Len(t, killedSessions, 3)
+		require.Contains(t, killedSessions, "klique_session1")
+		require.Contains(t, killedSessions, "klique_lazygit_session1")
+		require.Contains(t, killedSessions, "hivemind_legacy")
+	})
+
+	t.Run("leaves unrelated sessions alone", func(t *testing.T) {
+		var killedSessions []string
+		cmdExec := cmd_test.MockCmdExec{
+			RunFunc: recordKilledSessions(&killedSessions),
+			OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+				output := "unrelated_session: 1 windows (created Thu Feb 20 08:00:00 2026)\n"
+				return []byte(output), nil
+			},
+		}
+
+		err := CleanupSessions(cmdExec)
+		require.NoError(t, err)
+		require.Len(t, killedSessions, 0)
+	})
 }
 
 func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
@@ -137,6 +198,6 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s aider --model gpt-4", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s aider --model gpt-4", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }

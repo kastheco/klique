@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os"
 	"os/exec"
 	"os/user"
@@ -17,13 +17,29 @@ const (
 	defaultProgram = "claude"
 )
 
-// GetConfigDir returns the path to the application's configuration directory
+// GetConfigDir returns the path to the application's configuration directory.
+// On first run after a rename, it migrates ~/.hivemind to ~/.klique.
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".hivemind"), nil
+	newDir := filepath.Join(homeDir, ".klique")
+	oldDir := filepath.Join(homeDir, ".hivemind")
+
+	// One-time migration from legacy config directory
+	if _, err := os.Stat(newDir); os.IsNotExist(err) {
+		if _, err := os.Stat(oldDir); err == nil {
+			if renameErr := os.Rename(oldDir, newDir); renameErr != nil {
+				log.ErrorLog.Printf("failed to migrate %s to %s: %v", oldDir, newDir, renameErr)
+				// Migration failure is non-fatal: fall back to legacy dir so
+				// existing config remains accessible rather than starting fresh.
+				return oldDir, nil
+			}
+		}
+	}
+
+	return newDir, nil
 }
 
 // Config represents the application configuration

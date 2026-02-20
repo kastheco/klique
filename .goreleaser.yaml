@@ -1,7 +1,7 @@
 version: 2.9
 
 builds:
-  - binary: hivemind
+  - binary: klique
     goos:
       - darwin
       - linux
@@ -22,26 +22,26 @@ archives:
 
 brews:
   - repository:
-      owner: ByteMirror
+      owner: kastheco
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
-    name: hivemind
-    homepage: "https://github.com/ByteMirror/hivemind"
-    description: "Hivemind - A TUI-based agent-driven IDE for managing multiple AI agents"
+    name: klique
+    homepage: "https://github.com/kastheco/klique"
+    description: "klique - A TUI-based agent-driven IDE for managing multiple AI agents"
     license: "AGPL-3.0"
     install: |
-      bin.install "hivemind"
+      bin.install "klique"
     test: |
-      system "#{bin}/hivemind", "version"
+      system "#{bin}/klique", "version"
 
 scoops:
   - repository:
-      owner: ByteMirror
+      owner: kastheco
       name: scoop-bucket
       token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
-    name: hivemind
-    homepage: "https://github.com/ByteMirror/hivemind"
-    description: "Hivemind - A TUI-based agent-driven IDE for managing multiple AI agents"
+    name: klique
+    homepage: "https://github.com/kastheco/klique"
+    description: "klique - A TUI-based agent-driven IDE for managing multiple AI agents"
     license: AGPL-3.0
 
 release:

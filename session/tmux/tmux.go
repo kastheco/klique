@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/ByteMirror/hivemind/cmd"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/cmd"
+	"github.com/kastheco/klique/log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -57,11 +57,14 @@ type TmuxSession struct {
 	wg     *sync.WaitGroup
 }
 
-const TmuxPrefix = "hivemind_"
+const TmuxPrefix = "klique_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
-func toHivemindTmuxName(str string) string {
+// cleanupSessionsRe matches current klique_ sessions and legacy hivemind_ sessions.
+var cleanupSessionsRe = regexp.MustCompile(`(?:klique_|hivemind_).*:`)
+
+func toKliqueTmuxName(str string) string {
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
 	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
@@ -79,7 +82,7 @@ func NewTmuxSessionWithDeps(name string, program string, skipPermissions bool, p
 
 func newTmuxSession(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
-		sanitizedName:   toHivemindTmuxName(name),
+		sanitizedName:   toKliqueTmuxName(name),
 		program:         program,
 		skipPermissions: skipPermissions,
 		ptyFactory:      ptyFactory,
@@ -268,7 +271,8 @@ func (t *TmuxSession) DoesSessionExist() bool {
 	return t.cmdExec.Run(existsCmd) == nil
 }
 
-// CleanupSessions kills all tmux sessions that start with "session-"
+// CleanupSessions kills all tmux sessions that start with the klique prefix.
+// Also cleans up legacy "hivemind_" sessions from before the rename.
 func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions
 	cmd := exec.Command("tmux", "ls")
@@ -283,8 +287,7 @@ func CleanupSessions(cmdExec cmd.Executor) error {
 		return fmt.Errorf("failed to list tmux sessions: %v", err)
 	}
 
-	re := regexp.MustCompile(fmt.Sprintf(`%s.*:`, TmuxPrefix))
-	matches := re.FindAllString(string(output), -1)
+	matches := cleanupSessionsRe.FindAllString(string(output), -1)
 	for i, match := range matches {
 		matches[i] = match[:strings.Index(match, ":")]
 	}

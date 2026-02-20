@@ -2,7 +2,7 @@ package session
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session/git"
+	"github.com/kastheco/klique/session/git"
 	"time"
 )
 

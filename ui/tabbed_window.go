@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
 	"github.com/charmbracelet/lipgloss"
 )
 

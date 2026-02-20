@@ -2,8 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
 	"math"
 	"strings"
 	"time"

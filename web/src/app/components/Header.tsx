@@ -17,11 +17,11 @@ export default function Header() {
     <header className={`${styles.header} ${scrolled ? styles.scrolled : ""}`}>
       <a href="#" className={styles.logoWrapper}>
         <PixelBee scale={2} bob={false} />
-        <span className={styles.logo}>hivemind</span>
+        <span className={styles.logo}>klique</span>
       </a>
       <nav className={styles.nav}>
         <a
-          href="https://github.com/ByteMirror/hivemind"
+          href="https://github.com/kastheco/klique"
           target="_blank"
           rel="noopener noreferrer"
           className={styles.navLink}
@@ -29,7 +29,7 @@ export default function Header() {
           GitHub
         </a>
         <a
-          href="https://github.com/ByteMirror/hivemind#readme"
+          href="https://github.com/kastheco/klique#readme"
           target="_blank"
           rel="noopener noreferrer"
           className={styles.navLink}
@@ -37,7 +37,7 @@ export default function Header() {
           Docs
         </a>
         <a
-          href="https://github.com/ByteMirror/hivemind/releases"
+          href="https://github.com/kastheco/klique/releases"
           target="_blank"
           rel="noopener noreferrer"
           className={styles.navLink}

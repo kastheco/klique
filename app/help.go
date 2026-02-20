@@ -2,10 +2,10 @@ package app
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/ui"
-	"github.com/ByteMirror/hivemind/ui/overlay"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/klique/ui/overlay"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -35,7 +35,7 @@ func helpStart(instance *session.Instance) helpText {
 
 func (h helpTypeGeneral) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().Bold(true).Underline(true).Render(ui.GradientText("Hivemind", "#F0A868", "#7EC8D8")),
+		lipgloss.NewStyle().Bold(true).Underline(true).Render(ui.GradientText("klique", "#F0A868", "#7EC8D8")),
 		"",
 		"A terminal UI that manages multiple Claude Code (and other local agents) in separate workspaces.",
 		"",

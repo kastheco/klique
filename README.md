@@ -1,8 +1,8 @@
-# Hivemind [![CI](https://github.com/ByteMirror/hivemind/actions/workflows/build.yml/badge.svg)](https://github.com/ByteMirror/hivemind/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/ByteMirror/hivemind)](https://github.com/ByteMirror/hivemind/releases/latest) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+# klique [![CI](https://github.com/kastheco/klique/actions/workflows/build.yml/badge.svg)](https://github.com/kastheco/klique/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/kastheco/klique)](https://github.com/kastheco/klique/releases/latest) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 A TUI-based agent-driven IDE that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Amp](https://github.com/anthropics/amp) and other AI agents in isolated workspaces, so you can work on multiple tasks simultaneously.
 
-![Hivemind Screenshot](assets/screenshot.png)
+![klique Screenshot](assets/screenshot.png)
 
 ### Highlights
 - Complete tasks in the background (including yolo / auto-accept mode)
@@ -15,39 +15,39 @@ A TUI-based agent-driven IDE that manages multiple [Claude Code](https://github.
 #### Homebrew (macOS / Linux)
 
 ```bash
-brew install ByteMirror/tap/hivemind
+brew install kastheco/tap/klique
 ```
 
 #### Scoop (Windows)
 
 ```powershell
-scoop bucket add bytemirror https://github.com/ByteMirror/scoop-bucket
-scoop install hivemind
+scoop bucket add kastheco https://github.com/kastheco/scoop-bucket
+scoop install klique
 ```
 
 #### Go Install
 
 ```bash
-go install github.com/ByteMirror/hivemind@latest
+go install github.com/kastheco/klique@latest
 ```
 
 #### Install Script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ByteMirror/hivemind/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kastheco/klique/main/install.sh | bash
 ```
 
-This installs the `hivemind` binary in `~/.local/bin`.
+This installs the `klique` binary in `~/.local/bin`.
 
-To install with a custom name (e.g. `hm`):
+To install with a custom name (e.g. `kq`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ByteMirror/hivemind/main/install.sh | bash -s -- --name hm
+curl -fsSL https://raw.githubusercontent.com/kastheco/klique/main/install.sh | bash -s -- --name kq
 ```
 
 #### Download Binary
 
-Pre-built binaries for macOS, Linux, and Windows are available on the [Releases page](https://github.com/ByteMirror/hivemind/releases/latest).
+Pre-built binaries for macOS, Linux, and Windows are available on the [Releases page](https://github.com/kastheco/klique/releases/latest).
 
 ### Prerequisites
 
@@ -58,39 +58,39 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [Releases 
 
 ```
 Usage:
-  hivemind [flags]
-  hivemind [command]
+  klique [flags]
+  klique [command]
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   debug       Print debug information like config paths
   help        Help about any command
   reset       Reset all stored instances
-  version     Print the version number of hivemind
+  version     Print the version number of klique
 
 Flags:
   -y, --autoyes          [experimental] If enabled, all instances will automatically accept prompts
-  -h, --help             help for hivemind
+  -h, --help             help for klique
   -p, --program string   Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')
 ```
 
 Run the application with:
 
 ```bash
-hivemind
+klique
 ```
 
 NOTE: The default program is `claude` and we recommend using the latest version.
 
 <br />
 
-<b>Using Hivemind with other AI assistants:</b>
+<b>Using klique with other AI assistants:</b>
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
 - Launch with specific assistants:
-   - Codex: `hivemind -p "codex"`
-   - Aider: `hivemind -p "aider ..."`
-   - Gemini: `hivemind -p "gemini"`
-- Make this the default by modifying the config file (locate with `hivemind debug`)
+   - Codex: `klique -p "codex"`
+   - Aider: `klique -p "aider ..."`
+   - Gemini: `klique -p "gemini"`
+- Make this the default by modifying the config file (locate with `klique debug`)
 
 <br />
 
@@ -124,7 +124,7 @@ The menu at the bottom of the screen shows available commands:
 
 ### Attribution
 
-Hivemind is a fork of [claude-squad](https://github.com/smtg-ai/claude-squad) by smtg-ai.
+klique is a fork of [claude-squad](https://github.com/smtg-ai/claude-squad) by smtg-ai.
 
 ### License
 

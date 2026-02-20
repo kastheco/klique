@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/app"
-	cmd2 "github.com/ByteMirror/hivemind/cmd"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/daemon"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/session/git"
-	"github.com/ByteMirror/hivemind/session/tmux"
+	"github.com/kastheco/klique/app"
+	cmd2 "github.com/kastheco/klique/cmd"
+	"github.com/kastheco/klique/config"
+	"github.com/kastheco/klique/daemon"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/session/git"
+	"github.com/kastheco/klique/session/tmux"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -23,8 +23,8 @@ var (
 	autoYesFlag bool
 	daemonFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "hivemind",
-		Short: "Hivemind - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
+		Use:   "klique",
+		Short: "klique - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(daemonFlag)
@@ -47,7 +47,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: hivemind must be run from within a git repository")
+				return fmt.Errorf("error: klique must be run from within a git repository")
 			}
 
 			cfg := config.LoadConfig()
@@ -139,10 +139,10 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of hivemind",
+		Short: "Print the version number of klique",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("hivemind version %s\n", version)
-			fmt.Printf("https://github.com/ByteMirror/hivemind/releases/tag/v%s\n", version)
+			fmt.Printf("klique version %s\n", version)
+			fmt.Printf("https://github.com/kastheco/klique/releases/tag/v%s\n", version)
 		},
 	}
 )

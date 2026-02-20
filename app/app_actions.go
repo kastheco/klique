@@ -2,9 +2,9 @@ package app
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/ui"
-	"github.com/ByteMirror/hivemind/ui/overlay"
+	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/klique/ui/overlay"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"

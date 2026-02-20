@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session/git"
-	"github.com/ByteMirror/hivemind/session/tmux"
+	"github.com/kastheco/klique/log"
+	"github.com/kastheco/klique/session/git"
+	"github.com/kastheco/klique/session/tmux"
 )
 
 func (i *Instance) Preview() (string, error) {

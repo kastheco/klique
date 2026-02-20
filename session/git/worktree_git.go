@@ -2,7 +2,7 @@ package git
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"github.com/kastheco/klique/log"
 	"os/exec"
 	"strings"
 )
