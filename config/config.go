@@ -55,6 +55,10 @@ type Config struct {
 	// NotificationsEnabled controls whether macOS/Linux desktop notifications
 	// are sent when an agent finishes (Running -> Ready).
 	NotificationsEnabled *bool `json:"notifications_enabled,omitempty"`
+	// Profiles maps agent role names to their program and flags configuration.
+	Profiles map[string]AgentProfile `json:"profiles,omitempty"`
+	// PhaseRoles maps lifecycle phase names to agent role names.
+	PhaseRoles map[string]string `json:"phase_roles,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -166,6 +170,15 @@ func LoadConfig() *Config {
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.ErrorLog.Printf("failed to parse config file: %v", err)
 		return DefaultConfig()
+	}
+
+	// Overlay TOML config if it exists (TOML is authority for Profiles and PhaseRoles)
+	tomlResult, tomlErr := LoadTOMLConfig()
+	if tomlErr != nil {
+		log.WarningLog.Printf("failed to load TOML config: %v", tomlErr)
+	} else if tomlResult != nil {
+		config.Profiles = tomlResult.Profiles
+		config.PhaseRoles = tomlResult.PhaseRoles
 	}
 
 	return &config
