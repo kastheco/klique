@@ -263,5 +263,8 @@ func (i *Instance) Paused() bool {
 
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
 func (i *Instance) TmuxAlive() bool {
+	if i.tmuxSession == nil {
+		return false
+	}
 	return i.tmuxSession.DoesSessionExist()
 }
