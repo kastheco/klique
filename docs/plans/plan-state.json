@@ -39,5 +39,11 @@
   },
   "2026-02-21-fix-naming-and-toast-wrap.md": {
     "status": "ready"
+  },
+  "2026-02-21-generate-opencode-jsonc-design.md": {
+    "status": "ready"
+  },
+  "2026-02-21-generate-opencode-jsonc.md": {
+    "status": "ready"
   }
 }
