@@ -413,8 +413,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					instance.LastActivity = nil
 				}
 			}
-			// Deliver queued prompt once the instance reaches Ready for the first time.
-			if instance.QueuedPrompt != "" && instance.Status == session.Ready {
+			// Deliver queued prompt once the instance is idle (Ready or PromptDetected).
+			// PromptDetected covers programs like opencode whose idle marker ("Ask anything")
+			// keeps hasPrompt=true, preventing the Ready status path from ever being taken.
+			if instance.QueuedPrompt != "" && (instance.Status == session.Ready || instance.PromptDetected) {
 				if err := instance.SendPrompt(instance.QueuedPrompt); err != nil {
 					log.WarningLog.Printf("could not send queued prompt to %q: %v", instance.Title, err)
 				}
