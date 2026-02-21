@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var allTools = []string{"sg", "comby", "difft", "sd", "yq", "mlr", "glow", "typos", "scc", "tokei", "watchexec", "hyperfine", "procs", "mprocs"}
+
 func TestValidateRole(t *testing.T) {
 	t.Run("valid roles pass", func(t *testing.T) {
 		for _, role := range []string{"coder", "reviewer", "planner", "my-agent", "agent_1"} {
@@ -35,7 +37,7 @@ func TestScaffoldClaudeProject(t *testing.T) {
 		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
 	}
 
-	_, err := WriteClaudeProject(dir, agents, false)
+	_, err := WriteClaudeProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(dir, ".claude", "agents", "coder.md"))
@@ -49,7 +51,7 @@ func TestScaffoldOpenCodeProject(t *testing.T) {
 		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Enabled: true},
 	}
 
-	_, err := WriteOpenCodeProject(dir, agents, false)
+	_, err := WriteOpenCodeProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(dir, ".opencode", "agents", "coder.md"))
@@ -61,7 +63,7 @@ func TestScaffoldCodexProject(t *testing.T) {
 		{Role: "coder", Harness: "codex", Model: "gpt-5.3-codex", Enabled: true},
 	}
 
-	_, err := WriteCodexProject(dir, agents, false)
+	_, err := WriteCodexProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(dir, ".codex", "AGENTS.md"))
@@ -79,7 +81,7 @@ func TestScaffoldSkipsExisting(t *testing.T) {
 		{Role: "coder", Harness: "claude", Enabled: true},
 	}
 
-	results, err := WriteClaudeProject(dir, agents, false) // force=false
+	results, err := WriteClaudeProject(dir, agents, allTools, false) // force=false
 	require.NoError(t, err)
 
 	// File preserved
@@ -104,7 +106,7 @@ func TestScaffoldForceOverwrites(t *testing.T) {
 		{Role: "coder", Harness: "claude", Enabled: true},
 	}
 
-	results, err := WriteClaudeProject(dir, agents, true) // force=true
+	results, err := WriteClaudeProject(dir, agents, allTools, true) // force=true
 	require.NoError(t, err)
 
 	// Content overwritten
@@ -125,7 +127,7 @@ func TestScaffoldAll_MixedHarnesses(t *testing.T) {
 		{Role: "planner", Harness: "codex", Model: "gpt-5.3-codex", Enabled: true},
 	}
 
-	results, err := ScaffoldAll(dir, agents, false)
+	results, err := ScaffoldAll(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	// All three harness directories created
@@ -146,7 +148,7 @@ func TestScaffoldRejectsPathTraversalRole(t *testing.T) {
 		{Role: "../../../.bashrc", Harness: "claude", Enabled: true},
 	}
 
-	_, err := WriteClaudeProject(dir, agents, false)
+	_, err := WriteClaudeProject(dir, agents, allTools, false)
 	assert.Error(t, err)
 }
 
@@ -158,7 +160,7 @@ func TestScaffoldFiltersByHarness(t *testing.T) {
 		{Role: "reviewer", Harness: "opencode", Model: "anthropic/claude-opus-4-6", Enabled: true},
 	}
 
-	results, err := WriteClaudeProject(dir, agents, false)
+	results, err := WriteClaudeProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	// Only coder.md created (claude only)
@@ -175,7 +177,7 @@ func TestToolsReferenceInjected(t *testing.T) {
 			{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
 		}
 
-		_, err := WriteClaudeProject(dir, agents, false)
+		_, err := WriteClaudeProject(dir, agents, allTools, false)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
@@ -196,7 +198,7 @@ func TestToolsReferenceInjected(t *testing.T) {
 			{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Enabled: true},
 		}
 
-		_, err := WriteOpenCodeProject(dir, agents, false)
+		_, err := WriteOpenCodeProject(dir, agents, allTools, false)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(dir, ".opencode", "agents", "coder.md"))
@@ -211,7 +213,7 @@ func TestToolsReferenceInjected(t *testing.T) {
 			{Role: "coder", Harness: "codex", Model: "gpt-5.3-codex", Enabled: true},
 		}
 
-		_, err := WriteCodexProject(dir, agents, false)
+		_, err := WriteCodexProject(dir, agents, allTools, false)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(dir, ".codex", "AGENTS.md"))
@@ -226,12 +228,45 @@ func TestToolsReferenceInjected(t *testing.T) {
 			{Role: "coder", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
 		}
 
-		_, err := WriteClaudeProject(dir, agents, false)
+		_, err := WriteClaudeProject(dir, agents, allTools, false)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
 		require.NoError(t, err)
 		assert.NotContains(t, string(content), "{{MODEL}}")
 		assert.Contains(t, string(content), "claude-opus-4-6")
+	})
+
+	t.Run("filtered tools reference omits unselected tools", func(t *testing.T) {
+		dir := t.TempDir()
+		agents := []harness.AgentConfig{
+			{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+		}
+
+		_, err := WriteClaudeProject(dir, agents, []string{"sg", "difft"}, false)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "ast-grep")
+		assert.Contains(t, string(content), "difft")
+		assert.NotContains(t, string(content), "comby")
+		assert.NotContains(t, string(content), "typos")
+		assert.NotContains(t, string(content), "watchexec")
+	})
+
+	t.Run("empty tools selection produces no tools reference", func(t *testing.T) {
+		dir := t.TempDir()
+		agents := []harness.AgentConfig{
+			{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+		}
+
+		_, err := WriteClaudeProject(dir, agents, []string{}, false)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
+		require.NoError(t, err)
+		assert.NotContains(t, string(content), "ast-grep")
+		assert.NotContains(t, string(content), "Available CLI Tools")
 	})
 }
