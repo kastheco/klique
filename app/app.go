@@ -164,6 +164,11 @@ type home struct {
 
 	// previewTickCount counts preview ticks for throttled banner animation
 	previewTickCount int
+
+	// cachedPlanFile is the filename of the last rendered plan (for cache hit).
+	cachedPlanFile string
+	// cachedPlanRendered is the glamour-rendered markdown of cachedPlanFile.
+	cachedPlanRendered string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {

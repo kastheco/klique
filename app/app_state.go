@@ -584,9 +584,17 @@ func (m *home) spawnPlanSession(planFile string) (tea.Model, tea.Cmd) {
 }
 
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.
+// The rendered output is cached so repeated presses of 'v' don't re-run glamour.
 func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	planFile := m.sidebar.GetSelectedPlanFile()
 	if planFile == "" {
+		return m, nil
+	}
+
+	// Cache hit — reuse previously rendered content.
+	if planFile == m.cachedPlanFile && m.cachedPlanRendered != "" {
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		m.tabbedWindow.SetDocumentContent(m.cachedPlanRendered)
 		return m, nil
 	}
 
@@ -616,7 +624,9 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 		return m, m.handleError(fmt.Errorf("could not render markdown: %w", err))
 	}
 
-	// Switch to the preview tab and display the rendered markdown.
+	// Cache and display.
+	m.cachedPlanFile = planFile
+	m.cachedPlanRendered = rendered
 	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 	m.tabbedWindow.SetDocumentContent(rendered)
 	return m, nil

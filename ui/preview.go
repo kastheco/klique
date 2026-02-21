@@ -68,15 +68,14 @@ func (p *PreviewPane) setFallbackState(message string) {
 }
 
 // SetDocumentContent sets the preview to show a rendered document (e.g. plan markdown)
-// top-aligned with no centering, using the normal content path so scroll mode works.
-// Sets isDocument so the periodic UpdateContent tick won't overwrite the content.
+// using the viewport for scrollable display. Sets isDocument so the periodic
+// UpdateContent tick won't overwrite the content.
 func (p *PreviewPane) SetDocumentContent(content string) {
-	p.previewState = previewState{
-		fallback: false,
-		text:     content,
-	}
+	p.previewState = previewState{fallback: false}
 	p.isScrolling = false
 	p.isDocument = true
+	p.viewport.SetContent(content)
+	p.viewport.GotoTop()
 }
 
 // IsDocumentMode returns true when the preview is showing a static document.
@@ -280,8 +279,8 @@ func (p *PreviewPane) String() string {
 			Render(strings.Join(lines, ""))
 	}
 
-	// If in copy mode, use the viewport to display scrollable content
-	if p.isScrolling {
+	// If in document or scroll mode, use the viewport to display scrollable content
+	if p.isDocument || p.isScrolling {
 		return p.viewport.View()
 	}
 
@@ -310,6 +309,12 @@ func (p *PreviewPane) String() string {
 
 // ScrollUp scrolls up in the viewport
 func (p *PreviewPane) ScrollUp(instance *session.Instance) error {
+	// In document mode the viewport already has the content — just scroll it.
+	if p.isDocument {
+		p.viewport.LineUp(1)
+		return nil
+	}
+
 	if instance == nil || instance.Status == session.Paused {
 		return nil
 	}
@@ -343,6 +348,12 @@ func (p *PreviewPane) ScrollUp(instance *session.Instance) error {
 
 // ScrollDown scrolls down in the viewport
 func (p *PreviewPane) ScrollDown(instance *session.Instance) error {
+	// In document mode the viewport already has the content — just scroll it.
+	if p.isDocument {
+		p.viewport.LineDown(1)
+		return nil
+	}
+
 	if instance == nil || instance.Status == session.Paused {
 		return nil
 	}
