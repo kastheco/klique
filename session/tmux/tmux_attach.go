@@ -24,6 +24,9 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 	// The 2nd one returns when you press escape to Detach. It doesn't need to be
 	// in the waitgroup because is the goroutine doing the Detaching; it waits for
 	// all the other ones.
+	//
+	// Capture ctx locally so Detach/DetachSafely can nil t.ctx without racing.
+	ctx := t.ctx
 	go func() {
 		defer t.wg.Done()
 		_, _ = io.Copy(os.Stdout, t.ptmx)
@@ -31,7 +34,7 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 		// This could be due to normal detach or Ctrl-D
 		// Check if the context is done to determine if it was a normal detach
 		select {
-		case <-t.ctx.Done():
+		case <-ctx.Done():
 			// Normal detach, do nothing
 		default:
 			// If context is not done, it was likely an abnormal termination (Ctrl-D)
