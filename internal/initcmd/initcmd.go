@@ -69,7 +69,7 @@ func Run(opts Options) error {
 
 	agentConfigs := state.ToAgentConfigs()
 	fmt.Printf("\nScaffolding project: %s\n", projectDir)
-	results, err := scaffold.ScaffoldAll(projectDir, agentConfigs, opts.Force)
+	results, err := scaffold.ScaffoldAll(projectDir, agentConfigs, state.SelectedTools, opts.Force)
 	if err != nil {
 		return fmt.Errorf("scaffold: %w", err)
 	}

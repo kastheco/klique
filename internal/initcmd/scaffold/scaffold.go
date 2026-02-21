@@ -13,15 +13,19 @@ import (
 //go:embed templates
 var templates embed.FS
 
-// loadToolsReference reads the shared tools-reference template once.
-// Returns empty string on error (non-fatal -- agents work without it, but warns).
-func loadToolsReference() string {
+// loadFilteredToolsReference reads the shared tools-reference template and filters
+// it to include only the selected tools. Returns empty string when no tools are
+// selected or on error (non-fatal -- agents work without it, but warns).
+func loadFilteredToolsReference(selectedTools []string) string {
 	content, err := templates.ReadFile("templates/shared/tools-reference.md")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: tools-reference template missing from binary: %v\n", err)
 		return ""
 	}
-	return string(content)
+	if len(selectedTools) == 0 {
+		return ""
+	}
+	return FilterToolsReference(string(content), selectedTools)
 }
 
 // validateRole ensures a role name is safe for use in filesystem paths.
@@ -55,8 +59,8 @@ type WriteResult struct {
 
 // writePerRoleProject is the shared implementation for per-role harnesses (claude, opencode).
 // It scaffolds one .md file per agent role using templates at templates/<harnessName>/agents/<role>.md.
-func writePerRoleProject(dir, harnessName string, agents []harness.AgentConfig, force bool) ([]WriteResult, error) {
-	toolsRef := loadToolsReference()
+func writePerRoleProject(dir, harnessName string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
+	toolsRef := loadFilteredToolsReference(selectedTools)
 	agentDir := filepath.Join(dir, "."+harnessName, "agents")
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create .%s/agents: %w", harnessName, err)
@@ -91,17 +95,17 @@ func writePerRoleProject(dir, harnessName string, agents []harness.AgentConfig, 
 }
 
 // WriteClaudeProject scaffolds .claude/ project files.
-func WriteClaudeProject(dir string, agents []harness.AgentConfig, force bool) ([]WriteResult, error) {
-	return writePerRoleProject(dir, "claude", agents, force)
+func WriteClaudeProject(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
+	return writePerRoleProject(dir, "claude", agents, selectedTools, force)
 }
 
 // WriteOpenCodeProject scaffolds .opencode/ project files.
-func WriteOpenCodeProject(dir string, agents []harness.AgentConfig, force bool) ([]WriteResult, error) {
-	return writePerRoleProject(dir, "opencode", agents, force)
+func WriteOpenCodeProject(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
+	return writePerRoleProject(dir, "opencode", agents, selectedTools, force)
 }
 
 // WriteCodexProject scaffolds .codex/ project files.
-func WriteCodexProject(dir string, agents []harness.AgentConfig, force bool) ([]WriteResult, error) {
+func WriteCodexProject(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
 	for _, agent := range agents {
 		if agent.Harness != "codex" {
 			continue
@@ -111,7 +115,7 @@ func WriteCodexProject(dir string, agents []harness.AgentConfig, force bool) ([]
 		}
 	}
 
-	toolsRef := loadToolsReference()
+	toolsRef := loadFilteredToolsReference(selectedTools)
 	codexDir := filepath.Join(dir, ".codex")
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create .codex: %w", err)
@@ -136,7 +140,7 @@ func WriteCodexProject(dir string, agents []harness.AgentConfig, force bool) ([]
 }
 
 // ScaffoldAll writes project files for all harnesses that have at least one enabled agent.
-func ScaffoldAll(dir string, agents []harness.AgentConfig, force bool) ([]WriteResult, error) {
+func ScaffoldAll(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
 	var results []WriteResult
 
 	// Group agents by harness
@@ -145,7 +149,7 @@ func ScaffoldAll(dir string, agents []harness.AgentConfig, force bool) ([]WriteR
 		byHarness[a.Harness] = append(byHarness[a.Harness], a)
 	}
 
-	type scaffoldFn func(string, []harness.AgentConfig, bool) ([]WriteResult, error)
+	type scaffoldFn func(string, []harness.AgentConfig, []string, bool) ([]WriteResult, error)
 	scaffolders := map[string]scaffoldFn{
 		"claude":   WriteClaudeProject,
 		"opencode": WriteOpenCodeProject,
@@ -158,7 +162,7 @@ func ScaffoldAll(dir string, agents []harness.AgentConfig, force bool) ([]WriteR
 		if !ok {
 			continue
 		}
-		harnessResults, err := scaffolders[harnessName](dir, harnessAgents, force)
+		harnessResults, err := scaffolders[harnessName](dir, harnessAgents, selectedTools, force)
 		if err != nil {
 			return results, fmt.Errorf("scaffold %s: %w", harnessName, err)
 		}
