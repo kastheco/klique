@@ -31,7 +31,7 @@ func runHarnessStage(state *State) error {
 				Options(options...).
 				Value(&state.SelectedHarness),
 		),
-	)
+	).WithTheme(huh.ThemeCharm())
 
 	if err := form.Run(); err != nil {
 		return fmt.Errorf("harness selection: %w", err)
