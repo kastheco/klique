@@ -19,6 +19,7 @@ const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
 const ProgramGemini = "gemini"
+const ProgramOpenCode = "opencode"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
@@ -101,12 +102,31 @@ func isClaudeProgram(program string) bool {
 	return strings.HasSuffix(program, ProgramClaude)
 }
 
+// isAiderProgram returns true if the program string refers to Aider.
+func isAiderProgram(program string) bool {
+	return strings.HasPrefix(program, ProgramAider)
+}
+
+// isGeminiProgram returns true if the program string refers to Gemini.
+func isGeminiProgram(program string) bool {
+	return strings.HasPrefix(program, ProgramGemini)
+}
+
+// isOpenCodeProgram returns true if the program string refers to OpenCode.
+func isOpenCodeProgram(program string) bool {
+	return strings.HasSuffix(program, ProgramOpenCode)
+}
+
 type statusMonitor struct {
 	// Store hashes to save memory.
 	prevOutputHash []byte
 	// captureFailures counts consecutive capture-pane failures.
 	// After a threshold we stop logging every tick to avoid spam.
 	captureFailures int
+	// unchangedTicks counts consecutive ticks where the pane content hash is identical.
+	// HasUpdated only reports !updated after the count exceeds the debounce threshold,
+	// preventing false Running→Ready transitions during brief pauses (API waits, thinking).
+	unchangedTicks int
 }
 
 func newStatusMonitor() *statusMonitor {
@@ -196,39 +216,44 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if strings.HasSuffix(t.program, ProgramClaude) || strings.HasSuffix(t.program, ProgramAider) || strings.HasSuffix(t.program, ProgramGemini) {
+	if isClaudeProgram(t.program) || isAiderProgram(t.program) || isGeminiProgram(t.program) || isOpenCodeProgram(t.program) {
 		t.reportProgress(4, "Waiting for program to start...")
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		maxWaitTime := 30 * time.Second // Much longer timeout for slower systems
-		if !strings.HasSuffix(t.program, ProgramClaude) {
+
+		var searchString string
+		var tapFunc func() error // nil means no key tap needed (e.g. opencode)
+		maxWaitTime := 30 * time.Second
+
+		switch {
+		case isClaudeProgram(t.program):
+			searchString = "Do you trust the files in this folder?"
+			tapFunc = t.TapEnter
+		case isOpenCodeProgram(t.program):
+			// opencode shows its input placeholder once the TUI is ready; no tap needed.
+			searchString = "Ask anything"
+			tapFunc = nil
+		default: // aider / gemini
 			searchString = "Open documentation url for more info"
 			tapFunc = t.TapDAndEnter
-			maxWaitTime = 45 * time.Second // Aider/Gemini take longer to start
+			maxWaitTime = 45 * time.Second
 		}
 
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		// Use exponential backoff with longer timeout for reliability on slow systems
+		// Poll with exponential backoff until the ready string appears or we time out.
 		startTime := time.Now()
 		sleepDuration := 100 * time.Millisecond
-		attempt := 0
 
 		for time.Since(startTime) < maxWaitTime {
-			attempt++
 			time.Sleep(sleepDuration)
 			content, err := t.CapturePaneContent()
-			if err != nil {
-				// Session might not be ready yet, continue waiting
-			} else {
-				if strings.Contains(content, searchString) {
+			if err == nil && strings.Contains(content, searchString) {
+				if tapFunc != nil {
 					if err := tapFunc(); err != nil {
 						log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
 					}
-					break
 				}
+				break
 			}
 
-			// Exponential backoff with cap at 1 second
+			// Exponential backoff with cap at 1 second.
 			sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
 			if sleepDuration > time.Second {
 				sleepDuration = time.Second

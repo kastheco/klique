@@ -10,27 +10,27 @@ import (
 	"strings"
 )
 
-// TapEnter sends an enter keystroke to the tmux pane.
+// TapEnter sends an Enter keystroke to the tmux pane via tmux send-keys.
+// Using tmux send-keys is more reliable than raw PTY writes for TUI programs
+// (e.g. bubbletea-based CLIs like opencode) that manage their own input loop.
 func (t *TmuxSession) TapEnter() error {
-	_, err := t.ptmx.Write([]byte{0x0D})
-	if err != nil {
-		return fmt.Errorf("error sending enter keystroke to PTY: %w", err)
-	}
-	return nil
+	cmd := exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Enter")
+	return t.cmdExec.Run(cmd)
 }
 
-// TapDAndEnter sends 'D' followed by an enter keystroke to the tmux pane.
+// TapDAndEnter sends 'D' followed by Enter to the tmux pane.
+// Used for Aider's "Don't open documentation" prompt.
 func (t *TmuxSession) TapDAndEnter() error {
-	_, err := t.ptmx.Write([]byte{0x44, 0x0D})
-	if err != nil {
-		return fmt.Errorf("error sending enter keystroke to PTY: %w", err)
-	}
-	return nil
+	cmd := exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "D", "Enter")
+	return t.cmdExec.Run(cmd)
 }
 
+// SendKeys sends literal text to the tmux pane via tmux send-keys -l.
+// The -l flag transmits each character verbatim without key-binding interpretation,
+// making it equivalent to the user typing the text directly.
 func (t *TmuxSession) SendKeys(keys string) error {
-	_, err := t.ptmx.Write([]byte(keys))
-	return err
+	cmd := exec.Command("tmux", "send-keys", "-l", "-t", t.sanitizedName, keys)
+	return t.cmdExec.Run(cmd)
 }
 
 // HasUpdated checks if the tmux pane content has changed since the last tick. It also returns true if
@@ -49,18 +49,32 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	}
 	t.monitor.captureFailures = 0 // reset on success
 
-	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
-	if t.program == ProgramClaude {
+	// Detect when the program is idle and waiting for user input.
+	switch {
+	case isClaudeProgram(t.program):
 		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
-	} else if strings.HasPrefix(t.program, ProgramAider) {
+	case isAiderProgram(t.program):
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
-	} else if strings.HasPrefix(t.program, ProgramGemini) {
+	case isGeminiProgram(t.program):
 		hasPrompt = strings.Contains(content, "Yes, allow once")
+	case isOpenCodeProgram(t.program):
+		// opencode shows "Ask anything" as placeholder text in the input area when idle.
+		hasPrompt = strings.Contains(content, "Ask anything")
 	}
 
 	newHash := t.monitor.hash(content)
 	if !bytes.Equal(newHash, t.monitor.prevOutputHash) {
 		t.monitor.prevOutputHash = newHash
+		t.monitor.unchangedTicks = 0
+		return true, hasPrompt
+	}
+
+	// Content unchanged — only report !updated after a debounce threshold so that
+	// brief pauses (API waits, thinking between tool calls) don't cause false
+	// Running→Ready transitions. ~6 ticks × 500ms = 3s of stability required.
+	t.monitor.unchangedTicks++
+	if t.monitor.unchangedTicks < 6 {
+		// Still debouncing — report as updated to keep status as Running.
 		return true, hasPrompt
 	}
 	return false, hasPrompt
