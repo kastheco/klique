@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -248,6 +248,11 @@ func (w *TabbedWindow) SetActiveTab(tab int) {
 // GetActiveTab returns the currently active tab index.
 func (w *TabbedWindow) GetActiveTab() int {
 	return w.activeTab
+}
+
+// TickBanner advances the preview pane's banner animation frame.
+func (w *TabbedWindow) TickBanner() {
+	w.preview.TickBanner()
 }
 
 // IsPreviewInScrollMode returns true if the preview pane is in scroll mode

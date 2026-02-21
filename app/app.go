@@ -160,6 +160,9 @@ type home struct {
 	planState *planstate.PlanState
 	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
 	planStateDir string
+
+	// previewTickCount counts preview ticks for throttled banner animation
+	previewTickCount int
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -319,6 +322,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	case previewTickMsg:
 		cmd := m.instanceChanged()
+		// Advance banner animation every 10 ticks (~1s per frame)
+		m.previewTickCount++
+		if m.previewTickCount%10 == 0 {
+			m.tabbedWindow.TickBanner()
+		}
 		return m, tea.Batch(
 			cmd,
 			func() tea.Msg {

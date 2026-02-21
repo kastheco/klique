@@ -19,11 +19,16 @@ type PreviewPane struct {
 	previewState previewState
 	isScrolling  bool
 	viewport     viewport.Model
+
+	// bannerFrame tracks the animation frame for the idle banner dots.
+	bannerFrame int
 }
 
 type previewState struct {
 	// fallback is true if the preview pane is displaying fallback text
 	fallback bool
+	// fallbackMsg is the message shown below the banner in fallback mode
+	fallbackMsg string
 	// text is the text displayed in the preview pane
 	text string
 }
@@ -48,11 +53,26 @@ func (p *PreviewPane) SetSize(width, maxHeight int) {
 	p.viewport.Height = maxHeight
 }
 
-// setFallbackState sets the preview state with fallback text and a message
+// setFallbackState sets the preview state with the animated banner and a message below it.
 func (p *PreviewPane) setFallbackState(message string) {
 	p.previewState = previewState{
+		fallback:    true,
+		fallbackMsg: message,
+	}
+}
+
+// setFallbackContent sets the preview state with arbitrary centered content (no banner).
+func (p *PreviewPane) setFallbackContent(content string) {
+	p.previewState = previewState{
 		fallback: true,
-		text:     lipgloss.JoinVertical(lipgloss.Center, FallBackText, "", message),
+		text:     content,
+	}
+}
+
+// TickBanner advances the banner animation frame. Call from the app tick loop.
+func (p *PreviewPane) TickBanner() {
+	if p.previewState.fallback {
+		p.bannerFrame++
 	}
 }
 
@@ -60,7 +80,7 @@ func (p *PreviewPane) setFallbackState(message string) {
 func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	switch {
 	case instance == nil:
-		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
+		p.setFallbackState("No agents running, select a plan or create a 'n'ew one.")
 		return nil
 	case instance.Status == session.Loading:
 		// Real progress from instance startup stages
@@ -89,7 +109,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		}
 		progressText := fmt.Sprintf("%d%%", pct)
 
-		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
+		p.setFallbackContent(lipgloss.JoinVertical(lipgloss.Center,
 			"",
 			lipgloss.NewStyle().
 				Bold(true).
@@ -107,7 +127,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		))
 		return nil
 	case instance.Status == session.Paused:
-		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
+		p.setFallbackContent(lipgloss.JoinVertical(lipgloss.Center,
 			"Session is paused. Press 'r' to resume.",
 			"",
 			lipgloss.NewStyle().
@@ -167,11 +187,23 @@ func (p *PreviewPane) String() string {
 	}
 
 	if p.previewState.fallback {
+		// Build fallback text: either animated banner + message, or raw content
+		var fallbackText string
+		if p.previewState.fallbackMsg != "" {
+			// Banner mode: animated cursor + message
+			fallbackText = lipgloss.JoinVertical(lipgloss.Left, FallBackText(p.bannerFrame), "", p.previewState.fallbackMsg)
+		} else if p.previewState.text != "" {
+			// Content mode: loading spinner, paused state, etc.
+			fallbackText = p.previewState.text
+		} else {
+			fallbackText = FallBackText(p.bannerFrame)
+		}
+
 		// Calculate available height for fallback text
 		availableHeight := p.height - 3 - 4 // 2 for borders, 1 for margin, 1 for padding
 
 		// Count the number of lines in the fallback text
-		fallbackLines := len(strings.Split(p.previewState.text, "\n"))
+		fallbackLines := len(strings.Split(fallbackText, "\n"))
 
 		// Calculate padding needed above and below to center the content
 		totalPadding := availableHeight - fallbackLines
@@ -187,7 +219,7 @@ func (p *PreviewPane) String() string {
 		if topPadding > 0 {
 			lines = append(lines, strings.Repeat("\n", topPadding))
 		}
-		lines = append(lines, p.previewState.text)
+		lines = append(lines, fallbackText)
 		if bottomPadding > 0 {
 			lines = append(lines, strings.Repeat("\n", bottomPadding))
 		}
