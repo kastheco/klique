@@ -76,7 +76,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		if filled > barWidth {
 			filled = barWidth
 		}
-		bar := GradientBar(barWidth, filled, "#F0A868", "#7EC8D8")
+		bar := GradientBar(barWidth, filled, "#F25D94", "#7D56F4")
 
 		stepText := instance.LoadingMessage
 		if stepText == "" {
@@ -93,7 +93,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			"",
 			lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#F0A868")).
+				Foreground(lipgloss.Color("#F25D94")).
 				Render("Starting instance"),
 			"",
 			bar,
