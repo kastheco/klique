@@ -1,0 +1,116 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "disable": true
+    },
+    "plan": {
+      "disable": true
+    },
+    "chat": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow",
+          "{{HOME_DIR}}/.config/opencode/*": "allow",
+          "{{HOME_DIR}}/.config/opencode/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      "temperature": 0.3,
+      "textVerbosity": "medium"
+    },
+    "coder": {
+      "model": "{{CODER_MODEL}}",
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow",
+          "{{HOME_DIR}}/.config/opencode/*": "allow",
+          "{{HOME_DIR}}/.config/opencode/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": "allow"
+      },
+      {{CODER_EFFORT_LINE}}
+      "temperature": {{CODER_TEMP}},
+      "textVerbosity": "low"
+    },
+    "planner": {
+      "model": "{{PLANNER_MODEL}}",
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow",
+          "{{HOME_DIR}}/.config/opencode/*": "allow",
+          "{{HOME_DIR}}/.config/opencode/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": "allow"
+      },
+      {{PLANNER_EFFORT_LINE}}
+      "temperature": {{PLANNER_TEMP}},
+      "textVerbosity": "medium"
+    },
+    "reviewer": {
+      "model": "{{REVIEWER_MODEL}}",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      {{REVIEWER_EFFORT_LINE}}
+      "temperature": {{REVIEWER_TEMP}},
+      "textVerbosity": "medium"
+    }
+  }
+}
