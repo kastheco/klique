@@ -48,7 +48,18 @@ func runPhaseStage(state *State, existing *config.TOMLConfigResult) error {
 		phaseValues[i] = state.PhaseMapping[phase]
 	}
 
+	// Build summary of configured agents
+	summary := BuildProgressNote(state.Agents, len(state.Agents))
+
 	var fields []huh.Field
+
+	// Note header showing agent summary
+	fields = append(fields,
+		huh.NewNote().
+			Title("Map lifecycle phases to agents").
+			Description(summary),
+	)
+
 	for i, phase := range phases {
 		fields = append(fields,
 			huh.NewSelect[string]().
@@ -59,9 +70,8 @@ func runPhaseStage(state *State, existing *config.TOMLConfigResult) error {
 	}
 
 	form := huh.NewForm(
-		huh.NewGroup(fields...).
-			Title("Map lifecycle phases to agents"),
-	)
+		huh.NewGroup(fields...),
+	).WithTheme(huh.ThemeCharm())
 
 	if err := form.Run(); err != nil {
 		return fmt.Errorf("phase mapping: %w", err)

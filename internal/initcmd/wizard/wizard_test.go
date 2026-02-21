@@ -114,5 +114,42 @@ func TestPrePopulateFromExisting(t *testing.T) {
 	}
 
 	assert.Equal(t, "opencode", agents[0].Harness) // coder got pre-populated
-	assert.Equal(t, "claude", agents[1].Harness)    // reviewer got default
+	assert.Equal(t, "claude", agents[1].Harness)   // reviewer got default
+}
+
+func TestBuildProgressNote(t *testing.T) {
+	agents := []AgentState{
+		{Role: "coder", Harness: "opencode", Model: "claude-sonnet-4-6", Effort: "high", Enabled: true},
+		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Effort: "high", Enabled: true},
+		{Role: "planner", Harness: "codex", Model: "", Effort: "", Enabled: true},
+	}
+
+	t.Run("first agent shows current marker", func(t *testing.T) {
+		note := BuildProgressNote(agents, 0)
+		assert.Contains(t, note, "▸ coder")
+		assert.Contains(t, note, "○ reviewer")
+		assert.Contains(t, note, "○ planner")
+	})
+
+	t.Run("middle agent shows completed first", func(t *testing.T) {
+		note := BuildProgressNote(agents, 1)
+		assert.Contains(t, note, "✓ coder")
+		assert.Contains(t, note, "opencode")
+		assert.Contains(t, note, "claude-sonnet-4-6")
+		assert.Contains(t, note, "▸ reviewer")
+		assert.Contains(t, note, "○ planner")
+	})
+
+	t.Run("last agent shows all completed", func(t *testing.T) {
+		note := BuildProgressNote(agents, 2)
+		assert.Contains(t, note, "✓ coder")
+		assert.Contains(t, note, "✓ reviewer")
+		assert.Contains(t, note, "▸ planner")
+	})
+
+	t.Run("disabled agent shows skip marker", func(t *testing.T) {
+		agents[0].Enabled = false
+		note := BuildProgressNote(agents, 1)
+		assert.Contains(t, note, "⊘ coder")
+	})
 }

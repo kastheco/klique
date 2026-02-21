@@ -84,61 +84,91 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		}
 	}
 
-	// --- Form 1: Harness + Enabled ---
-	form1 := huh.NewForm(huh.NewGroup(
+	// --- Build all fields for a single stacked form ---
+	var fields []huh.Field
+
+	// Progress note header
+	fields = append(fields,
+		huh.NewNote().
+			Title(fmt.Sprintf("Configure: %s", agent.Role)).
+			Description(BuildProgressNote(state.Agents, idx)),
+	)
+
+	// Harness select
+	fields = append(fields,
 		huh.NewSelect[string]().
-			Title(fmt.Sprintf("Configure agent: %s - Harness", agent.Role)).
+			Title("Harness").
 			Options(harnessOpts...).
 			Value(&agent.Harness),
+	)
+
+	// Enabled toggle
+	fields = append(fields,
 		huh.NewConfirm().
 			Title("Enabled").
 			Value(&agent.Enabled),
-	))
-	if err := form1.Run(); err != nil {
+	)
+
+	form := huh.NewForm(
+		huh.NewGroup(fields...),
+	).WithTheme(huh.ThemeCharm())
+
+	if err := form.Run(); err != nil {
 		return err
 	}
 
+	// If disabled, skip model/temp/effort
 	if !agent.Enabled {
 		return nil
 	}
 
-	// Resolve harness after user selection (may have changed in Form 1)
+	// Resolve harness after user selection (may have changed)
 	h := state.Registry.Get(agent.Harness)
 	if h == nil {
 		return fmt.Errorf("unknown harness %q for agent %q", agent.Harness, agent.Role)
 	}
 
-	// --- Form 2: Model + Temperature ---
+	// --- Build model + settings form ---
+	var settingsFields []huh.Field
+
+	// Updated progress note (harness now chosen)
+	settingsFields = append(settingsFields,
+		huh.NewNote().
+			Title(fmt.Sprintf("Configure: %s (%s)", agent.Role, agent.Harness)).
+			Description(BuildProgressNote(state.Agents, idx)),
+	)
+
+	// Model select -- filterable with capped height for large lists
 	models := modelCache[agent.Harness]
-
-	var form2Fields []huh.Field
-
 	if len(models) > 1 {
 		var modelOpts []huh.Option[string]
 		for _, m := range models {
 			modelOpts = append(modelOpts, huh.NewOption(m, m))
 		}
-		form2Fields = append(form2Fields,
+		settingsFields = append(settingsFields,
 			huh.NewSelect[string]().
 				Title("Model").
 				Options(modelOpts...).
-				Value(&agent.Model),
+				Value(&agent.Model).
+				Height(8).
+				Filtering(true),
 		)
 	} else {
 		if agent.Model == "" && len(models) > 0 {
 			agent.Model = models[0]
 		}
-		form2Fields = append(form2Fields,
+		settingsFields = append(settingsFields,
 			huh.NewInput().
 				Title("Model").
 				Value(&agent.Model),
 		)
 	}
 
+	// Temperature (if harness supports it)
 	if h.SupportsTemperature() {
-		form2Fields = append(form2Fields,
+		settingsFields = append(settingsFields,
 			huh.NewInput().
-				Title("Temperature (empty = harness default)").
+				Title("Temperature (empty = default)").
 				Placeholder("e.g. 0.7").
 				Value(&agent.Temperature).
 				Validate(func(s string) error {
@@ -153,12 +183,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		)
 	}
 
-	form2 := huh.NewForm(huh.NewGroup(form2Fields...))
-	if err := form2.Run(); err != nil {
-		return err
-	}
-
-	// --- Form 3: Effort ---
+	// Effort (if harness supports it)
 	if h.SupportsEffort() {
 		levels := h.ListEffortLevels(agent.Model)
 		var effortOpts []huh.Option[string]
@@ -169,17 +194,17 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 			}
 			effortOpts = append(effortOpts, huh.NewOption(label, lvl))
 		}
-
-		form3 := huh.NewForm(huh.NewGroup(
+		settingsFields = append(settingsFields,
 			huh.NewSelect[string]().
 				Title("Effort").
 				Options(effortOpts...).
 				Value(&agent.Effort),
-		))
-		if err := form3.Run(); err != nil {
-			return err
-		}
+		)
 	}
 
-	return nil
+	settingsForm := huh.NewForm(
+		huh.NewGroup(settingsFields...),
+	).WithTheme(huh.ThemeCharm())
+
+	return settingsForm.Run()
 }
