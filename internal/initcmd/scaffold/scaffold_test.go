@@ -420,3 +420,135 @@ func TestScaffoldAll_IncludesSkills(t *testing.T) {
 	}
 	assert.Greater(t, skillResults, 0)
 }
+
+func TestWriteOpenCodeProject_GeneratesConfig(t *testing.T) {
+	dir := t.TempDir()
+	temp := 0.1
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: &temp, Effort: "medium", Enabled: true},
+		{Role: "planner", Harness: "opencode", Model: "anthropic/claude-opus-4-6", Temperature: ptrFloat(0.5), Effort: "max", Enabled: true},
+		{Role: "reviewer", Harness: "opencode", Model: "openai/gpt-5.3-codex", Temperature: ptrFloat(0.2), Effort: "xhigh", Enabled: true},
+	}
+
+	results, err := WriteOpenCodeProject(dir, agents, allTools, false)
+	require.NoError(t, err)
+
+	// Config file created
+	configPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	assert.FileExists(t, configPath)
+
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	s := string(content)
+
+	// Schema present
+	assert.Contains(t, s, `"$schema": "https://opencode.ai/config.json"`)
+
+	// Disabled built-in agents
+	assert.Contains(t, s, `"build"`)
+	assert.Contains(t, s, `"plan"`)
+	assert.Contains(t, s, `"disable": true`)
+
+	// Chat agent with fixed defaults
+	assert.Contains(t, s, `"chat"`)
+	assert.Contains(t, s, `"anthropic/claude-sonnet-4-6"`)
+
+	// Wizard-configured agents have correct models
+	assert.Contains(t, s, `"anthropic/claude-opus-4-6"`)
+	assert.Contains(t, s, `"openai/gpt-5.3-codex"`)
+
+	// Temperature rendered as bare numbers (no quotes)
+	assert.Contains(t, s, "0.1")
+	assert.Contains(t, s, "0.5")
+	assert.Contains(t, s, "0.2")
+
+	// Effort values present
+	assert.Contains(t, s, `"reasoningEffort": "medium"`)
+	assert.Contains(t, s, `"reasoningEffort": "max"`)
+	assert.Contains(t, s, `"reasoningEffort": "xhigh"`)
+
+	// No raw placeholders left
+	assert.NotContains(t, s, "{{")
+	assert.NotContains(t, s, "}}")
+
+	// Dynamic paths resolved (home dir and project dir)
+	homeDir, _ := os.UserHomeDir()
+	assert.Contains(t, s, homeDir)
+	assert.Contains(t, s, dir)
+
+	// Config is in the results list
+	var found bool
+	for _, r := range results {
+		if r.Path == ".opencode/opencode.jsonc" {
+			found = true
+			assert.True(t, r.Created)
+		}
+	}
+	assert.True(t, found, "opencode.jsonc should be in results")
+}
+
+func TestWriteOpenCodeProject_NoEffort(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: ptrFloat(0.1), Effort: "", Enabled: true},
+	}
+
+	_, err := WriteOpenCodeProject(dir, agents, nil, false)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	s := string(content)
+
+	// Coder block should NOT have reasoningEffort line
+	coderIdx := strings.Index(s, `"coder"`)
+	require.Greater(t, coderIdx, 0)
+	// Look at the next ~500 chars after "coder" for the effort line
+	coderSection := s[coderIdx:min(coderIdx+500, len(s))]
+	assert.NotContains(t, coderSection, "reasoningEffort")
+}
+
+func TestWriteOpenCodeProject_NoTemp(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: nil, Effort: "medium", Enabled: true},
+	}
+
+	_, err := WriteOpenCodeProject(dir, agents, nil, false)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	s := string(content)
+
+	// Coder block should NOT have temperature line
+	coderIdx := strings.Index(s, `"coder"`)
+	require.Greater(t, coderIdx, 0)
+	coderSection := s[coderIdx:min(coderIdx+500, len(s))]
+	assert.NotContains(t, coderSection, "temperature")
+}
+
+func TestWriteOpenCodeProject_SkipsNonOpencodeAgents(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: ptrFloat(0.1), Effort: "medium", Enabled: true},
+		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
+	}
+
+	_, err := WriteOpenCodeProject(dir, agents, nil, false)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	s := string(content)
+
+	// Coder block present (opencode harness)
+	assert.Contains(t, s, `"coder"`)
+	assert.Contains(t, s, `"anthropic/claude-sonnet-4-6"`)
+
+	// Reviewer block removed (claude harness, not opencode)
+	assert.NotContains(t, s, `"reviewer"`)
+	assert.NotContains(t, s, `"claude-opus-4-6"`)
+}
+
+func ptrFloat(f float64) *float64 { return &f }

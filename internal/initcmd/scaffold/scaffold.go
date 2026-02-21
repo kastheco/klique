@@ -100,9 +100,159 @@ func WriteClaudeProject(dir string, agents []harness.AgentConfig, selectedTools 
 	return writePerRoleProject(dir, "claude", agents, selectedTools, force)
 }
 
-// WriteOpenCodeProject scaffolds .opencode/ project files.
+// renderOpenCodeConfig reads the embedded opencode.jsonc template and substitutes
+// wizard-collected values (model, temperature, effort) and dynamic paths (home dir,
+// project dir). Agent blocks for roles not using the opencode harness are removed.
+func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, error) {
+	content, err := templates.ReadFile("templates/opencode/opencode.jsonc")
+	if err != nil {
+		return "", fmt.Errorf("read opencode.jsonc template: %w", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get home dir: %w", err)
+	}
+
+	rendered := string(content)
+	rendered = strings.ReplaceAll(rendered, "{{HOME_DIR}}", homeDir)
+	rendered = strings.ReplaceAll(rendered, "{{PROJECT_DIR}}", dir)
+
+	// Build lookup of opencode agents by role
+	agentByRole := make(map[string]harness.AgentConfig)
+	for _, a := range agents {
+		if a.Harness == "opencode" {
+			agentByRole[a.Role] = a
+		}
+	}
+
+	// Substitute per-role placeholders for wizard-configurable agents
+	for _, role := range []string{"coder", "planner", "reviewer"} {
+		upper := strings.ToUpper(role)
+		agent, ok := agentByRole[role]
+		if !ok {
+			// Remove entire agent block for this role
+			rendered = removeJSONBlock(rendered, role)
+			continue
+		}
+
+		rendered = strings.ReplaceAll(rendered, "{{"+upper+"_MODEL}}", agent.Model)
+
+		// Temperature: bare number or remove line
+		if agent.Temperature != nil {
+			rendered = strings.ReplaceAll(rendered, "{{"+upper+"_TEMP}}", fmt.Sprintf("%g", *agent.Temperature))
+		} else {
+			rendered = removeLine(rendered, "{{"+upper+"_TEMP}}")
+		}
+
+		// Effort: full line or remove
+		if agent.Effort != "" {
+			rendered = strings.ReplaceAll(rendered, "{{"+upper+"_EFFORT_LINE}}", fmt.Sprintf(`"reasoningEffort": "%s",`, agent.Effort))
+		} else {
+			rendered = removeLine(rendered, "{{"+upper+"_EFFORT_LINE}}")
+		}
+	}
+
+	return rendered, nil
+}
+
+// removeLine removes any line containing the given substring.
+func removeLine(s, substr string) string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		if !strings.Contains(line, substr) {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// removeJSONBlock removes a top-level agent block like `"role": { ... }` from the
+// JSONC content. Uses brace counting to find the matching closing brace.
+func removeJSONBlock(s, role string) string {
+	lines := strings.Split(s, "\n")
+	marker := fmt.Sprintf(`"%s":`, role)
+
+	startIdx := -1
+	for i, line := range lines {
+		if strings.Contains(strings.TrimSpace(line), marker) {
+			startIdx = i
+			break
+		}
+	}
+	if startIdx == -1 {
+		return s
+	}
+
+	// Find matching closing brace via depth counting
+	depth := 0
+	endIdx := startIdx
+	for i := startIdx; i < len(lines); i++ {
+		for _, c := range lines[i] {
+			if c == '{' {
+				depth++
+			} else if c == '}' {
+				depth--
+			}
+		}
+		if depth == 0 {
+			endIdx = i
+			break
+		}
+	}
+
+	// Remove lines [startIdx..endIdx] inclusive
+	result := make([]string, 0, len(lines)-(endIdx-startIdx+1))
+	result = append(result, lines[:startIdx]...)
+	result = append(result, lines[endIdx+1:]...)
+
+	return strings.Join(result, "\n")
+}
+
+// WriteOpenCodeProject scaffolds .opencode/ project files: agent prompts and opencode.jsonc.
 func WriteOpenCodeProject(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
-	return writePerRoleProject(dir, "opencode", agents, selectedTools, force)
+	// Scaffold agent .md files (existing behavior)
+	results, err := writePerRoleProject(dir, "opencode", agents, selectedTools, force)
+	if err != nil {
+		return nil, err
+	}
+
+	// Also scaffold the chat agent prompt (always, not wizard-dependent)
+	toolsRef := loadFilteredToolsReference(selectedTools)
+	chatContent, err := templates.ReadFile("templates/opencode/agents/chat.md")
+	if err == nil {
+		chatAgent := harness.AgentConfig{Role: "chat", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6"}
+		rendered := renderTemplate(string(chatContent), chatAgent, toolsRef)
+		chatDest := filepath.Join(dir, ".opencode", "agents", "chat.md")
+		written, writeErr := writeFile(chatDest, []byte(rendered), force)
+		if writeErr != nil {
+			return nil, writeErr
+		}
+		rel, relErr := filepath.Rel(dir, chatDest)
+		if relErr != nil {
+			rel = chatDest
+		}
+		results = append(results, WriteResult{Path: rel, Created: written})
+	}
+
+	// Generate opencode.jsonc from template
+	configContent, err := renderOpenCodeConfig(dir, agents)
+	if err != nil {
+		return nil, fmt.Errorf("render opencode.jsonc: %w", err)
+	}
+
+	configDest := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	written, err := writeFile(configDest, []byte(configContent), force)
+	if err != nil {
+		return nil, fmt.Errorf("write opencode.jsonc: %w", err)
+	}
+	rel, relErr := filepath.Rel(dir, configDest)
+	if relErr != nil {
+		rel = configDest
+	}
+	results = append(results, WriteResult{Path: rel, Created: written})
+
+	return results, nil
 }
 
 // WriteCodexProject scaffolds .codex/ project files.
