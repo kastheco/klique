@@ -268,9 +268,15 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	listWidth := int(float32(msg.Width) * 0.20)
 	tabsWidth := msg.Width - sidebarWidth - listWidth
 
-	// Menu takes 10% of height, list and window take 90%
-	contentHeight := int(float32(msg.Height) * 0.9)
-	menuHeight := msg.Height - contentHeight
+	// Keep the keybind rail compact and give the saved rows to the three columns.
+	menuHeight := 1
+	if msg.Height < 2 {
+		menuHeight = 0
+	}
+	contentHeight := msg.Height - menuHeight
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
 	m.toastManager.SetSize(msg.Width, msg.Height)
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)

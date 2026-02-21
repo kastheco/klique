@@ -78,9 +78,9 @@ const activeTabText = "2 Active"
 // list's top-left corner) hits a filter tab. Returns the filter and true if a tab was
 // clicked, or false if the click was outside the tab area.
 func (l *List) HandleTabClick(localX, localY int) (StatusFilter, bool) {
-	// The list String() starts with 2 newlines, then the tab row, then 2 more
-	// newlines. Accept clicks on rows 1-3 to cover the tab area generously,
-	// since the exact row depends on how lipgloss.Place renders the output.
+	// The tab row is rendered near the top (inside the bordered panel). Accept
+	// clicks on rows 1-3 to cover the tab area generously, since the exact row
+	// depends on how lipgloss.Place renders the output.
 	if localY < 1 || localY > 3 {
 		return 0, false
 	}

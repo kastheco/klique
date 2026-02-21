@@ -285,9 +285,9 @@ func (w *TabbedWindow) IsPreviewInScrollMode() bool {
 // the tabbed window's top-left) hits a tab header. Returns true and switches
 // tabs if a tab was clicked.
 func (w *TabbedWindow) HandleTabClick(localX, localY int) bool {
-	// Tab row is at row 1 (after the leading newline in String()).
-	// Accept rows 1-3 to generously cover the tab area with borders.
-	if localY < 1 || localY > 3 {
+	// Tab row starts at row 0 in String().
+	// Accept rows 0-2 to generously cover the tab area with borders.
+	if localY < 0 || localY > 2 {
 		return false
 	}
 
@@ -379,5 +379,5 @@ func (w *TabbedWindow) String() string {
 			innerWidth, w.height-2-ws.GetVerticalFrameSize()-tabHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
-	return lipgloss.JoinVertical(lipgloss.Left, "\n", row, window)
+	return lipgloss.JoinVertical(lipgloss.Left, row, window)
 }

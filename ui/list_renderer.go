@@ -220,10 +220,8 @@ func (l *List) String() string {
 		innerWidth = 8
 	}
 
-	// Write the title.
+	// Write the header row near the top so this column aligns with search/tabs.
 	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString("\n")
 
 	// Write filter tabs
 	titleWidth := AdjustPreviewWidth(innerWidth) + 2
