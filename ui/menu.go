@@ -48,7 +48,7 @@ type Menu struct {
 	systemGroupSize int
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeySearch, keys.KeySpace, keys.KeyRepoSwitch, keys.KeyHelp, keys.KeyQuit}
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeySearch, keys.KeySpace, keys.KeyRepoSwitch, keys.KeyHelp, keys.KeyQuit}
 var defaultSystemGroupSize = 5 // / search, space actions, R repo switch, ? help, q quit
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
@@ -192,8 +192,8 @@ func (m *Menu) String() string {
 		var inActionGroup bool
 		switch m.state {
 		case StateEmpty:
-			// For empty state, the action group is the first group
-			inActionGroup = i <= 1
+			// For empty state, action group is everything before the system group
+			inActionGroup = i < actionEnd
 		default:
 			// For other states, the action group is the second group
 			inActionGroup = i >= groups[1].start && i < groups[1].end
