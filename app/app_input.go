@@ -269,6 +269,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Handle quit commands first. Don't handle q because the user might want to type that.
 		if msg.String() == "ctrl+c" {
 			m.state = stateDefault
+			m.newInstance = nil
 			m.promptAfterName = false
 			m.list.Kill()
 			return m, tea.Sequence(
@@ -280,7 +281,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			)
 		}
 
-		instance := m.list.GetInstances()[m.list.TotalInstances()-1]
+		instance := m.newInstance
+		if instance == nil {
+			// stateNew without a pending instance — shouldn't happen, return to default
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, nil
+		}
 		switch msg.Type {
 		// Start the instance (enable previews etc) and go back to the main menu state.
 		case tea.KeyEnter:
@@ -291,6 +298,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// Set loading status and transition to default state immediately
 			instance.SetStatus(session.Loading)
 			m.state = stateDefault
+			m.newInstance = nil
 			m.menu.SetState(ui.StateDefault)
 
 			// Handle prompt-after-name flow
@@ -345,6 +353,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		case tea.KeyEsc:
 			m.list.Kill()
 			m.state = stateDefault
+			m.newInstance = nil
 			m.instanceChanged()
 
 			return m, tea.Sequence(
@@ -848,6 +857,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.newInstance = instance
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
@@ -875,6 +885,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.newInstance = instance
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
@@ -902,6 +913,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.newInstance = instance
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)

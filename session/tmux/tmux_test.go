@@ -70,6 +70,10 @@ func TestStartTmuxSession(t *testing.T) {
 			return nil
 		},
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			// Return the trust-screen string so the startup wait exits fast.
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Do you trust the files in this folder?"), nil
+			}
 			return []byte("output"), nil
 		},
 	}
@@ -108,6 +112,9 @@ func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
 			return nil
 		},
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Do you trust the files in this folder?"), nil
+			}
 			return []byte("output"), nil
 		},
 	}
@@ -188,6 +195,9 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 			return nil
 		},
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Open documentation url for more info"), nil
+			}
 			return []byte("output"), nil
 		},
 	}
@@ -200,4 +210,110 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 	require.Equal(t, 2, len(ptyFactory.cmds))
 	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s aider --model gpt-4", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
+}
+
+func TestStartTmuxSessionOpenCode(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	var ranCmds []string
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			ranCmds = append(ranCmds, cmd2.ToString(cmd))
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			// Return "Ask anything" immediately so the startup wait exits fast.
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Ask anything"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	session := newTmuxSession("oc-session", "opencode", false, ptyFactory, cmdExec)
+
+	err := session.Start(workdir)
+	require.NoError(t, err)
+
+	// Verify new-session used the right program.
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_oc-session -c %s opencode", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]))
+
+	// Verify no send-keys tap was issued (opencode needs no trust-screen tap).
+	for _, c := range ranCmds {
+		require.NotContains(t, c, "send-keys", "opencode startup should not send any keys")
+	}
+}
+
+func TestSendKeys(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	var ranCmds []string
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			ranCmds = append(ranCmds, cmd2.ToString(cmd))
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "opencode", false, ptyFactory, cmdExec)
+	// Manually set sanitizedName by creating via the constructor (already done).
+
+	err := session.SendKeys("hello world")
+	require.NoError(t, err)
+	require.Len(t, ranCmds, 1)
+	require.Equal(t, "tmux send-keys -l -t klique_test-session hello world", ranCmds[0])
+}
+
+func TestTapEnter(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	var ranCmds []string
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			ranCmds = append(ranCmds, cmd2.ToString(cmd))
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "opencode", false, ptyFactory, cmdExec)
+
+	err := session.TapEnter()
+	require.NoError(t, err)
+	require.Len(t, ranCmds, 1)
+	require.Equal(t, "tmux send-keys -t klique_test-session Enter", ranCmds[0])
+}
+
+func TestTapDAndEnter(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	var ranCmds []string
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			ranCmds = append(ranCmds, cmd2.ToString(cmd))
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "aider", false, ptyFactory, cmdExec)
+
+	err := session.TapDAndEnter()
+	require.NoError(t, err)
+	require.Len(t, ranCmds, 1)
+	require.Equal(t, "tmux send-keys -t klique_test-session D Enter", ranCmds[0])
 }

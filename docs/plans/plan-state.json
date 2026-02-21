@@ -38,7 +38,8 @@
     "implemented": "2026-02-21"
   },
   "2026-02-21-fix-naming-and-toast-wrap.md": {
-    "status": "ready"
+    "status": "done",
+    "implemented": "2026-02-21"
   },
   "2026-02-21-generate-opencode-jsonc-design.md": {
     "status": "ready"

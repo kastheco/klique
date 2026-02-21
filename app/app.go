@@ -99,6 +99,9 @@ type home struct {
 	// newInstanceFinalizer is called when the state is stateNew and then you press enter.
 	// It registers the new instance in the list after the instance has been started.
 	newInstanceFinalizer func()
+	// newInstance is the instance currently being named in stateNew.
+	// Set when entering stateNew, cleared on Enter/Esc/ctrl+c.
+	newInstance *session.Instance
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
