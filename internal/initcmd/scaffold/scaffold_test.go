@@ -270,3 +270,56 @@ func TestToolsReferenceInjected(t *testing.T) {
 		assert.NotContains(t, string(content), "Available CLI Tools")
 	})
 }
+
+func TestWriteProjectSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	results, err := WriteProjectSkills(dir, false)
+	require.NoError(t, err)
+
+	// All three skills written
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "golang-pro", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tui-design", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tmux-orchestration", "SKILL.md"))
+
+	// Reference files included
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tui-design", "references", "bubbletea-patterns.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tmux-orchestration", "references", "pane-orchestration.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "golang-pro", "references", "concurrency.md"))
+
+	// Results track what was written
+	assert.Greater(t, len(results), 0)
+	for _, r := range results {
+		assert.True(t, r.Created)
+	}
+}
+
+func TestWriteProjectSkills_SkipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".agents", "skills", "tui-design")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	customFile := filepath.Join(skillDir, "SKILL.md")
+	require.NoError(t, os.WriteFile(customFile, []byte("custom"), 0o644))
+
+	_, err := WriteProjectSkills(dir, false) // force=false
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(customFile)
+	require.NoError(t, err)
+	assert.Equal(t, "custom", string(content))
+}
+
+func TestWriteProjectSkills_ForceOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".agents", "skills", "tui-design")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	customFile := filepath.Join(skillDir, "SKILL.md")
+	require.NoError(t, os.WriteFile(customFile, []byte("old"), 0o644))
+
+	_, err := WriteProjectSkills(dir, true) // force=true
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(customFile)
+	require.NoError(t, err)
+	assert.NotEqual(t, "old", string(content))
+}

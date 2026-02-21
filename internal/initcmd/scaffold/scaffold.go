@@ -3,6 +3,7 @@ package scaffold
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,6 +138,48 @@ func WriteCodexProject(dir string, agents []harness.AgentConfig, selectedTools [
 		rel = dest
 	}
 	return []WriteResult{{Path: rel, Created: written}}, nil
+}
+
+// WriteProjectSkills writes embedded skill trees to <dir>/.agents/skills/.
+// Each skill is a directory containing SKILL.md and reference/script files.
+func WriteProjectSkills(dir string, force bool) ([]WriteResult, error) {
+	const prefix = "templates/skills"
+	var results []WriteResult
+
+	err := fs.WalkDir(templates, prefix, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		rel := strings.TrimPrefix(path, prefix+"/")
+		dest := filepath.Join(dir, ".agents", "skills", rel)
+
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return fmt.Errorf("create skill dir: %w", err)
+		}
+
+		content, err := templates.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read embedded skill %s: %w", path, err)
+		}
+
+		written, err := writeFile(dest, content, force)
+		if err != nil {
+			return fmt.Errorf("write skill %s: %w", rel, err)
+		}
+
+		relResult, relErr := filepath.Rel(dir, dest)
+		if relErr != nil {
+			relResult = dest
+		}
+		results = append(results, WriteResult{Path: relResult, Created: written})
+		return nil
+	})
+
+	return results, err
 }
 
 // ScaffoldAll writes project files for all harnesses that have at least one enabled agent.
