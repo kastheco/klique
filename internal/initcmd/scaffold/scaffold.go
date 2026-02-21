@@ -233,6 +233,13 @@ func SymlinkHarnessSkills(dir, harnessName string) error {
 func ScaffoldAll(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
 	var results []WriteResult
 
+	// Write project skills to .agents/skills/.
+	skillResults, err := WriteProjectSkills(dir, force)
+	if err != nil {
+		return results, fmt.Errorf("scaffold skills: %w", err)
+	}
+	results = append(results, skillResults...)
+
 	// Group agents by harness
 	byHarness := make(map[string][]harness.AgentConfig)
 	for _, a := range agents {
@@ -257,6 +264,10 @@ func ScaffoldAll(dir string, agents []harness.AgentConfig, selectedTools []strin
 			return results, fmt.Errorf("scaffold %s: %w", harnessName, err)
 		}
 		results = append(results, harnessResults...)
+
+		if err := SymlinkHarnessSkills(dir, harnessName); err != nil {
+			return results, fmt.Errorf("symlink %s skills: %w", harnessName, err)
+		}
 	}
 
 	return results, nil

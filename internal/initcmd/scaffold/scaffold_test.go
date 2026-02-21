@@ -3,6 +3,7 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kastheco/klique/internal/initcmd/harness"
@@ -383,4 +384,39 @@ func TestSymlinkHarnessSkills_ReplacesExisting(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(skillsDir, "tui-design", "SKILL.md"))
 	require.NoError(t, err)
 	assert.Equal(t, "new", string(content))
+}
+
+func TestScaffoldAll_IncludesSkills(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Enabled: true},
+	}
+
+	results, err := ScaffoldAll(dir, agents, allTools, false)
+	require.NoError(t, err)
+
+	// Skills written to canonical location
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tui-design", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "tmux-orchestration", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "golang-pro", "SKILL.md"))
+
+	// Symlinks created for each active harness
+	for _, h := range []string{"claude", "opencode"} {
+		link := filepath.Join(dir, "."+h, "skills", "tui-design")
+		_, err := os.Readlink(link)
+		assert.NoError(t, err, "%s should have tui-design symlink", h)
+	}
+
+	// Codex not scaffolded (no codex agent), so no codex symlinks
+	assert.NoFileExists(t, filepath.Join(dir, ".codex", "skills"))
+
+	// Results include skill files
+	var skillResults int
+	for _, r := range results {
+		if strings.HasPrefix(filepath.ToSlash(r.Path), ".agents/skills/") {
+			skillResults++
+		}
+	}
+	assert.Greater(t, skillResults, 0)
 }
