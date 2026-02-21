@@ -8,13 +8,11 @@ import (
 	"time"
 )
 
-func getWorktreeDirectory() (string, error) {
-	configDir, err := config.GetConfigDir()
-	if err != nil {
-		return "", err
+func getWorktreeDirectory(repoPath string) (string, error) {
+	if repoPath == "" {
+		return "", fmt.Errorf("repo path is required for worktree directory")
 	}
-
-	return filepath.Join(configDir, "worktrees"), nil
+	return filepath.Join(repoPath, ".worktrees"), nil
 }
 
 // GitWorktree manages git worktree operations for a session
@@ -62,7 +60,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
-	worktreeDir, err := getWorktreeDirectory()
+	worktreeDir, err := getWorktreeDirectory(repoPath)
 	if err != nil {
 		return nil, "", err
 	}

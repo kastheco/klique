@@ -1,6 +1,8 @@
 package git
 
 import (
+	"fmt"
+	"os"
 	"strings"
 )
 
@@ -24,6 +26,14 @@ func (d *DiffStats) IsEmpty() bool {
 // Diff returns the git diff between the worktree and the base branch along with statistics
 func (g *GitWorktree) Diff() *DiffStats {
 	stats := &DiffStats{}
+
+	// Bail out early if the worktree directory no longer exists on disk
+	// (e.g. cleaned up externally or after pause). Avoids spamming git
+	// errors every tick.
+	if _, err := os.Stat(g.worktreePath); err != nil {
+		stats.Error = fmt.Errorf("worktree path gone: %w", err)
+		return stats
+	}
 
 	// -N stages untracked files (intent to add), including them in the diff
 	_, err := g.runGitCommand(g.worktreePath, "add", "-N", ".")

@@ -104,6 +104,9 @@ func isClaudeProgram(program string) bool {
 type statusMonitor struct {
 	// Store hashes to save memory.
 	prevOutputHash []byte
+	// captureFailures counts consecutive capture-pane failures.
+	// After a threshold we stop logging every tick to avoid spam.
+	captureFailures int
 }
 
 func newStatusMonitor() *statusMonitor {

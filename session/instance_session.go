@@ -135,6 +135,12 @@ func (i *Instance) UpdateDiffStats() error {
 			i.diffStats = nil
 			return nil
 		}
+		if strings.Contains(stats.Error.Error(), "worktree path gone") {
+			// Worktree was cleaned up (pause, merge, external deletion).
+			// Clear stats silently — don't spam logs every tick.
+			i.diffStats = nil
+			return nil
+		}
 		return fmt.Errorf("failed to get diff stats: %w", stats.Error)
 	}
 

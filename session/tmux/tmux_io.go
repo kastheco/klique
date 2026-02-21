@@ -38,9 +38,16 @@ func (t *TmuxSession) SendKeys(keys string) error {
 func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	content, err := t.CapturePaneContent()
 	if err != nil {
-		log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
+		t.monitor.captureFailures++
+		// Log the first failure and then only every 30th (roughly every 15s at 500ms ticks)
+		// to avoid flooding the log when a pane is gone.
+		if t.monitor.captureFailures == 1 || t.monitor.captureFailures%30 == 0 {
+			log.ErrorLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
+				t.monitor.captureFailures, err)
+		}
 		return false, false
 	}
+	t.monitor.captureFailures = 0 // reset on success
 
 	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
 	if t.program == ProgramClaude {
