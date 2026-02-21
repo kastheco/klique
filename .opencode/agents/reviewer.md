@@ -33,6 +33,9 @@ These tools are available in this environment. Prefer them over lower-level alte
   - Find all calls: `sg --pattern 'fmt.Errorf($$$)' --lang go`
   - Structural replace: `sg --pattern 'errors.New($MSG)' --rewrite 'fmt.Errorf($MSG)' --lang go`
   - Interactive rewrite: `sg --pattern '$A != nil' --rewrite '$A == nil' --lang go --interactive`
+- **comby** (`comby`): Language-aware structural search/replace with hole syntax. Use for multi-line pattern matching and complex rewrites that span statement boundaries. Examples:
+  - `comby 'if err != nil { return :[rest] }' 'if err != nil { return fmt.Errorf(":[context]: %w", err) }' .go`
+  - `comby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -d src/`
 
 ### Diff & Change Analysis
 
@@ -71,6 +74,7 @@ These tools are available in this environment. Prefer them over lower-level alte
 | Task | Preferred Tool | Fallback |
 |------|---------------|----------|
 | Rename symbol across files | `sg` (ast-grep) | `sd` for simple strings |
+| Structural multi-line rewrite | `sg` or `comby` | manual edit |
 | Find pattern in code | `sg --pattern` | `rg` (ripgrep) for literal strings |
 | Replace string in files | `sd` | `sed` |
 | Read/modify YAML/TOML/JSON | `yq` | manual edit |
