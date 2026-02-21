@@ -182,6 +182,53 @@ func WriteProjectSkills(dir string, force bool) ([]WriteResult, error) {
 	return results, err
 }
 
+// SymlinkHarnessSkills creates symlinks from .<harnessName>/skills/<skill>
+// to ../../.agents/skills/<skill> for each skill in .agents/skills/.
+// Replaces existing symlinks. Skips non-symlink entries (user-managed dirs).
+func SymlinkHarnessSkills(dir, harnessName string) error {
+	srcDir := filepath.Join(dir, ".agents", "skills")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read skills dir: %w", err)
+	}
+
+	destDir := filepath.Join(dir, "."+harnessName, "skills")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("create %s skills dir: %w", harnessName, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		link := filepath.Join(destDir, name)
+		target := filepath.Join("..", "..", ".agents", "skills", name)
+
+		if fi, err := os.Lstat(link); err == nil {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				if err := os.Remove(link); err != nil {
+					return fmt.Errorf("remove existing symlink %s: %w", name, err)
+				}
+			} else {
+				continue
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat %s link: %w", name, err)
+		}
+
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("symlink %s skill %s: %w", harnessName, name, err)
+		}
+	}
+
+	return nil
+}
+
 // ScaffoldAll writes project files for all harnesses that have at least one enabled agent.
 func ScaffoldAll(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
 	var results []WriteResult
