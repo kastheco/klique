@@ -13,6 +13,16 @@ install:
 # Build + install
 bi: build install
 
+# run with no args
+bin:
+    kq
+
+init:
+    kq init {{ARGS}}
+
+# Build + install + run
+kq: build install bin
+
 # Run tests
 test:
     go test ./...
