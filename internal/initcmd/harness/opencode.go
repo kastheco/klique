@@ -2,11 +2,13 @@ package harness
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // OpenCode implements Harness for the OpenCode CLI.
@@ -23,8 +25,11 @@ func (o *OpenCode) Detect() (string, bool) {
 }
 
 // ListModels shells out to `opencode models` and parses the output line-by-line.
+// Caps at 10 seconds to avoid hanging the wizard if opencode is misconfigured.
 func (o *OpenCode) ListModels() ([]string, error) {
-	cmd := exec.Command("opencode", "models")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "opencode", "models")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("opencode models: %w", err)

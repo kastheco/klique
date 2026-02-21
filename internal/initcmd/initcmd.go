@@ -74,7 +74,11 @@ func Run(opts Options) error {
 		return fmt.Errorf("scaffold: %w", err)
 	}
 	for _, r := range results {
-		fmt.Printf("  %-40s OK\n", r.Path)
+		status := "OK"
+		if !r.Created {
+			status = "SKIP (exists)"
+		}
+		fmt.Printf("  %-40s %s\n", r.Path, status)
 	}
 
 	fmt.Println("\nDone! Run 'kq' to start.")
