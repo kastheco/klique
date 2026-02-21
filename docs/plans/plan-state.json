@@ -23,5 +23,11 @@
   },
   "2026-02-20-plan-orchestration.md": {
     "status": "ready"
+  },
+  "2026-02-20-wizard-ux-design.md": {
+    "status": "done"
+  },
+  "2026-02-20-wizard-ux.md": {
+    "status": "ready"
   }
 }
