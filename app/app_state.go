@@ -569,7 +569,7 @@ func (m *home) spawnPlanSession(planFile string) (tea.Model, tea.Cmd) {
 	}
 
 	inst.QueuedPrompt = fmt.Sprintf(
-		"Implement docs/plans/%s using the executing-plans superpowers skill. Execute ALL tasks sequentially without stopping to ask for confirmation between tasks.",
+		"Implement docs/plans/%s using the executing-plans superpowers skill. Execute ALL tasks sequentially without stopping to ask for confirmation between tasks. Do NOT delete the git worktree or feature branch when done — your orchestrator (klique) manages worktree lifecycle and will clean up after you.",
 		planFile,
 	)
 
