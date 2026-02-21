@@ -314,7 +314,7 @@ func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 func (s *Sidebar) String() string {
 	borderStyle := sidebarBorderStyle
 	if s.focused {
-		borderStyle = borderStyle.BorderForeground(ColorIris)
+		borderStyle = borderStyle.Border(lipgloss.DoubleBorder()).BorderForeground(ColorIris)
 	} else {
 		borderStyle = borderStyle.BorderForeground(ColorOverlay)
 	}

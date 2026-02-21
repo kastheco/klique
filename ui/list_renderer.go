@@ -275,7 +275,7 @@ func (l *List) String() string {
 	// Wrap in border matching the sidebar style.
 	borderStyle := listBorderStyle
 	if l.focused {
-		borderStyle = borderStyle.BorderForeground(ColorIris)
+		borderStyle = borderStyle.Border(lipgloss.DoubleBorder()).BorderForeground(ColorIris)
 	}
 	innerHeight := l.height - borderV
 	if innerHeight < 4 {

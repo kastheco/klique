@@ -55,6 +55,7 @@ type TabbedWindow struct {
 	diff       *DiffPane
 	git        *GitPane
 	instance   *session.Instance
+	focused    bool   // true when this panel has keyboard focus (panel == 1)
 	focusMode  bool   // true when user is typing directly into the agent pane
 	gitContent string // cached git pane content, set by tick when changed
 }
@@ -67,6 +68,11 @@ func (w *TabbedWindow) SetFocusMode(enabled bool) {
 // IsFocusMode returns whether the window is in focus/insert mode.
 func (w *TabbedWindow) IsFocusMode() bool {
 	return w.focusMode
+}
+
+// SetFocused sets whether this panel has keyboard focus (panel == 1).
+func (w *TabbedWindow) SetFocused(focused bool) {
+	w.focused = focused
 }
 
 func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, git *GitPane) *TabbedWindow {
@@ -317,7 +323,16 @@ func (w *TabbedWindow) String() string {
 	lastTabWidth := w.width - tabWidth*(len(w.tabs)-1)
 	tabHeight := activeTabStyle.GetVerticalFrameSize() + 1 // get padding border margin size + 1 for character height
 
-	focusColor := ColorFoam
+	// Determine tab/window border color based on focus state.
+	var borderColor lipgloss.TerminalColor
+	switch {
+	case w.focusMode:
+		borderColor = ColorFoam
+	case w.focused:
+		borderColor = ColorIris
+	default:
+		borderColor = ColorOverlay
+	}
 	for i, t := range w.tabs {
 		width := tabWidth
 		if i == len(w.tabs)-1 {
@@ -331,9 +346,7 @@ func (w *TabbedWindow) String() string {
 		} else {
 			style = inactiveTabStyle
 		}
-		if w.focusMode {
-			style = style.BorderForeground(focusColor)
-		}
+		style = style.BorderForeground(borderColor)
 		border, _, _, _, _ := style.GetBorder()
 		if isFirst && isActive {
 			border.BottomLeft = "│"
@@ -367,10 +380,7 @@ func (w *TabbedWindow) String() string {
 			content = w.git.String()
 		}
 	}
-	ws := windowStyle
-	if w.focusMode {
-		ws = ws.BorderForeground(ColorFoam)
-	}
+	ws := windowStyle.BorderForeground(borderColor)
 	// Subtract the window border width so the total rendered width
 	// (content + borders) matches the tab row width.
 	innerWidth := w.width - ws.GetHorizontalFrameSize()

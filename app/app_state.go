@@ -71,6 +71,7 @@ func (m *home) getMovableTopicNames() []string {
 func (m *home) setFocus(panel int) {
 	m.focusedPanel = panel
 	m.sidebar.SetFocused(panel == 0)
+	m.tabbedWindow.SetFocused(panel == 1)
 	m.list.SetFocused(panel == 2)
 }
 
