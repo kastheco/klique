@@ -10,6 +10,7 @@ Review agent. Checks quality, security, spec compliance.
 Use `difft` for structural diffs (not line-based `git diff`).
 Use `sg` (ast-grep) to verify patterns across the codebase.
 Load superpowers skills: `requesting-code-review`, `receiving-code-review`.
+Load project skills: `tui-design` (always for TUI/UX reviews), `tmux-orchestration` (when reviewing tmux/worker code).
 
 ## Planner
 Planning agent. Writes specs, plans, decomposes work into packages.
