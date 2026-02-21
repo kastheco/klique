@@ -19,4 +19,12 @@ Plans live in `docs/plans/`. State is tracked separately in `docs/plans/plan-sta
 with `"status": "ready"`. Transition to `"in_progress"` when implementation begins, `"done"`
 when complete. Valid statuses: `ready`, `in_progress`, `done`.
 
+## Project Skills
+
+Always load when working on this project's TUI:
+- `tui-design` — design-first workflow for bubbletea/lipgloss interfaces
+
+Load when task involves tmux panes, worker lifecycle, or process management:
+- `tmux-orchestration` — tmux pane management from Go, parking pattern, crash resilience
+
 {{TOOLS_REFERENCE}}
