@@ -49,20 +49,26 @@ func PromptCustomize(r io.Reader, w io.Writer, role string, summary string) bool
 
 func runAgentStage(state *State, existing *config.TOMLConfigResult) error {
 	roles := DefaultAgentRoles()
+	defaults := RoleDefaults()
 
-	// Initialize agent states with defaults or existing values
+	// Initialize agent states with existing values, role defaults, or bare minimums
 	defaultHarness := ""
 	if len(state.SelectedHarness) > 0 {
 		defaultHarness = state.SelectedHarness[0]
 	}
 	for _, role := range roles {
-		as := AgentState{
-			Role:    role,
-			Harness: defaultHarness,
-			Enabled: true,
+		// Start from role defaults
+		as := defaults[role]
+		if as.Role == "" {
+			// Unknown role (shouldn't happen) — minimal fallback
+			as = AgentState{Role: role, Enabled: true}
+		}
+		// Set harness to first selected if not already set
+		if as.Harness == "" {
+			as.Harness = defaultHarness
 		}
 
-		// Pre-populate from existing config
+		// Override with existing config if available
 		if existing != nil {
 			if profile, ok := existing.Profiles[role]; ok {
 				as.Harness = profile.Program
@@ -93,10 +99,16 @@ func runAgentStage(state *State, existing *config.TOMLConfigResult) error {
 		modelCache[name] = models
 	}
 
-	// Build a form for each agent role
+	// Gate each agent with customize? prompt
+	fmt.Println("\nAgent configuration:")
 	for i := range state.Agents {
-		if err := runSingleAgentForm(state, i, modelCache); err != nil {
-			return err
+		agent := &state.Agents[i]
+		summary := FormatAgentSummary(*agent)
+
+		if PromptCustomize(os.Stdin, os.Stdout, agent.Role, summary) {
+			if err := runSingleAgentForm(state, i, modelCache); err != nil {
+				return err
+			}
 		}
 	}
 
