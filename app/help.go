@@ -50,7 +50,6 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("ctrl-q")+descStyle.Render("    - Detach from session"),
 		"",
 		headerStyle.Render("\uf126 Handoff:"),
-		keyStyle.Render("p")+descStyle.Render("         - Commit and push branch to github"),
 		keyStyle.Render("P")+descStyle.Render("         - Create a pull request"),
 		keyStyle.Render("c")+descStyle.Render("         - Checkout: commit changes and pause session"),
 		keyStyle.Render("r")+descStyle.Render("         - Resume a paused session"),
@@ -62,11 +61,12 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
 		keyStyle.Render("R")+descStyle.Render("         - Switch repository"),
 		"",
-		headerStyle.Render("\uf07b Topics:"),
-		keyStyle.Render("T")+descStyle.Render("         - Create a new topic"),
-		keyStyle.Render("m")+descStyle.Render("         - Move instance to a topic"),
-		keyStyle.Render("X")+descStyle.Render("         - Kill all instances in active topic"),
-		keyStyle.Render("/")+descStyle.Render("         - Search topics and instances"),
+		headerStyle.Render("\uf03a Plans:"),
+		keyStyle.Render("p")+descStyle.Render("         - Create a new plan"),
+		keyStyle.Render("space")+descStyle.Render("     - Expand/collapse plan or topic"),
+		keyStyle.Render("↵/o")+descStyle.Render("       - Plan/topic menu or run stage"),
+		keyStyle.Render("v")+descStyle.Render("         - View selected plan"),
+		keyStyle.Render("/")+descStyle.Render("         - Search plans and instances"),
 		keyStyle.Render("←/h, →/l")+descStyle.Render("  - Switch sidebar and instance list"),
 	)
 	return content
@@ -89,7 +89,7 @@ func (h helpTypeInstanceStart) toContent() string {
 		"",
 		headerStyle.Render("\uf126 Handoff:"),
 		keyStyle.Render("c")+descStyle.Render("     - Checkout this instance's branch"),
-		keyStyle.Render("p")+descStyle.Render("     - Push branch to GitHub to create a PR"),
+		keyStyle.Render("P")+descStyle.Render("     - Create a pull request for this branch"),
 	)
 	return content
 }
