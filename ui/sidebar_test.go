@@ -209,3 +209,136 @@ func TestSidebarTreeRows_ApplyRuntimePlanStatusOverlay(t *testing.T) {
 	assert.True(t, planRow.HasRunning)
 	assert.False(t, planRow.HasNotification)
 }
+
+func TestSidebarTreeRender_UngroupedPlan(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "bugfix.md", Status: "ready"}},
+		nil,
+	)
+
+	output := s.String()
+	assert.Contains(t, output, "bugfix")
+	assert.Contains(t, output, "○")
+}
+
+func TestSidebarTreeRender_TopicWithChevron(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "in_progress"},
+			}},
+		},
+		nil, nil,
+	)
+
+	output := s.String()
+	assert.Contains(t, output, "auth")
+	assert.Contains(t, output, "▸")
+}
+
+func TestSidebarTreeRender_ExpandedTopicShowsPlans(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "in_progress"},
+			}},
+		},
+		nil, nil,
+	)
+
+	s.SelectByID(SidebarTopicPrefix + "auth")
+	s.ToggleSelectedExpand()
+
+	output := s.String()
+	assert.Contains(t, output, "auth")
+	assert.Contains(t, output, "tokens")
+	assert.Contains(t, output, "●")
+}
+
+func TestSidebarTreeRender_ExpandedPlanStages(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "fix.md", Status: "in_progress"}},
+		nil,
+	)
+
+	s.SelectByID(SidebarPlanPrefix + "fix.md")
+	s.ToggleSelectedExpand()
+
+	output := s.String()
+	assert.Contains(t, output, "Plan")
+	assert.Contains(t, output, "Implement")
+	assert.Contains(t, output, "Review")
+	assert.Contains(t, output, "Finished")
+}
+
+func TestSidebarTreeRender_SelectedRowHighlighted(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetFocused(true)
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{
+			{Filename: "a.md", Status: "ready"},
+			{Filename: "b.md", Status: "ready"},
+		},
+		nil,
+	)
+
+	s.Down()
+	output := s.String()
+	assert.Contains(t, output, "a")
+	assert.Contains(t, output, "b")
+}
+
+func TestSidebarTreeRender_HistoryToggle(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "active.md", Status: "ready"}},
+		[]PlanDisplay{{Filename: "old.md", Status: "done"}},
+	)
+
+	output := s.String()
+	assert.Contains(t, output, "History")
+}
+
+func TestSidebarTreeRender_CancelledPlan(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		nil, nil, nil,
+		[]PlanDisplay{{Filename: "dropped.md", Status: "cancelled"}},
+	)
+
+	output := s.String()
+	assert.Contains(t, output, "dropped")
+	assert.Contains(t, output, "✕")
+}
+
+func TestSidebarTreeRender_TopicAggregateStatus(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "in_progress"},
+				{Filename: "session.md", Status: "ready"},
+			}},
+		},
+		nil, nil,
+	)
+
+	output := s.String()
+	assert.Contains(t, output, "●")
+}
