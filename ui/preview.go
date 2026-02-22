@@ -10,6 +10,7 @@ import (
 )
 
 var previewPaneStyle = lipgloss.NewStyle().
+	Background(ColorBase).
 	Foreground(ColorText)
 
 type PreviewPane struct {

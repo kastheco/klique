@@ -241,6 +241,7 @@ func (l *List) String() string {
 
 	sortLabel := sortDropdownStyle.Render("3 \uf0dc " + sortModeLabels[l.sortMode])
 
+	gapFill := lipgloss.NewStyle().Background(ColorBase)
 	if !l.autoyes {
 		left := tabs
 		right := sortLabel
@@ -248,7 +249,7 @@ func (l *List) String() string {
 		if gap < 1 {
 			gap = 1
 		}
-		b.WriteString(left + strings.Repeat(" ", gap) + right)
+		b.WriteString(left + gapFill.Render(strings.Repeat(" ", gap)) + right)
 	} else {
 		left := tabs + " " + sortLabel
 		autoYes := autoYesStyle.Render(autoYesText)
@@ -256,7 +257,7 @@ func (l *List) String() string {
 		if gap < 1 {
 			gap = 1
 		}
-		b.WriteString(left + strings.Repeat(" ", gap) + autoYes)
+		b.WriteString(left + gapFill.Render(strings.Repeat(" ", gap)) + autoYes)
 	}
 
 	b.WriteString("\n")

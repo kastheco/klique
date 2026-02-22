@@ -20,6 +20,7 @@ var (
 	inactiveTabStyle  = lipgloss.NewStyle().
 				Border(inactiveTabBorder, true).
 				BorderForeground(ColorIris).
+				BorderBackground(ColorBase).
 				Background(ColorBase).
 				AlignHorizontal(lipgloss.Center)
 	activeTabStyle = inactiveTabStyle.
@@ -28,6 +29,7 @@ var (
 	windowBorder = lipgloss.RoundedBorder()
 	windowStyle  = lipgloss.NewStyle().
 			BorderForeground(ColorIris).
+			BorderBackground(ColorBase).
 			Background(ColorBase).
 			Border(windowBorder, false, true, true, true)
 )

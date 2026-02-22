@@ -29,10 +29,12 @@ var (
 	filePanelBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(ColorOverlay).
+				BorderBackground(ColorBase).
 				Background(ColorBase)
 	filePanelBorderFocusedStyle = lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(ColorIris).
+					BorderBackground(ColorBase).
 					Background(ColorBase)
 	diffHeaderStyle = lipgloss.NewStyle().
 			Background(ColorBase).

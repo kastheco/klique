@@ -526,7 +526,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 
 func (m *home) View() string {
 	// All columns use identical padding and height for uniform alignment.
-	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1)
+	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1).Background(ui.ColorBase)
 	sidebarView := colStyle.Render(m.sidebar.String())
 	listWithPadding := colStyle.Render(m.list.String())
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
@@ -595,13 +595,17 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(x, y, toastView, result, false, false)
 	}
 
+	// Process bubblezone markers first so FillBackground measures true
+	// visible widths (zone markers inflate lipgloss.Width before Scan).
+	result = zone.Scan(result)
+
 	// Global background fill — paint Rosé Pine Moon base behind every cell on
 	// the terminal screen. This catches gaps between panels, bare newlines from
 	// lipgloss Height fill, and any other transparent cells that would otherwise
 	// show the terminal's raw default background.
 	result = ui.FillBackground(result, m.termWidth, m.termHeight, ui.ColorBase)
 
-	return zone.Scan(result)
+	return result
 }
 
 // prCreatedMsg is sent when async PR creation succeeds.

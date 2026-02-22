@@ -167,13 +167,28 @@ func (m *Menu) String() string {
 		sysSize = 4
 	}
 	actionEnd := len(m.options) - sysSize
-	groups := []struct {
+
+	var groups []struct {
 		start int
 		end   int
-	}{
-		{0, 2},                      // Instance management group
-		{2, actionEnd},              // Action group
-		{actionEnd, len(m.options)}, // System group
+	}
+	if m.state == StateEmpty {
+		// No group separators in empty state — all items are one flat group.
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, len(m.options)},
+		}
+	} else {
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, 2},                      // Instance management group
+			{2, actionEnd},              // Action group
+			{actionEnd, len(m.options)}, // System group
+		}
 	}
 
 	for i, k := range m.options {
@@ -201,12 +216,10 @@ func (m *Menu) String() string {
 		}
 
 		if inActionGroup {
-			s.WriteString(localActionStyle.Render(binding.Help().Key))
-			s.WriteString(" ")
-			s.WriteString(localActionStyle.Render(binding.Help().Desc))
+			s.WriteString(localActionStyle.Render(binding.Help().Key + " " + binding.Help().Desc))
 		} else {
 			s.WriteString(localKeyStyle.Render(binding.Help().Key))
-			s.WriteString(" ")
+			s.WriteString(descStyle.Render(" "))
 			s.WriteString(localDescStyle.Render(binding.Help().Desc))
 		}
 

@@ -22,6 +22,7 @@ var sidebarTitleStyle = lipgloss.NewStyle().
 var sidebarBorderStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorOverlay).
+	BorderBackground(ColorBase).
 	Background(ColorBase).
 	Padding(0, 1)
 
@@ -50,12 +51,14 @@ var sectionHeaderStyle = lipgloss.NewStyle().
 var searchBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorOverlay).
+	BorderBackground(ColorBase).
 	Background(ColorBase).
 	Padding(0, 1)
 
 var searchActiveBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorFoam).
+	BorderBackground(ColorBase).
 	Background(ColorBase).
 	Padding(0, 1)
 
@@ -78,12 +81,15 @@ var dimmedTopicStyle = lipgloss.NewStyle().
 	Foreground(ColorMuted)
 
 var sidebarRunningStyle = lipgloss.NewStyle().
+	Background(ColorBase).
 	Foreground(ColorFoam)
 
 var sidebarReadyStyle = lipgloss.NewStyle().
+	Background(ColorBase).
 	Foreground(ColorFoam)
 
 var sidebarNotifyStyle = lipgloss.NewStyle().
+	Background(ColorBase).
 	Foreground(ColorRose)
 
 // SidebarItem represents a selectable item in the sidebar.
@@ -408,28 +414,48 @@ func (s *Sidebar) String() string {
 		// Plan items use a status glyph as prefix (○/●/◉); selected items show ▸.
 		// Selection takes priority over the status glyph.
 		isPlan := strings.HasPrefix(item.ID, SidebarPlanPrefix)
-		prefix := " "
+		// Build prefix glyph. For plan items, use a colored status glyph;
+		// for selected items, use ▸; otherwise a space.
+		// The glyph is always 1 cell wide.
+		prefixGlyph := " "
+		var prefixStyle lipgloss.Style
+		hasPrefixStyle := false
 		if i == s.selectedIdx {
-			prefix = "▸"
+			prefixGlyph = "▸"
 		} else if isPlan {
+			hasPrefixStyle = true
 			switch {
 			case item.HasNotification:
-				prefix = sidebarNotifyStyle.Render("◉")
+				prefixGlyph = "◉"
+				prefixStyle = sidebarNotifyStyle
 			case item.HasRunning:
-				prefix = sidebarRunningStyle.Render("●")
+				prefixGlyph = "●"
+				prefixStyle = sidebarRunningStyle
 			default:
-				prefix = sectionHeaderStyle.Render("○")
+				prefixGlyph = "○"
+				prefixStyle = sectionHeaderStyle
 			}
 		}
-		leftPart := prefix + nameText + countSuffix
-		leftWidth := runewidth.StringWidth(leftPart)
+		// Build the text portion (name + count) without the prefix so the
+		// outer item style applies a consistent background across it.
+		textPart := nameText + countSuffix
+		leftWidth := 1 + runewidth.StringWidth(textPart) // 1 for prefix glyph
 
 		// Pad between left and right to push icons to the right edge
 		gap := contentWidth - leftWidth - trailingWidth
 		if gap < 0 {
 			gap = 0
 		}
-		paddedLeft := leftPart + strings.Repeat(" ", gap)
+		// Render prefix with its own style (colored glyph) then append
+		// the rest as plain text so the outer item style's background
+		// covers everything uniformly.
+		var styledPrefix string
+		if hasPrefixStyle {
+			styledPrefix = prefixStyle.Render(prefixGlyph)
+		} else {
+			styledPrefix = prefixGlyph
+		}
+		paddedLeft := styledPrefix + textPart + strings.Repeat(" ", gap)
 
 		// Style the trailing icons. Plan items use a prefix glyph instead of a
 		// trailing dot, so skip the trailing icon for them.
@@ -490,6 +516,8 @@ func (s *Sidebar) String() string {
 		btnStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
+			BorderBackground(ColorBase).
+			Background(ColorBase).
 			Foreground(textColor).
 			Width(btnWidth).
 			Padding(0, 1)
