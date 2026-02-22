@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// assertValidJSON strips JSONC-style line comments and asserts the result is valid JSON.
+func assertValidJSON(t *testing.T, content string) {
+	t.Helper()
+	var lines []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	var parsed interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.Join(lines, "\n")), &parsed),
+		"rendered opencode.jsonc must be valid JSON:\n%s", content)
+}
 
 var allTools = []string{"sg", "comby", "difft", "sd", "yq", "mlr", "glow", "typos", "scc", "tokei", "watchexec", "hyperfine", "procs", "mprocs"}
 
@@ -465,6 +481,9 @@ func TestWriteOpenCodeProject_GeneratesConfig(t *testing.T) {
 	assert.NotContains(t, s, "{{")
 	assert.NotContains(t, s, "}}")
 
+	// Output must be valid JSON
+	assertValidJSON(t, s)
+
 	// Dynamic paths resolved (home dir and project dir)
 	homeDir, _ := os.UserHomeDir()
 	assert.Contains(t, s, homeDir)
@@ -520,6 +539,35 @@ func TestWriteOpenCodeProject_NoTemp(t *testing.T) {
 	require.Greater(t, coderIdx, 0)
 	coderSection := s[coderIdx:min(coderIdx+500, len(s))]
 	assert.NotContains(t, coderSection, "temperature")
+}
+
+func TestWriteOpenCodeProject_ValidJSONC_OnlyCoder(t *testing.T) {
+	// Regression: when planner+reviewer are removed (non-opencode harness),
+	// the preceding coder block must not have a trailing comma.
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: ptrFloat(0.1), Effort: "medium", Enabled: true},
+		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
+	}
+	_, err := WriteOpenCodeProject(dir, agents, nil, false)
+	require.NoError(t, err)
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	assertValidJSON(t, string(content))
+}
+
+func TestWriteOpenCodeProject_ValidJSONC_NoWizardAgents(t *testing.T) {
+	// Regression: when all three wizard roles are removed (none use opencode harness),
+	// only chat+build+plan remain and the output must still be valid JSON.
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
+	}
+	_, err := WriteOpenCodeProject(dir, agents, nil, false)
+	require.NoError(t, err)
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	assertValidJSON(t, string(content))
 }
 
 func TestWriteOpenCodeProject_SkipsNonOpencodeAgents(t *testing.T) {

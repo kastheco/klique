@@ -136,7 +136,35 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 		}
 	}
 
+	rendered = stripTrailingCommas(rendered)
+
 	return rendered, nil
+}
+
+// stripTrailingCommas removes JSON trailing commas that arise when removeJSONBlock
+// removes a block and the preceding entry's closing "  }," becomes the last entry
+// in the object. Scans every line: if it ends with a comma and the next non-blank
+// line opens with "}" or "]", the comma is stripped.
+func stripTrailingCommas(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+		if !strings.HasSuffix(trimmed, ",") {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			next := strings.TrimSpace(lines[j])
+			if next == "" {
+				continue
+			}
+			if strings.HasPrefix(next, "}") || strings.HasPrefix(next, "]") {
+				// Strip the trailing comma
+				lines[i] = trimmed[:len(trimmed)-1]
+			}
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // removeLine removes any line containing the given substring.
