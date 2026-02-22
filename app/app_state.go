@@ -16,6 +16,7 @@ import (
 	"github.com/kastheco/klique/keys"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
+	gitpkg "github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -705,6 +706,64 @@ func slugifyPlanName(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
 	name = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(name, "-")
 	return strings.Trim(name, "-")
+}
+
+// buildPlanFilename derives the plan filename from a human name and creation time.
+// "Auth Refactor" → "2026-02-21-auth-refactor.md"
+func buildPlanFilename(name string, now time.Time) string {
+	slug := slugifyPlanName(name)
+	if slug == "" {
+		slug = "plan"
+	}
+	return now.UTC().Format("2006-01-02") + "-" + slug + ".md"
+}
+
+// renderPlanStub returns the initial markdown content for a new plan file.
+func renderPlanStub(name, description, filename string) string {
+	return fmt.Sprintf("# %s\n\n## Context\n\n%s\n\n## Notes\n\n- Created by klique lifecycle flow\n- Plan file: %s\n", name, description, filename)
+}
+
+// createPlanRecord registers the plan in plan-state.json (in-memory + persisted).
+func (m *home) createPlanRecord(planFile, description, branch string, now time.Time) error {
+	if m.planState == nil {
+		ps, err := planstate.Load(m.planStateDir)
+		if err != nil {
+			return err
+		}
+		m.planState = ps
+	}
+	return m.planState.Register(planFile, description, branch, now)
+}
+
+// finalizePlanCreation writes the plan stub file, registers it in plan-state.json,
+// commits both to main, and creates the feature branch. Called at the end of the
+// plan creation wizard.
+func (m *home) finalizePlanCreation(name, description string) error {
+	now := time.Now().UTC()
+	planFile := buildPlanFilename(name, now)
+	branch := gitpkg.PlanBranchFromFile(planFile)
+	planPath := filepath.Join(m.planStateDir, planFile)
+
+	if err := os.MkdirAll(m.planStateDir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(planPath, []byte(renderPlanStub(name, description, planFile)), 0o644); err != nil {
+		return err
+	}
+	if err := m.createPlanRecord(planFile, description, branch, now); err != nil {
+		return err
+	}
+	if err := gitpkg.CommitPlanScaffoldOnMain(m.activeRepoPath, planFile); err != nil {
+		return err
+	}
+	if err := gitpkg.EnsurePlanBranch(m.activeRepoPath, branch); err != nil {
+		return err
+	}
+
+	m.loadPlanState()
+	m.updateSidebarPlans()
+	m.updateSidebarItems()
+	return nil
 }
 
 // getTopicNames returns existing topic names for the picker.
