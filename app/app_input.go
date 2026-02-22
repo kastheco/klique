@@ -1127,12 +1127,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyLeft:
+		if m.focusedPanel == 0 {
+			// Already on sidebar: hide it and move focus to center
+			if !m.sidebar.IsSearchActive() {
+				m.sidebarHidden = true
+				m.setFocus(1)
+				return m, tea.WindowSize()
+			}
+			return m, nil
+		}
 		if m.focusedPanel == 1 && m.sidebarHidden {
-			// Two-step reveal: first press shows sidebar without navigating focus
+			// Show sidebar and focus it in one motion
 			m.sidebarHidden = false
+			m.setFocus(0)
 			return m, tea.WindowSize()
 		}
-		// Cycle left: list(2) → preview(1) → sidebar(0), no-op at left edge.
+		// Normal cycle left: list(2) → preview(1) → sidebar(0)
 		if m.focusedPanel > 0 {
 			m.setFocus(m.focusedPanel - 1)
 		}
