@@ -22,6 +22,13 @@ const (
 	Paused
 )
 
+// AgentType constants identify the role of an agent session within a plan lifecycle.
+const (
+	AgentTypePlanner  = "planner"
+	AgentTypeCoder    = "coder"
+	AgentTypeReviewer = "reviewer"
+)
+
 // Instance is a running instance of claude code.
 type Instance struct {
 	// Title is the title of the instance.
@@ -48,7 +55,10 @@ type Instance struct {
 	SkipPermissions bool
 	// PlanFile is the plan filename this instance is implementing (empty = no plan).
 	PlanFile string
+	// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.
+	AgentType string
 	// IsReviewer is true when this instance is a reviewer session for a plan.
+	// Deprecated: use AgentType == AgentTypeReviewer instead.
 	IsReviewer bool
 	// ImplementationComplete is true when the coder finished and the plan transitioned to review.
 	// The instance is auto-paused and rendered with a dim/completed visual style.
@@ -119,6 +129,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		AutoYes:                i.AutoYes,
 		SkipPermissions:        i.SkipPermissions,
 		PlanFile:               i.PlanFile,
+		AgentType:              i.AgentType,
 		IsReviewer:             i.IsReviewer,
 		ImplementationComplete: i.ImplementationComplete,
 		QueuedPrompt:           i.QueuedPrompt,
@@ -161,6 +172,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		Program:                data.Program,
 		SkipPermissions:        data.SkipPermissions,
 		PlanFile:               data.PlanFile,
+		AgentType:              data.AgentType,
 		IsReviewer:             data.IsReviewer,
 		ImplementationComplete: data.ImplementationComplete,
 		QueuedPrompt:           data.QueuedPrompt,
@@ -204,6 +216,8 @@ type InstanceOptions struct {
 	SkipPermissions bool
 	// PlanFile binds this instance to a plan from plan-state.json.
 	PlanFile string
+	// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.
+	AgentType string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -227,6 +241,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
 		PlanFile:        opts.PlanFile,
+		AgentType:       opts.AgentType,
 	}, nil
 }
 

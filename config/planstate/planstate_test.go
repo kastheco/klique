@@ -279,6 +279,48 @@ func TestHasRunningCoderInTopic(t *testing.T) {
 	assert.False(t, running)
 }
 
+func TestRegisterPlan(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plan-state.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{}`), 0o644))
+
+	ps, err := Load(dir)
+	require.NoError(t, err)
+
+	now := time.Date(2026, 2, 21, 15, 4, 5, 0, time.UTC)
+	err = ps.Register("2026-02-21-auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
+	require.NoError(t, err)
+
+	entry, ok := ps.Entry("2026-02-21-auth-refactor.md")
+	require.True(t, ok)
+	assert.Equal(t, StatusReady, entry.Status)
+	assert.Equal(t, "refactor auth flow", entry.Description)
+	assert.Equal(t, "plan/auth-refactor", entry.Branch)
+	assert.Equal(t, now, entry.CreatedAt)
+}
+
+func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
+	ps := &PlanState{
+		Dir: "/tmp",
+		Plans: map[string]PlanEntry{
+			"2026-02-21-auth-refactor.md": {
+				Status:      StatusReady,
+				Description: "existing",
+				Branch:      "plan/auth-refactor",
+				CreatedAt:   time.Date(2026, 2, 21, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	err := ps.Register(
+		"2026-02-21-auth-refactor.md",
+		"new description",
+		"plan/auth-refactor",
+		time.Now().UTC(),
+	)
+	assert.Error(t, err)
+}
+
 func TestLoadLegacyFlatFormat(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plan-state.json")

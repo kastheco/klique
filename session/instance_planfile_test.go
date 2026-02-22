@@ -1,6 +1,8 @@
 package session
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestNewInstance_SetsPlanFile(t *testing.T) {
 	inst, err := NewInstance(InstanceOptions{
@@ -77,6 +79,54 @@ func TestInstanceData_RoundTripImplementationComplete(t *testing.T) {
 	roundTrip := inst.ToInstanceData()
 	if !roundTrip.ImplementationComplete {
 		t.Fatal("expected ImplementationComplete = true after ToInstanceData round-trip")
+	}
+}
+
+func TestNewInstance_SetsAgentType(t *testing.T) {
+	inst, err := NewInstance(InstanceOptions{
+		Title:     "planner-worker",
+		Path:      ".",
+		Program:   "opencode",
+		PlanFile:  "2026-02-21-auth-refactor.md",
+		AgentType: AgentTypePlanner,
+	})
+	if err != nil {
+		t.Fatalf("NewInstance() error = %v", err)
+	}
+	if inst.AgentType != AgentTypePlanner {
+		t.Fatalf("AgentType = %q, want %q", inst.AgentType, AgentTypePlanner)
+	}
+}
+
+func TestInstanceData_RoundTripAgentType(t *testing.T) {
+	data := InstanceData{
+		Title:     "persisted",
+		Path:      "/tmp/repo",
+		Branch:    "plan/auth-refactor",
+		Status:    Paused,
+		Program:   "opencode",
+		PlanFile:  "2026-02-21-auth-refactor.md",
+		AgentType: AgentTypeReviewer,
+		Worktree: GitWorktreeData{
+			RepoPath:      "/tmp/repo",
+			WorktreePath:  "/tmp/repo/.worktrees/plan-auth-refactor",
+			SessionName:   "persisted",
+			BranchName:    "plan/auth-refactor",
+			BaseCommitSHA: "abc123",
+		},
+	}
+
+	inst, err := FromInstanceData(data)
+	if err != nil {
+		t.Fatalf("FromInstanceData() error = %v", err)
+	}
+	if inst.AgentType != AgentTypeReviewer {
+		t.Fatalf("instance AgentType = %q, want %q", inst.AgentType, AgentTypeReviewer)
+	}
+
+	roundTrip := inst.ToInstanceData()
+	if roundTrip.AgentType != AgentTypeReviewer {
+		t.Fatalf("ToInstanceData AgentType = %q, want %q", roundTrip.AgentType, AgentTypeReviewer)
 	}
 }
 

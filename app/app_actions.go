@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/klique/internal/initcmd/scaffold"
 	"github.com/kastheco/klique/session"
+	gitpkg "github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/ui/overlay"
 
 	"github.com/atotto/clipboard"
@@ -212,9 +214,62 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return nil
 		}
 		return m, m.confirmAction(fmt.Sprintf("Cancel plan '%s'?", planName), cancelAction)
+
+	case "modify_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		if err := m.setPlanStatus(planFile, planstate.StatusPlanning); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m.spawnPlanAgent(planFile, "plan", buildModifyPlanPrompt(planFile))
+
+	case "start_over_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		entry, ok := m.planState.Entry(planFile)
+		if !ok {
+			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+		}
+		planName := planstate.DisplayName(planFile)
+		startOverAction := func() tea.Msg {
+			// Kill all instances bound to this plan
+			for i := len(m.allInstances) - 1; i >= 0; i-- {
+				if m.allInstances[i].PlanFile == planFile {
+					_ = m.allInstances[i].Kill()
+					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+				}
+			}
+			if err := gitpkg.ResetPlanBranch(m.activeRepoPath, entry.Branch); err != nil {
+				return err
+			}
+			if err := m.setPlanStatus(planFile, planstate.StatusPlanning); err != nil {
+				return err
+			}
+			_ = m.saveAllInstances()
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
+			return planRefreshMsg{}
+		}
+		return m, m.confirmAction(fmt.Sprintf("Start over plan '%s'? This resets the branch.", planName), startOverAction)
 	}
 
 	return m, nil
+}
+
+// setPlanStatus updates the status of a plan in plan-state.json.
+func (m *home) setPlanStatus(planFile string, status planstate.Status) error {
+	if m.planState == nil {
+		return fmt.Errorf("plan state is not loaded")
+	}
+	return m.planState.SetStatus(planFile, status)
 }
 
 // findPlanInstance returns the instance bound to the currently selected plan in the sidebar.
@@ -371,7 +426,38 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Synchronous path (no confirmation needed) — write to disk and refresh inline.
+	// For agent-spawning stages, dispatch to spawnPlanAgent which handles
+	// status update + session creation.
+	switch stage {
+	case "plan":
+		if err := m.planState.SetStatus(planFile, planstate.StatusPlanning); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
+	case "implement":
+		if err := m.planState.SetStatus(planFile, planstate.StatusImplementing); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m.spawnPlanAgent(planFile, "implement", buildImplementPrompt(planFile))
+	case "review":
+		if err := m.planState.SetStatus(planFile, planstate.StatusReviewing); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		planName := planstate.DisplayName(planFile)
+		reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
+		return m.spawnPlanAgent(planFile, "review", reviewPrompt)
+	}
+
+	// Non-agent stages (finished): just update status.
 	if err := planStageStatus(planFile, stage, m.planState); err != nil {
 		return m, m.handleError(err)
 	}
@@ -386,9 +472,9 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 func planStageStatus(planFile, stage string, ps *planstate.PlanState) error {
 	switch stage {
 	case "plan":
-		return ps.SetStatus(planFile, planstate.StatusInProgress)
+		return ps.SetStatus(planFile, planstate.StatusPlanning)
 	case "implement":
-		return ps.SetStatus(planFile, planstate.StatusInProgress)
+		return ps.SetStatus(planFile, planstate.StatusImplementing)
 	case "review":
 		return ps.SetStatus(planFile, planstate.StatusReviewing)
 	case "finished":

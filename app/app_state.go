@@ -16,6 +16,7 @@ import (
 	"github.com/kastheco/klique/keys"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
+	gitpkg "github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -705,6 +706,189 @@ func slugifyPlanName(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
 	name = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(name, "-")
 	return strings.Trim(name, "-")
+}
+
+// buildPlanFilename derives the plan filename from a human name and creation time.
+// "Auth Refactor" → "2026-02-21-auth-refactor.md"
+func buildPlanFilename(name string, now time.Time) string {
+	slug := slugifyPlanName(name)
+	if slug == "" {
+		slug = "plan"
+	}
+	return now.UTC().Format("2006-01-02") + "-" + slug + ".md"
+}
+
+// renderPlanStub returns the initial markdown content for a new plan file.
+func renderPlanStub(name, description, filename string) string {
+	return fmt.Sprintf("# %s\n\n## Context\n\n%s\n\n## Notes\n\n- Created by klique lifecycle flow\n- Plan file: %s\n", name, description, filename)
+}
+
+// createPlanRecord registers the plan in plan-state.json (in-memory + persisted).
+func (m *home) createPlanRecord(planFile, description, branch string, now time.Time) error {
+	if m.planState == nil {
+		ps, err := planstate.Load(m.planStateDir)
+		if err != nil {
+			return err
+		}
+		m.planState = ps
+	}
+	return m.planState.Register(planFile, description, branch, now)
+}
+
+// finalizePlanCreation writes the plan stub file, registers it in plan-state.json,
+// commits both to main, and creates the feature branch. Called at the end of the
+// plan creation wizard.
+func (m *home) finalizePlanCreation(name, description string) error {
+	now := time.Now().UTC()
+	planFile := buildPlanFilename(name, now)
+	branch := gitpkg.PlanBranchFromFile(planFile)
+	planPath := filepath.Join(m.planStateDir, planFile)
+
+	if err := os.MkdirAll(m.planStateDir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(planPath, []byte(renderPlanStub(name, description, planFile)), 0o644); err != nil {
+		return err
+	}
+	if err := m.createPlanRecord(planFile, description, branch, now); err != nil {
+		return err
+	}
+	if err := gitpkg.CommitPlanScaffoldOnMain(m.activeRepoPath, planFile); err != nil {
+		return err
+	}
+	if err := gitpkg.EnsurePlanBranch(m.activeRepoPath, branch); err != nil {
+		return err
+	}
+
+	m.loadPlanState()
+	m.updateSidebarPlans()
+	m.updateSidebarItems()
+	return nil
+}
+
+// shouldPromptPushAfterCoderExit returns true when a coder session has exited
+// (tmuxAlive == false) and the plan is still in the implementing state.
+func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Instance, tmuxAlive bool) bool {
+	if inst == nil {
+		return false
+	}
+	if inst.PlanFile == "" {
+		return false
+	}
+	if inst.AgentType != session.AgentTypeCoder {
+		return false
+	}
+	if entry.Status != planstate.StatusImplementing {
+		return false
+	}
+	return !tmuxAlive
+}
+
+// promptPushBranchThenAdvance shows a confirmation overlay asking the user to
+// push the implementation branch, then advances the plan to reviewing.
+func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
+	message := fmt.Sprintf("[!] Implementation finished for '%s'. Push branch now?", planstate.DisplayName(inst.PlanFile))
+	pushAction := func() tea.Msg {
+		worktree, err := inst.GetGitWorktree()
+		if err == nil {
+			// Push errors are non-fatal: the user can push manually later.
+			_ = worktree.PushChanges(
+				fmt.Sprintf("[klique] push completed implementation for '%s'", inst.Title),
+				false,
+			)
+		}
+		if err := m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing); err != nil {
+			return err
+		}
+		return planRefreshMsg{}
+	}
+	return m.confirmAction(message, func() tea.Msg { return pushAction() })
+}
+
+// buildPlanPrompt returns the initial prompt for a planner agent session.
+func buildPlanPrompt(planName, description string) string {
+	return fmt.Sprintf("Plan %s. Goal: %s.", planName, description)
+}
+
+// buildImplementPrompt returns the prompt for a coder agent session.
+func buildImplementPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"Implement docs/plans/%s using the executing-plans superpowers skill. Execute all tasks sequentially.",
+		planFile,
+	)
+}
+
+// buildModifyPlanPrompt returns the prompt for modifying an existing plan.
+func buildModifyPlanPrompt(planFile string) string {
+	return fmt.Sprintf("Modify existing plan at docs/plans/%s. Keep the same filename and update only what changed.", planFile)
+}
+
+// agentTypeForSubItem maps a sidebar stage name to the corresponding AgentType constant.
+func agentTypeForSubItem(action string) (string, bool) {
+	switch action {
+	case "plan":
+		return session.AgentTypePlanner, true
+	case "implement":
+		return session.AgentTypeCoder, true
+	case "review":
+		return session.AgentTypeReviewer, true
+	default:
+		return "", false
+	}
+}
+
+// spawnPlanAgent creates and starts an agent session for the given plan and action.
+func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+	}
+
+	agentType, ok := agentTypeForSubItem(action)
+	if !ok {
+		return m, m.handleError(fmt.Errorf("unknown plan action: %s", action))
+	}
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     planstate.DisplayName(planFile) + "-" + action,
+		Path:      m.activeRepoPath,
+		Program:   m.program,
+		PlanFile:  planFile,
+		AgentType: agentType,
+	})
+	if err != nil {
+		return m, m.handleError(err)
+	}
+	// Keep IsReviewer in sync with AgentType so the reviewer-completion check
+	// in the metadata tick handler (which gates on inst.IsReviewer) fires for
+	// sidebar-spawned reviewers as well as auto-spawned ones.
+	if agentType == session.AgentTypeReviewer {
+		inst.IsReviewer = true
+	}
+	inst.QueuedPrompt = prompt
+
+	var startCmd tea.Cmd
+	if action == "plan" {
+		// Planner runs on main branch (no shared worktree needed)
+		startCmd = func() tea.Msg {
+			err := inst.Start(true)
+			return instanceStartedMsg{instance: inst, err: err}
+		}
+	} else {
+		// Coder and reviewer share the plan's feature branch worktree
+		shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, entry.Branch)
+		if err := shared.Setup(); err != nil {
+			return m, m.handleError(err)
+		}
+		startCmd = func() tea.Msg {
+			err := inst.StartInSharedWorktree(shared, entry.Branch)
+			return instanceStartedMsg{instance: inst, err: err}
+		}
+	}
+
+	m.newInstanceFinalizer = m.list.AddInstance(inst)
+	m.list.SelectInstance(inst)
+	return m, tea.Batch(tea.WindowSize(), startCmd)
 }
 
 // getTopicNames returns existing topic names for the picker.
