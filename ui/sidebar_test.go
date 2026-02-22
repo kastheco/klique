@@ -20,10 +20,10 @@ func TestPlanDisplayName(t *testing.T) {
 func TestSidebarSetItems_IncludesPlansSectionBeforeTopics(t *testing.T) {
 	s := NewSidebar()
 	s.SetPlans([]PlanDisplay{{Filename: "2026-02-20-plan-orchestration.md", Status: string(planstate.StatusInProgress)}})
-	s.SetItems([]string{"alpha"}, map[string]int{"alpha": 1}, 0, map[string]bool{"alpha": false}, map[string]TopicStatus{"alpha": {}})
+	s.SetItems(map[string]int{"2026-02-20-plan-orchestration.md": 1}, 0, map[string]GroupStatus{})
 
-	if len(s.items) < 5 {
-		t.Fatalf("expected at least 5 sidebar items, got %d", len(s.items))
+	if len(s.items) < 3 {
+		t.Fatalf("expected at least 3 sidebar items, got %d", len(s.items))
 	}
 
 	if s.items[1].Name != "Plans" || !s.items[1].IsSection {
@@ -32,15 +32,12 @@ func TestSidebarSetItems_IncludesPlansSectionBeforeTopics(t *testing.T) {
 	if s.items[2].ID != SidebarPlanPrefix+"2026-02-20-plan-orchestration.md" {
 		t.Fatalf("item[2].ID = %q, want %q", s.items[2].ID, SidebarPlanPrefix+"2026-02-20-plan-orchestration.md")
 	}
-	if s.items[3].Name != "Topics" || !s.items[3].IsSection {
-		t.Fatalf("item[3] = %+v, want Topics section", s.items[3])
-	}
 }
 
 func TestGetSelectedPlanFile(t *testing.T) {
 	s := NewSidebar()
 	s.SetPlans([]PlanDisplay{{Filename: "plan.md", Status: string(planstate.StatusReady)}})
-	s.SetItems(nil, map[string]int{}, 0, map[string]bool{}, map[string]TopicStatus{})
+	s.SetItems(map[string]int{}, 0, map[string]GroupStatus{})
 
 	if s.GetSelectedPlanFile() != "" {
 		t.Fatalf("selected plan should be empty when All is selected")

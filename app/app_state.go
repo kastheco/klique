@@ -22,26 +22,29 @@ import (
 )
 
 func (m *home) updateSidebarItems() {
-	// Count running/notification instances for status (used by the "All" count badge).
-	// Since topics are now plan-state-based (not instance-based), we still track
-	// instance activity for the top-level status indicators.
-	topicStatuses := make(map[string]ui.TopicStatus)
+	countByPlan := make(map[string]int)
+	groupStatuses := make(map[string]ui.GroupStatus)
 	ungroupedCount := 0
 
 	for _, inst := range m.list.GetInstances() {
-		ungroupedCount++
-		// All instances are ungrouped at the instance level; topics are plan-state-based.
-		st := topicStatuses[""]
+		planKey := inst.PlanFile // "" => ungrouped
+		if planKey == "" {
+			ungroupedCount++
+		} else {
+			countByPlan[planKey]++
+		}
+
+		st := groupStatuses[planKey]
 		if inst.Started() && !inst.Paused() && !inst.PromptDetected {
 			st.HasRunning = true
 		}
 		if inst.Notified {
 			st.HasNotification = true
 		}
-		topicStatuses[""] = st
+		groupStatuses[planKey] = st
 	}
 
-	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses)
+	m.sidebar.SetItems(countByPlan, ungroupedCount, groupStatuses)
 }
 
 // setFocus updates which panel has focus and syncs the focused state to sidebar and list.
@@ -514,8 +517,6 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 	}
 	return nil
 }
-
-
 
 // transitionToReview marks a plan as "reviewing", pauses the coder session,
 // spawns a reviewer session with the reviewer profile, and returns the start cmd.

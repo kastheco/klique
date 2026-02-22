@@ -211,19 +211,25 @@ type TopicStatus struct {
 	HasNotification bool
 }
 
-// SetItems updates the sidebar items from the current topics.
-// sharedTopics maps topic name → whether it has a shared worktree.
-// topicStatuses maps topic name → running/notification status.
-func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int, sharedTopics map[string]bool, topicStatuses map[string]TopicStatus) {
+// GroupStatus holds status flags for a plan-grouped set of instances.
+type GroupStatus struct {
+	HasRunning      bool
+	HasNotification bool
+}
+
+// SetItems updates sidebar items from plan-grouped instance counts.
+// instanceCountByPlan maps plan filename → instance count ("" key = ungrouped).
+// ungroupedCount is the number of instances with no plan file.
+// groupStatuses maps plan filename → running/notification status ("" key = ungrouped).
+func (s *Sidebar) SetItems(instanceCountByPlan map[string]int, ungroupedCount int, groupStatuses map[string]GroupStatus) {
 	totalCount := ungroupedCount
-	for _, c := range instanceCountByTopic {
+	for _, c := range instanceCountByPlan {
 		totalCount += c
 	}
 
-	// Aggregate statuses for "All"
 	anyRunning := false
 	anyNotification := false
-	for _, st := range topicStatuses {
+	for _, st := range groupStatuses {
 		if st.HasRunning {
 			anyRunning = true
 		}
@@ -240,35 +246,27 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 		items = append(items, SidebarItem{Name: "Plans", IsSection: true})
 		for _, p := range s.plans {
 			isCancelled := p.Status == string(planstate.StatusCancelled)
+			st := groupStatuses[p.Filename]
 			items = append(items, SidebarItem{
 				Name:            planstate.DisplayName(p.Filename),
 				ID:              SidebarPlanPrefix + p.Filename,
-				HasRunning:      !isCancelled && p.Status == string(planstate.StatusInProgress),
-				HasNotification: !isCancelled && p.Status == string(planstate.StatusReviewing),
+				Count:           instanceCountByPlan[p.Filename],
+				HasRunning:      st.HasRunning,
+				HasNotification: st.HasNotification,
 				IsCancelled:     isCancelled,
 			})
 		}
 	}
 
-	if len(topicNames) > 0 {
-		items = append(items, SidebarItem{Name: "Topics", IsSection: true})
-		for _, name := range topicNames {
-			count := instanceCountByTopic[name]
-			st := topicStatuses[name]
-			items = append(items, SidebarItem{
-				Name: name, ID: name, Count: count,
-				SharedWorktree: sharedTopics[name],
-				HasRunning:     st.HasRunning, HasNotification: st.HasNotification,
-			})
-		}
-	}
-
 	if ungroupedCount > 0 {
-		ungroupedSt := topicStatuses[""]
+		ungroupedSt := groupStatuses[""]
 		items = append(items, SidebarItem{Name: "Ungrouped", IsSection: true})
 		items = append(items, SidebarItem{
-			Name: "Ungrouped", ID: SidebarUngrouped, Count: ungroupedCount,
-			HasRunning: ungroupedSt.HasRunning, HasNotification: ungroupedSt.HasNotification,
+			Name:            "Ungrouped",
+			ID:              SidebarUngrouped,
+			Count:           ungroupedCount,
+			HasRunning:      ungroupedSt.HasRunning,
+			HasNotification: ungroupedSt.HasNotification,
 		})
 	}
 
@@ -359,14 +357,15 @@ func (s *Sidebar) ClickItem(row int) {
 	}
 }
 
-// UpdateMatchCounts sets the search match counts for each topic item.
+// UpdateMatchCounts sets the search match counts for each sidebar item.
+// matchesByPlan maps plan filename → match count ("" key = ungrouped).
 // Pass nil to clear search highlighting.
-func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches int) {
+func (s *Sidebar) UpdateMatchCounts(matchesByPlan map[string]int, totalMatches int) {
 	for i := range s.items {
 		if s.items[i].IsSection {
 			continue
 		}
-		if matchesByTopic == nil {
+		if matchesByPlan == nil {
 			s.items[i].MatchCount = -1 // not searching
 			continue
 		}
@@ -374,9 +373,14 @@ func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches 
 		case SidebarAll:
 			s.items[i].MatchCount = totalMatches
 		case SidebarUngrouped:
-			s.items[i].MatchCount = matchesByTopic[""]
+			s.items[i].MatchCount = matchesByPlan[""]
 		default:
-			s.items[i].MatchCount = matchesByTopic[s.items[i].ID]
+			if strings.HasPrefix(s.items[i].ID, SidebarPlanPrefix) {
+				planFile := s.items[i].ID[len(SidebarPlanPrefix):]
+				s.items[i].MatchCount = matchesByPlan[planFile]
+			} else {
+				s.items[i].MatchCount = 0
+			}
 		}
 	}
 }
