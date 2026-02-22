@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 )
 
-// globalSkillsDir returns the global skills directory for a given harness.
+// GlobalSkillsDir returns the global skills directory for a given harness.
 // Returns the absolute path where the harness expects to find skill symlinks.
-func globalSkillsDir(home, harnessName string) string {
+func GlobalSkillsDir(home, harnessName string) string {
 	switch harnessName {
 	case "claude":
 		return filepath.Join(home, ".claude", "skills")
@@ -43,7 +43,7 @@ func SyncGlobalSkills(home, harnessName string) error {
 		return fmt.Errorf("read %s: %w", canonicalDir, err)
 	}
 
-	destDir := globalSkillsDir(home, harnessName)
+	destDir := GlobalSkillsDir(home, harnessName)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create %s skills dir: %w", harnessName, err)
 	}
