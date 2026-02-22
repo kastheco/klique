@@ -132,8 +132,9 @@ func (w *TabbedWindow) ToggleWithReset(instance *session.Instance) error {
 }
 
 // UpdatePreview updates the content of the preview pane. instance may be nil.
+// No-op when focusMode is true - the embedded terminal owns the pane.
 func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
-	if w.activeTab != PreviewTab {
+	if w.activeTab != PreviewTab || w.focusMode {
 		return nil
 	}
 	return w.preview.UpdateContent(instance)
