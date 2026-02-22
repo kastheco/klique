@@ -342,3 +342,142 @@ func TestSidebarTreeRender_TopicAggregateStatus(t *testing.T) {
 	output := s.String()
 	assert.Contains(t, output, "●")
 }
+
+func TestSidebarRight_ExpandsCollapsedTopic(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "ready"},
+			}},
+		},
+		nil, nil,
+	)
+
+	s.SelectByID(SidebarTopicPrefix + "auth")
+	assert.False(t, s.HasRowID(SidebarPlanPrefix+"tokens.md"))
+
+	s.Right()
+	assert.True(t, s.HasRowID(SidebarPlanPrefix+"tokens.md"))
+}
+
+func TestSidebarRight_MovesToFirstChildWhenExpanded(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "ready"},
+			}},
+		},
+		nil, nil,
+	)
+
+	s.SelectByID(SidebarTopicPrefix + "auth")
+	s.ToggleSelectedExpand()
+	s.SelectByID(SidebarTopicPrefix + "auth")
+
+	s.Right()
+	assert.Equal(t, SidebarPlanPrefix+"tokens.md", s.GetSelectedID())
+}
+
+func TestSidebarLeft_CollapsesExpandedTopic(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "ready"},
+			}},
+		},
+		nil, nil,
+	)
+
+	s.SelectByID(SidebarTopicPrefix + "auth")
+	s.ToggleSelectedExpand()
+	s.SelectByID(SidebarTopicPrefix + "auth")
+
+	s.Left()
+	assert.False(t, s.HasRowID(SidebarPlanPrefix+"tokens.md"))
+}
+
+func TestSidebarLeft_MovesToParentFromPlan(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		[]TopicDisplay{
+			{Name: "auth", Plans: []PlanDisplay{
+				{Filename: "tokens.md", Status: "ready"},
+			}},
+		},
+		nil, nil,
+	)
+
+	s.SelectByID(SidebarTopicPrefix + "auth")
+	s.ToggleSelectedExpand()
+	s.SelectByID(SidebarPlanPrefix + "tokens.md")
+
+	s.Left()
+	assert.Equal(t, SidebarTopicPrefix+"auth", s.GetSelectedID())
+}
+
+func TestSidebarLeft_MovesToParentPlanFromStage(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "fix.md", Status: "in_progress"}},
+		nil,
+	)
+
+	s.SelectByID(SidebarPlanPrefix + "fix.md")
+	s.ToggleSelectedExpand()
+	s.SelectByID(SidebarPlanStagePrefix + "fix.md::implement")
+
+	s.Left()
+	assert.Equal(t, SidebarPlanPrefix+"fix.md", s.GetSelectedID())
+}
+
+func TestSidebarLeft_UngroupedPlanMovesUp(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{
+			{Filename: "a.md", Status: "ready"},
+			{Filename: "b.md", Status: "ready"},
+		},
+		nil,
+	)
+
+	s.Down()
+	s.Left()
+	assert.Equal(t, SidebarPlanPrefix+"a.md", s.GetSelectedID())
+}
+
+func TestSidebarRight_NoopOnStage(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "fix.md", Status: "in_progress"}},
+		nil,
+	)
+
+	s.SelectByID(SidebarPlanPrefix + "fix.md")
+	s.ToggleSelectedExpand()
+	s.SelectByID(SidebarPlanStagePrefix + "fix.md::plan")
+	before := s.GetSelectedID()
+
+	s.Right()
+	assert.Equal(t, before, s.GetSelectedID())
+}
+
+func TestSidebarRight_ExpandsPlan(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "fix.md", Status: "in_progress"}},
+		nil,
+	)
+
+	s.SelectByID(SidebarPlanPrefix + "fix.md")
+	assert.False(t, s.HasRowID(SidebarPlanStagePrefix+"fix.md::plan"))
+
+	s.Right()
+	assert.True(t, s.HasRowID(SidebarPlanStagePrefix+"fix.md::plan"))
+}
