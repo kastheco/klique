@@ -85,6 +85,10 @@ type Instance struct {
 	// LastActivity is the most recently detected agent activity (ephemeral, not persisted).
 	LastActivity *Activity
 
+	// CachedContent is the last tmux capture-pane output, set by CollectMetadata.
+	// Used by the preview tick to avoid redundant subprocess calls.
+	CachedContent string
+
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
 

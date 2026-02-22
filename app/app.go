@@ -7,6 +7,7 @@ import (
 	"github.com/kastheco/klique/config/planstate"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/ui"
 	"github.com/kastheco/klique/ui/overlay"
 	"os"
@@ -403,45 +404,89 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				instance.LastActivity = nil
+		// Snapshot the instance list for the goroutine. The slice header is
+		// copied but the pointers are shared — CollectMetadata only reads
+		// instance fields that don't change between ticks (started, Status,
+		// tmuxSession, gitWorktree, Program).
+		instances := m.list.GetInstances()
+		snapshots := make([]*session.Instance, len(instances))
+		copy(snapshots, instances)
+
+		planDir := m.planStateDir
+
+		return m, func() tea.Msg {
+			results := make([]instanceMetadata, 0, len(snapshots))
+			for _, inst := range snapshots {
+				if !inst.Started() || inst.Paused() {
+					continue
+				}
+				md := inst.CollectMetadata()
+				results = append(results, instanceMetadata{
+					Title:      inst.Title,
+					Content:    md.Content,
+					Updated:    md.Updated,
+					HasPrompt:  md.HasPrompt,
+					DiffStats:  md.DiffStats,
+					CPUPercent: md.CPUPercent,
+					MemMB:      md.MemMB,
+				})
+			}
+			time.Sleep(500 * time.Millisecond)
+			return metadataResultMsg{Results: results, PlanDir: planDir}
+		}
+	case metadataResultMsg:
+		// Apply collected metadata to instances — zero I/O, just field writes.
+		instanceMap := make(map[string]*session.Instance)
+		for _, inst := range m.list.GetInstances() {
+			instanceMap[inst.Title] = inst
+		}
+
+		for _, md := range msg.Results {
+			inst, ok := instanceMap[md.Title]
+			if !ok {
 				continue
 			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
-				// Parse activity from pane content.
-				if content, err := instance.GetPaneContent(); err == nil && content != "" {
-					instance.LastActivity = session.ParseActivity(content, instance.Program)
+
+			if md.Updated {
+				inst.SetStatus(session.Running)
+				if md.Content != "" {
+					inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
 				}
 			} else {
-				if prompt {
-					instance.PromptDetected = true
-					instance.TapEnter()
+				if md.HasPrompt {
+					inst.PromptDetected = true
+					inst.TapEnter()
 				} else {
-					instance.SetStatus(session.Ready)
+					inst.SetStatus(session.Ready)
 				}
-				// Clear activity when instance is no longer running.
-				if instance.Status != session.Running {
-					instance.LastActivity = nil
+				if inst.Status != session.Running {
+					inst.LastActivity = nil
 				}
 			}
-			// Deliver queued prompt once the instance is idle (Ready or PromptDetected).
-			// PromptDetected covers programs like opencode whose idle marker ("Ask anything")
-			// keeps hasPrompt=true, preventing the Ready status path from ever being taken.
-			if instance.QueuedPrompt != "" && (instance.Status == session.Ready || instance.PromptDetected) {
-				if err := instance.SendPrompt(instance.QueuedPrompt); err != nil {
-					log.WarningLog.Printf("could not send queued prompt to %q: %v", instance.Title, err)
+
+			// Deliver queued prompt
+			if inst.QueuedPrompt != "" && (inst.Status == session.Ready || inst.PromptDetected) {
+				if err := inst.SendPrompt(inst.QueuedPrompt); err != nil {
+					log.WarningLog.Printf("could not send queued prompt to %q: %v", inst.Title, err)
 				}
-				instance.QueuedPrompt = ""
+				inst.QueuedPrompt = ""
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+
+			if md.DiffStats != nil {
+				inst.SetDiffStats(md.DiffStats)
 			}
-			instance.UpdateResourceUsage()
+			inst.CPUPercent = md.CPUPercent
+			inst.MemMB = md.MemMB
 		}
-		// Refresh plan state from disk and update the sidebar plans section.
+
+		// Clear activity for non-started / paused instances
+		for _, inst := range m.list.GetInstances() {
+			if !inst.Started() || inst.Paused() {
+				inst.LastActivity = nil
+			}
+		}
+
+		// Refresh plan state and sidebar (these are cheap — JSON parse + in-memory rebuild)
 		m.loadPlanState()
 		m.checkReviewerCompletion()
 		m.updateSidebarPlans()
@@ -458,6 +503,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case error:
 		// Handle errors from confirmation actions
 		return m, m.handleError(msg)
+	case planRefreshMsg:
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m, nil
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
 		m.updateSidebarItems()
@@ -651,6 +701,28 @@ type planRenderedMsg struct {
 	planFile string
 	rendered string
 	err      error
+}
+
+// planRefreshMsg triggers a plan state reload and sidebar refresh.
+// Returned from confirmation callbacks that write plan state changes.
+type planRefreshMsg struct{}
+
+// instanceMetadata holds the results of polling a single instance's subprocess data.
+// Collected in a goroutine, applied to the model in Update.
+type instanceMetadata struct {
+	Title      string
+	Content    string // tmux capture-pane output (reused for preview, activity, hash)
+	Updated    bool
+	HasPrompt  bool
+	DiffStats  *git.DiffStats
+	CPUPercent float64
+	MemMB      float64
+}
+
+// metadataResultMsg carries all per-instance metadata collected by the async tick.
+type metadataResultMsg struct {
+	Results []instanceMetadata
+	PlanDir string
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
