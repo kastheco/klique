@@ -1103,12 +1103,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		})
 		return m, nil
 	case keys.KeyFocusSidebar:
+		if m.sidebarHidden {
+			// Two-step: reveal sidebar first, don't focus yet
+			m.sidebarHidden = false
+			return m, tea.WindowSize()
+		}
 		// s key always jumps directly to the sidebar regardless of current panel.
 		m.setFocus(0)
 		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
+	case keys.KeyToggleSidebar:
+		if m.sidebarHidden {
+			// Show sidebar, keep current focus
+			m.sidebarHidden = false
+		} else {
+			// Hide sidebar
+			m.sidebarHidden = true
+			// If sidebar was focused, move focus to tabbed view
+			if m.focusedPanel == 0 {
+				m.setFocus(1)
+			}
+		}
+		return m, tea.WindowSize()
 	case keys.KeyLeft:
+		if m.focusedPanel == 1 && m.sidebarHidden {
+			// Two-step reveal: first press shows sidebar without navigating focus
+			m.sidebarHidden = false
+			return m, tea.WindowSize()
+		}
 		// Cycle left: list(2) → preview(1) → sidebar(0), no-op at left edge.
 		if m.focusedPanel > 0 {
 			m.setFocus(m.focusedPanel - 1)
