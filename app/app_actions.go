@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/klique/internal/initcmd/scaffold"
 	"github.com/kastheco/klique/session"
 	"github.com/kastheco/klique/ui/overlay"
 
@@ -371,7 +372,32 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Synchronous path (no confirmation needed) — write to disk and refresh inline.
+	// For agent-spawning stages, dispatch to spawnPlanAgent which handles
+	// status update + session creation.
+	switch stage {
+	case "plan":
+		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
+	case "implement":
+		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m.spawnPlanAgent(planFile, "implement", buildImplementPrompt(planFile))
+	case "review":
+		_ = m.planState.SetStatus(planFile, planstate.StatusReviewing)
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		planName := planstate.DisplayName(planFile)
+		reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
+		return m.spawnPlanAgent(planFile, "review", reviewPrompt)
+	}
+
+	// Non-agent stages (finished): just update status.
 	if err := planStageStatus(planFile, stage, m.planState); err != nil {
 		return m, m.handleError(err)
 	}

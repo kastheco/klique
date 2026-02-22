@@ -766,6 +766,86 @@ func (m *home) finalizePlanCreation(name, description string) error {
 	return nil
 }
 
+// buildPlanPrompt returns the initial prompt for a planner agent session.
+func buildPlanPrompt(planName, description string) string {
+	return fmt.Sprintf("Plan %s. Goal: %s.", planName, description)
+}
+
+// buildImplementPrompt returns the prompt for a coder agent session.
+func buildImplementPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"Implement docs/plans/%s using the executing-plans superpowers skill. Execute all tasks sequentially.",
+		planFile,
+	)
+}
+
+// buildModifyPlanPrompt returns the prompt for modifying an existing plan.
+func buildModifyPlanPrompt(planFile string) string {
+	return fmt.Sprintf("Modify existing plan at docs/plans/%s. Keep the same filename and update only what changed.", planFile)
+}
+
+// agentTypeForSubItem maps a sidebar stage name to the corresponding AgentType constant.
+func agentTypeForSubItem(action string) (string, bool) {
+	switch action {
+	case "plan":
+		return session.AgentTypePlanner, true
+	case "implement":
+		return session.AgentTypeCoder, true
+	case "review":
+		return session.AgentTypeReviewer, true
+	default:
+		return "", false
+	}
+}
+
+// spawnPlanAgent creates and starts an agent session for the given plan and action.
+func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+	}
+
+	agentType, ok := agentTypeForSubItem(action)
+	if !ok {
+		return m, m.handleError(fmt.Errorf("unknown plan action: %s", action))
+	}
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     planstate.DisplayName(planFile) + "-" + action,
+		Path:      m.activeRepoPath,
+		Program:   m.program,
+		PlanFile:  planFile,
+		AgentType: agentType,
+	})
+	if err != nil {
+		return m, m.handleError(err)
+	}
+	inst.QueuedPrompt = prompt
+
+	var startCmd tea.Cmd
+	if action == "plan" {
+		// Planner runs on main branch (no shared worktree needed)
+		startCmd = func() tea.Msg {
+			err := inst.Start(true)
+			return instanceStartedMsg{instance: inst, err: err}
+		}
+	} else {
+		// Coder and reviewer share the plan's feature branch worktree
+		shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, entry.Branch)
+		if err := shared.Setup(); err != nil {
+			return m, m.handleError(err)
+		}
+		startCmd = func() tea.Msg {
+			err := inst.StartInSharedWorktree(shared, entry.Branch)
+			return instanceStartedMsg{instance: inst, err: err}
+		}
+	}
+
+	m.newInstanceFinalizer = m.list.AddInstance(inst)
+	m.list.SelectInstance(inst)
+	return m, tea.Batch(tea.WindowSize(), startCmd)
+}
+
 // getTopicNames returns existing topic names for the picker.
 func (m *home) getTopicNames() []string {
 	if m.planState == nil {
