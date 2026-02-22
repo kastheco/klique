@@ -84,5 +84,8 @@
   "2026-02-21-osc11-terminal-bg.md": {
     "status": "done",
     "implemented": "2026-02-21"
+  },
+  "2026-02-21-init-wizard-refinements.md": {
+    "status": "ready"
   }
 }
