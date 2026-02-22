@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -10,6 +11,9 @@ import (
 	"github.com/kastheco/klique/internal/initcmd/harness"
 	"github.com/spf13/cobra"
 )
+
+// errUnhealthy is returned when health < 100% to signal exit code 1 without printing a message.
+var errUnhealthy = errors.New("unhealthy")
 
 func newCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -23,6 +27,10 @@ func newCheckCmd() *cobra.Command {
 
 Exit code 0 if 100% healthy, exit code 1 otherwise.`,
 		RunE: runCheck,
+		// Suppress usage on error — health failures are not usage errors.
+		SilenceUsage: true,
+		// Suppress cobra's "Error: ..." line for the unhealthy sentinel.
+		SilenceErrors: true,
 	}
 	cmd.Flags().BoolP("verbose", "v", false, "show per-skill detail for each harness")
 	return cmd
@@ -59,7 +67,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "\nHealth: %d/%d OK (%d%%)\n", ok, total, pct)
 
 	if pct < 100 {
-		os.Exit(1)
+		return errUnhealthy
 	}
 	return nil
 }
