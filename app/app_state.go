@@ -766,6 +766,47 @@ func (m *home) finalizePlanCreation(name, description string) error {
 	return nil
 }
 
+// shouldPromptPushAfterCoderExit returns true when a coder session has exited
+// (tmuxAlive == false) and the plan is still in the implementing state.
+func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Instance, tmuxAlive bool) bool {
+	if inst == nil {
+		return false
+	}
+	if inst.PlanFile == "" {
+		return false
+	}
+	if inst.AgentType != session.AgentTypeCoder {
+		return false
+	}
+	if entry.Status != planstate.StatusImplementing {
+		return false
+	}
+	return !tmuxAlive
+}
+
+// promptPushBranchThenAdvance shows a confirmation overlay asking the user to
+// push the implementation branch, then advances the plan to reviewing.
+func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
+	message := fmt.Sprintf("[!] Implementation finished for '%s'. Push branch now?", planstate.DisplayName(inst.PlanFile))
+	pushAction := func() tea.Msg {
+		worktree, err := inst.GetGitWorktree()
+		if err == nil {
+			_ = worktree.PushChanges(
+				fmt.Sprintf("[klique] push completed implementation for '%s'", inst.Title),
+				false,
+			)
+		}
+		_ = m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing)
+		return planRefreshMsg{}
+	}
+	skipAction := func() tea.Msg {
+		_ = m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing)
+		return planRefreshMsg{}
+	}
+	_ = skipAction // used via cancel path below
+	return m.confirmAction(message, func() tea.Msg { return pushAction() })
+}
+
 // buildPlanPrompt returns the initial prompt for a planner agent session.
 func buildPlanPrompt(planName, description string) string {
 	return fmt.Sprintf("Plan %s. Goal: %s.", planName, description)

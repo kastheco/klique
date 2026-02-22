@@ -20,6 +20,11 @@ const (
 	StatusReviewing  Status = "reviewing"
 	StatusCompleted  Status = "completed"
 	StatusCancelled  Status = "cancelled"
+
+	// Lifecycle-stage aliases used by the plan/implement/review/finished sidebar stages.
+	StatusPlanning     Status = "planning"
+	StatusImplementing Status = "implementing"
+	StatusFinished     Status = "finished"
 )
 
 type PlanEntry struct {
