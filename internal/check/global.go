@@ -13,18 +13,16 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 	result := HarnessResult{Name: harnessName, Installed: true}
 
 	canonicalDir := filepath.Join(home, ".agents", "skills")
-	entries, err := os.ReadDir(canonicalDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return result
-		}
+	entries, readErr := os.ReadDir(canonicalDir)
+	if readErr != nil && !os.IsNotExist(readErr) {
 		result.Skills = append(result.Skills, SkillEntry{
 			Name:   "~/.agents/skills",
 			Status: StatusBroken,
-			Detail: err.Error(),
+			Detail: readErr.Error(),
 		})
 		return result
 	}
+	// entries may be nil/empty if canonicalDir doesn't exist — that's fine.
 
 	// Codex reads ~/.agents/skills/ natively — all real dirs are synced.
 	if harnessName == "codex" {

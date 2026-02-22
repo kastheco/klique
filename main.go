@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/kastheco/klique/app"
@@ -196,6 +198,9 @@ func init() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, errUnhealthy) {
+			os.Exit(1)
+		}
 		fmt.Println(err)
 	}
 }

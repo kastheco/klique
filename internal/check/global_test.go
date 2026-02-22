@@ -79,6 +79,21 @@ func TestAuditGlobal_NoSkillsDir(t *testing.T) {
 	assert.Empty(t, result.Skills)
 }
 
+func TestAuditGlobal_OrphanWithNoCanonical(t *testing.T) {
+	home := t.TempDir()
+	// No ~/.agents/skills/ but harness dir has a stale symlink
+	claudeSkills := filepath.Join(home, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(claudeSkills, 0o755))
+	require.NoError(t, os.Symlink("/nonexistent", filepath.Join(claudeSkills, "stale")))
+
+	result := AuditGlobal(home, "claude")
+	byName := make(map[string]SkillEntry)
+	for _, s := range result.Skills {
+		byName[s.Name] = s
+	}
+	assert.Equal(t, StatusOrphan, byName["stale"].Status, "stale should be orphan even with no canonical dir")
+}
+
 func TestAuditGlobal_Codex(t *testing.T) {
 	home := t.TempDir()
 
