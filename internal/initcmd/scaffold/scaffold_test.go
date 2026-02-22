@@ -551,4 +551,26 @@ func TestWriteOpenCodeProject_SkipsNonOpencodeAgents(t *testing.T) {
 	assert.NotContains(t, s, `"claude-opus-4-6"`)
 }
 
+func TestRun_OpencodeConfigGenerated(t *testing.T) {
+	// This is a scaffold-level check — the integration test in initcmd_test.go
+	// already tests the TOML write path. Just verify the config file shows up
+	// in ScaffoldAll results when opencode agents are present.
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6",
+			Temperature: ptrFloat(0.1), Effort: "medium", Enabled: true},
+	}
+
+	results, err := ScaffoldAll(dir, agents, nil, false)
+	require.NoError(t, err)
+
+	var hasConfig bool
+	for _, r := range results {
+		if r.Path == ".opencode/opencode.jsonc" {
+			hasConfig = true
+		}
+	}
+	assert.True(t, hasConfig, "ScaffoldAll should produce opencode.jsonc for opencode agents")
+}
+
 func ptrFloat(f float64) *float64 { return &f }
