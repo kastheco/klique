@@ -757,6 +757,24 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	}
 
+	// Forward key events to the viewport when in document or scroll mode.
+	// This enables viewport native keys like PgUp/PgDn and arrow keys.
+	if (m.tabbedWindow.IsDocumentMode() || m.tabbedWindow.IsPreviewInScrollMode()) &&
+		m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
+		cmd := m.tabbedWindow.ViewportUpdate(msg)
+
+		// Keep existing shift+up/down behavior as fallback handlers.
+		if msg.Type != tea.KeyShiftUp && msg.Type != tea.KeyShiftDown {
+			if m.tabbedWindow.ViewportHandlesKey(msg) {
+				return m, cmd
+			}
+		}
+
+		if cmd != nil {
+			return m, cmd
+		}
+	}
+
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
 		return m.handleQuit()

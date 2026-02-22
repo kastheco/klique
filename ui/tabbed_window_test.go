@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -46,4 +47,28 @@ func TestUpdatePreview_WorksWhenNotFocusMode(t *testing.T) {
 	// With nil instance, UpdateContent sets fallback state.
 	assert.True(t, preview.previewState.fallback,
 		"UpdatePreview should update content when focusMode is false")
+}
+
+func TestViewportUpdate_DelegatesOnlyForPreviewTab(t *testing.T) {
+	preview := NewPreviewPane()
+	preview.SetSize(30, 5)
+	preview.SetDocumentContent(testDocumentLines(40))
+	diff := NewDiffPane()
+	git := NewGitPane()
+	tw := NewTabbedWindow(preview, diff, git)
+
+	before := preview.viewport.View()
+
+	tw.SetActiveTab(PreviewTab)
+	cmd := tw.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	afterPreview := preview.viewport.View()
+	assert.Nil(t, cmd)
+	assert.NotEqual(t, before, afterPreview)
+
+	tw.SetActiveTab(DiffTab)
+	beforeDiff := preview.viewport.View()
+	cmd = tw.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	afterDiff := preview.viewport.View()
+	assert.Nil(t, cmd)
+	assert.Equal(t, beforeDiff, afterDiff)
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
@@ -160,6 +161,23 @@ func (w *TabbedWindow) ClearDocumentMode() {
 // IsDocumentMode returns true when the preview is showing a static document.
 func (w *TabbedWindow) IsDocumentMode() bool {
 	return w.preview.IsDocumentMode()
+}
+
+// ViewportUpdate forwards a tea.Msg to the preview viewport when in document
+// or scroll mode, enabling native key handling (PgUp/PgDn, Home/End, etc.).
+func (w *TabbedWindow) ViewportUpdate(msg tea.Msg) tea.Cmd {
+	if w.activeTab != PreviewTab {
+		return nil
+	}
+	return w.preview.ViewportUpdate(msg)
+}
+
+// ViewportHandlesKey reports whether the preview viewport keymap handles this key.
+func (w *TabbedWindow) ViewportHandlesKey(msg tea.KeyMsg) bool {
+	if w.activeTab != PreviewTab {
+		return false
+	}
+	return w.preview.ViewportHandlesKey(msg)
 }
 
 // SetGitContent caches the git pane content to avoid re-rendering when unchanged.

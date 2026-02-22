@@ -5,12 +5,18 @@ import (
 	"github.com/kastheco/klique/session"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-var previewPaneStyle = lipgloss.NewStyle().
-	Foreground(ColorText)
+var (
+	previewPaneStyle = lipgloss.NewStyle().
+				Foreground(ColorText)
+	scrollbarTrackStyle = lipgloss.NewStyle().Foreground(ColorOverlay)
+	scrollbarThumbStyle = lipgloss.NewStyle().Foreground(ColorIris)
+)
 
 type PreviewPane struct {
 	width  int
@@ -55,7 +61,7 @@ func (p *PreviewPane) SetRawContent(content string) {
 func (p *PreviewPane) SetSize(width, maxHeight int) {
 	p.width = width
 	p.height = maxHeight
-	p.viewport.Width = width
+	p.viewport.Width = max(0, width-1)
 	p.viewport.Height = maxHeight
 }
 
@@ -86,6 +92,38 @@ func (p *PreviewPane) IsDocumentMode() bool {
 // ClearDocumentMode exits document mode so UpdateContent resumes normal preview.
 func (p *PreviewPane) ClearDocumentMode() {
 	p.isDocument = false
+}
+
+// ViewportUpdate forwards a tea.Msg to the viewport when in document or scroll
+// mode, enabling the viewport's built-in key handling (PgUp/PgDn, Home/End,
+// arrow keys, mouse wheel). Returns any command the viewport emits.
+func (p *PreviewPane) ViewportUpdate(msg tea.Msg) tea.Cmd {
+	if !p.isDocument && !p.isScrolling {
+		return nil
+	}
+
+	var cmd tea.Cmd
+	p.viewport, cmd = p.viewport.Update(msg)
+	return cmd
+}
+
+// ViewportHandlesKey reports whether the viewport keymap handles this key.
+func (p *PreviewPane) ViewportHandlesKey(msg tea.KeyMsg) bool {
+	if !p.isDocument && !p.isScrolling {
+		return false
+	}
+
+	km := p.viewport.KeyMap
+	return key.Matches(msg,
+		km.Up,
+		km.Down,
+		km.Left,
+		km.Right,
+		km.PageUp,
+		km.PageDown,
+		km.HalfPageUp,
+		km.HalfPageDown,
+	)
 }
 
 // setFallbackContent sets the preview state with arbitrary centered content (no banner).
@@ -216,6 +254,40 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	return nil
 }
 
+// renderScrollbar builds a vertical scrollbar string of the given height using
+// the viewport's current scroll position. Returns an empty string when all
+// content fits on screen (no scrolling needed).
+func (p *PreviewPane) renderScrollbar(height int) string {
+	if height <= 0 {
+		return ""
+	}
+
+	pct := p.viewport.ScrollPercent()
+
+	// Don't show scrollbar when everything fits on screen.
+	if p.viewport.AtBottom() && p.viewport.YOffset == 0 {
+		return ""
+	}
+
+	thumbSize := max(1, height/5)
+	trackLen := height - thumbSize
+	thumbPos := int(pct * float64(trackLen))
+
+	var sb strings.Builder
+	for i := 0; i < height; i++ {
+		if i >= thumbPos && i < thumbPos+thumbSize {
+			sb.WriteString(scrollbarThumbStyle.Render("▐"))
+		} else {
+			sb.WriteString(scrollbarTrackStyle.Render("│"))
+		}
+		if i < height-1 {
+			sb.WriteByte('\n')
+		}
+	}
+
+	return sb.String()
+}
+
 // Returns the preview pane content as a string.
 func (p *PreviewPane) String() string {
 	if p.width == 0 || p.height == 0 {
@@ -281,7 +353,12 @@ func (p *PreviewPane) String() string {
 
 	// If in document or scroll mode, use the viewport to display scrollable content
 	if p.isDocument || p.isScrolling {
-		return p.viewport.View()
+		viewContent := p.viewport.View()
+		scrollbar := p.renderScrollbar(p.viewport.Height)
+		if scrollbar == "" {
+			return viewContent
+		}
+		return lipgloss.JoinHorizontal(lipgloss.Top, viewContent, scrollbar)
 	}
 
 	// Normal mode display

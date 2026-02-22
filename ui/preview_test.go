@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 )
 
@@ -378,4 +379,71 @@ func TestPreviewContentWithoutScrolling(t *testing.T) {
 	// Verify the rendered string contains the content
 	renderedString := previewPane.String()
 	require.Contains(t, renderedString, "test", "Rendered preview should contain the test content")
+}
+
+func TestPreviewPaneSetSize_ReservesScrollbarColumn(t *testing.T) {
+	previewPane := NewPreviewPane()
+	previewPane.SetSize(80, 24)
+
+	require.Equal(t, 80, previewPane.width)
+	require.Equal(t, 79, previewPane.viewport.Width)
+	require.Equal(t, 24, previewPane.viewport.Height)
+}
+
+func TestPreviewPaneViewportUpdate_DocumentModeHandlesNativeKeys(t *testing.T) {
+	previewPane := NewPreviewPane()
+	previewPane.SetSize(30, 5)
+	previewPane.SetDocumentContent(testDocumentLines(40))
+
+	before := previewPane.viewport.View()
+	cmd := previewPane.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	after := previewPane.viewport.View()
+
+	require.Nil(t, cmd)
+	require.NotEqual(t, before, after)
+}
+
+func TestPreviewPaneViewportUpdate_NoOpOutsideScrollableModes(t *testing.T) {
+	previewPane := NewPreviewPane()
+	previewPane.SetSize(30, 5)
+	previewPane.SetRawContent("plain preview")
+
+	cmd := previewPane.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+
+	require.Nil(t, cmd)
+	require.False(t, previewPane.IsDocumentMode())
+	require.False(t, previewPane.isScrolling)
+}
+
+func TestPreviewPaneString_RendersScrollbarOnlyWhenScrollable(t *testing.T) {
+	t.Run("shows scrollbar for long document", func(t *testing.T) {
+		previewPane := NewPreviewPane()
+		previewPane.SetSize(30, 6)
+		previewPane.SetDocumentContent(testDocumentLines(60))
+
+		rendered := previewPane.String()
+		require.Contains(t, rendered, "▐")
+		require.Contains(t, rendered, "│")
+	})
+
+	t.Run("hides scrollbar when content fits", func(t *testing.T) {
+		previewPane := NewPreviewPane()
+		previewPane.SetSize(30, 6)
+		previewPane.SetDocumentContent(testDocumentLines(2))
+
+		rendered := previewPane.String()
+		require.NotContains(t, rendered, "▐")
+		require.NotContains(t, rendered, "│")
+	})
+}
+
+func testDocumentLines(n int) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		if i > 1 {
+			b.WriteByte('\n')
+		}
+		_, _ = fmt.Fprintf(&b, "line %d", i)
+	}
+	return b.String()
 }
