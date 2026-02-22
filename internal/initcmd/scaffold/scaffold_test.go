@@ -66,12 +66,14 @@ func TestScaffoldOpenCodeProject(t *testing.T) {
 	dir := t.TempDir()
 	agents := []harness.AgentConfig{
 		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Enabled: true},
+		{Role: "chat", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Enabled: true},
 	}
 
 	_, err := WriteOpenCodeProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(dir, ".opencode", "agents", "coder.md"))
+	assert.FileExists(t, filepath.Join(dir, ".opencode", "agents", "chat.md"))
 }
 
 func TestScaffoldCodexProject(t *testing.T) {
