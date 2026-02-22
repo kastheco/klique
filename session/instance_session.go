@@ -27,12 +27,12 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 }
 
 // PreviewCached returns the last captured pane content without a subprocess call.
-// Falls back to live capture if the cache is empty (first tick).
+// Falls back to live capture only before the first metadata capture completes.
 func (i *Instance) PreviewCached() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	if i.CachedContent != "" {
+	if i.CachedContentSet {
 		return i.CachedContent, nil
 	}
 	return i.Preview()
@@ -126,18 +126,20 @@ func (i *Instance) SendKeys(keys string) error {
 // InstanceMetadata holds the results of polling a single instance.
 // Collected in a goroutine — all fields are values, no pointers into the model.
 type InstanceMetadata struct {
-	Content    string // raw tmux capture-pane output
-	Updated    bool
-	HasPrompt  bool
-	DiffStats  *git.DiffStats
-	CPUPercent float64
-	MemMB      float64
+	Content            string // raw tmux capture-pane output
+	ContentCaptured    bool
+	Updated            bool
+	HasPrompt          bool
+	DiffStats          *git.DiffStats
+	CPUPercent         float64
+	MemMB              float64
+	ResourceUsageValid bool
 }
 
 // CollectMetadata gathers all per-tick data for this instance via subprocess calls.
 // Safe to call from a goroutine — reads only, no model mutations.
-// Combines HasUpdated + GetPaneContent + UpdateDiffStats + UpdateResourceUsage
-// into a single method, eliminating the redundant second capture-pane call.
+// Combines HasUpdated + UpdateDiffStats + UpdateResourceUsage data collection
+// into a single method, eliminating redundant capture-pane calls.
 func (i *Instance) CollectMetadata() InstanceMetadata {
 	var m InstanceMetadata
 
@@ -146,7 +148,7 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 	}
 
 	// Single capture-pane call — reused for hash check, activity parsing, and preview.
-	m.Updated, m.HasPrompt, m.Content = i.tmuxSession.HasUpdatedWithContent()
+	m.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()
 
 	// Git diff stats
 	if i.gitWorktree != nil {
@@ -163,10 +165,7 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 	}
 
 	// Resource usage (pgrep + ps)
-	m.CPUPercent, m.MemMB = i.collectResourceUsage()
-
-	// Cache the content for the preview tick to read without shelling out.
-	i.CachedContent = m.Content
+	m.CPUPercent, m.MemMB, m.ResourceUsageValid = i.collectResourceUsage()
 
 	return m
 }
@@ -209,15 +208,15 @@ func (i *Instance) UpdateDiffStats() error {
 }
 
 // collectResourceUsage queries CPU and memory usage via subprocess calls.
-// Returns (cpu%, memMB). Safe to call from a goroutine.
-func (i *Instance) collectResourceUsage() (float64, float64) {
+// Returns (cpu%, memMB, ok). Safe to call from a goroutine.
+func (i *Instance) collectResourceUsage() (float64, float64, bool) {
 	if !i.started || i.tmuxSession == nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	pid, err := i.tmuxSession.GetPanePID()
 	if err != nil {
-		return i.CPUPercent, i.MemMB // keep previous on error
+		return 0, 0, false
 	}
 
 	targetPid := strconv.Itoa(pid)
@@ -231,29 +230,31 @@ func (i *Instance) collectResourceUsage() (float64, float64) {
 	psCmd := exec.Command("ps", "-o", "%cpu=,rss=", "-p", targetPid)
 	output, err := psCmd.Output()
 	if err != nil {
-		return i.CPUPercent, i.MemMB
+		return 0, 0, false
 	}
 
 	fields := strings.Fields(strings.TrimSpace(string(output)))
 	if len(fields) < 2 {
-		return i.CPUPercent, i.MemMB
+		return 0, 0, false
 	}
 
 	cpu, err := strconv.ParseFloat(fields[0], 64)
 	if err != nil {
-		return i.CPUPercent, i.MemMB
+		return 0, 0, false
 	}
 	rssKB, err := strconv.ParseFloat(fields[1], 64)
 	if err != nil {
-		return i.CPUPercent, i.MemMB
+		return 0, 0, false
 	}
-	return cpu, rssKB / 1024
+	return cpu, rssKB / 1024, true
 }
 
 // UpdateResourceUsage queries the process tree for CPU and memory usage.
 // Kept for backward compat but now delegates to collectResourceUsage.
 func (i *Instance) UpdateResourceUsage() {
-	i.CPUPercent, i.MemMB = i.collectResourceUsage()
+	if cpu, mem, ok := i.collectResourceUsage(); ok {
+		i.CPUPercent, i.MemMB = cpu, mem
+	}
 }
 
 // GetDiffStats returns the current git diff statistics

@@ -412,8 +412,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		snapshots := make([]*session.Instance, len(instances))
 		copy(snapshots, instances)
 
-		planDir := m.planStateDir
-
 		return m, func() tea.Msg {
 			results := make([]instanceMetadata, 0, len(snapshots))
 			for _, inst := range snapshots {
@@ -422,17 +420,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				md := inst.CollectMetadata()
 				results = append(results, instanceMetadata{
-					Title:      inst.Title,
-					Content:    md.Content,
-					Updated:    md.Updated,
-					HasPrompt:  md.HasPrompt,
-					DiffStats:  md.DiffStats,
-					CPUPercent: md.CPUPercent,
-					MemMB:      md.MemMB,
+					Title:              inst.Title,
+					Content:            md.Content,
+					ContentCaptured:    md.ContentCaptured,
+					Updated:            md.Updated,
+					HasPrompt:          md.HasPrompt,
+					DiffStats:          md.DiffStats,
+					CPUPercent:         md.CPUPercent,
+					MemMB:              md.MemMB,
+					ResourceUsageValid: md.ResourceUsageValid,
 				})
 			}
 			time.Sleep(500 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanDir: planDir}
+			return metadataResultMsg{Results: results}
 		}
 	case metadataResultMsg:
 		// Apply collected metadata to instances — zero I/O, just field writes.
@@ -447,20 +447,25 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			if md.Updated {
-				inst.SetStatus(session.Running)
-				if md.Content != "" {
-					inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
-				}
-			} else {
-				if md.HasPrompt {
-					inst.PromptDetected = true
-					inst.TapEnter()
+			if md.ContentCaptured {
+				inst.CachedContent = md.Content
+				inst.CachedContentSet = true
+
+				if md.Updated {
+					inst.SetStatus(session.Running)
+					if md.Content != "" {
+						inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
+					}
 				} else {
-					inst.SetStatus(session.Ready)
-				}
-				if inst.Status != session.Running {
-					inst.LastActivity = nil
+					if md.HasPrompt {
+						inst.PromptDetected = true
+						inst.TapEnter()
+					} else {
+						inst.SetStatus(session.Ready)
+					}
+					if inst.Status != session.Running {
+						inst.LastActivity = nil
+					}
 				}
 			}
 
@@ -475,8 +480,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if md.DiffStats != nil {
 				inst.SetDiffStats(md.DiffStats)
 			}
-			inst.CPUPercent = md.CPUPercent
-			inst.MemMB = md.MemMB
+			if md.ResourceUsageValid {
+				inst.CPUPercent = md.CPUPercent
+				inst.MemMB = md.MemMB
+			}
 		}
 
 		// Clear activity for non-started / paused instances
@@ -710,19 +717,20 @@ type planRefreshMsg struct{}
 // instanceMetadata holds the results of polling a single instance's subprocess data.
 // Collected in a goroutine, applied to the model in Update.
 type instanceMetadata struct {
-	Title      string
-	Content    string // tmux capture-pane output (reused for preview, activity, hash)
-	Updated    bool
-	HasPrompt  bool
-	DiffStats  *git.DiffStats
-	CPUPercent float64
-	MemMB      float64
+	Title              string
+	Content            string // tmux capture-pane output (reused for preview, activity, hash)
+	ContentCaptured    bool
+	Updated            bool
+	HasPrompt          bool
+	DiffStats          *git.DiffStats
+	CPUPercent         float64
+	MemMB              float64
+	ResourceUsageValid bool
 }
 
 // metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
 	Results []instanceMetadata
-	PlanDir string
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate

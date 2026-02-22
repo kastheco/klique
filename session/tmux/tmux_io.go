@@ -81,8 +81,8 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 }
 
 // HasUpdatedWithContent is like HasUpdated but also returns the raw captured
-// pane content, eliminating the need for a separate CapturePaneContent call.
-func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, content string) {
+// pane content and whether capture succeeded, eliminating duplicate capture-pane calls.
+func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool) {
 	raw, err := t.CapturePaneContent()
 	if err != nil {
 		t.monitor.captureFailures++
@@ -90,11 +90,12 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 			log.ErrorLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
 				t.monitor.captureFailures, err)
 		}
-		return false, false, ""
+		return false, false, "", false
 	}
 	t.monitor.captureFailures = 0
 
 	content = raw
+	captured = true
 
 	switch {
 	case isClaudeProgram(t.program):
@@ -111,14 +112,14 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 	if !bytes.Equal(newHash, t.monitor.prevOutputHash) {
 		t.monitor.prevOutputHash = newHash
 		t.monitor.unchangedTicks = 0
-		return true, hasPrompt, content
+		return true, hasPrompt, content, true
 	}
 
 	t.monitor.unchangedTicks++
 	if t.monitor.unchangedTicks < 6 {
-		return true, hasPrompt, content
+		return true, hasPrompt, content, true
 	}
-	return false, hasPrompt, content
+	return false, hasPrompt, content, true
 }
 
 // CapturePaneContent captures the content of the tmux pane
