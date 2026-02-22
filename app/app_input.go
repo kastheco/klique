@@ -21,7 +21,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateMoveTo {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -33,7 +33,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
 		return nil, false
 	}
-	if name == keys.KeyShiftDown || name == keys.KeyShiftUp {
+	if name == keys.KeyShiftDown || name == keys.KeyShiftUp || name == keys.KeyMoveTo {
 		return nil, false
 	}
 
@@ -671,6 +671,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle move-to-plan state (assign instance to plan)
+	if m.state == stateMoveTo {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			selected := m.list.GetSelectedInstance()
+			if selected != nil && m.pickerOverlay.IsSubmitted() {
+				picked := m.pickerOverlay.Value()
+				selected.PlanFile = m.planPickerMap[picked]
+				m.updateSidebarItems()
+				if err := m.saveAllInstances(); err != nil {
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					m.pickerOverlay = nil
+					return m, m.handleError(err)
+				}
+			}
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			m.pickerOverlay = nil
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
 	// Handle repo switch state (picker overlay)
 	if m.state == stateRepoSwitch {
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
@@ -1102,6 +1130,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateSearch
 		m.setFocus(0)
 		m.list.SetFilter("") // Show all instances
+		return m, nil
+	case keys.KeyMoveTo:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = stateMoveTo
+		items, mapping := m.getAssignablePlanNames()
+		m.planPickerMap = mapping
+		m.pickerOverlay = overlay.NewPickerOverlay("Assign to plan", items)
 		return m, nil
 	default:
 		return m, nil

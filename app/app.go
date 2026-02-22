@@ -75,6 +75,8 @@ const (
 	stateContextMenu
 	// stateRepoSwitch is the state when the user is switching repos via picker.
 	stateRepoSwitch
+	// stateMoveTo is the state when the user is assigning an instance to a plan.
+	stateMoveTo
 )
 
 type home struct {
@@ -172,6 +174,8 @@ type home struct {
 
 	// repoPickerMap maps picker display text to full repo path
 	repoPickerMap map[string]string
+	// planPickerMap maps picker display text to plan filename (empty = ungrouped)
+	planPickerMap map[string]string
 
 	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
 	planState *planstate.PlanState
