@@ -21,7 +21,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateMoveTo {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -33,7 +33,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
 		return nil, false
 	}
-	if name == keys.KeyShiftDown || name == keys.KeyShiftUp {
+	if name == keys.KeyShiftDown || name == keys.KeyShiftUp || name == keys.KeyMoveTo {
 		return nil, false
 	}
 
@@ -126,7 +126,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if itemRow >= 0 {
 			m.tabbedWindow.ClearDocumentMode()
 			m.sidebar.ClickItem(itemRow)
-			m.filterInstancesByTopic()
+			m.filterInstancesByPlan()
 			return m, m.instanceChanged()
 		}
 	} else if x < m.sidebarWidth+m.tabsWidth {
@@ -170,7 +170,7 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		itemRow := contentY - 4
 		if itemRow >= 0 {
 			m.sidebar.ClickItem(itemRow)
-			m.filterInstancesByTopic()
+			m.filterInstancesByPlan()
 		}
 		// Plan header: show plan context menu
 		if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
@@ -558,13 +558,27 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle confirmation state
 	if m.state == stateConfirm {
-		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
-		if shouldClose {
+		if m.confirmationOverlay == nil {
 			m.state = stateDefault
-			m.confirmationOverlay = nil
 			return m, nil
 		}
-		return m, nil
+		switch msg.String() {
+		case m.confirmationOverlay.ConfirmKey:
+			action := m.pendingConfirmAction
+			m.state = stateDefault
+			m.confirmationOverlay = nil
+			m.pendingConfirmAction = nil
+			// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
+			// This prevents blocking the UI during I/O (git push, etc.).
+			return m, action
+		case m.confirmationOverlay.CancelKey, "esc":
+			m.state = stateDefault
+			m.confirmationOverlay = nil
+			m.pendingConfirmAction = nil
+			return m, nil
+		default:
+			return m, nil
+		}
 	}
 
 	// Handle new plan name state
@@ -657,6 +671,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle move-to-plan state (assign instance to plan)
+	if m.state == stateMoveTo {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			selected := m.list.GetSelectedInstance()
+			if selected != nil && m.pickerOverlay.IsSubmitted() {
+				picked := m.pickerOverlay.Value()
+				selected.PlanFile = m.planPickerMap[picked]
+				m.updateSidebarItems()
+				if err := m.saveAllInstances(); err != nil {
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					m.pickerOverlay = nil
+					return m, m.handleError(err)
+				}
+			}
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			m.pickerOverlay = nil
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
 	// Handle repo switch state (picker overlay)
 	if m.state == stateRepoSwitch {
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
@@ -687,7 +729,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.sidebar.DeactivateSearch()
 			m.sidebar.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
-			m.filterInstancesByTopic()
+			m.filterInstancesByPlan()
 			return m, nil
 		case msg.String() == "enter":
 			m.sidebar.DeactivateSearch()
@@ -696,11 +738,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		case msg.String() == "up":
 			m.sidebar.Up()
-			m.filterSearchWithTopic()
+			m.filterBySearch()
 			return m, m.instanceChanged()
 		case msg.String() == "down":
 			m.sidebar.Down()
-			m.filterSearchWithTopic()
+			m.filterBySearch()
 			return m, m.instanceChanged()
 		case msg.Type == tea.KeyBackspace:
 			q := m.sidebar.GetSearchQuery()
@@ -825,7 +867,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.ClearDocumentMode()
 		if m.focusedPanel == 0 {
 			m.sidebar.Up()
-			m.filterInstancesByTopic()
+			m.filterInstancesByPlan()
 		} else {
 			m.list.Up()
 		}
@@ -834,7 +876,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.ClearDocumentMode()
 		if m.focusedPanel == 0 {
 			m.sidebar.Down()
-			m.filterInstancesByTopic()
+			m.filterInstancesByPlan()
 		} else {
 			m.list.Down()
 		}
@@ -899,29 +941,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
-		// Create the kill action as a tea.Cmd
+		// Pre-kill checks run async; model mutations happen in Update via killInstanceMsg.
 		title := selected.Title
 		killAction := func() tea.Msg {
-			// Get worktree and check if branch is checked out
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
 				return err
 			}
-
 			checkedOut, err := worktree.IsBranchCheckedOut()
 			if err != nil {
 				return err
 			}
-
 			if checkedOut {
 				return fmt.Errorf("instance %s is currently checked out", selected.Title)
 			}
-
-			// Kill the instance, remove from master list, and persist
-			m.list.Kill()
-			m.removeFromAllInstances(title)
-			m.saveAllInstances()
-			return instanceChangedMsg{}
+			return killInstanceMsg{title: title}
 		}
 
 		// Show confirmation modal
@@ -997,9 +1031,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.sidebar.IsSelectedTopicHeader() {
 				return m.openTopicContextMenu()
 			}
-			// Plan file selected (legacy path): spawn coder session
+			// Plan file selected: show context menu with start/view/push/pr options
 			if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
-				return m.spawnPlanSession(planFile)
+				return m.openPlanContextMenu()
 			}
 		}
 		if m.list.NumInstances() == 0 {
@@ -1097,6 +1131,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.setFocus(0)
 		m.list.SetFilter("") // Show all instances
 		return m, nil
+	case keys.KeyMoveTo:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = stateMoveTo
+		items, mapping := m.getAssignablePlanNames()
+		m.planPickerMap = mapping
+		m.pickerOverlay = overlay.NewPickerOverlay("Assign to plan", items)
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -1161,28 +1205,15 @@ func (m *home) handleError(err error) tea.Cmd {
 	return m.toastTickCmd()
 }
 
-// confirmAction shows a confirmation modal and stores the action to execute on confirm
+// confirmAction shows a confirmation modal and stores the action to execute on confirm.
+// The action is a tea.Cmd that will be returned from Update() to run asynchronously —
+// never called synchronously, which would block the UI during I/O operations.
 func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.state = stateConfirm
+	m.pendingConfirmAction = action
 
-	// Create and show the confirmation overlay using ConfirmationOverlay
 	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-	// Set a fixed width for consistent appearance
 	m.confirmationOverlay.SetWidth(50)
-
-	// Set callbacks for confirmation and cancellation
-	m.confirmationOverlay.OnConfirm = func() {
-		m.state = stateDefault
-		// Execute the action if it exists
-		if action != nil {
-			_ = action()
-		}
-		m.updateSidebarItems()
-	}
-
-	m.confirmationOverlay.OnCancel = func() {
-		m.state = stateDefault
-	}
 
 	return nil
 }

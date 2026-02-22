@@ -173,11 +173,24 @@ func (l *List) Kill() {
 	}
 }
 
-// KillInstancesByTopic kills and removes all instances belonging to the given topic.
-// NOTE: Topics are now plan-state-based; this method is kept for compatibility but
-// will not match any instances since TopicName has been removed from Instance.
-func (l *List) KillInstancesByTopic(_ string) {
-	// No-op: instances no longer have a TopicName field.
+// KillInstancesByPlan kills and removes all instances belonging to the given plan file.
+func (l *List) KillInstancesByPlan(planFile string) {
+	var remaining []*session.Instance
+	for _, inst := range l.allItems {
+		if inst.PlanFile == planFile {
+			if err := inst.Kill(); err != nil {
+				log.ErrorLog.Printf("could not kill instance %s: %v", inst.Title, err)
+			}
+			repoName, err := inst.RepoName()
+			if err == nil {
+				l.rmRepo(repoName)
+			}
+		} else {
+			remaining = append(remaining, inst)
+		}
+	}
+	l.allItems = remaining
+	l.rebuildFilteredItems()
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -247,6 +260,18 @@ func (l *List) SetSelectedInstance(idx int) {
 	l.selectedIdx = idx
 }
 
+// SelectInstance finds the given instance in the filtered/sorted list and selects it.
+// Returns true if found. This is sort-order safe unlike SetSelectedInstance(index).
+func (l *List) SelectInstance(inst *session.Instance) bool {
+	for i, item := range l.items {
+		if item == inst {
+			l.selectedIdx = i
+			return true
+		}
+	}
+	return false
+}
+
 // GetInstances returns all instances (unfiltered) for persistence and metadata updates.
 func (l *List) GetInstances() []*session.Instance {
 	return l.allItems
@@ -257,33 +282,27 @@ func (l *List) TotalInstances() int {
 	return len(l.allItems)
 }
 
-// SetFilter filters the displayed instances by topic name.
+// SetFilter filters the displayed instances by plan file.
 // Empty string shows all. SidebarUngrouped shows only ungrouped instances.
-func (l *List) SetFilter(topicFilter string) {
-	l.filter = topicFilter
+// Otherwise, filters to instances with matching PlanFile.
+func (l *List) SetFilter(planFilter string) {
+	l.filter = planFilter
 	l.rebuildFilteredItems()
 }
 
-// SetSearchFilter filters instances by search query across all topics.
-// SetSearchFilter filters instances by search query across all topics.
+// SetSearchFilter filters instances by title and plan filename across all instances.
+// Search is global — it ignores any active plan filter.
 func (l *List) SetSearchFilter(query string) {
-	l.SetSearchFilterWithTopic(query, "")
-}
-
-// SetSearchFilterWithTopic filters instances by search query, optionally scoped to a topic.
-// topicFilter: "" = all topics, "__ungrouped__" = ungrouped only, otherwise = specific topic.
-func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 	l.filter = ""
-	filtered := make([]*session.Instance, 0)
+	q := strings.ToLower(query)
+	filtered := make([]*session.Instance, 0, len(l.allItems))
 	for _, inst := range l.allItems {
-		// Check status filter
 		if l.statusFilter == StatusFilterActive && inst.Paused() {
 			continue
 		}
-		// Topic filter is no longer instance-based; skip it.
-		// Then check search query
-		if query == "" ||
-			strings.Contains(strings.ToLower(inst.Title), query) {
+		if q == "" ||
+			strings.Contains(strings.ToLower(inst.Title), q) ||
+			strings.Contains(strings.ToLower(inst.PlanFile), q) {
 			filtered = append(filtered, inst)
 		}
 	}
@@ -305,22 +324,35 @@ func (l *List) Clear() {
 }
 
 func (l *List) rebuildFilteredItems() {
-	// First apply topic filter
-	var topicFiltered []*session.Instance
-	// Topics are now plan-state-based; all instances are shown regardless of filter.
-	topicFiltered = l.allItems
+	// Apply plan filter first
+	var grouped []*session.Instance
+	if l.filter == "" {
+		grouped = l.allItems
+	} else if l.filter == SidebarUngrouped {
+		for _, inst := range l.allItems {
+			if inst.PlanFile == "" {
+				grouped = append(grouped, inst)
+			}
+		}
+	} else {
+		for _, inst := range l.allItems {
+			if inst.PlanFile == l.filter {
+				grouped = append(grouped, inst)
+			}
+		}
+	}
 
 	// Then apply status filter
 	if l.statusFilter == StatusFilterActive {
-		filtered := make([]*session.Instance, 0)
-		for _, inst := range topicFiltered {
+		filtered := make([]*session.Instance, 0, len(grouped))
+		for _, inst := range grouped {
 			if !inst.Paused() {
 				filtered = append(filtered, inst)
 			}
 		}
 		l.items = filtered
 	} else {
-		l.items = topicFiltered
+		l.items = grouped
 	}
 
 	// Apply sort

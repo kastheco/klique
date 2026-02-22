@@ -143,11 +143,121 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.updateSidebarItems()
 		return m, tea.WindowSize()
 
+	case "start_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		return m.spawnPlanSession(planFile)
+
 	case "view_plan":
 		return m.viewSelectedPlan()
+
+	case "push_plan_branch":
+		planInst := m.findPlanInstance()
+		if planInst == nil {
+			return m, m.handleError(fmt.Errorf("no active session for this plan"))
+		}
+		pushAction := func() tea.Msg {
+			worktree, err := planInst.GetGitWorktree()
+			if err != nil {
+				return err
+			}
+			if err := worktree.PushChanges("update from klique", true); err != nil {
+				return err
+			}
+			return nil
+		}
+		message := fmt.Sprintf("Push changes from plan '%s'?", planInst.Title)
+		return m, m.confirmAction(message, pushAction)
+
+	case "create_plan_pr":
+		planInst := m.findPlanInstance()
+		if planInst == nil {
+			return m, m.handleError(fmt.Errorf("no active session for this plan"))
+		}
+		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
+		m.list.SelectInstance(planInst)
+		m.state = statePRTitle
+		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", planInst.Title)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
+	case "mark_plan_done":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" || m.planState == nil {
+			return m, nil
+		}
+		if err := m.planState.SetStatus(planFile, planstate.StatusCompleted); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m, tea.WindowSize()
+
+	case "cancel_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" || m.planState == nil {
+			return m, nil
+		}
+		planName := planstate.DisplayName(planFile)
+		cancelAction := func() tea.Msg {
+			if err := m.planState.SetStatus(planFile, planstate.StatusCancelled); err != nil {
+				return err
+			}
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
+			return nil
+		}
+		return m, m.confirmAction(fmt.Sprintf("Cancel plan '%s'?", planName), cancelAction)
+
+	case "kill_running_instances_in_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+
+		doKill := func() {
+			for i := len(m.allInstances) - 1; i >= 0; i-- {
+				if m.allInstances[i].PlanFile == planFile {
+					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+				}
+			}
+			m.list.KillInstancesByPlan(planFile)
+			_ = m.saveAllInstances()
+			m.updateSidebarItems()
+		}
+
+		message := fmt.Sprintf("[!] Kill running instances in plan '%s'?", planstate.DisplayName(planFile))
+		m.state = stateConfirm
+		m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+		m.confirmationOverlay.SetWidth(50)
+		m.confirmationOverlay.OnConfirm = doKill
+		m.pendingConfirmAction = func() tea.Msg {
+			doKill()
+			return instanceChangedMsg{}
+		}
+		return m, nil
 	}
 
 	return m, nil
+}
+
+// findPlanInstance returns the instance bound to the currently selected plan in the sidebar.
+// Returns nil if no plan is selected or no instance is bound to it.
+func (m *home) findPlanInstance() *session.Instance {
+	planFile := m.sidebar.GetSelectedPlanFile()
+	if planFile == "" {
+		return nil
+	}
+	for _, inst := range m.list.GetInstances() {
+		if inst.PlanFile == planFile {
+			return inst
+		}
+	}
+	return nil
 }
 
 // openContextMenu builds a context menu for the currently focused/selected item
@@ -200,9 +310,13 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	items := []overlay.ContextMenuItem{
+		{Label: "Start plan", Action: "start_plan"},
 		{Label: "View plan", Action: "view_plan"},
+		{Label: "Kill running instances", Action: "kill_running_instances_in_plan"},
 		{Label: "Push branch", Action: "push_plan_branch"},
 		{Label: "Create PR", Action: "create_plan_pr"},
+		{Label: "Mark done", Action: "mark_plan_done"},
+		{Label: "Cancel plan", Action: "cancel_plan"},
 	}
 	x := m.sidebarWidth
 	y := 1 + 4 + m.sidebar.GetSelectedIdx()
@@ -277,32 +391,39 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			conflictName := planstate.DisplayName(conflictPlan)
 			message := fmt.Sprintf("⚠ %s is already running in topic \"%s\"\n\nRunning both plans may cause issues.\nContinue anyway?", conflictName, entry.Topic)
 			proceedAction := func() tea.Msg {
-				m.executePlanStage(planFile, stage)
-				return instanceChangedMsg{}
+				if err := planStageStatus(planFile, stage, m.planState); err != nil {
+					return err
+				}
+				return planRefreshMsg{}
 			}
 			return m, m.confirmAction(message, proceedAction)
 		}
 	}
 
-	m.executePlanStage(planFile, stage)
-	return m, nil
-}
-
-// executePlanStage applies the status transition for a plan stage.
-func (m *home) executePlanStage(planFile, stage string) {
-	switch stage {
-	case "plan":
-		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
-	case "implement":
-		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
-	case "review":
-		_ = m.planState.SetStatus(planFile, planstate.StatusReviewing)
-	case "finished":
-		_ = m.planState.SetStatus(planFile, planstate.StatusCompleted)
+	// Synchronous path (no confirmation needed) — write to disk and refresh inline.
+	if err := planStageStatus(planFile, stage, m.planState); err != nil {
+		return m, m.handleError(err)
 	}
 	m.loadPlanState()
 	m.updateSidebarPlans()
 	m.updateSidebarItems()
+	return m, nil
+}
+
+// planStageStatus writes the appropriate status for a plan lifecycle stage to disk.
+// Safe to call from a goroutine — only does disk I/O, no model mutations.
+func planStageStatus(planFile, stage string, ps *planstate.PlanState) error {
+	switch stage {
+	case "plan":
+		return ps.SetStatus(planFile, planstate.StatusInProgress)
+	case "implement":
+		return ps.SetStatus(planFile, planstate.StatusInProgress)
+	case "review":
+		return ps.SetStatus(planFile, planstate.StatusReviewing)
+	case "finished":
+		return ps.SetStatus(planFile, planstate.StatusCompleted)
+	}
+	return nil
 }
 
 // isLocked returns true if the given stage cannot be triggered given the current plan status.

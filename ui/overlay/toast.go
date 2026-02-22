@@ -325,15 +325,10 @@ func (t *toast) slideOffset() int {
 }
 
 // renderToast renders a single toast notification as a styled string.
+// Long messages wrap naturally within the toast width via lipgloss.
 func (tm *ToastManager) renderToast(t *toast) string {
 	icon := tm.toastIcon(t.Type)
-	// t.Width - 4 accounts for border (2) + padding (2), then subtract icon width + space.
-	maxMsgWidth := t.Width - 4 - runewidth.StringWidth(icon) - 1
-	msg := t.Message
-	if runewidth.StringWidth(msg) > maxMsgWidth {
-		msg = runewidth.Truncate(msg, maxMsgWidth, "...")
-	}
-	content := icon + " " + msg
+	content := icon + " " + t.Message
 	return toastStyle(t.Type, t.Width).Render(content)
 }
 

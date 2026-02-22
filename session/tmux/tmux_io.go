@@ -80,6 +80,48 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	return false, hasPrompt
 }
 
+// HasUpdatedWithContent is like HasUpdated but also returns the raw captured
+// pane content and whether capture succeeded, eliminating duplicate capture-pane calls.
+func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool) {
+	raw, err := t.CapturePaneContent()
+	if err != nil {
+		t.monitor.captureFailures++
+		if t.monitor.captureFailures == 1 || t.monitor.captureFailures%30 == 0 {
+			log.ErrorLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
+				t.monitor.captureFailures, err)
+		}
+		return false, false, "", false
+	}
+	t.monitor.captureFailures = 0
+
+	content = raw
+	captured = true
+
+	switch {
+	case isClaudeProgram(t.program):
+		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
+	case isAiderProgram(t.program):
+		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+	case isGeminiProgram(t.program):
+		hasPrompt = strings.Contains(content, "Yes, allow once")
+	case isOpenCodeProgram(t.program):
+		hasPrompt = strings.Contains(content, "Ask anything")
+	}
+
+	newHash := t.monitor.hash(content)
+	if !bytes.Equal(newHash, t.monitor.prevOutputHash) {
+		t.monitor.prevOutputHash = newHash
+		t.monitor.unchangedTicks = 0
+		return true, hasPrompt, content, true
+	}
+
+	t.monitor.unchangedTicks++
+	if t.monitor.unchangedTicks < 6 {
+		return true, hasPrompt, content, true
+	}
+	return false, hasPrompt, content, true
+}
+
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent() (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)

@@ -19,6 +19,7 @@ const (
 	StatusDone       Status = "done"
 	StatusReviewing  Status = "reviewing"
 	StatusCompleted  Status = "completed"
+	StatusCancelled  Status = "cancelled"
 )
 
 type PlanEntry struct {
@@ -140,11 +141,11 @@ func (ps *PlanState) PlansByTopic(topic string) []PlanInfo {
 	return result
 }
 
-// UngroupedPlans returns all plans with no topic that are not done/completed, sorted by filename.
+// UngroupedPlans returns all plans with no topic that are not done/completed/cancelled, sorted by filename.
 func (ps *PlanState) UngroupedPlans() []PlanInfo {
 	result := make([]PlanInfo, 0)
 	for filename, entry := range ps.Plans {
-		if entry.Topic == "" && entry.Status != StatusDone && entry.Status != StatusCompleted {
+		if entry.Topic == "" && entry.Status != StatusDone && entry.Status != StatusCompleted && entry.Status != StatusCancelled {
 			result = append(result, PlanInfo{
 				Filename: filename, Status: entry.Status,
 				Description: entry.Description, Branch: entry.Branch,
@@ -175,11 +176,11 @@ func (ps *PlanState) HasRunningCoderInTopic(topic, excludePlan string) (bool, st
 	return false, ""
 }
 
-// Unfinished returns plans that are not done or completed, sorted by filename.
+// Unfinished returns plans that are not done, completed, or cancelled, sorted by filename.
 func (ps *PlanState) Unfinished() []PlanInfo {
 	result := make([]PlanInfo, 0, len(ps.Plans))
 	for filename, entry := range ps.Plans {
-		if entry.Status == StatusDone || entry.Status == StatusCompleted {
+		if entry.Status == StatusDone || entry.Status == StatusCompleted || entry.Status == StatusCancelled {
 			continue
 		}
 		result = append(result, PlanInfo{
@@ -212,6 +213,25 @@ func (ps *PlanState) Finished() []PlanInfo {
 			return result[i].CreatedAt.After(result[j].CreatedAt)
 		}
 		return result[i].Filename > result[j].Filename
+	})
+	return result
+}
+
+// Cancelled returns all cancelled plans, sorted by filename.
+func (ps *PlanState) Cancelled() []PlanInfo {
+	result := make([]PlanInfo, 0)
+	for filename, entry := range ps.Plans {
+		if entry.Status != StatusCancelled {
+			continue
+		}
+		result = append(result, PlanInfo{
+			Filename: filename, Status: entry.Status,
+			Description: entry.Description, Branch: entry.Branch,
+			Topic: entry.Topic, CreatedAt: entry.CreatedAt,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Filename < result[j].Filename
 	})
 	return result
 }

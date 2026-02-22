@@ -22,26 +22,29 @@ import (
 )
 
 func (m *home) updateSidebarItems() {
-	// Count running/notification instances for status (used by the "All" count badge).
-	// Since topics are now plan-state-based (not instance-based), we still track
-	// instance activity for the top-level status indicators.
-	topicStatuses := make(map[string]ui.TopicStatus)
+	countByPlan := make(map[string]int)
+	groupStatuses := make(map[string]ui.GroupStatus)
 	ungroupedCount := 0
 
 	for _, inst := range m.list.GetInstances() {
-		ungroupedCount++
-		// All instances are ungrouped at the instance level; topics are plan-state-based.
-		st := topicStatuses[""]
+		planKey := inst.PlanFile // "" => ungrouped
+		if planKey == "" {
+			ungroupedCount++
+		} else {
+			countByPlan[planKey]++
+		}
+
+		st := groupStatuses[planKey]
 		if inst.Started() && !inst.Paused() && !inst.PromptDetected {
 			st.HasRunning = true
 		}
 		if inst.Notified {
 			st.HasNotification = true
 		}
-		topicStatuses[""] = st
+		groupStatuses[planKey] = st
 	}
 
-	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses)
+	m.sidebar.SetItems(countByPlan, ungroupedCount, groupStatuses)
 }
 
 // setFocus updates which panel has focus and syncs the focused state to sidebar and list.
@@ -169,7 +172,30 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	return m, m.instanceChanged()
 }
 
-func (m *home) filterInstancesByTopic() {
+func (m *home) filterBySearch() {
+	query := strings.ToLower(m.sidebar.GetSearchQuery())
+	if query == "" {
+		m.sidebar.UpdateMatchCounts(nil, 0)
+		m.filterInstancesByPlan()
+		return
+	}
+
+	// Search is global across all instances regardless of selected plan.
+	m.list.SetSearchFilter(query)
+
+	matchesByPlan := make(map[string]int)
+	totalMatches := 0
+	for _, inst := range m.list.GetInstances() {
+		if strings.Contains(strings.ToLower(inst.Title), query) ||
+			strings.Contains(strings.ToLower(inst.PlanFile), query) {
+			matchesByPlan[inst.PlanFile]++
+			totalMatches++
+		}
+	}
+	m.sidebar.UpdateMatchCounts(matchesByPlan, totalMatches)
+}
+
+func (m *home) filterInstancesByPlan() {
 	selectedID := m.sidebar.GetSelectedID()
 	switch {
 	case selectedID == ui.SidebarAll:
@@ -177,48 +203,35 @@ func (m *home) filterInstancesByTopic() {
 	case selectedID == ui.SidebarUngrouped:
 		m.list.SetFilter(ui.SidebarUngrouped)
 	case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
-		// Plan items: show all instances (no topic filter)
+		m.list.SetFilter(strings.TrimPrefix(selectedID, ui.SidebarPlanPrefix))
+	default:
 		m.list.SetFilter("")
-	default:
-		m.list.SetFilter(selectedID)
 	}
 }
 
-// filterSearchWithTopic applies the search query scoped to the currently selected topic.
-func (m *home) filterSearchWithTopic() {
-	query := strings.ToLower(m.sidebar.GetSearchQuery())
-	selectedID := m.sidebar.GetSelectedID()
-	topicFilter := ""
-	switch selectedID {
-	case ui.SidebarAll:
-		topicFilter = ""
-	case ui.SidebarUngrouped:
-		topicFilter = ui.SidebarUngrouped
-	default:
-		topicFilter = selectedID
+func (m *home) getAssignablePlanNames() ([]string, map[string]string) {
+	items := []string{"(Ungrouped)"}
+	mapping := map[string]string{"(Ungrouped)": ""}
+	if m.planState == nil {
+		return items, mapping
 	}
-	m.list.SetSearchFilterWithTopic(query, topicFilter)
-}
 
-func (m *home) filterBySearch() {
-	query := strings.ToLower(m.sidebar.GetSearchQuery())
-	if query == "" {
-		m.sidebar.UpdateMatchCounts(nil, 0)
-		m.filterInstancesByTopic()
-		return
+	planFiles := make([]string, 0, len(m.planState.Plans))
+	for filename := range m.planState.Plans {
+		planFiles = append(planFiles, filename)
 	}
-	m.list.SetSearchFilter(query)
+	sort.Strings(planFiles)
 
-	// Calculate match counts for sidebar dimming
-	matchesByTopic := make(map[string]int)
-	totalMatches := 0
-	for _, inst := range m.list.GetInstances() {
-		if strings.Contains(strings.ToLower(inst.Title), query) {
-			matchesByTopic[""]++
-			totalMatches++
+	for _, filename := range planFiles {
+		label := planstate.DisplayName(filename)
+		if _, exists := mapping[label]; exists {
+			label = fmt.Sprintf("%s (%s)", label, filename)
 		}
+		items = append(items, label)
+		mapping[label] = filename
 	}
-	m.sidebar.UpdateMatchCounts(matchesByTopic, totalMatches)
+
+	return items, mapping
 }
 
 // rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
@@ -230,7 +243,7 @@ func (m *home) rebuildInstanceList() {
 			m.list.AddInstance(inst)()
 		}
 	}
-	m.filterInstancesByTopic()
+	m.filterInstancesByPlan()
 	// Reload plan state for the new active repo.
 	m.planStateDir = filepath.Join(m.activeRepoPath, "docs", "plans")
 	m.loadPlanState()
@@ -317,7 +330,11 @@ func (m *home) switchToRepo(selection string) {
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
+// No-ops when storage is nil (test environments without persistent state).
 func (m *home) saveAllInstances() error {
+	if m.storage == nil {
+		return nil
+	}
 	return m.storage.SaveInstances(m.allInstances)
 }
 
@@ -396,6 +413,8 @@ func (m *home) killGitTab() {
 }
 
 // loadPlanState reads plan-state.json from the active repo's docs/plans/ directory.
+// Called on user-triggered events (plan creation, repo switch, etc.). The periodic
+// metadata tick loads plan state in its goroutine instead.
 // Silently no-ops if the file is missing (project may not use plans).
 func (m *home) loadPlanState() {
 	if m.planStateDir == "" {
@@ -423,8 +442,8 @@ func (m *home) updateSidebarPlans() {
 		plans := m.planState.PlansByTopic(t.Name)
 		planDisplays := make([]ui.PlanDisplay, 0, len(plans))
 		for _, p := range plans {
-			if p.Status == planstate.StatusDone || p.Status == planstate.StatusCompleted {
-				continue // finished plans go to history
+			if p.Status == planstate.StatusDone || p.Status == planstate.StatusCompleted || p.Status == planstate.StatusCancelled {
+				continue // finished/cancelled plans handled separately
 			}
 			planDisplays = append(planDisplays, ui.PlanDisplay{
 				Filename:    p.Filename,
@@ -464,7 +483,34 @@ func (m *home) updateSidebarPlans() {
 		})
 	}
 
-	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history)
+	// Build cancelled plans
+	cancelledInfos := m.planState.Cancelled()
+	cancelled := make([]ui.PlanDisplay, 0, len(cancelledInfos))
+	for _, p := range cancelledInfos {
+		cancelled = append(cancelled, ui.PlanDisplay{
+			Filename:    p.Filename,
+			Status:      string(p.Status),
+			Description: p.Description,
+			Topic:       p.Topic,
+		})
+	}
+
+	// Feed flat-mode plan list (active plans + cancelled for rendering)
+	allVisiblePlans := make([]ui.PlanDisplay, 0, len(ungrouped)+len(cancelled))
+	allVisiblePlans = append(allVisiblePlans, ungrouped...)
+	for _, t := range topics {
+		allVisiblePlans = append(allVisiblePlans, t.Plans...)
+	}
+	allVisiblePlans = append(allVisiblePlans, cancelled...)
+	m.sidebar.SetPlans(allVisiblePlans)
+
+	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history, cancelled)
+
+	// NOTE: Tree mode navigation is disabled until String() is updated to
+	// render s.rows. Currently String() renders s.items (flat list) while
+	// tree mode makes Up()/Down() navigate s.rows, causing an index mismatch
+	// where the visual highlight doesn't match the logical selection.
+	m.sidebar.DisableTreeMode()
 }
 
 // checkPlanCompletion scans running coder instances for plans that have been
@@ -484,32 +530,6 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 		return m.transitionToReview(inst)
 	}
 	return nil
-}
-
-// checkReviewerCompletion detects reviewer sessions whose tmux pane has died
-// (agent exited after completing the review) and marks the plan as done.
-func (m *home) checkReviewerCompletion() {
-	if m.planState == nil {
-		return
-	}
-	for _, inst := range m.list.GetInstances() {
-		if inst.PlanFile == "" || !inst.IsReviewer || !inst.Started() || inst.Paused() {
-			continue
-		}
-		if inst.TmuxAlive() {
-			continue
-		}
-		// Reviewer's tmux session is gone — mark plan completed (terminal) only if still reviewing.
-		// Using StatusCompleted (not StatusDone) breaks the infinite spawn cycle: IsDone()
-		// only matches StatusDone, so the coder instance will not trigger another reviewer.
-		entry := m.planState.Plans[inst.PlanFile]
-		if entry.Status != planstate.StatusReviewing {
-			continue
-		}
-		if err := m.planState.SetStatus(inst.PlanFile, planstate.StatusCompleted); err != nil {
-			log.WarningLog.Printf("could not mark plan %q completed: %v", inst.PlanFile, err)
-		}
-	}
 }
 
 // transitionToReview marks a plan as "reviewing", pauses the coder session,
@@ -550,7 +570,7 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	reviewerInst.QueuedPrompt = prompt
 
 	m.newInstanceFinalizer = m.list.AddInstance(reviewerInst)
-	m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+	m.list.SelectInstance(reviewerInst) // sort-order safe, unlike index arithmetic
 
 	m.toastManager.Success(fmt.Sprintf("Implementation complete → review started for %s", planName))
 
@@ -591,7 +611,7 @@ func (m *home) spawnPlanSession(planFile string) (tea.Model, tea.Cmd) {
 	)
 
 	m.newInstanceFinalizer = m.list.AddInstance(inst)
-	m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+	m.list.SelectInstance(inst) // sort-order safe
 
 	startCmd := func() tea.Msg {
 		err := inst.Start(true)

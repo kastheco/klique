@@ -88,6 +88,7 @@ const (
 	rowKindPlan                                // plan header
 	rowKindStage                               // plan lifecycle stage
 	rowKindHistoryToggle                       // "History" toggle row
+	rowKindCancelled                           // cancelled plan (strikethrough)
 )
 
 // sidebarRow is a single rendered row in the sidebar.
@@ -121,6 +122,10 @@ var sidebarReadyStyle = lipgloss.NewStyle().
 var sidebarNotifyStyle = lipgloss.NewStyle().
 	Foreground(ColorRose)
 
+var sidebarCancelledStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Strikethrough(true)
+
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
 	Name            string
@@ -131,6 +136,7 @@ type SidebarItem struct {
 	SharedWorktree  bool // true if this topic has a shared worktree
 	HasRunning      bool // true if this topic has running instances
 	HasNotification bool // true if this topic has recently-finished instances
+	IsCancelled     bool // true if this plan was cancelled (render with strikethrough)
 }
 
 // Sidebar is the left-most panel showing topics and search.
@@ -155,6 +161,7 @@ type Sidebar struct {
 	treeTopics    []TopicDisplay
 	treeUngrouped []PlanDisplay
 	treeHistory   []PlanDisplay
+	treeCancelled []PlanDisplay
 	useTreeMode   bool // true when SetTopicsAndPlans has been called
 }
 
@@ -204,19 +211,25 @@ type TopicStatus struct {
 	HasNotification bool
 }
 
-// SetItems updates the sidebar items from the current topics.
-// sharedTopics maps topic name → whether it has a shared worktree.
-// topicStatuses maps topic name → running/notification status.
-func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int, sharedTopics map[string]bool, topicStatuses map[string]TopicStatus) {
+// GroupStatus holds status flags for a plan-grouped set of instances.
+type GroupStatus struct {
+	HasRunning      bool
+	HasNotification bool
+}
+
+// SetItems updates sidebar items from plan-grouped instance counts.
+// instanceCountByPlan maps plan filename → instance count ("" key = ungrouped).
+// ungroupedCount is the number of instances with no plan file.
+// groupStatuses maps plan filename → running/notification status ("" key = ungrouped).
+func (s *Sidebar) SetItems(instanceCountByPlan map[string]int, ungroupedCount int, groupStatuses map[string]GroupStatus) {
 	totalCount := ungroupedCount
-	for _, c := range instanceCountByTopic {
+	for _, c := range instanceCountByPlan {
 		totalCount += c
 	}
 
-	// Aggregate statuses for "All"
 	anyRunning := false
 	anyNotification := false
-	for _, st := range topicStatuses {
+	for _, st := range groupStatuses {
 		if st.HasRunning {
 			anyRunning = true
 		}
@@ -232,34 +245,28 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 	if len(s.plans) > 0 {
 		items = append(items, SidebarItem{Name: "Plans", IsSection: true})
 		for _, p := range s.plans {
+			isCancelled := p.Status == string(planstate.StatusCancelled)
+			st := groupStatuses[p.Filename]
 			items = append(items, SidebarItem{
 				Name:            planstate.DisplayName(p.Filename),
 				ID:              SidebarPlanPrefix + p.Filename,
-				HasRunning:      p.Status == string(planstate.StatusInProgress),
-				HasNotification: p.Status == string(planstate.StatusReviewing),
-			})
-		}
-	}
-
-	if len(topicNames) > 0 {
-		items = append(items, SidebarItem{Name: "Topics", IsSection: true})
-		for _, name := range topicNames {
-			count := instanceCountByTopic[name]
-			st := topicStatuses[name]
-			items = append(items, SidebarItem{
-				Name: name, ID: name, Count: count,
-				SharedWorktree: sharedTopics[name],
-				HasRunning:     st.HasRunning, HasNotification: st.HasNotification,
+				Count:           instanceCountByPlan[p.Filename],
+				HasRunning:      st.HasRunning,
+				HasNotification: st.HasNotification,
+				IsCancelled:     isCancelled,
 			})
 		}
 	}
 
 	if ungroupedCount > 0 {
-		ungroupedSt := topicStatuses[""]
+		ungroupedSt := groupStatuses[""]
 		items = append(items, SidebarItem{Name: "Ungrouped", IsSection: true})
 		items = append(items, SidebarItem{
-			Name: "Ungrouped", ID: SidebarUngrouped, Count: ungroupedCount,
-			HasRunning: ungroupedSt.HasRunning, HasNotification: ungroupedSt.HasNotification,
+			Name:            "Ungrouped",
+			ID:              SidebarUngrouped,
+			Count:           ungroupedCount,
+			HasRunning:      ungroupedSt.HasRunning,
+			HasNotification: ungroupedSt.HasNotification,
 		})
 	}
 
@@ -350,14 +357,15 @@ func (s *Sidebar) ClickItem(row int) {
 	}
 }
 
-// UpdateMatchCounts sets the search match counts for each topic item.
+// UpdateMatchCounts sets the search match counts for each sidebar item.
+// matchesByPlan maps plan filename → match count ("" key = ungrouped).
 // Pass nil to clear search highlighting.
-func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches int) {
+func (s *Sidebar) UpdateMatchCounts(matchesByPlan map[string]int, totalMatches int) {
 	for i := range s.items {
 		if s.items[i].IsSection {
 			continue
 		}
-		if matchesByTopic == nil {
+		if matchesByPlan == nil {
 			s.items[i].MatchCount = -1 // not searching
 			continue
 		}
@@ -365,9 +373,14 @@ func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches 
 		case SidebarAll:
 			s.items[i].MatchCount = totalMatches
 		case SidebarUngrouped:
-			s.items[i].MatchCount = matchesByTopic[""]
+			s.items[i].MatchCount = matchesByPlan[""]
 		default:
-			s.items[i].MatchCount = matchesByTopic[s.items[i].ID]
+			if strings.HasPrefix(s.items[i].ID, SidebarPlanPrefix) {
+				planFile := s.items[i].ID[len(SidebarPlanPrefix):]
+				s.items[i].MatchCount = matchesByPlan[planFile]
+			} else {
+				s.items[i].MatchCount = 0
+			}
 		}
 	}
 }
@@ -388,11 +401,22 @@ func (s *Sidebar) IsSearchActive() bool    { return s.searchActive }
 func (s *Sidebar) GetSearchQuery() string  { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
+// DisableTreeMode forces flat-mode navigation (using s.items) even if tree
+// data has been loaded. Use this until String() is updated to render s.rows.
+func (s *Sidebar) DisableTreeMode() {
+	s.useTreeMode = false
+}
+
 // SetTopicsAndPlans sets the three-level tree data and rebuilds rows.
-func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay) {
+func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {
 	s.treeTopics = topics
 	s.treeUngrouped = ungrouped
 	s.treeHistory = history
+	if len(cancelled) > 0 {
+		s.treeCancelled = cancelled[0]
+	} else {
+		s.treeCancelled = nil
+	}
 	s.useTreeMode = true
 	s.rebuildRows()
 }
@@ -451,6 +475,16 @@ func (s *Sidebar) rebuildRows() {
 			Kind:  rowKindHistoryToggle,
 			ID:    SidebarPlanHistoryToggle,
 			Label: "History",
+		})
+	}
+
+	// Cancelled plans (shown at bottom with strikethrough)
+	for _, p := range s.treeCancelled {
+		rows = append(rows, sidebarRow{
+			Kind:     rowKindCancelled,
+			ID:       SidebarPlanPrefix + p.Filename,
+			Label:    planstate.DisplayName(p.Filename),
+			PlanFile: p.Filename,
 		})
 	}
 
@@ -649,93 +683,115 @@ func (s *Sidebar) String() string {
 			continue
 		}
 
-		// Fixed-slot layout: [prefix 1ch] [name+count flexible] [icons fixed right]
 		// Content area = itemWidth - 2 (Padding(0,1) in item styles)
 		contentWidth := itemWidth - 2
-
-		// Build trailing icons and measure their fixed width
-		trailingWidth := 0
-		if item.SharedWorktree {
-			trailingWidth += 2 // " \ue727"
-		}
-		if item.HasNotification || item.HasRunning {
-			trailingWidth += 2 // " ●"
-		}
-
-		// Build count suffix
-		displayCount := item.Count
-		if s.searchActive && item.MatchCount >= 0 {
-			displayCount = item.MatchCount
-		}
-		countSuffix := ""
-		if displayCount > 0 {
-			countSuffix = fmt.Sprintf(" (%d)", displayCount)
-		}
-
-		// Truncate name to fit: contentWidth - prefix(1) - countSuffix - trailing
-		nameText := item.Name
-		maxNameWidth := contentWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
-		if maxNameWidth < 3 {
-			maxNameWidth = 3
-		}
-		if runewidth.StringWidth(nameText) > maxNameWidth {
-			nameText = runewidth.Truncate(nameText, maxNameWidth-1, "…")
-		}
-
-		// Left part: prefix + name + count
-		// Plan items use a status glyph as prefix (○/●/◉); selected items show ▸.
-		// Selection takes priority over the status glyph.
 		isPlan := strings.HasPrefix(item.ID, SidebarPlanPrefix)
-		// Build prefix glyph. For plan items, use a colored status glyph;
-		// for selected items, use ▸; otherwise a space.
-		// The glyph is always 1 cell wide.
-		prefixGlyph := " "
-		var prefixStyle lipgloss.Style
-		hasPrefixStyle := false
-		if i == s.selectedIdx {
-			prefixGlyph = "▸"
-		} else if isPlan {
-			hasPrefixStyle = true
-			switch {
-			case item.HasNotification:
-				prefixGlyph = "◉"
-				prefixStyle = sidebarNotifyStyle
-			case item.HasRunning:
-				prefixGlyph = "●"
-				prefixStyle = sidebarRunningStyle
-			default:
-				prefixGlyph = "○"
-				prefixStyle = sectionHeaderStyle
+
+		var line string
+		if isPlan {
+			// ── Plan items: bubbles-style ──
+			// Layout: [indent 1ch][cursor 1ch][name...][gap...][status 2ch]
+			// Plans are indented under their section header with status
+			// shown as a trailing glyph (right-aligned, always visible).
+			cursor := " "
+			if i == s.selectedIdx {
+				cursor = "▸"
 			}
-		}
-		// Build the text portion (name + count) without the prefix so the
-		// outer item style applies a consistent background across it.
-		textPart := nameText + countSuffix
-		leftWidth := 1 + runewidth.StringWidth(textPart) // 1 for prefix glyph
 
-		// Pad between left and right to push icons to the right edge
-		gap := contentWidth - leftWidth - trailingWidth
-		if gap < 0 {
-			gap = 0
-		}
-		// Render prefix with its own style (colored glyph) then append
-		// the rest as plain text so the outer item style's background
-		// covers everything uniformly.
-		var styledPrefix string
-		if hasPrefixStyle {
-			styledPrefix = prefixStyle.Render(prefixGlyph)
+			// Trailing status glyph — always visible, colored by state
+			var statusGlyph string
+			var statusStyle lipgloss.Style
+			switch {
+			case item.IsCancelled:
+				statusGlyph = "✕"
+				statusStyle = sidebarCancelledStyle
+			case item.HasNotification: // reviewing
+				statusGlyph = "◉"
+				statusStyle = sidebarNotifyStyle
+			case item.HasRunning: // in_progress
+				statusGlyph = "●"
+				statusStyle = sidebarRunningStyle
+			default: // ready
+				statusGlyph = "○"
+				statusStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+			}
+
+			const planIndent = 1  // extra indent under section header
+			const cursorWidth = 1 // ▸ or space
+			const trailWidth = 2  // " " + glyph
+
+			// Truncate name to fit
+			nameText := item.Name
+			maxName := contentWidth - planIndent - cursorWidth - trailWidth
+			if maxName < 3 {
+				maxName = 3
+			}
+			if runewidth.StringWidth(nameText) > maxName {
+				nameText = runewidth.Truncate(nameText, maxName-1, "…")
+			}
+
+			textPart := nameText
+			if item.IsCancelled {
+				textPart = sidebarCancelledStyle.Render(textPart)
+			}
+
+			usedWidth := planIndent + cursorWidth + runewidth.StringWidth(textPart) + trailWidth
+			gap := contentWidth - usedWidth
+			if gap < 0 {
+				gap = 0
+			}
+
+			line = " " + cursor + textPart + strings.Repeat(" ", gap) + " " + statusStyle.Render(statusGlyph)
 		} else {
-			styledPrefix = prefixGlyph
-		}
-		paddedLeft := styledPrefix + textPart + strings.Repeat(" ", gap)
+			// ── Non-plan items: All, topics, ungrouped ──
+			// Layout: [cursor 1ch][name+count...][gap...][trailing icons]
 
-		// Style the trailing icons. Plan items use a prefix glyph instead of a
-		// trailing dot, so skip the trailing icon for them.
-		var styledTrailing string
-		if item.SharedWorktree {
-			styledTrailing += " \ue727"
-		}
-		if !isPlan {
+			// Build trailing icons
+			trailingWidth := 0
+			if item.SharedWorktree {
+				trailingWidth += 2 // " \ue727"
+			}
+			if item.HasNotification || item.HasRunning {
+				trailingWidth += 2 // " ●"
+			}
+
+			// Count suffix
+			displayCount := item.Count
+			if s.searchActive && item.MatchCount >= 0 {
+				displayCount = item.MatchCount
+			}
+			countSuffix := ""
+			if displayCount > 0 {
+				countSuffix = fmt.Sprintf(" (%d)", displayCount)
+			}
+
+			// Truncate name
+			nameText := item.Name
+			maxName := contentWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
+			if maxName < 3 {
+				maxName = 3
+			}
+			if runewidth.StringWidth(nameText) > maxName {
+				nameText = runewidth.Truncate(nameText, maxName-1, "…")
+			}
+
+			cursor := " "
+			if i == s.selectedIdx {
+				cursor = "▸"
+			}
+
+			textPart := nameText + countSuffix
+			leftWidth := 1 + runewidth.StringWidth(textPart)
+			gap := contentWidth - leftWidth - trailingWidth
+			if gap < 0 {
+				gap = 0
+			}
+
+			// Trailing icons
+			var styledTrailing string
+			if item.SharedWorktree {
+				styledTrailing += " \ue727"
+			}
 			if item.HasNotification {
 				if time.Now().UnixMilli()/500%2 == 0 {
 					styledTrailing += " " + sidebarReadyStyle.Render("●")
@@ -745,9 +801,10 @@ func (s *Sidebar) String() string {
 			} else if item.HasRunning {
 				styledTrailing += " " + sidebarRunningStyle.Render("●")
 			}
+
+			line = cursor + textPart + strings.Repeat(" ", gap) + styledTrailing
 		}
 
-		line := paddedLeft + styledTrailing
 		if i == s.selectedIdx && s.focused {
 			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(line))
 		} else if i == s.selectedIdx && !s.focused {

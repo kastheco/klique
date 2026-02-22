@@ -57,6 +57,8 @@ const (
 	KeyFocusSidebar  // Key for focusing the sidebar / plan list
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
+
+	KeyMoveTo // Key for assigning instance to a plan
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -94,6 +96,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"s":          KeyFocusSidebar,
 	"v":          KeyViewPlan,
 	"ctrl+s":     KeyToggleSidebar,
+	"m":          KeyMoveTo,
 	"g":          KeyGitTab,
 	"f1":         KeyTabAgent,
 	"f2":         KeyTabDiff,
@@ -213,6 +216,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyToggleSidebar: key.NewBinding(
 		key.WithKeys("ctrl+s"),
 		key.WithHelp("ctrl+s", "toggle sidebar"),
+	),
+	KeyMoveTo: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "assign to plan"),
 	),
 	KeyGitTab: key.NewBinding(
 		key.WithKeys("g"),

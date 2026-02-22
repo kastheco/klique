@@ -7,6 +7,7 @@ import (
 	"github.com/kastheco/klique/config/planstate"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
+	"github.com/kastheco/klique/session/git"
 	"github.com/kastheco/klique/ui"
 	"github.com/kastheco/klique/ui/overlay"
 	"os"
@@ -74,6 +75,8 @@ const (
 	stateContextMenu
 	// stateRepoSwitch is the state when the user is switching repos via picker.
 	stateRepoSwitch
+	// stateMoveTo is the state when the user is assigning an instance to a plan.
+	stateMoveTo
 )
 
 type home struct {
@@ -132,6 +135,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingConfirmAction stores the tea.Cmd to run asynchronously when confirmed
+	pendingConfirmAction tea.Cmd
 
 	// sidebar displays the topic sidebar
 	sidebar *ui.Sidebar
@@ -169,6 +174,8 @@ type home struct {
 
 	// repoPickerMap maps picker display text to full repo path
 	repoPickerMap map[string]string
+	// planPickerMap maps picker display text to plan filename (empty = ungrouped)
+	planPickerMap map[string]string
 
 	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
 	planState *planstate.PlanState
@@ -401,51 +408,161 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				instance.LastActivity = nil
+		// Snapshot the instance list for the goroutine. The slice header is
+		// copied but the pointers are shared — CollectMetadata only reads
+		// instance fields that don't change between ticks (started, Status,
+		// tmuxSession, gitWorktree, Program).
+		instances := m.list.GetInstances()
+		snapshots := make([]*session.Instance, len(instances))
+		copy(snapshots, instances)
+		planStateDir := m.planStateDir // snapshot for goroutine
+
+		return m, func() tea.Msg {
+			results := make([]instanceMetadata, 0, len(snapshots))
+			for _, inst := range snapshots {
+				if !inst.Started() || inst.Paused() {
+					continue
+				}
+				md := inst.CollectMetadata()
+				results = append(results, instanceMetadata{
+					Title:              inst.Title,
+					Content:            md.Content,
+					ContentCaptured:    md.ContentCaptured,
+					Updated:            md.Updated,
+					HasPrompt:          md.HasPrompt,
+					DiffStats:          md.DiffStats,
+					CPUPercent:         md.CPUPercent,
+					MemMB:              md.MemMB,
+					ResourceUsageValid: md.ResourceUsageValid,
+					TmuxAlive:          md.TmuxAlive,
+				})
+			}
+
+			// Load plan state from disk — moved here from the synchronous
+			// Update handler to avoid blocking the event loop every 500ms.
+			var ps *planstate.PlanState
+			if planStateDir != "" {
+				loaded, err := planstate.Load(planStateDir)
+				if err != nil {
+					log.WarningLog.Printf("could not load plan state: %v", err)
+				} else {
+					ps = loaded
+				}
+			}
+
+			time.Sleep(500 * time.Millisecond)
+			return metadataResultMsg{Results: results, PlanState: ps}
+		}
+	case metadataResultMsg:
+		// Apply collected metadata to instances — zero I/O, just field writes.
+		// All subprocess calls (TapEnter, SendPrompt) are deferred to tea.Cmds.
+		instanceMap := make(map[string]*session.Instance)
+		for _, inst := range m.list.GetInstances() {
+			instanceMap[inst.Title] = inst
+		}
+
+		var asyncCmds []tea.Cmd
+
+		for _, md := range msg.Results {
+			inst, ok := instanceMap[md.Title]
+			if !ok {
 				continue
 			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
-				// Parse activity from pane content.
-				if content, err := instance.GetPaneContent(); err == nil && content != "" {
-					instance.LastActivity = session.ParseActivity(content, instance.Program)
-				}
-			} else {
-				if prompt {
-					instance.PromptDetected = true
-					instance.TapEnter()
+
+			if md.ContentCaptured {
+				inst.CachedContent = md.Content
+				inst.CachedContentSet = true
+
+				if md.Updated {
+					inst.SetStatus(session.Running)
+					if md.Content != "" {
+						inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
+					}
 				} else {
-					instance.SetStatus(session.Ready)
-				}
-				// Clear activity when instance is no longer running.
-				if instance.Status != session.Running {
-					instance.LastActivity = nil
+					if md.HasPrompt {
+						inst.PromptDetected = true
+						// Defer tmux send-keys to async Cmd (was blocking Update).
+						i := inst
+						asyncCmds = append(asyncCmds, func() tea.Msg {
+							i.TapEnter()
+							return nil
+						})
+					} else {
+						inst.SetStatus(session.Ready)
+					}
+					if inst.Status != session.Running {
+						inst.LastActivity = nil
+					}
 				}
 			}
-			// Deliver queued prompt once the instance is idle (Ready or PromptDetected).
-			// PromptDetected covers programs like opencode whose idle marker ("Ask anything")
-			// keeps hasPrompt=true, preventing the Ready status path from ever being taken.
-			if instance.QueuedPrompt != "" && (instance.Status == session.Ready || instance.PromptDetected) {
-				if err := instance.SendPrompt(instance.QueuedPrompt); err != nil {
-					log.WarningLog.Printf("could not send queued prompt to %q: %v", instance.Title, err)
-				}
-				instance.QueuedPrompt = ""
+
+			// Deliver queued prompt via async Cmd — SendPrompt contains a 100ms
+			// sleep + two tmux subprocess calls that were blocking the event loop.
+			if inst.QueuedPrompt != "" && (inst.Status == session.Ready || inst.PromptDetected) {
+				prompt := inst.QueuedPrompt
+				inst.QueuedPrompt = "" // clear immediately to prevent re-send
+				i := inst
+				asyncCmds = append(asyncCmds, func() tea.Msg {
+					if err := i.SendPrompt(prompt); err != nil {
+						log.WarningLog.Printf("could not send queued prompt to %q: %v", i.Title, err)
+					}
+					return nil
+				})
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+
+			if md.DiffStats != nil {
+				inst.SetDiffStats(md.DiffStats)
 			}
-			instance.UpdateResourceUsage()
+			if md.ResourceUsageValid {
+				inst.CPUPercent = md.CPUPercent
+				inst.MemMB = md.MemMB
+			}
 		}
-		// Refresh plan state from disk and update the sidebar plans section.
-		m.loadPlanState()
-		m.checkReviewerCompletion()
+
+		// Clear activity for non-started / paused instances
+		for _, inst := range m.list.GetInstances() {
+			if !inst.Started() || inst.Paused() {
+				inst.LastActivity = nil
+			}
+		}
+
+		// Apply plan state loaded in the goroutine (replaces synchronous loadPlanState call).
+		if msg.PlanState != nil {
+			m.planState = msg.PlanState
+		}
+
+		// Inline reviewer completion check using cached TmuxAlive from metadata
+		// (replaces checkReviewerCompletion which called tmux has-session per reviewer).
+		if m.planState != nil {
+			tmuxAliveMap := make(map[string]bool, len(msg.Results))
+			for _, md := range msg.Results {
+				tmuxAliveMap[md.Title] = md.TmuxAlive
+			}
+			for _, inst := range m.list.GetInstances() {
+				if inst.PlanFile == "" || !inst.IsReviewer || !inst.Started() || inst.Paused() {
+					continue
+				}
+				alive, collected := tmuxAliveMap[inst.Title]
+				if !collected || alive {
+					continue
+				}
+				entry := m.planState.Plans[inst.PlanFile]
+				if entry.Status != planstate.StatusReviewing {
+					continue
+				}
+				// SetStatus writes to disk — acceptable here because reviewer death
+				// is a rare one-shot event (~1ms), not a per-tick cost.
+				if err := m.planState.SetStatus(inst.PlanFile, planstate.StatusCompleted); err != nil {
+					log.WarningLog.Printf("could not mark plan %q completed: %v", inst.PlanFile, err)
+				}
+			}
+		}
+
 		m.updateSidebarPlans()
 		m.updateSidebarItems()
 		completionCmd := m.checkPlanCompletion()
-		return m, tea.Batch(tickUpdateMetadataCmd, completionCmd)
+		asyncCmds = append(asyncCmds, tickUpdateMetadataCmd, completionCmd)
+		return m, tea.Batch(asyncCmds...)
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 	case tea.KeyMsg:
@@ -460,6 +577,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		m.updateSidebarItems()
 		return m, m.instanceChanged()
+	case killInstanceMsg:
+		// Async pre-kill checks passed — safe to mutate model in Update.
+		m.list.Kill()
+		m.removeFromAllInstances(msg.title)
+		m.saveAllInstances()
+		m.updateSidebarItems()
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+	case planRefreshMsg:
+		// Reload plan state and refresh sidebar after async plan mutation.
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+		return m, tea.WindowSize()
 	case instanceStartedMsg:
 		if msg.err != nil {
 			m.list.Kill()
@@ -614,6 +744,15 @@ type gitTabTickMsg struct{}
 
 type instanceChangedMsg struct{}
 
+// killInstanceMsg is sent after async pre-kill checks pass (worktree not checked out).
+// Model mutations (list.Kill, removeFromAllInstances) happen in Update, not in the goroutine.
+type killInstanceMsg struct {
+	title string
+}
+
+// planRefreshMsg triggers a plan state reload and sidebar refresh in Update.
+type planRefreshMsg struct{}
+
 // instanceStartedMsg is sent when an async instance startup completes.
 type instanceStartedMsg struct {
 	instance *session.Instance
@@ -627,6 +766,27 @@ type planRenderedMsg struct {
 	planFile string
 	rendered string
 	err      error
+}
+
+// instanceMetadata holds the results of polling a single instance's subprocess data.
+// Collected in a goroutine, applied to the model in Update.
+type instanceMetadata struct {
+	Title              string
+	Content            string // tmux capture-pane output (reused for preview, activity, hash)
+	ContentCaptured    bool
+	Updated            bool
+	HasPrompt          bool
+	DiffStats          *git.DiffStats
+	CPUPercent         float64
+	MemMB              float64
+	ResourceUsageValid bool
+	TmuxAlive          bool
+}
+
+// metadataResultMsg carries all per-instance metadata collected by the async tick.
+type metadataResultMsg struct {
+	Results   []instanceMetadata
+	PlanState *planstate.PlanState // pre-loaded plan state (nil if dir not set)
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate

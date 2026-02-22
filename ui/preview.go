@@ -194,8 +194,8 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 
 		p.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, content, footer))
 	} else if !p.isScrolling {
-		// In normal mode, use the usual preview
-		content, err = instance.Preview()
+		// In normal mode, use the cached preview to avoid redundant subprocess calls.
+		content, err = instance.PreviewCached()
 		if err != nil {
 			return err
 		}
