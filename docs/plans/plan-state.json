@@ -63,18 +63,25 @@
     "status": "ready"
   },
   "2026-02-21-sidebar-toggle-design.md": {
-    "status": "ready"
+    "status": "done",
+    "implemented": "2026-02-21"
   },
   "2026-02-21-sidebar-toggle.md": {
+    "status": "done",
+    "implemented": "2026-02-21"
+  },
+  "2026-02-21-sidebar-nav-showhide.md": {
     "status": "ready"
   },
   "2026-02-21-agent-customize-gate.md": {
     "status": "ready"
   },
   "2026-02-21-osc11-terminal-bg-design.md": {
-    "status": "ready"
+    "status": "done",
+    "implemented": "2026-02-21"
   },
   "2026-02-21-osc11-terminal-bg.md": {
-    "status": "ready"
+    "status": "done",
+    "implemented": "2026-02-21"
   }
 }
