@@ -100,26 +100,6 @@ func RoleDefaults() map[string]AgentState {
 	}
 }
 
-// IsCustomized returns true if the agent's settings differ from factory RoleDefaults.
-// defaultHarness is the harness that would be assigned if the user did not customize.
-func IsCustomized(a AgentState, defaultHarness string) bool {
-	defaults, ok := RoleDefaults()[a.Role]
-	if !ok {
-		return false // unknown role, cannot compare
-	}
-	defaults.Harness = defaultHarness
-	// Treat empty harness as the default (not yet customized)
-	agentHarness := a.Harness
-	if agentHarness == "" {
-		agentHarness = defaultHarness
-	}
-	return agentHarness != defaults.Harness ||
-		a.Model != defaults.Model ||
-		a.Effort != defaults.Effort ||
-		a.Temperature != defaults.Temperature ||
-		a.Enabled != defaults.Enabled
-}
-
 // Run executes all wizard stages in sequence.
 // If existing is non-nil, pre-populates forms from existing config.
 func Run(registry *harness.Registry, existing *config.TOMLConfigResult) (*State, error) {
@@ -138,7 +118,7 @@ func Run(registry *harness.Registry, existing *config.TOMLConfigResult) (*State,
 		return nil, err
 	}
 
-		// Stage 3: Hardcoded phase mapping
+	// Stage 3: Hardcoded phase mapping
 	state.PhaseMapping = map[string]string{
 		"implementing":   "coder",
 		"spec_review":    "reviewer",

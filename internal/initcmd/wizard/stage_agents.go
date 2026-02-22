@@ -1,9 +1,7 @@
 package wizard
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -31,24 +29,6 @@ func FormatAgentSummary(a AgentState) string {
 		parts = append(parts, "temp="+a.Temperature)
 	}
 	return strings.Join(parts, " / ")
-} // PromptCustomize prints an agent summary and asks "customize? y[n]".
-// If customized is true, the summary is rendered in bold to indicate
-// it differs from factory defaults.
-// Returns true only if the user types "y" or "Y". Default (Enter) is no.
-func PromptCustomize(r io.Reader, w io.Writer, role string, summary string, customized bool) bool {
-	if customized {
-		fmt.Fprintf(w, "  %-10s \033[1m%s\033[0m\n", role, summary)
-	} else {
-		fmt.Fprintf(w, "  %-10s %s\n", role, summary)
-	}
-	fmt.Fprintf(w, "  customize? y[n]: ")
-
-	scanner := bufio.NewScanner(r)
-	if !scanner.Scan() {
-		return false
-	}
-	answer := strings.TrimSpace(scanner.Text())
-	return strings.EqualFold(answer, "y")
 }
 
 func runAgentStage(state *State, existing *config.TOMLConfigResult) error {
@@ -105,17 +85,17 @@ func runAgentStage(state *State, existing *config.TOMLConfigResult) error {
 		modelCache[name] = models
 	}
 
-	// Gate each agent with customize? prompt
-	fmt.Println("\nAgent configuration:")
+	// Configure each agent via huh forms
 	for i := range state.Agents {
 		agent := &state.Agents[i]
-		summary := FormatAgentSummary(*agent)
-		customized := IsCustomized(*agent, defaultHarness)
 
-		if PromptCustomize(os.Stdin, os.Stdout, agent.Role, summary, customized) {
-			if err := runSingleAgentForm(state, i, modelCache); err != nil {
-				return err
-			}
+		// chat role is not configurable in the wizard
+		if agent.Role == "chat" {
+			continue
+		}
+
+		if err := runSingleAgentForm(state, i, modelCache); err != nil {
+			return err
 		}
 	}
 
@@ -141,41 +121,50 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		}
 	}
 
-	// --- Build all fields for a single stacked form ---
-	var fields []huh.Field
+	// --- Form 1: Summary + Customize gate ---
+	// Group 1 always visible: progress note + customize confirm
+	// Group 2 conditionally visible: harness + enabled toggle
+	var customize bool
+	summary := FormatAgentSummary(*agent)
 
-	// Progress note header
-	fields = append(fields,
-		huh.NewNote().
-			Title(fmt.Sprintf("Configure: %s", agent.Role)).
-			Description(BuildProgressNote(state.Agents, idx)),
-	)
+	gateForm := huh.NewForm(
+		// Group 1: summary + customize?
+		huh.NewGroup(
+			huh.NewNote().
+				Title(fmt.Sprintf("Agent: %s", agent.Role)).
+				Description(fmt.Sprintf("%s\n\n%s",
+					summary,
+					BuildProgressNote(state.Agents, idx))),
+			huh.NewConfirm().
+				Title("Customize?").
+				Description("Change harness, model, or tuning").
+				Affirmative("Yes").
+				Negative("No").
+				Value(&customize),
+		),
 
-	// Harness select
-	fields = append(fields,
-		huh.NewSelect[string]().
-			Title("Harness").
-			Options(harnessOpts...).
-			Value(&agent.Harness),
-	)
-
-	// Enabled toggle
-	fields = append(fields,
-		huh.NewConfirm().
-			Title("Enabled").
-			Value(&agent.Enabled),
-	)
-
-	form := huh.NewForm(
-		huh.NewGroup(fields...),
+		// Group 2: harness + enabled (hidden unless customize=true)
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Harness").
+				Options(harnessOpts...).
+				Value(&agent.Harness),
+			huh.NewConfirm().
+				Title("Enabled").
+				Affirmative("Yes").
+				Negative("No").
+				Value(&agent.Enabled),
+		).WithHideFunc(func() bool {
+			return !customize
+		}),
 	).WithTheme(huh.ThemeCharm())
 
-	if err := form.Run(); err != nil {
+	if err := gateForm.Run(); err != nil {
 		return err
 	}
 
-	// If disabled, skip model/temp/effort
-	if !agent.Enabled {
+	// If not customizing or disabled, we're done
+	if !customize || !agent.Enabled {
 		return nil
 	}
 
@@ -185,7 +174,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		return fmt.Errorf("unknown harness %q for agent %q", agent.Harness, agent.Role)
 	}
 
-	// --- Build model + settings form ---
+	// --- Form 2: Model + settings (only if customize=true AND enabled) ---
 	var settingsFields []huh.Field
 
 	// Updated progress note (harness now chosen)
@@ -195,7 +184,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 			Description(BuildProgressNote(state.Agents, idx)),
 	)
 
-	// Model select -- filterable with capped height for large lists
+	// Model select — filterable with capped height for large lists
 	models := modelCache[agent.Harness]
 	if len(models) > 1 {
 		var modelOpts []huh.Option[string]
