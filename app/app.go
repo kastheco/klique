@@ -531,7 +531,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 
 func (m *home) View() string {
 	// All columns use identical padding and height for uniform alignment.
-	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1).Background(ui.ColorBase)
+	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1)
 	sidebarView := colStyle.Render(m.sidebar.String())
 	listWithPadding := colStyle.Render(m.list.String())
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
