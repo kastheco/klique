@@ -940,154 +940,158 @@ func (s *Sidebar) String() string {
 	if itemWidth < 4 {
 		itemWidth = 4
 	}
-	for i, item := range s.items {
-		// During search, hide section headers and topics with 0 matches
-		if s.searchActive && s.searchQuery != "" {
-			if item.IsSection {
-				continue // hide section headers during search
-			}
-			if item.ID != SidebarAll && item.MatchCount == 0 {
-				continue // hide topics with no matches
-			}
-		}
-
-		if item.IsSection {
-			b.WriteString(sectionHeaderStyle.Render("── " + item.Name + " ──"))
-			b.WriteString("\n")
-			continue
-		}
-
-		// Content area = itemWidth - 2 (Padding(0,1) in item styles)
-		contentWidth := itemWidth - 2
-		isPlan := strings.HasPrefix(item.ID, SidebarPlanPrefix)
-
-		var line string
-		if isPlan {
-			// ── Plan items: bubbles-style ──
-			// Layout: [indent 1ch][cursor 1ch][name...][gap...][status 2ch]
-			// Plans are indented under their section header with status
-			// shown as a trailing glyph (right-aligned, always visible).
-			cursor := " "
-			if i == s.selectedIdx {
-				cursor = "▸"
-			}
-
-			// Trailing status glyph — always visible, colored by state
-			var statusGlyph string
-			var statusStyle lipgloss.Style
-			switch {
-			case item.IsCancelled:
-				statusGlyph = "✕"
-				statusStyle = sidebarCancelledStyle
-			case item.HasNotification: // reviewing
-				statusGlyph = "◉"
-				statusStyle = sidebarNotifyStyle
-			case item.HasRunning: // in_progress
-				statusGlyph = "●"
-				statusStyle = sidebarRunningStyle
-			default: // ready
-				statusGlyph = "○"
-				statusStyle = lipgloss.NewStyle().Foreground(ColorMuted)
-			}
-
-			const planIndent = 1  // extra indent under section header
-			const cursorWidth = 1 // ▸ or space
-			const trailWidth = 2  // " " + glyph
-
-			// Truncate name to fit
-			nameText := item.Name
-			maxName := contentWidth - planIndent - cursorWidth - trailWidth
-			if maxName < 3 {
-				maxName = 3
-			}
-			if runewidth.StringWidth(nameText) > maxName {
-				nameText = runewidth.Truncate(nameText, maxName-1, "…")
-			}
-
-			textPart := nameText
-			if item.IsCancelled {
-				textPart = sidebarCancelledStyle.Render(textPart)
-			}
-
-			usedWidth := planIndent + cursorWidth + runewidth.StringWidth(textPart) + trailWidth
-			gap := contentWidth - usedWidth
-			if gap < 0 {
-				gap = 0
-			}
-
-			line = " " + cursor + textPart + strings.Repeat(" ", gap) + " " + statusStyle.Render(statusGlyph)
-		} else {
-			// ── Non-plan items: All, topics, ungrouped ──
-			// Layout: [cursor 1ch][name+count...][gap...][trailing icons]
-
-			// Build trailing icons
-			trailingWidth := 0
-			if item.SharedWorktree {
-				trailingWidth += 2 // " \ue727"
-			}
-			if item.HasNotification || item.HasRunning {
-				trailingWidth += 2 // " ●"
-			}
-
-			// Count suffix
-			displayCount := item.Count
-			if s.searchActive && item.MatchCount >= 0 {
-				displayCount = item.MatchCount
-			}
-			countSuffix := ""
-			if displayCount > 0 {
-				countSuffix = fmt.Sprintf(" (%d)", displayCount)
-			}
-
-			// Truncate name
-			nameText := item.Name
-			maxName := contentWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
-			if maxName < 3 {
-				maxName = 3
-			}
-			if runewidth.StringWidth(nameText) > maxName {
-				nameText = runewidth.Truncate(nameText, maxName-1, "…")
-			}
-
-			cursor := " "
-			if i == s.selectedIdx {
-				cursor = "▸"
-			}
-
-			textPart := nameText + countSuffix
-			leftWidth := 1 + runewidth.StringWidth(textPart)
-			gap := contentWidth - leftWidth - trailingWidth
-			if gap < 0 {
-				gap = 0
-			}
-
-			// Trailing icons
-			var styledTrailing string
-			if item.SharedWorktree {
-				styledTrailing += " \ue727"
-			}
-			if item.HasNotification {
-				if time.Now().UnixMilli()/500%2 == 0 {
-					styledTrailing += " " + sidebarReadyStyle.Render("●")
-				} else {
-					styledTrailing += " " + sidebarNotifyStyle.Render("●")
+	if s.useTreeMode {
+		s.renderTreeRows(&b, itemWidth)
+	} else {
+		for i, item := range s.items {
+			// During search, hide section headers and topics with 0 matches
+			if s.searchActive && s.searchQuery != "" {
+				if item.IsSection {
+					continue // hide section headers during search
 				}
-			} else if item.HasRunning {
-				styledTrailing += " " + sidebarRunningStyle.Render("●")
+				if item.ID != SidebarAll && item.MatchCount == 0 {
+					continue // hide topics with no matches
+				}
 			}
 
-			line = cursor + textPart + strings.Repeat(" ", gap) + styledTrailing
-		}
+			if item.IsSection {
+				b.WriteString(sectionHeaderStyle.Render("── " + item.Name + " ──"))
+				b.WriteString("\n")
+				continue
+			}
 
-		if i == s.selectedIdx && s.focused {
-			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(line))
-		} else if i == s.selectedIdx && !s.focused {
-			b.WriteString(activeTopicStyle.Width(itemWidth).Render(line))
-		} else {
-			b.WriteString(topicItemStyle.Width(itemWidth).Render(line))
+			// Content area = itemWidth - 2 (Padding(0,1) in item styles)
+			contentWidth := itemWidth - 2
+			isPlan := strings.HasPrefix(item.ID, SidebarPlanPrefix)
+
+			var line string
+			if isPlan {
+				// ── Plan items: bubbles-style ──
+				// Layout: [indent 1ch][cursor 1ch][name...][gap...][status 2ch]
+				// Plans are indented under their section header with status
+				// shown as a trailing glyph (right-aligned, always visible).
+				cursor := " "
+				if i == s.selectedIdx {
+					cursor = "▸"
+				}
+
+				// Trailing status glyph — always visible, colored by state
+				var statusGlyph string
+				var statusStyle lipgloss.Style
+				switch {
+				case item.IsCancelled:
+					statusGlyph = "✕"
+					statusStyle = sidebarCancelledStyle
+				case item.HasNotification: // reviewing
+					statusGlyph = "◉"
+					statusStyle = sidebarNotifyStyle
+				case item.HasRunning: // in_progress
+					statusGlyph = "●"
+					statusStyle = sidebarRunningStyle
+				default: // ready
+					statusGlyph = "○"
+					statusStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+				}
+
+				const planIndent = 1  // extra indent under section header
+				const cursorWidth = 1 // ▸ or space
+				const trailWidth = 2  // " " + glyph
+
+				// Truncate name to fit
+				nameText := item.Name
+				maxName := contentWidth - planIndent - cursorWidth - trailWidth
+				if maxName < 3 {
+					maxName = 3
+				}
+				if runewidth.StringWidth(nameText) > maxName {
+					nameText = runewidth.Truncate(nameText, maxName-1, "…")
+				}
+
+				textPart := nameText
+				if item.IsCancelled {
+					textPart = sidebarCancelledStyle.Render(textPart)
+				}
+
+				usedWidth := planIndent + cursorWidth + runewidth.StringWidth(textPart) + trailWidth
+				gap := contentWidth - usedWidth
+				if gap < 0 {
+					gap = 0
+				}
+
+				line = " " + cursor + textPart + strings.Repeat(" ", gap) + " " + statusStyle.Render(statusGlyph)
+			} else {
+				// ── Non-plan items: All, topics, ungrouped ──
+				// Layout: [cursor 1ch][name+count...][gap...][trailing icons]
+
+				// Build trailing icons
+				trailingWidth := 0
+				if item.SharedWorktree {
+					trailingWidth += 2 // " \ue727"
+				}
+				if item.HasNotification || item.HasRunning {
+					trailingWidth += 2 // " ●"
+				}
+
+				// Count suffix
+				displayCount := item.Count
+				if s.searchActive && item.MatchCount >= 0 {
+					displayCount = item.MatchCount
+				}
+				countSuffix := ""
+				if displayCount > 0 {
+					countSuffix = fmt.Sprintf(" (%d)", displayCount)
+				}
+
+				// Truncate name
+				nameText := item.Name
+				maxName := contentWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
+				if maxName < 3 {
+					maxName = 3
+				}
+				if runewidth.StringWidth(nameText) > maxName {
+					nameText = runewidth.Truncate(nameText, maxName-1, "…")
+				}
+
+				cursor := " "
+				if i == s.selectedIdx {
+					cursor = "▸"
+				}
+
+				textPart := nameText + countSuffix
+				leftWidth := 1 + runewidth.StringWidth(textPart)
+				gap := contentWidth - leftWidth - trailingWidth
+				if gap < 0 {
+					gap = 0
+				}
+
+				// Trailing icons
+				var styledTrailing string
+				if item.SharedWorktree {
+					styledTrailing += " \ue727"
+				}
+				if item.HasNotification {
+					if time.Now().UnixMilli()/500%2 == 0 {
+						styledTrailing += " " + sidebarReadyStyle.Render("●")
+					} else {
+						styledTrailing += " " + sidebarNotifyStyle.Render("●")
+					}
+				} else if item.HasRunning {
+					styledTrailing += " " + sidebarRunningStyle.Render("●")
+				}
+
+				line = cursor + textPart + strings.Repeat(" ", gap) + styledTrailing
+			}
+
+			if i == s.selectedIdx && s.focused {
+				b.WriteString(selectedTopicStyle.Width(itemWidth).Render(line))
+			} else if i == s.selectedIdx && !s.focused {
+				b.WriteString(activeTopicStyle.Width(itemWidth).Render(line))
+			} else {
+				b.WriteString(topicItemStyle.Width(itemWidth).Render(line))
+			}
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
-	}
+	} // end else (flat mode)
 
 	// Build repo indicator as a clickable dropdown button at the bottom.
 	// lipgloss .Width(w) includes padding but EXCLUDES borders.
