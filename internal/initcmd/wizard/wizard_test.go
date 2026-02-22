@@ -78,6 +78,38 @@ func TestDefaultAgentRoles(t *testing.T) {
 	assert.Equal(t, []string{"coder", "reviewer", "planner"}, roles)
 }
 
+func TestRoleDefaults(t *testing.T) {
+	defaults := RoleDefaults()
+
+	t.Run("has all three roles", func(t *testing.T) {
+		assert.Contains(t, defaults, "coder")
+		assert.Contains(t, defaults, "reviewer")
+		assert.Contains(t, defaults, "planner")
+	})
+
+	t.Run("coder defaults", func(t *testing.T) {
+		c := defaults["coder"]
+		assert.Equal(t, "anthropic/claude-sonnet-4-6", c.Model)
+		assert.Equal(t, "medium", c.Effort)
+		assert.Equal(t, "0.1", c.Temperature)
+		assert.True(t, c.Enabled)
+	})
+
+	t.Run("planner defaults", func(t *testing.T) {
+		p := defaults["planner"]
+		assert.Equal(t, "anthropic/claude-opus-4-6", p.Model)
+		assert.Equal(t, "max", p.Effort)
+		assert.Equal(t, "0.5", p.Temperature)
+	})
+
+	t.Run("reviewer defaults", func(t *testing.T) {
+		r := defaults["reviewer"]
+		assert.Equal(t, "openai/gpt-5.3-codex", r.Model)
+		assert.Equal(t, "xhigh", r.Effort)
+		assert.Equal(t, "0.2", r.Temperature)
+	})
+}
+
 func TestPrePopulateFromExisting(t *testing.T) {
 	// Tests the pre-population logic without running the interactive form.
 	temp := 0.5

@@ -72,6 +72,34 @@ func DefaultAgentRoles() []string {
 	return []string{"coder", "reviewer", "planner"}
 }
 
+// RoleDefaults returns sensible per-role defaults for fresh inits.
+// Harness is left empty; the caller fills it from selected harnesses.
+func RoleDefaults() map[string]AgentState {
+	return map[string]AgentState{
+		"coder": {
+			Role:        "coder",
+			Model:       "anthropic/claude-sonnet-4-6",
+			Effort:      "medium",
+			Temperature: "0.1",
+			Enabled:     true,
+		},
+		"planner": {
+			Role:        "planner",
+			Model:       "anthropic/claude-opus-4-6",
+			Effort:      "max",
+			Temperature: "0.5",
+			Enabled:     true,
+		},
+		"reviewer": {
+			Role:        "reviewer",
+			Model:       "openai/gpt-5.3-codex",
+			Effort:      "xhigh",
+			Temperature: "0.2",
+			Enabled:     true,
+		},
+	}
+}
+
 // Run executes all wizard stages in sequence.
 // If existing is non-nil, pre-populates forms from existing config.
 func Run(registry *harness.Registry, existing *config.TOMLConfigResult) (*State, error) {
