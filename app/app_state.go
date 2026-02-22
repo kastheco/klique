@@ -624,7 +624,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 		}
 
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStandardStyle("dark"),
 			glamour.WithWordWrap(wordWrap),
 		)
 		if err != nil {
