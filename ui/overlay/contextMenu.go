@@ -137,13 +137,7 @@ func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
 	switch msg.String() {
 	case "esc":
 		return "", true
-	case " ":
-		if c.searchQuery == "" {
-			return "", true
-		}
-		c.searchQuery += " "
-		c.applyFilter()
-	case "enter":
+	case " ", "enter":
 		if c.selectedIdx < len(c.filtered) && !c.filtered[c.selectedIdx].item.Disabled {
 			return c.filtered[c.selectedIdx].item.Action, true
 		}
@@ -231,7 +225,7 @@ func (c *ContextMenu) Render() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(contextHintStyle.Render("↑↓ nav • space close"))
+	b.WriteString(contextHintStyle.Render("↑↓ nav • space select • esc close"))
 
 	return contextMenuStyle.Render(b.String())
 }
