@@ -127,6 +127,23 @@ var sidebarCancelledStyle = lipgloss.NewStyle().
 	Foreground(ColorMuted).
 	Strikethrough(true)
 
+// Tree-mode styles
+
+// stageCheckStyle is for completed stage indicators (✓).
+var stageCheckStyle = lipgloss.NewStyle().Foreground(ColorFoam)
+
+// stageActiveStyle is for the currently active stage indicator (▸).
+var stageActiveStyle = lipgloss.NewStyle().Foreground(ColorIris)
+
+// stageLockedStyle is for locked/unreachable stage indicators (○).
+var stageLockedStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+// topicLabelStyle is for topic header labels in tree mode.
+var topicLabelStyle = lipgloss.NewStyle().Foreground(ColorText).Bold(true)
+
+// historyToggleStyle is for the history section divider.
+var historyToggleStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
 	Name            string
