@@ -48,8 +48,8 @@ type Menu struct {
 	systemGroupSize int
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeySearch, keys.KeyToggleSidebar, keys.KeySpace, keys.KeyRepoSwitch, keys.KeyHelp, keys.KeyQuit}
-var defaultSystemGroupSize = 6 // ctrl+s toggle sidebar, / search, space actions, R repo switch, ? help, q quit
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeySearch, keys.KeySpace, keys.KeyRepoSwitch, keys.KeyHelp, keys.KeyQuit}
+var defaultSystemGroupSize = 5 // / search, space actions, R repo switch, ? help, q quit
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
@@ -138,7 +138,7 @@ func (m *Menu) addInstanceOptions() {
 	}
 
 	// System group
-	systemGroup := []keys.KeyName{keys.KeyToggleSidebar, keys.KeyKillAllInTopic, keys.KeySearch, keys.KeyRepoSwitch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
+	systemGroup := []keys.KeyName{keys.KeyKillAllInTopic, keys.KeySearch, keys.KeyRepoSwitch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
 	// Combine all groups
 	options = append(options, actionGroup...)
