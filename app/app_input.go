@@ -1104,8 +1104,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyFocusSidebar:
 		if m.sidebarHidden {
-			// Two-step: reveal sidebar first, don't focus yet
+			// Show and focus in one motion
 			m.sidebarHidden = false
+			m.setFocus(0)
 			return m, tea.WindowSize()
 		}
 		// s key always jumps directly to the sidebar regardless of current panel.
