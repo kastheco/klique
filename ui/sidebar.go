@@ -88,6 +88,7 @@ const (
 	rowKindPlan                                // plan header
 	rowKindStage                               // plan lifecycle stage
 	rowKindHistoryToggle                       // "History" toggle row
+	rowKindCancelled                           // cancelled plan (strikethrough)
 )
 
 // sidebarRow is a single rendered row in the sidebar.
@@ -121,6 +122,10 @@ var sidebarReadyStyle = lipgloss.NewStyle().
 var sidebarNotifyStyle = lipgloss.NewStyle().
 	Foreground(ColorRose)
 
+var sidebarCancelledStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Strikethrough(true)
+
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
 	Name            string
@@ -131,6 +136,7 @@ type SidebarItem struct {
 	SharedWorktree  bool // true if this topic has a shared worktree
 	HasRunning      bool // true if this topic has running instances
 	HasNotification bool // true if this topic has recently-finished instances
+	IsCancelled     bool // true if this plan was cancelled (render with strikethrough)
 }
 
 // Sidebar is the left-most panel showing topics and search.
@@ -155,6 +161,7 @@ type Sidebar struct {
 	treeTopics    []TopicDisplay
 	treeUngrouped []PlanDisplay
 	treeHistory   []PlanDisplay
+	treeCancelled []PlanDisplay
 	useTreeMode   bool // true when SetTopicsAndPlans has been called
 }
 
@@ -232,11 +239,13 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 	if len(s.plans) > 0 {
 		items = append(items, SidebarItem{Name: "Plans", IsSection: true})
 		for _, p := range s.plans {
+			isCancelled := p.Status == string(planstate.StatusCancelled)
 			items = append(items, SidebarItem{
 				Name:            planstate.DisplayName(p.Filename),
 				ID:              SidebarPlanPrefix + p.Filename,
-				HasRunning:      p.Status == string(planstate.StatusInProgress),
-				HasNotification: p.Status == string(planstate.StatusReviewing),
+				HasRunning:      !isCancelled && p.Status == string(planstate.StatusInProgress),
+				HasNotification: !isCancelled && p.Status == string(planstate.StatusReviewing),
+				IsCancelled:     isCancelled,
 			})
 		}
 	}
@@ -389,10 +398,15 @@ func (s *Sidebar) GetSearchQuery() string  { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
 // SetTopicsAndPlans sets the three-level tree data and rebuilds rows.
-func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay) {
+func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {
 	s.treeTopics = topics
 	s.treeUngrouped = ungrouped
 	s.treeHistory = history
+	if len(cancelled) > 0 {
+		s.treeCancelled = cancelled[0]
+	} else {
+		s.treeCancelled = nil
+	}
 	s.useTreeMode = true
 	s.rebuildRows()
 }
@@ -451,6 +465,16 @@ func (s *Sidebar) rebuildRows() {
 			Kind:  rowKindHistoryToggle,
 			ID:    SidebarPlanHistoryToggle,
 			Label: "History",
+		})
+	}
+
+	// Cancelled plans (shown at bottom with strikethrough)
+	for _, p := range s.treeCancelled {
+		rows = append(rows, sidebarRow{
+			Kind:     rowKindCancelled,
+			ID:       SidebarPlanPrefix + p.Filename,
+			Label:    planstate.DisplayName(p.Filename),
+			PlanFile: p.Filename,
 		})
 	}
 
@@ -697,6 +721,9 @@ func (s *Sidebar) String() string {
 		} else if isPlan {
 			hasPrefixStyle = true
 			switch {
+			case item.IsCancelled:
+				prefixGlyph = "✕"
+				prefixStyle = sidebarCancelledStyle
 			case item.HasNotification:
 				prefixGlyph = "◉"
 				prefixStyle = sidebarNotifyStyle
@@ -711,6 +738,9 @@ func (s *Sidebar) String() string {
 		// Build the text portion (name + count) without the prefix so the
 		// outer item style applies a consistent background across it.
 		textPart := nameText + countSuffix
+		if item.IsCancelled {
+			textPart = sidebarCancelledStyle.Render(textPart)
+		}
 		leftWidth := 1 + runewidth.StringWidth(textPart) // 1 for prefix glyph
 
 		// Pad between left and right to push icons to the right edge

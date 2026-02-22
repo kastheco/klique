@@ -423,8 +423,8 @@ func (m *home) updateSidebarPlans() {
 		plans := m.planState.PlansByTopic(t.Name)
 		planDisplays := make([]ui.PlanDisplay, 0, len(plans))
 		for _, p := range plans {
-			if p.Status == planstate.StatusDone || p.Status == planstate.StatusCompleted {
-				continue // finished plans go to history
+			if p.Status == planstate.StatusDone || p.Status == planstate.StatusCompleted || p.Status == planstate.StatusCancelled {
+				continue // finished/cancelled plans handled separately
 			}
 			planDisplays = append(planDisplays, ui.PlanDisplay{
 				Filename:    p.Filename,
@@ -464,7 +464,28 @@ func (m *home) updateSidebarPlans() {
 		})
 	}
 
-	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history)
+	// Build cancelled plans
+	cancelledInfos := m.planState.Cancelled()
+	cancelled := make([]ui.PlanDisplay, 0, len(cancelledInfos))
+	for _, p := range cancelledInfos {
+		cancelled = append(cancelled, ui.PlanDisplay{
+			Filename:    p.Filename,
+			Status:      string(p.Status),
+			Description: p.Description,
+			Topic:       p.Topic,
+		})
+	}
+
+	// Feed flat-mode plan list (active plans + cancelled for rendering)
+	allVisiblePlans := make([]ui.PlanDisplay, 0, len(ungrouped)+len(cancelled))
+	allVisiblePlans = append(allVisiblePlans, ungrouped...)
+	for _, t := range topics {
+		allVisiblePlans = append(allVisiblePlans, t.Plans...)
+	}
+	allVisiblePlans = append(allVisiblePlans, cancelled...)
+	m.sidebar.SetPlans(allVisiblePlans)
+
+	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history, cancelled)
 }
 
 // checkPlanCompletion scans running coder instances for plans that have been
