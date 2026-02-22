@@ -1,5 +1,12 @@
 package check
 
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/kastheco/klique/internal/initcmd/harness"
+)
+
 // SkillStatus represents the state of a single skill entry.
 type SkillStatus int
 
@@ -62,6 +69,36 @@ type AuditResult struct {
 	Project     []ProjectSkillEntry
 	Superpowers []SuperpowersResult
 	InProject   bool // whether cwd is a kq project
+}
+
+// Audit runs all three audit layers and returns a complete result.
+// home is the user's home directory; projectDir is the current working directory.
+// registry provides the list of known harnesses.
+func Audit(home, projectDir string, registry *harness.Registry) *AuditResult {
+	result := &AuditResult{}
+
+	harnessNames := registry.All()
+
+	// Detect whether cwd is a kq project.
+	agentsDir := filepath.Join(projectDir, ".agents")
+	if _, err := os.Stat(agentsDir); err == nil {
+		result.InProject = true
+	}
+
+	// Global skills audit — one HarnessResult per harness.
+	for _, name := range harnessNames {
+		result.Global = append(result.Global, AuditGlobal(home, name))
+	}
+
+	// Project skills audit — only when in a kq project.
+	if result.InProject {
+		result.Project = AuditProject(projectDir, harnessNames)
+	}
+
+	// Superpowers audit.
+	result.Superpowers = AuditSuperpowers(home, harnessNames)
+
+	return result
 }
 
 // Summary returns (ok, total) counts across all checks.
