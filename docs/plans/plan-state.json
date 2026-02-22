@@ -169,10 +169,11 @@
       "created_at": "2026-02-22T08:35:22.645408061Z"
     },
     "2026-02-22-disable-cache-focused.md": {
-      "status": "ready",
+      "status": "reviewing",
       "description": "disable cache reading and poll tmux pane directly when focused to improve interactive experience (it glitches a lot currently)",
       "branch": "plan/disable-cache-focused",
-      "created_at": "2026-02-22T09:56:55.401392089Z"
+      "created_at": "2026-02-22T09:56:55.401392089Z",
+      "implemented": "2026-02-22"
     },
     "2026-02-22-dupe-task-after-plan-change.md": {
       "status": "ready",
@@ -193,7 +194,7 @@
       "created_at": "2026-02-22T10:04:55.567483368Z"
     },
     "2026-02-22-rename-to-kasmos.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "switch name back to kasmos and overtake that repo (rename that one to kasmold first)",
       "branch": "plan/rename-to-kasmos",
       "created_at": "2026-02-22T09:53:24.333455818Z"
@@ -203,6 +204,30 @@
       "description": "drop plan from first part of cta below ascii art",
       "branch": "plan/shorten-cta",
       "created_at": "2026-02-22T09:54:49.026733734Z"
+    },
+    "2026-02-22-1a-tree-renderer.md": {
+      "status": "ready",
+      "description": "tree-mode rendering branch in Sidebar.String() with indentation, chevrons, and status glyphs",
+      "branch": "plan/1a-tree-renderer",
+      "created_at": "2026-02-22T18:00:00Z"
+    },
+    "2026-02-22-1b-tree-navigation.md": {
+      "status": "ready",
+      "description": "Left/Right tree-traversal methods and Space/Enter/arrow keybindings for tree-mode sidebar",
+      "branch": "plan/1b-tree-navigation",
+      "created_at": "2026-02-22T18:00:00Z"
+    },
+    "2026-02-22-1c-highlight-boost-list.md": {
+      "status": "ready",
+      "description": "highlight-boost instance list with partition sort and dimmed rendering for non-matching instances",
+      "branch": "plan/1c-highlight-boost-list",
+      "created_at": "2026-02-22T18:00:00Z"
+    },
+    "2026-02-22-2-tree-mode-wiring.md": {
+      "status": "ready",
+      "description": "wire tree renderer, navigation, and highlight-boost together; remove DisableTreeMode gate",
+      "branch": "plan/2-tree-mode-wiring",
+      "created_at": "2026-02-22T18:00:00Z"
     }
   }
 }
