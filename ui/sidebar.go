@@ -391,6 +391,84 @@ func (s *Sidebar) Down() {
 	}
 }
 
+// IsTreeMode returns true when the sidebar is rendering in tree mode.
+func (s *Sidebar) IsTreeMode() bool {
+	return s.useTreeMode
+}
+
+// Right expands the selected node if collapsed, or moves to its first child if already expanded.
+// No-op on stage rows and in flat mode.
+func (s *Sidebar) Right() {
+	if !s.useTreeMode || s.selectedIdx >= len(s.rows) {
+		return
+	}
+	row := s.rows[s.selectedIdx]
+	switch row.Kind {
+	case rowKindTopic:
+		if row.Collapsed {
+			s.ToggleSelectedExpand()
+		} else {
+			if s.selectedIdx+1 < len(s.rows) {
+				s.selectedIdx++
+			}
+		}
+	case rowKindPlan:
+		if row.Collapsed {
+			s.ToggleSelectedExpand()
+		} else {
+			if s.selectedIdx+1 < len(s.rows) && s.rows[s.selectedIdx+1].Kind == rowKindStage {
+				s.selectedIdx++
+			}
+		}
+		// Stage, History, Cancelled: no-op
+	}
+}
+
+// Left collapses the selected node if expanded, or moves to its parent.
+// On ungrouped plans with no parent topic, behaves like Up().
+func (s *Sidebar) Left() {
+	if !s.useTreeMode || s.selectedIdx >= len(s.rows) {
+		return
+	}
+	row := s.rows[s.selectedIdx]
+	switch row.Kind {
+	case rowKindTopic:
+		if !row.Collapsed {
+			s.ToggleSelectedExpand()
+		} else if s.selectedIdx > 0 {
+			s.selectedIdx--
+		}
+	case rowKindPlan:
+		if !row.Collapsed {
+			s.ToggleSelectedExpand()
+			return
+		}
+		// Move to parent topic
+		for i := s.selectedIdx - 1; i >= 0; i-- {
+			if s.rows[i].Kind == rowKindTopic {
+				s.selectedIdx = i
+				return
+			}
+		}
+		// No parent topic — move up
+		if s.selectedIdx > 0 {
+			s.selectedIdx--
+		}
+	case rowKindStage:
+		// Move to parent plan
+		for i := s.selectedIdx - 1; i >= 0; i-- {
+			if s.rows[i].Kind == rowKindPlan {
+				s.selectedIdx = i
+				return
+			}
+		}
+	case rowKindHistoryToggle, rowKindCancelled:
+		if s.selectedIdx > 0 {
+			s.selectedIdx--
+		}
+	}
+}
+
 // ClickItem selects a sidebar item by its rendered row offset (0-indexed from the first item).
 // Section headers count as a row but are skipped for selection.
 func (s *Sidebar) ClickItem(row int) {
