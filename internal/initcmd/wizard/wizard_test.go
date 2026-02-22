@@ -154,38 +154,53 @@ func TestFormatAgentSummary(t *testing.T) {
 func TestPromptCustomize(t *testing.T) {
 	t.Run("empty input (Enter) returns false", func(t *testing.T) {
 		r := strings.NewReader("\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.False(t, result)
 	})
 
 	t.Run("n returns false", func(t *testing.T) {
 		r := strings.NewReader("n\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.False(t, result)
 	})
 
 	t.Run("N returns false", func(t *testing.T) {
 		r := strings.NewReader("N\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.False(t, result)
 	})
 
 	t.Run("y returns true", func(t *testing.T) {
 		r := strings.NewReader("y\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.True(t, result)
 	})
 
 	t.Run("Y returns true", func(t *testing.T) {
 		r := strings.NewReader("Y\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.True(t, result)
 	})
 
 	t.Run("junk defaults to false", func(t *testing.T) {
 		r := strings.NewReader("hello\n")
-		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6")
+		result := PromptCustomize(r, io.Discard, "coder", "opencode / claude-sonnet-4-6", false)
 		assert.False(t, result)
+	})
+
+	t.Run("customized agent renders bold", func(t *testing.T) {
+		var buf strings.Builder
+		r := strings.NewReader("n\n")
+		PromptCustomize(r, &buf, "coder", "opencode / custom-model", true)
+		assert.Contains(t, buf.String(), "\033[1m")
+		assert.Contains(t, buf.String(), "\033[0m")
+	})
+
+	t.Run("default agent renders plain", func(t *testing.T) {
+		var buf strings.Builder
+		r := strings.NewReader("n\n")
+		PromptCustomize(r, &buf, "coder", "opencode / default-model", false)
+		assert.NotContains(t, buf.String(), "\033[1m")
 	})
 }
 
@@ -233,6 +248,48 @@ func TestPrePopulateFromExisting(t *testing.T) {
 	// reviewer still has role defaults for model/effort
 	assert.Equal(t, "openai/gpt-5.3-codex", agents[1].Model)
 	assert.Equal(t, "xhigh", agents[1].Effort)
+}
+
+func TestIsCustomized(t *testing.T) {
+	t.Run("matches defaults returns false", func(t *testing.T) {
+		defaults := RoleDefaults()
+		assert.False(t, IsCustomized(defaults["coder"], "opencode"))
+	})
+
+	t.Run("different model returns true", func(t *testing.T) {
+		a := RoleDefaults()["coder"]
+		a.Model = "anthropic/claude-opus-4-6"
+		assert.True(t, IsCustomized(a, "opencode"))
+	})
+
+	t.Run("different harness returns true", func(t *testing.T) {
+		a := RoleDefaults()["coder"]
+		a.Harness = "claude"
+		assert.True(t, IsCustomized(a, "opencode"))
+	})
+
+	t.Run("different effort returns true", func(t *testing.T) {
+		a := RoleDefaults()["coder"]
+		a.Effort = "high"
+		assert.True(t, IsCustomized(a, "opencode"))
+	})
+
+	t.Run("different temperature returns true", func(t *testing.T) {
+		a := RoleDefaults()["coder"]
+		a.Temperature = "0.5"
+		assert.True(t, IsCustomized(a, "opencode"))
+	})
+
+	t.Run("disabled returns true", func(t *testing.T) {
+		a := RoleDefaults()["coder"]
+		a.Enabled = false
+		assert.True(t, IsCustomized(a, "opencode"))
+	})
+
+	t.Run("unknown role returns false", func(t *testing.T) {
+		a := AgentState{Role: "unknown", Enabled: true}
+		assert.False(t, IsCustomized(a, "opencode"))
+	})
 }
 
 func TestBuildProgressNote(t *testing.T) {

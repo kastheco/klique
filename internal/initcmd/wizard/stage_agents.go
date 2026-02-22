@@ -31,12 +31,16 @@ func FormatAgentSummary(a AgentState) string {
 		parts = append(parts, "temp="+a.Temperature)
 	}
 	return strings.Join(parts, " / ")
-}
-
-// PromptCustomize prints an agent summary and asks "customize? y[n]".
+} // PromptCustomize prints an agent summary and asks "customize? y[n]".
+// If customized is true, the summary is rendered in bold to indicate
+// it differs from factory defaults.
 // Returns true only if the user types "y" or "Y". Default (Enter) is no.
-func PromptCustomize(r io.Reader, w io.Writer, role string, summary string) bool {
-	fmt.Fprintf(w, "  %-10s %s\n", role, summary)
+func PromptCustomize(r io.Reader, w io.Writer, role string, summary string, customized bool) bool {
+	if customized {
+		fmt.Fprintf(w, "  %-10s \033[1m%s\033[0m\n", role, summary)
+	} else {
+		fmt.Fprintf(w, "  %-10s %s\n", role, summary)
+	}
 	fmt.Fprintf(w, "  customize? y[n]: ")
 
 	scanner := bufio.NewScanner(r)
@@ -106,8 +110,9 @@ func runAgentStage(state *State, existing *config.TOMLConfigResult) error {
 	for i := range state.Agents {
 		agent := &state.Agents[i]
 		summary := FormatAgentSummary(*agent)
+		customized := IsCustomized(*agent, defaultHarness)
 
-		if PromptCustomize(os.Stdin, os.Stdout, agent.Role, summary) {
+		if PromptCustomize(os.Stdin, os.Stdout, agent.Role, summary, customized) {
 			if err := runSingleAgentForm(state, i, modelCache); err != nil {
 				return err
 			}
