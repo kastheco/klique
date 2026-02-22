@@ -153,7 +153,35 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 		}
 	}
 
+	rendered = stripTrailingCommas(rendered)
+
 	return rendered, nil
+}
+
+// stripTrailingCommas removes JSON trailing commas that arise when removeJSONBlock
+// removes a block and the preceding entry's closing "  }," becomes the last entry
+// in the object. Scans every line: if it ends with a comma and the next non-blank
+// line opens with "}" or "]", the comma is stripped.
+func stripTrailingCommas(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+		if !strings.HasSuffix(trimmed, ",") {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			next := strings.TrimSpace(lines[j])
+			if next == "" {
+				continue
+			}
+			if strings.HasPrefix(next, "}") || strings.HasPrefix(next, "]") {
+				// Strip the trailing comma
+				lines[i] = trimmed[:len(trimmed)-1]
+			}
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // removeLine removes any line containing the given substring.
@@ -220,20 +248,21 @@ func WriteOpenCodeProject(dir string, agents []harness.AgentConfig, selectedTool
 	// Also scaffold the chat agent prompt (always, not wizard-dependent)
 	toolsRef := loadFilteredToolsReference(selectedTools)
 	chatContent, err := templates.ReadFile("templates/opencode/agents/chat.md")
-	if err == nil {
-		chatAgent := harness.AgentConfig{Role: "chat", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6"}
-		rendered := renderTemplate(string(chatContent), chatAgent, toolsRef)
-		chatDest := filepath.Join(dir, ".opencode", "agents", "chat.md")
-		written, writeErr := writeFile(chatDest, []byte(rendered), force)
-		if writeErr != nil {
-			return nil, writeErr
-		}
-		rel, relErr := filepath.Rel(dir, chatDest)
-		if relErr != nil {
-			rel = chatDest
-		}
-		results = append(results, WriteResult{Path: rel, Created: written})
+	if err != nil {
+		return nil, fmt.Errorf("read chat.md template: %w", err)
 	}
+	chatAgent := harness.AgentConfig{Role: "chat", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6"}
+	rendered := renderTemplate(string(chatContent), chatAgent, toolsRef)
+	chatDest := filepath.Join(dir, ".opencode", "agents", "chat.md")
+	written, writeErr := writeFile(chatDest, []byte(rendered), force)
+	if writeErr != nil {
+		return nil, writeErr
+	}
+	rel, relErr := filepath.Rel(dir, chatDest)
+	if relErr != nil {
+		rel = chatDest
+	}
+	results = append(results, WriteResult{Path: rel, Created: written})
 
 	// Generate opencode.jsonc from template
 	configContent, err := renderOpenCodeConfig(dir, agents)
@@ -242,11 +271,11 @@ func WriteOpenCodeProject(dir string, agents []harness.AgentConfig, selectedTool
 	}
 
 	configDest := filepath.Join(dir, ".opencode", "opencode.jsonc")
-	written, err := writeFile(configDest, []byte(configContent), force)
+	written, err = writeFile(configDest, []byte(configContent), force)
 	if err != nil {
 		return nil, fmt.Errorf("write opencode.jsonc: %w", err)
 	}
-	rel, relErr := filepath.Rel(dir, configDest)
+	rel, relErr = filepath.Rel(dir, configDest)
 	if relErr != nil {
 		rel = configDest
 	}
