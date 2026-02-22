@@ -523,14 +523,6 @@ func (s *Sidebar) rebuildRows() {
 	}
 
 	s.rows = rows
-
-	// Clamp selectedIdx
-	if s.selectedIdx >= len(rows) {
-		s.selectedIdx = len(rows) - 1
-	}
-	if s.selectedIdx < 0 {
-		s.selectedIdx = 0
-	}
 }
 
 // planStageRows returns the four lifecycle stage rows for a plan.
