@@ -556,7 +556,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Coder-exit → push-prompt: when a coder session's tmux pane has exited
 			// and the plan is still in StatusImplementing, prompt the user to push the
 			// implementation branch before advancing to reviewing.
+			// Skip when a confirmation overlay is already showing to avoid re-prompting
+			// on every tick while the user is deciding.
 			for _, inst := range m.list.GetInstances() {
+				if m.state == stateConfirm {
+					break
+				}
 				alive, collected := tmuxAliveMap[inst.Title]
 				if !collected {
 					continue

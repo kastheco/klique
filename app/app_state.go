@@ -791,19 +791,17 @@ func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 	pushAction := func() tea.Msg {
 		worktree, err := inst.GetGitWorktree()
 		if err == nil {
+			// Push errors are non-fatal: the user can push manually later.
 			_ = worktree.PushChanges(
 				fmt.Sprintf("[klique] push completed implementation for '%s'", inst.Title),
 				false,
 			)
 		}
-		_ = m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing)
+		if err := m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing); err != nil {
+			return err
+		}
 		return planRefreshMsg{}
 	}
-	skipAction := func() tea.Msg {
-		_ = m.planState.SetStatus(inst.PlanFile, planstate.StatusReviewing)
-		return planRefreshMsg{}
-	}
-	_ = skipAction // used via cancel path below
 	return m.confirmAction(message, func() tea.Msg { return pushAction() })
 }
 
@@ -860,6 +858,12 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	})
 	if err != nil {
 		return m, m.handleError(err)
+	}
+	// Keep IsReviewer in sync with AgentType so the reviewer-completion check
+	// in the metadata tick handler (which gates on inst.IsReviewer) fires for
+	// sidebar-spawned reviewers as well as auto-spawned ones.
+	if agentType == session.AgentTypeReviewer {
+		inst.IsReviewer = true
 	}
 	inst.QueuedPrompt = prompt
 
