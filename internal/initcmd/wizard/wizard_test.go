@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -189,7 +190,6 @@ func TestPromptCustomize(t *testing.T) {
 }
 
 func TestPrePopulateFromExisting(t *testing.T) {
-	// Tests the pre-population logic without running the interactive form.
 	temp := 0.5
 	existing := &config.TOMLConfigResult{
 		Profiles: map[string]config.AgentProfile{
@@ -206,25 +206,33 @@ func TestPrePopulateFromExisting(t *testing.T) {
 		},
 	}
 
-	// Simulate what runAgentStage does for pre-population
+	// Simulate what runAgentStage now does for pre-population
 	roles := DefaultAgentRoles()
+	defaults := RoleDefaults()
 	var agents []AgentState
 	for _, role := range roles {
-		as := AgentState{Role: role, Harness: "claude", Enabled: true}
+		as := defaults[role]
+		if as.Harness == "" {
+			as.Harness = "claude"
+		}
 		if profile, ok := existing.Profiles[role]; ok {
 			as.Harness = profile.Program
 			as.Model = profile.Model
 			as.Effort = profile.Effort
 			as.Enabled = profile.Enabled
+			as.Temperature = "" // clear role default when existing config found
 			if profile.Temperature != nil {
-				as.Temperature = "0.5"
+				as.Temperature = fmt.Sprintf("%g", *profile.Temperature)
 			}
 		}
 		agents = append(agents, as)
 	}
 
 	assert.Equal(t, "opencode", agents[0].Harness) // coder got pre-populated
-	assert.Equal(t, "claude", agents[1].Harness)   // reviewer got default
+	assert.Equal(t, "claude", agents[1].Harness)   // reviewer got harness default
+	// reviewer still has role defaults for model/effort
+	assert.Equal(t, "openai/gpt-5.3-codex", agents[1].Model)
+	assert.Equal(t, "xhigh", agents[1].Effort)
 }
 
 func TestBuildProgressNote(t *testing.T) {
