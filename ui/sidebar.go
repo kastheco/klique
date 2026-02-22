@@ -22,13 +22,10 @@ var sidebarTitleStyle = lipgloss.NewStyle().
 var sidebarBorderStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorOverlay).
-	BorderBackground(ColorBase).
-	Background(ColorBase).
 	Padding(0, 1)
 
 var topicItemStyle = lipgloss.NewStyle().
 	Padding(0, 1).
-	Background(ColorBase).
 	Foreground(ColorText)
 
 // selectedTopicStyle — focused: iris bg on dark base
@@ -45,21 +42,16 @@ var activeTopicStyle = lipgloss.NewStyle().
 
 var sectionHeaderStyle = lipgloss.NewStyle().
 	Foreground(ColorMuted).
-	Background(ColorBase).
 	Padding(0, 1)
 
 var searchBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorOverlay).
-	BorderBackground(ColorBase).
-	Background(ColorBase).
 	Padding(0, 1)
 
 var searchActiveBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(ColorFoam).
-	BorderBackground(ColorBase).
-	Background(ColorBase).
 	Padding(0, 1)
 
 const (
@@ -77,19 +69,15 @@ type PlanDisplay struct {
 // dimmedTopicStyle is for topics with no matching instances during search
 var dimmedTopicStyle = lipgloss.NewStyle().
 	Padding(0, 1).
-	Background(ColorBase).
 	Foreground(ColorMuted)
 
 var sidebarRunningStyle = lipgloss.NewStyle().
-	Background(ColorBase).
 	Foreground(ColorFoam)
 
 var sidebarReadyStyle = lipgloss.NewStyle().
-	Background(ColorBase).
 	Foreground(ColorFoam)
 
 var sidebarNotifyStyle = lipgloss.NewStyle().
-	Background(ColorBase).
 	Foreground(ColorRose)
 
 // SidebarItem represents a selectable item in the sidebar.
@@ -516,8 +504,6 @@ func (s *Sidebar) String() string {
 		btnStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor).
-			BorderBackground(ColorBase).
-			Background(ColorBase).
 			Foreground(textColor).
 			Width(btnWidth).
 			Padding(0, 1)
@@ -548,5 +534,5 @@ func (s *Sidebar) String() string {
 	}
 
 	bordered := borderStyle.Width(innerWidth).Height(borderHeight).Render(innerContent)
-	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered, lipgloss.WithWhitespaceBackground(ColorBase))
+	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
 }
