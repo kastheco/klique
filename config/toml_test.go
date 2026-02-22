@@ -149,4 +149,31 @@ func TestResolveProfileWithDisabledAgent(t *testing.T) {
 		profile := cfg.ResolveProfile("implementing", "claude")
 		assert.Equal(t, "opencode", profile.Program)
 	})
+
+	t.Run("spec_review phase resolves to reviewer profile", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{
+				"implementing": "coder",
+				"spec_review":  "reviewer",
+			},
+			Profiles: map[string]AgentProfile{
+				"coder":    {Program: "opencode", Enabled: true},
+				"reviewer": {Program: "claude", Enabled: true, Flags: []string{"--model", "opus"}},
+			},
+		}
+		profile := cfg.ResolveProfile("spec_review", "opencode")
+		assert.Equal(t, "claude", profile.Program)
+		assert.Equal(t, "claude --model opus", profile.BuildCommand())
+	})
+
+	t.Run("spec_review falls back when no reviewer configured", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]AgentProfile{
+				"coder": {Program: "opencode", Enabled: true},
+			},
+		}
+		profile := cfg.ResolveProfile("spec_review", "opencode")
+		assert.Equal(t, "opencode", profile.Program)
+	})
 }

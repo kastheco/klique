@@ -512,8 +512,8 @@ func (m *home) checkReviewerCompletion() {
 	}
 }
 
-// transitionToReview marks a plan as "reviewing", spawns a reviewer session
-// pre-loaded with the review prompt, and returns the start cmd.
+// transitionToReview marks a plan as "reviewing", pauses the coder session,
+// spawns a reviewer session with the reviewer profile, and returns the start cmd.
 func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	planFile := coderInst.PlanFile
 
@@ -522,14 +522,24 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 		log.WarningLog.Printf("could not set plan %q to reviewing: %v", planFile, err)
 	}
 
+	// Auto-pause the coder instance — its work is done.
+	coderInst.ImplementationComplete = true
+	if err := coderInst.Pause(); err != nil {
+		log.WarningLog.Printf("could not pause coder instance for %q: %v", planFile, err)
+	}
+
 	planName := planstate.DisplayName(planFile)
 	planPath := "docs/plans/" + planFile
 	prompt := scaffold.LoadReviewPrompt(planPath, planName)
 
+	// Use the reviewer profile if configured, otherwise fall back to default program.
+	reviewProfile := m.appConfig.ResolveProfile("spec_review", m.program)
+	reviewProgram := reviewProfile.BuildCommand()
+
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:    planName + "-review",
 		Path:     m.activeRepoPath,
-		Program:  m.program,
+		Program:  reviewProgram,
 		PlanFile: planFile,
 	})
 	if err != nil {
@@ -541,6 +551,8 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 
 	m.newInstanceFinalizer = m.list.AddInstance(reviewerInst)
 	m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+
+	m.toastManager.Success(fmt.Sprintf("Implementation complete → review started for %s", planName))
 
 	return func() tea.Msg {
 		err := reviewerInst.Start(true)

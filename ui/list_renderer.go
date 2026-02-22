@@ -27,7 +27,12 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 	prefix := " "
 	titleS := selectedTitleStyle
 	descS := selectedDescStyle
-	if selected && !focused {
+
+	// Implementation-complete instances always use dim styles regardless of selection.
+	if i.ImplementationComplete {
+		titleS = completedTitleStyle
+		descS = completedDescStyle
+	} else if selected && !focused {
 		// Active but unfocused — muted highlight
 		titleS = activeTitleStyle
 		descS = activeDescStyle
@@ -43,23 +48,27 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 
 	// add spinner next to title if it's running
 	var join string
-	switch i.Status {
-	case session.Running, session.Loading:
-		join = fmt.Sprintf("%s ", r.spinner.View())
-	case session.Ready:
-		if i.Notified {
-			t := (math.Sin(float64(time.Now().UnixMilli())/300.0) + 1.0) / 2.0
-			cr := lerpByte(0x51, 0xF0, t)
-			cg := lerpByte(0xBD, 0xA8, t)
-			cb := lerpByte(0x73, 0x68, t)
-			pulseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", cr, cg, cb)))
-			join = pulseStyle.Render(readyIcon)
-		} else {
-			join = readyStyle.Render(readyIcon)
+	if i.ImplementationComplete {
+		join = completedStyle.Render(completedIcon)
+	} else {
+		switch i.Status {
+		case session.Running, session.Loading:
+			join = fmt.Sprintf("%s ", r.spinner.View())
+		case session.Ready:
+			if i.Notified {
+				t := (math.Sin(float64(time.Now().UnixMilli())/300.0) + 1.0) / 2.0
+				cr := lerpByte(0x51, 0xF0, t)
+				cg := lerpByte(0xBD, 0xA8, t)
+				cb := lerpByte(0x73, 0x68, t)
+				pulseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", cr, cg, cb)))
+				join = pulseStyle.Render(readyIcon)
+			} else {
+				join = readyStyle.Render(readyIcon)
+			}
+		case session.Paused:
+			join = pausedStyle.Render(pausedIcon)
+		default:
 		}
-	case session.Paused:
-		join = pausedStyle.Render(pausedIcon)
-	default:
 	}
 
 	// Cut the title if it's too long

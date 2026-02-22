@@ -12,19 +12,20 @@ import (
 
 // InstanceData represents the serializable data of an Instance
 type InstanceData struct {
-	Title           string    `json:"title"`
-	Path            string    `json:"path"`
-	Branch          string    `json:"branch"`
-	Status          Status    `json:"status"`
-	Height          int       `json:"height"`
-	Width           int       `json:"width"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	AutoYes         bool      `json:"auto_yes"`
-	SkipPermissions bool      `json:"skip_permissions"`
-	PlanFile        string    `json:"plan_file,omitempty"`
-	IsReviewer      bool      `json:"is_reviewer,omitempty"`
-	QueuedPrompt    string    `json:"queued_prompt,omitempty"`
+	Title                  string    `json:"title"`
+	Path                   string    `json:"path"`
+	Branch                 string    `json:"branch"`
+	Status                 Status    `json:"status"`
+	Height                 int       `json:"height"`
+	Width                  int       `json:"width"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+	AutoYes                bool      `json:"auto_yes"`
+	SkipPermissions        bool      `json:"skip_permissions"`
+	PlanFile               string    `json:"plan_file,omitempty"`
+	IsReviewer             bool      `json:"is_reviewer,omitempty"`
+	ImplementationComplete bool      `json:"implementation_complete,omitempty"`
+	QueuedPrompt           string    `json:"queued_prompt,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`

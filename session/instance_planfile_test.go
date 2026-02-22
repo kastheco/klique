@@ -47,3 +47,60 @@ func TestInstanceData_RoundTripPlanFile(t *testing.T) {
 		t.Fatalf("ToInstanceData PlanFile = %q, want %q", roundTrip.PlanFile, "plan.md")
 	}
 }
+
+func TestInstanceData_RoundTripImplementationComplete(t *testing.T) {
+	data := InstanceData{
+		Title:                  "coder-done",
+		Path:                   "/tmp/repo",
+		Branch:                 "feature/impl",
+		Status:                 Paused,
+		Program:                "opencode",
+		PlanFile:               "plan.md",
+		ImplementationComplete: true,
+		Worktree: GitWorktreeData{
+			RepoPath:      "/tmp/repo",
+			WorktreePath:  "/tmp/repo/.worktrees/coder-done",
+			SessionName:   "coder-done",
+			BranchName:    "feature/impl",
+			BaseCommitSHA: "def456",
+		},
+	}
+
+	inst, err := FromInstanceData(data)
+	if err != nil {
+		t.Fatalf("FromInstanceData() error = %v", err)
+	}
+	if !inst.ImplementationComplete {
+		t.Fatal("expected ImplementationComplete = true after FromInstanceData")
+	}
+
+	roundTrip := inst.ToInstanceData()
+	if !roundTrip.ImplementationComplete {
+		t.Fatal("expected ImplementationComplete = true after ToInstanceData round-trip")
+	}
+}
+
+func TestInstanceData_ImplementationCompleteFalseByDefault(t *testing.T) {
+	data := InstanceData{
+		Title:   "normal-session",
+		Path:    "/tmp/repo",
+		Branch:  "feature/x",
+		Status:  Paused,
+		Program: "claude",
+		Worktree: GitWorktreeData{
+			RepoPath:      "/tmp/repo",
+			WorktreePath:  "/tmp/repo/.worktrees/normal-session",
+			SessionName:   "normal-session",
+			BranchName:    "feature/x",
+			BaseCommitSHA: "aaa111",
+		},
+	}
+
+	inst, err := FromInstanceData(data)
+	if err != nil {
+		t.Fatalf("FromInstanceData() error = %v", err)
+	}
+	if inst.ImplementationComplete {
+		t.Fatal("expected ImplementationComplete = false for a normal instance")
+	}
+}

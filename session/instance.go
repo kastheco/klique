@@ -50,6 +50,9 @@ type Instance struct {
 	PlanFile string
 	// IsReviewer is true when this instance is a reviewer session for a plan.
 	IsReviewer bool
+	// ImplementationComplete is true when the coder finished and the plan transitioned to review.
+	// The instance is auto-paused and rendered with a dim/completed visual style.
+	ImplementationComplete bool
 	// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.
 	QueuedPrompt string
 
@@ -97,20 +100,21 @@ type Instance struct {
 // ToInstanceData converts an Instance to its serializable form
 func (i *Instance) ToInstanceData() InstanceData {
 	data := InstanceData{
-		Title:           i.Title,
-		Path:            i.Path,
-		Branch:          i.Branch,
-		Status:          i.Status,
-		Height:          i.Height,
-		Width:           i.Width,
-		CreatedAt:       i.CreatedAt,
-		UpdatedAt:       time.Now(),
-		Program:         i.Program,
-		AutoYes:         i.AutoYes,
-		SkipPermissions: i.SkipPermissions,
-		PlanFile:        i.PlanFile,
-		IsReviewer:      i.IsReviewer,
-		QueuedPrompt:    i.QueuedPrompt,
+		Title:                  i.Title,
+		Path:                   i.Path,
+		Branch:                 i.Branch,
+		Status:                 i.Status,
+		Height:                 i.Height,
+		Width:                  i.Width,
+		CreatedAt:              i.CreatedAt,
+		UpdatedAt:              time.Now(),
+		Program:                i.Program,
+		AutoYes:                i.AutoYes,
+		SkipPermissions:        i.SkipPermissions,
+		PlanFile:               i.PlanFile,
+		IsReviewer:             i.IsReviewer,
+		ImplementationComplete: i.ImplementationComplete,
+		QueuedPrompt:           i.QueuedPrompt,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -139,19 +143,20 @@ func (i *Instance) ToInstanceData() InstanceData {
 // FromInstanceData creates a new Instance from serialized data
 func FromInstanceData(data InstanceData) (*Instance, error) {
 	instance := &Instance{
-		Title:           data.Title,
-		Path:            data.Path,
-		Branch:          data.Branch,
-		Status:          data.Status,
-		Height:          data.Height,
-		Width:           data.Width,
-		CreatedAt:       data.CreatedAt,
-		UpdatedAt:       data.UpdatedAt,
-		Program:         data.Program,
-		SkipPermissions: data.SkipPermissions,
-		PlanFile:        data.PlanFile,
-		IsReviewer:      data.IsReviewer,
-		QueuedPrompt:    data.QueuedPrompt,
+		Title:                  data.Title,
+		Path:                   data.Path,
+		Branch:                 data.Branch,
+		Status:                 data.Status,
+		Height:                 data.Height,
+		Width:                  data.Width,
+		CreatedAt:              data.CreatedAt,
+		UpdatedAt:              data.UpdatedAt,
+		Program:                data.Program,
+		SkipPermissions:        data.SkipPermissions,
+		PlanFile:               data.PlanFile,
+		IsReviewer:             data.IsReviewer,
+		ImplementationComplete: data.ImplementationComplete,
+		QueuedPrompt:           data.QueuedPrompt,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,

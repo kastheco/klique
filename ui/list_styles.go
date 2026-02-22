@@ -6,6 +6,7 @@ import (
 
 const readyIcon = "● "
 const pausedIcon = "\uf04c "
+const completedIcon = "✓ "
 
 var readyStyle = lipgloss.NewStyle().
 	Foreground(ColorFoam)
@@ -21,6 +22,22 @@ var removedLinesStyle = lipgloss.NewStyle().
 
 var pausedStyle = lipgloss.NewStyle().
 	Foreground(ColorMuted)
+
+var completedStyle = lipgloss.NewStyle().
+	Foreground(ColorFoam).
+	Faint(true)
+
+// completedTitleStyle renders the title line for implementation-complete instances.
+var completedTitleStyle = lipgloss.NewStyle().
+	Padding(1, 1, 0, 1).
+	Foreground(ColorMuted).
+	Faint(true)
+
+// completedDescStyle renders the description/branch line for implementation-complete instances.
+var completedDescStyle = lipgloss.NewStyle().
+	Padding(0, 1, 1, 1).
+	Foreground(ColorMuted).
+	Faint(true)
 
 var titleStyle = lipgloss.NewStyle().
 	Padding(1, 1, 0, 1).
