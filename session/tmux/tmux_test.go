@@ -296,6 +296,39 @@ func TestTapEnter(t *testing.T) {
 	require.Equal(t, "tmux send-keys -t klique_test-session Enter", ranCmds[0])
 }
 
+func TestStartTmuxSessionInjectsAgentFlag(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Ask anything"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("agent-test", "opencode", false, ptyFactory, cmdExec)
+	s.SetAgentType("planner")
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		fmt.Sprintf("tmux new-session -d -s klique_agent-test -c %s opencode --agent planner", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]),
+	)
+}
+
 func TestTapDAndEnter(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 

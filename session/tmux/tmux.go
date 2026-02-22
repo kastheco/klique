@@ -34,6 +34,8 @@ type TmuxSession struct {
 	cmdExec cmd.Executor
 	// skipPermissions appends --dangerously-skip-permissions to Claude commands
 	skipPermissions bool
+	// agentType, when non-empty, appends --agent <type> to the program command.
+	agentType string
 	// ProgressFunc is called with (stage, description) during Start() to report progress.
 	ProgressFunc func(stage int, desc string)
 
@@ -89,6 +91,11 @@ func newTmuxSession(name string, program string, skipPermissions bool, ptyFactor
 		ptyFactory:      ptyFactory,
 		cmdExec:         cmdExec,
 	}
+}
+
+// SetAgentType sets the agent type flag to inject at startup (planner/coder/reviewer).
+func (t *TmuxSession) SetAgentType(agentType string) {
+	t.agentType = strings.TrimSpace(agentType)
 }
 
 func (t *TmuxSession) reportProgress(stage int, desc string) {
@@ -153,6 +160,9 @@ func (t *TmuxSession) Start(workDir string) error {
 	program := t.program
 	if t.skipPermissions && isClaudeProgram(program) {
 		program = program + " --dangerously-skip-permissions"
+	}
+	if t.agentType != "" && !strings.Contains(program, "--agent") {
+		program = program + " --agent " + t.agentType
 	}
 
 	t.reportProgress(1, "Creating tmux session...")

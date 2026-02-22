@@ -34,6 +34,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	} else {
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
+	tmuxSession.SetAgentType(i.AgentType)
 	// Wire up tmux progress to instance loading progress
 	tmuxStageOffset := 3 // tmux stages start at 4 for first-time, 2 for reload
 	if !firstTimeSetup {
@@ -118,6 +119,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	} else {
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
+	tmuxSession.SetAgentType(i.AgentType)
 	tmuxSession.ProgressFunc = func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
 	}
