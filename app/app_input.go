@@ -207,7 +207,6 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 			items = append(items, overlay.ContextMenuItem{Label: "Focus agent", Action: "send_prompt_instance"})
 		}
 		items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
-		items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Create PR", Action: "create_pr_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Copy worktree path", Action: "copy_worktree_path"})

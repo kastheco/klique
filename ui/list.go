@@ -174,23 +174,10 @@ func (l *List) Kill() {
 }
 
 // KillInstancesByTopic kills and removes all instances belonging to the given topic.
-func (l *List) KillInstancesByTopic(topicName string) {
-	var remaining []*session.Instance
-	for _, inst := range l.allItems {
-		if inst.TopicName == topicName {
-			if err := inst.Kill(); err != nil {
-				log.ErrorLog.Printf("could not kill instance %s: %v", inst.Title, err)
-			}
-			repoName, err := inst.RepoName()
-			if err == nil {
-				l.rmRepo(repoName)
-			}
-		} else {
-			remaining = append(remaining, inst)
-		}
-	}
-	l.allItems = remaining
-	l.rebuildFilteredItems()
+// NOTE: Topics are now plan-state-based; this method is kept for compatibility but
+// will not match any instances since TopicName has been removed from Instance.
+func (l *List) KillInstancesByTopic(_ string) {
+	// No-op: instances no longer have a TopicName field.
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -293,18 +280,10 @@ func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 		if l.statusFilter == StatusFilterActive && inst.Paused() {
 			continue
 		}
-		// Check topic filter
-		if topicFilter != "" {
-			if topicFilter == "__ungrouped__" && inst.TopicName != "" {
-				continue
-			} else if topicFilter != "__ungrouped__" && inst.TopicName != topicFilter {
-				continue
-			}
-		}
+		// Topic filter is no longer instance-based; skip it.
 		// Then check search query
 		if query == "" ||
-			strings.Contains(strings.ToLower(inst.Title), query) ||
-			strings.Contains(strings.ToLower(inst.TopicName), query) {
+			strings.Contains(strings.ToLower(inst.Title), query) {
 			filtered = append(filtered, inst)
 		}
 	}
@@ -328,23 +307,8 @@ func (l *List) Clear() {
 func (l *List) rebuildFilteredItems() {
 	// First apply topic filter
 	var topicFiltered []*session.Instance
-	if l.filter == "" {
-		topicFiltered = l.allItems
-	} else if l.filter == SidebarUngrouped {
-		topicFiltered = make([]*session.Instance, 0)
-		for _, inst := range l.allItems {
-			if inst.TopicName == "" {
-				topicFiltered = append(topicFiltered, inst)
-			}
-		}
-	} else {
-		topicFiltered = make([]*session.Instance, 0)
-		for _, inst := range l.allItems {
-			if inst.TopicName == l.filter {
-				topicFiltered = append(topicFiltered, inst)
-			}
-		}
-	}
+	// Topics are now plan-state-based; all instances are shown regardless of filter.
+	topicFiltered = l.allItems
 
 	// Then apply status filter
 	if l.statusFilter == StatusFilterActive {

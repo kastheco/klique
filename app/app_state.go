@@ -30,15 +30,15 @@ func (m *home) updateSidebarItems() {
 
 	for _, inst := range m.list.GetInstances() {
 		ungroupedCount++
-		topicKey := inst.TopicName // "" for ungrouped
-		st := topicStatuses[topicKey]
+		// All instances are ungrouped at the instance level; topics are plan-state-based.
+		st := topicStatuses[""]
 		if inst.Started() && !inst.Paused() && !inst.PromptDetected {
 			st.HasRunning = true
 		}
 		if inst.Notified {
 			st.HasNotification = true
 		}
-		topicStatuses[topicKey] = st
+		topicStatuses[""] = st
 	}
 
 	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses)

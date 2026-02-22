@@ -46,8 +46,6 @@ type Instance struct {
 	AutoYes bool
 	// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.
 	SkipPermissions bool
-	// TopicName is the name of the topic this instance belongs to (empty = ungrouped).
-	TopicName string
 	// PlanFile is the plan filename this instance is implementing (empty = no plan).
 	PlanFile string
 	// IsReviewer is true when this instance is a reviewer session for a plan.
@@ -110,7 +108,6 @@ func (i *Instance) ToInstanceData() InstanceData {
 		Program:         i.Program,
 		AutoYes:         i.AutoYes,
 		SkipPermissions: i.SkipPermissions,
-		TopicName:       i.TopicName,
 		PlanFile:        i.PlanFile,
 		IsReviewer:      i.IsReviewer,
 		QueuedPrompt:    i.QueuedPrompt,
@@ -152,7 +149,6 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		UpdatedAt:       data.UpdatedAt,
 		Program:         data.Program,
 		SkipPermissions: data.SkipPermissions,
-		TopicName:       data.TopicName,
 		PlanFile:        data.PlanFile,
 		IsReviewer:      data.IsReviewer,
 		QueuedPrompt:    data.QueuedPrompt,
@@ -194,8 +190,6 @@ type InstanceOptions struct {
 	AutoYes bool
 	// SkipPermissions enables --dangerously-skip-permissions for Claude instances.
 	SkipPermissions bool
-	// TopicName assigns this instance to a topic.
-	TopicName string
 	// PlanFile binds this instance to a plan from plan-state.json.
 	PlanFile string
 }
@@ -220,7 +214,6 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:       t,
 		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
-		TopicName:       opts.TopicName,
 		PlanFile:        opts.PlanFile,
 	}, nil
 }
