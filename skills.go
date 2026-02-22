@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/kastheco/klique/internal/initcmd/harness"
 	"github.com/spf13/cobra"
@@ -14,7 +15,56 @@ func newSkillsCmd() *cobra.Command {
 		Short: "Manage agent skills",
 	}
 	cmd.AddCommand(newSkillsSyncCmd())
+	cmd.AddCommand(newSkillsListCmd())
 	return cmd
+}
+
+func newSkillsListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List personal skills in ~/.agents/skills/",
+		RunE:  runSkillsList,
+	}
+}
+
+func runSkillsList(cmd *cobra.Command, args []string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+
+	skillsDir := filepath.Join(home, ".agents", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("No personal skills found. Install skills to ~/.agents/skills/")
+			return nil
+		}
+		return err
+	}
+
+	fmt.Printf("Personal skills in %s:\n\n", skillsDir)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+
+		// Check if it's a symlink (externally managed)
+		fi, err := os.Lstat(filepath.Join(skillsDir, name))
+		if err != nil {
+			continue
+		}
+		managed := ""
+		if fi.Mode()&os.ModeSymlink != 0 {
+			target, _ := os.Readlink(filepath.Join(skillsDir, name))
+			managed = fmt.Sprintf(" -> %s (external)", target)
+		}
+
+		fmt.Printf("  %-30s%s\n", name, managed)
+	}
+
+	return nil
 }
 
 func newSkillsSyncCmd() *cobra.Command {
