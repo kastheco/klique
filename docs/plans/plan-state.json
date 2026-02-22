@@ -74,7 +74,8 @@
     "status": "ready"
   },
   "2026-02-21-agent-customize-gate.md": {
-    "status": "ready"
+    "status": "done",
+    "implemented": "2026-02-21"
   },
   "2026-02-21-osc11-terminal-bg-design.md": {
     "status": "done",
