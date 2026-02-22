@@ -197,7 +197,7 @@
       "created_at": "2026-02-22T08:35:22.645408061Z"
     },
     "2026-02-22-disable-cache-focused.md": {
-      "status": "reviewing",
+      "status": "completed",
       "description": "disable cache reading and poll tmux pane directly when focused to improve interactive experience (it glitches a lot currently)",
       "branch": "plan/disable-cache-focused",
       "created_at": "2026-02-22T09:56:55.401392089Z",
@@ -222,7 +222,7 @@
       "created_at": "2026-02-22T10:04:55.567483368Z"
     },
     "2026-02-22-remove-right-sidbar-right-to-focus-session.md": {
-      "status": "ready",
+      "status": "planning",
       "branch": "plan/remove-right-sidbar-right-to-focus-session",
       "created_at": "2026-02-22T12:15:27.104776176Z"
     },

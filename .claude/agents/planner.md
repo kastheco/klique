@@ -25,9 +25,13 @@ to populate the sidebar Plans list — unregistered plans are invisible to the u
 
 Registration steps (do both atomically, never skip step 2):
 1. Write the plan to `docs/plans/<date>-<name>.md`
-2. Read `docs/plans/plan-state.json`, add `"<date>-<name>.md": {"status": "ready"}`, write it back
+2. **Use the Read tool** on `docs/plans/plan-state.json` first (REQUIRED — Edit/Write will
+   be rejected if you haven't Read the file), then add `"<date>-<name>.md": {"status": "ready"}`
+   and write it back
 
-Valid statuses: `ready` → `in_progress` → `done`. Only klique transitions beyond `done`.
+**Never modify plan statuses.** Only register NEW plans. Status transitions (`ready` →
+`in_progress` → `done` → etc.) are managed by klique — do not change the `"status"` field
+of existing entries.
 
 ## Project Skills
 

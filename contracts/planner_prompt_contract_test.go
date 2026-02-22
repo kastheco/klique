@@ -19,6 +19,8 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 		"Do NOT create feature branches for planning work.",
 		"Only register implementation plans in plan-state.json",
 		"never register design docs",
+		"Use the Read tool",
+		"Never modify plan statuses",
 	}
 
 	for _, needle := range required {
