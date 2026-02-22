@@ -510,11 +510,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case error:
 		// Handle errors from confirmation actions
 		return m, m.handleError(msg)
-	case planRefreshMsg:
-		m.loadPlanState()
-		m.updateSidebarPlans()
-		m.updateSidebarItems()
-		return m, nil
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
 		m.updateSidebarItems()
@@ -709,10 +704,6 @@ type planRenderedMsg struct {
 	rendered string
 	err      error
 }
-
-// planRefreshMsg triggers a plan state reload and sidebar refresh.
-// Returned from confirmation callbacks that write plan state changes.
-type planRefreshMsg struct{}
 
 // instanceMetadata holds the results of polling a single instance's subprocess data.
 // Collected in a goroutine, applied to the model in Update.
