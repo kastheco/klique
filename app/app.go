@@ -552,6 +552,25 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					log.WarningLog.Printf("could not mark plan %q completed: %v", inst.PlanFile, err)
 				}
 			}
+
+			// Coder-exit → push-prompt: when a coder session's tmux pane has exited
+			// and the plan is still in StatusImplementing, prompt the user to push the
+			// implementation branch before advancing to reviewing.
+			for _, inst := range m.list.GetInstances() {
+				alive, collected := tmuxAliveMap[inst.Title]
+				if !collected {
+					continue
+				}
+				entry := m.planState.Plans[inst.PlanFile]
+				if !shouldPromptPushAfterCoderExit(entry, inst, alive) {
+					continue
+				}
+				if cmd := m.promptPushBranchThenAdvance(inst); cmd != nil {
+					asyncCmds = append(asyncCmds, cmd)
+				}
+				// Only prompt for one instance per tick to avoid stacking overlays.
+				break
+			}
 		}
 
 		m.updateSidebarPlans()

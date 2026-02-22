@@ -430,19 +430,25 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	// status update + session creation.
 	switch stage {
 	case "plan":
-		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
+		if err := m.planState.SetStatus(planFile, planstate.StatusPlanning); err != nil {
+			return m, m.handleError(err)
+		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		m.updateSidebarItems()
 		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
 	case "implement":
-		_ = m.planState.SetStatus(planFile, planstate.StatusInProgress)
+		if err := m.planState.SetStatus(planFile, planstate.StatusImplementing); err != nil {
+			return m, m.handleError(err)
+		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		m.updateSidebarItems()
 		return m.spawnPlanAgent(planFile, "implement", buildImplementPrompt(planFile))
 	case "review":
-		_ = m.planState.SetStatus(planFile, planstate.StatusReviewing)
+		if err := m.planState.SetStatus(planFile, planstate.StatusReviewing); err != nil {
+			return m, m.handleError(err)
+		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		m.updateSidebarItems()
@@ -466,9 +472,9 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 func planStageStatus(planFile, stage string, ps *planstate.PlanState) error {
 	switch stage {
 	case "plan":
-		return ps.SetStatus(planFile, planstate.StatusInProgress)
+		return ps.SetStatus(planFile, planstate.StatusPlanning)
 	case "implement":
-		return ps.SetStatus(planFile, planstate.StatusInProgress)
+		return ps.SetStatus(planFile, planstate.StatusImplementing)
 	case "review":
 		return ps.SetStatus(planFile, planstate.StatusReviewing)
 	case "finished":
