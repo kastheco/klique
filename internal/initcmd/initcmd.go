@@ -52,6 +52,22 @@ func Run(opts Options) error {
 		}
 	}
 
+	// Stage 4a-2: Sync personal skills to all harness global dirs
+	fmt.Println("\nSyncing personal skills...")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("  WARNING: could not get home dir: %v\n", err)
+	} else {
+		for _, name := range state.SelectedHarness {
+			fmt.Printf("  %-12s ", name)
+			if err := harness.SyncGlobalSkills(home, name); err != nil {
+				fmt.Printf("FAILED: %v\n", err)
+			} else {
+				fmt.Println("OK")
+			}
+		}
+	}
+
 	// Stage 4b: Write TOML config
 	fmt.Println("\nWriting config...")
 	tc := state.ToTOMLConfig()
