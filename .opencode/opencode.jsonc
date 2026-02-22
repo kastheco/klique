@@ -7,6 +7,36 @@
     "plan": {
       "disable": true
     },
+    "chat": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "/home/kas/dev/klique/*": "allow",
+          "/home/kas/dev/klique/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow",
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "deny",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      "temperature": 0.3,
+      "textVerbosity": "medium"
+    },
     "coder": {
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
@@ -14,19 +44,18 @@
         "edit": "allow",
         "external_directory": {
           "*": "ask",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
+          "/home/kas/dev/klique/*": "allow",
+          "/home/kas/dev/klique/**": "allow",
           "/tmp/*": "allow",
           "/tmp/**": "allow",
-          "~/.config/opencode/*": "allow",
-          "~/.config/opencode/**": "allow"
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow"
         },
         "glob": "allow",
         "grep": "allow",
         "read": "allow",
         "write": "allow"
       },
-      "reasoningEffort": "medium",
       "temperature": 0.1,
       "textVerbosity": "low"
     },
@@ -37,20 +66,19 @@
         "edit": "allow",
         "external_directory": {
           "*": "ask",
-          ".kasmos/*": "allow",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
+          "/home/kas/dev/klique/*": "allow",
+          "/home/kas/dev/klique/**": "allow",
           "/tmp/*": "allow",
           "/tmp/**": "allow",
-          "~/.config/opencode/*": "allow",
-          "~/.config/opencode/**": "allow"
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow"
         },
         "glob": "allow",
         "grep": "allow",
         "read": "allow",
         "write": "allow"
       },
-      "reasoningEffort": "max",
+      "reasoningEffort": "high",
       "temperature": 0.5,
       "textVerbosity": "medium"
     },
@@ -65,8 +93,8 @@
         },
         "external_directory": {
           "*": "ask",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
+          "/home/kas/dev/klique/*": "allow",
+          "/home/kas/dev/klique/**": "allow",
           "/tmp/*": "allow",
           "/tmp/**": "allow"
         },
@@ -79,17 +107,9 @@
           "/tmp/**": "allow"
         }
       },
-      "reasoningEffort": "xhigh",
+      "reasoningEffort": "medium",
       "temperature": 0.2,
       "textVerbosity": "medium"
     }
-  },
-  "tui": {
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  },
-  "plugin": [
-    "@franlol/opencode-md-table-formatter@latest"
-  ]
+  }
 }

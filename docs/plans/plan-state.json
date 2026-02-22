@@ -97,7 +97,7 @@
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-21-plan-lifecycle-sessions.md": {
-      "status": "ready",
+      "status": "completed",
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-21-rose-pine-moon-design.md": {
@@ -156,17 +156,53 @@
       "branch": "plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet",
       "created_at": "2026-02-22T08:30:57.806756006Z"
     },
+    "2026-02-22-customize-superpowers.md": {
+      "status": "ready",
+      "description": "streamline interactions with superpowers and this app by personalizing the superpowers skills",
+      "branch": "plan/customize-superpowers",
+      "created_at": "2026-02-22T10:10:09.111289772Z"
+    },
     "2026-02-22-detect-permissions-needed.md": {
       "status": "ready",
       "description": "indicate in list view if permissions are needed and switch to live capture (or increased cache r/w if possible) to button presses dont jump back and forth",
       "branch": "plan/detect-permissions-needed",
       "created_at": "2026-02-22T08:35:22.645408061Z"
     },
+    "2026-02-22-disable-cache-focused.md": {
+      "status": "ready",
+      "description": "disable cache reading and poll tmux pane directly when focused to improve interactive experience (it glitches a lot currently)",
+      "branch": "plan/disable-cache-focused",
+      "created_at": "2026-02-22T09:56:55.401392089Z"
+    },
+    "2026-02-22-dupe-task-after-plan-change.md": {
+      "status": "ready",
+      "description": "i marked another plan done and suddenly i had 2 of another one that was running even though it hasn't switched to a review agent yet",
+      "branch": "plan/dupe-task-after-plan-change",
+      "created_at": "2026-02-22T10:00:27.703574166Z"
+    },
     "2026-02-22-kq-check.md": {
-      "status": "done",
+      "status": "completed",
       "description": "kq check command to audit skills sync health across all three layers (global, project, superpowers)",
-      "created_at": "2026-02-22T09:00:00.000000000Z",
+      "created_at": "2026-02-22T09:00:00Z",
       "implemented": "2026-02-22"
+    },
+    "2026-02-22-parallelize-superpowers.md": {
+      "status": "ready",
+      "description": "extract any parallelization opportunities by controlling individual task fixes (use new agent for each even if sequential)",
+      "branch": "plan/parallelize-superpowers",
+      "created_at": "2026-02-22T10:04:55.567483368Z"
+    },
+    "2026-02-22-rename-to-kasmos.md": {
+      "status": "ready",
+      "description": "switch name back to kasmos and overtake that repo (rename that one to kasmold first)",
+      "branch": "plan/rename-to-kasmos",
+      "created_at": "2026-02-22T09:53:24.333455818Z"
+    },
+    "2026-02-22-shorten-cta.md": {
+      "status": "completed",
+      "description": "drop plan from first part of cta below ascii art",
+      "branch": "plan/shorten-cta",
+      "created_at": "2026-02-22T09:54:49.026733734Z"
     }
   }
 }
