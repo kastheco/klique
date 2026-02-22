@@ -12,6 +12,13 @@ Before planning, load the relevant superpowers skill:
 - **Writing plans**: `writing-plans` — structured plan format with phases and tasks
 - **Large scope**: use `scc` for codebase metrics when estimating effort
 
+## Branch Policy
+
+Always commit plan files to the main branch. Do NOT create feature branches for planning work.
+The feature branch for implementation is created by klique when the user triggers "implement".
+
+Only register implementation plans in plan-state.json — never register design docs (*-design.md) as separate entries.
+
 ## Plan State (CRITICAL — must follow every time)
 
 Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
