@@ -23,12 +23,6 @@ type InstanceStorage interface {
 	DeleteAllInstances() error
 }
 
-// TopicStorage handles topic-related operations
-type TopicStorage interface {
-	SaveTopics(topicsJSON json.RawMessage) error
-	GetTopics() json.RawMessage
-}
-
 // AppState handles application-level state
 type AppState interface {
 	// GetHelpScreensSeen returns the bitmask of seen help screens
@@ -37,10 +31,9 @@ type AppState interface {
 	SetHelpScreensSeen(seen uint32) error
 }
 
-// StateManager combines instance storage, topic storage, and app state management
+// StateManager combines instance storage and app state management
 type StateManager interface {
 	InstanceStorage
-	TopicStorage
 	AppState
 }
 
@@ -50,8 +43,6 @@ type State struct {
 	HelpScreensSeen uint32 `json:"help_screens_seen"`
 	// Instances stores the serialized instance data as raw JSON
 	InstancesData json.RawMessage `json:"instances"`
-	// TopicsData stores the serialized topic data as raw JSON
-	TopicsData json.RawMessage `json:"topics,omitempty"`
 	// RecentRepos stores recently opened repo paths so they persist in the picker
 	RecentRepos []string `json:"recent_repos,omitempty"`
 }
@@ -61,7 +52,6 @@ func DefaultState() *State {
 	return &State{
 		HelpScreensSeen: 0,
 		InstancesData:   json.RawMessage("[]"),
-		TopicsData:      json.RawMessage("[]"),
 	}
 }
 
@@ -129,20 +119,6 @@ func (s *State) SaveInstances(instancesJSON json.RawMessage) error {
 // GetInstances returns the raw instance data
 func (s *State) GetInstances() json.RawMessage {
 	return s.InstancesData
-}
-
-// SaveTopics saves the raw topic data
-func (s *State) SaveTopics(topicsJSON json.RawMessage) error {
-	s.TopicsData = topicsJSON
-	return SaveState(s)
-}
-
-// GetTopics returns the raw topic data
-func (s *State) GetTopics() json.RawMessage {
-	if s.TopicsData == nil {
-		return json.RawMessage("[]")
-	}
-	return s.TopicsData
 }
 
 // DeleteAllInstances removes all stored instances

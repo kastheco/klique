@@ -50,14 +50,14 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
-	// stateNewTopic is the state when the user is creating a new topic.
-	stateNewTopic
-	// stateNewTopicConfirm is the state when confirming shared worktree for a new topic.
-	stateNewTopicConfirm
 	// stateSearch is the state when the user is searching topics/instances.
 	stateSearch
-	// stateMoveTo is the state when the user is moving an instance to a topic.
-	stateMoveTo
+	// stateNewPlanName is the state when the user is entering a plan name.
+	stateNewPlanName
+	// stateNewPlanDescription is the state when the user is entering a plan description.
+	stateNewPlanDescription
+	// stateNewPlanTopic is the state when the user is picking a topic for a new plan.
+	stateNewPlanTopic
 	// statePRTitle is the state when the user is entering a PR title.
 	statePRTitle
 	// statePRBody is the state when the user is editing the PR body/description.
@@ -135,14 +135,12 @@ type home struct {
 
 	// sidebar displays the topic sidebar
 	sidebar *ui.Sidebar
-	// topics is the list of topics for the active repo
-	topics []*session.Topic
-	// allTopics stores every topic across all repos (master list)
-	allTopics []*session.Topic
 	// focusedPanel tracks which panel has keyboard focus: 0=sidebar (left), 1=preview/center, 2=instance list (right)
 	focusedPanel int
-	// pendingTopicName stores the topic name during the two-step creation flow
-	pendingTopicName string
+	// pendingPlanName stores the plan name during the three-step plan creation flow
+	pendingPlanName string
+	// pendingPlanDesc stores the plan description during the three-step plan creation flow
+	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
@@ -248,20 +246,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		}
 	}
 
-	// Load topics
-	topics, err := storage.LoadTopics()
-	if err != nil {
-		log.ErrorLog.Printf("Failed to load topics: %v", err)
-		topics = []*session.Topic{}
-	}
-	// Migrate legacy topics that used "." as their path
-	for _, t := range topics {
-		if t.Path == "" || t.Path == "." {
-			t.Path = activeRepoPath
-		}
-	}
-	h.allTopics = topics
-	h.topics = h.filterTopicsByRepo(topics, activeRepoPath)
 	h.updateSidebarItems()
 
 	// Persist the active repo so it appears in the picker even if it has no instances
@@ -523,9 +507,6 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
 	}
-	if err := m.saveAllTopics(); err != nil {
-		return m, m.handleError(err)
-	}
 	return m, tea.Quit
 }
 
@@ -559,9 +540,11 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateRenameInstance && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateRenameTopic && m.textInputOverlay != nil:
+	case m.state == stateNewPlanName && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateMoveTo && m.pickerOverlay != nil:
+	case m.state == stateNewPlanDescription && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateNewPlanTopic && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateRepoSwitch && m.pickerOverlay != nil:
 		// Position near the repo button at the bottom of the sidebar
@@ -571,8 +554,6 @@ func (m *home) View() string {
 			pickerY = 2
 		}
 		result = overlay.PlaceOverlay(pickerX, pickerY, m.pickerOverlay.Render(), mainView, true, false)
-	case m.state == stateNewTopic && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == statePrompt:
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
@@ -583,7 +564,7 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
 		result = overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	case m.state == stateConfirm || m.state == stateNewTopicConfirm:
+	case m.state == stateConfirm:
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}

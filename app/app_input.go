@@ -21,7 +21,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -172,33 +172,14 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 			m.sidebar.ClickItem(itemRow)
 			m.filterInstancesByTopic()
 		}
-		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
-			// No context menu for All/Ungrouped
-			return m, nil
+		// Plan header: show plan context menu
+		if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
+			return m.openPlanContextMenu()
 		}
-		// Find the topic
-		var topic *session.Topic
-		for _, t := range m.topics {
-			if t.Name == selectedID {
-				topic = t
-				break
-			}
+		// Topic header: show topic context menu
+		if m.sidebar.IsSelectedTopicHeader() {
+			return m.openTopicContextMenu()
 		}
-		if topic == nil {
-			return m, nil
-		}
-		items := []overlay.ContextMenuItem{
-			{Label: "Kill all instances", Action: "kill_all_in_topic"},
-			{Label: "Delete topic + instances", Action: "delete_topic_and_instances"},
-			{Label: "Delete topic (ungroup only)", Action: "delete_topic"},
-			{Label: "Rename topic", Action: "rename_topic"},
-		}
-		if topic.SharedWorktree {
-			items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_topic"})
-		}
-		m.contextMenu = overlay.NewContextMenu(x, y, items)
-		m.state = stateContextMenu
 		return m, nil
 	} else if x >= m.sidebarWidth+m.tabsWidth {
 		// Right-click in instance list (right column) — select the item first
@@ -310,24 +291,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.promptAfterName = false
 			}
 
-			// Find topic for shared worktree check
-			var topic *session.Topic
-			for _, t := range m.topics {
-				if t.Name == instance.TopicName {
-					topic = t
-					break
-				}
-			}
-
 			// Start instance asynchronously
 			startCmd := func() tea.Msg {
-				var startErr error
-				if topic != nil && topic.SharedWorktree && topic.Started() {
-					startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
-				} else {
-					startErr = instance.Start(true)
-				}
-				return instanceStartedMsg{instance: instance, err: startErr}
+				return instanceStartedMsg{instance: instance, err: instance.Start(true)}
 			}
 
 			return m, tea.Batch(tea.WindowSize(), startCmd)
@@ -505,44 +471,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle topic rename state
-	if m.state == stateRenameTopic {
-		if m.textInputOverlay == nil {
-			m.state = stateDefault
-			return m, nil
-		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				newName := m.textInputOverlay.GetValue()
-				oldName := m.sidebar.GetSelectedID()
-				if newName != "" && newName != oldName {
-					// Rename the topic
-					for _, t := range m.topics {
-						if t.Name == oldName {
-							t.Name = newName
-							break
-						}
-					}
-					// Update all instances that reference this topic (across all repos)
-					for _, inst := range m.allInstances {
-						if inst.TopicName == oldName {
-							inst.TopicName = newName
-						}
-					}
-					m.updateSidebarItems()
-					m.saveAllInstances()
-					m.saveAllTopics()
-				}
-			}
-			m.textInputOverlay = nil
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
-		}
-		return m, nil
-	}
-
 	// Handle focus mode — forward keys directly to the agent's or lazygit's PTY
 	if m.state == stateFocusAgent {
 		// Ctrl+Space exits focus mode
@@ -640,98 +568,91 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle new topic creation state
-	if m.state == stateNewTopic {
+	// Handle new plan name state
+	if m.state == stateNewPlanName {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
 		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
 		if shouldClose {
 			if m.textInputOverlay.IsSubmitted() {
-				m.pendingTopicName = m.textInputOverlay.GetValue()
-				if m.pendingTopicName == "" {
+				m.pendingPlanName = m.textInputOverlay.GetValue()
+				if m.pendingPlanName == "" {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
 					m.textInputOverlay = nil
-					return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
+					return m, m.handleError(fmt.Errorf("plan name cannot be empty"))
 				}
-				// Show shared worktree confirmation
-				m.textInputOverlay = nil
-				m.confirmationOverlay = overlay.NewConfirmationOverlay(
-					fmt.Sprintf("Create shared worktree for topic '%s'?\nAll instances will share one branch and directory.", m.pendingTopicName),
-				)
-				m.confirmationOverlay.SetWidth(60)
-				m.state = stateNewTopicConfirm
+				m.textInputOverlay = overlay.NewTextInputOverlay("Plan description (optional)", "")
+				m.textInputOverlay.SetSize(60, 3)
+				m.state = stateNewPlanDescription
 				return m, nil
 			}
-			// Cancelled
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.pendingTopicName = ""
+			m.pendingPlanName = ""
 			m.textInputOverlay = nil
 			return m, tea.WindowSize()
 		}
 		return m, nil
 	}
 
-	// Handle new topic shared worktree confirmation state
-	if m.state == stateNewTopicConfirm {
-		if m.confirmationOverlay == nil {
+	// Handle new plan description state
+	if m.state == stateNewPlanDescription {
+		if m.textInputOverlay == nil {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
-		if !shouldClose {
-			return m, nil // No decision yet
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				m.pendingPlanDesc = m.textInputOverlay.GetValue()
+			}
+			m.textInputOverlay = nil
+			// Show topic picker
+			topicNames := m.getTopicNames()
+			topicNames = append([]string{"(No topic)"}, topicNames...)
+			m.pickerOverlay = overlay.NewPickerOverlay("Assign to topic (optional)", topicNames)
+			m.state = stateNewPlanTopic
+			return m, nil
 		}
-
-		// Determine if confirmed (y) or cancelled (n/esc) based on which key was pressed
-		shared := msg.String() == m.confirmationOverlay.ConfirmKey
-		topic := session.NewTopic(session.TopicOptions{
-			Name:           m.pendingTopicName,
-			SharedWorktree: shared,
-			Path:           m.activeRepoPath,
-		})
-		if err := topic.Setup(); err != nil {
-			m.pendingTopicName = ""
-			m.confirmationOverlay = nil
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-			return m, m.handleError(err)
-		}
-		m.allTopics = append(m.allTopics, topic)
-		m.topics = append(m.topics, topic)
-		m.updateSidebarItems()
-		if err := m.saveAllTopics(); err != nil {
-			return m, m.handleError(err)
-		}
-		m.pendingTopicName = ""
-		m.confirmationOverlay = nil
-		m.state = stateDefault
-		m.menu.SetState(ui.StateDefault)
-		return m, tea.WindowSize()
+		return m, nil
 	}
 
-	// Handle move-to-topic state (picker overlay)
-	if m.state == stateMoveTo {
+	// Handle new plan topic picker state
+	if m.state == stateNewPlanTopic {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
 		if shouldClose {
-			selected := m.list.GetSelectedInstance()
-			if selected != nil && m.pickerOverlay.IsSubmitted() {
+			topic := ""
+			if m.pickerOverlay.IsSubmitted() {
 				picked := m.pickerOverlay.Value()
-				if picked == "(Ungrouped)" {
-					selected.TopicName = ""
-				} else {
-					selected.TopicName = picked
+				if picked != "(No topic)" {
+					topic = picked
 				}
-				m.updateSidebarItems()
-				if err := m.saveAllInstances(); err != nil {
+			}
+			if m.pendingPlanName != "" {
+				if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
 					m.pickerOverlay = nil
+					m.pendingPlanName = ""
+					m.pendingPlanDesc = ""
 					return m, m.handleError(err)
 				}
+				m.loadPlanState()
+				m.updateSidebarPlans()
+				m.updateSidebarItems()
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
+			m.pendingPlanName = ""
+			m.pendingPlanDesc = ""
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -841,16 +762,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		topicName := ""
-		selectedID := m.sidebar.GetSelectedID()
-		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-			topicName = selectedID
-		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:     "",
-			Path:      m.activeRepoPath,
-			Program:   m.program,
-			TopicName: topicName,
+			Title:   "",
+			Path:    m.activeRepoPath,
+			Program: m.program,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -869,16 +784,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		topicName := ""
-		selectedID := m.sidebar.GetSelectedID()
-		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-			topicName = selectedID
-		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:     "",
-			Path:      m.activeRepoPath,
-			Program:   m.program,
-			TopicName: topicName,
+			Title:   "",
+			Path:    m.activeRepoPath,
+			Program: m.program,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -896,17 +805,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		topicName := ""
-		selectedID := m.sidebar.GetSelectedID()
-		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-			topicName = selectedID
-		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
 			Path:            m.activeRepoPath,
 			Program:         m.program,
 			SkipPermissions: true,
-			TopicName:       topicName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -1163,46 +1066,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.setFocus(m.focusedPanel + 1)
 		}
 		return m, nil
-	case keys.KeyNewTopic:
-		m.state = stateNewTopic
-		m.textInputOverlay = overlay.NewTextInputOverlay("Topic name", "")
-		m.textInputOverlay.SetSize(50, 3)
+	case keys.KeyNewPlan:
+		m.state = stateNewPlanName
+		m.textInputOverlay = overlay.NewTextInputOverlay("Plan name", "")
+		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
-	case keys.KeyMoveTo:
-		selected := m.list.GetSelectedInstance()
-		if selected == nil {
-			return m, nil
-		}
-		// Can't move shared-worktree instances (they're tied to their topic's worktree)
-		if selected.TopicName != "" {
-			for _, t := range m.topics {
-				if t.Name == selected.TopicName && t.SharedWorktree {
-					return m, m.handleError(fmt.Errorf("cannot move instances in shared-worktree topics"))
-				}
-			}
-		}
-		m.state = stateMoveTo
-		m.pickerOverlay = overlay.NewPickerOverlay("Move to topic", m.getMovableTopicNames())
-		return m, nil
-	case keys.KeyKillAllInTopic:
-		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
-			return m, m.handleError(fmt.Errorf("select a topic first"))
-		}
-		killAction := func() tea.Msg {
-			// Remove from allInstances before killing
-			for i := len(m.allInstances) - 1; i >= 0; i-- {
-				if m.allInstances[i].TopicName == selectedID {
-					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
-				}
-			}
-			m.list.KillInstancesByTopic(selectedID)
-			m.saveAllInstances()
-			m.updateSidebarItems()
-			return instanceChangedMsg{}
-		}
-		message := fmt.Sprintf("[!] Kill all instances in topic '%s'?", selectedID)
-		return m, m.confirmAction(message, killAction)
 	case keys.KeyRepoSwitch:
 		m.state = stateRepoSwitch
 		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())

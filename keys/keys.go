@@ -26,14 +26,12 @@ const (
 	KeyHelp               // Key for showing help screen
 	KeyNewSkipPermissions // Key for creating instance with --dangerously-skip-permissions
 
-	KeyNewTopic // Key for creating a new topic
-	KeyMoveTo   // Key for moving instance to a topic
-	KeySearch   // Key for activating search
-	KeyLeft     // Key for switching focus left (to sidebar)
-	KeyRight    // Key for switching focus right (to instance list)
+	KeyNewPlan // Key for creating a new plan
+	KeySearch  // Key for activating search
+	KeyLeft    // Key for switching focus left (to sidebar)
+	KeyRight   // Key for switching focus right (to instance list)
 
-	KeyCreatePR       // Key for creating a pull request
-	KeyKillAllInTopic // Key for killing all instances in the active topic
+	KeyCreatePR // Key for creating a pull request
 
 	KeySendPrompt // Key for sending a prompt to a running instance
 
@@ -78,17 +76,14 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"tab":        KeyTab,
 	"c":          KeyCheckout,
 	"r":          KeyResume,
-	"p":          KeySubmit,
+	"p":          KeyNewPlan,
 	"?":          KeyHelp,
 	"S":          KeyNewSkipPermissions,
-	"T":          KeyNewTopic,
-	"m":          KeyMoveTo,
 	"/":          KeySearch,
 	"left":       KeyLeft,
 	"h":          KeyLeft,
 	"right":      KeyRight,
 	"l":          KeyRight,
-	"X":          KeyKillAllInTopic,
 	"P":          KeyCreatePR,
 	"i":          KeySendPrompt,
 	" ":          KeySpace,
@@ -143,9 +138,9 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("q"),
 		key.WithHelp("q", "quit"),
 	),
-	KeySubmit: key.NewBinding(
+	KeyNewPlan: key.NewBinding(
 		key.WithKeys("p"),
-		key.WithHelp("p", "push branch"),
+		key.WithHelp("p", "new plan"),
 	),
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
@@ -167,14 +162,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("S"),
 		key.WithHelp("S", "new (skip permissions)"),
 	),
-	KeyNewTopic: key.NewBinding(
-		key.WithKeys("T"),
-		key.WithHelp("T", "new topic"),
-	),
-	KeyMoveTo: key.NewBinding(
-		key.WithKeys("m"),
-		key.WithHelp("m", "move to topic"),
-	),
 	KeySearch: key.NewBinding(
 		key.WithKeys("/"),
 		key.WithHelp("/", "search"),
@@ -182,10 +169,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyCreatePR: key.NewBinding(
 		key.WithKeys("P"),
 		key.WithHelp("P", "create PR"),
-	),
-	KeyKillAllInTopic: key.NewBinding(
-		key.WithKeys("X"),
-		key.WithHelp("X", "kill all in topic"),
 	),
 	KeyLeft: key.NewBinding(
 		key.WithKeys("left", "h"),

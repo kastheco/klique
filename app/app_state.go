@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/kastheco/klique/config"
@@ -20,29 +22,14 @@ import (
 )
 
 func (m *home) updateSidebarItems() {
-	topicNames := make([]string, len(m.topics))
-	countByTopic := make(map[string]int)
-	sharedTopics := make(map[string]bool)
+	// Count running/notification instances for status (used by the "All" count badge).
+	// Since topics are now plan-state-based (not instance-based), we still track
+	// instance activity for the top-level status indicators.
 	topicStatuses := make(map[string]ui.TopicStatus)
 	ungroupedCount := 0
 
-	for i, t := range m.topics {
-		topicNames[i] = t.Name
-		if t.SharedWorktree {
-			sharedTopics[t.Name] = true
-		}
-	}
-
 	for _, inst := range m.list.GetInstances() {
-		if inst.TopicName == "" {
-			ungroupedCount++
-		} else {
-			countByTopic[inst.TopicName]++
-		}
-
-		// Track running and notification status per topic key.
-		// An instance is "active" if it's started, not paused, and hasn't shown
-		// a prompt yet (meaning the program is still working).
+		ungroupedCount++
 		topicKey := inst.TopicName // "" for ungrouped
 		st := topicStatuses[topicKey]
 		if inst.Started() && !inst.Paused() && !inst.PromptDetected {
@@ -54,16 +41,7 @@ func (m *home) updateSidebarItems() {
 		topicStatuses[topicKey] = st
 	}
 
-	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount, sharedTopics, topicStatuses)
-}
-
-// getMovableTopicNames returns topic names that a non-shared instance can be moved to.
-func (m *home) getMovableTopicNames() []string {
-	names := []string{"(Ungrouped)"}
-	for _, t := range m.topics {
-		names = append(names, t.Name)
-	}
-	return names
+	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses)
 }
 
 // setFocus updates which panel has focus and syncs the focused state to sidebar and list.
@@ -231,13 +209,12 @@ func (m *home) filterBySearch() {
 	}
 	m.list.SetSearchFilter(query)
 
-	// Calculate match counts per topic for sidebar dimming
+	// Calculate match counts for sidebar dimming
 	matchesByTopic := make(map[string]int)
 	totalMatches := 0
 	for _, inst := range m.list.GetInstances() {
-		if strings.Contains(strings.ToLower(inst.Title), query) ||
-			strings.Contains(strings.ToLower(inst.TopicName), query) {
-			matchesByTopic[inst.TopicName]++
+		if strings.Contains(strings.ToLower(inst.Title), query) {
+			matchesByTopic[""]++
 			totalMatches++
 		}
 	}
@@ -253,7 +230,6 @@ func (m *home) rebuildInstanceList() {
 			m.list.AddInstance(inst)()
 		}
 	}
-	m.topics = m.filterTopicsByRepo(m.allTopics, m.activeRepoPath)
 	m.filterInstancesByTopic()
 	// Reload plan state for the new active repo.
 	m.planStateDir = filepath.Join(m.activeRepoPath, "docs", "plans")
@@ -353,22 +329,6 @@ func (m *home) removeFromAllInstances(title string) {
 			return
 		}
 	}
-}
-
-// filterTopicsByRepo returns topics that belong to the given repo path.
-func (m *home) filterTopicsByRepo(topics []*session.Topic, repoPath string) []*session.Topic {
-	var filtered []*session.Topic
-	for _, t := range topics {
-		if t.Path == repoPath {
-			filtered = append(filtered, t)
-		}
-	}
-	return filtered
-}
-
-// saveAllTopics saves all topics (across all repos) to storage.
-func (m *home) saveAllTopics() error {
-	return m.storage.SaveTopics(m.allTopics)
 }
 
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
@@ -629,4 +589,45 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 
 		return planRenderedMsg{planFile: planFile, rendered: rendered}
 	}
+}
+
+// createPlanEntry creates a new plan entry in plan-state.json.
+func (m *home) createPlanEntry(name, description, topic string) error {
+	if m.planState == nil {
+		ps, err := planstate.Load(m.planStateDir)
+		if err != nil {
+			return err
+		}
+		m.planState = ps
+	}
+
+	slug := slugifyPlanName(name)
+	filename := fmt.Sprintf("%s-%s.md", time.Now().UTC().Format("2006-01-02"), slug)
+	branch := "plan/" + slug
+	if err := m.planState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
+		return err
+	}
+	m.updateSidebarPlans()
+	m.updateSidebarItems()
+	return nil
+}
+
+// slugifyPlanName converts a plan name to a URL-safe slug.
+func slugifyPlanName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(name, "-")
+	return strings.Trim(name, "-")
+}
+
+// getTopicNames returns existing topic names for the picker.
+func (m *home) getTopicNames() []string {
+	if m.planState == nil {
+		return nil
+	}
+	topics := m.planState.Topics()
+	names := make([]string, len(topics))
+	for i, t := range topics {
+		names[i] = t.Name
+	}
+	return names
 }

@@ -311,6 +311,36 @@ func (s *Sidebar) IsSearchActive() bool    { return s.searchActive }
 func (s *Sidebar) GetSearchQuery() string  { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
+// GetSelectedTopicName returns the topic name if a topic row is selected, or "".
+// Full implementation in Task 3 (three-level sidebar tree).
+func (s *Sidebar) GetSelectedTopicName() string {
+	return "" // stub — implemented in Task 3
+}
+
+// IsSelectedTopicHeader returns true if a topic header row is selected.
+// Full implementation in Task 3.
+func (s *Sidebar) IsSelectedTopicHeader() bool {
+	return false // stub — implemented in Task 3
+}
+
+// IsSelectedPlanHeader returns true if a plan header row is selected.
+// Full implementation in Task 3.
+func (s *Sidebar) IsSelectedPlanHeader() bool {
+	return false // stub — implemented in Task 3
+}
+
+// ToggleSelectedExpand toggles expand/collapse of a topic or plan row.
+// Full implementation in Task 3.
+func (s *Sidebar) ToggleSelectedExpand() bool {
+	return false // stub — implemented in Task 3
+}
+
+// GetSelectedPlanStage returns the plan file and stage if a stage row is selected.
+// Full implementation in Task 3.
+func (s *Sidebar) GetSelectedPlanStage() (planFile, stage string, ok bool) {
+	return "", "", false // stub — implemented in Task 3
+}
+
 func (s *Sidebar) String() string {
 	borderStyle := sidebarBorderStyle
 	if s.focused {
