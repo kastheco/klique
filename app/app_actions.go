@@ -143,6 +143,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.updateSidebarItems()
 		return m, tea.WindowSize()
 
+	case "start_plan":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		return m.spawnPlanSession(planFile)
+
 	case "view_plan":
 		return m.viewSelectedPlan()
 	}
@@ -200,6 +207,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	items := []overlay.ContextMenuItem{
+		{Label: "Start plan", Action: "start_plan"},
 		{Label: "View plan", Action: "view_plan"},
 		{Label: "Push branch", Action: "push_plan_branch"},
 		{Label: "Create PR", Action: "create_plan_pr"},

@@ -486,6 +486,12 @@ func (m *home) updateSidebarPlans() {
 	m.sidebar.SetPlans(allVisiblePlans)
 
 	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history, cancelled)
+
+	// NOTE: Tree mode navigation is disabled until String() is updated to
+	// render s.rows. Currently String() renders s.items (flat list) while
+	// tree mode makes Up()/Down() navigate s.rows, causing an index mismatch
+	// where the visual highlight doesn't match the logical selection.
+	m.sidebar.DisableTreeMode()
 }
 
 // checkPlanCompletion scans running coder instances for plans that have been

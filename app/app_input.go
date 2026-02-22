@@ -997,9 +997,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.sidebar.IsSelectedTopicHeader() {
 				return m.openTopicContextMenu()
 			}
-			// Plan file selected (legacy path): spawn coder session
+			// Plan file selected: show context menu with start/view/push/pr options
 			if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
-				return m.spawnPlanSession(planFile)
+				return m.openPlanContextMenu()
 			}
 		}
 		if m.list.NumInstances() == 0 {
