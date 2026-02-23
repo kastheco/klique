@@ -266,9 +266,11 @@
       "created_at": "2026-02-22T12:12:58.588910211Z"
     },
     "2026-02-22-wave-orchestration.md": {
-      "status": "planning",
+      "status": "done",
       "description": "implement wave orchestration: plan parser, instance fields, orchestrator state machine, validation gate, prompt builder, wiring, wave badge",
-      "created_at": "0001-01-01T00:00:00Z"
+      "branch": "plan/wave-orchestration",
+      "created_at": "0001-01-01T00:00:00Z",
+      "implemented": "2026-02-22"
     }
   }
 }
