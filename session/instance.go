@@ -59,6 +59,10 @@ type Instance struct {
 	Topic string
 	// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.
 	AgentType string
+	// TaskNumber is the task number within a plan (1-indexed). 0 = not a wave task.
+	TaskNumber int
+	// WaveNumber is the wave number this task belongs to (1-indexed). 0 = not a wave task.
+	WaveNumber int
 	// IsReviewer is true when this instance is a reviewer session for a plan.
 	// Deprecated: use AgentType == AgentTypeReviewer instead.
 	IsReviewer bool
@@ -132,6 +136,8 @@ func (i *Instance) ToInstanceData() InstanceData {
 		SkipPermissions:        i.SkipPermissions,
 		PlanFile:               i.PlanFile,
 		AgentType:              i.AgentType,
+		TaskNumber:             i.TaskNumber,
+		WaveNumber:             i.WaveNumber,
 		IsReviewer:             i.IsReviewer,
 		ImplementationComplete: i.ImplementationComplete,
 		QueuedPrompt:           i.QueuedPrompt,
@@ -175,6 +181,8 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		SkipPermissions:        data.SkipPermissions,
 		PlanFile:               data.PlanFile,
 		AgentType:              data.AgentType,
+		TaskNumber:             data.TaskNumber,
+		WaveNumber:             data.WaveNumber,
 		IsReviewer:             data.IsReviewer,
 		ImplementationComplete: data.ImplementationComplete,
 		QueuedPrompt:           data.QueuedPrompt,
@@ -220,6 +228,10 @@ type InstanceOptions struct {
 	PlanFile string
 	// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.
 	AgentType string
+	// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).
+	TaskNumber int
+	// WaveNumber is the wave this task belongs to (1-indexed, 0 = not a wave task).
+	WaveNumber int
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -244,6 +256,8 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		SkipPermissions: opts.SkipPermissions,
 		PlanFile:        opts.PlanFile,
 		AgentType:       opts.AgentType,
+		TaskNumber:      opts.TaskNumber,
+		WaveNumber:      opts.WaveNumber,
 	}, nil
 }
 

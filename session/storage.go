@@ -24,6 +24,8 @@ type InstanceData struct {
 	SkipPermissions        bool      `json:"skip_permissions"`
 	PlanFile               string    `json:"plan_file,omitempty"`
 	AgentType              string    `json:"agent_type,omitempty"`
+	TaskNumber             int       `json:"task_number,omitempty"`
+	WaveNumber             int       `json:"wave_number,omitempty"`
 	IsReviewer             bool      `json:"is_reviewer,omitempty"`
 	ImplementationComplete bool      `json:"implementation_complete,omitempty"`
 	QueuedPrompt           string    `json:"queued_prompt,omitempty"`

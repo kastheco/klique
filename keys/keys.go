@@ -65,7 +65,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"enter":  KeyEnter,
 	"o":      KeyEnter,
 	"n":      KeyNew,
-	"D":      KeyKill,
+	"K":      KeyKill,
 	"q":      KeyQuit,
 	"tab":    KeyTab,
 	"c":      KeyCheckout,
@@ -113,8 +113,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("n", "new"),
 	),
 	KeyKill: key.NewBinding(
-		key.WithKeys("D"),
-		key.WithHelp("D", "kill"),
+		key.WithKeys("K"),
+		key.WithHelp("K", "kill"),
 	),
 	KeyHelp: key.NewBinding(
 		key.WithKeys("?"),
@@ -166,11 +166,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeySendPrompt: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "focus agent"),
+		key.WithHelp("i", "interactive"),
 	),
 	KeySpace: key.NewBinding(
 		key.WithKeys(" "),
-		key.WithHelp("space", "actions"),
+		key.WithHelp("space", "shortcuts"),
 	),
 	KeyFilterAll: key.NewBinding(
 		key.WithKeys("1"),

@@ -193,6 +193,11 @@
       "branch": "plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet",
       "created_at": "2026-02-22T08:30:57.806756006Z"
     },
+    "2026-02-22-contextual-status-bar.md": {
+      "status": "ready",
+      "description": "top status bar showing contextual info (wave progress, repo name, branch) based on focused/selected item",
+      "created_at": "0001-01-01T00:00:00Z"
+    },
     "2026-02-22-customize-superpowers.md": {
       "status": "ready",
       "description": "streamline interactions with superpowers and this app by personalizing the superpowers skills",
@@ -213,7 +218,7 @@
       "implemented": "2026-02-22"
     },
     "2026-02-22-dupe-task-after-plan-change.md": {
-      "status": "ready",
+      "status": "done",
       "description": "i marked another plan done and suddenly i had 2 of another one that was running even though it hasn't switched to a review agent yet",
       "branch": "plan/dupe-task-after-plan-change",
       "created_at": "2026-02-22T10:00:27.703574166Z"
@@ -248,25 +253,22 @@
       "branch": "plan/shorten-cta",
       "created_at": "2026-02-22T09:54:49.026733734Z"
     },
-    "2026-02-22-update-shortcut-hints.md": {
-      "status": "ready",
-      "description": "D kill becomes K kill. i focus agent to i interactive mode. space actions becomes space shortcuts. hide P create PR and c checkout, remove R switch repo, keep the rest.",
-      "branch": "plan/update-shortcut-hints",
-      "created_at": "2026-02-22T12:12:58.588910211Z"
-    },
     "2026-02-22-tab-focus-ring.md": {
-      "status": "done",
+      "status": "completed",
       "description": "implement 5-slot Tab focus ring: key defs, focusSlot state, key routing, tests, gradient, help",
       "created_at": "2026-02-22T18:45:00Z",
       "implemented": "2026-02-22"
     },
-    "2026-02-22-contextual-status-bar.md": {
-      "status": "ready",
-      "description": "top status bar showing contextual info (wave progress, repo name, branch) based on focused/selected item"
+    "2026-02-22-update-shortcut-hints.md": {
+      "status": "done",
+      "description": "D kill becomes K kill. i focus agent to i interactive mode. space actions becomes space shortcuts. hide P create PR and c checkout, remove R switch repo, keep the rest.",
+      "branch": "plan/update-shortcut-hints",
+      "created_at": "2026-02-22T12:12:58.588910211Z"
     },
     "2026-02-22-wave-orchestration.md": {
-      "status": "ready",
-      "description": "implement wave orchestration: plan parser, instance fields, orchestrator state machine, validation gate, prompt builder, wiring, wave badge"
+      "status": "planning",
+      "description": "implement wave orchestration: plan parser, instance fields, orchestrator state machine, validation gate, prompt builder, wiring, wave badge",
+      "created_at": "0001-01-01T00:00:00Z"
     }
   }
 }

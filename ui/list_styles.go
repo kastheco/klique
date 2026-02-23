@@ -149,3 +149,8 @@ var listBorderStyle = lipgloss.NewStyle().
 	Padding(0, 1)
 
 const branchIcon = "\uf126"
+
+// waveBadgeStyle is used for wave task badges (e.g. "W1", "W2") in the instance list.
+var waveBadgeStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Bold(false)

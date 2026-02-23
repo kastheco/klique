@@ -48,8 +48,8 @@ type Menu struct {
 	systemGroupSize int
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyNewPlan, keys.KeySearch, keys.KeySpace, keys.KeyRepoSwitch, keys.KeyHelp, keys.KeyQuit}
-var defaultSystemGroupSize = 5 // search, space actions, R repo switch, ? help, q quit
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyNewPlan, keys.KeySearch, keys.KeySpace, keys.KeyHelp, keys.KeyQuit}
+var defaultSystemGroupSize = 4 // search, space shortcuts, ? help, q quit
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
@@ -125,17 +125,15 @@ func (m *Menu) addInstanceOptions() {
 	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
 	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace, keys.KeyCreatePR}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace}
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
-	} else {
-		actionGroup = append(actionGroup, keys.KeyCheckout)
 	}
 
 	// Navigation group (when in diff tab): up/down navigate when diff is focused via Tab ring
 
 	// System group
-	systemGroup := []keys.KeyName{keys.KeySearch, keys.KeyRepoSwitch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
+	systemGroup := []keys.KeyName{keys.KeySearch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
 	// Combine all groups
 	options = append(options, actionGroup...)

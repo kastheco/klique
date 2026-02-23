@@ -2,7 +2,10 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/kastheco/klique/config/planparser"
 	"github.com/kastheco/klique/config/planstate"
 	"github.com/kastheco/klique/internal/initcmd/scaffold"
 	"github.com/kastheco/klique/session"
@@ -438,13 +441,43 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		m.updateSidebarItems()
 		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
 	case "implement":
+		// Read and parse plan — this also validates wave headers.
+		plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
+		content, err := os.ReadFile(filepath.Join(plansDir, planFile))
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		plan, err := planparser.Parse(string(content))
+		if err != nil {
+			// No wave headers — revert to planning and respawn the planner with a
+			// wave-annotation prompt so the agent adds the required ## Wave sections.
+			if setErr := m.planState.SetStatus(planFile, planstate.StatusPlanning); setErr != nil {
+				return m, m.handleError(setErr)
+			}
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
+			m.toastManager.Info("Plan needs ## Wave headers — respawning planner to annotate.")
+			wavePrompt := fmt.Sprintf(
+				"The plan at docs/plans/%s is missing ## Wave N headers required for wave-based implementation. "+
+					"Please annotate the plan by grouping tasks under ## Wave 1, ## Wave 2, … sections. "+
+					"Keep all existing task content intact; only add the Wave headers.",
+				planFile,
+			)
+			_, spawnCmd := m.spawnPlanAgent(planFile, "plan", wavePrompt)
+			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return planRefreshMsg{} }, spawnCmd)
+		}
+
+		orch := NewWaveOrchestrator(planFile, plan)
+		m.waveOrchestrators[planFile] = orch
+
 		if err := m.planState.SetStatus(planFile, planstate.StatusImplementing); err != nil {
 			return m, m.handleError(err)
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		m.updateSidebarItems()
-		return m.spawnPlanAgent(planFile, "implement", buildImplementPrompt(planFile))
+		return m.startNextWave(orch, entry)
 	case "review":
 		if err := m.planState.SetStatus(planFile, planstate.StatusReviewing); err != nil {
 			return m, m.handleError(err)
@@ -481,6 +514,17 @@ func planStageStatus(planFile, stage string, ps *planstate.PlanState) error {
 		return ps.SetStatus(planFile, planstate.StatusCompleted)
 	}
 	return nil
+}
+
+// validatePlanHasWaves reads a plan file and checks it has ## Wave headers.
+// Returns an error if the plan lacks wave annotations.
+func validatePlanHasWaves(plansDir, planFile string) error {
+	content, err := os.ReadFile(filepath.Join(plansDir, planFile))
+	if err != nil {
+		return fmt.Errorf("read plan: %w", err)
+	}
+	_, err = planparser.Parse(string(content))
+	return err
 }
 
 // isLocked returns true if the given stage cannot be triggered given the current plan status.
