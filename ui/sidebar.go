@@ -352,11 +352,18 @@ func (s *Sidebar) GetSelectedID() string {
 	return s.items[s.selectedIdx].ID
 }
 
-// GetSelectedPlanFile returns the plan filename if a plan item is selected, or "".
+// GetSelectedPlanFile returns the plan filename if a plan item or stage item is selected, or "".
 func (s *Sidebar) GetSelectedPlanFile() string {
 	id := s.GetSelectedID()
 	if strings.HasPrefix(id, SidebarPlanPrefix) {
 		return id[len(SidebarPlanPrefix):]
+	}
+	if strings.HasPrefix(id, SidebarPlanStagePrefix) {
+		// Stage ID format: "__plan_stage__<planFile>::<stage>"
+		rest := id[len(SidebarPlanStagePrefix):]
+		if idx := strings.Index(rest, "::"); idx >= 0 {
+			return rest[:idx]
+		}
 	}
 	return ""
 }

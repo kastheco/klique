@@ -199,18 +199,45 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	return m, m.instanceChanged()
 }
 
+// filterInstancesByTopic updates the instance list highlight filter based on the
+// current sidebar selection. In tree mode, this highlights matching instances and
+// boosts them to the top. In flat mode, it falls back to the existing SetFilter behavior.
 func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()
+
+	if !m.sidebar.IsTreeMode() {
+		// Flat mode fallback
+		switch {
+		case selectedID == ui.SidebarAll:
+			m.list.SetFilter("")
+		case selectedID == ui.SidebarUngrouped:
+			m.list.SetFilter(ui.SidebarUngrouped)
+		case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
+			m.list.SetFilter("")
+		default:
+			m.list.SetFilter(selectedID)
+		}
+		return
+	}
+
+	// Tree mode: use highlight filter
 	switch {
-	case selectedID == ui.SidebarAll:
-		m.list.SetFilter("")
-	case selectedID == ui.SidebarUngrouped:
-		m.list.SetFilter(ui.SidebarUngrouped)
 	case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
-		// Plan items: show all instances (no topic filter)
-		m.list.SetFilter("")
+		planFile := selectedID[len(ui.SidebarPlanPrefix):]
+		m.list.SetHighlightFilter("plan", planFile)
+	case strings.HasPrefix(selectedID, ui.SidebarTopicPrefix):
+		topicName := selectedID[len(ui.SidebarTopicPrefix):]
+		m.list.SetHighlightFilter("topic", topicName)
+	case strings.HasPrefix(selectedID, ui.SidebarPlanStagePrefix):
+		// Stage selected — highlight parent plan
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile != "" {
+			m.list.SetHighlightFilter("plan", planFile)
+		} else {
+			m.list.SetHighlightFilter("", "")
+		}
 	default:
-		m.list.SetFilter(selectedID)
+		m.list.SetHighlightFilter("", "")
 	}
 }
 
