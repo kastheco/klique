@@ -1,4 +1,5 @@
 tmux kill-server
 rm -rf worktree*
-rm -rf ~/.klique
-rm -rf ~/.hivemind  # Legacy path from before the kastheco/klique rename
+rm -rf ~/.config/kasmos
+rm -rf ~/.klique       # legacy
+rm -rf ~/.hivemind     # legacy

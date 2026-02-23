@@ -45,7 +45,7 @@ jobs:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
       run: |
-        BINARY_NAME=klique
+        BINARY_NAME=kasmos
         if [ "${{ matrix.goos }}" = "windows" ]; then
           BINARY_NAME=$BINARY_NAME.exe
         fi
@@ -54,6 +54,6 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: klique-${{ matrix.goos }}-${{ matrix.goarch }}
+        name: kasmos-${{ matrix.goos }}-${{ matrix.goarch }}
         path: build/${{ matrix.goos }}_${{ matrix.goarch }}/*
         retention-days: 7

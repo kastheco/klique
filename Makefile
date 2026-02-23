@@ -1,13 +1,13 @@
 .PHONY: run build test clean
 
 run: build
-	./klique $(ARGS)
+	./kasmos $(ARGS)
 
 build:
-	go build -o klique .
+	go build -o kasmos .
 
 test:
 	go test ./... -v
 
 clean:
-	rm -f klique
+	rm -f kasmos

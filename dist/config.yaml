@@ -1,15 +1,15 @@
 version: 2
-project_name: klique
+project_name: kasmos
 release:
   github:
     owner: kastheco
-    name: klique
+    name: kasmos
   draft: true
   replace_existing_draft: true
   prerelease: auto
   name_template: '{{.Tag}}'
 scoops:
-  - name: klique
+  - name: kasmos
     repository:
       owner: kastheco
       name: scoop-bucket
@@ -18,12 +18,12 @@ scoops:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: Scoop update for {{ .ProjectName }} version {{ .Tag }}
-    homepage: https://github.com/kastheco/klique
-    description: klique - A TUI-based agent-driven IDE for managing multiple AI agents
+    homepage: https://github.com/kastheco/kasmos
+    description: kas - A TUI-based agent-driven IDE for managing multiple AI agents
     license: AGPL-3.0
     goamd64: v1
 builds:
-  - id: klique
+  - id: kasmos
     goos:
       - darwin
       - linux
@@ -54,7 +54,7 @@ builds:
       - windows_arm64_v8.0
     dir: .
     main: .
-    binary: klique
+    binary: kasmos
     builder: go
     tool: go
     command: build
@@ -171,7 +171,7 @@ github_urls:
 gitlab_urls:
   download: https://gitlab.com
 brews:
-  - name: klique
+  - name: kasmos
     repository:
       owner: kastheco
       name: homebrew-tap
@@ -181,11 +181,11 @@ brews:
       email: bot@goreleaser.com
     commit_msg_template: Brew formula update for {{ .ProjectName }} version {{ .Tag }}
     install: |
-      bin.install "klique"
+      bin.install "kasmos"
     test: |
-      system "#{bin}/klique", "version"
-    description: klique - A TUI-based agent-driven IDE for managing multiple AI agents
-    homepage: https://github.com/kastheco/klique
+      system "#{bin}/kasmos", "version"
+    description: kas - A TUI-based agent-driven IDE for managing multiple AI agents
+    homepage: https://github.com/kastheco/kasmos
     license: AGPL-3.0
     goarm: "6"
     goamd64: v1

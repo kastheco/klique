@@ -1,27 +1,29 @@
 set shell := ["bash", "-cu"]
 set dotenv-load := true
 
-# Build klique binary
+# Build kasmos binary
 build:
-    go build -o klique .
+    go build -o kasmos .
 
-# Install to GOPATH/bin (with kq alias)
+# Install to GOPATH/bin (with kas, ks, km aliases)
 install:
     go install .
-    ln -sf "$(go env GOPATH)/bin/klique" "$(go env GOPATH)/bin/kq"
+    ln -sf "$(go env GOPATH)/bin/kasmos" "$(go env GOPATH)/bin/kas"
+    ln -sf "$(go env GOPATH)/bin/kasmos" "$(go env GOPATH)/bin/ks"
+    ln -sf "$(go env GOPATH)/bin/kasmos" "$(go env GOPATH)/bin/km"
 
 # Build + install
 bi: build install
 
 # run with no args
 bin:
-    kq
+    kas
 
 init:
-    kq init --force 
+    kas init --force
 
 # Build + install + run
-kq: build install bin
+kas: build install bin
 
 # Run tests
 test:
@@ -31,7 +33,7 @@ test:
 lint:
     go vet ./...
 
-# Run klique (pass-through args)
+# Run kasmos (pass-through args)
 run *ARGS:
     go run . {{ARGS}}
 
@@ -39,7 +41,7 @@ run *ARGS:
 release-dry v:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "==> Dry run for klique v{{v}}"
+    echo "==> Dry run for kasmos v{{v}}"
     goreleaser release --snapshot --clean
     echo "==> Artifacts in dist/"
 
@@ -51,7 +53,7 @@ release v:
     VERSION="{{v}}"
     TAG="v${VERSION}"
 
-    echo "==> Releasing klique ${TAG}"
+    echo "==> Releasing kasmos ${TAG}"
 
     # 1. Ensure clean working tree
     if [[ -n "$(git status --porcelain)" ]]; then
@@ -71,7 +73,7 @@ release v:
     fi
 
     # 3. Tag
-    git tag -a "${TAG}" -m "klique ${TAG}"
+    git tag -a "${TAG}" -m "kasmos ${TAG}"
     echo "    tagged ${TAG}"
 
     # 4. Push commit + tag
@@ -81,9 +83,9 @@ release v:
 
     # 5. Goreleaser builds, creates GH release, pushes homebrew formula
     GITHUB_TOKEN="${GH_PAT}" goreleaser release --clean
-    echo "==> Done: https://github.com/kastheco/klique/releases/tag/${TAG}"
+    echo "==> Done: https://github.com/kastheco/kasmos/releases/tag/${TAG}"
 
 # Clean build artifacts
 clean:
-    rm -f klique
+    rm -f kasmos
     rm -rf dist/

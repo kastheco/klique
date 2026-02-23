@@ -1,7 +1,7 @@
 version: 2.9
 
 builds:
-  - binary: klique
+  - binary: kasmos
     goos:
       - darwin
       - linux
@@ -25,23 +25,23 @@ brews:
       owner: kastheco
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
-    name: klique
-    homepage: "https://github.com/kastheco/klique"
-    description: "klique - A TUI-based agent-driven IDE for managing multiple AI agents"
+    name: kasmos
+    homepage: "https://github.com/kastheco/kasmos"
+    description: "kas - A TUI-based agent-driven IDE for managing multiple AI agents"
     license: "AGPL-3.0"
     install: |
-      bin.install "klique"
+      bin.install "kasmos"
     test: |
-      system "#{bin}/klique", "version"
+      system "#{bin}/kasmos", "version"
 
 scoops:
   - repository:
       owner: kastheco
       name: scoop-bucket
       token: "{{ .Env.GH_PAT }}"
-    name: klique
-    homepage: "https://github.com/kastheco/klique"
-    description: "klique - A TUI-based agent-driven IDE for managing multiple AI agents"
+    name: kasmos
+    homepage: "https://github.com/kastheco/kasmos"
+    description: "kas - A TUI-based agent-driven IDE for managing multiple AI agents"
     license: AGPL-3.0
 
 release:
