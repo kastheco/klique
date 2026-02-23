@@ -53,26 +53,28 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 	}
 
 	// add spinner next to title if it's running
+	// Inherit titleS background so status icons don't break the row color.
+	titleBg := titleS.GetBackground()
 	var join string
 	if i.ImplementationComplete {
-		join = completedStyle.Render(completedIcon)
+		join = completedStyle.Background(titleBg).Render(completedIcon)
 	} else {
 		switch i.Status {
 		case session.Running, session.Loading:
-			join = fmt.Sprintf("%s ", r.spinner.View())
+			join = lipgloss.NewStyle().Background(titleBg).Render(fmt.Sprintf("%s ", r.spinner.View()))
 		case session.Ready:
 			if i.Notified {
 				t := (math.Sin(float64(time.Now().UnixMilli())/300.0) + 1.0) / 2.0
 				cr := lerpByte(0x51, 0xF0, t)
 				cg := lerpByte(0xBD, 0xA8, t)
-				cb := lerpByte(0x73, 0x68, t)
-				pulseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", cr, cg, cb)))
+				cb := lerpByte(0x68, 0x68, t)
+				pulseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", cr, cg, cb))).Background(titleBg)
 				join = pulseStyle.Render(readyIcon)
 			} else {
-				join = readyStyle.Render(readyIcon)
+				join = readyStyle.Background(titleBg).Render(readyIcon)
 			}
 		case session.Paused:
-			join = pausedStyle.Render(pausedIcon)
+			join = pausedStyle.Background(titleBg).Render(pausedIcon)
 		default:
 		}
 	}
@@ -92,11 +94,12 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 
 	// Wave badge for task instances (e.g. "W1" for wave 1 tasks).
 	// Keep a plain (unstyled) version for accurate visual-width calculation.
+	// Inherit the title background so the badge doesn't break the row color.
 	waveBadgePlain := ""
 	waveBadgeStyled := ""
 	if i.WaveNumber > 0 {
 		waveBadgePlain = fmt.Sprintf(" W%d", i.WaveNumber)
-		waveBadgeStyled = waveBadgeStyle.Render(waveBadgePlain)
+		waveBadgeStyled = waveBadgeStyle.Background(titleS.GetBackground()).Render(waveBadgePlain)
 	}
 
 	// Use the plain badge for width measurement, styled badge for rendering.
@@ -214,7 +217,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 		if resourcePad < 0 {
 			resourcePad = 0
 		}
-		resourceLine = resourceStyle.Render(resourceContent) + strings.Repeat(" ", resourcePad)
+		resourceLine = resourceStyle.Background(descS.GetBackground()).Render(resourceContent) + strings.Repeat(" ", resourcePad)
 	}
 
 	// join title, branch, and optionally resource line
