@@ -140,14 +140,25 @@ func TestGetConfigDir(t *testing.T) {
 	t.Run("migrates legacy .klique to .config/kasmos", func(t *testing.T) {
 		tempHome := t.TempDir()
 		t.Setenv("HOME", tempHome)
-		oldDir := filepath.Join(tempHome, ".config", "kasmos")
+
+		oldDir := filepath.Join(tempHome, ".klique")
 		require.NoError(t, os.MkdirAll(oldDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "config.json"), []byte("{}"), 0644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, "config.json"),
+			[]byte(`{"auto_yes":true}`), 0644))
 
 		configDir, err := GetConfigDir()
 		require.NoError(t, err)
 		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
-		assert.NoFileExists(t, oldDir)
+
+		// Old dir should be gone
+		_, err = os.Stat(oldDir)
+		assert.True(t, os.IsNotExist(err))
+
+		// New dir should contain the migrated file with original contents intact
+		data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+		require.NoError(t, err)
+		assert.Equal(t, `{"auto_yes":true}`, string(data))
 	})
 
 	t.Run("skips migration when .config/kasmos already exists", func(t *testing.T) {
