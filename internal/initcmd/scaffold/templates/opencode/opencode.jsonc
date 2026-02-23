@@ -12,7 +12,7 @@
       "permission": {
         "bash": "allow",
         "edit": {
-          "*": "deny",
+          "*": "ask",
           "/tmp/*": "allow",
           "/tmp/**": "allow"
         },
