@@ -277,6 +277,11 @@
       "branch": "plan/wave-orchestration",
       "created_at": "0001-01-01T00:00:00Z",
       "implemented": "2026-02-22"
+    },
+    "2026-02-23-plan-state-machine.md": {
+      "status": "ready",
+      "description": "centralized FSM for plan lifecycle with flock serialization and agent sentinel files",
+      "created_at": "2026-02-23T14:00:00Z"
     }
   }
 }
