@@ -18,7 +18,7 @@ Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
 Never modify plan file content for state tracking.
 
 **You MUST register every plan you write.** Immediately after writing a plan `.md` file,
-add an entry to `plan-state.json` with `"status": "ready"`. The klique TUI polls this file
+add an entry to `plan-state.json` with `"status": "ready"`. The kasmos TUI polls this file
 to populate the sidebar Plans list — unregistered plans are invisible to the user.
 
 Registration steps (do both atomically, never skip step 2):
@@ -28,7 +28,7 @@ Registration steps (do both atomically, never skip step 2):
    and write it back
 
 **Never modify plan statuses.** Only register NEW plans. Status transitions (`ready` →
-`in_progress` → `done` → etc.) are managed by klique — do not change the `"status"` field
+`in_progress` → `done` → etc.) are managed by kasmos — do not change the `"status"` field
 of existing entries.
 
 ## Project Skills

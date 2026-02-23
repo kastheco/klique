@@ -1,4 +1,4 @@
-# klique Agents
+# kasmos Agents
 
 ## Coder
 Implementation agent. Writes code, fixes bugs, runs tests.
@@ -23,8 +23,8 @@ Load project skills: `tui-design` (always for TUI work), `tmux-orchestration` (w
 Plans live in `docs/plans/`. State tracked in `docs/plans/plan-state.json`.
 Never modify plan files for state tracking. **You MUST register every plan** by adding
 an entry to `plan-state.json` with `"status": "ready"` immediately after writing the `.md` file.
-Unregistered plans are invisible in the klique sidebar.
-Valid statuses: `ready` → `in_progress` → `done`. Only klique transitions beyond `done`.
+Unregistered plans are invisible in the kasmos sidebar.
+Valid statuses: `ready` → `in_progress` → `done`. Only kasmos transitions beyond `done`.
 
 ## CLI Tools
 
