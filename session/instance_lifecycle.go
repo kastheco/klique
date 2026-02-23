@@ -99,6 +99,50 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	return nil
 }
 
+// StartOnMainBranch starts the instance in the repo root without creating a git worktree.
+// Used for planner agents that commit directly to main.
+func (i *Instance) StartOnMainBranch() error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	i.LoadingTotal = 5
+	i.LoadingStage = 0
+	i.LoadingMessage = "Initializing..."
+
+	i.setLoadingProgress(1, "Preparing session...")
+	var tmuxSession *tmux.TmuxSession
+	if i.tmuxSession != nil {
+		tmuxSession = i.tmuxSession
+	} else {
+		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	}
+	tmuxSession.SetAgentType(i.AgentType)
+	tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(1+stage, desc)
+	}
+	i.tmuxSession = tmuxSession
+
+	var setupErr error
+	defer func() {
+		if setupErr != nil {
+			if cleanupErr := i.Kill(); cleanupErr != nil {
+				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
+			}
+		} else {
+			i.started = true
+		}
+	}()
+
+	if err := i.tmuxSession.Start(i.Path); err != nil {
+		setupErr = fmt.Errorf("failed to start session on main branch: %w", err)
+		return setupErr
+	}
+
+	i.SetStatus(Running)
+	return nil
+}
+
 // StartInSharedWorktree starts the instance using a topic's shared worktree.
 // Unlike Start(), this does NOT create a new git worktree — it uses the one provided.
 func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch string) error {
@@ -174,7 +218,7 @@ func (i *Instance) Pause() error {
 
 	var errs []error
 
-	if !i.sharedWorktree {
+	if !i.sharedWorktree && i.gitWorktree != nil {
 		// Check if there are any changes to commit
 		if dirty, err := i.gitWorktree.IsDirty(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
@@ -198,7 +242,7 @@ func (i *Instance) Pause() error {
 		// Continue with pause process even if detach fails
 	}
 
-	if !i.sharedWorktree {
+	if !i.sharedWorktree && i.gitWorktree != nil {
 		// Check if worktree exists before trying to remove it
 		if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
 			// Remove worktree but keep branch
@@ -223,7 +267,9 @@ func (i *Instance) Pause() error {
 	}
 
 	i.SetStatus(Paused)
-	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+	if i.gitWorktree != nil {
+		_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+	}
 	return nil
 }
 

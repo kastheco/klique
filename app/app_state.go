@@ -877,9 +877,9 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 
 	var startCmd tea.Cmd
 	if action == "plan" {
-		// Planner runs on main branch (no shared worktree needed)
+		// Planner runs on main branch — no worktree created.
 		startCmd = func() tea.Msg {
-			err := inst.Start(true)
+			err := inst.StartOnMainBranch()
 			return instanceStartedMsg{instance: inst, err: err}
 		}
 	} else {
