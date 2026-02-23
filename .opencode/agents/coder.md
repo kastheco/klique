@@ -14,9 +14,14 @@ Before writing code, load the relevant superpowers skill for your task:
 
 ## Plan State
 
-Plans live in `docs/plans/`. State is tracked separately in `docs/plans/plan-state.json`
-(never modify plan file content for state tracking). When you finish implementing a plan,
-update its entry to `"status": "done"`. Valid statuses: `ready`, `in_progress`, `done`.
+Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
+Never modify plan file content for state tracking.
+
+When you finish implementing a plan, write a sentinel file:
+`docs/plans/.signals/implement-finished-<planfile>`
+(empty file — just create it). kasmos will detect this and advance the plan to review.
+
+**Never modify `plan-state.json` directly.** kasmos owns that file.
 
 ## Project Skills
 

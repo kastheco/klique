@@ -15,6 +15,15 @@ Use `difft` for structural diffs (not line-based `git diff`) when reviewing chan
 Use `sg` (ast-grep) to verify patterns across the codebase rather than spot-checking.
 Be specific about issues — cite file paths and line numbers.
 
+## Review Completion
+
+When your review is complete, write a sentinel file to signal kasmos:
+- If approved: create `docs/plans/.signals/review-approved-<planfile>` (empty file)
+- If changes needed: create `docs/plans/.signals/review-changes-<planfile>` with your
+  feedback as the file body (kasmos will pass this to the next coder session)
+
+**Never modify `plan-state.json` directly.** kasmos owns that file.
+
 ## Project Skills
 
 Always load when reviewing TUI/UX changes:

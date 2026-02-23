@@ -19,24 +19,21 @@ The feature branch for implementation is created by kasmos when the user trigger
 
 Only register implementation plans in plan-state.json — never register design docs (*-design.md) as separate entries.
 
-## Plan State (CRITICAL — must follow every time)
+## Plan Registration (CRITICAL — must follow every time)
 
 Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
 Never modify plan file content for state tracking.
 
-**You MUST register every plan you write.** Immediately after writing a plan `.md` file,
-add an entry to `plan-state.json` with `"status": "ready"`. The kasmos TUI polls this file
-to populate the sidebar Plans list — unregistered plans are invisible to the user.
+**You MUST signal kasmos when you finish writing a plan.** kasmos detects the sentinel file
+and registers the plan automatically — you do NOT need to edit `plan-state.json` directly.
 
-Registration steps (do both atomically, never skip step 2):
+Registration steps (do both, never skip step 2):
 1. Write the plan to `docs/plans/<date>-<name>.md`
-2. **Use the Read tool** on `docs/plans/plan-state.json` first (REQUIRED — Edit/Write will
-   be rejected if you haven't Read the file), then add `"<date>-<name>.md": {"status": "ready"}`
-   and write it back
+2. Create a sentinel file: `docs/plans/.signals/planner-finished-<date>-<name>.md`
+   (empty file — just create it). kasmos will detect this and register the plan.
 
-**Never modify plan statuses.** Only register NEW plans. Status transitions (`ready` →
-`in_progress` → `done` → etc.) are managed by kasmos — do not change the `"status"` field
-of existing entries.
+**Never modify `plan-state.json` directly.** kasmos owns that file. Status transitions
+are managed by kasmos — do not change the `"status"` field of any entry.
 
 ## Project Skills
 
