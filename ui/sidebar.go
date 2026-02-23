@@ -535,12 +535,6 @@ func (s *Sidebar) IsSearchActive() bool    { return s.searchActive }
 func (s *Sidebar) GetSearchQuery() string  { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
-// DisableTreeMode forces flat-mode navigation (using s.items) even if tree
-// data has been loaded. Use this until String() is updated to render s.rows.
-func (s *Sidebar) DisableTreeMode() {
-	s.useTreeMode = false
-}
-
 // SetTopicsAndPlans sets the three-level tree data and rebuilds rows.
 func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {
 	s.treeTopics = topics
