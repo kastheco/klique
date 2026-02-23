@@ -529,15 +529,17 @@ func validatePlanHasWaves(plansDir, planFile string) error {
 
 // isLocked returns true if the given stage cannot be triggered given the current plan status.
 func isLocked(status planstate.Status, stage string) bool {
+	implementing := status == planstate.StatusInProgress || status == planstate.StatusImplementing
 	switch stage {
 	case "plan":
 		return false
 	case "implement":
+		// Locked only before any planning work has started.
 		return status == planstate.StatusReady
 	case "review":
-		return status == planstate.StatusReady || status == planstate.StatusInProgress
+		return status == planstate.StatusReady || status == planstate.StatusPlanning || implementing
 	case "finished":
-		return status != planstate.StatusReviewing && status != planstate.StatusDone && status != planstate.StatusCompleted
+		return status != planstate.StatusReviewing && status != planstate.StatusDone && status != planstate.StatusCompleted && status != planstate.StatusFinished
 	default:
 		return true
 	}

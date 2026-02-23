@@ -689,24 +689,29 @@ func planStageRows(p PlanDisplay, indent int) []sidebarRow {
 }
 
 // stageState returns (done, active, locked) for a stage given the plan status.
+// Recognises both the legacy "in_progress" value and the lifecycle alias
+// "implementing" so the sidebar stays correct throughout the full lifecycle.
 func stageState(status, stage string) (done, active, locked bool) {
+	implementing := status == "in_progress" || status == "implementing"
+	postPlan := implementing || status == "reviewing" || status == "done" || status == "completed" || status == "finished"
+	postImpl := status == "reviewing" || status == "done" || status == "completed" || status == "finished"
 	switch stage {
 	case "plan":
-		done = status == "in_progress" || status == "reviewing" || status == "done" || status == "completed"
-		active = status == "ready"
+		done = postPlan
+		active = status == "ready" || status == "planning"
 		locked = false
 	case "implement":
-		done = status == "reviewing" || status == "done" || status == "completed"
-		active = status == "in_progress"
+		done = postImpl
+		active = implementing
 		locked = status == "ready"
 	case "review":
-		done = status == "done" || status == "completed"
+		done = status == "done" || status == "completed" || status == "finished"
 		active = status == "reviewing"
-		locked = status == "ready" || status == "in_progress"
+		locked = status == "ready" || status == "planning" || implementing
 	case "finished":
-		done = status == "done" || status == "completed"
+		done = status == "done" || status == "completed" || status == "finished"
 		active = false
-		locked = !(status == "reviewing" || status == "done" || status == "completed")
+		locked = !postImpl
 	}
 	return
 }
