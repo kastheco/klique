@@ -465,14 +465,14 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 	assert.Contains(t, rendered, "[!")
 }
 
-func TestSidebarToggle(t *testing.T) {
+func TestFocusRing(t *testing.T) {
 	newTestHome := func() *home {
-		spinner := spinner.New(spinner.WithSpinner(spinner.Dot))
+		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 		return &home{
 			ctx:          context.Background(),
 			state:        stateDefault,
 			appConfig:    config.DefaultConfig(),
-			list:         ui.NewList(&spinner, false),
+			list:         ui.NewList(&spin, false),
 			menu:         ui.NewMenu(),
 			sidebar:      ui.NewSidebar(),
 			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
@@ -488,91 +488,147 @@ func TestSidebarToggle(t *testing.T) {
 		return homeModel
 	}
 
-	t.Run("ctrl+s hides sidebar and moves focus from sidebar to panel 1", func(t *testing.T) {
+	// --- Tab ring cycling ---
+
+	t.Run("Tab advances focus ring forward", func(t *testing.T) {
 		h := newTestHome()
-		h.sidebarHidden = false
-		h.setFocus(0)
+		h.setFocusSlot(slotSidebar) // slot 0
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.True(t, homeModel.sidebarHidden)
-		assert.Equal(t, 1, homeModel.focusedPanel)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
 	})
 
-	t.Run("ctrl+s hides sidebar and keeps focus when panel 1 is focused", func(t *testing.T) {
+	t.Run("Tab wraps from list (4) to sidebar (0)", func(t *testing.T) {
 		h := newTestHome()
-		h.sidebarHidden = false
-		h.setFocus(1)
+		h.setFocusSlot(slotList) // slot 4
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.True(t, homeModel.sidebarHidden)
-		assert.Equal(t, 1, homeModel.focusedPanel)
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
 	})
 
-	t.Run("ctrl+s shows sidebar and keeps focus when sidebar is hidden", func(t *testing.T) {
+	t.Run("Shift+Tab moves focus ring backward", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotAgent) // slot 1
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
+	})
+
+	t.Run("Shift+Tab wraps from sidebar (0) to list (4)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotSidebar) // slot 0
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+
+		assert.Equal(t, slotList, homeModel.focusSlot)
+	})
+
+	t.Run("Tab skips sidebar when hidden", func(t *testing.T) {
 		h := newTestHome()
 		h.sidebarHidden = true
-		h.setFocus(2)
+		h.setFocusSlot(slotList) // slot 4
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.False(t, homeModel.sidebarHidden)
-		assert.Equal(t, 2, homeModel.focusedPanel)
+		// Should skip slot 0 (sidebar) and land on slot 1 (agent)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
 	})
 
-	t.Run("left from panel 1 shows and focuses sidebar when hidden", func(t *testing.T) {
+	t.Run("Shift+Tab skips sidebar when hidden", func(t *testing.T) {
 		h := newTestHome()
 		h.sidebarHidden = true
-		h.setFocus(1)
+		h.setFocusSlot(slotAgent) // slot 1
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
 
-		assert.False(t, homeModel.sidebarHidden)
-		assert.Equal(t, 0, homeModel.focusedPanel)
+		// Should skip slot 0 (sidebar) and land on slot 4 (list)
+		assert.Equal(t, slotList, homeModel.focusSlot)
 	})
 
-	t.Run("left from sidebar hides sidebar and focuses panel 1", func(t *testing.T) {
+	// --- Direct slot jumps ---
+
+	t.Run("! jumps to agent slot", func(t *testing.T) {
 		h := newTestHome()
-		h.sidebarHidden = false
-		h.setFocus(0)
+		h.setFocusSlot(slotList)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
 
-		assert.True(t, homeModel.sidebarHidden)
-		assert.Equal(t, 1, homeModel.focusedPanel)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
 	})
 
-	t.Run("h moves focus to sidebar when panel 1 is focused and sidebar is visible", func(t *testing.T) {
+	t.Run("@ jumps to diff slot", func(t *testing.T) {
 		h := newTestHome()
-		h.sidebarHidden = false
-		h.setFocus(1)
+		h.setFocusSlot(slotList)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
 
-		assert.False(t, homeModel.sidebarHidden)
-		assert.Equal(t, 0, homeModel.focusedPanel)
+		assert.Equal(t, slotDiff, homeModel.focusSlot)
+	})
+
+	t.Run("# jumps to git slot", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotList)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")})
+
+		assert.Equal(t, slotGit, homeModel.focusSlot)
+	})
+
+	t.Run("s jumps to sidebar slot", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotList)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
 	})
 
 	t.Run("s shows and focuses sidebar when hidden", func(t *testing.T) {
 		h := newTestHome()
 		h.sidebarHidden = true
-		h.setFocus(2)
+		h.setFocusSlot(slotList)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 
 		assert.False(t, homeModel.sidebarHidden)
-		assert.Equal(t, 0, homeModel.focusedPanel)
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
 	})
 
-	t.Run("s moves focus to sidebar when sidebar is visible", func(t *testing.T) {
+	// --- Sidebar toggle (ctrl+s) ---
+
+	t.Run("ctrl+s hides sidebar and moves focus from sidebar to agent slot", func(t *testing.T) {
 		h := newTestHome()
 		h.sidebarHidden = false
-		h.setFocus(2)
+		h.setFocusSlot(slotSidebar)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+		assert.True(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("ctrl+s hides sidebar and keeps focus when agent slot is focused", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = false
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+		assert.True(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("ctrl+s shows sidebar and keeps focus when sidebar is hidden", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = true
+		h.setFocusSlot(slotList)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
 
 		assert.False(t, homeModel.sidebarHidden)
-		assert.Equal(t, 0, homeModel.focusedPanel)
+		assert.Equal(t, slotList, homeModel.focusSlot)
 	})
 }

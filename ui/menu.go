@@ -132,10 +132,7 @@ func (m *Menu) addInstanceOptions() {
 		actionGroup = append(actionGroup, keys.KeyCheckout)
 	}
 
-	// Navigation group (when in diff tab)
-	if m.isInDiffTab {
-		actionGroup = append(actionGroup, keys.KeyShiftUp)
-	}
+	// Navigation group (when in diff tab): up/down navigate when diff is focused via Tab ring
 
 	// System group
 	systemGroup := []keys.KeyName{keys.KeySearch, keys.KeyRepoSwitch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}

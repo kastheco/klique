@@ -290,7 +290,7 @@ func (m *home) findPlanInstance() *session.Instance {
 // openContextMenu builds a context menu for the currently focused/selected item
 // (sidebar topic/plan or instance) and positions it next to the selected item.
 func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == 0 {
+	if m.focusSlot == slotSidebar {
 		// Sidebar focused — use plan or topic context menu
 		if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
 			return m.openPlanContextMenu()

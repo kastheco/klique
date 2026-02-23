@@ -33,9 +33,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
 		return nil, false
 	}
-	if name == keys.KeyShiftDown || name == keys.KeyShiftUp {
-		return nil, false
-	}
+	// (no special-cased keys to skip here)
 
 	// Skip the menu highlighting if the key is not in the map or we are using the shift up and down keys.
 	// TODO: cleanup: when you press enter on stateNew, we use keys.KeySubmitName. We should unify the keymap.
@@ -112,7 +110,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Determine which column was clicked
 	if x < m.sidebarWidth {
 		// Click in sidebar
-		m.setFocus(0)
+		m.setFocusSlot(slotSidebar)
 
 		// Search bar is at rows 0-2 in the sidebar content (border takes 3 rows)
 		if contentY >= 0 && contentY <= 2 {
@@ -130,8 +128,8 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m, m.instanceChanged()
 		}
 	} else if x < m.sidebarWidth+m.tabsWidth {
-		// Click in preview/diff area (center column)
-		m.setFocus(1)
+		// Click in preview/diff area (center column): focus whichever center tab is visible
+		m.setFocusSlot(slotAgent + m.tabbedWindow.GetActiveTab())
 		localX := x - m.sidebarWidth
 		if m.tabbedWindow.HandleTabClick(localX, contentY) {
 			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
@@ -139,7 +137,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	} else {
 		// Click in instance list (right column)
-		m.setFocus(2)
+		m.setFocusSlot(slotList)
 
 		localX := x - m.sidebarWidth - m.tabsWidth
 		// Check if clicking on filter tabs
@@ -478,16 +476,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.WindowSize()
 		}
 
-		// F1/F2/F3: exit focus mode and switch to specific tab
-		if targetTab, ok := fkeyToTab(msg.String()); ok {
+		// !/@ /#: exit focus mode and jump to specific tab slot
+		var jumpSlot int
+		var doJump bool
+		switch msg.String() {
+		case "!":
+			jumpSlot, doJump = slotAgent, true
+		case "@":
+			jumpSlot, doJump = slotDiff, true
+		case "#":
+			jumpSlot, doJump = slotGit, true
+		}
+		if doJump {
 			wasGitTab := m.tabbedWindow.IsInGitTab()
 			m.exitFocusMode()
-			m.tabbedWindow.SetActiveTab(targetTab)
-			m.menu.SetInDiffTab(targetTab == ui.DiffTab)
-			if wasGitTab && targetTab != ui.GitTab {
+			m.setFocusSlot(jumpSlot)
+			if wasGitTab && jumpSlot != slotGit {
 				m.killGitTab()
 			}
-			if targetTab == ui.GitTab && !wasGitTab {
+			if jumpSlot == slotGit && !wasGitTab {
 				cmd := m.spawnGitTab()
 				return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), cmd)
 			}
@@ -780,6 +787,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m.handleQuit()
 	}
 
+	// Shift+Tab: reverse focus ring cycle
+	if msg.Type == tea.KeyShiftTab {
+		wasGitSlot := m.focusSlot == slotGit
+		m.prevFocusSlot()
+		if wasGitSlot && m.focusSlot != slotGit {
+			m.killGitTab()
+		}
+		if m.focusSlot == slotGit {
+			cmd := m.spawnGitTab()
+			return m, tea.Batch(m.instanceChanged(), cmd)
+		}
+		return m, m.instanceChanged()
+	}
+
 	name, ok := keys.GlobalKeyStringsMap[msg.String()]
 	if !ok {
 		return m, nil
@@ -855,38 +876,47 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyUp:
 		m.tabbedWindow.ClearDocumentMode()
-		if m.focusedPanel == 0 {
+		switch m.focusSlot {
+		case slotSidebar:
 			m.sidebar.Up()
 			m.filterInstancesByTopic()
-		} else {
+		case slotAgent, slotDiff:
+			m.tabbedWindow.ScrollUp()
+		case slotGit:
+			gitPane := m.tabbedWindow.GetGitPane()
+			if gitPane != nil && gitPane.IsRunning() {
+				_ = gitPane.SendKey(keyToBytes(msg))
+			}
+		case slotList:
 			m.list.Up()
 		}
 		return m, m.instanceChanged()
 	case keys.KeyDown:
 		m.tabbedWindow.ClearDocumentMode()
-		if m.focusedPanel == 0 {
+		switch m.focusSlot {
+		case slotSidebar:
 			m.sidebar.Down()
 			m.filterInstancesByTopic()
-		} else {
+		case slotAgent, slotDiff:
+			m.tabbedWindow.ScrollDown()
+		case slotGit:
+			gitPane := m.tabbedWindow.GetGitPane()
+			if gitPane != nil && gitPane.IsRunning() {
+				_ = gitPane.SendKey(keyToBytes(msg))
+			}
+		case slotList:
 			m.list.Down()
 		}
 		return m, m.instanceChanged()
-	case keys.KeyShiftUp:
-		m.tabbedWindow.ScrollUp()
-		return m, m.instanceChanged()
-	case keys.KeyShiftDown:
-		m.tabbedWindow.ScrollDown()
-		return m, m.instanceChanged()
 	case keys.KeyTab:
-		wasGitTab := m.tabbedWindow.IsInGitTab()
-		m.tabbedWindow.Toggle()
-		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
-		// Kill lazygit when leaving git tab
-		if wasGitTab && !m.tabbedWindow.IsInGitTab() {
+		wasGitSlot := m.focusSlot == slotGit
+		m.nextFocusSlot()
+		// Kill lazygit when leaving git slot
+		if wasGitSlot && m.focusSlot != slotGit {
 			m.killGitTab()
 		}
-		// Spawn lazygit when entering git tab
-		if m.tabbedWindow.IsInGitTab() {
+		// Spawn lazygit when entering git slot
+		if m.focusSlot == slotGit {
 			cmd := m.spawnGitTab()
 			return m, tea.Batch(m.instanceChanged(), cmd)
 		}
@@ -901,23 +931,26 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.CycleSortMode()
 		return m, m.instanceChanged()
 	case keys.KeySpace:
-		if m.focusedPanel == 0 && m.sidebar.ToggleSelectedExpand() {
+		if m.focusSlot == slotSidebar && m.sidebar.ToggleSelectedExpand() {
 			return m, nil
 		}
 		// In tree mode, Space on non-expandable rows (stages) is a no-op
-		if m.focusedPanel == 0 && m.sidebar.IsTreeMode() {
+		if m.focusSlot == slotSidebar && m.sidebar.IsTreeMode() {
 			return m, nil
 		}
 		return m.openContextMenu()
 	case keys.KeyGitTab:
-		// Jump directly to git tab
-		if m.tabbedWindow.IsInGitTab() {
+		// Jump directly to git slot
+		if m.focusSlot == slotGit {
 			return m, nil
 		}
-		m.tabbedWindow.SetActiveTab(ui.GitTab)
-		m.menu.SetInDiffTab(false)
-		cmd := m.spawnGitTab()
-		return m, tea.Batch(m.instanceChanged(), cmd)
+		wasGitSlot := m.tabbedWindow.IsInGitTab()
+		m.setFocusSlot(slotGit)
+		if !wasGitSlot {
+			cmd := m.spawnGitTab()
+			return m, tea.Batch(m.instanceChanged(), cmd)
+		}
+		return m, m.instanceChanged()
 	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabGit:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
@@ -1012,7 +1045,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
 		// If the sidebar is focused, handle tree-mode interactions.
-		if m.focusedPanel == 0 {
+		if m.focusSlot == slotSidebar {
 			// Stage rows are display-only — no action
 			if _, _, isStage := m.sidebar.GetSelectedPlanStage(); isStage {
 				return m, nil
@@ -1052,11 +1085,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if m.sidebarHidden {
 			// Show and focus in one motion
 			m.sidebarHidden = false
-			m.setFocus(0)
+			m.setFocusSlot(slotSidebar)
 			return m, tea.WindowSize()
 		}
-		// s key always jumps directly to the sidebar regardless of current panel.
-		m.setFocus(0)
+		// s key always jumps directly to the sidebar regardless of current slot.
+		m.setFocusSlot(slotSidebar)
 		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
@@ -1067,47 +1100,38 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		} else {
 			// Hide sidebar
 			m.sidebarHidden = true
-			// If sidebar was focused, move focus to tabbed view
-			if m.focusedPanel == 0 {
-				m.setFocus(1)
+			// If sidebar was focused, move focus to agent tab
+			if m.focusSlot == slotSidebar {
+				m.setFocusSlot(slotAgent)
 			}
 		}
 		return m, tea.WindowSize()
-	case keys.KeyLeft:
-		if m.focusedPanel == 0 && m.sidebar.IsTreeMode() {
-			m.sidebar.Left()
-			m.filterInstancesByTopic()
-			return m, nil
-		}
-		if m.focusedPanel == 0 {
-			// Already on sidebar: hide it and move focus to center
-			if !m.sidebar.IsSearchActive() {
-				m.sidebarHidden = true
-				m.setFocus(1)
-				return m, tea.WindowSize()
+	case keys.KeyArrowLeft:
+		switch m.focusSlot {
+		case slotSidebar:
+			if m.sidebar.IsTreeMode() {
+				m.sidebar.Left()
+				m.filterInstancesByTopic()
 			}
-			return m, nil
-		}
-		if m.focusedPanel == 1 && m.sidebarHidden {
-			// Show sidebar and focus it in one motion
-			m.sidebarHidden = false
-			m.setFocus(0)
-			return m, tea.WindowSize()
-		}
-		// Normal cycle left: list(2) → preview(1) → sidebar(0)
-		if m.focusedPanel > 0 {
-			m.setFocus(m.focusedPanel - 1)
+		case slotGit:
+			gitPane := m.tabbedWindow.GetGitPane()
+			if gitPane != nil && gitPane.IsRunning() {
+				_ = gitPane.SendKey(keyToBytes(msg))
+			}
 		}
 		return m, nil
-	case keys.KeyRight:
-		if m.focusedPanel == 0 && m.sidebar.IsTreeMode() {
-			m.sidebar.Right()
-			m.filterInstancesByTopic()
-			return m, nil
-		}
-		// Cycle right: sidebar(0) → preview(1) → list(2). Stop at list.
-		if m.focusedPanel < 2 {
-			m.setFocus(m.focusedPanel + 1)
+	case keys.KeyArrowRight:
+		switch m.focusSlot {
+		case slotSidebar:
+			if m.sidebar.IsTreeMode() {
+				m.sidebar.Right()
+				m.filterInstancesByTopic()
+			}
+		case slotGit:
+			gitPane := m.tabbedWindow.GetGitPane()
+			if gitPane != nil && gitPane.IsRunning() {
+				_ = gitPane.SendKey(keyToBytes(msg))
+			}
 		}
 		return m, nil
 	case keys.KeyNewPlan:
@@ -1123,7 +1147,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.sidebar.ActivateSearch()
 		m.sidebar.SelectFirst() // Reset to "All" when starting search
 		m.state = stateSearch
-		m.setFocus(0)
+		m.setFocusSlot(slotSidebar)
 		m.list.SetFilter("") // Show all instances
 		return m, nil
 	default:

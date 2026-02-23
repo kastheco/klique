@@ -138,8 +138,9 @@ type home struct {
 
 	// sidebar displays the topic sidebar
 	sidebar *ui.Sidebar
-	// focusedPanel tracks which panel has keyboard focus: 0=sidebar (left), 1=preview/center, 2=instance list (right)
-	focusedPanel int
+	// focusSlot tracks which pane has keyboard focus in the Tab ring:
+	// 0=sidebar, 1=agent tab, 2=diff tab, 3=git tab, 4=instance list
+	focusSlot int
 	// pendingPlanName stores the plan name during the three-step plan creation flow
 	pendingPlanName string
 	// pendingPlanDesc stores the plan description during the three-step plan creation flow
@@ -226,7 +227,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.sidebar = ui.NewSidebar()
 	h.sidebar.SetRepoName(filepath.Base(activeRepoPath))
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
-	h.setFocus(0) // Start with sidebar focused
+	h.setFocusSlot(slotList) // Start with instance list focused (slot 4)
 	h.loadPlanState()
 
 	// Load saved instances

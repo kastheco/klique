@@ -43,7 +43,10 @@ func TestHandleKeyPress_DocumentModeConsumesViewportNavigationKeys(t *testing.T)
 	require.NotEqual(t, before, preview.String())
 }
 
-func TestHandleKeyPress_DocumentModeKeepsShiftScrollFallback(t *testing.T) {
+func TestHandleKeyPress_DocumentModeScrollsWithDownKey(t *testing.T) {
+	// In the tab focus ring model, scrolling in document mode uses up/down
+	// when the agent slot (slotAgent) is focused. Shift+Down is no longer a
+	// dedicated scroll binding — Tab-focus + up/down replaces it.
 	preview := ui.NewPreviewPane()
 	preview.SetSize(30, 5)
 	preview.SetDocumentContent(appTestDocumentLines(50))
@@ -60,14 +63,14 @@ func TestHandleKeyPress_DocumentModeKeepsShiftScrollFallback(t *testing.T) {
 		menu:         ui.NewMenu(),
 		sidebar:      ui.NewSidebar(),
 		tabbedWindow: tw,
+		focusSlot:    slotAgent, // agent slot focused → down scrolls preview
 		keySent:      true,
 	}
 
 	before := preview.String()
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyShiftDown})
+	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyDown})
 	homeModel, ok := model.(*home)
 	require.True(t, ok)
-	require.Nil(t, cmd)
 	require.True(t, homeModel.tabbedWindow.IsDocumentMode())
 	require.NotEqual(t, before, preview.String())
 }

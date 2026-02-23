@@ -21,8 +21,8 @@ var (
 	ColorFoam = lipgloss.Color("#9ccfd8") // info, running
 	ColorIris = lipgloss.Color("#c4a7e7") // highlight, primary
 
-	// Gradient endpoints for the banner
-	GradientStart = "#ea9a97" // rose
+	// Gradient endpoints for the banner and focused tab label
+	GradientStart = "#9ccfd8" // foam
 	GradientEnd   = "#c4a7e7" // iris
 
 	// Diff-specific (keep readable semantic greens/reds)

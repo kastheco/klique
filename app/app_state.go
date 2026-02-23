@@ -74,13 +74,51 @@ func (m *home) updateSidebarItems() {
 	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses, planStatuses)
 }
 
-// setFocus updates which panel has focus and syncs the focused state to sidebar and list.
-// 0 = sidebar (left), 1 = preview/center, 2 = instance list (right).
-func (m *home) setFocus(panel int) {
-	m.focusedPanel = panel
-	m.sidebar.SetFocused(panel == 0)
-	m.tabbedWindow.SetFocused(panel == 1)
-	m.list.SetFocused(panel == 2)
+// focusSlot constants for readability.
+const (
+	slotSidebar = 0
+	slotAgent   = 1
+	slotDiff    = 2
+	slotGit     = 3
+	slotList    = 4
+	slotCount   = 5
+)
+
+// setFocusSlot updates which pane has focus and syncs visual state.
+func (m *home) setFocusSlot(slot int) {
+	m.focusSlot = slot
+	m.sidebar.SetFocused(slot == slotSidebar)
+	m.list.SetFocused(slot == slotList)
+
+	// Center pane is focused when any of the 3 center tabs is active.
+	centerFocused := slot >= slotAgent && slot <= slotGit
+	m.tabbedWindow.SetFocused(centerFocused)
+
+	// When focusing a center tab, switch the visible tab to match and track which tab is focused.
+	if centerFocused {
+		m.tabbedWindow.SetActiveTab(slot - slotAgent) // slotAgent=1 → PreviewTab=0, etc.
+		m.tabbedWindow.SetFocusedTab(slot - slotAgent)
+	} else {
+		m.tabbedWindow.SetFocusedTab(-1)
+	}
+}
+
+// nextFocusSlot advances the focus ring forward, skipping sidebar when hidden.
+func (m *home) nextFocusSlot() {
+	next := (m.focusSlot + 1) % slotCount
+	if next == slotSidebar && m.sidebarHidden {
+		next = slotAgent
+	}
+	m.setFocusSlot(next)
+}
+
+// prevFocusSlot moves the focus ring backward, skipping sidebar when hidden.
+func (m *home) prevFocusSlot() {
+	prev := (m.focusSlot - 1 + slotCount) % slotCount
+	if prev == slotSidebar && m.sidebarHidden {
+		prev = slotList
+	}
+	m.setFocusSlot(prev)
 }
 
 // enterFocusMode enters focus/insert mode and starts the fast preview ticker.
@@ -153,46 +191,31 @@ func (m *home) exitFocusMode() {
 	m.tabbedWindow.SetFocusMode(false)
 }
 
-// fkeyToTab maps F1/F2/F3 key strings to tab indices.
-func fkeyToTab(key string) (int, bool) {
-	switch key {
-	case "f1":
-		return ui.PreviewTab, true
-	case "f2":
-		return ui.DiffTab, true
-	case "f3":
-		return ui.GitTab, true
-	default:
-		return 0, false
-	}
-}
-
-// switchToTab switches to the specified tab, handling git tab spawn/kill lifecycle.
+// switchToTab switches to the specified tab slot, handling git tab spawn/kill lifecycle.
 func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
-	var targetTab int
+	var targetSlot int
 	switch name {
 	case keys.KeyTabAgent:
-		targetTab = ui.PreviewTab
+		targetSlot = slotAgent
 	case keys.KeyTabDiff:
-		targetTab = ui.DiffTab
+		targetSlot = slotDiff
 	case keys.KeyTabGit:
-		targetTab = ui.GitTab
+		targetSlot = slotGit
 	default:
 		return m, nil
 	}
 
-	if m.tabbedWindow.GetActiveTab() == targetTab {
+	if m.focusSlot == targetSlot {
 		return m, nil
 	}
 
 	wasGitTab := m.tabbedWindow.IsInGitTab()
-	m.tabbedWindow.SetActiveTab(targetTab)
-	m.menu.SetInDiffTab(targetTab == ui.DiffTab)
+	m.setFocusSlot(targetSlot)
 
-	if wasGitTab && targetTab != ui.GitTab {
+	if wasGitTab && m.focusSlot != slotGit {
 		m.killGitTab()
 	}
-	if targetTab == ui.GitTab {
+	if m.focusSlot == slotGit {
 		cmd := m.spawnGitTab()
 		return m, tea.Batch(m.instanceChanged(), cmd)
 	}
