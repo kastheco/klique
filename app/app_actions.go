@@ -155,6 +155,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m.triggerPlanStage(planFile, "plan")
 
+	case "start_implement":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		return m.triggerPlanStage(planFile, "implement")
+
 	case "start_review":
 		planFile := m.sidebar.GetSelectedPlanFile()
 		if planFile == "" {
@@ -359,7 +366,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 				// ready or planning: primary action is to write/re-write the plan
 				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
 			case implementing:
-				items = append(items, overlay.ContextMenuItem{Label: "Start review", Action: "start_review"})
+				items = append(items, overlay.ContextMenuItem{Label: "Start implement", Action: "start_implement"})
 			case entry.Status == planstate.StatusReviewing:
 				items = append(items, overlay.ContextMenuItem{Label: "Mark finished", Action: "mark_plan_done"})
 			}
