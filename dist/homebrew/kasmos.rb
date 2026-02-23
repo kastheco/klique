@@ -15,6 +15,9 @@ class Kasmos < Formula
 
       def install
         bin.install "kasmos"
+        bin.install_symlink "kasmos" => "kas"
+        bin.install_symlink "kasmos" => "ks"
+        bin.install_symlink "kasmos" => "km"
       end
     end
     if Hardware::CPU.arm?
@@ -23,6 +26,9 @@ class Kasmos < Formula
 
       def install
         bin.install "kasmos"
+        bin.install_symlink "kasmos" => "kas"
+        bin.install_symlink "kasmos" => "ks"
+        bin.install_symlink "kasmos" => "km"
       end
     end
   end
@@ -33,6 +39,9 @@ class Kasmos < Formula
       sha256 "dc35f682cd6bfedf35902a0a646fc96f99c36d0ae53cb8693187a37e6c34c7a7"
       def install
         bin.install "kasmos"
+        bin.install_symlink "kasmos" => "kas"
+        bin.install_symlink "kasmos" => "ks"
+        bin.install_symlink "kasmos" => "km"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
@@ -40,11 +49,14 @@ class Kasmos < Formula
       sha256 "8d93533564271d6d65bb3d56b21135c0382f69e615455f21905f60542bbb7c2f"
       def install
         bin.install "kasmos"
+        bin.install_symlink "kasmos" => "kas"
+        bin.install_symlink "kasmos" => "ks"
+        bin.install_symlink "kasmos" => "km"
       end
     end
   end
 
   test do
-    system "#{bin}/kasmos", "version"
+    system "#{bin}/kas", "version"
   end
 end

@@ -31,8 +31,11 @@ brews:
     license: "AGPL-3.0"
     install: |
       bin.install "kasmos"
+      bin.install_symlink "kasmos" => "kas"
+      bin.install_symlink "kasmos" => "ks"
+      bin.install_symlink "kasmos" => "km"
     test: |
-      system "#{bin}/kasmos", "version"
+      system "#{bin}/kas", "version"
 
 scoops:
   - repository:

@@ -2,6 +2,11 @@
 .aider*
 .env*
 klique
+kasmos
 **.DS_Store
 kq
+kas
 .worktrees/
+dist/artifacts.json
+dist/metadata.json
+dist/checksums.txt
