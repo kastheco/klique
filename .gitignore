@@ -10,3 +10,4 @@ kas
 dist/artifacts.json
 dist/metadata.json
 dist/checksums.txt
+docs/plans/.signals/
