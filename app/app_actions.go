@@ -437,6 +437,14 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		return m, m.handleError(fmt.Errorf("missing plan state for %s", planFile))
 	}
 
+	// Backfill branch name for plans created before the branch field existed.
+	if entry.Branch == "" {
+		entry.Branch = gitpkg.PlanBranchFromFile(planFile)
+		if err := m.planState.SetBranch(planFile, entry.Branch); err != nil {
+			return m, m.handleError(fmt.Errorf("failed to assign branch for plan: %w", err))
+		}
+	}
+
 	// Check if stage is locked
 	if isLocked(entry.Status, stage) {
 		prev := map[string]string{
