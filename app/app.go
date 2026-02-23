@@ -479,10 +479,30 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			var signals []planfsm.Signal
+			if planStateDir != "" {
+				signals = planfsm.ScanSignals(planStateDir)
+			}
+
 			time.Sleep(500 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals}
 		}
 	case metadataResultMsg:
+		// Process agent sentinel signals — feed to FSM and consume sentinel files.
+		// Done in Update (main goroutine) so FSM writes are never concurrent.
+		for _, sig := range msg.Signals {
+			if err := m.fsm.Transition(sig.PlanFile, sig.Event); err != nil {
+				log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.PlanFile, err)
+			}
+			planfsm.ConsumeSignal(sig)
+			if sig.Event == planfsm.ReviewChangesRequested && sig.Body != "" {
+				m.pendingReviewFeedback[sig.PlanFile] = sig.Body
+			}
+		}
+		if len(msg.Signals) > 0 {
+			m.loadPlanState() // refresh after signal processing
+		}
+
 		// Apply collected metadata to instances — zero I/O, just field writes.
 		// All subprocess calls (TapEnter, SendPrompt) are deferred to tea.Cmds.
 		instanceMap := make(map[string]*session.Instance)
@@ -1004,12 +1024,11 @@ type instanceMetadata struct {
 	MemMB              float64
 	ResourceUsageValid bool
 	TmuxAlive          bool
-}
-
-// metadataResultMsg carries all per-instance metadata collected by the async tick.
+}// metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
 	Results   []instanceMetadata
 	PlanState *planstate.PlanState // pre-loaded plan state (nil if dir not set)
+	Signals   []planfsm.Signal     // agent sentinel files found this tick
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
