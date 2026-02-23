@@ -95,7 +95,7 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 	for _, data := range instancesData {
 		// Skip non-paused instances whose worktree no longer exists on disk.
 		// This cleans up stale state from old sessions or config migrations
-		// (e.g. worktree path was moved from ~/.klique/worktrees/ to <repo>/.worktrees/).
+		// (e.g. worktree path was moved from ~/.config/kasmos/worktrees/ to <repo>/.worktrees/).
 		if data.Status != Paused && data.Worktree.WorktreePath != "" {
 			if _, err := os.Stat(data.Worktree.WorktreePath); err != nil {
 				log.WarningLog.Printf("skipping stale instance %q: worktree path gone: %s",

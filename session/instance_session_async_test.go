@@ -15,7 +15,7 @@ import (
 type testPtyFactory struct{}
 
 func (f *testPtyFactory) Start(_ *exec.Cmd) (*os.File, error) {
-	return os.CreateTemp("", "klique-pty-*")
+	return os.CreateTemp("", "kas-pty-*")
 }
 
 func (f *testPtyFactory) Close() {}

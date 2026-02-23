@@ -279,7 +279,7 @@ func (i *Instance) GetRepoPath() string {
 func (i *Instance) SetStatus(status Status) {
 	if i.Status == Running && status == Ready {
 		i.Notified = true
-		SendNotification("klique", fmt.Sprintf("'%s' has finished", i.Title))
+		SendNotification("kas", fmt.Sprintf("'%s' has finished", i.Title))
 	}
 	if status == Running || status == Loading {
 		i.LastActiveAt = time.Now()

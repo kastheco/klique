@@ -89,7 +89,7 @@ func RunDaemon(cfg *config.Config) error {
 
 // LaunchDaemon launches the daemon process.
 func LaunchDaemon() error {
-	// Find the klique binary.
+	// Find the kasmos binary.
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)

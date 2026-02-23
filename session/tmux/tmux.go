@@ -60,14 +60,14 @@ type TmuxSession struct {
 	wg     *sync.WaitGroup
 }
 
-const TmuxPrefix = "klique_"
+const TmuxPrefix = "kas_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
-// cleanupSessionsRe matches current klique_ sessions and legacy hivemind_ sessions.
-var cleanupSessionsRe = regexp.MustCompile(`(?:klique_|hivemind_).*:`)
+// cleanupSessionsRe matches current kas_ sessions and legacy klique_/hivemind_ sessions.
+var cleanupSessionsRe = regexp.MustCompile(`(?:kas_|klique_|hivemind_).*:`)
 
-func toKliqueTmuxName(str string) string {
+func toKasTmuxName(str string) string {
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
 	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
@@ -85,7 +85,7 @@ func NewTmuxSessionWithDeps(name string, program string, skipPermissions bool, p
 
 func newTmuxSession(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
-		sanitizedName:   toKliqueTmuxName(name),
+		sanitizedName:   toKasTmuxName(name),
 		program:         program,
 		skipPermissions: skipPermissions,
 		ptyFactory:      ptyFactory,
@@ -309,7 +309,7 @@ func (t *TmuxSession) DoesSessionExist() bool {
 	return t.cmdExec.Run(existsCmd) == nil
 }
 
-// CleanupSessions kills all tmux sessions that start with the klique prefix.
+// CleanupSessions kills all tmux sessions that start with the kas prefix.
 // Also cleans up legacy "hivemind_" sessions from before the rename.
 func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions

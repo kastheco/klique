@@ -14,7 +14,7 @@ var (
 	ErrorLog   *log.Logger
 )
 
-var logFileName = filepath.Join(os.TempDir(), "klique.log")
+var logFileName = filepath.Join(os.TempDir(), "kas.log")
 
 var globalLogFile *os.File
 

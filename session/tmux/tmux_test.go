@@ -84,9 +84,9 @@ func TestStartTmuxSession(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s claude", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s claude", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
-	require.Equal(t, "tmux attach-session -t klique_test-session",
+	require.Equal(t, "tmux attach-session -t kas_test-session",
 		cmd2.ToString(ptyFactory.cmds[1]))
 
 	require.Equal(t, 2, len(ptyFactory.files))
@@ -125,7 +125,7 @@ func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s claude --dangerously-skip-permissions", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s claude --dangerously-skip-permissions", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }
 
@@ -145,13 +145,14 @@ func recordKilledSessions(killedSessions *[]string) func(cmd *exec.Cmd) error {
 }
 
 func TestCleanupSessions(t *testing.T) {
-	t.Run("kills klique, legacy hivemind, and lazygit sessions", func(t *testing.T) {
+	t.Run("kills kas, legacy klique/hivemind, and lazygit sessions", func(t *testing.T) {
 		var killedSessions []string
 		cmdExec := cmd_test.MockCmdExec{
 			RunFunc: recordKilledSessions(&killedSessions),
 			OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
-				output := "klique_session1: 1 windows (created Thu Feb 20 10:00:00 2026)\n" +
-					"klique_lazygit_session1: 1 windows (created Thu Feb 20 10:00:01 2026)\n" +
+				output := "kas_session1: 1 windows (created Thu Feb 20 10:00:00 2026)\n" +
+					"kas_lazygit_session1: 1 windows (created Thu Feb 20 10:00:01 2026)\n" +
+					"klique_legacy_session: 1 windows (created Thu Feb 20 09:30:00 2026)\n" +
 					"hivemind_legacy: 1 windows (created Thu Feb 20 09:00:00 2026)\n" +
 					"unrelated_session: 1 windows (created Thu Feb 20 08:00:00 2026)\n"
 				return []byte(output), nil
@@ -160,9 +161,10 @@ func TestCleanupSessions(t *testing.T) {
 
 		err := CleanupSessions(cmdExec)
 		require.NoError(t, err)
-		require.Len(t, killedSessions, 3)
-		require.Contains(t, killedSessions, "klique_session1")
-		require.Contains(t, killedSessions, "klique_lazygit_session1")
+		require.Len(t, killedSessions, 4)
+		require.Contains(t, killedSessions, "kas_session1")
+		require.Contains(t, killedSessions, "kas_lazygit_session1")
+		require.Contains(t, killedSessions, "klique_legacy_session")
 		require.Contains(t, killedSessions, "hivemind_legacy")
 	})
 
@@ -208,7 +210,7 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_test-session -c %s aider --model gpt-4", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s aider --model gpt-4", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }
 
@@ -242,7 +244,7 @@ func TestStartTmuxSessionOpenCode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify new-session used the right program.
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s klique_oc-session -c %s opencode", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_oc-session -c %s opencode", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 
 	// Verify no send-keys tap was issued (opencode needs no trust-screen tap).
@@ -271,7 +273,7 @@ func TestSendKeys(t *testing.T) {
 	err := session.SendKeys("hello world")
 	require.NoError(t, err)
 	require.Len(t, ranCmds, 1)
-	require.Equal(t, "tmux send-keys -l -t klique_test-session hello world", ranCmds[0])
+	require.Equal(t, "tmux send-keys -l -t kas_test-session hello world", ranCmds[0])
 }
 
 func TestTapEnter(t *testing.T) {
@@ -293,7 +295,7 @@ func TestTapEnter(t *testing.T) {
 	err := session.TapEnter()
 	require.NoError(t, err)
 	require.Len(t, ranCmds, 1)
-	require.Equal(t, "tmux send-keys -t klique_test-session Enter", ranCmds[0])
+	require.Equal(t, "tmux send-keys -t kas_test-session Enter", ranCmds[0])
 }
 
 func TestStartTmuxSessionInjectsAgentFlag(t *testing.T) {
@@ -324,7 +326,7 @@ func TestStartTmuxSessionInjectsAgentFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(
 		t,
-		fmt.Sprintf("tmux new-session -d -s klique_agent-test -c %s opencode --agent planner", workdir),
+		fmt.Sprintf("tmux new-session -d -s kas_agent-test -c %s opencode --agent planner", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]),
 	)
 }
@@ -348,5 +350,5 @@ func TestTapDAndEnter(t *testing.T) {
 	err := session.TapDAndEnter()
 	require.NoError(t, err)
 	require.Len(t, ranCmds, 1)
-	require.Equal(t, "tmux send-keys -t klique_test-session D Enter", ranCmds[0])
+	require.Equal(t, "tmux send-keys -t kas_test-session D Enter", ranCmds[0])
 }
