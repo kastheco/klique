@@ -442,7 +442,7 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/klique/config/planparser"
+	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -588,7 +588,7 @@ Expected: FAIL — types don't exist.
 package app
 
 import (
-	"github.com/kastheco/klique/config/planparser"
+	"github.com/kastheco/kasmos/config/planparser"
 )
 
 // WaveState represents the current state of wave orchestration for a plan.
@@ -907,7 +907,7 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/klique/config/planparser"
+	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -961,7 +961,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kastheco/klique/config/planparser"
+	"github.com/kastheco/kasmos/config/planparser"
 )
 
 // buildTaskPrompt constructs the prompt for a single task instance.

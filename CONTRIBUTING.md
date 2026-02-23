@@ -5,8 +5,8 @@ Thank you for considering contributing to our project! This document outlines th
 ## Development Setup
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/klique.git`
-3. Add the upstream repository: `git remote add upstream https://github.com/kastheco/klique.git`
+2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/kasmos.git`
+3. Add the upstream repository: `git remote add upstream https://github.com/kastheco/kasmos.git`
 4. Install dependencies: `go mod download`
 
 ## Code Standards

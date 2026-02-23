@@ -652,8 +652,8 @@ Expected: FAIL — `ListItem` undefined
 package ui
 
 import (
-	"github.com/kastheco/klique/config"
-	"github.com/kastheco/klique/session"
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/session"
 )
 
 // ListItemType identifies the kind of list item.
@@ -770,7 +770,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/kastheco/klique/config"
+	"github.com/kastheco/kasmos/config"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -984,8 +984,8 @@ package ui
 
 import (
 	"fmt"
-	"github.com/kastheco/klique/config"
-	"github.com/kastheco/klique/plan"
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/plan"
 )
 
 // BuildPlanItems constructs the visible list items from a parsed plan and its state.
@@ -1213,9 +1213,9 @@ package app
 
 import (
 	"fmt"
-	"github.com/kastheco/klique/config"
-	"github.com/kastheco/klique/session"
-	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"time"
 )

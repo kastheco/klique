@@ -14,7 +14,7 @@
 
 | Thing | Old | New |
 |-------|-----|-----|
-| Go module | `github.com/kastheco/klique` | `github.com/kastheco/kasmos` |
+| Go module | `github.com/kastheco/kasmos` | `github.com/kastheco/kasmos` |
 | Binary | `klique` | `kasmos` |
 | Cobra `Use` | `klique` | `kas` |
 | Symlink aliases | `kq` | `kas`, `ks`, `km` |
@@ -70,7 +70,7 @@ gh repo rename kasmold --repo kastheco/kasmos --yes
 **Step 2: Rename klique → kasmos**
 
 ```bash
-gh repo rename kasmos --repo kastheco/klique --yes
+gh repo rename kasmos --repo kastheco/kasmos --yes
 ```
 
 **Step 3: Update local git remote**
@@ -94,7 +94,7 @@ gh repo view kastheco/kasmos --json name
 
 **MUST complete before Phase 2.** All Go import paths change here.
 
-Replace all `github.com/kastheco/klique` → `github.com/kastheco/kasmos` in Go source and go.mod.
+Replace all `github.com/kastheco/kasmos` → `github.com/kastheco/kasmos` in Go source and go.mod.
 
 **Files:**
 - Modify: `go.mod` (line 1)
@@ -103,7 +103,7 @@ Replace all `github.com/kastheco/klique` → `github.com/kastheco/kasmos` in Go 
 **Step 1: Replace module path in go.mod and all Go files**
 
 ```bash
-sd 'github.com/kastheco/klique' 'github.com/kastheco/kasmos' go.mod $(rg -l 'kastheco/klique' --type go)
+sd 'github.com/kastheco/kasmos' 'github.com/kastheco/kasmos' go.mod $(rg -l 'kastheco/kasmos' --type go)
 ```
 
 **Step 2: Verify compilation**
@@ -290,7 +290,7 @@ sd 'Short: "klique - Manage multiple AI agents' 'Short: "kas - Manage multiple A
 sd 'error: klique must be run from' 'error: kas must be run from' main.go
 sd '"Print the version number of klique"' '"Print the version number of kas"' main.go
 sd 'klique version %s' 'kas version %s' main.go
-sd 'kastheco/klique/releases' 'kastheco/kasmos/releases' main.go
+sd 'kastheco/kasmos/releases' 'kastheco/kasmos/releases' main.go
 sd 'Write ~/.klique/config.toml' 'Write ~/.config/kasmos/config.toml' main.go
 sd 'kqInitCmd' 'kasInitCmd' main.go
 ```
@@ -571,7 +571,7 @@ sd 'klique' 'kasmos' Makefile
 ```bash
 sd 'binary: klique' 'binary: kasmos' .goreleaser.yaml
 sd 'name: klique' 'name: kasmos' .goreleaser.yaml
-sd 'kastheco/klique' 'kastheco/kasmos' .goreleaser.yaml
+sd 'kastheco/kasmos' 'kastheco/kasmos' .goreleaser.yaml
 sd '"klique - A TUI' '"kas - A TUI' .goreleaser.yaml
 sd 'bin.install "klique"' 'bin.install "kasmos"' .goreleaser.yaml
 sd '"klique", "version"' '"kasmos", "version"' .goreleaser.yaml
@@ -580,7 +580,7 @@ sd '"klique", "version"' '"kasmos", "version"' .goreleaser.yaml
 **Step 4: Update `install.sh`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' install.sh
+sd 'kastheco/kasmos' 'kastheco/kasmos' install.sh
 sd 'INSTALL_NAME="klique"' 'INSTALL_NAME="kasmos"' install.sh
 sd '"klique_' '"kasmos_' install.sh
 sd '/klique\$' '/kasmos$' install.sh
@@ -619,7 +619,7 @@ sd 'name: klique-' 'name: kasmos-' .github/workflows/build.yml
 **Step 8: Update `.github/workflows/cla.yml`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' .github/workflows/cla.yml
+sd 'kastheco/kasmos' 'kastheco/kasmos' .github/workflows/cla.yml
 sd "remote-repository-name: 'klique-clas'" "remote-repository-name: 'kasmos-clas'" .github/workflows/cla.yml
 ```
 
@@ -628,7 +628,7 @@ sd "remote-repository-name: 'klique-clas'" "remote-repository-name: 'kasmos-clas
 ```bash
 mv dist/homebrew/klique.rb dist/homebrew/kasmos.rb
 sd 'class Klique' 'class Kasmos' dist/homebrew/kasmos.rb
-sd 'kastheco/klique' 'kastheco/kasmos' dist/homebrew/kasmos.rb
+sd 'kastheco/kasmos' 'kastheco/kasmos' dist/homebrew/kasmos.rb
 sd '"klique - A TUI' '"kas - A TUI' dist/homebrew/kasmos.rb
 sd 'bin.install "klique"' 'bin.install "kasmos"' dist/homebrew/kasmos.rb
 sd '"klique", "version"' '"kasmos", "version"' dist/homebrew/kasmos.rb
@@ -639,7 +639,7 @@ sd 'klique_' 'kasmos_' dist/homebrew/kasmos.rb
 
 ```bash
 mv dist/scoop/klique.json dist/scoop/kasmos.json
-sd 'kastheco/klique' 'kastheco/kasmos' dist/scoop/kasmos.json
+sd 'kastheco/kasmos' 'kastheco/kasmos' dist/scoop/kasmos.json
 sd '"klique - A TUI' '"kas - A TUI' dist/scoop/kasmos.json
 sd 'klique_' 'kasmos_' dist/scoop/kasmos.json
 sd 'klique.exe' 'kasmos.exe' dist/scoop/kasmos.json
@@ -648,7 +648,7 @@ sd 'klique.exe' 'kasmos.exe' dist/scoop/kasmos.json
 **Step 11: Update `dist/config.yaml`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' dist/config.yaml
+sd 'kastheco/kasmos' 'kastheco/kasmos' dist/config.yaml
 sd 'project_name: klique' 'project_name: kasmos' dist/config.yaml
 sd 'name: klique' 'name: kasmos' dist/config.yaml
 sd 'binary: klique' 'binary: kasmos' dist/config.yaml
@@ -698,7 +698,7 @@ sd '"/klique"' '"/kasmos"' web/next.config.ts
 **Step 3: Update `web/src/app/layout.tsx`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' web/src/app/layout.tsx
+sd 'kastheco/kasmos' 'kastheco/kasmos' web/src/app/layout.tsx
 sd 'title: "klique - Agent-Driven IDE' 'title: "kas - Agent-Driven IDE' web/src/app/layout.tsx
 sd '"klique", "tui"' '"kasmos", "tui"' web/src/app/layout.tsx
 sd 'title: "klique"' 'title: "kas"' web/src/app/layout.tsx
@@ -707,14 +707,14 @@ sd 'title: "klique"' 'title: "kas"' web/src/app/layout.tsx
 **Step 4: Update `web/src/app/components/Header.tsx`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' web/src/app/components/Header.tsx
+sd 'kastheco/kasmos' 'kastheco/kasmos' web/src/app/components/Header.tsx
 sd '>klique<' '>kas<' web/src/app/components/Header.tsx
 ```
 
 **Step 5: Update `web/src/app/components/PageContent.tsx`**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' web/src/app/components/PageContent.tsx
+sd 'kastheco/kasmos' 'kastheco/kasmos' web/src/app/components/PageContent.tsx
 sd 'klique can manage' 'kas can manage' web/src/app/components/PageContent.tsx
 sd 'Why klique' 'Why kas' web/src/app/components/PageContent.tsx
 sd 'Install klique' 'Install kas' web/src/app/components/PageContent.tsx
@@ -732,8 +732,8 @@ sd '            klique' '            kas' web/src/app/components/PageContent.tsx
 ```bash
 sd 'kastheco/tap/klique' 'kastheco/tap/kasmos' web/src/app/components/InstallTabs.tsx
 sd 'scoop install klique' 'scoop install kasmos' web/src/app/components/InstallTabs.tsx
-sd 'kastheco/klique@latest' 'kastheco/kasmos@latest' web/src/app/components/InstallTabs.tsx
-sd 'kastheco/klique/main' 'kastheco/kasmos/main' web/src/app/components/InstallTabs.tsx
+sd 'kastheco/kasmos@latest' 'kastheco/kasmos@latest' web/src/app/components/InstallTabs.tsx
+sd 'kastheco/kasmos/main' 'kastheco/kasmos/main' web/src/app/components/InstallTabs.tsx
 ```
 
 **Step 7: Regenerate package-lock.json**
@@ -829,7 +829,7 @@ git commit -m "refactor: update scaffold templates for kasmos rename"
 **Step 1: Update README.md**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' README.md
+sd 'kastheco/kasmos' 'kastheco/kasmos' README.md
 sd '# klique' '# kas' README.md
 sd '!\[klique Screenshot\]' '![kas Screenshot]' README.md
 sd 'kastheco/tap/klique' 'kastheco/tap/kasmos' README.md
@@ -863,7 +863,7 @@ sd 'klique' 'kasmos' CONTRIBUTING.md
 **Step 3: Update CLA.md**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' CLA.md
+sd 'kastheco/kasmos' 'kastheco/kasmos' CLA.md
 sd '\[klique\]' '[kas]' CLA.md
 ```
 
@@ -901,7 +901,7 @@ sd '/home/kas/dev/klique' '/home/kas/dev/kasmos' .opencode/opencode.jsonc
 **Step 8: Update repo URLs in plan docs (cosmetic)**
 
 ```bash
-sd 'kastheco/klique' 'kastheco/kasmos' $(rg -l 'kastheco/klique' docs/plans/)
+sd 'kastheco/kasmos' 'kastheco/kasmos' $(rg -l 'kastheco/kasmos' docs/plans/)
 ```
 
 Do NOT replace bare `klique` in plan docs — these are historical records.

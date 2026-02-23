@@ -356,7 +356,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kastheco/klique/internal/initcmd/harness"
+	"github.com/kastheco/kasmos/internal/initcmd/harness"
 	"github.com/spf13/cobra"
 )
 

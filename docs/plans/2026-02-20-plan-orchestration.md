@@ -416,7 +416,7 @@ planState    *planstate.PlanState
 planStateDir string // path to docs/plans/ for the active repo
 ```
 
-Import `"github.com/kastheco/klique/config/planstate"`.
+Import `"github.com/kastheco/kasmos/config/planstate"`.
 
 **Step 2: Load plan state on init and repo switch**
 

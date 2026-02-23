@@ -45,7 +45,7 @@ type metadataResultMsg struct {
 }
 ```
 
-This requires adding `"github.com/kastheco/klique/session/git"` to the imports in `app.go`.
+This requires adding `"github.com/kastheco/kasmos/session/git"` to the imports in `app.go`.
 
 **Step 2: Run tests**
 

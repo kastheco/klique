@@ -31,7 +31,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/kastheco/klique/session"
+	"github.com/kastheco/kasmos/session"
 )
 
 func mustInstance(t *testing.T, title, planFile string) *session.Instance {
@@ -215,7 +215,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/kasmos/config/planstate"
 )
 
 func findItem(t *testing.T, items []SidebarItem, id string) SidebarItem {
@@ -404,9 +404,9 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/kastheco/klique/config/planstate"
-	"github.com/kastheco/klique/session"
-	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
 )
 
 func newHomeForPlanStateTests(t *testing.T) *home {
@@ -625,10 +625,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/kastheco/klique/config/planstate"
-	"github.com/kastheco/klique/session"
-	"github.com/kastheco/klique/ui"
-	"github.com/kastheco/klique/ui/overlay"
+	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
+	"github.com/kastheco/kasmos/ui/overlay"
 )
 
 func newHomeForInputTests(t *testing.T) *home {
@@ -799,9 +799,9 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/kastheco/klique/config/planstate"
-	"github.com/kastheco/klique/session"
-	"github.com/kastheco/klique/ui"
+	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
 )
 
 func TestExecuteContextAction_KillRunningInstancesInPlan(t *testing.T) {

@@ -536,7 +536,7 @@ The following changes landed after this plan was originally written. The executo
     	"testing"
     	"time"
 
-    	"github.com/kastheco/klique/config/planstate"
+    	"github.com/kastheco/kasmos/config/planstate"
    )
 
    func TestSidebarBuildRows_PlanTreeAndHistory(t *testing.T) {
@@ -779,7 +779,7 @@ The following changes landed after this plan was originally written. The executo
    import (
     	"testing"
 
-    	"github.com/kastheco/klique/keys"
+    	"github.com/kastheco/kasmos/keys"
    )
 
    func TestDefaultMenuIncludesNewPlanAndNoTopicActions(t *testing.T) {

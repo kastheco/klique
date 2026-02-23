@@ -208,7 +208,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/kasmos/config/planstate"
 )
 
 func PlanBranchFromFile(planFile string) string {
@@ -596,7 +596,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/kasmos/config/planstate"
 )
 
 func TestBuildPlanFilename(t *testing.T) {
@@ -760,7 +760,7 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/klique/session"
+	"github.com/kastheco/kasmos/session"
 )
 
 func TestBuildPlanPrompt(t *testing.T) {
@@ -964,8 +964,8 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/klique/config/planstate"
-	"github.com/kastheco/klique/session"
+	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/session"
 )
 
 func TestShouldPromptPushAfterCoderExit(t *testing.T) {
@@ -1100,7 +1100,7 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/klique/config/planstate"
+	"github.com/kastheco/kasmos/config/planstate"
 )
 
 func TestModifyPlanActionSetsPlanning(t *testing.T) {

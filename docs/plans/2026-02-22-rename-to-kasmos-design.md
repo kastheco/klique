@@ -8,7 +8,7 @@ Rename the project from `klique` to `kasmos`. The primary CLI command becomes `k
 
 | Thing | Old | New |
 |-------|-----|-----|
-| Go module | `github.com/kastheco/klique` | `github.com/kastheco/kasmos` |
+| Go module | `github.com/kastheco/kasmos` | `github.com/kastheco/kasmos` |
 | Binary | `klique` | `kasmos` |
 | Cobra `Use` | `klique` | `kas` |
 | Symlink aliases | `kq` | `kas`, `ks`, `km` |
@@ -21,7 +21,7 @@ Rename the project from `klique` to `kasmos`. The primary CLI command becomes `k
 ## GitHub Repo Rename (Manual, Pre-Implementation)
 
 1. Rename `kastheco/kasmos` → `kastheco/kasmold` (free up the name)
-2. Rename `kastheco/klique` → `kastheco/kasmos`
+2. Rename `kastheco/kasmos` → `kastheco/kasmos`
 3. Update local git remote: `git remote set-url origin git@github.com:kastheco/kasmos.git`
 
 ## Config Directory Migration

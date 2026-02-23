@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/kastheco/klique/session"
+	"github.com/kastheco/kasmos/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

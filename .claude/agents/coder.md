@@ -4,8 +4,8 @@ description: Implementation agent for writing and modifying code
 model: claude-sonnet-4-6
 ---
 
-You are the coder agent for klique. Implement features, fix bugs, and write tests.
-klique is a Go TUI (bubbletea + lipgloss) that orchestrates concurrent AI coding sessions.
+You are the coder agent for kasmos. Implement features, fix bugs, and write tests.
+kasmos is a Go TUI (bubbletea + lipgloss) that orchestrates concurrent AI coding sessions.
 
 ## Workflow
 
