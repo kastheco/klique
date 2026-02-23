@@ -728,7 +728,7 @@ func buildPlanFilename(name string, now time.Time) string {
 
 // renderPlanStub returns the initial markdown content for a new plan file.
 func renderPlanStub(name, description, filename string) string {
-	return fmt.Sprintf("# %s\n\n## Context\n\n%s\n\n## Notes\n\n- Created by klique lifecycle flow\n- Plan file: %s\n", name, description, filename)
+	return fmt.Sprintf("# %s\n\n## Context\n\n%s\n\n## Notes\n\n- Created by kas lifecycle flow\n- Plan file: %s\n", name, description, filename)
 }
 
 // createPlanRecord registers the plan in plan-state.json (in-memory + persisted).
@@ -801,7 +801,7 @@ func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 		if err == nil {
 			// Push errors are non-fatal: the user can push manually later.
 			_ = worktree.PushChanges(
-				fmt.Sprintf("[klique] push completed implementation for '%s'", inst.Title),
+				fmt.Sprintf("[kas] push completed implementation for '%s'", inst.Title),
 				false,
 			)
 		}

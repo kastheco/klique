@@ -168,7 +168,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return err
 			}
-			if err := worktree.PushChanges("update from klique", true); err != nil {
+			if err := worktree.PushChanges("update from kas", true); err != nil {
 				return err
 			}
 			return nil
@@ -365,7 +365,7 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 		if err != nil {
 			return err
 		}
-		commitMsg := "update from klique"
+		commitMsg := "update from kas"
 		if err := worktree.PushChanges(commitMsg, true); err != nil {
 			return err
 		}
