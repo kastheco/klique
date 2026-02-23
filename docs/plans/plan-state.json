@@ -164,11 +164,12 @@
       "implemented": "2026-02-22"
     },
     "2026-02-22-2-tree-mode-wiring.md": {
-      "status": "ready",
+      "status": "done",
       "description": "wire tree renderer, navigation, and highlight-boost together; remove DisableTreeMode gate",
       "branch": "plan/2-tree-mode-wiring",
       "topic": "sidebar",
-      "created_at": "2026-02-22T18:00:00Z"
+      "created_at": "2026-02-22T18:00:00Z",
+      "implemented": "2026-02-22"
     },
     "2026-02-22-async-metadata-tick.md": {
       "status": "done",
