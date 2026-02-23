@@ -24,7 +24,7 @@ func TestWritePhase(t *testing.T) {
 	t.Setenv("HOME", tmpHome)
 
 	// Create config dir
-	configDir := filepath.Join(tmpHome, ".klique")
+	configDir := filepath.Join(tmpHome, ".config", "kasmos")
 	require.NoError(t, os.MkdirAll(configDir, 0o755))
 
 	// Simulate wizard output

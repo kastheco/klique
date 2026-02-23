@@ -93,14 +93,14 @@ func TestPlanLifecycle(t *testing.T) {
 	assert.True(t, ps.IsDone("test-plan.md"))
 	assert.Empty(t, ps.Unfinished()) // "done" excluded from unfinished
 
-	// klique transitions to "reviewing" (spawns reviewer session)
+	// kas transitions to "reviewing" (spawns reviewer session)
 	require.NoError(t, ps.SetStatus("test-plan.md", StatusReviewing))
 	assert.False(t, ps.IsDone("test-plan.md"))
 	unfinished = ps.Unfinished()
 	require.Len(t, unfinished, 1)
 	assert.Equal(t, StatusReviewing, unfinished[0].Status)
 
-	// Reviewer completes — klique marks completed (terminal, not done)
+	// Reviewer completes — kas marks completed (terminal, not done)
 	require.NoError(t, ps.SetStatus("test-plan.md", StatusCompleted))
 	assert.False(t, ps.IsDone("test-plan.md"))
 	assert.Empty(t, ps.Unfinished())
@@ -114,8 +114,8 @@ func TestPlanLifecycle(t *testing.T) {
 // TestFullLifecycleNoRespawnLoop walks the complete orchestration state machine and
 // asserts that the terminal `completed` status cannot re-trigger a reviewer session.
 //
-// The bug this tests for: after a reviewer exits, klique wrote "done" which caused
-// IsDone() to return true again, spawning another reviewer — forever. Now klique
+// The bug this tests for: after a reviewer exits, kas wrote "done" which caused
+// IsDone() to return true again, spawning another reviewer — forever. Now kas
 // writes "completed" instead, and IsDone() only matches "done", breaking the cycle.
 func TestFullLifecycleNoRespawnLoop(t *testing.T) {
 	dir := t.TempDir()
@@ -135,12 +135,12 @@ func TestFullLifecycleNoRespawnLoop(t *testing.T) {
 	assert.True(t, ps.IsDone("feature.md"), "IsDone must be true so reviewer gets spawned")
 	assert.Empty(t, ps.Unfinished(), "done should not appear in sidebar")
 
-	// Step 3: klique spawns reviewer, marks "reviewing"
+	// Step 3: kas spawns reviewer, marks "reviewing"
 	require.NoError(t, ps.SetStatus("feature.md", StatusReviewing))
 	assert.False(t, ps.IsDone("feature.md"), "reviewing is not done")
 	assert.Len(t, ps.Unfinished(), 1, "reviewing should appear in sidebar")
 
-	// Step 4: reviewer exits — klique marks "completed" (the fix)
+	// Step 4: reviewer exits — kas marks "completed" (the fix)
 	require.NoError(t, ps.SetStatus("feature.md", StatusCompleted))
 
 	// Critical invariants that break the respawn loop:

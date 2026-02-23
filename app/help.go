@@ -35,7 +35,7 @@ func helpStart(instance *session.Instance) helpText {
 
 func (h helpTypeGeneral) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().Bold(true).Underline(true).Render(ui.GradientText("klique", ui.GradientStart, ui.GradientEnd)),
+		lipgloss.NewStyle().Bold(true).Underline(true).Render(ui.GradientText("kas", ui.GradientStart, ui.GradientEnd)),
 		"",
 		"A terminal UI that manages multiple Claude Code (and other local agents) in separate workspaces.",
 		"",

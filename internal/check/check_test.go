@@ -14,13 +14,13 @@ func TestAudit_InProject(t *testing.T) {
 	home := t.TempDir()
 	projectDir := t.TempDir()
 
-	// Mark as kq project by creating .agents/
+	// Mark as kas project by creating .agents/
 	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, ".agents", "skills"), 0o755))
 
 	registry := harness.NewRegistry()
 	result := Audit(home, projectDir, registry)
 
-	assert.True(t, result.InProject, "should detect kq project")
+	assert.True(t, result.InProject, "should detect kas project")
 	assert.NotNil(t, result.Global)
 	assert.NotNil(t, result.Project)
 	assert.NotNil(t, result.Superpowers)
@@ -29,12 +29,12 @@ func TestAudit_InProject(t *testing.T) {
 func TestAudit_NotInProject(t *testing.T) {
 	home := t.TempDir()
 	projectDir := t.TempDir()
-	// No .agents/ dir — not a kq project
+	// No .agents/ dir — not a kas project
 
 	registry := harness.NewRegistry()
 	result := Audit(home, projectDir, registry)
 
-	assert.False(t, result.InProject, "should not detect kq project")
+	assert.False(t, result.InProject, "should not detect kas project")
 	assert.Nil(t, result.Project, "project skills should be nil when not in project")
 }
 
@@ -53,7 +53,7 @@ func TestAudit_Summary_AllSynced(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.Symlink(target, filepath.Join(claudeSkills, "my-skill")))
 
-	// Not a kq project — no project skills counted
+	// Not a kas project — no project skills counted
 	registry := harness.NewRegistry()
 	result := Audit(home, projectDir, registry)
 

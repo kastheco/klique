@@ -63,7 +63,7 @@ func TestCheckCmd_NotInProject(t *testing.T) {
 
 func TestCheckCmd_InProject(t *testing.T) {
 	out := captureCheckOutput(t, func(home, project string) {
-		// Create .agents/skills/ to mark as kq project
+		// Create .agents/skills/ to mark as kas project
 		require.NoError(t, os.MkdirAll(filepath.Join(project, ".agents", "skills"), 0o755))
 	})
 

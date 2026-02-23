@@ -26,8 +26,8 @@ var (
 	autoYesFlag bool
 	daemonFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "klique",
-		Short: "klique - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
+		Use:   "kas",
+		Short: "kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(daemonFlag)
@@ -50,7 +50,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: klique must be run from within a git repository")
+				return fmt.Errorf("error: kas must be run from within a git repository")
 			}
 
 			cfg := config.LoadConfig()
@@ -146,9 +146,9 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of klique",
+		Short: "Print the version number of kas",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("klique version %s\n", version)
+			fmt.Printf("kas version %s\n", version)
 			fmt.Printf("https://github.com/kastheco/kasmos/releases/tag/v%s\n", version)
 		},
 	}
@@ -171,14 +171,14 @@ func init() {
 	var forceFlag bool
 	var cleanFlag bool
 
-	kqInitCmd := &cobra.Command{
+	kasInitCmd := &cobra.Command{
 		Use:   "init",
 		Short: "Configure agent harnesses, install superpowers, and scaffold project files",
 		Long: `Run an interactive wizard to:
   1. Detect and select agent CLIs (claude, opencode, codex)
   2. Configure agent roles (coder, reviewer, planner) with model and tuning
   3. Install superpowers skills into each harness
-  4. Write ~/.klique/config.toml and scaffold project-level agent files`,
+  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return initcmd.Run(initcmd.Options{
 				Force: forceFlag,
@@ -187,13 +187,13 @@ func init() {
 		},
 	}
 
-	kqInitCmd.Flags().BoolVar(&forceFlag, "force", false, "Overwrite existing project scaffold files")
-	kqInitCmd.Flags().BoolVar(&cleanFlag, "clean", false, "Ignore existing config, start with factory defaults")
+	kasInitCmd.Flags().BoolVar(&forceFlag, "force", false, "Overwrite existing project scaffold files")
+	kasInitCmd.Flags().BoolVar(&cleanFlag, "clean", false, "Ignore existing config, start with factory defaults")
 
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
-	rootCmd.AddCommand(kqInitCmd)
+	rootCmd.AddCommand(kasInitCmd)
 }
 
 func main() {

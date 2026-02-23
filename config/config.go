@@ -18,24 +18,38 @@ const (
 )
 
 // GetConfigDir returns the path to the application's configuration directory.
-// On first run after a rename, it migrates ~/.hivemind to ~/.klique.
+// Uses XDG-compliant ~/.config/kasmos/. On first run, migrates legacy
+// directories: ~/.klique or ~/.hivemind -> ~/.config/kasmos/.
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
-	newDir := filepath.Join(homeDir, ".klique")
-	oldDir := filepath.Join(homeDir, ".hivemind")
+	newDir := filepath.Join(homeDir, ".config", "kasmos")
 
-	// One-time migration from legacy config directory
-	if _, err := os.Stat(newDir); os.IsNotExist(err) {
+	// Already exists — fast path
+	if _, err := os.Stat(newDir); err == nil {
+		return newDir, nil
+	}
+
+	// Try migrating from legacy directories (most recent first)
+	legacyDirs := []string{
+		filepath.Join(homeDir, ".klique"),
+		filepath.Join(homeDir, ".hivemind"),
+	}
+
+	for _, oldDir := range legacyDirs {
 		if _, err := os.Stat(oldDir); err == nil {
-			if renameErr := os.Rename(oldDir, newDir); renameErr != nil {
-				log.ErrorLog.Printf("failed to migrate %s to %s: %v", oldDir, newDir, renameErr)
-				// Migration failure is non-fatal: fall back to legacy dir so
-				// existing config remains accessible rather than starting fresh.
+			// Ensure parent ~/.config/ exists
+			if mkErr := os.MkdirAll(filepath.Dir(newDir), 0755); mkErr != nil {
+				log.ErrorLog.Printf("failed to create %s: %v", filepath.Dir(newDir), mkErr)
 				return oldDir, nil
 			}
+			if renameErr := os.Rename(oldDir, newDir); renameErr != nil {
+				log.ErrorLog.Printf("failed to migrate %s to %s: %v", oldDir, newDir, renameErr)
+				return oldDir, nil
+			}
+			return newDir, nil
 		}
 	}
 

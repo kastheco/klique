@@ -63,12 +63,12 @@ type SuperpowersResult struct {
 	Detail    string
 }
 
-// AuditResult is the complete output of kq check.
+// AuditResult is the complete output of kas check.
 type AuditResult struct {
 	Global      []HarnessResult
 	Project     []ProjectSkillEntry
 	Superpowers []SuperpowersResult
-	InProject   bool // whether cwd is a kq project
+	InProject   bool // whether cwd is a kas project
 }
 
 // Audit runs all three audit layers and returns a complete result.
@@ -79,7 +79,7 @@ func Audit(home, projectDir string, registry *harness.Registry) *AuditResult {
 
 	harnessNames := registry.All()
 
-	// Detect whether cwd is a kq project.
+	// Detect whether cwd is a kas project.
 	agentsDir := filepath.Join(projectDir, ".agents")
 	if _, err := os.Stat(agentsDir); err == nil {
 		result.InProject = true
@@ -90,7 +90,7 @@ func Audit(home, projectDir string, registry *harness.Registry) *AuditResult {
 		result.Global = append(result.Global, AuditGlobal(home, name))
 	}
 
-	// Project skills audit — only when in a kq project.
+	// Project skills audit — only when in a kas project.
 	if result.InProject {
 		result.Project = AuditProject(projectDir, harnessNames)
 	}

@@ -10,13 +10,13 @@ import (
 	"github.com/kastheco/kasmos/internal/initcmd/wizard"
 )
 
-// Options holds the CLI flags for kq init.
+// Options holds the CLI flags for kas init.
 type Options struct {
 	Force bool // overwrite existing project scaffold files
 	Clean bool // ignore existing config, start with factory defaults
 }
 
-// Run executes the kq init workflow.
+// Run executes the kas init workflow.
 func Run(opts Options) error {
 	registry := harness.NewRegistry()
 
@@ -97,6 +97,6 @@ func Run(opts Options) error {
 		fmt.Printf("  %-40s %s\n", r.Path, status)
 	}
 
-	fmt.Println("\nDone! Run 'kq' to start.")
+	fmt.Println("\nDone! Run 'kas' to start.")
 	return nil
 }
