@@ -248,7 +248,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.sidebar = ui.NewSidebar()
 	h.sidebar.SetRepoName(filepath.Base(activeRepoPath))
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
-	h.setFocusSlot(slotList) // Start with instance list focused (slot 4)
+	h.setFocusSlot(slotSidebar) // Start with left sidebar focused
 	h.loadPlanState()
 
 	// Load saved instances
