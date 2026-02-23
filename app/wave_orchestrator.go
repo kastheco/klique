@@ -139,6 +139,34 @@ func (o *WaveOrchestrator) NeedsConfirm() bool {
 	return false
 }
 
+// ResetConfirm resets the one-shot confirm latch so NeedsConfirm() can return true
+// again on the next check. Call this when the user cancels a wave-advance confirmation
+// so the prompt re-appears on the subsequent metadata tick (fixes deadlock).
+func (o *WaveOrchestrator) ResetConfirm() {
+	o.waitingForConfirm = false
+}
+
+// RetryFailedTasks transitions all failed tasks in the current wave back to running
+// and sets the orchestrator state to WaveStateRunning. Returns the tasks that were
+// retried (previously failed). Returns nil if there are no failed tasks to retry.
+func (o *WaveOrchestrator) RetryFailedTasks() []planparser.Task {
+	if o.currentWave >= len(o.plan.Waves) {
+		return nil
+	}
+	var tasks []planparser.Task
+	for _, t := range o.plan.Waves[o.currentWave].Tasks {
+		if o.taskStates[t.Number] == taskFailed {
+			o.taskStates[t.Number] = taskRunning
+			tasks = append(tasks, t)
+		}
+	}
+	if len(tasks) > 0 {
+		o.state = WaveStateRunning
+		o.waitingForConfirm = false
+	}
+	return tasks
+}
+
 // IsCurrentWaveComplete returns true if all tasks in the current wave have resolved.
 func (o *WaveOrchestrator) IsCurrentWaveComplete() bool {
 	return o.state == WaveStateWaveComplete || o.state == WaveStateAllComplete

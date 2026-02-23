@@ -189,6 +189,13 @@ type home struct {
 
 	// waveOrchestrators tracks active wave orchestrations by plan filename.
 	waveOrchestrators map[string]*WaveOrchestrator
+
+	// pendingWaveConfirmPlanFile is set while a wave-advance (or failed-wave decision)
+	// confirmation overlay is showing, so cancel can reset the orchestrator latch.
+	pendingWaveConfirmPlanFile string
+	// pendingWaveAbortAction is the abort action for a failed-wave decision dialog.
+	// Triggered when the user presses 'a' while the failed-wave overlay is active.
+	pendingWaveAbortAction tea.Cmd
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -589,15 +596,28 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Wave completion monitoring: check task completion and trigger wave transitions.
+			// We process both WaveStateRunning (check task statuses) and WaveStateWaveComplete
+			// (re-show confirm dialog after user cancelled, resetting the latch via ResetConfirm).
 			for planFile, orch := range m.waveOrchestrators {
-				if orch.State() != WaveStateRunning {
+				orchState := orch.State()
+				if orchState != WaveStateRunning && orchState != WaveStateWaveComplete {
 					continue
 				}
-				planName := planstate.DisplayName(planFile)
-				for _, task := range orch.CurrentWaveTasks() {
-					taskTitle := fmt.Sprintf("%s-T%d", planName, task.Number)
-					for _, inst := range m.list.GetInstances() {
-						if inst.Title != taskTitle {
+
+				if orchState == WaveStateRunning {
+					// Check task status updates only while the wave is actively running.
+					planName := planstate.DisplayName(planFile)
+					for _, task := range orch.CurrentWaveTasks() {
+						taskTitle := fmt.Sprintf("%s-T%d", planName, task.Number)
+						inst, exists := instanceMap[taskTitle]
+						if !exists {
+							// No matching instance — treat as failed (e.g. spawn crashed).
+							orch.MarkTaskFailed(task.Number)
+							continue
+						}
+						if inst.Paused() {
+							// Paused task instances are treated as failures.
+							orch.MarkTaskFailed(task.Number)
 							continue
 						}
 						alive, collected := tmuxAliveMap[inst.Title]
@@ -610,15 +630,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							orch.MarkTaskFailed(task.Number)
 						}
 					}
+					orchState = orch.State() // refresh after task updates
 				}
 
 				// If all waves complete, delete orchestrator (coder-exit flow takes over).
-				if orch.State() == WaveStateAllComplete {
+				if orchState == WaveStateAllComplete {
 					delete(m.waveOrchestrators, planFile)
 					continue
 				}
 
-				// If wave just completed, show user confirmation (once per wave).
+				// orchState must be WaveStateWaveComplete here.
+				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
+				// ResetConfirm on cancel allows the prompt to reappear next tick).
 				if m.state != stateConfirm && orch.NeedsConfirm() {
 					waveNum := orch.CurrentWaveNumber()
 					completed := orch.CompletedTaskCount()
@@ -626,20 +649,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					total := completed + failed
 					entry, _ := m.planState.Entry(planFile)
 
-					var message string
-					if failed > 0 {
-						message = fmt.Sprintf("Wave %d: %d/%d complete, %d failed. Start Wave %d?",
-							waveNum, completed, total, failed, waveNum+1)
-					} else {
-						message = fmt.Sprintf("Wave %d complete (%d/%d). Start Wave %d?",
-							waveNum, completed, total, waveNum+1)
-					}
-
 					capturedPlanFile := planFile
 					capturedEntry := entry
-					asyncCmds = append(asyncCmds, m.confirmAction(message, func() tea.Msg {
-						return waveAdvanceMsg{planFile: capturedPlanFile, entry: capturedEntry}
-					}))
+					if failed > 0 {
+						message := fmt.Sprintf(
+							"Wave %d: %d/%d tasks complete, %d failed.\n\n"+
+								"[r] retry failed   [s] skip, advance   [a] abort",
+							waveNum, completed, total, failed)
+						m.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)
+					} else {
+						message := fmt.Sprintf("Wave %d complete (%d/%d). Start Wave %d?",
+							waveNum, completed, total, waveNum+1)
+						m.waveStandardConfirmAction(message, capturedPlanFile, capturedEntry)
+					}
 				}
 			}
 		}
@@ -694,6 +716,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m.startNextWave(orch, msg.entry)
+	case waveRetryMsg:
+		orch, ok := m.waveOrchestrators[msg.planFile]
+		if !ok {
+			return m, nil
+		}
+		return m.retryFailedWaveTasks(orch, msg.entry)
+	case waveAbortMsg:
+		delete(m.waveOrchestrators, msg.planFile)
+		m.toastManager.Info(fmt.Sprintf("Wave orchestration aborted for %s",
+			planstate.DisplayName(msg.planFile)))
+		return m, m.toastTickCmd()
 	case instanceStartedMsg:
 		if msg.err != nil {
 			m.list.Kill()
@@ -861,6 +894,17 @@ type planRefreshMsg struct{}
 type waveAdvanceMsg struct {
 	planFile string
 	entry    planstate.PlanEntry
+}
+
+// waveRetryMsg is sent when the user chooses "retry" on the failed-wave decision prompt.
+type waveRetryMsg struct {
+	planFile string
+	entry    planstate.PlanEntry
+}
+
+// waveAbortMsg is sent when the user chooses "abort" on the failed-wave decision prompt.
+type waveAbortMsg struct {
+	planFile string
 }
 
 // instanceStartedMsg is sent when an async instance startup completes.

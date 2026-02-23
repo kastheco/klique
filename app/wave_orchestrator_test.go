@@ -136,3 +136,63 @@ func TestWaveOrchestrator_AllComplete(t *testing.T) {
 	// No more waves — should be AllComplete
 	assert.Equal(t, WaveStateAllComplete, orch.State())
 }
+
+func TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+			{Number: 2, Tasks: []planparser.Task{
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1) // wave 1 complete
+
+	// First call consumes the one-shot latch
+	assert.True(t, orch.NeedsConfirm(), "first call must return true")
+	assert.False(t, orch.NeedsConfirm(), "second call must return false (latch consumed)")
+
+	// After reset, NeedsConfirm should fire again
+	orch.ResetConfirm()
+	assert.True(t, orch.NeedsConfirm(), "after ResetConfirm, must return true again")
+}
+
+func TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+			{Number: 2, Tasks: []planparser.Task{
+				{Number: 3, Title: "Third", Body: "do third"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+
+	// T1 fails, T2 completes — wave done with failure
+	orch.MarkTaskFailed(1)
+	orch.MarkTaskComplete(2)
+	require.Equal(t, WaveStateWaveComplete, orch.State(), "wave must be WaveComplete with failure")
+	assert.Equal(t, 1, orch.FailedTaskCount())
+
+	// Retry the failed task
+	retried := orch.RetryFailedTasks()
+
+	assert.Equal(t, WaveStateRunning, orch.State(), "state must be Running after retry")
+	require.Len(t, retried, 1, "must return only the failed task")
+	assert.Equal(t, 1, retried[0].Number, "retried task must be T1")
+
+	// After the retried task completes, wave is done again (with more waves pending)
+	orch.MarkTaskComplete(1)
+	assert.Equal(t, WaveStateWaveComplete, orch.State(), "wave must be WaveComplete after retry+complete")
+	assert.Equal(t, 0, orch.FailedTaskCount(), "no more failures after retry completes")
+}

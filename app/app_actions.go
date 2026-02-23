@@ -449,15 +449,23 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 		plan, err := planparser.Parse(string(content))
 		if err != nil {
-			// No wave headers — revert to planning so user can annotate the plan.
+			// No wave headers — revert to planning and respawn the planner with a
+			// wave-annotation prompt so the agent adds the required ## Wave sections.
 			if setErr := m.planState.SetStatus(planFile, planstate.StatusPlanning); setErr != nil {
 				return m, m.handleError(setErr)
 			}
 			m.loadPlanState()
 			m.updateSidebarPlans()
 			m.updateSidebarItems()
-			m.toastManager.Error("Plan needs ## Wave headers before implementation. Returning to planning.")
-			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return planRefreshMsg{} })
+			m.toastManager.Info("Plan needs ## Wave headers — respawning planner to annotate.")
+			wavePrompt := fmt.Sprintf(
+				"The plan at docs/plans/%s is missing ## Wave N headers required for wave-based implementation. "+
+					"Please annotate the plan by grouping tasks under ## Wave 1, ## Wave 2, … sections. "+
+					"Keep all existing task content intact; only add the Wave headers.",
+				planFile,
+			)
+			_, spawnCmd := m.spawnPlanAgent(planFile, "plan", wavePrompt)
+			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return planRefreshMsg{} }, spawnCmd)
 		}
 
 		orch := NewWaveOrchestrator(planFile, plan)

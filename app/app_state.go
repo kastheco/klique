@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/kastheco/klique/config"
+	"github.com/kastheco/klique/config/planparser"
 	"github.com/kastheco/klique/config/planstate"
 	"github.com/kastheco/klique/internal/initcmd/scaffold"
 	"github.com/kastheco/klique/keys"
@@ -911,17 +912,13 @@ func (m *home) getTopicNames() []string {
 	return names
 }
 
-// startNextWave spawns all task instances for the orchestrator's next wave.
-func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
-	tasks := orch.StartNextWave()
-	if tasks == nil {
-		return m, nil
-	}
-
+// spawnWaveTasks creates and starts instances for the given task list within an orchestrator.
+// Used by both startNextWave (initial spawn) and retryFailedWaveTasks (re-spawn failed tasks).
+func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
 	planFile := orch.PlanFile()
 	planName := planstate.DisplayName(planFile)
 
-	// Set up shared worktree for all tasks in this wave.
+	// Set up shared worktree for all tasks in this batch.
 	shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, entry.Branch)
 	if err := shared.Setup(); err != nil {
 		return m, m.handleError(err)
@@ -956,10 +953,30 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 		cmds = append(cmds, startCmd)
 	}
 
-	waveNum := orch.CurrentWaveNumber()
-	taskCount := len(tasks)
-	m.toastManager.Info(fmt.Sprintf("Wave %d started: %d task(s) running", waveNum, taskCount))
 	cmds = append(cmds, tea.WindowSize(), m.toastTickCmd())
-
 	return m, tea.Batch(cmds...)
+}
+
+// startNextWave advances the orchestrator to the next wave and spawns its task instances.
+func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
+	tasks := orch.StartNextWave()
+	if tasks == nil {
+		return m, nil
+	}
+
+	waveNum := orch.CurrentWaveNumber()
+	m.toastManager.Info(fmt.Sprintf("Wave %d started: %d task(s) running", waveNum, len(tasks)))
+	return m.spawnWaveTasks(orch, tasks, entry)
+}
+
+// retryFailedWaveTasks retries all failed tasks in the current wave by re-spawning them.
+func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
+	tasks := orch.RetryFailedTasks()
+	if len(tasks) == 0 {
+		return m, nil
+	}
+
+	m.toastManager.Info(fmt.Sprintf("Retrying %d failed task(s) in Wave %d",
+		len(tasks), orch.CurrentWaveNumber()))
+	return m.spawnWaveTasks(orch, tasks, entry)
 }

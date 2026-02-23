@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/kastheco/klique/config/planstate"
 	"github.com/kastheco/klique/keys"
 	"github.com/kastheco/klique/log"
 	"github.com/kastheco/klique/session"
@@ -575,13 +576,36 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			m.confirmationOverlay = nil
 			m.pendingConfirmAction = nil
+			m.pendingWaveAbortAction = nil
+			m.pendingWaveConfirmPlanFile = ""
 			// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
 			// This prevents blocking the UI during I/O (git push, etc.).
 			return m, action
-		case m.confirmationOverlay.CancelKey, "esc":
+		case "a":
+			// 'a' = abort, used by the failed-wave decision dialog.
+			abortAction := m.pendingWaveAbortAction
+			if abortAction == nil {
+				return m, nil // 'a' not bound for this confirm dialog
+			}
 			m.state = stateDefault
 			m.confirmationOverlay = nil
 			m.pendingConfirmAction = nil
+			m.pendingWaveAbortAction = nil
+			m.pendingWaveConfirmPlanFile = ""
+			return m, abortAction
+		case m.confirmationOverlay.CancelKey, "esc":
+			// Reset the orchestrator confirm latch when the user cancels a wave prompt,
+			// so the prompt can reappear on the next metadata tick (fixes deadlock).
+			if m.pendingWaveConfirmPlanFile != "" {
+				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmPlanFile]; ok {
+					orch.ResetConfirm()
+				}
+				m.pendingWaveConfirmPlanFile = ""
+			}
+			m.state = stateDefault
+			m.confirmationOverlay = nil
+			m.pendingConfirmAction = nil
+			m.pendingWaveAbortAction = nil
 			return m, nil
 		default:
 			return m, nil
@@ -1225,6 +1249,39 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.confirmationOverlay.SetWidth(50)
 
 	return nil
+}
+
+// waveStandardConfirmAction shows the wave-advance confirmation for a wave with no failures.
+// Stores the plan file so the cancel path can reset the orchestrator confirm latch.
+func (m *home) waveStandardConfirmAction(message, planFile string, entry planstate.PlanEntry) {
+	m.pendingWaveConfirmPlanFile = planFile
+	capturedPlanFile := planFile
+	capturedEntry := entry
+	m.confirmAction(message, func() tea.Msg {
+		return waveAdvanceMsg{planFile: capturedPlanFile, entry: capturedEntry}
+	})
+}
+
+// waveFailedConfirmAction shows a three-choice dialog for a wave that has failed tasks.
+// Keys: r=retry, s=skip/advance, a=abort. The abort action is stored separately so the
+// stateConfirm key handler can dispatch it on 'a'.
+func (m *home) waveFailedConfirmAction(message, planFile string, entry planstate.PlanEntry) {
+	m.pendingWaveConfirmPlanFile = planFile
+	capturedPlanFile := planFile
+	capturedEntry := entry
+
+	m.state = stateConfirm
+	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+	m.confirmationOverlay.ConfirmKey = "r"
+	m.confirmationOverlay.CancelKey = "s"
+	m.confirmationOverlay.SetWidth(60)
+
+	m.pendingConfirmAction = func() tea.Msg {
+		return waveRetryMsg{planFile: capturedPlanFile, entry: capturedEntry}
+	}
+	m.pendingWaveAbortAction = func() tea.Msg {
+		return waveAbortMsg{planFile: capturedPlanFile}
+	}
 }
 
 // keydownCallback clears the menu option highlighting after 500ms.
