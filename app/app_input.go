@@ -593,7 +593,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveConfirmPlanFile = ""
 			return m, abortAction
-		case m.confirmationOverlay.CancelKey, "esc":
+		case m.confirmationOverlay.CancelKey:
+			// "No" — user explicitly declined.
 			// Reset the orchestrator confirm latch when the user cancels a wave prompt,
 			// so the prompt can reappear on the next metadata tick (fixes deadlock).
 			if m.pendingWaveConfirmPlanFile != "" {
@@ -602,6 +603,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 				m.pendingWaveConfirmPlanFile = ""
 			}
+			// Planner-exit "no": kill planner instance, mark prompted, leave plan ready.
+			if m.pendingPlannerInstanceTitle != "" {
+				for _, inst := range m.list.GetInstances() {
+					if inst.Title == m.pendingPlannerInstanceTitle {
+						m.plannerPrompted[inst.PlanFile] = true
+						break
+					}
+				}
+				m.removeFromAllInstances(m.pendingPlannerInstanceTitle)
+				m.saveAllInstances()
+				m.updateSidebarItems()
+				m.pendingPlannerInstanceTitle = ""
+			}
+			m.state = stateDefault
+			m.confirmationOverlay = nil
+			m.pendingConfirmAction = nil
+			m.pendingWaveAbortAction = nil
+			return m, nil
+		case "esc":
+			// Esc — preserve everything, allow re-prompt on next tick.
+			if m.pendingWaveConfirmPlanFile != "" {
+				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmPlanFile]; ok {
+					orch.ResetConfirm()
+				}
+				m.pendingWaveConfirmPlanFile = ""
+			}
+			// Planner-exit esc: do NOT mark plannerPrompted — allows re-prompt next tick.
+			m.pendingPlannerInstanceTitle = ""
 			m.state = stateDefault
 			m.confirmationOverlay = nil
 			m.pendingConfirmAction = nil
