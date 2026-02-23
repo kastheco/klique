@@ -98,11 +98,11 @@
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-21-plan-instance-grouping.md": {
-      "status": "completed",
+      "status": "done",
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-21-plan-lifecycle-sessions.md": {
-      "status": "completed",
+      "status": "done",
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-21-rose-pine-moon-design.md": {
@@ -206,7 +206,7 @@
       "created_at": "2026-02-22T08:35:22.645408061Z"
     },
     "2026-02-22-disable-cache-focused.md": {
-      "status": "completed",
+      "status": "done",
       "description": "disable cache reading and poll tmux pane directly when focused to improve interactive experience (it glitches a lot currently)",
       "branch": "plan/disable-cache-focused",
       "created_at": "2026-02-22T09:56:55.401392089Z",
@@ -219,7 +219,7 @@
       "created_at": "2026-02-22T10:00:27.703574166Z"
     },
     "2026-02-22-kq-check.md": {
-      "status": "completed",
+      "status": "done",
       "description": "kq check command to audit skills sync health across all three layers (global, project, superpowers)",
       "created_at": "2026-02-22T09:00:00Z",
       "implemented": "2026-02-22"
@@ -231,9 +231,10 @@
       "created_at": "2026-02-22T10:04:55.567483368Z"
     },
     "2026-02-22-remove-right-sidbar-right-to-focus-session.md": {
-      "status": "planning",
+      "status": "done",
       "branch": "plan/remove-right-sidbar-right-to-focus-session",
-      "created_at": "2026-02-22T12:15:27.104776176Z"
+      "created_at": "2026-02-22T12:15:27.104776176Z",
+      "implemented": "2026-02-22"
     },
     "2026-02-22-rename-to-kasmos.md": {
       "status": "planning",
@@ -242,7 +243,7 @@
       "created_at": "2026-02-22T09:53:24.333455818Z"
     },
     "2026-02-22-shorten-cta.md": {
-      "status": "completed",
+      "status": "done",
       "description": "drop plan from first part of cta below ascii art",
       "branch": "plan/shorten-cta",
       "created_at": "2026-02-22T09:54:49.026733734Z"
