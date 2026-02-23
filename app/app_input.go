@@ -1099,9 +1099,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyEnter:
 		// If the sidebar is focused, handle tree-mode interactions.
 		if m.focusSlot == slotSidebar {
-			// Stage rows are display-only — no action
-			if _, _, isStage := m.sidebar.GetSelectedPlanStage(); isStage {
-				return m, nil
+			// Stage row: trigger that lifecycle stage directly.
+			if planFile, stage, isStage := m.sidebar.GetSelectedPlanStage(); isStage {
+				return m.triggerPlanStage(planFile, stage)
 			}
 			// Plan header: open plan context menu
 			if m.sidebar.IsSelectedPlanHeader() {

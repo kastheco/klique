@@ -155,6 +155,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m.triggerPlanStage(planFile, "plan")
 
+	case "start_review":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		return m.triggerPlanStage(planFile, "review")
+
 	case "view_plan":
 		return m.viewSelectedPlan()
 
@@ -339,14 +346,34 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 	if planFile == "" {
 		return m, nil
 	}
-	items := []overlay.ContextMenuItem{
-		{Label: "Start plan", Action: "start_plan"},
-		{Label: "View plan", Action: "view_plan"},
-		{Label: "Push branch", Action: "push_plan_branch"},
-		{Label: "Create PR", Action: "create_plan_pr"},
-		{Label: "Mark done", Action: "mark_plan_done"},
-		{Label: "Cancel plan", Action: "cancel_plan"},
+
+	var items []overlay.ContextMenuItem
+	if m.planState != nil {
+		if entry, ok := m.planState.Plans[planFile]; ok {
+			implementing := entry.Status == planstate.StatusInProgress || entry.Status == planstate.StatusImplementing
+			postPlan := implementing || entry.Status == planstate.StatusReviewing ||
+				entry.Status == planstate.StatusDone || entry.Status == planstate.StatusCompleted ||
+				entry.Status == planstate.StatusFinished
+			switch {
+			case !postPlan:
+				// ready or planning: primary action is to write/re-write the plan
+				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
+			case implementing:
+				items = append(items, overlay.ContextMenuItem{Label: "Start review", Action: "start_review"})
+			case entry.Status == planstate.StatusReviewing:
+				items = append(items, overlay.ContextMenuItem{Label: "Mark finished", Action: "mark_plan_done"})
+			}
+		}
 	}
+	items = append(items,
+		overlay.ContextMenuItem{Label: "View plan", Action: "view_plan"},
+		overlay.ContextMenuItem{Label: "Push branch", Action: "push_plan_branch"},
+		overlay.ContextMenuItem{Label: "Create PR", Action: "create_plan_pr"},
+		overlay.ContextMenuItem{Label: "Mark done", Action: "mark_plan_done"},
+		overlay.ContextMenuItem{Label: "Start over", Action: "start_over_plan"},
+		overlay.ContextMenuItem{Label: "Cancel plan", Action: "cancel_plan"},
+	)
+
 	x := m.sidebarWidth
 	y := 1 + 4 + m.sidebar.GetSelectedIdx()
 	m.contextMenu = overlay.NewContextMenu(x, y, items)
