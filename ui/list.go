@@ -23,7 +23,6 @@ type List struct {
 	// multiple repos in play.
 	repos map[string]int
 
-	filter       string       // topic name filter (empty = show all)
 	statusFilter StatusFilter // status filter (All or Active)
 	sortMode     SortMode     // how instances are sorted
 	allItems     []*session.Instance
@@ -176,13 +175,6 @@ func (l *List) Kill() {
 	}
 }
 
-// KillInstancesByTopic kills and removes all instances belonging to the given topic.
-// NOTE: Topics are now plan-state-based; this method is kept for compatibility but
-// will not match any instances since TopicName has been removed from Instance.
-func (l *List) KillInstancesByTopic(_ string) {
-	// No-op: instances no longer have a TopicName field.
-}
-
 func (l *List) Attach() (chan struct{}, error) {
 	targetInstance := l.items[l.selectedIdx]
 	return targetInstance.Attach()
@@ -272,10 +264,11 @@ func (l *List) TotalInstances() int {
 	return len(l.allItems)
 }
 
-// SetFilter filters the displayed instances by topic name.
-// Empty string shows all. SidebarUngrouped shows only ungrouped instances.
-func (l *List) SetFilter(topicFilter string) {
-	l.filter = topicFilter
+// SetFilter triggers a rebuild of the filtered item list.
+// The topicFilter parameter is accepted for API compatibility but is no longer
+// used for filtering — highlight-boost (SetHighlightFilter) handles tree-mode
+// selection, and flat-mode topic filtering has been superseded.
+func (l *List) SetFilter(_ string) {
 	l.rebuildFilteredItems()
 }
 
@@ -321,7 +314,6 @@ func (l *List) SetSearchFilter(query string) {
 // SetSearchFilterWithTopic filters instances by search query, optionally scoped to a topic.
 // topicFilter: "" = all topics, "__ungrouped__" = ungrouped only, otherwise = specific topic.
 func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
-	l.filter = ""
 	filtered := make([]*session.Instance, 0)
 	for _, inst := range l.allItems {
 		// Check status filter
@@ -349,7 +341,6 @@ func (l *List) Clear() {
 	l.allItems = nil
 	l.items = nil
 	l.selectedIdx = 0
-	l.filter = ""
 }
 
 func (l *List) rebuildFilteredItems() {

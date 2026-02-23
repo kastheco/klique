@@ -206,7 +206,9 @@ func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()
 
 	if !m.sidebar.IsTreeMode() {
-		// Flat mode fallback
+		// Flat mode fallback: reachable during startup before SetTopicsAndPlans
+		// is first called (e.g. rebuildInstanceList calls us before updateSidebarPlans).
+		// Once tree mode is active it is never disabled, so this path is transient.
 		switch {
 		case selectedID == ui.SidebarAll:
 			m.list.SetFilter("")

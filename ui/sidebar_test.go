@@ -52,6 +52,26 @@ func TestGetSelectedPlanFile(t *testing.T) {
 	}
 }
 
+func TestGetSelectedPlanFile_StageRow(t *testing.T) {
+	s := NewSidebar()
+	s.SetTopicsAndPlans(
+		nil,
+		[]PlanDisplay{{Filename: "fix.md", Status: string(planstate.StatusReady)}},
+		nil,
+	)
+
+	// Expand the plan to reveal stage rows
+	s.SelectByID(SidebarPlanPrefix + "fix.md")
+	s.ToggleSelectedExpand()
+
+	// Select a stage row
+	s.SelectByID(SidebarPlanStagePrefix + "fix.md::implement")
+
+	if got := s.GetSelectedPlanFile(); got != "fix.md" {
+		t.Fatalf("GetSelectedPlanFile() with stage selected = %q, want %q", got, "fix.md")
+	}
+}
+
 func TestSidebarTopicTree(t *testing.T) {
 	s := NewSidebar()
 
