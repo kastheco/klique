@@ -1165,30 +1165,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
 		switch m.focusSlot {
-		case slotSidebar:
-			if m.sidebar.IsTreeMode() {
-				m.sidebar.Left()
-				m.filterInstancesByTopic()
-			}
 		case slotGit:
 			gitPane := m.tabbedWindow.GetGitPane()
 			if gitPane != nil && gitPane.IsRunning() {
 				_ = gitPane.SendKey(keyToBytes(msg))
+				return m, nil
 			}
+			// Not running — fall through to panel navigation
+			m.setFocusSlot(slotSidebar)
+		case slotAgent, slotDiff:
+			m.setFocusSlot(slotSidebar)
+		case slotList:
+			m.setFocusSlot(slotAgent)
 		}
 		return m, nil
 	case keys.KeyArrowRight:
 		switch m.focusSlot {
-		case slotSidebar:
-			if m.sidebar.IsTreeMode() {
-				m.sidebar.Right()
-				m.filterInstancesByTopic()
-			}
 		case slotGit:
 			gitPane := m.tabbedWindow.GetGitPane()
 			if gitPane != nil && gitPane.IsRunning() {
 				_ = gitPane.SendKey(keyToBytes(msg))
+				return m, nil
 			}
+			// Not running — fall through to panel navigation
+			m.setFocusSlot(slotList)
+		case slotSidebar:
+			m.setFocusSlot(slotAgent)
+		case slotAgent, slotDiff:
+			m.setFocusSlot(slotList)
 		}
 		return m, nil
 	case keys.KeyNewPlan:
