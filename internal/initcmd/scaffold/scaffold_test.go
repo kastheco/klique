@@ -572,11 +572,15 @@ func TestWriteOpenCodeProject_ValidJSONC_NoWizardAgents(t *testing.T) {
 	assertValidJSON(t, string(content))
 }
 
-func TestWriteOpenCodeProject_SkipsNonOpencodeAgents(t *testing.T) {
+// TestWriteOpenCodeProject_IncludesNonOpencodeAgents verifies that agent roles
+// configured for a different harness (e.g. claude) are still written to
+// opencode.jsonc. Kasmos controls which harness is used at orchestration time;
+// opencode.jsonc just needs the block present so the agent is defined.
+func TestWriteOpenCodeProject_IncludesNonOpencodeAgents(t *testing.T) {
 	dir := t.TempDir()
 	agents := []harness.AgentConfig{
 		{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: ptrFloat(0.1), Effort: "medium", Enabled: true},
-		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Enabled: true},
+		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Temperature: ptrFloat(0.2), Effort: "medium", Enabled: true},
 	}
 
 	_, err := WriteOpenCodeProject(dir, agents, nil, false)
@@ -590,9 +594,9 @@ func TestWriteOpenCodeProject_SkipsNonOpencodeAgents(t *testing.T) {
 	assert.Contains(t, s, `"coder"`)
 	assert.Contains(t, s, `"anthropic/claude-sonnet-4-6"`)
 
-	// Reviewer block removed (claude harness, not opencode)
-	assert.NotContains(t, s, `"reviewer"`)
-	assert.NotContains(t, s, `"claude-opus-4-6"`)
+	// Reviewer block also present even though harness is claude
+	assert.Contains(t, s, `"reviewer"`)
+	assert.Contains(t, s, `"claude-opus-4-6"`)
 }
 
 func TestRun_OpencodeConfigGenerated(t *testing.T) {

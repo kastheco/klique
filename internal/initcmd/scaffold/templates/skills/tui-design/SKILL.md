@@ -1,5 +1,5 @@
 ---
-name: TUI Design
+name: tui-design
 description: >
   This skill should be used when the user asks to "create a TUI",
   "build a terminal UI", "design a bubbletea app", "style with lipgloss",

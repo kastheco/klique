@@ -101,12 +101,14 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 	rendered = strings.ReplaceAll(rendered, "{{HOME_DIR}}", homeDir)
 	rendered = strings.ReplaceAll(rendered, "{{PROJECT_DIR}}", dir)
 
-	// Build lookup of opencode agents by role
+	// Build lookup of agents by role. Include all harnesses so that agent
+	// blocks are always written to opencode.jsonc — even when a role is
+	// configured to use a different harness (e.g. claude for reviewer).
+	// Kasmos controls which harness is actually used at orchestration time;
+	// the opencode config just needs the block to exist.
 	agentByRole := make(map[string]harness.AgentConfig)
 	for _, a := range agents {
-		if a.Harness == "opencode" {
-			agentByRole[a.Role] = a
-		}
+		agentByRole[a.Role] = a
 	}
 
 	// Substitute per-role placeholders for wizard-configurable agents
