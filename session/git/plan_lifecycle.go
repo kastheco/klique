@@ -79,6 +79,19 @@ func MergePlanBranch(repoPath, branch string) error {
 	_, _ = gt.runGitCommand(repoPath, "worktree", "remove", "-f", worktreePath)
 	_, _ = gt.runGitCommand(repoPath, "worktree", "prune")
 
+	// Ensure the local branch exists — worktree removal may have deleted it.
+	// If a remote tracking branch exists, recreate the local one from it.
+	if _, err := gt.runGitCommand(repoPath, "rev-parse", "--verify", branch); err != nil {
+		remote := "origin/" + branch
+		if _, remoteErr := gt.runGitCommand(repoPath, "rev-parse", "--verify", remote); remoteErr == nil {
+			if _, brErr := gt.runGitCommand(repoPath, "branch", branch, remote); brErr != nil {
+				return fmt.Errorf("recreate local branch %s from remote: %w", branch, brErr)
+			}
+		} else {
+			return fmt.Errorf("branch %s not found locally or on remote", branch)
+		}
+	}
+
 	// Merge the plan branch into the current branch.
 	if _, err := gt.runGitCommand(repoPath, "merge", branch, "--no-ff", "-m",
 		fmt.Sprintf("merge plan branch %s", branch)); err != nil {
@@ -87,7 +100,8 @@ func MergePlanBranch(repoPath, branch string) error {
 
 	// Delete the plan branch after successful merge.
 	if _, err := gt.runGitCommand(repoPath, "branch", "-d", branch); err != nil {
-		return fmt.Errorf("delete branch %s after merge: %w", branch, err)
+		// Non-fatal: merge succeeded, branch cleanup is best-effort.
+		_ = err
 	}
 
 	return nil
