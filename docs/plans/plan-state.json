@@ -183,6 +183,7 @@
       "status": "planning",
       "description": "utilize bubblezone for using mouse accurately as well as to escape agent focus",
       "branch": "plan/bubblezone",
+      "topic": "tools",
       "created_at": "2026-02-22T08:28:43.336094301Z"
     },
     "2026-02-22-center-col-v-align.md": {
@@ -200,6 +201,7 @@
       "status": "planning",
       "description": "top status bar showing contextual info (wave progress, repo name, branch) based on focused/selected item",
       "branch": "plan/contextual-status-bar",
+      "topic": "ui",
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-22-customize-superpowers.md": {
@@ -210,7 +212,7 @@
       "implemented": "2026-02-24"
     },
     "2026-02-22-detect-permissions-needed.md": {
-      "status": "ready",
+      "status": "cancelled",
       "description": "indicate in list view if permissions are needed and switch to live capture (or increased cache r/w if possible) to button presses dont jump back and forth",
       "branch": "plan/detect-permissions-needed",
       "created_at": "2026-02-22T08:35:22.645408061Z"
@@ -235,7 +237,7 @@
       "implemented": "2026-02-22"
     },
     "2026-02-22-parallelize-superpowers.md": {
-      "status": "ready",
+      "status": "cancelled",
       "description": "extract any parallelization opportunities by controlling individual task fixes (use new agent for each even if sequential)",
       "branch": "plan/parallelize-superpowers",
       "created_at": "2026-02-22T10:04:55.567483368Z"
@@ -305,6 +307,7 @@
       "status": "implementing",
       "description": "add a feature for importing clickup tasks as plans using the official MCP server. this feature is optional and is only available when the clickup mcp server is detected. have it be an option at the bottom the plans list above history (+ import from clickup) or something like that. once the task details are downloaded, run the plan through superpowers brainstorming using a planning agent automatically to determine if it's ready for implementation or needs to be fleshed out.",
       "branch": "plan/clickup-import",
+      "topic": "tools",
       "created_at": "2026-02-24T02:44:43.679630782Z"
     },
     "2026-02-24-live-preview-terminal.md": {
@@ -325,6 +328,10 @@
       "branch": "plan/sentry-integration",
       "topic": "tools",
       "created_at": "2026-02-24T20:03:01.389587403Z"
+    },
+    "2026-02-24-wizard-tui-redesign.md": {
+      "status": "ready",
+      "description": "replace huh-form init wizard with full-screen bubbletea TUI using Rosé Pine Moon aesthetic"
     }
   }
 }
