@@ -93,6 +93,11 @@ type Instance struct {
 	// persistently show a running indicator without flickering.
 	PromptDetected bool
 
+	// AwaitingWork is set when a QueuedPrompt is delivered to the agent, and
+	// cleared when the agent transitions to Running. The wave orchestrator uses
+	// this to avoid treating the initial idle prompt as task completion.
+	AwaitingWork bool
+
 	// CPUPercent is the current CPU usage of the instance's process.
 	CPUPercent float64
 	// MemMB is the current memory usage in megabytes.
@@ -285,6 +290,9 @@ func (i *Instance) SetStatus(status Status) {
 		i.LastActiveAt = time.Now()
 		i.PromptDetected = false
 		i.Notified = false
+	}
+	if status == Running {
+		i.AwaitingWork = false
 	}
 	i.Status = status
 }

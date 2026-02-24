@@ -580,6 +580,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if inst.QueuedPrompt != "" && (inst.Status == session.Ready || inst.PromptDetected) {
 				prompt := inst.QueuedPrompt
 				inst.QueuedPrompt = "" // clear immediately to prevent re-send
+				inst.AwaitingWork = true
 				i := inst
 				asyncCmds = append(asyncCmds, func() tea.Msg {
 					if err := i.SendPrompt(prompt); err != nil {
@@ -731,7 +732,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if !collected {
 							continue
 						}
-						if inst.PromptDetected {
+						if inst.PromptDetected && !inst.AwaitingWork {
 							orch.MarkTaskComplete(task.Number)
 						} else if !alive {
 							orch.MarkTaskFailed(task.Number)
