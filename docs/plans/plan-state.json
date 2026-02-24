@@ -200,10 +200,11 @@
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-22-customize-superpowers.md": {
-      "status": "ready",
+      "status": "done",
       "description": "streamline interactions with superpowers and this app by personalizing the superpowers skills",
       "branch": "plan/customize-superpowers",
-      "created_at": "2026-02-22T10:10:09.111289772Z"
+      "created_at": "2026-02-22T10:10:09.111289772Z",
+      "implemented": "2026-02-24"
     },
     "2026-02-22-detect-permissions-needed.md": {
       "status": "ready",
