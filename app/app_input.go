@@ -22,7 +22,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -750,6 +750,42 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pickerOverlay = nil
 			m.pendingPlanName = ""
 			m.pendingPlanDesc = ""
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
+	// Handle change-topic picker for existing plans
+	if m.state == stateChangeTopic {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			m.pendingChangeTopicPlan = ""
+			return m, nil
+		}
+		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.pickerOverlay.IsSubmitted() && m.planState != nil && m.pendingChangeTopicPlan != "" {
+				picked := m.pickerOverlay.Value()
+				newTopic := ""
+				if picked != "(No topic)" {
+					newTopic = picked
+				}
+				if entry, ok := m.planState.Plans[m.pendingChangeTopicPlan]; ok {
+					entry.Topic = newTopic
+					m.planState.Plans[m.pendingChangeTopicPlan] = entry
+					if err := m.planState.Save(); err != nil {
+						m.state = stateDefault
+						m.pickerOverlay = nil
+						m.pendingChangeTopicPlan = ""
+						return m, m.handleError(err)
+					}
+					m.updateSidebarPlans()
+					m.updateSidebarItems()
+				}
+			}
+			m.state = stateDefault
+			m.pickerOverlay = nil
+			m.pendingChangeTopicPlan = ""
 			return m, tea.WindowSize()
 		}
 		return m, nil

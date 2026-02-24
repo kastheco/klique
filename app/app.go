@@ -76,6 +76,8 @@ const (
 	stateContextMenu
 	// stateRepoSwitch is the state when the user is switching repos via picker.
 	stateRepoSwitch
+	// stateChangeTopic is the state when the user is changing a plan's topic via picker.
+	stateChangeTopic
 )
 
 type home struct {
@@ -150,6 +152,8 @@ type home struct {
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
+	// pendingChangeTopicPlan stores the plan filename during the change-topic flow
+	pendingChangeTopicPlan string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
 
@@ -978,6 +982,8 @@ func (m *home) View() string {
 	case m.state == stateNewPlanDescription && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateNewPlanTopic && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateChangeTopic && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateRepoSwitch && m.pickerOverlay != nil:
 		// Position near the repo button at the bottom of the sidebar

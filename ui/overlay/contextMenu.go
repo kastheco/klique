@@ -143,17 +143,29 @@ func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
 		}
 		return "", false
 	case "up", "k":
-		for i := c.selectedIdx - 1; i >= 0; i-- {
-			if !c.filtered[i].item.Disabled {
-				c.selectedIdx = i
-				break
+		if len(c.filtered) > 0 {
+			start := c.selectedIdx
+			for {
+				c.selectedIdx--
+				if c.selectedIdx < 0 {
+					c.selectedIdx = len(c.filtered) - 1
+				}
+				if !c.filtered[c.selectedIdx].item.Disabled || c.selectedIdx == start {
+					break
+				}
 			}
 		}
 	case "down", "j":
-		for i := c.selectedIdx + 1; i < len(c.filtered); i++ {
-			if !c.filtered[i].item.Disabled {
-				c.selectedIdx = i
-				break
+		if len(c.filtered) > 0 {
+			start := c.selectedIdx
+			for {
+				c.selectedIdx++
+				if c.selectedIdx >= len(c.filtered) {
+					c.selectedIdx = 0
+				}
+				if !c.filtered[c.selectedIdx].item.Disabled || c.selectedIdx == start {
+					break
+				}
 			}
 		}
 	case "backspace":
