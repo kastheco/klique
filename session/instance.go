@@ -270,6 +270,11 @@ func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
+	if i.gitWorktree == nil {
+		// Planner instances run on the main branch without a worktree —
+		// derive the repo name from the instance path instead.
+		return filepath.Base(i.Path), nil
+	}
 	return i.gitWorktree.GetRepoName(), nil
 }
 
