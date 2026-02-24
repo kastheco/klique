@@ -437,23 +437,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return previewTickMsg{}
 		}
-	case focusPreviewTickMsg:
-		if m.state != stateFocusAgent || m.previewTerminal == nil {
-			return m, nil
-		}
-		if content, changed := m.previewTerminal.Render(); changed {
-			m.tabbedWindow.SetPreviewContent(content)
-		}
-		// Capture reference for the command goroutine — safe even if
-		// exitFocusMode() nils m.previewTerminal before the command fires.
-		term := m.previewTerminal
-		return m, func() tea.Msg {
-			// Block until new content is rendered or 50ms elapses.
-			// This replaces the fixed 16ms sleep with event-driven wakeup,
-			// cutting worst-case display latency from ~24ms to ~1-3ms.
-			term.WaitForRender(50 * time.Millisecond)
-			return focusPreviewTickMsg{}
-		}
 	case gitTabTickMsg:
 		if !m.tabbedWindow.IsInGitTab() {
 			return m, nil
@@ -1146,9 +1129,6 @@ type prErrorMsg struct {
 type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
-
-// focusPreviewTickMsg is a fast ticker (30fps) for focus mode preview refresh only.
-type focusPreviewTickMsg struct{}
 
 // previewTerminalReadyMsg signals that the async terminal attach completed.
 type previewTerminalReadyMsg struct {

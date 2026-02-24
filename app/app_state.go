@@ -161,10 +161,9 @@ func (m *home) enterFocusMode() tea.Cmd {
 	m.tabbedWindow.SetFocusMode(true)
 	m.menu.SetFocusMode(true)
 
-	// Start the 30fps render ticker
-	return func() tea.Msg {
-		return focusPreviewTickMsg{}
-	}
+	// previewTickMsg loop (started in Init) handles rendering for both
+	// normal preview and focus mode — no separate tick needed here.
+	return nil
 }
 
 // enterGitFocusMode enters focus mode for the git tab (lazygit).
