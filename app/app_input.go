@@ -290,7 +290,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.promptAfterName {
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				m.textInputOverlay = overlay.NewTextInputOverlay("enter prompt", "")
 				m.textInputOverlay.SetSize(50, 5)
 				m.promptAfterName = false
 			}
@@ -397,7 +397,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 					// Transition to PR body editing state
 					m.state = statePRBody
-					m.textInputOverlay = overlay.NewTextInputOverlay("PR description (edit or submit)", generatedBody)
+					m.textInputOverlay = overlay.NewTextInputOverlay("pr description (edit or submit)", generatedBody)
 					m.textInputOverlay.SetSize(80, 20)
 					return m, nil
 				}
@@ -680,7 +680,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.textInputOverlay = nil
 					return m, m.handleError(fmt.Errorf("plan name cannot be empty"))
 				}
-				m.textInputOverlay = overlay.NewTextInputOverlay("Plan description (optional)", "")
+				m.textInputOverlay = overlay.NewTextInputOverlay("plan description (optional)", "")
 				m.textInputOverlay.SetSize(60, 3)
 				m.state = stateNewPlanDescription
 				return m, nil
@@ -1099,7 +1099,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] Kill session '%s'?", selected.Title)
+		message := fmt.Sprintf("[!] kill session '%s'?", selected.Title)
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
@@ -1122,7 +1122,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] Push changes from session '%s'?", selected.Title)
+		message := fmt.Sprintf("[!] push changes from session '%s'?", selected.Title)
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCreatePR:
 		selected := m.list.GetSelectedInstance()
@@ -1130,7 +1130,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", selected.Title)
+		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", selected.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 	case keys.KeyCheckout:
@@ -1184,7 +1184,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		if !selected.TmuxAlive() {
-			m.toastManager.Error(fmt.Sprintf("Session for '%s' is not running", selected.Title))
+			m.toastManager.Error(fmt.Sprintf("session for '%s' is not running", selected.Title))
 			return m, m.toastTickCmd()
 		}
 		// Show help screen before attaching
@@ -1278,7 +1278,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyNewPlan:
 		m.state = stateNewPlanName
-		m.textInputOverlay = overlay.NewTextInputOverlay("Plan name", "")
+		m.textInputOverlay = overlay.NewTextInputOverlay("plan name", "")
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 	case keys.KeyRepoSwitch:

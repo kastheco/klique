@@ -174,6 +174,10 @@ func (t *TmuxSession) Start(workDir string) error {
 		program = program + " --agent " + t.agentType
 	}
 
+	// Prepend KASMOS_MANAGED=1 so the agent process sees it from startup.
+	// tmux set-environment (below) only affects new panes, not the initial program.
+	program = "KASMOS_MANAGED=1 " + program
+
 	t.reportProgress(1, "Creating tmux session...")
 
 	// Create a new detached tmux session and start claude in it

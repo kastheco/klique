@@ -673,7 +673,7 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	m.addInstanceFinalizer(reviewerInst, m.list.AddInstance(reviewerInst))
 	m.list.SelectInstance(reviewerInst) // sort-order safe, unlike index arithmetic
 
-	m.toastManager.Success(fmt.Sprintf("Implementation complete → review started for %s", planName))
+	m.toastManager.Success(fmt.Sprintf("implementation complete → review started for %s", planName))
 
 	return func() tea.Msg {
 		err := reviewerInst.Start(true)
@@ -707,7 +707,7 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	m.addInstanceFinalizer(coderInst, m.list.AddInstance(coderInst))
 	m.list.SelectInstance(coderInst)
 
-	m.toastManager.Info(fmt.Sprintf("Review changes requested → re-implementing %s", planName))
+	m.toastManager.Info(fmt.Sprintf("review changes requested → re-implementing %s", planName))
 
 	return func() tea.Msg {
 		err := coderInst.Start(true)
@@ -867,22 +867,21 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 }
 
 // promptPushBranchThenAdvance shows a confirmation overlay asking the user to
-// push the implementation branch, then advances the plan to reviewing.
+// push the implementation branch, then advances the plan to reviewing and
+// spawns a reviewer agent via coderCompleteMsg.
 func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
-	message := fmt.Sprintf("[!] Implementation finished for '%s'. Push branch now?", planstate.DisplayName(inst.PlanFile))
+	capturedPlanFile := inst.PlanFile
+	capturedTitle := inst.Title
+	message := fmt.Sprintf("[!] implementation finished for '%s'. push branch now?", planstate.DisplayName(capturedPlanFile))
 	pushAction := func() tea.Msg {
 		worktree, err := inst.GetGitWorktree()
 		if err == nil {
-			// Push errors are non-fatal: the user can push manually later.
 			_ = worktree.PushChanges(
-				fmt.Sprintf("[kas] push completed implementation for '%s'", inst.Title),
+				fmt.Sprintf("[kas] push completed implementation for '%s'", capturedTitle),
 				false,
 			)
 		}
-		if err := m.fsm.Transition(inst.PlanFile, planfsm.ImplementFinished); err != nil {
-			return err
-		}
-		return planRefreshMsg{}
+		return coderCompleteMsg{planFile: capturedPlanFile}
 	}
 	return m.confirmAction(message, func() tea.Msg { return pushAction() })
 }
@@ -1154,7 +1153,7 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 	}
 
 	waveNum := orch.CurrentWaveNumber()
-	m.toastManager.Info(fmt.Sprintf("Wave %d started: %d task(s) running", waveNum, len(tasks)))
+	m.toastManager.Info(fmt.Sprintf("wave %d started: %d task(s) running", waveNum, len(tasks)))
 	return m.spawnWaveTasks(orch, tasks, entry)
 }
 
@@ -1165,7 +1164,7 @@ func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.Plan
 		return m, nil
 	}
 
-	m.toastManager.Info(fmt.Sprintf("Retrying %d failed task(s) in Wave %d",
+	m.toastManager.Info(fmt.Sprintf("retrying %d failed task(s) in wave %d",
 		len(tasks), orch.CurrentWaveNumber()))
 	return m.spawnWaveTasks(orch, tasks, entry)
 }

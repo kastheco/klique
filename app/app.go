@@ -693,7 +693,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				capturedPlanFile := inst.PlanFile
 				capturedTitle := inst.Title
 				m.confirmAction(
-					fmt.Sprintf("Plan '%s' is ready. Start implementation?", planstate.DisplayName(capturedPlanFile)),
+					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(capturedPlanFile)),
 					func() tea.Msg {
 						return plannerCompleteMsg{planFile: capturedPlanFile}
 					},
@@ -784,7 +784,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.waveOrchestrators, planFile)
 
 					if m.state != stateConfirm {
-						message := fmt.Sprintf("All waves complete for '%s'. Push branch and start review?", planName)
+						message := fmt.Sprintf("all waves complete for '%s'. push branch and start review?", planName)
 						m.confirmAction(message, func() tea.Msg {
 							return waveAllCompleteMsg{planFile: capturedPlanFile}
 						})
@@ -807,12 +807,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					planName := planstate.DisplayName(planFile)
 					if failed > 0 {
 						message := fmt.Sprintf(
-							"%s — Wave %d: %d/%d tasks complete, %d failed.\n\n"+
+							"%s — wave %d: %d/%d tasks complete, %d failed.\n\n"+
 								"[r] retry failed   [n] next wave   [a] abort",
 							planName, waveNum, completed, total, failed)
 						m.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)
 					} else {
-						message := fmt.Sprintf("%s — Wave %d complete (%d/%d). Start Wave %d?",
+						message := fmt.Sprintf("%s — wave %d complete (%d/%d). start wave %d?",
 							planName, waveNum, completed, total, waveNum+1)
 						m.waveStandardConfirmAction(message, capturedPlanFile, capturedEntry)
 					}
@@ -897,7 +897,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.saveAllInstances()
 		m.updateSidebarItems()
-		m.toastManager.Info(fmt.Sprintf("Wave orchestration aborted for %s",
+		m.toastManager.Info(fmt.Sprintf("wave orchestration aborted for %s",
 			planstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.toastTickCmd())
 	case waveAllCompleteMsg:
@@ -932,7 +932,36 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.spawnReviewer(planFile); cmd != nil {
 			reviewerCmd = cmd
 		}
-		m.toastManager.Info(fmt.Sprintf("All waves complete for '%s' — starting review", planName))
+		m.toastManager.Info(fmt.Sprintf("all waves complete for '%s' — starting review", planName))
+		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
+	case coderCompleteMsg:
+		// Single-coder (non-wave) implementation finished and user confirmed push.
+		// Transition FSM and spawn reviewer — mirrors waveAllCompleteMsg flow.
+		planFile := msg.planFile
+		planName := planstate.DisplayName(planFile)
+
+		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+			log.WarningLog.Printf("coder-complete: could not transition %q to reviewing: %v", planFile, err)
+		}
+
+		// Mark the coder instance as implementation-complete and pause it.
+		for _, inst := range m.list.GetInstances() {
+			if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
+				inst.ImplementationComplete = true
+				_ = inst.Pause()
+				break
+			}
+		}
+
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+
+		var reviewerCmd tea.Cmd
+		if cmd := m.spawnReviewer(planFile); cmd != nil {
+			reviewerCmd = cmd
+		}
+		m.toastManager.Info(fmt.Sprintf("implementation complete for '%s' — starting review", planName))
 		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
 	case plannerCompleteMsg:
 		// User confirmed: start implementation. Kill the dead planner instance first.
@@ -1133,6 +1162,12 @@ type waveAbortMsg struct {
 // waveAllCompleteMsg is sent when the user confirms advancing to review
 // after all waves in a plan have finished.
 type waveAllCompleteMsg struct {
+	planFile string
+}
+
+// coderCompleteMsg is sent when a single-coder (non-wave) implementation finishes
+// and the user confirms pushing. Triggers FSM transition and reviewer spawn.
+type coderCompleteMsg struct {
 	planFile string
 }
 

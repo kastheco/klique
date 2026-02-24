@@ -22,6 +22,7 @@ Key points:
 - Tests: testify assertions, table-driven, no real tmux/git/network in tests
 - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`
 - Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)
+- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. "push changes from 'foo'?" not "Push changes from 'foo'?"
 
 ## Active Work
 

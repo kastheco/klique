@@ -84,7 +84,7 @@ func TestStartTmuxSession(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s claude", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 claude", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 	require.Equal(t, "tmux attach-session -t kas_test-session",
 		cmd2.ToString(ptyFactory.cmds[1]))
@@ -125,7 +125,7 @@ func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s claude --dangerously-skip-permissions", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 claude --dangerously-skip-permissions", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }
 
@@ -210,7 +210,7 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s aider --model gpt-4", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 aider --model gpt-4", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }
 
@@ -244,7 +244,7 @@ func TestStartTmuxSessionOpenCode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify new-session used the right program.
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_oc-session -c %s opencode", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s kas_oc-session -c %s KASMOS_MANAGED=1 opencode", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 
 	// Verify no send-keys tap was issued (opencode needs no trust-screen tap).
@@ -326,7 +326,7 @@ func TestStartTmuxSessionInjectsAgentFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(
 		t,
-		fmt.Sprintf("tmux new-session -d -s kas_agent-test -c %s opencode --agent planner", workdir),
+		fmt.Sprintf("tmux new-session -d -s kas_agent-test -c %s KASMOS_MANAGED=1 opencode --agent planner", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]),
 	)
 }

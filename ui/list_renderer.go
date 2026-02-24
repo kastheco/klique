@@ -84,11 +84,11 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 	titleText := i.Title
 	switch {
 	case i.WaveNumber > 0 && i.TaskNumber > 0:
-		titleText = fmt.Sprintf("Wave %d · Task %d", i.WaveNumber, i.TaskNumber)
+		titleText = fmt.Sprintf("wave %d · task %d", i.WaveNumber, i.TaskNumber)
 	case i.AgentType == session.AgentTypeReviewer && i.PlanFile != "":
-		titleText = "Review"
+		titleText = "review"
 	case i.AgentType == session.AgentTypeCoder && i.PlanFile != "" && i.WaveNumber == 0:
-		titleText = "Implementation Fix"
+		titleText = "applying fixes"
 	}
 
 	widthAvail := r.width - 3 - runewidth.StringWidth(prefix) - 1

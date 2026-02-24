@@ -78,7 +78,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", selected.Title)
+		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", selected.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
@@ -115,7 +115,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = stateRenameInstance
-		m.textInputOverlay = overlay.NewTextInputOverlay("Rename instance", selected.Title)
+		m.textInputOverlay = overlay.NewTextInputOverlay("rename instance", selected.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
@@ -125,7 +125,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = stateRenameInstance // reuse rename overlay state
-		m.textInputOverlay = overlay.NewTextInputOverlay("Rename topic", topicName)
+		m.textInputOverlay = overlay.NewTextInputOverlay("rename topic", topicName)
 		m.textInputOverlay.SetSize(50, 3)
 		return m, nil
 
@@ -159,7 +159,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		orch.MarkTaskComplete(selected.TaskNumber)
-		m.toastManager.Success(fmt.Sprintf("Task %d marked complete", selected.TaskNumber))
+		m.toastManager.Success(fmt.Sprintf("task %d marked complete", selected.TaskNumber))
 		return m, m.toastTickCmd()
 
 	case "change_topic":
@@ -214,7 +214,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			}
 			return nil
 		}
-		message := fmt.Sprintf("Push changes from plan '%s'?", planInst.Title)
+		message := fmt.Sprintf("push changes from plan '%s'?", planInst.Title)
 		return m, m.confirmAction(message, pushAction)
 
 	case "create_plan_pr":
@@ -225,7 +225,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
 		m.list.SelectInstance(planInst)
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", planInst.Title)
+		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planInst.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
@@ -262,7 +262,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.updateSidebarItems()
 			return planRefreshMsg{}
 		}
-		return m, m.confirmAction(fmt.Sprintf("Merge '%s' branch into main?", planName), mergeAction)
+		return m, m.confirmAction(fmt.Sprintf("merge '%s' branch into main?", planName), mergeAction)
 
 	case "mark_plan_done":
 		planFile := m.sidebar.GetSelectedPlanFile()
@@ -292,7 +292,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.updateSidebarItems()
 			return nil
 		}
-		return m, m.confirmAction(fmt.Sprintf("Cancel plan '%s'?", planName), cancelAction)
+		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
 
 	case "modify_plan":
 		planFile := m.sidebar.GetSelectedPlanFile()
@@ -337,7 +337,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.updateSidebarItems()
 			return planRefreshMsg{}
 		}
-		return m, m.confirmAction(fmt.Sprintf("Start over plan '%s'? This resets the branch.", planName), startOverAction)
+		return m, m.confirmAction(fmt.Sprintf("start over plan '%s'? this resets the branch.", planName), startOverAction)
 	}
 
 	return m, nil
@@ -533,7 +533,7 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 		}
 		return nil
 	}
-	message := "Push changes from '" + selected.Title + "'?"
+	message := "push changes from '" + selected.Title + "'?"
 	return m, m.confirmAction(message, pushAction)
 }
 
@@ -580,7 +580,7 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			"review":    "implement",
 			"finished":  "review",
 		}[stage]
-		m.toastManager.Error(fmt.Sprintf("complete %s first", prev))
+		m.toastManager.Error(fmt.Sprintf("complete '%s' first", prev))
 		return m, m.toastTickCmd()
 	}
 
@@ -588,7 +588,7 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	if stage == "implement" && entry.Topic != "" {
 		if hasConflict, conflictPlan := m.planState.HasRunningCoderInTopic(entry.Topic, planFile); hasConflict {
 			conflictName := planstate.DisplayName(conflictPlan)
-			message := fmt.Sprintf("⚠ %s is already running in topic \"%s\"\n\nRunning both plans may cause issues.\nContinue anyway?", conflictName, entry.Topic)
+			message := fmt.Sprintf("⚠ %s is already running in topic \"%s\"\n\nrunning both plans may cause issues.\ncontinue anyway?", conflictName, entry.Topic)
 			proceedAction := func() tea.Msg {
 				if err := m.fsmSetImplementing(planFile); err != nil {
 					return err
@@ -627,7 +627,7 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			m.loadPlanState()
 			m.updateSidebarPlans()
 			m.updateSidebarItems()
-			m.toastManager.Info("Plan needs ## Wave headers — respawning planner to annotate.")
+			m.toastManager.Info("plan needs ## Wave headers — respawning planner to annotate.")
 			wavePrompt := fmt.Sprintf(
 				"The plan at docs/plans/%s is missing ## Wave N headers required for wave-based implementation. "+
 					"Please annotate the plan by grouping tasks under ## Wave 1, ## Wave 2, … sections. "+

@@ -107,25 +107,19 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 // SetStatus fails inside the push-action closure, the error is returned as a
 // tea.Msg rather than being silently swallowed with _ =.
 //
-// This is a regression test for the bug where both the push and skip closures
-// in promptPushBranchThenAdvance used _ = m.fsm.Transition(...), causing
-// disk-write failures to be invisible to the user.
-func TestPromptPushBranchThenAdvance_SetStatusErrorPropagates(t *testing.T) {
+// TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg verifies that the
+// confirm action returns a coderCompleteMsg so the Update handler can perform
+// the FSM transition and spawn a reviewer.
+func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 	const planFile = "2026-02-21-test-feature.md"
 
-	// Use a planState with a read-only Dir so fsm.Transition will fail on save.
-	roDir := t.TempDir()
-	plansDir := filepath.Join(roDir, "docs", "plans")
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := planstate.Load(plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
-
-	// Make the plan-state.json file read-only so the next fsm.Transition save fails.
-	stateFile := filepath.Join(plansDir, "plan-state.json")
-	require.NoError(t, os.Chmod(stateFile, 0o444))
-	t.Cleanup(func() { _ = os.Chmod(stateFile, 0o644) })
 
 	inst := &session.Instance{
 		PlanFile:  planFile,
@@ -143,16 +137,16 @@ func TestPromptPushBranchThenAdvance_SetStatusErrorPropagates(t *testing.T) {
 	// Call promptPushBranchThenAdvance — this sets pendingConfirmAction.
 	_ = h.promptPushBranchThenAdvance(inst)
 
-	// Execute the stored push action directly (simulating user confirming).
 	require.NotNil(t, h.pendingConfirmAction,
 		"pendingConfirmAction must be set after promptPushBranchThenAdvance")
 
 	msg := h.pendingConfirmAction()
 
-	// The returned tea.Msg must be an error, not planRefreshMsg, because fsm.Transition failed.
-	_, isErr := msg.(error)
-	assert.True(t, isErr,
-		"push action must return error when fsm.Transition fails, got %T: %v", msg, msg)
+	ccMsg, ok := msg.(coderCompleteMsg)
+	assert.True(t, ok,
+		"push action must return coderCompleteMsg, got %T: %v", msg, msg)
+	assert.Equal(t, planFile, ccMsg.planFile,
+		"coderCompleteMsg must carry the correct plan file")
 }
 
 // TestMetadataTickHandler_NoRepromptWhenConfirmPending verifies that when the
