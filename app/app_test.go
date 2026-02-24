@@ -654,4 +654,60 @@ func TestFocusRing(t *testing.T) {
 		assert.False(t, homeModel.sidebarHidden)
 		assert.Equal(t, slotList, homeModel.focusSlot)
 	})
+
+	// --- Arrow key navigation (layout: sidebar | list | tabs) ---
+
+	t.Run("← from agent moves to list", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+
+		assert.Equal(t, slotList, homeModel.focusSlot)
+	})
+
+	t.Run("← from diff moves to list", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotDiff)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+
+		assert.Equal(t, slotList, homeModel.focusSlot)
+	})
+
+	t.Run("← from list moves to sidebar", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotList)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
+	})
+
+	t.Run("→ from sidebar moves to list", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotSidebar)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
+
+		assert.Equal(t, slotList, homeModel.focusSlot)
+	})
+
+	t.Run("→ from list moves to agent", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotList)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
+
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("→ from agent is no-op (already rightmost)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
+
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
 }
