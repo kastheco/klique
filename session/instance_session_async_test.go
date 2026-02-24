@@ -57,22 +57,3 @@ func TestCollectMetadata_DoesNotMutateCachedPreviewState(t *testing.T) {
 	require.Equal(t, "existing", inst.CachedContent)
 	require.True(t, inst.CachedContentSet)
 }
-
-func TestPreviewCached_UsesInitializedEmptyCache(t *testing.T) {
-	inst := &Instance{
-		Status:           Running,
-		CachedContent:    "",
-		CachedContentSet: true,
-		started:          true,
-	}
-
-	var (
-		content string
-		err     error
-	)
-	require.NotPanics(t, func() {
-		content, err = inst.PreviewCached()
-	})
-	require.NoError(t, err)
-	require.Equal(t, "", content)
-}

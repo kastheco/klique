@@ -146,7 +146,8 @@ func (p *PreviewPane) TickBanner() {
 	}
 }
 
-// Updates the preview pane content with the tmux pane content.
+// UpdateContent updates the preview pane with fallback states for nil/loading/paused instances.
+// In normal mode the live content is pushed via SetRawContent from the VT emulator tick loop.
 // No-op when in document mode (isDocument) — the caller must ClearDocumentMode first.
 func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	if p.isDocument {
@@ -214,42 +215,20 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return nil
 	}
 
-	var content string
-	var err error
-
 	// If in scroll mode but haven't captured content yet, do it now
 	if p.isScrolling && p.viewport.Height > 0 && len(p.viewport.View()) == 0 {
-		// Capture full pane content including scrollback history using capture-pane -p -S -
-		content, err = instance.PreviewFullHistory()
+		content, err := instance.PreviewFullHistory()
 		if err != nil {
 			return err
 		}
 
-		// Set content in the viewport
 		footer := lipgloss.NewStyle().
 			Foreground(ColorMuted).
 			Render("ESC to exit scroll mode")
 
 		p.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, content, footer))
-	} else if !p.isScrolling {
-		// In normal mode, use the cached preview to avoid redundant subprocess calls.
-		content, err = instance.PreviewCached()
-		if err != nil {
-			return err
-		}
-
-		// Always update the preview state with content, even if empty
-		// This ensures that newly created instances will display their content immediately
-		if len(content) == 0 && !instance.Started() {
-			p.setFallbackState("Please enter a name for the instance.")
-		} else {
-			// Update the preview state with the current content
-			p.previewState = previewState{
-				fallback: false,
-				text:     content,
-			}
-		}
 	}
+	// In normal (non-scroll) mode, live content arrives via SetRawContent from the VT emulator.
 
 	return nil
 }

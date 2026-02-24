@@ -26,18 +26,6 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	return i.tmuxSession.HasUpdated()
 }
 
-// PreviewCached returns the last captured pane content without a subprocess call.
-// Falls back to live capture only before the first metadata capture completes.
-func (i *Instance) PreviewCached() (string, error) {
-	if !i.started || i.Status == Paused {
-		return "", nil
-	}
-	if i.CachedContentSet {
-		return i.CachedContent, nil
-	}
-	return i.Preview()
-}
-
 // NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected
 // to this instance's tmux PTY for zero-latency interactive focus mode.
 func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {

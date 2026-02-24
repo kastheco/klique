@@ -473,13 +473,6 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
-	// If there's no selected instance, we don't need to update the preview.
-	// Preview errors (e.g. dead tmux pane) are transient infrastructure failures —
-	// log them silently rather than spamming the user with toast notifications.
-	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		log.ErrorLog.Printf("preview update error: %v", err)
-	}
-
 	// Collect async commands: terminal spawn and/or git tab respawn.
 	var cmds []tea.Cmd
 	if spawnCmd != nil {
