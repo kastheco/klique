@@ -91,6 +91,7 @@ func (m *home) setFocusSlot(slot int) {
 	m.focusSlot = slot
 	m.sidebar.SetFocused(slot == slotSidebar)
 	m.list.SetFocused(slot == slotList)
+	m.menu.SetFocusSlot(slot)
 
 	// Center pane is focused when any of the 3 center tabs is active.
 	centerFocused := slot >= slotAgent && slot <= slotGit

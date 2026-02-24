@@ -40,6 +40,7 @@ type Menu struct {
 	instance      *session.Instance
 	isInDiffTab   bool
 	isFocusMode   bool
+	focusSlot     int // which pane is focused (-1 = unknown)
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -103,6 +104,21 @@ func (m *Menu) SetFocusMode(focused bool) {
 	m.updateOptions()
 }
 
+// FocusSlot constants mirrored from app package to avoid import cycle.
+const (
+	MenuSlotSidebar = 0
+	MenuSlotAgent   = 1
+	MenuSlotDiff    = 2
+	MenuSlotGit     = 3
+	MenuSlotList    = 4
+)
+
+// SetFocusSlot updates which pane is focused so the menu can show context-sensitive keybinds.
+func (m *Menu) SetFocusSlot(slot int) {
+	m.focusSlot = slot
+	m.updateOptions()
+}
+
 // updateOptions updates the menu options based on current state and instance
 func (m *Menu) updateOptions() {
 	if m.isFocusMode {
@@ -112,14 +128,18 @@ func (m *Menu) updateOptions() {
 	}
 	switch m.state {
 	case StateEmpty:
-		m.options = defaultMenuOptions
-		m.systemGroupSize = defaultSystemGroupSize
+		if m.focusSlot == MenuSlotSidebar {
+			m.addSidebarOptions()
+		} else {
+			m.options = defaultMenuOptions
+			m.systemGroupSize = defaultSystemGroupSize
+		}
 	case StateDefault:
-		if m.instance != nil {
-			// When there is an instance, show that instance's options
+		if m.focusSlot == MenuSlotSidebar {
+			m.addSidebarOptions()
+		} else if m.instance != nil {
 			m.addInstanceOptions()
 		} else {
-			// When there is no instance, show the empty state
 			m.options = defaultMenuOptions
 			m.systemGroupSize = defaultSystemGroupSize
 		}
@@ -130,6 +150,18 @@ func (m *Menu) updateOptions() {
 		m.options = promptMenuOptions
 		m.systemGroupSize = 0
 	}
+}
+
+func (m *Menu) addSidebarOptions() {
+	// Sidebar-focused: show plan navigation keybinds
+	options := []keys.KeyName{keys.KeyNewPlan}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan}
+	systemGroup := []keys.KeyName{keys.KeySearch, keys.KeyHelp, keys.KeyQuit}
+
+	options = append(options, actionGroup...)
+	options = append(options, systemGroup...)
+	m.options = options
+	m.systemGroupSize = len(systemGroup)
 }
 
 func (m *Menu) addInstanceOptions() {

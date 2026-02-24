@@ -55,6 +55,7 @@ const (
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
 	KeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)
+	KeySpaceExpand   // Space key with expand/collapse label (sidebar context)
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -172,7 +173,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeySpace: key.NewBinding(
 		key.WithKeys(" "),
-		key.WithHelp("space", "shortcuts"),
+		key.WithHelp("space", "menu"),
 	),
 	KeyFilterAll: key.NewBinding(
 		key.WithKeys("1"),
@@ -225,6 +226,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyExitFocus: key.NewBinding(
 		key.WithKeys("ctrl+@"),
 		key.WithHelp("ctrl+space", "exit focus"),
+	),
+
+	KeySpaceExpand: key.NewBinding(
+		key.WithKeys(" "),
+		key.WithHelp("space", "expand/collapse"),
 	),
 
 	// -- Special keybindings --

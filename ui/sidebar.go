@@ -182,8 +182,9 @@ type Sidebar struct {
 	treeHistory   []PlanDisplay
 	treeCancelled []PlanDisplay
 
-	useTreeMode  bool // true when SetTopicsAndPlans has been called
-	planStatuses map[string]TopicStatus
+	useTreeMode     bool // true when SetTopicsAndPlans has been called
+	historyExpanded bool // whether the History section is expanded
+	planStatuses    map[string]TopicStatus
 }
 
 // SetPlans stores unfinished plans for sidebar display.
@@ -247,6 +248,9 @@ func (s *Sidebar) SetItems(
 	s.planStatuses = planStatuses
 	if s.useTreeMode {
 		s.rebuildRows()
+		// In tree mode, selectedIdx indexes into s.rows, not s.items.
+		// The flat items list below is only used for non-tree rendering;
+		// do NOT let its ID-restoration logic overwrite the tree selection.
 	}
 
 	totalCount := ungroupedCount
@@ -307,31 +311,33 @@ func (s *Sidebar) SetItems(
 		})
 	}
 
-	// Preserve the currently selected ID across rebuilds so the periodic
-	// metadata tick doesn't reset the user's navigation position.
-	prevID := ""
-	if s.selectedIdx >= 0 && s.selectedIdx < len(s.items) {
-		prevID = s.items[s.selectedIdx].ID
-	}
+	// In tree mode, selectedIdx is an index into s.rows (managed by rebuildRows).
+	// Only restore flat-mode selection when NOT in tree mode.
+	if !s.useTreeMode {
+		prevID := ""
+		if s.selectedIdx >= 0 && s.selectedIdx < len(s.items) {
+			prevID = s.items[s.selectedIdx].ID
+		}
 
-	s.items = items
+		s.items = items
 
-	// Try to restore selection by ID.
-	if prevID != "" {
-		for i, item := range items {
-			if item.ID == prevID {
-				s.selectedIdx = i
-				return
+		if prevID != "" {
+			for i, item := range items {
+				if item.ID == prevID {
+					s.selectedIdx = i
+					return
+				}
 			}
 		}
-	}
 
-	// Fallback: clamp index if the previous ID no longer exists.
-	if s.selectedIdx >= len(items) {
-		s.selectedIdx = len(items) - 1
-	}
-	if s.selectedIdx < 0 {
-		s.selectedIdx = 0
+		if s.selectedIdx >= len(items) {
+			s.selectedIdx = len(items) - 1
+		}
+		if s.selectedIdx < 0 {
+			s.selectedIdx = 0
+		}
+	} else {
+		s.items = items
 	}
 }
 
@@ -575,6 +581,13 @@ const miscTopic = "miscellaneous"
 
 // rebuildRows rebuilds the flat row list from the tree structure.
 func (s *Sidebar) rebuildRows() {
+	// Preserve selection by row ID across rebuilds so periodic ticks
+	// don't reset the user's navigation position.
+	prevID := ""
+	if s.selectedIdx >= 0 && s.selectedIdx < len(s.rows) {
+		prevID = s.rows[s.selectedIdx].ID
+	}
+
 	rows := []sidebarRow{}
 
 	// Real topics first
@@ -613,10 +626,10 @@ func (s *Sidebar) rebuildRows() {
 					Collapsed:       !s.expandedPlans[p.Filename],
 					HasRunning:      isPlanActive(effective.Status),
 					HasNotification: effective.Status == string(planstate.StatusReviewing),
-					Indent:          4,
+					Indent:          2,
 				})
 				if s.expandedPlans[p.Filename] {
-					rows = append(rows, planStageRows(effective, 6)...)
+					rows = append(rows, planStageRows(effective, 3)...)
 				}
 			}
 		}
@@ -656,10 +669,10 @@ func (s *Sidebar) rebuildRows() {
 					Collapsed:       !s.expandedPlans[p.Filename],
 					HasRunning:      isPlanActive(effective.Status),
 					HasNotification: effective.Status == string(planstate.StatusReviewing),
-					Indent:          4,
+					Indent:          2,
 				})
 				if s.expandedPlans[p.Filename] {
-					rows = append(rows, planStageRows(effective, 6)...)
+					rows = append(rows, planStageRows(effective, 3)...)
 				}
 			}
 		}
@@ -668,11 +681,28 @@ func (s *Sidebar) rebuildRows() {
 	// History toggle (if there are finished plans)
 	if len(s.treeHistory) > 0 {
 		rows = append(rows, sidebarRow{
-			Kind:   rowKindHistoryToggle,
-			ID:     SidebarPlanHistoryToggle,
-			Label:  "History",
-			Indent: 0,
+			Kind:      rowKindHistoryToggle,
+			ID:        SidebarPlanHistoryToggle,
+			Label:     "History",
+			Collapsed: !s.historyExpanded,
+			Indent:    0,
 		})
+		if s.historyExpanded {
+			for _, p := range s.treeHistory {
+				rows = append(rows, sidebarRow{
+					Kind:      rowKindPlan,
+					ID:        SidebarPlanPrefix + p.Filename,
+					Label:     planstate.DisplayName(p.Filename),
+					PlanFile:  p.Filename,
+					Collapsed: !s.expandedPlans[p.Filename],
+					Done:      true,
+					Indent:    2,
+				})
+				if s.expandedPlans[p.Filename] {
+					rows = append(rows, planStageRows(p, 3)...)
+				}
+			}
+		}
 	}
 
 	// Cancelled plans (shown at bottom with strikethrough)
@@ -688,7 +718,17 @@ func (s *Sidebar) rebuildRows() {
 
 	s.rows = rows
 
-	// Clamp selectedIdx
+	// Restore selection by ID if possible.
+	if prevID != "" {
+		for i, row := range rows {
+			if row.ID == prevID {
+				s.selectedIdx = i
+				return
+			}
+		}
+	}
+
+	// Fallback: clamp selectedIdx
 	if s.selectedIdx >= len(rows) {
 		s.selectedIdx = len(rows) - 1
 	}
@@ -764,6 +804,10 @@ func (s *Sidebar) ToggleSelectedExpand() bool {
 		return true
 	case rowKindPlan:
 		s.expandedPlans[row.PlanFile] = !s.expandedPlans[row.PlanFile]
+		s.rebuildRows()
+		return true
+	case rowKindHistoryToggle:
+		s.historyExpanded = !s.historyExpanded
 		s.rebuildRows()
 		return true
 	}
@@ -986,7 +1030,11 @@ func (s *Sidebar) renderStageRow(row sidebarRow) string {
 
 // renderHistoryToggleRow renders the history section divider.
 func (s *Sidebar) renderHistoryToggleRow(_ int) string {
-	return historyToggleStyle.Render("── History ──")
+	chevron := "▸"
+	if s.historyExpanded {
+		chevron = "▾"
+	}
+	return historyToggleStyle.Render("── " + chevron + " History ──")
 }
 
 // renderCancelledRow renders a cancelled plan with strikethrough.
