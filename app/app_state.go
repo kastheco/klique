@@ -922,6 +922,12 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	}
 	inst.QueuedPrompt = prompt
 
+	// Set loading state immediately so the UI shows the progress bar
+	// instead of the idle banner while the async start runs.
+	inst.SetStatus(session.Loading)
+	inst.LoadingTotal = 5
+	inst.LoadingMessage = "Preparing session..."
+
 	var startCmd tea.Cmd
 	if action == "plan" {
 		// Planner runs on main branch — no worktree created.
@@ -996,6 +1002,9 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 			return m, m.handleError(err)
 		}
 		inst.QueuedPrompt = prompt
+		inst.SetStatus(session.Loading)
+		inst.LoadingTotal = 6
+		inst.LoadingMessage = "Connecting to shared worktree..."
 
 		// AddInstance registers in the list immediately; finalizer sets repo name after start.
 		m.newInstanceFinalizer = m.list.AddInstance(inst)
