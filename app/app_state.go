@@ -652,6 +652,10 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	planPath := "docs/plans/" + planFile
 	prompt := scaffold.LoadReviewPrompt(planPath, planName)
 
+	// Kill any previous reviewer for this plan so the new session gets a fresh
+	// tmux session instead of reattaching to a stale/errored one.
+	m.killExistingPlanAgent(planFile, session.AgentTypeReviewer)
+
 	// Use the reviewer profile if configured, otherwise fall back to default program.
 	reviewProfile := m.appConfig.ResolveProfile("spec_review", m.program)
 	reviewProgram := reviewProfile.BuildCommand()
@@ -681,6 +685,21 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	}
 }
 
+// killExistingPlanAgent finds and kills any existing instance for the given plan
+// and agent type, removing it from the list. This ensures a fresh tmux session
+// is created instead of reattaching to a stale/errored one.
+func (m *home) killExistingPlanAgent(planFile, agentType string) {
+	for _, inst := range m.list.GetInstances() {
+		if inst.PlanFile == planFile && inst.AgentType == agentType {
+			if err := inst.Kill(); err != nil {
+				log.WarningLog.Printf("could not kill old %s for %q: %v", agentType, planFile, err)
+			}
+			m.removeFromAllInstances(inst.Title)
+			break
+		}
+	}
+}
+
 // spawnCoderWithFeedback creates and starts a coder session for the given plan,
 // injecting reviewer feedback into the implementation prompt.
 // Does NOT perform any FSM transition — the caller is responsible for that.
@@ -690,6 +709,10 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	if feedback != "" {
 		prompt += fmt.Sprintf("\n\nReviewer feedback from previous round:\n%s", feedback)
 	}
+
+	// Kill any previous coder for this plan so the new session gets a fresh
+	// tmux session instead of reattaching to a stale/errored one.
+	m.killExistingPlanAgent(planFile, session.AgentTypeCoder)
 
 	coderInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     planName + "-implement",
