@@ -452,7 +452,7 @@ func TestSidebarLeft_MovesToParentPlanFromStage(t *testing.T) {
 	assert.Equal(t, SidebarPlanPrefix+"fix.md", s.GetSelectedID())
 }
 
-func TestSidebarLeft_UngroupedPlanMovesUp(t *testing.T) {
+func TestSidebarLeft_UngroupedPlanMovesToMiscTopic(t *testing.T) {
 	s := NewSidebar()
 	s.SetTopicsAndPlans(
 		nil,
@@ -463,9 +463,12 @@ func TestSidebarLeft_UngroupedPlanMovesUp(t *testing.T) {
 		nil,
 	)
 
+	// First row is Miscellaneous topic, Down goes to a.md
 	s.Down()
-	s.Left()
 	assert.Equal(t, SidebarPlanPrefix+"a.md", s.GetSelectedID())
+	// Left from child plan moves to parent miscellaneous topic
+	s.Left()
+	assert.Equal(t, SidebarTopicPrefix+"miscellaneous", s.GetSelectedID())
 }
 
 func TestSidebarRight_NoopOnStage(t *testing.T) {

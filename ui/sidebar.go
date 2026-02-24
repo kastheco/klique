@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/kastheco/kasmos/config/planstate"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mattn/go-runewidth"
@@ -569,30 +570,14 @@ func isPlanActive(status string) bool {
 		status == string(planstate.StatusImplementing)
 }
 
+// miscTopic is the virtual topic name for ungrouped plans.
+const miscTopic = "miscellaneous"
+
 // rebuildRows rebuilds the flat row list from the tree structure.
 func (s *Sidebar) rebuildRows() {
 	rows := []sidebarRow{}
 
-	// Ungrouped plans (shown at top level, always visible)
-	for _, p := range s.treeUngrouped {
-		effective := p
-		effective.Status = s.effectivePlanStatus(p)
-		rows = append(rows, sidebarRow{
-			Kind:            rowKindPlan,
-			ID:              SidebarPlanPrefix + p.Filename,
-			Label:           planstate.DisplayName(p.Filename),
-			PlanFile:        p.Filename,
-			Collapsed:       !s.expandedPlans[p.Filename],
-			HasRunning:      isPlanActive(effective.Status),
-			HasNotification: effective.Status == string(planstate.StatusReviewing),
-			Indent:          0,
-		})
-		if s.expandedPlans[p.Filename] {
-			rows = append(rows, planStageRows(effective, 2)...)
-		}
-	}
-
-	// Topic headers (collapsed by default)
+	// Real topics first
 	for _, t := range s.treeTopics {
 		// Aggregate status from child plans
 		hasRunning := false
@@ -618,6 +603,49 @@ func (s *Sidebar) rebuildRows() {
 		})
 		if !s.collapsedTopics[t.Name] {
 			for _, p := range t.Plans {
+				effective := p
+				effective.Status = s.effectivePlanStatus(p)
+				rows = append(rows, sidebarRow{
+					Kind:            rowKindPlan,
+					ID:              SidebarPlanPrefix + p.Filename,
+					Label:           planstate.DisplayName(p.Filename),
+					PlanFile:        p.Filename,
+					Collapsed:       !s.expandedPlans[p.Filename],
+					HasRunning:      isPlanActive(effective.Status),
+					HasNotification: effective.Status == string(planstate.StatusReviewing),
+					Indent:          2,
+				})
+				if s.expandedPlans[p.Filename] {
+					rows = append(rows, planStageRows(effective, 4)...)
+				}
+			}
+		}
+	}
+
+	// Virtual "Miscellaneous" topic for ungrouped plans (after real topics)
+	if len(s.treeUngrouped) > 0 {
+		hasRunning := false
+		hasNotification := false
+		for _, p := range s.treeUngrouped {
+			eff := s.effectivePlanStatus(p)
+			if isPlanActive(eff) {
+				hasRunning = true
+			}
+			if eff == string(planstate.StatusReviewing) {
+				hasNotification = true
+			}
+		}
+		rows = append(rows, sidebarRow{
+			Kind:            rowKindTopic,
+			ID:              SidebarTopicPrefix + miscTopic,
+			Label:           miscTopic,
+			Collapsed:       s.collapsedTopics[miscTopic],
+			HasRunning:      hasRunning,
+			HasNotification: hasNotification,
+			Indent:          0,
+		})
+		if !s.collapsedTopics[miscTopic] {
+			for _, p := range s.treeUngrouped {
 				effective := p
 				effective.Status = s.effectivePlanStatus(p)
 				rows = append(rows, sidebarRow{
@@ -824,11 +852,12 @@ func (s *Sidebar) renderTreeRows(b *strings.Builder, itemWidth int) {
 			line = s.renderCancelledRow(row, i, contentWidth)
 		}
 
-		// Apply selection styling
+		// Apply selection styling — strip inner ANSI so the selection
+		// background covers the full row without gaps.
 		if i == s.selectedIdx && s.focused {
-			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(line))
+			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(ansi.Strip(line)))
 		} else if i == s.selectedIdx && !s.focused {
-			b.WriteString(activeTopicStyle.Width(itemWidth).Render(line))
+			b.WriteString(activeTopicStyle.Width(itemWidth).Render(ansi.Strip(line)))
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render(line))
 		}
