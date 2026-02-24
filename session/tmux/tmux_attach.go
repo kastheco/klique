@@ -76,8 +76,8 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 				continue
 			}
 
-			// Check for Ctrl+q (ASCII 17)
-			if nr == 1 && buf[0] == 17 {
+			// Check for Ctrl+q (ASCII 17) or Ctrl+space (ASCII 0)
+			if nr == 1 && (buf[0] == 17 || buf[0] == 0) {
 				// Detach from the session
 				t.Detach()
 				return

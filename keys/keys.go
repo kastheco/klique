@@ -66,7 +66,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"N":      KeyPrompt,
 	"enter":  KeyEnter,
 	"o":      KeyEnter,
-	"p":      KeyNewPlan,
+	"n":      KeyNewPlan,
 	"K":      KeyKill,
 	"q":      KeyQuit,
 	"tab":    KeyTab,
@@ -127,8 +127,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("q", "quit"),
 	),
 	KeyNewPlan: key.NewBinding(
-		key.WithKeys("p"),
-		key.WithHelp("p", "new plan"),
+		key.WithKeys("n"),
+		key.WithHelp("n", "new plan"),
 	),
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
