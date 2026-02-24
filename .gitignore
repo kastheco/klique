@@ -11,3 +11,9 @@ dist/artifacts.json
 dist/metadata.json
 dist/checksums.txt
 docs/plans/.signals/
+docs/plans/.plan-state.lock
+*.bak
+.agents/skills/bubbletea/
+.opencode/skills/bubbletea
+.claude/skills/bubbletea
+.codex/skills/bubbletea
