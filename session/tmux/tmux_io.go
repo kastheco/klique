@@ -58,8 +58,9 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	case isGeminiProgram(t.program):
 		hasPrompt = strings.Contains(content, "Yes, allow once")
 	case isOpenCodeProgram(t.program):
-		// opencode shows "Ask anything" as placeholder text in the input area when idle.
-		hasPrompt = strings.Contains(content, "Ask anything")
+		// opencode shows "esc interrupt" in its bottom bar only while a task is running.
+		// When idle and waiting for input, that line disappears. So idle = no interrupt shown.
+		hasPrompt = !strings.Contains(content, "esc interrupt")
 	}
 
 	newHash := t.monitor.hash(content)
@@ -105,7 +106,7 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 	case isGeminiProgram(t.program):
 		hasPrompt = strings.Contains(content, "Yes, allow once")
 	case isOpenCodeProgram(t.program):
-		hasPrompt = strings.Contains(content, "Ask anything")
+		hasPrompt = !strings.Contains(content, "esc interrupt")
 	}
 
 	newHash := t.monitor.hash(content)
