@@ -39,6 +39,7 @@ type Menu struct {
 	state         MenuState
 	instance      *session.Instance
 	isInDiffTab   bool
+	isFocusMode   bool
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -96,8 +97,19 @@ func (m *Menu) SetInDiffTab(inDiffTab bool) {
 	m.updateOptions()
 }
 
+// SetFocusMode updates whether the agent pane is in focus/interactive mode.
+func (m *Menu) SetFocusMode(focused bool) {
+	m.isFocusMode = focused
+	m.updateOptions()
+}
+
 // updateOptions updates the menu options based on current state and instance
 func (m *Menu) updateOptions() {
+	if m.isFocusMode {
+		m.options = []keys.KeyName{keys.KeyExitFocus}
+		m.systemGroupSize = 0
+		return
+	}
 	switch m.state {
 	case StateEmpty:
 		m.options = defaultMenuOptions

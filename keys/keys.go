@@ -54,6 +54,7 @@ const (
 	KeyFocusList     // Key for focusing the right sidebar / instance list
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
+	KeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -220,6 +221,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyTabGit: key.NewBinding(
 		key.WithKeys("#"),
 		key.WithHelp("#", "git tab"),
+	),
+	KeyExitFocus: key.NewBinding(
+		key.WithKeys("ctrl+@"),
+		key.WithHelp("ctrl+space", "exit focus"),
 	),
 
 	// -- Special keybindings --

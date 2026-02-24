@@ -158,6 +158,7 @@ func (m *home) enterFocusMode() tea.Cmd {
 	m.embeddedTerminal = term
 	m.state = stateFocusAgent
 	m.tabbedWindow.SetFocusMode(true)
+	m.menu.SetFocusMode(true)
 
 	// Start the 30fps render ticker
 	return func() tea.Msg {
@@ -184,6 +185,7 @@ func (m *home) enterGitFocusMode() tea.Cmd {
 
 	m.state = stateFocusAgent
 	m.tabbedWindow.SetFocusMode(true)
+	m.menu.SetFocusMode(true)
 
 	return func() tea.Msg {
 		return gitTabTickMsg{}
@@ -198,6 +200,7 @@ func (m *home) exitFocusMode() {
 	}
 	m.state = stateDefault
 	m.tabbedWindow.SetFocusMode(false)
+	m.menu.SetFocusMode(false)
 }
 
 // switchToTab switches to the specified tab slot, handling git tab spawn/kill lifecycle.
