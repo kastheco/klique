@@ -613,10 +613,10 @@ func (s *Sidebar) rebuildRows() {
 					Collapsed:       !s.expandedPlans[p.Filename],
 					HasRunning:      isPlanActive(effective.Status),
 					HasNotification: effective.Status == string(planstate.StatusReviewing),
-					Indent:          2,
+					Indent:          4,
 				})
 				if s.expandedPlans[p.Filename] {
-					rows = append(rows, planStageRows(effective, 4)...)
+					rows = append(rows, planStageRows(effective, 6)...)
 				}
 			}
 		}
@@ -656,10 +656,10 @@ func (s *Sidebar) rebuildRows() {
 					Collapsed:       !s.expandedPlans[p.Filename],
 					HasRunning:      isPlanActive(effective.Status),
 					HasNotification: effective.Status == string(planstate.StatusReviewing),
-					Indent:          2,
+					Indent:          4,
 				})
 				if s.expandedPlans[p.Filename] {
-					rows = append(rows, planStageRows(effective, 4)...)
+					rows = append(rows, planStageRows(effective, 6)...)
 				}
 			}
 		}
@@ -873,11 +873,6 @@ func (s *Sidebar) renderTopicRow(row sidebarRow, idx, contentWidth int) string {
 		chevron = "▾"
 	}
 
-	cursor := " "
-	if idx == s.selectedIdx {
-		cursor = "▸"
-	}
-
 	var statusGlyph string
 	var statusStyle lipgloss.Style
 	if row.HasNotification {
@@ -889,7 +884,7 @@ func (s *Sidebar) renderTopicRow(row sidebarRow, idx, contentWidth int) string {
 	}
 
 	label := row.Label
-	const fixedW = 3 // cursor(1) + chevron(1) + space(1)
+	const fixedW = 2 // chevron(1) + space(1)
 	trailW := 0
 	if statusGlyph != "" {
 		trailW = 2 // " ●"
@@ -913,7 +908,7 @@ func (s *Sidebar) renderTopicRow(row sidebarRow, idx, contentWidth int) string {
 	if statusGlyph != "" {
 		trail = " " + statusStyle.Render(statusGlyph)
 	}
-	return cursor + chevron + " " + text + strings.Repeat(" ", gap) + trail
+	return chevron + " " + text + strings.Repeat(" ", gap) + trail
 }
 
 // renderPlanRow renders a plan row.
