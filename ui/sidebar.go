@@ -708,7 +708,7 @@ func stageState(status, stage string) (done, active, locked bool) {
 	case "implement":
 		done = postImpl
 		active = implementing
-		locked = status == "ready"
+		locked = false // triggerPlanStage validates wave headers and reverts if needed
 	case "review":
 		done = status == "done"
 		active = status == "reviewing"

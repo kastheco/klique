@@ -214,7 +214,7 @@ func TestSidebarTreeRows_ApplyRuntimePlanStatusOverlay(t *testing.T) {
 	implementID := SidebarPlanStagePrefix + "fix.md::implement"
 	implementRow, ok := findRowByID(s.rows, implementID)
 	require.True(t, ok)
-	assert.True(t, implementRow.Locked)
+	assert.False(t, implementRow.Locked) // implement is never locked; triggerPlanStage validates
 	assert.False(t, implementRow.Active)
 
 	s.SetItems(nil, nil, 0, nil, map[string]TopicStatus{}, map[string]TopicStatus{"fix.md": {HasRunning: true}})

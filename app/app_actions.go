@@ -454,11 +454,12 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 	if m.planState != nil {
 		if entry, ok := m.planState.Plans[planFile]; ok {
 			implementing := entry.Status == planstate.StatusImplementing
-			postPlan := implementing || entry.Status == planstate.StatusReviewing ||
-				entry.Status == planstate.StatusDone
 			switch {
-			case !postPlan:
-				// ready or planning: primary action is to write/re-write the plan
+			case entry.Status == planstate.StatusReady:
+				// Ready: offer both plan (re-write) and implement (if plan file exists)
+				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
+				items = append(items, overlay.ContextMenuItem{Label: "Start implement", Action: "start_implement"})
+			case entry.Status == planstate.StatusPlanning:
 				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
 			case implementing:
 				items = append(items, overlay.ContextMenuItem{Label: "Start implement", Action: "start_implement"})
@@ -656,8 +657,9 @@ func isLocked(status planstate.Status, stage string) bool {
 	case "plan":
 		return false
 	case "implement":
-		// Locked only before any planning work has started.
-		return status == planstate.StatusReady
+		// Never locked — triggerPlanStage("implement") validates wave headers
+		// and reverts to planning if the plan isn't ready yet.
+		return false
 	case "review":
 		return status == planstate.StatusReady || status == planstate.StatusPlanning || implementing
 	case "finished":
