@@ -444,6 +444,158 @@ func TestPlannerExit_EscPreservesForRePrompt(t *testing.T) {
 		"pendingPlannerInstanceTitle must be cleared after esc")
 }
 
+// ---------------------------------------------------------------------------
+// All-waves-complete → review flow tests
+// ---------------------------------------------------------------------------
+
+// TestWaveMonitor_AllComplete_ShowsReviewPrompt verifies that when all tasks in the
+// final wave complete, the orchestrator is deleted and a confirmation dialog appears
+// asking the user to push and start review.
+func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
+	const planFile = "2026-02-24-all-complete.md"
+
+	// Single wave plan — completing its tasks triggers WaveStateAllComplete directly.
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Only task", Body: "do it"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "all-complete test", "plan/all-complete", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	// Create task instance with PromptDetected (agent finished)
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "all-complete-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	h.fsm = planfsm.New(plansDir)
+	_ = h.list.AddInstance(inst)
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "all-complete-W1-T1", TmuxAlive: true}},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Orchestrator must be deleted
+	assert.Empty(t, updated.waveOrchestrators,
+		"orchestrator must be deleted after all waves complete")
+
+	// Confirmation dialog must appear for review
+	assert.Equal(t, stateConfirm, updated.state,
+		"state must be stateConfirm to prompt user for review")
+	require.NotNil(t, updated.confirmationOverlay,
+		"confirmation overlay must be set for all-complete review prompt")
+	// Standard confirm dialog (y/n) — not a wave-failed decision prompt
+	assert.Equal(t, "y", updated.confirmationOverlay.ConfirmKey,
+		"confirm key must be 'y' for review prompt")
+}
+
+// TestWaveAllCompleteMsg_TransitionsToReviewing verifies that the waveAllCompleteMsg
+// handler transitions the plan FSM from implementing to reviewing.
+func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
+	const planFile = "2026-02-24-review-transition.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "review transition test", "plan/review-trans", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
+	h.fsm = planfsm.New(plansDir)
+
+	model, _ := h.Update(waveAllCompleteMsg{planFile: planFile})
+	updated := model.(*home)
+
+	// Reload plan state from disk to verify FSM transition persisted.
+	reloaded, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status,
+		"plan must transition to reviewing after waveAllCompleteMsg")
+
+	// Toast must confirm the transition
+	_ = updated // ensure the model is used (toast is in-memory, hard to assert without rendering)
+}
+
+// TestWaveMonitor_AllComplete_MultiWave verifies the flow with a multi-wave plan
+// where all waves complete sequentially (wave 1 done → advance → wave 2 done → review prompt).
+func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
+	const planFile = "2026-02-24-multi-wave.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "W1 task", Body: "first"}}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "W2 task", Body: "second"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()     // start wave 1
+	orch.MarkTaskComplete(1) // wave 1 done → WaveStateWaveComplete
+	require.Equal(t, WaveStateWaveComplete, orch.State())
+
+	orch.StartNextWave() // advance to wave 2
+	require.Equal(t, WaveStateRunning, orch.State())
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "multi wave test", "plan/multi-wave", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	// Wave 2 task instance — agent finished
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "multi-wave-W2-T2",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 2,
+		WaveNumber: 2,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	h.fsm = planfsm.New(plansDir)
+	_ = h.list.AddInstance(inst)
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "multi-wave-W2-T2", TmuxAlive: true}},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Wave 2 was the last wave → AllComplete → review prompt
+	assert.Empty(t, updated.waveOrchestrators,
+		"orchestrator must be deleted after final wave completes")
+	assert.Equal(t, stateConfirm, updated.state,
+		"state must be stateConfirm for review prompt after final wave")
+}
+
 // TestPlannerExit_CancelKillsInstanceAndMarksPrompted verifies that pressing "n"
 // on the planner-exit dialog kills the planner instance and marks plannerPrompted.
 func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {

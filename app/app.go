@@ -769,9 +769,26 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					orchState = orch.State() // refresh after task updates
 				}
 
-				// If all waves complete, delete orchestrator (coder-exit flow takes over).
+				// All waves complete — pause the last wave's tasks, prompt for review.
 				if orchState == WaveStateAllComplete {
+					capturedPlanFile := planFile
+					planName := planstate.DisplayName(planFile)
+
+					// Pause all task instances (they're done, free up resources).
+					for _, inst := range m.list.GetInstances() {
+						if inst.PlanFile == capturedPlanFile && inst.TaskNumber > 0 {
+							inst.ImplementationComplete = true
+							_ = inst.Pause()
+						}
+					}
 					delete(m.waveOrchestrators, planFile)
+
+					if m.state != stateConfirm {
+						message := fmt.Sprintf("All waves complete for '%s'. Push branch and start review?", planName)
+						m.confirmAction(message, func() tea.Msg {
+							return waveAllCompleteMsg{planFile: capturedPlanFile}
+						})
+					}
 					continue
 				}
 
@@ -883,6 +900,40 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toastManager.Info(fmt.Sprintf("Wave orchestration aborted for %s",
 			planstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.toastTickCmd())
+	case waveAllCompleteMsg:
+		// All waves finished and user confirmed — push branch and advance to review.
+		planFile := msg.planFile
+		planName := planstate.DisplayName(planFile)
+
+		// Push the implementation branch (best-effort, non-blocking).
+		for _, inst := range m.list.GetInstances() {
+			if inst.PlanFile == planFile && inst.TaskNumber > 0 {
+				worktree, err := inst.GetGitWorktree()
+				if err == nil {
+					_ = worktree.PushChanges(
+						fmt.Sprintf("[kas] push completed implementation for '%s'", planName),
+						false,
+					)
+					break // one push is enough — all tasks share the worktree
+				}
+			}
+		}
+
+		// Transition FSM implementing → reviewing.
+		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+			log.WarningLog.Printf("wave all-complete: could not transition %q to reviewing: %v", planFile, err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateSidebarItems()
+
+		// Spawn reviewer agent for the completed plan.
+		var reviewerCmd tea.Cmd
+		if cmd := m.spawnReviewer(planFile); cmd != nil {
+			reviewerCmd = cmd
+		}
+		m.toastManager.Info(fmt.Sprintf("All waves complete for '%s' — starting review", planName))
+		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
 	case plannerCompleteMsg:
 		// User confirmed: start implementation. Kill the dead planner instance first.
 		m.plannerPrompted[msg.planFile] = true
@@ -1076,6 +1127,12 @@ type waveRetryMsg struct {
 
 // waveAbortMsg is sent when the user chooses "abort" on the failed-wave decision prompt.
 type waveAbortMsg struct {
+	planFile string
+}
+
+// waveAllCompleteMsg is sent when the user confirms advancing to review
+// after all waves in a plan have finished.
+type waveAllCompleteMsg struct {
 	planFile string
 }
 
