@@ -503,8 +503,6 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 	items = append(items,
 		overlay.ContextMenuItem{Label: "View plan", Action: "view_plan"},
 		overlay.ContextMenuItem{Label: "Change topic", Action: "change_topic"},
-		overlay.ContextMenuItem{Label: "Push branch", Action: "push_plan_branch"},
-		overlay.ContextMenuItem{Label: "Create PR", Action: "create_plan_pr"},
 		overlay.ContextMenuItem{Label: "Merge to main", Action: "merge_plan"},
 		overlay.ContextMenuItem{Label: "Mark done", Action: "mark_plan_done"},
 		overlay.ContextMenuItem{Label: "Start over", Action: "start_over_plan"},
