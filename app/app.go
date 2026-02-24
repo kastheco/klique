@@ -369,6 +369,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
+	if m.previewTerminal != nil {
+		m.previewTerminal.Resize(previewWidth, previewHeight)
+	}
 	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
 		log.ErrorLog.Print(err)
 	}
