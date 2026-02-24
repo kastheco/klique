@@ -527,7 +527,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Preview tab focus: forward to embedded terminal
-		if m.embeddedTerminal == nil {
+		if m.previewTerminal == nil {
 			m.exitFocusMode()
 			return m, nil
 		}
@@ -535,7 +535,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if data == nil {
 			return m, nil
 		}
-		if err := m.embeddedTerminal.SendKey(data); err != nil {
+		if err := m.previewTerminal.SendKey(data); err != nil {
 			return m, m.handleError(err)
 		}
 		return m, nil

@@ -175,8 +175,10 @@ type home struct {
 	termWidth  int
 	termHeight int
 
-	// embeddedTerminal is the VT emulator for focus mode (nil when not in focus mode)
-	embeddedTerminal *session.EmbeddedTerminal
+	// previewTerminal is the VT emulator for the selected instance's preview.
+	// Also used for focus mode — entering focus just forwards keys to this terminal.
+	previewTerminal         *session.EmbeddedTerminal
+	previewTerminalInstance string // title of the instance the terminal is attached to
 
 	// repoPickerMap maps picker display text to full repo path
 	repoPickerMap map[string]string
@@ -414,29 +416,37 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tabbedWindow.SetDocumentContent(msg.rendered)
 		return m, nil
 	case previewTickMsg:
-		cmd := m.instanceChanged()
-		// Advance banner animation every 20 ticks (~1s per frame at 50ms tick)
+		// If previewTerminal is active, render from it (zero-latency VT emulator).
+		if m.previewTerminal != nil && !m.tabbedWindow.IsDocumentMode() {
+			if content, changed := m.previewTerminal.Render(); changed {
+				m.tabbedWindow.SetPreviewContent(content)
+			}
+		}
+		// Banner animation (only when no terminal is active / fallback showing).
 		m.previewTickCount++
 		if m.previewTickCount%20 == 0 {
 			m.tabbedWindow.TickBanner()
 		}
-		return m, tea.Batch(
-			cmd,
-			func() tea.Msg {
+		// Use event-driven wakeup when terminal is live, fall back to 50ms poll otherwise.
+		term := m.previewTerminal
+		return m, func() tea.Msg {
+			if term != nil {
+				term.WaitForRender(50 * time.Millisecond)
+			} else {
 				time.Sleep(50 * time.Millisecond)
-				return previewTickMsg{}
-			},
-		)
+			}
+			return previewTickMsg{}
+		}
 	case focusPreviewTickMsg:
-		if m.state != stateFocusAgent || m.embeddedTerminal == nil {
+		if m.state != stateFocusAgent || m.previewTerminal == nil {
 			return m, nil
 		}
-		if content, changed := m.embeddedTerminal.Render(); changed {
+		if content, changed := m.previewTerminal.Render(); changed {
 			m.tabbedWindow.SetPreviewContent(content)
 		}
 		// Capture reference for the command goroutine — safe even if
-		// exitFocusMode() nils m.embeddedTerminal before the command fires.
-		term := m.embeddedTerminal
+		// exitFocusMode() nils m.previewTerminal before the command fires.
+		term := m.previewTerminal
 		return m, func() tea.Msg {
 			// Block until new content is rendered or 50ms elapses.
 			// This replaces the fixed 16ms sleep with event-driven wakeup,
@@ -1127,6 +1137,13 @@ type tickUpdateMetadataMessage struct{}
 
 // focusPreviewTickMsg is a fast ticker (30fps) for focus mode preview refresh only.
 type focusPreviewTickMsg struct{}
+
+// previewTerminalReadyMsg signals that the async terminal attach completed.
+type previewTerminalReadyMsg struct {
+	term          *session.EmbeddedTerminal
+	instanceTitle string
+	err           error
+}
 
 // gitTabTickMsg is a 30fps ticker for refreshing the git tab's lazygit rendering.
 type gitTabTickMsg struct{}

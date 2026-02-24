@@ -156,7 +156,7 @@ func (m *home) enterFocusMode() tea.Cmd {
 		return m.handleError(err)
 	}
 
-	m.embeddedTerminal = term
+	m.previewTerminal = term
 	m.state = stateFocusAgent
 	m.tabbedWindow.SetFocusMode(true)
 	m.menu.SetFocusMode(true)
@@ -195,9 +195,9 @@ func (m *home) enterGitFocusMode() tea.Cmd {
 
 // exitFocusMode shuts down the embedded terminal and resets state.
 func (m *home) exitFocusMode() {
-	if m.embeddedTerminal != nil {
-		m.embeddedTerminal.Close()
-		m.embeddedTerminal = nil
+	if m.previewTerminal != nil {
+		m.previewTerminal.Close()
+		m.previewTerminal = nil
 	}
 	m.state = stateDefault
 	m.tabbedWindow.SetFocusMode(false)
