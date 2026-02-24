@@ -298,7 +298,7 @@
       "created_at": "2026-02-24T03:50:07.986559175Z"
     },
     "2026-02-24-clickup-import.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "add a feature for importing clickup tasks as plans using the official MCP server. this feature is optional and is only available when the clickup mcp server is detected. have it be an option at the bottom the plans list above history (+ import from clickup) or something like that. once the task details are downloaded, run the plan through superpowers brainstorming using a planning agent automatically to determine if it's ready for implementation or needs to be fleshed out.",
       "branch": "plan/clickup-import",
       "created_at": "2026-02-24T02:44:43.679630782Z"

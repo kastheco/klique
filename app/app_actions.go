@@ -455,12 +455,12 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 		if entry, ok := m.planState.Plans[planFile]; ok {
 			implementing := entry.Status == planstate.StatusImplementing
 			switch {
-			case entry.Status == planstate.StatusReady:
-				// Ready: offer both plan (re-write) and implement (if plan file exists)
+			case entry.Status == planstate.StatusReady || entry.Status == planstate.StatusPlanning:
+				// Ready or planning: offer both plan (write/re-write) and implement.
+				// triggerPlanStage("implement") validates wave headers and auto-reverts
+				// to planning if the plan isn't ready, so this is always safe.
 				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
 				items = append(items, overlay.ContextMenuItem{Label: "Start implement", Action: "start_implement"})
-			case entry.Status == planstate.StatusPlanning:
-				items = append(items, overlay.ContextMenuItem{Label: "Start plan", Action: "start_plan"})
 			case implementing:
 				items = append(items, overlay.ContextMenuItem{Label: "Start implement", Action: "start_implement"})
 			case entry.Status == planstate.StatusReviewing:
