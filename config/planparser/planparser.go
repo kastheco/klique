@@ -45,7 +45,7 @@ func (p *Plan) HeaderContext() string {
 }
 
 var (
-	waveHeaderRe = regexp.MustCompile(`(?m)^## Wave (\d+)\s*$`)
+	waveHeaderRe = regexp.MustCompile(`(?m)^## Wave (\d+)\b.*$`)
 	taskHeaderRe = regexp.MustCompile(`(?m)^### Task (\d+):\s*(.+)$`)
 	goalRe       = regexp.MustCompile(`(?m)^\*\*Goal:\*\*\s*(.+)$`)
 	archRe       = regexp.MustCompile(`(?m)^\*\*Architecture:\*\*\s*(.+)$`)
