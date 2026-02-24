@@ -228,10 +228,7 @@ func (l *List) String() string {
 	const autoYesText = " auto-yes "
 
 	// Border frame: 2 border + 2 padding = 4 chars horizontal, 2 chars vertical.
-	// An extra 2-char buffer matches the sidebar's innerWidth = width-6 so that
-	// placing the bordered element Right-aligned leaves a 2-char gap on the left,
-	// mirroring the sidebar's 2-char gap on its right side.
-	const borderH = 6
+	const borderH = 4
 	const borderV = 2
 
 	// Inner width available inside the border.
@@ -299,12 +296,8 @@ func (l *List) String() string {
 	if innerHeight < 4 {
 		innerHeight = 4
 	}
-	// borderStyle.Width/Height set the inner content dimensions; no inner Place
-	// needed — the border itself constrains and pads the content.
 	bordered := borderStyle.Width(innerWidth).Height(innerHeight).Render(b.String())
-	// Place Right so the border hugs the right edge, leaving the 2-char gap on
-	// the left (between preview and list), mirroring the sidebar's right gap.
-	return lipgloss.Place(l.width, l.height, lipgloss.Right, lipgloss.Top, bordered)
+	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, bordered)
 }
 
 // itemHeight returns the rendered row count for an instance entry.

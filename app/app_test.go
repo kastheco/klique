@@ -479,6 +479,15 @@ func TestFocusRing(t *testing.T) {
 		}
 	}
 
+	addTestInstance := func(t *testing.T, h *home) {
+		t.Helper()
+		inst, err := session.NewInstance(session.InstanceOptions{
+			Title: "test", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		h.list.AddInstance(inst)()
+	}
+
 	handle := func(t *testing.T, h *home, msg tea.KeyMsg) *home {
 		t.Helper()
 		h.keySent = true
@@ -562,13 +571,23 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotGit, homeModel.focusSlot)
 	})
 
-	t.Run("t jumps to list slot", func(t *testing.T) {
+	t.Run("t jumps to list slot when instances exist", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotSidebar)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
 
 		assert.Equal(t, slotList, homeModel.focusSlot)
+	})
+
+	t.Run("t is no-op when list is empty", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotSidebar)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
 	})
 
 	// --- Direct slot jumps ---
@@ -656,9 +675,11 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	// --- Arrow key navigation (layout: sidebar | list | tabs) ---
+	// When instances exist, list acts as a waypoint between sidebar and tabs.
 
-	t.Run("← from agent moves to list", func(t *testing.T) {
+	t.Run("← from agent moves to list (instances exist)", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotAgent)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
@@ -666,8 +687,9 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotList, homeModel.focusSlot)
 	})
 
-	t.Run("← from diff moves to list", func(t *testing.T) {
+	t.Run("← from diff moves to list (instances exist)", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotDiff)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
@@ -677,6 +699,7 @@ func TestFocusRing(t *testing.T) {
 
 	t.Run("← from list moves to sidebar", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotList)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
@@ -684,8 +707,9 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotSidebar, homeModel.focusSlot)
 	})
 
-	t.Run("→ from sidebar moves to list", func(t *testing.T) {
+	t.Run("→ from sidebar moves to list (instances exist)", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotSidebar)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
@@ -695,6 +719,7 @@ func TestFocusRing(t *testing.T) {
 
 	t.Run("→ from list moves to agent", func(t *testing.T) {
 		h := newTestHome()
+		addTestInstance(t, h)
 		h.setFocusSlot(slotList)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
@@ -705,6 +730,26 @@ func TestFocusRing(t *testing.T) {
 	t.Run("→ from agent is no-op (already rightmost)", func(t *testing.T) {
 		h := newTestHome()
 		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
+
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	// --- Arrow keys skip list when no instances ---
+
+	t.Run("← from agent skips to sidebar (no instances)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+
+		assert.Equal(t, slotSidebar, homeModel.focusSlot)
+	})
+
+	t.Run("→ from sidebar skips to agent (no instances)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotSidebar)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
 

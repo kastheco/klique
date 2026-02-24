@@ -1000,8 +1000,8 @@ func (s *Sidebar) String() string {
 		borderStyle = borderStyle.BorderForeground(ColorOverlay)
 	}
 
-	// Inner width accounts for border (2) + border padding (2)
-	innerWidth := s.width - 6
+	// Inner width accounts for border (2) + border padding (2) = 4
+	innerWidth := s.width - 4
 	if innerWidth < 8 {
 		innerWidth = 8
 	}

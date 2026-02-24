@@ -1168,8 +1168,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.setFocusSlot(slotSidebar)
 		return m, nil
 	case keys.KeyFocusList:
-		// t key always jumps directly to the right sidebar (instance list).
-		m.setFocusSlot(slotList)
+		// t key always jumps directly to the instance list — no-op when list is hidden.
+		if m.list.TotalInstances() > 0 {
+			m.setFocusSlot(slotList)
+		}
 		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
@@ -1187,6 +1189,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
+		listVisible := m.list.TotalInstances() > 0
 		switch m.focusSlot {
 		case slotGit:
 			gitPane := m.tabbedWindow.GetGitPane()
@@ -1195,14 +1198,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, nil
 			}
 			// Not running — fall through to panel navigation
-			m.setFocusSlot(slotList)
+			if listVisible {
+				m.setFocusSlot(slotList)
+			} else {
+				m.setFocusSlot(slotSidebar)
+			}
 		case slotAgent, slotDiff:
-			m.setFocusSlot(slotList)
+			if listVisible {
+				m.setFocusSlot(slotList)
+			} else {
+				m.setFocusSlot(slotSidebar)
+			}
 		case slotList:
 			m.setFocusSlot(slotSidebar)
 		}
 		return m, nil
 	case keys.KeyArrowRight:
+		listVisible := m.list.TotalInstances() > 0
 		switch m.focusSlot {
 		case slotGit:
 			gitPane := m.tabbedWindow.GetGitPane()
@@ -1212,7 +1224,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			// Not running — no-op (already rightmost)
 		case slotSidebar:
-			m.setFocusSlot(slotList)
+			if listVisible {
+				m.setFocusSlot(slotList)
+			} else {
+				m.setFocusSlot(slotAgent)
+			}
 		case slotList:
 			m.setFocusSlot(slotAgent)
 		case slotAgent, slotDiff:

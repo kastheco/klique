@@ -309,17 +309,21 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// Three-column layout: sidebar (15%), instance list (20%), preview (remaining)
+	// Three-column layout: sidebar (18%), instance list (20%), preview (remaining)
+	// The instance list column is hidden when there are no instances.
 	var sidebarWidth int
 	if m.sidebarHidden {
 		sidebarWidth = 0
 	} else {
-		sidebarWidth = int(float32(msg.Width) * 0.18)
+		sidebarWidth = int(float32(msg.Width) * 0.25)
 		if sidebarWidth < 20 {
 			sidebarWidth = 20
 		}
 	}
-	listWidth := int(float32(msg.Width) * 0.20)
+	var listWidth int
+	if m.list.TotalInstances() > 0 {
+		listWidth = int(float32(msg.Width) * 0.20)
+	}
 	tabsWidth := msg.Width - sidebarWidth - listWidth
 
 	// Keep the keybind rail compact and give the saved rows to the three columns.
@@ -344,6 +348,11 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	m.listWidth = listWidth
 	m.tabsWidth = tabsWidth
 	m.contentHeight = contentHeight
+
+	// If the list column disappeared while it had focus, move to sidebar.
+	if listWidth == 0 && m.focusSlot == slotList {
+		m.setFocusSlot(slotSidebar)
+	}
 
 	if m.textInputOverlay != nil {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
@@ -914,16 +923,19 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 func (m *home) View() string {
 	// All columns use identical padding and height for uniform alignment.
 	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1)
-	sidebarView := colStyle.Render(m.sidebar.String())
-	listWithPadding := colStyle.Render(m.list.String())
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
+
 	// Layout: sidebar | instance list (middle) | preview/tabs (right)
-	var listAndPreview string
-	if m.sidebarHidden {
-		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
-	} else {
-		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
+	// The instance list column is omitted when there are no instances.
+	var cols []string
+	if !m.sidebarHidden {
+		cols = append(cols, colStyle.Render(m.sidebar.String()))
 	}
+	if m.listWidth > 0 {
+		cols = append(cols, colStyle.Render(m.list.String()))
+	}
+	cols = append(cols, previewWithPadding)
+	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
