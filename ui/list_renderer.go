@@ -92,19 +92,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 		skipPermsIndicator = " \uf132"
 	}
 
-	// Wave badge for task instances (e.g. "W1" for wave 1 tasks).
-	// Keep a plain (unstyled) version for accurate visual-width calculation.
-	// Inherit the title background so the badge doesn't break the row color.
-	waveBadgePlain := ""
-	waveBadgeStyled := ""
-	if i.WaveNumber > 0 {
-		waveBadgePlain = fmt.Sprintf(" W%d", i.WaveNumber)
-		waveBadgeStyled = waveBadgeStyle.Background(titleS.GetBackground()).Render(waveBadgePlain)
-	}
-
-	// Use the plain badge for width measurement, styled badge for rendering.
-	titleContentPlain := fmt.Sprintf("%s %s%s%s", prefix, titleText, skipPermsIndicator, waveBadgePlain)
-	titleContent := fmt.Sprintf("%s %s%s%s", prefix, titleText, skipPermsIndicator, waveBadgeStyled)
+	// Use the plain title for width measurement and rendering.
+	// Wave number is now embedded in the title (e.g. "plan-W1-T2") so no badge needed.
+	titleContentPlain := fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)
+	titleContent := fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)
 	// Build title line: content + spaces + status icon, all fitting within r.width
 	titleContentWidth := runewidth.StringWidth(titleContentPlain)
 	joinWidth := runewidth.StringWidth(join)

@@ -643,12 +643,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingWaveNextAction = nil
 			return m, nil
 		case "esc":
-			// Esc — preserve everything, allow re-prompt on next tick.
+			// Esc — preserve everything, allow re-prompt on next tick (after cooldown).
 			if m.pendingWaveConfirmPlanFile != "" {
 				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmPlanFile]; ok {
 					orch.ResetConfirm()
 				}
 				m.pendingWaveConfirmPlanFile = ""
+				m.waveConfirmDismissedAt = time.Now()
 			}
 			// Planner-exit esc: do NOT mark plannerPrompted — allows re-prompt next tick.
 			m.pendingPlannerInstanceTitle = ""

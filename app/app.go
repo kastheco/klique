@@ -196,6 +196,10 @@ type home struct {
 	// pendingWaveConfirmPlanFile is set while a wave-advance (or failed-wave decision)
 	// confirmation overlay is showing, so cancel can reset the orchestrator latch.
 	pendingWaveConfirmPlanFile string
+	// waveConfirmDismissedAt is the time the wave confirm dialog was last dismissed
+	// via Esc. Used to impose a cooldown before re-showing the dialog.
+	waveConfirmDismissedAt time.Time
+
 	// pendingWaveAbortAction is the abort action for a failed-wave decision dialog.
 	// Triggered when the user presses 'a' while the failed-wave overlay is active.
 	pendingWaveAbortAction tea.Cmd
@@ -564,6 +568,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if md.Updated {
 					inst.SetStatus(session.Running)
+					inst.PromptDetected = false
 					if md.Content != "" {
 						inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
 					}
@@ -725,7 +730,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Check task status updates only while the wave is actively running.
 					planName := planstate.DisplayName(planFile)
 					for _, task := range orch.CurrentWaveTasks() {
-						taskTitle := fmt.Sprintf("%s-T%d", planName, task.Number)
+						taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
 						inst, exists := instanceMap[taskTitle]
 						if !exists {
 							// No matching instance — treat as failed (e.g. spawn crashed).
@@ -759,7 +764,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// orchState must be WaveStateWaveComplete here.
 				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
 				// ResetConfirm on cancel allows the prompt to reappear next tick).
-				if m.state != stateConfirm && orch.NeedsConfirm() {
+				if m.state != stateConfirm && time.Since(m.waveConfirmDismissedAt) > 30*time.Second && orch.NeedsConfirm() {
 					waveNum := orch.CurrentWaveNumber()
 					completed := orch.CompletedTaskCount()
 					failed := orch.FailedTaskCount()
@@ -824,7 +829,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Pause completed wave's instances before starting the next.
 		planName := planstate.DisplayName(msg.planFile)
 		for _, task := range orch.CurrentWaveTasks() {
-			taskTitle := fmt.Sprintf("%s-T%d", planName, task.Number)
+			taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
 			for _, inst := range m.list.GetInstances() {
 				if inst.Title == taskTitle && inst.PromptDetected {
 					if err := inst.Pause(); err != nil {

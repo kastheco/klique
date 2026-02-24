@@ -557,6 +557,18 @@ func (m *home) updateSidebarPlans() {
 		})
 	}
 
+	// Flatten single-plan topics where topic name matches the plan display name.
+	// These don't benefit from a topic header — show the plan directly as ungrouped.
+	filtered := topics[:0]
+	for _, t := range topics {
+		if len(t.Plans) == 1 && t.Name == planstate.DisplayName(t.Plans[0].Filename) {
+			ungrouped = append(ungrouped, t.Plans[0])
+		} else {
+			filtered = append(filtered, t)
+		}
+	}
+	topics = filtered
+
 	// Build history
 	finishedInfos := m.planState.Finished()
 	history := make([]ui.PlanDisplay, 0, len(finishedInfos))
@@ -1062,7 +1074,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 				break
 			}
 			// Mark all tasks in this earlier wave as complete to advance.
-			for _, t := range plan.Waves[orch.currentWave-1].Tasks {
+			for _, t := range plan.Waves[orch.currentWave].Tasks {
 				orch.MarkTaskComplete(t.Number)
 			}
 		}
@@ -1101,7 +1113,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 		prompt := buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves())
 
 		inst, err := session.NewInstance(session.InstanceOptions{
-			Title:      fmt.Sprintf("%s-T%d", planName, task.Number),
+			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
 			Path:       m.activeRepoPath,
 			Program:    m.program,
 			PlanFile:   planFile,
