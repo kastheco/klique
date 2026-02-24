@@ -906,12 +906,12 @@ func (m *home) View() string {
 	sidebarView := colStyle.Render(m.sidebar.String())
 	listWithPadding := colStyle.Render(m.list.String())
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
-	// Layout: sidebar | preview (center/main) | instance list (right)
+	// Layout: sidebar | instance list (middle) | preview/tabs (right)
 	var listAndPreview string
 	if m.sidebarHidden {
-		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, previewWithPadding, listWithPadding)
+		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
 	} else {
-		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, previewWithPadding, listWithPadding)
+		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 	}
 
 	mainView := lipgloss.JoinVertical(
