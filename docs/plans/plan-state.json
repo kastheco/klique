@@ -164,7 +164,7 @@
       "implemented": "2026-02-22"
     },
     "2026-02-22-2-tree-mode-wiring.md": {
-      "status": "completed",
+      "status": "done",
       "description": "wire tree renderer, navigation, and highlight-boost together; remove DisableTreeMode gate",
       "branch": "plan/2-tree-mode-wiring",
       "topic": "sidebar",
@@ -183,7 +183,7 @@
       "created_at": "2026-02-22T08:28:43.336094301Z"
     },
     "2026-02-22-center-col-v-align.md": {
-      "status": "completed",
+      "status": "done",
       "description": "center column is scrolled up slightly and also not bottom aligned",
       "branch": "plan/center-col-v-align",
       "created_at": "2026-02-22T08:33:42.034471509Z"
@@ -249,7 +249,7 @@
       "implemented": "2026-02-22"
     },
     "2026-02-22-rename-to-kasmos.md": {
-      "status": "completed",
+      "status": "done",
       "description": "switch name back to kasmos and overtake that repo (rename that one to kasmold first)",
       "branch": "plan/rename-to-kasmos",
       "created_at": "2026-02-22T09:53:24.333455818Z"
@@ -261,7 +261,7 @@
       "created_at": "2026-02-22T09:54:49.026733734Z"
     },
     "2026-02-22-tab-focus-ring.md": {
-      "status": "completed",
+      "status": "done",
       "description": "implement 5-slot Tab focus ring: key defs, focusSlot state, key routing, tests, gradient, help",
       "created_at": "2026-02-22T18:45:00Z",
       "implemented": "2026-02-22"
@@ -280,16 +280,22 @@
       "implemented": "2026-02-22"
     },
     "2026-02-23-plan-state-machine.md": {
-      "status": "completed",
+      "status": "done",
       "description": "centralized FSM for plan lifecycle with flock serialization and agent sentinel files",
       "branch": "plan/plan-state-machine",
       "created_at": "2026-02-23T14:00:00Z"
     },
     "2026-02-23-update-ascii-art.md": {
-      "status": "completed",
+      "status": "done",
       "description": "replace KLIQUE ascii art banner with KASMOS using same ANSI Shadow font",
       "branch": "plan/update-ascii-art",
       "created_at": "2026-02-23T18:00:00Z"
+    },
+    "2026-02-24-clickup-import.md": {
+      "status": "ready",
+      "description": "add a feature for importing clickup tasks as plans using the official MCP server. this feature is optional and is only available when the clickup mcp server is detected. have it be an option at the bottom the plans list above history (+ import from clickup) or something like that. once the task details are downloaded, run the plan through superpowers brainstorming using a planning agent automatically to determine if it's ready for implementation or needs to be fleshed out.",
+      "branch": "plan/clickup-import",
+      "created_at": "2026-02-24T02:44:43.679630782Z"
     }
   }
 }
