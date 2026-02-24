@@ -15,13 +15,15 @@ Before writing code, load the relevant superpowers skill for your task:
 ## Plan State
 
 Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
-Never modify plan file content for state tracking.
+**Never modify `plan-state.json` directly** — kasmos owns that file.
 
-When you finish implementing a plan, write a sentinel file:
-`docs/plans/.signals/implement-finished-<planfile>`
-(empty file — just create it). kasmos will detect this and advance the plan to review.
+When you finish implementing a plan, signal kasmos by writing a sentinel file:
 
-**Never modify `plan-state.json` directly.** kasmos owns that file.
+```bash
+touch docs/plans/.signals/implement-finished-<date>-<name>.md
+```
+
+kasmos detects this and transitions the plan to `reviewing` status automatically.
 
 ## Project Skills
 

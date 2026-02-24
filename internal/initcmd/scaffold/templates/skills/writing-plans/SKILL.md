@@ -96,7 +96,9 @@ git commit -m "feat: add specific feature"
 
 ## After Saving the Plan
 
-**Immediately after writing the plan file, call `TodoWrite` to populate the session task list.**
+Do all three of these steps immediately after writing the plan file. Do not skip any of them.
+
+**Step 1: Call `TodoWrite` to populate the session task list.**
 
 Create one todo per `### Task N:` in the plan, all with status `pending` and appropriate priority:
 
@@ -108,7 +110,25 @@ TodoWrite([
 ])
 ```
 
-This is **mandatory** — the plan state must be reflected in the session todo list so execution tools can track progress. Do not skip this step.
+**Step 2: Signal kasmos by writing a sentinel file.**
+
+kasmos monitors `docs/plans/.signals/` to detect when agents finish phases. Create an empty file:
+
+```bash
+touch docs/plans/.signals/planner-finished-<date>-<name>.md
+# e.g. touch docs/plans/.signals/planner-finished-2026-02-24-auth-refactor.md
+```
+
+The filename must match the plan filename exactly (same `<date>-<name>.md` portion). kasmos will detect this file, register the plan in `plan-state.json`, and update the TUI sidebar automatically. **Do not edit `plan-state.json` directly** — kasmos owns that file.
+
+**Step 3: Commit the plan.**
+
+```bash
+git add docs/plans/<date>-<name>.md
+git commit -m "plan: <feature name>"
+```
+
+Do not commit the sentinel file — it is consumed and deleted by kasmos.
 
 ## Execution Handoff
 
