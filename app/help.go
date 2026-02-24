@@ -54,7 +54,7 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("q")+descStyle.Render("             - quit"),
 		"",
 		headerStyle.Render("sessions:"),
-		keyStyle.Render("↵/o")+descStyle.Render("           - attach to tmux session fullscreen"),
+		keyStyle.Render("↵/o")+descStyle.Render("           - attach to tmux session fullscreen (ctrl+q to detach)"),
 		keyStyle.Render("i")+descStyle.Render("             - interactive mode (ctrl+space to exit)"),
 		keyStyle.Render("K")+descStyle.Render("             - kill selected session"),
 		keyStyle.Render("r")+descStyle.Render("             - resume paused session"),
