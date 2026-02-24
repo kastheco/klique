@@ -922,3 +922,124 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 		// errTerm.Close() was called internally by the handler
 	})
 }
+
+// TestPreviewTerminal_RenderTickIntegration tests the full preview terminal lifecycle:
+// selection change → previewTerminalReadyMsg → render tick → selection change again.
+func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
+	newTestHomeWithInstances := func(t *testing.T) (*home, *session.Instance, *session.Instance) {
+		t.Helper()
+		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+		h := &home{
+			ctx:          context.Background(),
+			state:        stateDefault,
+			appConfig:    config.DefaultConfig(),
+			list:         ui.NewList(&spin, false),
+			menu:         ui.NewMenu(),
+			sidebar:      ui.NewSidebar(),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
+		}
+
+		instA, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-A", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instA.MarkStartedForTest()
+		instA.Status = session.Running
+		instA.CachedContentSet = true
+
+		instB, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-B", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instB.MarkStartedForTest()
+		instB.Status = session.Running
+		instB.CachedContentSet = true
+
+		h.list.AddInstance(instA)()
+		h.list.AddInstance(instB)()
+
+		return h, instA, instB
+	}
+
+	t.Run("full flow: attach → tick → selection change → discard old terminal", func(t *testing.T) {
+		h, instA, instB := newTestHomeWithInstances(t)
+
+		// Step 1: Select instance A and simulate instanceChanged returning a spawn cmd.
+		require.True(t, h.list.SelectInstance(instA))
+		spawnCmd := h.instanceChanged()
+		assert.NotNil(t, spawnCmd, "instanceChanged should return spawn cmd for new selection")
+		assert.Nil(t, h.previewTerminal, "terminal not yet attached — spawn is async")
+
+		// Step 2: Async spawn completes — deliver previewTerminalReadyMsg for instance A.
+		termA := session.NewDummyTerminal()
+		_, cmd := h.Update(previewTerminalReadyMsg{
+			term:          termA,
+			instanceTitle: "instance-A",
+		})
+		assert.Equal(t, termA, h.previewTerminal, "terminal A should be attached")
+		assert.Equal(t, "instance-A", h.previewTerminalInstance)
+		assert.Nil(t, cmd, "no follow-up cmd from ready msg")
+
+		// Step 3: Render tick fires — terminal is active, tick returns event-driven cmd.
+		_, tickCmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, tickCmd, "previewTickMsg should always return a follow-up tick cmd")
+		// previewTerminal is still attached after the tick.
+		assert.Equal(t, termA, h.previewTerminal, "terminal A should remain attached after tick")
+
+		// Step 4: User selects instance B — old terminal is discarded, new spawn cmd returned.
+		require.True(t, h.list.SelectInstance(instB))
+		spawnCmd2 := h.instanceChanged()
+
+		assert.Nil(t, h.previewTerminal, "old terminal A should be discarded on selection change")
+		assert.Empty(t, h.previewTerminalInstance, "instance name should be cleared")
+		assert.NotNil(t, spawnCmd2, "new spawn cmd should be returned for instance B")
+	})
+
+	t.Run("render tick with nil terminal returns sleep-based cmd", func(t *testing.T) {
+		h, _, _ := newTestHomeWithInstances(t)
+		// No terminal attached.
+		assert.Nil(t, h.previewTerminal)
+
+		_, cmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, cmd, "previewTickMsg should return a follow-up cmd even with nil terminal")
+	})
+
+	t.Run("render tick with active terminal returns event-driven cmd", func(t *testing.T) {
+		h, instA, _ := newTestHomeWithInstances(t)
+		h.list.SelectInstance(instA)
+
+		term := session.NewDummyTerminal()
+		h.previewTerminal = term
+		h.previewTerminalInstance = "instance-A"
+		defer term.Close()
+
+		_, cmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, cmd, "previewTickMsg should return event-driven cmd when terminal is active")
+		// Terminal remains attached after tick.
+		assert.Equal(t, term, h.previewTerminal, "terminal should remain attached after tick")
+	})
+
+	t.Run("stale ready msg after second selection change is discarded", func(t *testing.T) {
+		h, instA, instB := newTestHomeWithInstances(t)
+
+		// Select A, spawn starts.
+		require.True(t, h.list.SelectInstance(instA))
+		h.instanceChanged()
+
+		// Before spawn completes, user switches to B.
+		require.True(t, h.list.SelectInstance(instB))
+		h.instanceChanged()
+
+		// Now the stale ready msg for A arrives.
+		staleTermA := session.NewDummyTerminal()
+		_, cmd := h.Update(previewTerminalReadyMsg{
+			term:          staleTermA,
+			instanceTitle: "instance-A", // stale — selection is now B
+		})
+
+		// Stale terminal must be discarded (not attached).
+		assert.Nil(t, h.previewTerminal, "stale terminal for A should not be attached when B is selected")
+		assert.Empty(t, h.previewTerminalInstance)
+		assert.Nil(t, cmd)
+	})
+}
