@@ -79,11 +79,16 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 		}
 	}
 
-	// For wave tasks, show "Wave N · Task N" instead of the full plan-name-W#-T# title.
-	// The plan name is already visible on the branch line so repeating it is redundant.
+	// For plan-managed instances, show a clean role-based title instead of the
+	// full plan-name prefix. The plan name is already on the branch line.
 	titleText := i.Title
-	if i.WaveNumber > 0 && i.TaskNumber > 0 {
+	switch {
+	case i.WaveNumber > 0 && i.TaskNumber > 0:
 		titleText = fmt.Sprintf("Wave %d · Task %d", i.WaveNumber, i.TaskNumber)
+	case i.AgentType == session.AgentTypeReviewer && i.PlanFile != "":
+		titleText = "Review"
+	case i.AgentType == session.AgentTypeCoder && i.PlanFile != "" && i.WaveNumber == 0:
+		titleText = "Implementation Fix"
 	}
 
 	widthAvail := r.width - 3 - runewidth.StringWidth(prefix) - 1
