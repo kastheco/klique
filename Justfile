@@ -24,6 +24,9 @@ init:
 # Build + install + run
 kas: build install bin
 
+# Alias for kas
+kms: kas
+
 # Run tests
 test:
     go test ./...
