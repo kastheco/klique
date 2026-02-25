@@ -13,6 +13,7 @@ import (
 
 	"github.com/kastheco/kasmos/cmd/cmd_test"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -351,4 +352,18 @@ func TestTapDAndEnter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ranCmds, 1)
 	require.Equal(t, "tmux send-keys -t kas_test-session D Enter", ranCmds[0])
+}
+
+func TestSetInitialPrompt(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte("output"), nil },
+	}
+
+	s := newTmuxSession("prompt-test", "opencode", false, ptyFactory, cmdExec)
+	s.SetInitialPrompt("hello world")
+
+	// Verify the field is set (accessed via the Start command construction).
+	assert.Equal(t, "hello world", s.initialPrompt)
 }

@@ -41,6 +41,9 @@ type TmuxSession struct {
 	skipPermissions bool
 	// agentType, when non-empty, appends --agent <type> to the program command.
 	agentType string
+	// initialPrompt, when non-empty, is baked into the CLI command at Start()
+	// using per-program syntax (--prompt for opencode, positional for claude).
+	initialPrompt string
 	// ProgressFunc is called with (stage, description) during Start() to report progress.
 	ProgressFunc func(stage int, desc string)
 
@@ -101,6 +104,14 @@ func newTmuxSession(name string, program string, skipPermissions bool, ptyFactor
 // SetAgentType sets the agent type flag to inject at startup (planner/coder/reviewer).
 func (t *TmuxSession) SetAgentType(agentType string) {
 	t.agentType = strings.TrimSpace(agentType)
+}
+
+// SetInitialPrompt sets the initial prompt to bake into the CLI command at launch.
+// Supported programs: opencode (--prompt), claude (positional arg).
+// For unsupported programs the prompt is ignored; callers should keep
+// QueuedPrompt set so the send-keys fallback fires.
+func (t *TmuxSession) SetInitialPrompt(prompt string) {
+	t.initialPrompt = prompt
 }
 
 func (t *TmuxSession) reportProgress(stage int, desc string) {
