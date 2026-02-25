@@ -132,18 +132,25 @@ func (m *home) prevFocusSlot() {
 }
 
 // enterFocusMode enters focus/insert mode and starts the fast preview ticker.
-// enterFocusMode directly attaches to the selected instance's tmux session.
-// This takes over the terminal for native performance. Ctrl+Q detaches.
-// enterFocusMode creates an embedded terminal emulator connected to the instance's
-// PTY and starts the 30fps render ticker. Input goes directly to the PTY (zero latency),
-// display is rendered from the emulator's screen buffer (no subprocess calls).
+// enterFocusMode reuses the existing previewTerminal if it is already attached to
+// the selected instance — entering focus just toggles key forwarding to the same
+// terminal. Only spawns a new terminal if none is attached yet (rare fallback).
 func (m *home) enterFocusMode() tea.Cmd {
 	m.tabbedWindow.ClearDocumentMode()
 	selected := m.list.GetSelectedInstance()
-	if selected == nil {
+	if selected == nil || !selected.Started() || selected.Status == session.Paused {
 		return nil
 	}
 
+	// If previewTerminal is already attached to this instance, just enter focus mode.
+	if m.previewTerminal != nil && m.previewTerminalInstance == selected.Title {
+		m.state = stateFocusAgent
+		m.tabbedWindow.SetFocusMode(true)
+		m.menu.SetFocusMode(true)
+		return nil
+	}
+
+	// No terminal yet (shouldn't normally happen) — spawn one synchronously-ish.
 	cols, rows := m.tabbedWindow.GetPreviewSize()
 	if cols < 10 {
 		cols = 80
@@ -155,14 +162,12 @@ func (m *home) enterFocusMode() tea.Cmd {
 	if err != nil {
 		return m.handleError(err)
 	}
-
 	m.previewTerminal = term
+	m.previewTerminalInstance = selected.Title
 	m.state = stateFocusAgent
 	m.tabbedWindow.SetFocusMode(true)
 	m.menu.SetFocusMode(true)
 
-	// previewTickMsg loop (started in Init) handles rendering for both
-	// normal preview and focus mode — no separate tick needed here.
 	return nil
 }
 
