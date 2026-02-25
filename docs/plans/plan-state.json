@@ -314,10 +314,11 @@
       "created_at": "2026-02-24T02:44:43.679630782Z"
     },
     "2026-02-24-live-preview-terminal.md": {
-      "status": "reviewing",
+      "status": "done",
       "description": "replace capture-pane polling with live EmbeddedTerminal VT emulator in preview pane, unify with focus mode",
       "branch": "plan/live-preview-terminal",
-      "created_at": "2026-02-24T18:00:00Z"
+      "created_at": "2026-02-24T18:00:00Z",
+      "implemented": "2026-02-24"
     },
     "2026-02-24-orphan-session-recovery.md": {
       "status": "ready",
@@ -332,6 +333,13 @@
       "topic": "automation",
       "created_at": "2026-02-24T23:14:58.827108721Z"
     },
+    "2026-02-24-review-approval-gate.md": {
+      "status": "ready",
+      "description": "manual approval gate after automated review — two-popup flow for merge/PR before plan can be marked done",
+      "branch": "plan/review-approval-gate",
+      "topic": "automation",
+      "created_at": "2026-02-24T23:45:00Z"
+    },
     "2026-02-24-sentry-integration.md": {
       "status": "ready",
       "description": "add sentry to the project for better debugging experience",
@@ -340,7 +348,7 @@
       "created_at": "2026-02-24T20:03:01.389587403Z"
     },
     "2026-02-24-spring.md": {
-      "status": "implementing",
+      "status": "done",
       "description": "integrate harmonica to add a spring load-in animation for the kasmos logo on launch — scales from small to big — and vertically center both the logo and the call to action line below it",
       "branch": "plan/spring",
       "topic": "ui",
@@ -351,13 +359,6 @@
       "description": "replace huh-form init wizard with full-screen bubbletea TUI using Rosé Pine Moon aesthetic",
       "topic": "ui",
       "created_at": "0001-01-01T00:00:00Z"
-    },
-    "2026-02-24-review-approval-gate.md": {
-      "status": "ready",
-      "description": "manual approval gate after automated review — two-popup flow for merge/PR before plan can be marked done",
-      "branch": "plan/review-approval-gate",
-      "topic": "automation",
-      "created_at": "2026-02-24T23:45:00Z"
     }
   }
 }

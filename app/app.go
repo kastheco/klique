@@ -771,6 +771,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						if inst.PromptDetected && !inst.AwaitingWork {
 							orch.MarkTaskComplete(task.Number)
+							inst.SetStatus(session.Ready)
 						} else if !alive {
 							orch.MarkTaskFailed(task.Number)
 						}
