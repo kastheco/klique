@@ -124,7 +124,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		itemRow := contentY - 4
 		if itemRow >= 0 {
 			m.tabbedWindow.ClearDocumentMode()
-			m.sidebar.ClickItem(itemRow)
+			m.sidebar.ClickItem(itemRow + m.sidebar.GetScrollOffset())
 			m.filterInstancesByTopic()
 			return m, m.instanceChanged()
 		}
@@ -168,7 +168,7 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		// Right-click in sidebar
 		itemRow := contentY - 4
 		if itemRow >= 0 {
-			m.sidebar.ClickItem(itemRow)
+			m.sidebar.ClickItem(itemRow + m.sidebar.GetScrollOffset())
 			m.filterInstancesByTopic()
 		}
 		// Plan header: show plan context menu

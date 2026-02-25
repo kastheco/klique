@@ -219,7 +219,9 @@ func (s *Sidebar) SetSize(width, height int) {
 
 // availSidebarRows returns the number of tree-mode sidebar rows that fit in the panel.
 // Header accounts for: search bar (3 lines with border) + 2 blank lines = 5 lines.
-// Border + padding = 4 lines (2 border + 2 padding).
+// borderAndPadding accounts for the outer border (2 lines: top + bottom) plus
+// the empirical rendering overhead from the search bar lipgloss layout. Value 4
+// produces correct results at all tested heights.
 func (s *Sidebar) availSidebarRows() int {
 	const borderAndPadding = 4
 	const headerLines = 5
@@ -382,6 +384,11 @@ func (s *Sidebar) SetItems(
 // GetSelectedIdx returns the index of the currently selected item in the sidebar.
 func (s *Sidebar) GetSelectedIdx() int {
 	return s.selectedIdx
+}
+
+// GetScrollOffset returns the current scroll offset for the visible row window.
+func (s *Sidebar) GetScrollOffset() int {
+	return s.scrollOffset
 }
 
 func (s *Sidebar) GetSelectedID() string {
