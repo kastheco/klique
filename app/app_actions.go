@@ -277,6 +277,12 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
+		// Solo agents finish at "implementing" — advance through reviewing in one step.
+		if entry, ok := m.planState.Entry(planFile); ok && entry.Status == "implementing" {
+			if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+				return m, m.handleError(err)
+			}
+		}
 		if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
 			return m, m.handleError(err)
 		}
