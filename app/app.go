@@ -56,10 +56,8 @@ const (
 	stateConfirm
 	// stateSearch is the state when the user is searching topics/instances.
 	stateSearch
-	// stateNewPlanName is the state when the user is entering a plan name.
-	stateNewPlanName
-	// stateNewPlanDescription is the state when the user is entering a plan description.
-	stateNewPlanDescription
+	// stateNewPlan is the state when the user is creating a new plan (name + description form).
+	stateNewPlan
 	// stateNewPlanTopic is the state when the user is picking a topic for a new plan.
 	stateNewPlanTopic
 	// statePRTitle is the state when the user is entering a PR title.
@@ -136,6 +134,8 @@ type home struct {
 	spinner spinner.Model
 	// textInputOverlay handles text input with state
 	textInputOverlay *overlay.TextInputOverlay
+	// formOverlay handles multi-field form input (plan creation)
+	formOverlay *overlay.FormOverlay
 	// textOverlay displays text information
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
@@ -148,9 +148,9 @@ type home struct {
 	// focusSlot tracks which pane has keyboard focus in the Tab ring:
 	// 0=sidebar, 1=agent tab, 2=diff tab, 3=git tab, 4=instance list
 	focusSlot int
-	// pendingPlanName stores the plan name during the three-step plan creation flow
+	// pendingPlanName stores the submitted plan name while topic picking is active
 	pendingPlanName string
-	// pendingPlanDesc stores the plan description during the three-step plan creation flow
+	// pendingPlanDesc stores the submitted plan description while topic picking is active
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
@@ -1083,10 +1083,8 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateRenameInstance && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateNewPlanName && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateNewPlanDescription && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateNewPlan && m.formOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.formOverlay.Render(), mainView, true, true)
 	case m.state == stateNewPlanTopic && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateChangeTopic && m.pickerOverlay != nil:
