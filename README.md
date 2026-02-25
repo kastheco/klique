@@ -1,6 +1,6 @@
 # kasmos [![CI](https://github.com/kastheco/kasmos/actions/workflows/build.yml/badge.svg)](https://github.com/kastheco/kasmos/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/kastheco/kasmos)](https://github.com/kastheco/kasmos/releases/latest) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-> harness & model-agnostic ai orchestration tool with wave-based automation — powered by superpowers, tmux, and git worktrees.
+> harness & model-agnostic ai orchestration tool with automated wave-based implementation
 
 ![kasmos screenshot](assets/screenshot.gif)
 
