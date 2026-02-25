@@ -28,8 +28,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 	titleS := selectedTitleStyle
 	descS := selectedDescStyle
 
-	// Implementation-complete instances always use dim styles regardless of selection.
-	if i.ImplementationComplete {
+	// Implementation-complete instances use dim styles unless selected.
+	if i.ImplementationComplete && !selected {
 		titleS = completedTitleStyle
 		descS = completedDescStyle
 	} else if selected && !focused {
