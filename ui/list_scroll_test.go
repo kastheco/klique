@@ -62,6 +62,19 @@ func TestListScrollOffset_ResizeClamps(t *testing.T) {
 	assert.GreaterOrEqual(t, l.scrollOffset, 0, "scrollOffset must not go negative after resize")
 }
 
+func TestListScrollOffset_RebuildResetsOffset(t *testing.T) {
+	l := makeScrollTestList(t, 20)
+	l.SetSize(40, 10)
+	// Scroll down
+	for i := 0; i < 15; i++ {
+		l.Down()
+	}
+	assert.Greater(t, l.scrollOffset, 0, "should be scrolled down before rebuild")
+	// Trigger rebuildFilteredItems via SetStatusFilter
+	l.SetStatusFilter(StatusFilterActive)
+	assert.Equal(t, 0, l.scrollOffset, "scrollOffset should reset to 0 after rebuild")
+}
+
 func TestListString_DoesNotOverflowHeight(t *testing.T) {
 	l := makeScrollTestList(t, 20)
 	l.SetSize(40, 14)

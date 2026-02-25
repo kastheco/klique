@@ -413,12 +413,7 @@ func (l *List) rebuildFilteredItems() {
 		l.sortItems()
 	}
 
-	if l.selectedIdx >= len(l.items) {
-		l.selectedIdx = len(l.items) - 1
-	}
-	if l.selectedIdx < 0 {
-		l.selectedIdx = 0
-	}
+	l.selectedIdx = 0
 	l.scrollOffset = 0
 	l.ensureSelectedVisible()
 }
