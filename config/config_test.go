@@ -283,3 +283,23 @@ func TestSaveConfig(t *testing.T) {
 		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
 	})
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestIsTelemetryEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		field    *bool
+		expected bool
+	}{
+		{"nil defaults to true", nil, true},
+		{"explicit true", boolPtr(true), true},
+		{"explicit false", boolPtr(false), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{TelemetryEnabled: tt.field}
+			assert.Equal(t, tt.expected, cfg.IsTelemetryEnabled())
+		})
+	}
+}

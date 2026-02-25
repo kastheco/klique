@@ -75,6 +75,9 @@ type Config struct {
 	PhaseRoles map[string]string `json:"phase_roles,omitempty"`
 	// AnimateBanner controls the idle banner animation (disabled by default).
 	AnimateBanner bool `json:"animate_banner,omitempty"`
+	// TelemetryEnabled controls whether crash reporting via Sentry is active.
+	// Defaults to true when not set.
+	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -109,6 +112,15 @@ func (c *Config) AreNotificationsEnabled() bool {
 		return true
 	}
 	return *c.NotificationsEnabled
+}
+
+// IsTelemetryEnabled returns whether Sentry telemetry is enabled.
+// Defaults to true when the field is not set.
+func (c *Config) IsTelemetryEnabled() bool {
+	if c.TelemetryEnabled == nil {
+		return true
+	}
+	return *c.TelemetryEnabled
 }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
@@ -201,6 +213,9 @@ func LoadConfig() *Config {
 		}
 		if tomlResult.AnimateBanner {
 			config.AnimateBanner = true
+		}
+		if tomlResult.TelemetryEnabled != nil {
+			config.TelemetryEnabled = tomlResult.TelemetryEnabled
 		}
 	}
 

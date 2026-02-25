@@ -37,18 +37,25 @@ type TOMLUIConfig struct {
 	AnimateBanner bool `toml:"animate_banner"`
 }
 
+// TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.
+type TOMLTelemetryConfig struct {
+	Enabled *bool `toml:"enabled,omitempty"`
+}
+
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
-	Phases map[string]string    `toml:"phases"`
-	Agents map[string]TOMLAgent `toml:"agents"`
-	UI     TOMLUIConfig         `toml:"ui"`
+	Phases    map[string]string    `toml:"phases"`
+	Agents    map[string]TOMLAgent `toml:"agents"`
+	UI        TOMLUIConfig         `toml:"ui"`
+	Telemetry TOMLTelemetryConfig  `toml:"telemetry"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
 type TOMLConfigResult struct {
-	Profiles      map[string]AgentProfile
-	PhaseRoles    map[string]string
-	AnimateBanner bool
+	Profiles         map[string]AgentProfile
+	PhaseRoles       map[string]string
+	AnimateBanner    bool
+	TelemetryEnabled *bool
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -60,9 +67,10 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 	}
 
 	result := &TOMLConfigResult{
-		Profiles:      make(map[string]AgentProfile),
-		PhaseRoles:    tc.Phases,
-		AnimateBanner: tc.UI.AnimateBanner,
+		Profiles:         make(map[string]AgentProfile),
+		PhaseRoles:       tc.Phases,
+		AnimateBanner:    tc.UI.AnimateBanner,
+		TelemetryEnabled: tc.Telemetry.Enabled,
 	}
 
 	for name, agent := range tc.Agents {

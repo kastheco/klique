@@ -6,6 +6,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
+	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/git"
@@ -29,6 +30,7 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 	// ANSI reset and unstyled cell falls back to #232136 instead of black.
 	restore := ui.SetTerminalBackground(string(ui.ColorBase))
 	defer restore()
+	defer sentrypkg.RecoverPanic()
 
 	zone.NewGlobal()
 	p := tea.NewProgram(
@@ -449,7 +451,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		term := m.previewTerminal
 		return m, func() tea.Msg {
 			if term != nil {
-				term.WaitForRender(50 * time.Millisecond)
+				term.WaitForRender(16 * time.Millisecond)
 			} else {
 				time.Sleep(50 * time.Millisecond)
 			}

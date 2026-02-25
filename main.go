@@ -13,6 +13,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/daemon"
 	initcmd "github.com/kastheco/kasmos/internal/initcmd"
+	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/git"
@@ -30,11 +31,19 @@ var (
 		Short: "kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			log.Initialize(daemonFlag)
+
+			cfg := config.LoadConfig()
+			if err := sentrypkg.Init(version, cfg.IsTelemetryEnabled()); err != nil {
+				// Non-fatal: sentry failure should not prevent startup
+				_ = err
+			}
+			defer sentrypkg.Flush()
+			defer sentrypkg.RecoverPanic()
+
+			log.Initialize(daemonFlag, cfg.IsTelemetryEnabled())
 			defer log.Close()
 
 			if daemonFlag {
-				cfg := config.LoadConfig()
 				session.NotificationsEnabled = cfg.AreNotificationsEnabled()
 				if err := daemon.RunDaemon(cfg); err != nil {
 					log.ErrorLog.Printf("failed to start daemon: %v", err)
@@ -53,7 +62,6 @@ var (
 				return fmt.Errorf("error: kas must be run from within a git repository")
 			}
 
-			cfg := config.LoadConfig()
 			session.NotificationsEnabled = cfg.AreNotificationsEnabled()
 
 			// Program flag overrides config
@@ -66,6 +74,9 @@ var (
 			if autoYesFlag {
 				autoYes = true
 			}
+
+			sentrypkg.SetContext(program, autoYes, filepath.Base(currentDir))
+
 			if autoYes {
 				defer func() {
 					if err := daemon.LaunchDaemon(); err != nil {

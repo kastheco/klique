@@ -2,10 +2,13 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
 )
 
 var (
@@ -22,7 +25,7 @@ var globalLogFile *os.File
 // defer Close() after calling this function. It sets the go log output to the file in
 // the os temp directory.
 
-func Initialize(daemon bool) {
+func Initialize(daemon bool, telemetryEnabled ...bool) {
 	f, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(fmt.Sprintf("could not open log file: %s", err))
@@ -35,9 +38,18 @@ func Initialize(daemon bool) {
 	if daemon {
 		fmtS = "[DAEMON] %s"
 	}
-	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
-	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLog = log.New(f, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+
+	useTelemetry := len(telemetryEnabled) > 0 && telemetryEnabled[0]
+	var infoW, warnW, errW io.Writer = f, f, f
+	if useTelemetry && sentrypkg.IsEnabled() {
+		infoW = sentrypkg.NewWriter(f, sentrypkg.LevelInfo)
+		warnW = sentrypkg.NewWriter(f, sentrypkg.LevelWarning)
+		errW = sentrypkg.NewWriter(f, sentrypkg.LevelError)
+	}
+
+	InfoLog = log.New(infoW, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
+	WarningLog = log.New(warnW, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLog = log.New(errW, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
 
 	globalLogFile = f
 }
