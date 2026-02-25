@@ -184,6 +184,17 @@ func (t *TmuxSession) Start(workDir string) error {
 	if t.agentType != "" && !strings.Contains(program, "--agent") {
 		program = program + " --agent " + t.agentType
 	}
+	if t.initialPrompt != "" {
+		escaped := shellEscapeSingleQuote(t.initialPrompt)
+		switch {
+		case isOpenCodeProgram(t.program):
+			program = program + " --prompt " + escaped
+		case isClaudeProgram(t.program):
+			program = program + " " + escaped
+		}
+		// aider/gemini: no CLI prompt support — callers keep QueuedPrompt
+		// set so the send-keys fallback fires from the app tick handler.
+	}
 
 	// Prepend KASMOS_MANAGED=1 so the agent process sees it from startup.
 	// tmux set-environment (below) only affects new panes, not the initial program.

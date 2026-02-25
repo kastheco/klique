@@ -367,3 +367,103 @@ func TestSetInitialPrompt(t *testing.T) {
 	// Verify the field is set (accessed via the Start command construction).
 	assert.Equal(t, "hello world", s.initialPrompt)
 }
+
+func TestStartOpenCodeWithInitialPrompt(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Ask anything"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("oc-prompt", "opencode", false, ptyFactory, cmdExec)
+	s.SetAgentType("planner")
+	s.SetInitialPrompt("Plan auth. Goal: JWT tokens.")
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		fmt.Sprintf("tmux new-session -d -s kas_oc-prompt -c %s KASMOS_MANAGED=1 opencode --agent planner --prompt 'Plan auth. Goal: JWT tokens.'", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]),
+	)
+}
+
+func TestStartClaudeWithInitialPrompt(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Do you trust the files in this folder?"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("claude-prompt", "claude", false, ptyFactory, cmdExec)
+	s.SetInitialPrompt("Implement the auth module.")
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		fmt.Sprintf("tmux new-session -d -s kas_claude-prompt -c %s KASMOS_MANAGED=1 claude 'Implement the auth module.'", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]),
+	)
+}
+
+func TestStartOpenCodeWithPromptContainingSingleQuotes(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Ask anything"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("oc-quote", "opencode", false, ptyFactory, cmdExec)
+	s.SetInitialPrompt("it's a test")
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		fmt.Sprintf("tmux new-session -d -s kas_oc-quote -c %s KASMOS_MANAGED=1 opencode --prompt 'it'\\''s a test'", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]),
+	)
+}
