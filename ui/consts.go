@@ -52,3 +52,10 @@ var bannerFrames = func() []string {
 func FallBackText(frame int) string {
 	return bannerFrames[frame%len(bannerFrames)]
 }
+
+// BannerLines returns the pre-rendered gradient banner as individual lines
+// for the given animation frame. Always returns exactly 6 lines.
+func BannerLines(frame int) []string {
+	banner := bannerFrames[frame%len(bannerFrames)]
+	return strings.Split(banner, "\n")
+}
