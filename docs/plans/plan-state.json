@@ -341,7 +341,7 @@
       "created_at": "2026-02-24T23:45:00Z"
     },
     "2026-02-24-sentry-integration.md": {
-      "status": "ready",
+      "status": "done",
       "description": "add sentry to the project for better debugging experience",
       "branch": "plan/sentry-integration",
       "topic": "tools",
@@ -359,6 +359,27 @@
       "description": "replace huh-form init wizard with full-screen bubbletea TUI using Rosé Pine Moon aesthetic",
       "topic": "ui",
       "created_at": "0001-01-01T00:00:00Z"
+    },
+    "2026-02-25-improve-cli-tools.md": {
+      "status": "ready",
+      "description": "update cli-tools to be more strict and ensure rg is ALWAYS used over grep as well as other tools",
+      "branch": "plan/improve-cli-tools",
+      "topic": "tools",
+      "created_at": "2026-02-25T17:38:32.640854935Z"
+    },
+    "2026-02-25-prompt-via-cli.md": {
+      "status": "done",
+      "description": "instead of waiting for the session to become ready to send the prompt text, supply it via --prompt (opencode) or -p (claude) when launching the agent directly",
+      "branch": "plan/prompt-via-cli",
+      "topic": "automation",
+      "created_at": "2026-02-25T17:31:48.642511235Z"
+    },
+    "2026-02-25-scroll-overflow.md": {
+      "status": "ready",
+      "description": "manual scroll offset for list and sidebar overflow",
+      "branch": "plan/scroll-overflow",
+      "topic": "ui",
+      "created_at": "2026-02-25T00:00:00Z"
     }
   }
 }
