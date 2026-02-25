@@ -22,7 +22,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlanName || m.state == stateNewPlanDescription || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -662,55 +662,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	}
 
-	// Handle new plan name state
-	if m.state == stateNewPlanName {
-		if m.textInputOverlay == nil {
+	// Handle new plan form state
+	if m.state == stateNewPlan {
+		if m.formOverlay == nil {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		shouldClose := m.formOverlay.HandleKeyPress(msg)
 		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				m.pendingPlanName = m.textInputOverlay.GetValue()
-				if m.pendingPlanName == "" {
+			if m.formOverlay.IsSubmitted() {
+				name := m.formOverlay.Name()
+				if name == "" {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
-					m.textInputOverlay = nil
+					m.formOverlay = nil
 					return m, m.handleError(fmt.Errorf("plan name cannot be empty"))
 				}
-				m.textInputOverlay = overlay.NewTextInputOverlay("plan description (optional)", "")
-				m.textInputOverlay.SetSize(60, 3)
-				m.state = stateNewPlanDescription
+				// Stash values and show topic picker
+				m.pendingPlanName = name
+				m.pendingPlanDesc = m.formOverlay.Description()
+				m.formOverlay = nil
+				topicNames := m.getTopicNames()
+				topicNames = append([]string{"(No topic)"}, topicNames...)
+				m.pickerOverlay = overlay.NewPickerOverlay("assign to topic (optional)", topicNames)
+				m.pickerOverlay.SetAllowCustom(true)
+				m.state = stateNewPlanTopic
 				return m, nil
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.pendingPlanName = ""
-			m.textInputOverlay = nil
+			m.formOverlay = nil
 			return m, tea.WindowSize()
-		}
-		return m, nil
-	}
-
-	// Handle new plan description state
-	if m.state == stateNewPlanDescription {
-		if m.textInputOverlay == nil {
-			m.state = stateDefault
-			return m, nil
-		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				m.pendingPlanDesc = m.textInputOverlay.GetValue()
-			}
-			m.textInputOverlay = nil
-			// Show topic picker with custom entry support for new topic names
-			topicNames := m.getTopicNames()
-			topicNames = append([]string{"(No topic)"}, topicNames...)
-			m.pickerOverlay = overlay.NewPickerOverlay("Assign to topic (optional)", topicNames)
-			m.pickerOverlay.SetAllowCustom(true)
-			m.state = stateNewPlanTopic
-			return m, nil
 		}
 		return m, nil
 	}
@@ -719,6 +701,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateNewPlanTopic {
 		if m.pickerOverlay == nil {
 			m.state = stateDefault
+			m.pendingPlanName = ""
+			m.pendingPlanDesc = ""
 			return m, nil
 		}
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
@@ -730,19 +714,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					topic = picked
 				}
 			}
-			if m.pendingPlanName != "" {
-				if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
-					m.state = stateDefault
-					m.menu.SetState(ui.StateDefault)
-					m.pickerOverlay = nil
-					m.pendingPlanName = ""
-					m.pendingPlanDesc = ""
-					return m, m.handleError(err)
-				}
-				m.loadPlanState()
-				m.updateSidebarPlans()
-				m.updateSidebarItems()
+			if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
+				m.state = stateDefault
+				m.menu.SetState(ui.StateDefault)
+				m.pickerOverlay = nil
+				m.pendingPlanName = ""
+				m.pendingPlanDesc = ""
+				return m, m.handleError(err)
 			}
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
@@ -1288,9 +1270,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 	case keys.KeyNewPlan:
-		m.state = stateNewPlanName
-		m.textInputOverlay = overlay.NewTextInputOverlay("plan name", "")
-		m.textInputOverlay.SetSize(60, 3)
+		m.state = stateNewPlan
+		m.formOverlay = overlay.NewFormOverlay("new plan", 60)
 		return m, nil
 	case keys.KeyRepoSwitch:
 		m.state = stateRepoSwitch
