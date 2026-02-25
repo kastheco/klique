@@ -72,6 +72,45 @@ func TestFormOverlay_ArrowDownNavigates(t *testing.T) {
 	assert.Equal(t, "desc", f.Description())
 }
 
+func TestFormOverlay_TabCyclesFromDescriptionBackToName(t *testing.T) {
+	f := NewFormOverlay("new plan", 60)
+	for _, r := range "a" {
+		f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
+	for _, r := range "b" {
+		f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
+	for _, r := range "c" {
+		f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	closed := f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	require.True(t, closed)
+	assert.Equal(t, "ac", f.Name())
+	assert.Equal(t, "b", f.Description())
+}
+
+func TestFormOverlay_ShiftTabCyclesFromNameToDescription(t *testing.T) {
+	f := NewFormOverlay("new plan", 60)
+	for _, r := range "a" {
+		f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyShiftTab})
+	for _, r := range "b" {
+		f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	closed := f.HandleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	require.True(t, closed)
+	assert.Equal(t, "a", f.Name())
+	assert.Equal(t, "b", f.Description())
+}
+
 func TestFormOverlay_Render(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 

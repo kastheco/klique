@@ -75,10 +75,18 @@ func (f *FormOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		return true
 
 	case tea.KeyTab, tea.KeyDown:
+		if f.focusedKey() == "desc" {
+			f.updateForm(huh.PrevField())
+			return false
+		}
 		f.updateForm(huh.NextField())
 		return false
 
 	case tea.KeyShiftTab, tea.KeyUp:
+		if f.focusedKey() == "name" {
+			f.updateForm(huh.NextField())
+			return false
+		}
 		f.updateForm(huh.PrevField())
 		return false
 
@@ -86,6 +94,14 @@ func (f *FormOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		f.updateForm(msg)
 		return false
 	}
+}
+
+func (f *FormOverlay) focusedKey() string {
+	field := f.form.GetFocusedField()
+	if field == nil {
+		return ""
+	}
+	return field.GetKey()
 }
 
 // Render returns the styled overlay string.
