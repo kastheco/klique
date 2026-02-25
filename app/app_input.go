@@ -894,6 +894,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	}
 
+	// Delete key: dismiss a finished (non-running) instance from the list.
+	if msg.Type == tea.KeyDelete {
+		selected := m.list.GetSelectedInstance()
+		if selected != nil && selected.Status != session.Running && selected.Status != session.Loading {
+			title := selected.Title
+			m.list.Remove()
+			m.removeFromAllInstances(title)
+			_ = m.saveAllInstances()
+			m.updateSidebarItems()
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		}
+		return m, nil
+	}
+
 	name, ok := keys.GlobalKeyStringsMap[msg.String()]
 	if !ok {
 		return m, nil

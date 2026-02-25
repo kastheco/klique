@@ -87,6 +87,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 		titleText = fmt.Sprintf("wave %d · task %d", i.WaveNumber, i.TaskNumber)
 	case i.AgentType == session.AgentTypeReviewer && i.PlanFile != "":
 		titleText = "review"
+	case i.SoloAgent:
+		titleText = "solo agent"
 	case i.AgentType == session.AgentTypeCoder && i.PlanFile != "" && i.WaveNumber == 0:
 		titleText = "applying fixes"
 	}

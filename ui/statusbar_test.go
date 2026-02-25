@@ -40,6 +40,59 @@ func TestStatusBar_PlanContext(t *testing.T) {
 	assert.Contains(t, result, "implementing")
 }
 
+func TestStatusBar_PlanNameRedundantSuppression(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+
+	// When plan name is already present in the branch, it must not be rendered
+	// as a separate segment (would appear duplicated in the bar).
+	sb.SetData(StatusBarData{
+		RepoName:   "kasmos",
+		Branch:     "plan/auth-refactor",
+		PlanName:   "auth-refactor",
+		PlanStatus: "implementing",
+	})
+	inBranch := sb.String()
+
+	// Render again with a plan name that is NOT in the branch.
+	sb.SetData(StatusBarData{
+		RepoName:   "kasmos",
+		Branch:     "main",
+		PlanName:   "auth-refactor",
+		PlanStatus: "implementing",
+	})
+	notInBranch := sb.String()
+
+	// Strip ANSI so we can count plain-text occurrences.
+	stripANSI := func(s string) string {
+		var b strings.Builder
+		inEsc := false
+		for _, r := range s {
+			if r == '\x1b' {
+				inEsc = true
+			}
+			if !inEsc {
+				b.WriteRune(r)
+			}
+			if inEsc && r == 'm' {
+				inEsc = false
+			}
+		}
+		return b.String()
+	}
+
+	plain1 := stripANSI(inBranch)
+	plain2 := stripANSI(notInBranch)
+
+	// Branch already contains plan name: "auth-refactor" should appear exactly once.
+	assert.Equal(t, 1, strings.Count(plain1, "auth-refactor"),
+		"plan name already in branch must not render as a separate segment")
+
+	// Branch does not contain plan name: it should appear as its own segment.
+	assert.Equal(t, 1, strings.Count(plain2, "auth-refactor"),
+		"plan name not in branch must be rendered")
+}
+
 func TestStatusBar_WaveGlyphs(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)

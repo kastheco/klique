@@ -172,6 +172,37 @@ func (l *List) RemoveByTitle(title string) *session.Instance {
 	return target
 }
 
+// Remove dismisses the currently selected instance from the list without
+// touching the tmux session or worktree. Use this to clear finished instances.
+func (l *List) Remove() {
+	if len(l.items) == 0 {
+		return
+	}
+	targetInstance := l.items[l.selectedIdx]
+
+	// If removing the last item, select the previous one.
+	if l.selectedIdx == len(l.items)-1 {
+		defer l.Up()
+	}
+
+	// Unregister the repo name.
+	repoName, err := targetInstance.RepoName()
+	if err != nil {
+		log.ErrorLog.Printf("could not get repo name: %v", err)
+	} else {
+		l.rmRepo(repoName)
+	}
+
+	// Remove from both items and allItems.
+	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
+	for i, inst := range l.allItems {
+		if inst == targetInstance {
+			l.allItems = append(l.allItems[:i], l.allItems[i+1:]...)
+			break
+		}
+	}
+}
+
 // Kill removes and kills the currently selected instance.
 func (l *List) Kill() {
 	if len(l.items) == 0 {

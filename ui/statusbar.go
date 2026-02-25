@@ -121,7 +121,7 @@ func (s *StatusBar) String() string {
 		parts = append(parts, statusBarBranchStyle.Render("\ue725 "+s.data.Branch))
 	}
 
-	if s.data.PlanName != "" {
+	if s.data.PlanName != "" && !strings.Contains(s.data.Branch, s.data.PlanName) {
 		parts = append(parts, statusBarPlanNameStyle.Render(s.data.PlanName))
 	}
 
