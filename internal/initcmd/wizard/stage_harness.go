@@ -27,7 +27,7 @@ func runHarnessStage(state *State) error {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
-				Title("Which agent harnesses do you want to configure?").
+				Title("which agent harnesses do you want to configure?").
 				Options(options...).
 				Value(&state.SelectedHarness),
 		),

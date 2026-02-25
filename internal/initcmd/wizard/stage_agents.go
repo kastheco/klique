@@ -123,7 +123,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 
 	// --- Form 1: Summary + Customize gate ---
 	// Group 1 always visible: progress note + customize confirm
-	// Group 2 conditionally visible: harness + enabled toggle
+	// Group 2 conditionally visible: harness select
 	var customize bool
 	summary := FormatAgentSummary(*agent)
 	defHarness := ""
@@ -135,60 +135,48 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 	}
 
 	gateForm := huh.NewForm(
-		// Group 1: summary + customize?
 		huh.NewGroup(
 			huh.NewNote().
-				Title(fmt.Sprintf("Agent: %s", agent.Role)).
+				Title(fmt.Sprintf("agent: %s", agent.Role)).
 				Description(fmt.Sprintf("%s\n\n%s",
 					summary,
 					BuildProgressNote(state.Agents, idx))),
 			huh.NewConfirm().
-				Title("Customize?").
-				Description("Change harness, model, or tuning").
-				Affirmative("Yes").
-				Negative("No").
+				Title("customize?").
+				Description("change harness, model, or tuning").
+				Affirmative("yes").
+				Negative("no").
 				Value(&customize),
 		),
-
-		// Group 2: harness + enabled (hidden unless customize=true)
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Harness").
-				Options(harnessOpts...).
-				Value(&agent.Harness),
-			huh.NewConfirm().
-				Title("Enabled").
-				Affirmative("Yes").
-				Negative("No").
-				Value(&agent.Enabled),
-		).WithHideFunc(func() bool {
-			return !customize
-		}),
 	).WithTheme(huh.ThemeCharm())
 
 	if err := gateForm.Run(); err != nil {
 		return err
 	}
 
-	// If not customizing or disabled, we're done
-	if !customize || !agent.Enabled {
+	// If not customizing, we're done; otherwise implicitly enable the agent
+	if !customize {
 		return nil
 	}
+	agent.Enabled = true
 
-	// Resolve harness after user selection (may have changed)
+	// Resolve harness adapter based on current selection (used for capability checks below)
 	h := state.Registry.Get(agent.Harness)
 	if h == nil {
 		return fmt.Errorf("unknown harness %q for agent %q", agent.Harness, agent.Role)
 	}
 
-	// --- Form 2: Model + settings (only if customize=true AND enabled) ---
+	// --- Form 2: Harness + model + settings ---
 	var settingsFields []huh.Field
 
-	// Updated progress note (harness now chosen)
 	settingsFields = append(settingsFields,
 		huh.NewNote().
-			Title(fmt.Sprintf("Configure: %s (%s)", agent.Role, agent.Harness)).
+			Title(fmt.Sprintf("configure: %s", agent.Role)).
 			Description(BuildProgressNote(state.Agents, idx)),
+		huh.NewSelect[string]().
+			Title("harness").
+			Options(harnessOpts...).
+			Value(&agent.Harness),
 	)
 
 	// Model select — filterable with capped height for large lists
@@ -200,7 +188,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		}
 		settingsFields = append(settingsFields,
 			huh.NewSelect[string]().
-				Title("Model").
+				Title("model").
 				Options(modelOpts...).
 				Value(&agent.Model).
 				Height(8).
@@ -212,7 +200,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		}
 		settingsFields = append(settingsFields,
 			huh.NewInput().
-				Title("Model").
+				Title("model").
 				Value(&agent.Model),
 		)
 	}
@@ -221,7 +209,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 	if h.SupportsTemperature() {
 		settingsFields = append(settingsFields,
 			huh.NewInput().
-				Title("Temperature (empty = default)").
+				Title("temperature (empty = default)").
 				Placeholder("e.g. 0.7").
 				Value(&agent.Temperature).
 				Validate(func(s string) error {
@@ -249,7 +237,7 @@ func runSingleAgentForm(state *State, idx int, modelCache map[string][]string) e
 		}
 		settingsFields = append(settingsFields,
 			huh.NewSelect[string]().
-				Title("Effort").
+				Title("effort").
 				Options(effortOpts...).
 				Value(&agent.Effort),
 		)
