@@ -13,6 +13,7 @@ import (
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildPlanPrompt(t *testing.T) {
@@ -230,4 +231,47 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 			t.Errorf("after %q: got status %q, want %q", tc.event, entry.Status, tc.wantStatus)
 		}
 	}
+}
+
+func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, cmd := range [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "config", "user.email", "test@test.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
+	} {
+		out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+		if err != nil {
+			t.Skipf("git setup failed (%v): %s", err, out)
+		}
+	}
+
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	planFile := "2026-02-25-test-solo.md"
+	require.NoError(t, ps.Register(planFile, "test solo", "plan/test-solo", time.Now()))
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewList(&sp, false)
+	h := &home{
+		planState:          ps,
+		activeRepoPath:     dir,
+		program:            "opencode",
+		list:               list,
+		menu:               ui.NewMenu(),
+		sidebar:            ui.NewSidebar(),
+		instanceFinalizers: make(map[*session.Instance]func()),
+	}
+
+	h.spawnPlanAgent(planFile, "solo", "solo prompt")
+
+	instances := list.GetInstances()
+	require.NotEmpty(t, instances, "expected instance after spawnPlanAgent(solo)")
+	inst := instances[len(instances)-1]
+	assert.True(t, inst.SoloAgent, "solo agent must have SoloAgent=true")
+	assert.Equal(t, session.AgentTypeCoder, inst.AgentType)
 }

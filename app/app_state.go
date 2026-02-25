@@ -1081,6 +1081,9 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	if agentType == session.AgentTypeReviewer {
 		inst.IsReviewer = true
 	}
+	if action == "solo" {
+		inst.SoloAgent = true
+	}
 	inst.QueuedPrompt = prompt
 
 	// Set loading state immediately so the UI shows the progress bar
