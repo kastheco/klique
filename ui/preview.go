@@ -33,6 +33,8 @@ type PreviewPane struct {
 	// isDocument is true when the preview is showing a rendered document (plan markdown).
 	// While set, UpdateContent() is a no-op so the tick loop doesn't overwrite the content.
 	isDocument bool
+	// springAnim drives the banner load-in animation on launch.
+	springAnim *SpringAnim
 }
 
 type previewState struct {
@@ -46,7 +48,15 @@ type previewState struct {
 
 func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
-		viewport: viewport.New(0, 0),
+		viewport:   viewport.New(0, 0),
+		springAnim: NewSpringAnim(6.0),
+	}
+}
+
+// TickSpring advances the spring load-in animation by one frame.
+func (p *PreviewPane) TickSpring() {
+	if p.springAnim != nil {
+		p.springAnim.Tick()
 	}
 }
 

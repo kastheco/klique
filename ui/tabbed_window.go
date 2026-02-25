@@ -308,6 +308,11 @@ func (w *TabbedWindow) TickBanner() {
 	w.preview.TickBanner()
 }
 
+// TickSpring advances the preview pane's spring load-in animation.
+func (w *TabbedWindow) TickSpring() {
+	w.preview.TickSpring()
+}
+
 // SetAnimateBanner enables or disables the idle banner animation on the preview pane.
 func (w *TabbedWindow) SetAnimateBanner(enabled bool) {
 	w.preview.SetAnimateBanner(enabled)
