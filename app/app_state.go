@@ -197,12 +197,10 @@ func (m *home) enterGitFocusMode() tea.Cmd {
 	}
 }
 
-// exitFocusMode shuts down the embedded terminal and resets state.
+// exitFocusMode resets focus state. previewTerminal stays alive — it continues
+// rendering in normal preview mode after the user exits focus/insert mode.
 func (m *home) exitFocusMode() {
-	if m.previewTerminal != nil {
-		m.previewTerminal.Close()
-		m.previewTerminal = nil
-	}
+	// previewTerminal stays alive — it continues rendering in normal preview mode.
 	m.state = stateDefault
 	m.tabbedWindow.SetFocusMode(false)
 	m.menu.SetFocusMode(false)
