@@ -208,8 +208,6 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		items = append(items, overlay.ContextMenuItem{Label: "rename", Action: "rename_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "push branch", Action: "push_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "create pr", Action: "create_pr_instance"})
-		items = append(items, overlay.ContextMenuItem{Label: "copy worktree path", Action: "copy_worktree_path"})
-		items = append(items, overlay.ContextMenuItem{Label: "copy branch name", Action: "copy_branch_name"})
 		// Wave task: offer manual completion
 		if selected.TaskNumber > 0 {
 			if orch, ok := m.waveOrchestrators[selected.PlanFile]; ok && orch.IsTaskRunning(selected.TaskNumber) {
@@ -1076,6 +1074,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, m.enterFocusMode()
 	case keys.KeyKill:
+		// Soft kill: terminate tmux session only, keep instance in list.
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() {
+			return m, nil
+		}
+		inst := selected
+		return m, func() tea.Msg {
+			inst.StopTmux()
+			inst.SetStatus(session.Ready)
+			return instanceChangedMsg{}
+		}
+	case keys.KeyAbort:
+		// Full abort: kill tmux, remove worktree, remove from list + persistence.
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
@@ -1099,7 +1110,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] kill session '%s'?", selected.Title)
+		message := fmt.Sprintf("[!] abort session '%s'? this removes the worktree.", selected.Title)
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()

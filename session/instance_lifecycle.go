@@ -207,6 +207,14 @@ func (i *Instance) Kill() error {
 	return errors.Join(errs...)
 }
 
+// StopTmux terminates the tmux session only. Does not touch the worktree,
+// persistence, or plan state. The instance stays in the list as stopped.
+func (i *Instance) StopTmux() {
+	if i.tmuxSession != nil {
+		_ = i.tmuxSession.Close()
+	}
+}
+
 // Pause stops the tmux session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
 	if !i.started {

@@ -11,7 +11,8 @@ const (
 	KeyDown
 	KeyEnter
 	KeyNew
-	KeyKill
+	KeyKill  // k — soft kill: terminates tmux session, keeps instance in list
+	KeyAbort // K — full abort: kills tmux, removes worktree, removes from list
 	KeyQuit
 	KeyReview
 	KeyPush
@@ -61,14 +62,13 @@ const (
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
 	"up":     KeyUp,
-	"k":      KeyUp,
 	"down":   KeyDown,
-	"j":      KeyDown,
 	"N":      KeyPrompt,
 	"enter":  KeyEnter,
 	"o":      KeyEnter,
 	"n":      KeyNewPlan,
-	"K":      KeyKill,
+	"k":      KeyKill,
+	"K":      KeyAbort,
 	"q":      KeyQuit,
 	"tab":    KeyTab,
 	"c":      KeyCheckout,
@@ -77,9 +77,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"S":      KeyNewSkipPermissions,
 	"/":      KeySearch,
 	"left":   KeyArrowLeft,
-	"h":      KeyArrowLeft,
 	"right":  KeyArrowRight,
-	"l":      KeyArrowRight,
 	"P":      KeyCreatePR,
 	"i":      KeySendPrompt,
 	" ":      KeySpace,
@@ -100,12 +98,12 @@ var GlobalKeyStringsMap = map[string]KeyName{
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
 var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyUp: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "up"),
+		key.WithKeys("up"),
+		key.WithHelp("↑", "up"),
 	),
 	KeyDown: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "down"),
+		key.WithKeys("down"),
+		key.WithHelp("↓", "down"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),
@@ -116,8 +114,12 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("n", "new"),
 	),
 	KeyKill: key.NewBinding(
+		key.WithKeys("k"),
+		key.WithHelp("k", "kill"),
+	),
+	KeyAbort: key.NewBinding(
 		key.WithKeys("K"),
-		key.WithHelp("K", "kill"),
+		key.WithHelp("K", "abort"),
 	),
 	KeyHelp: key.NewBinding(
 		key.WithKeys("?"),
@@ -160,12 +162,12 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("P", "create PR"),
 	),
 	KeyArrowLeft: key.NewBinding(
-		key.WithKeys("left", "h"),
-		key.WithHelp("←/h", "left"),
+		key.WithKeys("left"),
+		key.WithHelp("←", "left"),
 	),
 	KeyArrowRight: key.NewBinding(
-		key.WithKeys("right", "l"),
-		key.WithHelp("→/l", "right"),
+		key.WithKeys("right"),
+		key.WithHelp("→", "right"),
 	),
 	KeySendPrompt: key.NewBinding(
 		key.WithKeys("i"),
