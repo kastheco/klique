@@ -1,6 +1,6 @@
 # kasmos [![CI](https://github.com/kastheco/kasmos/actions/workflows/build.yml/badge.svg)](https://github.com/kastheco/kasmos/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/kastheco/kasmos)](https://github.com/kastheco/kasmos/releases/latest) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-> orchestrate multiple AI agents across parallel plans from your terminal — powered by tmux, git worktrees, and wave-based automation.
+> harness & model-agnostic ai orchestration tool with wave-based automation — powered by bubbletea, tmux, and git worktrees.
 
 ![kasmos screenshot](assets/screenshot.png)
 
@@ -8,7 +8,7 @@
 
 ## what it does
 
-kasmos turns your terminal into a multi-agent control center. each plan gets its own isolated git worktree and tmux session. a planner agent writes the implementation plan, coder agents execute it wave by wave, and a reviewer agent validates the result — all managed from a single TUI.
+kasmos turns your terminal into a multi-agent control center. each plan gets its own isolated git worktree and tmux session per stage: a planner agent writes the implementation plan, coder agents execute it wave by wave, and a reviewer agent validates the result — all managed from a single tui.
 
 - **plan-centric workflow** — create plans with name + description, organize into topics, track status through the full lifecycle (planning → implementing → reviewing → done)
 - **wave orchestration** — plans are split into waves; kasmos automatically runs parallel agents per wave, advancing only when all tasks pass
