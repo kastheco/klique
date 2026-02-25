@@ -352,6 +352,8 @@ func (l *List) availContentLines() int {
 }
 
 // ensureSelectedVisible adjusts scrollOffset so the selected item is fully visible.
+// When an item is taller than the available viewport (e.g. a tall item in a short panel),
+// the item's top edge is preferred over its bottom edge.
 func (l *List) ensureSelectedVisible() {
 	if len(l.items) == 0 {
 		l.scrollOffset = 0
@@ -366,6 +368,10 @@ func (l *List) ensureSelectedVisible() {
 	}
 	if end >= l.scrollOffset+avail {
 		l.scrollOffset = end - avail + 1
+		// If the item is taller than avail, prefer showing its top.
+		if l.scrollOffset > start {
+			l.scrollOffset = start
+		}
 	}
 	if l.scrollOffset < 0 {
 		l.scrollOffset = 0
@@ -373,11 +379,13 @@ func (l *List) ensureSelectedVisible() {
 }
 
 // itemHeight returns the rendered row count for an instance entry.
-// Title style has Padding(1,0) top, desc style has Padding(0,1) bottom.
-// 2-line item (title+branch) = 4 rows; 3-line (with resource) = 6 rows.
+// Title style has Padding(1,0,0,1) top, desc style has Padding(0,1,1,1) bottom.
+// The branch icon (U+F126) is a 2-column Nerd Fonts glyph. go-runewidth and
+// lipgloss disagree on its width, causing the branch line to wrap onto two rows.
+// 2-line item (title+branch) = 5 rows; 3-line (with resource) = 7 rows.
 func (l *List) itemHeight(idx int) int {
 	inst := l.items[idx]
-	base := 4 // title (1 pad top + 1 content) + branch (1 content + 1 pad bottom)
+	base := 5 // title (1 pad top + 1 content) + branch (2 content rows due to wrap + 1 pad bottom)
 	if inst.Status != session.Paused && inst.MemMB > 0 {
 		base += 2 // resource line (1 content + 1 pad bottom)
 	}
