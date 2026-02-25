@@ -74,6 +74,29 @@ func (l *List) GetSelectedIdx() int {
 	return l.selectedIdx
 }
 
+// SelectedIndex returns the current selection index (alias for GetSelectedIdx).
+func (l *List) SelectedIndex() int {
+	return l.selectedIdx
+}
+
+// CycleNext selects the next instance, wrapping to the beginning at the end.
+func (l *List) CycleNext() {
+	if len(l.items) == 0 {
+		return
+	}
+	l.selectedIdx = (l.selectedIdx + 1) % len(l.items)
+	l.ensureSelectedVisible()
+}
+
+// CyclePrev selects the previous instance, wrapping to the end at the beginning.
+func (l *List) CyclePrev() {
+	if len(l.items) == 0 {
+		return
+	}
+	l.selectedIdx = (l.selectedIdx - 1 + len(l.items)) % len(l.items)
+	l.ensureSelectedVisible()
+}
+
 // allTabText and activeTabText are the rendered tab labels with hotkey indicators.
 const allTabText = "1 All"
 const activeTabText = "2 Active"

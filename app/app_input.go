@@ -506,6 +506,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
 
+		// Alt+Up/Down: cycle through instances (wrapping) while staying in focus mode
+		if msg.Alt && (msg.Type == tea.KeyUp || msg.Type == tea.KeyDown) {
+			if msg.Type == tea.KeyUp {
+				m.list.CyclePrev()
+			} else {
+				m.list.CycleNext()
+			}
+			cmd := m.instanceChanged()
+			// Re-enter focus mode for the newly selected instance
+			focusCmd := m.enterFocusMode()
+			return m, tea.Batch(cmd, focusCmd)
+		}
+
 		// Git tab focus: forward to lazygit
 		if m.tabbedWindow.IsInGitTab() {
 			gitPane := m.tabbedWindow.GetGitPane()
@@ -873,6 +886,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if cmd != nil {
 			return m, cmd
 		}
+	}
+
+	// Alt+Up/Down: cycle through instances (wrapping)
+	if msg.Alt && (msg.Type == tea.KeyUp || msg.Type == tea.KeyDown) {
+		if msg.Type == tea.KeyUp {
+			m.list.CyclePrev()
+		} else {
+			m.list.CycleNext()
+		}
+		return m, m.instanceChanged()
 	}
 
 	// Handle quit commands first
