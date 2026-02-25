@@ -398,7 +398,7 @@
       "status": "ready",
       "description": "show the plan name you just entered when selecting a topic name because i have a bad memory and forget what plan i was adding",
       "branch": "plan/show-plan-name-for-topics",
-      "topic": "ui",
+      "topic": "workflow",
       "created_at": "2026-02-25T18:29:04.610125585Z"
     },
     "2026-02-25-simplify-plan-creation.md": {
@@ -409,7 +409,7 @@
       "created_at": "2026-02-25T18:28:33.075480763Z"
     },
     "2026-02-25-solo-agent-mode.md": {
-      "status": "reviewing",
+      "status": "done",
       "description": "start solo agent context menu action — single coder in worktree with minimal prompt, no wave/review lifecycle",
       "branch": "plan/solo-agent-mode",
       "topic": "automation",
