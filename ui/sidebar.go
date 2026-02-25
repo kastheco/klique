@@ -189,6 +189,7 @@ type Sidebar struct {
 
 	useTreeMode     bool // true when SetTopicsAndPlans has been called
 	historyExpanded bool // whether the History section is expanded
+	scrollOffset    int  // row index of first visible sidebar row
 	planStatuses    map[string]TopicStatus
 }
 
@@ -213,6 +214,38 @@ func NewSidebar() *Sidebar {
 func (s *Sidebar) SetSize(width, height int) {
 	s.width = width
 	s.height = height
+	s.clampSidebarScroll()
+}
+
+// availSidebarRows returns the number of tree-mode sidebar rows that fit in the panel.
+// Header accounts for: search bar (3 lines with border) + 2 blank lines = 5 lines.
+// Border + padding = 4 lines (2 border + 2 padding).
+func (s *Sidebar) availSidebarRows() int {
+	const borderAndPadding = 4
+	const headerLines = 5
+	avail := s.height - borderAndPadding - headerLines
+	if avail < 1 {
+		avail = 1
+	}
+	return avail
+}
+
+// clampSidebarScroll adjusts scrollOffset so selectedIdx stays within the visible window.
+func (s *Sidebar) clampSidebarScroll() {
+	if len(s.rows) == 0 {
+		s.scrollOffset = 0
+		return
+	}
+	avail := s.availSidebarRows()
+	if s.selectedIdx < s.scrollOffset {
+		s.scrollOffset = s.selectedIdx
+	}
+	if s.selectedIdx >= s.scrollOffset+avail {
+		s.scrollOffset = s.selectedIdx - avail + 1
+	}
+	if s.scrollOffset < 0 {
+		s.scrollOffset = 0
+	}
 }
 
 func (s *Sidebar) SetFocused(focused bool) {
@@ -385,6 +418,7 @@ func (s *Sidebar) Up() {
 		if s.selectedIdx > 0 {
 			s.selectedIdx--
 		}
+		s.clampSidebarScroll()
 		return
 	}
 	for i := s.selectedIdx - 1; i >= 0; i-- {
@@ -400,6 +434,7 @@ func (s *Sidebar) Down() {
 		if s.selectedIdx < len(s.rows)-1 {
 			s.selectedIdx++
 		}
+		s.clampSidebarScroll()
 		return
 	}
 	for i := s.selectedIdx + 1; i < len(s.items); i++ {
@@ -722,12 +757,14 @@ func (s *Sidebar) rebuildRows() {
 	}
 
 	s.rows = rows
+	s.scrollOffset = 0
 
 	// Restore selection by ID if possible.
 	if prevID != "" {
 		for i, row := range rows {
 			if row.ID == prevID {
 				s.selectedIdx = i
+				s.clampSidebarScroll()
 				return
 			}
 		}
@@ -740,6 +777,7 @@ func (s *Sidebar) rebuildRows() {
 	if s.selectedIdx < 0 {
 		s.selectedIdx = 0
 	}
+	s.clampSidebarScroll()
 }
 
 // planStageRows returns the four lifecycle stage rows for a plan.
@@ -882,30 +920,42 @@ func (s *Sidebar) SelectByID(id string) bool {
 
 // renderTreeRows writes the tree-mode sidebar content into b.
 // Each row is rendered according to its Kind via per-kind render functions.
+// Only the visible window [scrollOffset, scrollOffset+avail) is rendered.
 func (s *Sidebar) renderTreeRows(b *strings.Builder, itemWidth int) {
 	contentWidth := itemWidth - 2 // account for Padding(0,1) in item styles
 
-	for i, row := range s.rows {
+	avail := s.availSidebarRows()
+	startRow := s.scrollOffset
+	endRow := startRow + avail
+	if endRow > len(s.rows) {
+		endRow = len(s.rows)
+	}
+	if startRow > len(s.rows) {
+		startRow = len(s.rows)
+	}
+
+	for relIdx, row := range s.rows[startRow:endRow] {
+		absIdx := relIdx + startRow
 		var line string
 
 		switch row.Kind {
 		case rowKindTopic:
-			line = s.renderTopicRow(row, i, contentWidth)
+			line = s.renderTopicRow(row, absIdx, contentWidth)
 		case rowKindPlan:
-			line = s.renderPlanRow(row, i, contentWidth)
+			line = s.renderPlanRow(row, absIdx, contentWidth)
 		case rowKindStage:
 			line = s.renderStageRow(row)
 		case rowKindHistoryToggle:
 			line = s.renderHistoryToggleRow(contentWidth)
 		case rowKindCancelled:
-			line = s.renderCancelledRow(row, i, contentWidth)
+			line = s.renderCancelledRow(row, absIdx, contentWidth)
 		}
 
 		// Apply selection styling — strip inner ANSI so the selection
 		// background covers the full row without gaps.
-		if i == s.selectedIdx && s.focused {
+		if absIdx == s.selectedIdx && s.focused {
 			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(ansi.Strip(line)))
-		} else if i == s.selectedIdx && !s.focused {
+		} else if absIdx == s.selectedIdx && !s.focused {
 			b.WriteString(activeTopicStyle.Width(itemWidth).Render(ansi.Strip(line)))
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render(line))
@@ -1328,5 +1378,15 @@ func (s *Sidebar) String() string {
 	innerContent := topContent + strings.Repeat("\n", gap) + bottomSection
 
 	bordered := borderStyle.Width(innerWidth).Height(borderHeight).Render(innerContent)
-	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
+	placed := lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
+
+	// Clamp output to s.height lines so content never overflows the panel.
+	if s.height > 0 {
+		placedLines := strings.Split(placed, "\n")
+		if len(placedLines) > s.height {
+			placedLines = placedLines[:s.height]
+			placed = strings.Join(placedLines, "\n")
+		}
+	}
+	return placed
 }
