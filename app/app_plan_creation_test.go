@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +51,44 @@ func TestCreatePlanRecord(t *testing.T) {
 	if entry.Branch != branch {
 		t.Fatalf("entry.Branch = %q, want %q", entry.Branch, branch)
 	}
+}
+
+func TestHandleDefaultStateStartsCombinedPlanForm(t *testing.T) {
+	h := &home{state: stateDefault, keySent: true}
+
+	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	require.Nil(t, cmd)
+
+	updated, ok := model.(*home)
+	require.True(t, ok)
+	require.Equal(t, stateNewPlan, updated.state)
+	require.NotNil(t, updated.formOverlay)
+}
+
+func TestHandleKeyPressNewPlanWithoutOverlayReturnsDefault(t *testing.T) {
+	h := &home{state: stateNewPlan}
+
+	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	require.Nil(t, cmd)
+
+	updated, ok := model.(*home)
+	require.True(t, ok)
+	require.Equal(t, stateDefault, updated.state)
+}
+
+func TestHandleKeyPressNewPlanTopicWithoutPickerClearsPendingValues(t *testing.T) {
+	h := &home{
+		state:           stateNewPlanTopic,
+		pendingPlanName: "auth-refactor",
+		pendingPlanDesc: "Refactor JWT auth",
+	}
+
+	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	require.Nil(t, cmd)
+
+	updated, ok := model.(*home)
+	require.True(t, ok)
+	require.Equal(t, stateDefault, updated.state)
+	require.Empty(t, updated.pendingPlanName)
+	require.Empty(t, updated.pendingPlanDesc)
 }
