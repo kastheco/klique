@@ -72,4 +72,4 @@ Difftastic supports 50+ languages via tree-sitter. Language is detected from fil
 
 - **difft**: Reviewing refactors, renames, code moves — ignores irrelevant formatting noise
 - **git diff**: When you need patch-compatible output or line-level granularity
-- **diff**: Legacy fallback, no syntax awareness
+- **diff**: BANNED. Use `difft` instead — always. (`git diff` is fine, standalone `diff` is not.)

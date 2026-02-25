@@ -82,4 +82,4 @@ ast-grep run -p 'pattern' --json | sd 'old' 'new'
 - **sd**: Simple string/regex replacements in files. Fastest path for non-structural changes.
 - **ast-grep**: When replacement must be syntax-aware (renaming symbols without hitting strings/comments)
 - **comby**: When replacement involves balanced delimiters or multi-line structural patterns
-- **sed**: Legacy fallback. sd is strictly better for interactive use — simpler syntax, sane defaults.
+- **sed**: BANNED. Use `sd` instead — always.

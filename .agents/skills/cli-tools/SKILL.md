@@ -7,6 +7,24 @@ description: Use when performing code search, refactoring, file transformations,
 
 Modern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.
 
+<HARD-GATE>
+## Banned Tools
+
+These legacy tools are NEVER permitted. Using them is a violation, not a preference.
+
+| Banned | Replacement | No Exceptions |
+|--------|-------------|---------------|
+| `grep` | `rg` (ripgrep) | Even for simple searches. `rg` is always faster and respects .gitignore |
+| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |
+| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |
+| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |
+| `wc -l` | `scc` | Even for single files |
+
+**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.
+
+If you catch yourself thinking "grep is fine for this simple case" — it's not. Use `rg`.
+</HARD-GATE>
+
 ## Tool Selection by Task
 
 Pick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.
@@ -144,14 +162,16 @@ scc --include-ext go,ts              # specific languages only
 
 **In-depth reference:** [resources/scc.md](resources/scc.md)
 
-## Common Mistakes
+## Violations
 
-| Mistake | Fix |
-|---------|-----|
-| Using `sed` for code refactoring | Use `ast-grep` or `comby` — they understand syntax |
+These Violations are not suggestions. If you do any of these, you are violating the skill.
+
+| Violation | Required Fix |
+|-----------|-------------|
+| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |
+| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |
+| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |
+| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |
+| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |
 | Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\n:[body]\n}` |
 | Forgetting `-in-place` with comby | Without it, comby only previews changes |
-| Using `grep` to find code patterns | Use `ast-grep --pattern` for syntax-aware search |
-| Using `diff` for code review | Use `difft` for syntax-aware structural diffs |
-| Manual YAML editing with `sed` | Use `yq` to preserve structure and formatting |
-| Using `wc -l` for project metrics | Use `scc` for language-aware counts + complexity |

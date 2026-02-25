@@ -88,6 +88,6 @@ scc dir2/
 ## When to Use scc vs Alternatives
 
 - **scc**: Fast language-aware metrics with complexity. Best for project scope assessment.
-- **wc -l**: Only when you literally need raw line count of a single file
+- **wc -l**: BANNED. Use `scc` instead — even for single files.
 - **cloc**: Legacy alternative (slower, Perl-based)
 - **tokei**: Rust alternative (similar speed, different feature set)
