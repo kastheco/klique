@@ -390,36 +390,14 @@ func (p *PreviewPane) String() string {
 			}
 		}
 
-		// Calculate available height for fallback text
-		availableHeight := p.height - 3 - 4 // 2 for borders, 1 for margin, 1 for padding
-
-		// Count the number of lines in the fallback text
-		fallbackLines := len(strings.Split(fallbackText, "\n"))
-
-		// Calculate padding needed above and below to center the content
-		totalPadding := availableHeight - fallbackLines
-		topPadding := 0
-		bottomPadding := 0
-		if totalPadding > 0 {
-			topPadding = totalPadding / 2
-			bottomPadding = totalPadding - topPadding // accounts for odd numbers
-		}
-
-		// Build the centered content
-		var lines []string
-		if topPadding > 0 {
-			lines = append(lines, strings.Repeat("\n", topPadding))
-		}
-		lines = append(lines, fallbackText)
-		if bottomPadding > 0 {
-			lines = append(lines, strings.Repeat("\n", bottomPadding))
-		}
-
-		// Center both vertically and horizontally
-		return previewPaneStyle.
-			Width(p.width).
-			Align(lipgloss.Center).
-			Render(strings.Join(lines, ""))
+		// Center both vertically and horizontally.
+		return lipgloss.Place(
+			p.width,
+			p.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			previewPaneStyle.Render(fallbackText),
+		)
 	}
 
 	// If in document or scroll mode, use the viewport to display scrollable content

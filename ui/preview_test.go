@@ -394,6 +394,25 @@ func TestPreviewPaneString_RendersScrollbarOnlyWhenScrollable(t *testing.T) {
 	})
 }
 
+func TestPreviewPaneString_CentersFallbackContentInShortHeight(t *testing.T) {
+	previewPane := NewPreviewPane()
+	previewPane.SetSize(20, 8)
+	previewPane.setFallbackContent("X")
+
+	rendered := previewPane.String()
+	lines := strings.Split(rendered, "\n")
+
+	markerLine := -1
+	for i, line := range lines {
+		if strings.Contains(line, "X") {
+			markerLine = i
+			break
+		}
+	}
+
+	require.Equal(t, 3, markerLine)
+}
+
 func testDocumentLines(n int) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {
