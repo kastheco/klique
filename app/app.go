@@ -148,9 +148,9 @@ type home struct {
 	// focusSlot tracks which pane has keyboard focus in the Tab ring:
 	// 0=sidebar, 1=agent tab, 2=diff tab, 3=git tab, 4=instance list
 	focusSlot int
-	// pendingPlanName stores the submitted plan name while topic picking is active
+	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
-	// pendingPlanDesc stores the submitted plan description while topic picking is active
+	// pendingPlanDesc stores the plan description during the two-step plan creation flow
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string

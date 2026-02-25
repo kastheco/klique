@@ -714,19 +714,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					topic = picked
 				}
 			}
-			if m.pendingPlanName != "" {
-				if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
-					m.state = stateDefault
-					m.menu.SetState(ui.StateDefault)
-					m.pickerOverlay = nil
-					m.pendingPlanName = ""
-					m.pendingPlanDesc = ""
-					return m, m.handleError(err)
-				}
-				m.loadPlanState()
-				m.updateSidebarPlans()
-				m.updateSidebarItems()
+			if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
+				m.state = stateDefault
+				m.menu.SetState(ui.StateDefault)
+				m.pickerOverlay = nil
+				m.pendingPlanName = ""
+				m.pendingPlanDesc = ""
+				return m, m.handleError(err)
 			}
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
