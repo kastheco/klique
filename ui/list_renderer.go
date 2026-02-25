@@ -245,8 +245,8 @@ func (l *List) String() string {
 		innerWidth = 8
 	}
 
-	// Write the header row near the top so this column aligns with search/tabs.
-	var b strings.Builder
+	// Build header separately (tabs + sort/autyes row + blank line).
+	var header strings.Builder
 
 	// Write filter tabs
 	titleWidth := AdjustPreviewWidth(innerWidth) + 2
@@ -273,7 +273,7 @@ func (l *List) String() string {
 		if gap < 1 {
 			gap = 1
 		}
-		b.WriteString(left + strings.Repeat(" ", gap) + right)
+		header.WriteString(left + strings.Repeat(" ", gap) + right)
 	} else {
 		left := tabs + " " + sortLabel
 		autoYes := autoYesStyle.Render(autoYesText)
@@ -281,19 +281,33 @@ func (l *List) String() string {
 		if gap < 1 {
 			gap = 1
 		}
-		b.WriteString(left + strings.Repeat(" ", gap) + autoYes)
+		header.WriteString(left + strings.Repeat(" ", gap) + autoYes)
 	}
 
-	b.WriteString("\n")
-	b.WriteString("\n")
+	header.WriteString("\n")
+	header.WriteString("\n")
 
-	// Render the list.
+	// Build item content separately.
+	var content strings.Builder
 	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i == l.selectedIdx, l.focused, len(l.repos) > 1, i, l.IsHighlighted(item)))
+		content.WriteString(l.renderer.Render(item, i == l.selectedIdx, l.focused, len(l.repos) > 1, i, l.IsHighlighted(item)))
 		if i != len(l.items)-1 {
-			b.WriteString("\n\n")
+			content.WriteString("\n\n")
 		}
 	}
+
+	// Slice content to visible window.
+	allLines := strings.Split(content.String(), "\n")
+	avail := l.availContentLines()
+	start := l.scrollOffset
+	if start > len(allLines) {
+		start = len(allLines)
+	}
+	end := start + avail
+	if end > len(allLines) {
+		end = len(allLines)
+	}
+	visible := strings.Join(allLines[start:end], "\n")
 
 	// Wrap in border matching the sidebar style.
 	borderStyle := listBorderStyle
@@ -304,8 +318,58 @@ func (l *List) String() string {
 	if innerHeight < 4 {
 		innerHeight = 4
 	}
-	bordered := borderStyle.Width(innerWidth).Height(innerHeight).Render(b.String())
-	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, bordered)
+	bordered := borderStyle.Width(innerWidth).Height(innerHeight).Render(header.String() + visible)
+	placed := lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, bordered)
+
+	// Hard-clip to l.height lines to prevent overflow from header wrapping or other layout quirks.
+	placedLines := strings.Split(placed, "\n")
+	if len(placedLines) > l.height {
+		placedLines = placedLines[:l.height]
+	}
+	return strings.Join(placedLines, "\n")
+}
+
+// itemStartLine returns the line offset (0-based) where item idx begins
+// in the rendered content buffer (items only, excluding the 2-line header).
+func (l *List) itemStartLine(idx int) int {
+	line := 0
+	for i := 0; i < idx; i++ {
+		line += l.itemHeight(i) + 1 // +1 for blank gap between items
+	}
+	return line
+}
+
+// availContentLines returns the number of lines available for item content
+// inside the border, excluding the 2-line header (tabs + blank line).
+func (l *List) availContentLines() int {
+	const borderV = 2
+	const headerLines = 2
+	avail := l.height - borderV - headerLines
+	if avail < 1 {
+		avail = 1
+	}
+	return avail
+}
+
+// ensureSelectedVisible adjusts scrollOffset so the selected item is fully visible.
+func (l *List) ensureSelectedVisible() {
+	if len(l.items) == 0 {
+		l.scrollOffset = 0
+		return
+	}
+	avail := l.availContentLines()
+	start := l.itemStartLine(l.selectedIdx)
+	end := start + l.itemHeight(l.selectedIdx) - 1
+
+	if start < l.scrollOffset {
+		l.scrollOffset = start
+	}
+	if end >= l.scrollOffset+avail {
+		l.scrollOffset = end - avail + 1
+	}
+	if l.scrollOffset < 0 {
+		l.scrollOffset = 0
+	}
 }
 
 // itemHeight returns the rendered row count for an instance entry.

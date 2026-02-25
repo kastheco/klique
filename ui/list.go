@@ -29,6 +29,8 @@ type List struct {
 
 	highlightKind  string // "plan", "topic", or "" (no highlight)
 	highlightValue string // plan filename or topic name
+
+	scrollOffset int // line offset from top of rendered item content
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
@@ -108,6 +110,7 @@ func (l *List) SetSize(width, height int) {
 	// So: width - 6 (border) - 2 (item padding) = width - 8.
 	// AdjustPreviewWidth subtracts 2, so pass width - 6.
 	l.renderer.setWidth(width - 6)
+	l.ensureSelectedVisible()
 }
 
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
@@ -138,6 +141,7 @@ func (l *List) Down() {
 	if l.selectedIdx < len(l.items)-1 {
 		l.selectedIdx++
 	}
+	l.ensureSelectedVisible()
 }
 
 // RemoveByTitle removes an instance from both allItems and items by title.
@@ -216,6 +220,7 @@ func (l *List) Up() {
 	if l.selectedIdx > 0 {
 		l.selectedIdx--
 	}
+	l.ensureSelectedVisible()
 }
 
 func (l *List) addRepo(repo string) {
@@ -414,6 +419,8 @@ func (l *List) rebuildFilteredItems() {
 	if l.selectedIdx < 0 {
 		l.selectedIdx = 0
 	}
+	l.scrollOffset = 0
+	l.ensureSelectedVisible()
 }
 
 func (l *List) sortItems() {
