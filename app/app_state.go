@@ -1160,8 +1160,8 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	inst.LoadingMessage = "Preparing session..."
 
 	var startCmd tea.Cmd
-	if action == "plan" {
-		// Planner runs on main branch — no worktree created.
+	if action == "plan" || action == "solo" {
+		// Planner and solo agent run on main branch — no worktree created.
 		startCmd = func() tea.Msg {
 			err := inst.StartOnMainBranch()
 			return instanceStartedMsg{instance: inst, err: err}
