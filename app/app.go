@@ -438,6 +438,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		// Advance spring animation every tick (20fps)
+		m.tabbedWindow.TickSpring()
 		// Banner animation (only when no terminal is active / fallback showing).
 		m.previewTickCount++
 		if m.previewTickCount%20 == 0 {
