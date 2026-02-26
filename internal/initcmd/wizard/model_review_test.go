@@ -3,7 +3,9 @@ package wizard
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReviewStep_RendersSummary(t *testing.T) {
@@ -32,4 +34,21 @@ func TestReviewStep_FormatSummaryLine(t *testing.T) {
 	assert.Contains(t, line, "claude")
 	assert.Contains(t, line, "claude-sonnet-4-6")
 	assert.Contains(t, line, "medium")
+}
+
+func TestReviewStep_QReturnsStepCancelMsg(t *testing.T) {
+	r := newReviewStep(nil, nil)
+	next, cmd := r.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+	_, ok := next.(*reviewStep)
+	require.True(t, ok)
+	msg := cmd()
+	_, ok = msg.(stepCancelMsg)
+	assert.True(t, ok)
+}
+
+func TestReviewStep_ViewDoesNotRenderStepDots(t *testing.T) {
+	r := newReviewStep(nil, []string{"claude"})
+	view := r.View(100, 20)
+	assert.NotContains(t, view, "● ── ●")
 }

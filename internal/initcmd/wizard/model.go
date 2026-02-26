@@ -35,36 +35,41 @@ type rootModel struct {
 	cancelled bool
 }
 
-type stepFactory func(state *State, registry *harness.Registry, existing *config.TOMLConfigResult) stepModel
-
-var rootStepFactories = []stepFactory{
-	newPlaceholderHarnessStep,
-	newPlaceholderAgentsStep,
-	newPlaceholderReviewStep,
-}
+const wizardTotalSteps = 3
 
 func newRootModel(registry *harness.Registry, existing *config.TOMLConfigResult) rootModel {
-	state := &State{Registry: registry}
+	state := &State{
+		Registry: registry,
+		PhaseMapping: map[string]string{
+			"implementing":   "coder",
+			"spec_review":    "reviewer",
+			"quality_review": "reviewer",
+			"planning":       "planner",
+		},
+	}
 	if registry != nil {
 		state.DetectResults = registry.DetectAll()
 	}
 
+	steps := make([]stepModel, wizardTotalSteps)
+	steps[0] = newHarnessStep(state.DetectResults)
+
 	return rootModel{
-		registry: registry,
-		existing: existing,
-		state:    state,
-		step:     0,
+		registry:   registry,
+		existing:   existing,
+		state:      state,
+		steps:      steps,
+		totalSteps: wizardTotalSteps,
+		step:       0,
 	}
 }
 
 func (m rootModel) Init() tea.Cmd {
-	m.steps = nil
-	for _, factory := range rootStepFactories {
-		m.steps = append(m.steps, factory(m.state, m.registry, m.existing))
-	}
-	m.totalSteps = len(m.steps)
 	if m.totalSteps == 0 {
 		return tea.Quit
+	}
+	if m.step < 0 || m.step >= len(m.steps) || m.steps[m.step] == nil {
+		return nil
 	}
 	return m.steps[m.step].Init()
 }
@@ -79,17 +84,27 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.step >= 0 && m.step < len(m.steps) {
 			m.steps[m.step].Apply(m.state)
 		}
-		if m.step == 0 && len(m.state.Agents) == 0 {
+		switch m.step {
+		case 0:
 			m.state.Agents = initAgentsFromExisting(m.state.SelectedHarness, m.existing)
+			m.steps[1] = newAgentStep(m.state.Agents, m.state.SelectedHarness, m.modelCacheForSelectedHarness())
+		case 1:
+			m.steps[2] = newReviewStep(m.state.Agents, m.state.SelectedHarness)
 		}
 		if m.step >= m.totalSteps-1 {
 			return m, tea.Quit
 		}
 		m.nextStep()
+		if m.step < 0 || m.step >= len(m.steps) || m.steps[m.step] == nil {
+			return m, nil
+		}
 		return m, m.steps[m.step].Init()
 	case stepBackMsg:
 		m.prevStep()
 		return m, nil
+	case stepCancelMsg:
+		m.cancelled = true
+		return m, tea.Quit
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			m.cancelled = true
@@ -97,7 +112,7 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.step < 0 || m.step >= len(m.steps) {
+	if m.step < 0 || m.step >= len(m.steps) || m.steps[m.step] == nil {
 		return m, nil
 	}
 
@@ -107,7 +122,7 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m rootModel) View() string {
-	if m.step < 0 || m.step >= len(m.steps) {
+	if m.step < 0 || m.step >= len(m.steps) || m.steps[m.step] == nil {
 		return ""
 	}
 
@@ -125,6 +140,27 @@ func (m rootModel) View() string {
 	content := m.steps[m.step].View(m.width, contentHeight)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, "", content)
+}
+
+func (m rootModel) modelCacheForSelectedHarness() map[string][]string {
+	cache := make(map[string][]string)
+	if m.registry == nil {
+		return cache
+	}
+
+	for _, harnessName := range m.state.SelectedHarness {
+		h := m.registry.Get(harnessName)
+		if h == nil {
+			continue
+		}
+		models, err := h.ListModels()
+		if err != nil {
+			continue
+		}
+		cache[harnessName] = append([]string(nil), models...)
+	}
+
+	return cache
 }
 
 func (m *rootModel) nextStep() {
@@ -218,43 +254,3 @@ func gradientText(text, startHex, endHex string) string {
 	sb.WriteString("\033[0m")
 	return sb.String()
 }
-
-type placeholderStepModel struct {
-	title string
-}
-
-func newPlaceholderHarnessStep(_ *State, _ *harness.Registry, _ *config.TOMLConfigResult) stepModel {
-	return placeholderStepModel{title: "harness"}
-}
-
-func newPlaceholderAgentsStep(_ *State, _ *harness.Registry, _ *config.TOMLConfigResult) stepModel {
-	return placeholderStepModel{title: "agents"}
-}
-
-func newPlaceholderReviewStep(_ *State, _ *harness.Registry, _ *config.TOMLConfigResult) stepModel {
-	return placeholderStepModel{title: "done"}
-}
-
-func (m placeholderStepModel) Init() tea.Cmd {
-	return nil
-}
-
-func (m placeholderStepModel) Update(msg tea.Msg) (stepModel, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "enter":
-			return m, func() tea.Msg { return stepDoneMsg{} }
-		case "esc":
-			return m, func() tea.Msg { return stepBackMsg{} }
-		}
-	}
-	return m, nil
-}
-
-func (m placeholderStepModel) View(width, _ int) string {
-	body := subtitleStyle.Render(fmt.Sprintf("%s step placeholder", m.title))
-	hint := hintDescStyle.Render("enter: next  esc: back  ctrl+c: cancel")
-	return lipgloss.NewStyle().Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, body, "", hint))
-}
-
-func (m placeholderStepModel) Apply(_ *State) {}

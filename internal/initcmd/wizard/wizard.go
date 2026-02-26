@@ -3,37 +3,11 @@ package wizard
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 )
-
-// BuildProgressNote renders a summary of agent configuration progress.
-// Used as the description for huh.NewNote() at the top of each agent form.
-func BuildProgressNote(agents []AgentState, currentIdx int) string {
-	var lines []string
-	for i, a := range agents {
-		switch {
-		case i < currentIdx && !a.Enabled:
-			lines = append(lines, fmt.Sprintf("  ⊘ %s  (disabled)", a.Role))
-		case i < currentIdx:
-			summary := a.Harness
-			if a.Model != "" {
-				summary += " / " + a.Model
-			}
-			if a.Effort != "" {
-				summary += " / " + a.Effort
-			}
-			lines = append(lines, fmt.Sprintf("  ✓ %-10s %s", a.Role, summary))
-		case i == currentIdx:
-			lines = append(lines, fmt.Sprintf("  ▸ %-10s configuring...", a.Role))
-		default:
-			lines = append(lines, fmt.Sprintf("  ○ %s", a.Role))
-		}
-	}
-	return strings.Join(lines, "\n")
-}
 
 // State holds all wizard-collected values across stages.
 type State struct {
@@ -120,33 +94,20 @@ func IsCustomized(a AgentState, defaultHarness string) bool {
 // Run executes all wizard stages in sequence.
 // If existing is non-nil, pre-populates forms from existing config.
 func Run(registry *harness.Registry, existing *config.TOMLConfigResult) (*State, error) {
-	state := &State{
-		Registry:      registry,
-		DetectResults: registry.DetectAll(),
-	}
-
-	// Stage 1: Harness selection
-	if err := runHarnessStage(state); err != nil {
+	m := newRootModel(registry, existing)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	finalModel, err := p.Run()
+	if err != nil {
 		return nil, err
 	}
-
-	// Stage 2: Agent configuration
-	if err := runAgentStage(state, existing); err != nil {
-		return nil, err
+	rm, ok := finalModel.(rootModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected wizard model type %T", finalModel)
 	}
-
-	// Stage 3: Hardcoded phase mapping
-	state.PhaseMapping = map[string]string{
-		"implementing":   "coder",
-		"spec_review":    "reviewer",
-		"quality_review": "reviewer",
-		"planning":       "planner",
+	if rm.cancelled {
+		return nil, fmt.Errorf("wizard cancelled")
 	}
-
-	// Stage 4: Tool discovery removed — cli-tools skill is always written as a project
-	// skill and loaded at runtime. No need to filter by installed tools.
-
-	return state, nil
+	return rm.state, nil
 }
 
 // parseTemperature converts a temperature string to *float64.

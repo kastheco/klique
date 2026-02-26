@@ -69,9 +69,6 @@ func (h *harnessStep) View(width, height int) string {
 	}
 
 	lines := []string{
-		titleStyle.Render(gradientText("klique init wizard", gradientStart, gradientEnd)),
-		renderHarnessStepDots(),
-		"",
 		titleStyle.Render("select agent harnesses"),
 		"",
 	}
@@ -152,14 +149,4 @@ func (h *harnessStep) selectedNames() []string {
 		}
 	}
 	return names
-}
-
-func renderHarnessStepDots() string {
-	return strings.Join([]string{
-		stepActiveStyle.Render("●"),
-		stepPendingStyle.Render("──"),
-		stepPendingStyle.Render("○"),
-		stepPendingStyle.Render("──"),
-		stepPendingStyle.Render("○"),
-	}, " ")
 }

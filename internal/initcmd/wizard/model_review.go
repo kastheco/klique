@@ -38,7 +38,7 @@ func (r *reviewStep) Update(msg tea.Msg) (stepModel, tea.Cmd) {
 	case "esc":
 		return r, func() tea.Msg { return stepBackMsg{} }
 	case "q", "ctrl+c":
-		return r, tea.Quit
+		return r, func() tea.Msg { return stepCancelMsg{} }
 	}
 
 	return r, nil
@@ -54,9 +54,8 @@ func (r *reviewStep) View(width, height int) string {
 
 	rows := make([]string, 0, len(r.agents)+12)
 	rows = append(rows,
-		renderReviewStepDots(),
 		titleStyle.Render("review configuration"),
-		separatorStyle.Render(strings.Repeat("─", max(1, width-2))),
+		separatorStyle.Render(strings.Repeat("─", max(width-2, 1))),
 		lipgloss.NewStyle().Foreground(colorFoam).Render("harnesses: "+strings.Join(r.harnesses, " ")),
 		"",
 	)
@@ -97,16 +96,6 @@ func formatReviewLine(a AgentState) string {
 	return fmt.Sprintf("%s %-8s %s / %s / %s / temp %s", dotEnabledStyle.Render("●"), a.Role, a.Harness, a.Model, effort, temp)
 }
 
-func renderReviewStepDots() string {
-	return strings.Join([]string{
-		stepDoneStyle.Render("●"),
-		stepPendingStyle.Render("──"),
-		stepDoneStyle.Render("●"),
-		stepPendingStyle.Render("──"),
-		stepActiveStyle.Render("●"),
-	}, " ")
-}
-
 func reviewScaffoldPaths(harnesses []string) []string {
 	if len(harnesses) == 0 {
 		return []string{"./<harness>/agents/*.md"}
@@ -117,11 +106,4 @@ func reviewScaffoldPaths(harnesses []string) []string {
 		paths = append(paths, fmt.Sprintf("./.%s/agents/*.md", h))
 	}
 	return paths
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

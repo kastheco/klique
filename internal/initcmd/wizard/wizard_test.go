@@ -1,10 +1,8 @@
 package wizard
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/kastheco/kasmos/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -184,124 +182,5 @@ func TestIsCustomized(t *testing.T) {
 	t.Run("unknown role returns false", func(t *testing.T) {
 		a := AgentState{Role: "unknown", Enabled: true}
 		assert.False(t, IsCustomized(a, "opencode"))
-	})
-}
-
-func TestFormatAgentSummary(t *testing.T) {
-	t.Run("full settings", func(t *testing.T) {
-		a := AgentState{
-			Role: "coder", Harness: "opencode",
-			Model:  "anthropic/claude-sonnet-4-6",
-			Effort: "medium", Temperature: "0.1", Enabled: true,
-		}
-		s := FormatAgentSummary(a)
-		assert.Contains(t, s, "opencode")
-		assert.Contains(t, s, "anthropic/claude-sonnet-4-6")
-		assert.Contains(t, s, "medium")
-		assert.Contains(t, s, "temp=0.1")
-	})
-
-	t.Run("no temperature", func(t *testing.T) {
-		a := AgentState{
-			Role: "coder", Harness: "claude",
-			Model:  "claude-sonnet-4-6",
-			Effort: "high", Temperature: "", Enabled: true,
-		}
-		s := FormatAgentSummary(a)
-		assert.Contains(t, s, "claude")
-		assert.Contains(t, s, "claude-sonnet-4-6")
-		assert.Contains(t, s, "high")
-		assert.NotContains(t, s, "temp=")
-	})
-
-	t.Run("disabled", func(t *testing.T) {
-		a := AgentState{
-			Role: "planner", Harness: "codex", Enabled: false,
-		}
-		s := FormatAgentSummary(a)
-		assert.Contains(t, s, "disabled")
-	})
-}
-
-func TestPrePopulateFromExisting(t *testing.T) {
-	temp := 0.5
-	existing := &config.TOMLConfigResult{
-		Profiles: map[string]config.AgentProfile{
-			"coder": {
-				Program:     "opencode",
-				Model:       "anthropic/claude-sonnet-4-6",
-				Temperature: &temp,
-				Effort:      "high",
-				Enabled:     true,
-			},
-		},
-		PhaseRoles: map[string]string{
-			"implementing": "coder",
-		},
-	}
-
-	// Simulate what runAgentStage now does for pre-population
-	roles := DefaultAgentRoles()
-	defaults := RoleDefaults()
-	var agents []AgentState
-	for _, role := range roles {
-		as := defaults[role]
-		if as.Harness == "" {
-			as.Harness = "claude"
-		}
-		if profile, ok := existing.Profiles[role]; ok {
-			as.Harness = profile.Program
-			as.Model = profile.Model
-			as.Effort = profile.Effort
-			as.Enabled = profile.Enabled
-			as.Temperature = "" // clear role default when existing config found
-			if profile.Temperature != nil {
-				as.Temperature = fmt.Sprintf("%g", *profile.Temperature)
-			}
-		}
-		agents = append(agents, as)
-	}
-
-	assert.Equal(t, "opencode", agents[0].Harness) // coder got pre-populated
-	assert.Equal(t, "claude", agents[1].Harness)   // reviewer got harness default
-	// reviewer still has role defaults for model/effort
-	assert.Equal(t, "openai/gpt-5.3-codex", agents[1].Model)
-	assert.Equal(t, "xhigh", agents[1].Effort)
-}
-
-func TestBuildProgressNote(t *testing.T) {
-	agents := []AgentState{
-		{Role: "coder", Harness: "opencode", Model: "claude-sonnet-4-6", Effort: "high", Enabled: true},
-		{Role: "reviewer", Harness: "claude", Model: "claude-opus-4-6", Effort: "high", Enabled: true},
-		{Role: "planner", Harness: "codex", Model: "", Effort: "", Enabled: true},
-	}
-
-	t.Run("first agent shows current marker", func(t *testing.T) {
-		note := BuildProgressNote(agents, 0)
-		assert.Contains(t, note, "▸ coder")
-		assert.Contains(t, note, "○ reviewer")
-		assert.Contains(t, note, "○ planner")
-	})
-
-	t.Run("middle agent shows completed first", func(t *testing.T) {
-		note := BuildProgressNote(agents, 1)
-		assert.Contains(t, note, "✓ coder")
-		assert.Contains(t, note, "opencode")
-		assert.Contains(t, note, "claude-sonnet-4-6")
-		assert.Contains(t, note, "▸ reviewer")
-		assert.Contains(t, note, "○ planner")
-	})
-
-	t.Run("last agent shows all completed", func(t *testing.T) {
-		note := BuildProgressNote(agents, 2)
-		assert.Contains(t, note, "✓ coder")
-		assert.Contains(t, note, "✓ reviewer")
-		assert.Contains(t, note, "▸ planner")
-	})
-
-	t.Run("disabled agent shows skip marker", func(t *testing.T) {
-		agents[0].Enabled = false
-		note := BuildProgressNote(agents, 1)
-		assert.Contains(t, note, "⊘ coder")
 	})
 }

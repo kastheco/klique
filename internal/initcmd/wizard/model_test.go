@@ -3,8 +3,18 @@ package wizard
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewRootModelInitializesSteps(t *testing.T) {
+	m := newRootModel(nil, nil)
+	require.Len(t, m.steps, 3)
+	assert.Equal(t, 3, m.totalSteps)
+	_, ok := m.steps[0].(*harnessStep)
+	assert.True(t, ok)
+}
 
 func TestRootModelStepTransitions(t *testing.T) {
 	t.Run("initial step is 0", func(t *testing.T) {
@@ -37,4 +47,16 @@ func TestStepIndicator(t *testing.T) {
 	indicator := renderStepIndicator(1, 3)
 	assert.Contains(t, indicator, "●")
 	assert.Contains(t, indicator, "○")
+}
+
+func TestRootModelHandlesStepCancelMsg(t *testing.T) {
+	m := newRootModel(nil, nil)
+	next, cmd := m.Update(stepCancelMsg{})
+	rm, ok := next.(rootModel)
+	require.True(t, ok)
+	assert.True(t, rm.cancelled)
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, ok = msg.(tea.QuitMsg)
+	assert.True(t, ok)
 }

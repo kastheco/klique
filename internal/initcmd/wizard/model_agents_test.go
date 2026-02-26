@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAgentStep_BrowseNavigation(t *testing.T) {
@@ -172,4 +174,25 @@ func TestTruncateForCell(t *testing.T) {
 	assert.Equal(t, "", truncateForCell("abc", 0))
 	assert.Equal(t, "abc", truncateForCell("abc", 3))
 	assert.Equal(t, "ab...", truncateForCell("abcdef", 5))
+}
+
+func TestAgentStep_QReturnsStepCancelMsg(t *testing.T) {
+	s := newAgentStep([]AgentState{{Role: "coder", Harness: "claude", Enabled: true}}, []string{"claude"}, nil)
+	next, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+	_, ok := next.(*agentStepModel)
+	require.True(t, ok)
+	msg := cmd()
+	_, ok = msg.(stepCancelMsg)
+	assert.True(t, ok)
+}
+
+func TestRenderTemperatureFieldHasNoSideEffects(t *testing.T) {
+	s := newAgentStep([]AgentState{{Role: "coder", Harness: "opencode", Enabled: true}}, []string{"opencode"}, nil)
+	s.enterEditMode()
+	s.editField = 0
+	s.syncTemperatureInput()
+	assert.False(t, s.tempInput.Focused())
+	_ = s.renderTemperatureField(true)
+	assert.False(t, s.tempInput.Focused())
 }

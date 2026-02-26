@@ -133,7 +133,7 @@ func (m *agentStepModel) Update(msg tea.Msg) (stepModel, tea.Cmd) {
 	case "esc":
 		return m, func() tea.Msg { return stepBackMsg{} }
 	case "q":
-		return m, tea.Quit
+		return m, func() tea.Msg { return stepCancelMsg{} }
 	}
 
 	return m, nil
@@ -381,7 +381,7 @@ func (m *agentStepModel) cycleFieldValue(direction int) {
 
 func (m *agentStepModel) updateEditMode(keyMsg tea.KeyMsg) (stepModel, tea.Cmd) {
 	if keyMsg.String() == "q" {
-		return m, tea.Quit
+		return m, func() tea.Msg { return stepCancelMsg{} }
 	}
 
 	switch keyMsg.String() {
@@ -486,11 +486,6 @@ func (m *agentStepModel) renderTemperatureField(active bool) string {
 	style := fieldNormalStyle
 	if active {
 		style = fieldActiveStyle
-	}
-	if active {
-		m.tempInput.Focus()
-	} else {
-		m.tempInput.Blur()
 	}
 	view := m.tempInput.View()
 	if strings.TrimSpace(view) == "" {
