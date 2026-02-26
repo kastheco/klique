@@ -32,14 +32,6 @@ Registration steps (do both atomically, never skip step 2):
 `in_progress` → `done` → etc.) are managed by kasmos — do not change the `"status"` field
 of existing entries.
 
-## Project Skills
-
-Always load when working on this project's TUI:
-- `tui-design` — design-first workflow for bubbletea/lipgloss interfaces
-
-Load when task involves tmux panes, worker lifecycle, or process management:
-- `tmux-orchestration` — tmux pane management from Go, parking pattern, crash resilience
-
 ## CLI Tools (MANDATORY)
 
 You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.

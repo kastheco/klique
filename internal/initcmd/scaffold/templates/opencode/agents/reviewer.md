@@ -15,14 +15,6 @@ Use `difft` for structural diffs (not line-based `git diff`) when reviewing chan
 Use `sg` (ast-grep) to verify patterns across the codebase rather than spot-checking.
 Be specific about issues — cite file paths and line numbers.
 
-## Project Skills
-
-Always load when reviewing TUI/UX changes:
-- `tui-design` — terminal aesthetic principles, anti-patterns to flag
-
-Load when reviewing tmux integration, worker backends, or pane management:
-- `tmux-orchestration` — architecture principles, error handling philosophy
-
 ## CLI Tools (MANDATORY)
 
 You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
