@@ -15,6 +15,7 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/git"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"os"
@@ -553,6 +554,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					MemMB:              md.MemMB,
 					ResourceUsageValid: md.ResourceUsageValid,
 					TmuxAlive:          md.TmuxAlive,
+					PermissionPrompt:   md.PermissionPrompt,
 				})
 			}
 
@@ -699,6 +701,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return nil
 				})
+			}
+
+			// Permission prompt detection for opencode instances.
+			if md.PermissionPrompt != nil && m.state == stateDefault {
+				pp := md.PermissionPrompt
+				if pp.Pattern != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(pp.Pattern) {
+					// Auto-approve cached pattern — send keys asynchronously.
+					i := inst
+					asyncCmds = append(asyncCmds, func() tea.Msg {
+						return permissionAutoApproveMsg{instance: i}
+					})
+				} else {
+					// Show the permission modal overlay.
+					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
+					m.permissionOverlay.SetWidth(55)
+					m.pendingPermissionInstance = inst
+					m.state = statePermission
+				}
 			}
 
 			if md.DiffStats != nil {
@@ -915,6 +935,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			asyncCmds = append(asyncCmds, m.toastTickCmd())
 		}
 		return m, tea.Batch(asyncCmds...)
+	case permissionAutoApproveMsg:
+		if msg.instance != nil && msg.instance.Started() {
+			i := msg.instance
+			return m, func() tea.Msg {
+				i.SendPermissionResponse(tmux.PermissionAllowAlways)
+				return nil
+			}
+		}
+		return m, nil
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 	case tea.KeyMsg:
@@ -1351,6 +1380,19 @@ type clickUpTaskFetchedMsg struct {
 	Err  error
 }
 
+// permissionAutoApproveMsg is sent when a permission pattern is cached as "allow always"
+// and the response should be sent to the opencode pane without showing the modal.
+type permissionAutoApproveMsg struct {
+	instance *session.Instance
+}
+
+// permissionResponseMsg is sent after the user selects a choice in the permission overlay.
+type permissionResponseMsg struct {
+	instance *session.Instance
+	choice   overlay.PermissionChoice
+	pattern  string
+}
+
 // addInstanceFinalizer registers a finalizer for the given instance.
 // Lazily initializes the map so tests that don't pre-initialize it still work.
 func (m *home) addInstanceFinalizer(inst *session.Instance, fn func()) {
@@ -1388,6 +1430,8 @@ type instanceMetadata struct {
 	MemMB              float64
 	ResourceUsageValid bool
 	TmuxAlive          bool
+	// PermissionPrompt is non-nil when opencode shows a permission dialog in this tick.
+	PermissionPrompt *session.PermissionPrompt
 }
 
 // metadataResultMsg carries all per-instance metadata collected by the async tick.

@@ -129,6 +129,8 @@ type InstanceMetadata struct {
 	MemMB              float64
 	ResourceUsageValid bool
 	TmuxAlive          bool // tmux has-session result (for reviewer completion check)
+	// PermissionPrompt is non-nil when opencode shows a permission dialog in this tick.
+	PermissionPrompt *PermissionPrompt
 }
 
 // CollectMetadata gathers all per-tick data for this instance via subprocess calls.
@@ -164,6 +166,11 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 
 	// Session liveness (tmux has-session) — used by reviewer completion check.
 	m.TmuxAlive = i.TmuxAlive()
+
+	// Permission prompt detection — only for opencode sessions with captured content.
+	if m.ContentCaptured && m.Content != "" {
+		m.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)
+	}
 
 	return m
 }
@@ -258,4 +265,15 @@ func (i *Instance) UpdateResourceUsage() {
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
+}
+
+// SendPermissionResponse sends the user's permission choice to the opencode pane
+// via tmux send-keys. Safe to call from a goroutine.
+func (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {
+	if !i.started || i.tmuxSession == nil {
+		return
+	}
+	if err := i.tmuxSession.SendPermissionResponse(choice); err != nil {
+		log.ErrorLog.Printf("error sending permission response: %v", err)
+	}
 }
