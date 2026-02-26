@@ -1070,8 +1070,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		return m.openContextMenu()
-	case keys.KeyGitTab:
-		// Jump directly to git slot
+	case keys.KeyInfoTab:
+		// Jump directly to info slot
 		if m.focusSlot == slotGit {
 			return m, nil
 		}
@@ -1082,7 +1082,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(m.instanceChanged(), cmd)
 		}
 		return m, m.instanceChanged()
-	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabGit:
+	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
 		if m.tabbedWindow.IsInGitTab() {
