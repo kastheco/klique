@@ -1370,10 +1370,32 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 }
 
 // retryFailedWaveTasks retries all failed tasks in the current wave by re-spawning them.
+// Old failed instances are removed first to prevent ghost duplicates that accumulate
+// across retries and all get marked ImplementationComplete when waves finish.
 func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.RetryFailedTasks()
 	if len(tasks) == 0 {
 		return m, nil
+	}
+
+	// Build a set of task numbers being retried for fast lookup.
+	retryingTasks := make(map[int]bool, len(tasks))
+	for _, t := range tasks {
+		retryingTasks[t.Number] = true
+	}
+
+	// Remove old failed instances for the tasks being retried.
+	// Collect first to avoid mutating the list while iterating.
+	planFile := orch.PlanFile()
+	var staleInsts []*session.Instance
+	for _, inst := range m.list.GetInstances() {
+		if inst.PlanFile == planFile && retryingTasks[inst.TaskNumber] {
+			staleInsts = append(staleInsts, inst)
+		}
+	}
+	for _, inst := range staleInsts {
+		m.list.RemoveByTitle(inst.Title)
+		m.removeFromAllInstances(inst.Title)
 	}
 
 	m.toastManager.Info(fmt.Sprintf("retrying %d failed task(s) in wave %d",

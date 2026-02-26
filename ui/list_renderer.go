@@ -139,7 +139,9 @@ func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bo
 
 	remainingWidth := r.width
 	remainingWidth -= runewidth.StringWidth(prefix)
+	remainingWidth -= 1 // literal space before branchIcon in format string
 	remainingWidth -= runewidth.StringWidth(branchIcon)
+	remainingWidth -= 1 // literal dash after branchIcon in format string
 
 	diffWidth := runewidth.StringWidth(addedDiff) + runewidth.StringWidth(removedDiff)
 	if diffWidth > 0 {

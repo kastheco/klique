@@ -596,6 +596,120 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 		"state must be stateConfirm for review prompt after final wave")
 }
 
+// TestRetryFailedWaveTasks_RemovesOldInstances verifies that when a failed wave task
+// is retried, the old failed instance is removed from the list before the new one is
+// spawned. Without this cleanup, each retry leaves behind ghost instances that all get
+// marked ImplementationComplete when waves finish — producing duplicate entries.
+func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
+	const planFile = "2026-02-25-retry-cleanup.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{
+				{Number: 1, Title: "Task 1", Body: "do first"},
+				{Number: 6, Title: "Task 6", Body: "the flaky one"},
+			}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	// Task 1 completed, task 6 failed.
+	orch.MarkTaskComplete(1)
+	orch.MarkTaskFailed(6)
+	require.Equal(t, WaveStateAllComplete, orch.State(), "single-wave plan should be AllComplete")
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "retry cleanup test", "plan/retry-cleanup", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	planName := planstate.DisplayName(planFile)
+
+	// Create the completed task 1 instance
+	inst1, err := session.NewInstance(session.InstanceOptions{
+		Title:      planName + "-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst1.SetStatus(session.Ready)
+
+	// Create the failed task 6 instance (the one that should be removed on retry)
+	failedInst6, err := session.NewInstance(session.InstanceOptions{
+		Title:      planName + "-W1-T6",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 6,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	failedInst6.SetStatus(session.Paused) // failed tasks end up paused
+
+	state := config.DefaultState()
+	storage, err := session.NewStorage(state)
+	require.NoError(t, err)
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	h.storage = storage
+	h.allInstances = []*session.Instance{inst1, failedInst6}
+	h.activeRepoPath = dir
+	h.program = "claude"
+	_ = h.list.AddInstance(inst1)
+	_ = h.list.AddInstance(failedInst6)
+
+	// Verify we start with 2 instances
+	require.Len(t, h.list.GetInstances(), 2, "should start with 2 instances")
+
+	// Count instances with TaskNumber==6 before retry
+	countTask6 := func() int {
+		count := 0
+		for _, inst := range h.list.GetInstances() {
+			if inst.TaskNumber == 6 && inst.PlanFile == planFile {
+				count++
+			}
+		}
+		return count
+	}
+	require.Equal(t, 1, countTask6(), "should have exactly 1 task-6 instance before retry")
+
+	entry, _ := ps.Entry(planFile)
+
+	// retryFailedWaveTasks spawns new instances — but it should remove the old one first.
+	// Note: spawnWaveTasks will fail (no real git/tmux) but the cleanup should happen before that.
+	h.retryFailedWaveTasks(orch, entry)
+
+	// The old failed task 6 instance must have been removed from the list.
+	for _, inst := range h.list.GetInstances() {
+		if inst == failedInst6 {
+			t.Fatal("old failed task-6 instance must be removed from the list on retry")
+		}
+	}
+
+	// The old failed task 6 instance must have been removed from allInstances.
+	for _, inst := range h.allInstances {
+		if inst == failedInst6 {
+			t.Fatal("old failed task-6 instance must be removed from allInstances on retry")
+		}
+	}
+
+	// Task 1 instance must still be there (it wasn't retried)
+	foundTask1 := false
+	for _, inst := range h.list.GetInstances() {
+		if inst.TaskNumber == 1 && inst.PlanFile == planFile {
+			foundTask1 = true
+		}
+	}
+	assert.True(t, foundTask1, "task 1 instance must not be affected by task 6 retry")
+}
+
 // TestPlannerExit_CancelKillsInstanceAndMarksPrompted verifies that pressing "n"
 // on the planner-exit dialog kills the planner instance and marks plannerPrompted.
 func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
