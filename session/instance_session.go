@@ -128,7 +128,8 @@ type InstanceMetadata struct {
 	CPUPercent         float64
 	MemMB              float64
 	ResourceUsageValid bool
-	TmuxAlive          bool // tmux has-session result (for reviewer completion check)
+	TmuxAlive          bool              // tmux has-session result (for reviewer completion check)
+	PermissionPrompt   *PermissionPrompt // non-nil when opencode shows a permission dialog
 }
 
 // CollectMetadata gathers all per-tick data for this instance via subprocess calls.
@@ -157,6 +158,11 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 		} else {
 			m.DiffStats = stats
 		}
+	}
+
+	// Permission prompt detection
+	if m.ContentCaptured && m.Content != "" {
+		m.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)
 	}
 
 	// Resource usage (pgrep + ps)
@@ -258,4 +264,14 @@ func (i *Instance) UpdateResourceUsage() {
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
+}
+
+// SendPermissionResponse sends the key sequence for the given permission choice to the agent pane.
+func (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {
+	if !i.started || i.tmuxSession == nil {
+		return
+	}
+	if err := i.tmuxSession.SendPermissionResponse(choice); err != nil {
+		log.ErrorLog.Printf("error sending permission response: %v", err)
+	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/git"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"os"
@@ -93,6 +94,8 @@ const (
 	stateClickUpPicker
 	// stateClickUpFetching is when kasmos is fetching a full task from ClickUp.
 	stateClickUpFetching
+	// statePermission is when an opencode permission prompt is detected and the modal is shown.
+	statePermission
 )
 
 type home struct {
@@ -256,6 +259,15 @@ type home struct {
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
 	pendingReviewFeedback map[string]string
+
+	// -- Permission prompt handling --
+
+	// permissionOverlay is the modal shown when an opencode permission prompt is detected.
+	permissionOverlay *overlay.PermissionOverlay
+	// pendingPermissionInstance is the instance that triggered the permission modal.
+	pendingPermissionInstance *session.Instance
+	// permissionCache caches "allow always" decisions keyed by permission pattern.
+	permissionCache *config.PermissionCache
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -300,6 +312,11 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.fsm = planfsm.New(h.planStateDir)
 	h.nav = ui.NewNavigationPanel(&h.spinner)
 	h.toastManager = overlay.NewToastManager(&h.spinner)
+
+	configDir, _ := config.GetConfigDir()
+	permCache := config.NewPermissionCache(configDir)
+	_ = permCache.Load()
+	h.permissionCache = permCache
 
 	h.nav.SetRepoName(filepath.Base(activeRepoPath))
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
@@ -541,6 +558,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					MemMB:              md.MemMB,
 					ResourceUsageValid: md.ResourceUsageValid,
 					TmuxAlive:          md.TmuxAlive,
+					PermissionPrompt:   md.PermissionPrompt,
 				})
 			}
 
@@ -671,6 +689,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if inst.Status != session.Running {
 						inst.LastActivity = nil
 					}
+				}
+			}
+
+			// Permission prompt detection for opencode
+			if md.PermissionPrompt != nil && m.state == stateDefault {
+				pp := md.PermissionPrompt
+				if pp.Pattern != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(pp.Pattern) {
+					// Auto-approve cached pattern
+					i := inst
+					asyncCmds = append(asyncCmds, func() tea.Msg {
+						return permissionAutoApproveMsg{instance: i}
+					})
+				} else {
+					// Show modal
+					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
+					m.permissionOverlay.SetWidth(55)
+					m.pendingPermissionInstance = inst
+					m.state = statePermission
 				}
 			}
 
@@ -1063,6 +1099,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.toastManager.Info(fmt.Sprintf("implementation complete for '%s' — starting review", planName))
 		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
+	case permissionAutoApproveMsg:
+		if msg.instance != nil && msg.instance.Started() {
+			i := msg.instance
+			return m, func() tea.Msg {
+				i.SendPermissionResponse(tmux.PermissionAllowAlways)
+				return nil
+			}
+		}
+		return m, nil
 	case plannerCompleteMsg:
 		// User confirmed: start implementation. Kill the dead planner instance first.
 		m.plannerPrompted[msg.planFile] = true
@@ -1245,6 +1290,18 @@ func safeZoneScan(s string) (scanned string) {
 	return zone.Scan(s)
 }
 
+// permissionAutoApproveMsg is sent when a cached "allow always" pattern is detected.
+type permissionAutoApproveMsg struct {
+	instance *session.Instance
+}
+
+// permissionResponseMsg is sent when the user confirms a permission choice in the modal.
+type permissionResponseMsg struct {
+	instance *session.Instance
+	choice   overlay.PermissionChoice
+	pattern  string
+}
+
 // prCreatedMsg is sent when async PR creation succeeds.
 type prCreatedMsg struct{}
 
@@ -1374,6 +1431,7 @@ type instanceMetadata struct {
 	MemMB              float64
 	ResourceUsageValid bool
 	TmuxAlive          bool
+	PermissionPrompt   *session.PermissionPrompt // non-nil when opencode shows a permission dialog
 }
 
 // metadataResultMsg carries all per-instance metadata collected by the async tick.

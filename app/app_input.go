@@ -6,6 +6,7 @@ import (
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"strings"
@@ -23,7 +24,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -589,6 +590,61 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		default:
 			return m, nil
 		}
+	}
+
+	// Handle permission prompt state
+	if m.state == statePermission {
+		if m.permissionOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.permissionOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.permissionOverlay.IsConfirmed() {
+				choice := m.permissionOverlay.Choice()
+				inst := m.pendingPermissionInstance
+				pattern := ""
+				if inst != nil && inst.CachedContentSet {
+					if pp := session.ParsePermissionPrompt(inst.CachedContent, inst.Program); pp != nil {
+						pattern = pp.Pattern
+					}
+				}
+
+				// Cache "allow always" decisions
+				if choice == overlay.PermissionAllowAlways && pattern != "" && m.permissionCache != nil {
+					m.permissionCache.Remember(pattern)
+					_ = m.permissionCache.Save()
+				}
+
+				m.permissionOverlay = nil
+				m.state = stateDefault
+
+				if inst != nil {
+					// Map overlay choice to tmux choice
+					var tmuxChoice tmux.PermissionChoice
+					switch choice {
+					case overlay.PermissionAllowAlways:
+						tmuxChoice = tmux.PermissionAllowAlways
+					case overlay.PermissionAllowOnce:
+						tmuxChoice = tmux.PermissionAllowOnce
+					case overlay.PermissionReject:
+						tmuxChoice = tmux.PermissionReject
+					}
+					capturedInst := inst
+					capturedChoice := tmuxChoice
+					m.pendingPermissionInstance = nil
+					return m, func() tea.Msg {
+						capturedInst.SendPermissionResponse(capturedChoice)
+						return nil
+					}
+				}
+			}
+			m.permissionOverlay = nil
+			m.pendingPermissionInstance = nil
+			m.state = stateDefault
+			return m, nil
+		}
+		return m, nil
 	}
 
 	// Handle new plan form state
