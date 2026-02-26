@@ -435,6 +435,51 @@ func TestStartClaudeWithInitialPrompt(t *testing.T) {
 	)
 }
 
+func TestStartClaudeWithLongPromptUsesFile(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Do you trust the files in this folder?"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("claude-long", "claude", false, ptyFactory, cmdExec)
+	longPrompt := strings.Repeat("x", maxInlinePromptLen+1)
+	s.SetInitialPrompt(longPrompt)
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+
+	// The command should reference a @file instead of inlining the prompt.
+	cmdStr := cmd2.ToString(ptyFactory.cmds[0])
+	require.Contains(t, cmdStr, "@")
+	require.NotContains(t, cmdStr, longPrompt, "long prompt must not be inlined")
+
+	// The prompt file should exist and contain the prompt.
+	require.NotEmpty(t, s.promptFile)
+	content, err := os.ReadFile(s.promptFile)
+	require.NoError(t, err)
+	assert.Equal(t, longPrompt, string(content))
+
+	// Close should clean up the temp file.
+	s.Close()
+	_, err = os.Stat(s.promptFile)
+	assert.True(t, os.IsNotExist(err), "prompt file should be removed after Close")
+}
+
 func TestStartOpenCodeWithPromptContainingSingleQuotes(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 

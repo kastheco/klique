@@ -5,14 +5,15 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/kastheco/kasmos/cmd"
-	"github.com/kastheco/kasmos/log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kastheco/kasmos/cmd"
+	"github.com/kastheco/kasmos/log"
 )
 
 const ProgramClaude = "claude"
@@ -52,6 +53,9 @@ type TmuxSession struct {
 	peerCount  int
 	// ProgressFunc is called with (stage, description) during Start() to report progress.
 	ProgressFunc func(stage int, desc string)
+	// promptFile is the path to a temporary file containing the initial prompt.
+	// Set during Start() when the prompt exceeds maxInlinePromptLen. Cleaned up by Close().
+	promptFile string
 
 	// Initialized by Start or Restore
 	//
@@ -200,12 +204,11 @@ func (t *TmuxSession) Start(workDir string) error {
 		program = program + " --agent " + t.agentType
 	}
 	if t.initialPrompt != "" {
-		escaped := shellEscapeSingleQuote(t.initialPrompt)
 		switch {
 		case isOpenCodeProgram(t.program):
-			program = program + " --prompt " + escaped
+			program = program + " --prompt " + shellEscapeSingleQuote(t.initialPrompt)
 		case isClaudeProgram(t.program):
-			program = program + " " + escaped
+			program = program + " " + t.promptArg()
 		}
 		// aider/gemini: no CLI prompt support — callers keep QueuedPrompt
 		// set so the send-keys fallback fires from the app tick handler.
@@ -361,6 +364,11 @@ func (t *TmuxSession) Close() error {
 	cmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
 	if err := t.cmdExec.Run(cmd); err != nil {
 		errs = append(errs, fmt.Errorf("error killing tmux session: %w", err))
+	}
+
+	if t.promptFile != "" {
+		os.Remove(t.promptFile)
+		t.promptFile = ""
 	}
 
 	return errors.Join(errs...)
