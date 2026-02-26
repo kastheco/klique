@@ -716,6 +716,9 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 		if inst.PlanFile == "" || inst.IsReviewer {
 			continue
 		}
+		if inst.ImplementationComplete {
+			continue // already went through review cycle — don't re-trigger
+		}
 		if reviewerPlans[inst.PlanFile] {
 			continue // reviewer already spawned; skip regardless of stale plan state
 		}
@@ -734,6 +737,7 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	planFile := coderInst.PlanFile
 	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
 		log.WarningLog.Printf("could not set plan %q to reviewing: %v", planFile, err)
+		return nil // FSM rejected — plan is not in implementing state, don't spawn reviewer.
 	}
 
 	// Auto-pause the coder instance — its work is done.
