@@ -1,12 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "sentry": {
-      "type": "remote",
-      "url": "https://mcp.sentry.dev/mcp",
-      "oauth": {}
-    }
-  },
   "agent": {
     "build": {
       "disable": true
@@ -86,12 +79,12 @@
         "read": "allow",
         "write": "allow"
       },
-      "reasoningEffort": "medium",
+      "reasoningEffort": "high",
       "temperature": 0.5,
       "textVerbosity": "medium"
     },
     "reviewer": {
-      "model": "claude-opus-4-6",
+      "model": "anthropic/claude-opus-4-6",
       "permission": {
         "bash": "allow",
         "edit": {
@@ -115,7 +108,7 @@
           "/tmp/**": "allow"
         }
       },
-      "reasoningEffort": "high",
+      "reasoningEffort": "medium",
       "temperature": 0.2,
       "textVerbosity": "medium"
     }
