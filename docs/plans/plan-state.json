@@ -354,24 +354,46 @@
       "created_at": "2026-02-24T23:30:00Z"
     },
     "2026-02-24-wizard-tui-redesign.md": {
-      "status": "ready",
+      "status": "implementing",
       "description": "replace huh-form init wizard with full-screen bubbletea TUI using Rosé Pine Moon aesthetic",
+      "branch": "plan/wizard-tui-redesign",
       "topic": "ui",
       "created_at": "0001-01-01T00:00:00Z"
     },
+    "2026-02-25-alt-v-not-working.md": {
+      "status": "done",
+      "description": "alt+v doesnt passthrough in interactive mode (i need for my custom variants toggle keybind)",
+      "branch": "plan/alt-v-not-working",
+      "topic": "ui",
+      "created_at": "2026-02-25T18:58:19.973770029Z"
+    },
+    "2026-02-25-contextual-status-bar.md": {
+      "status": "done",
+      "description": "top status bar showing contextual info (wave progress, repo name, branch) based on focused/selected item",
+      "branch": "plan/contextual-status-bar",
+      "topic": "ui",
+      "created_at": "2026-02-25T22:00:00Z"
+    },
     "2026-02-25-fix-planner-missing-waves.md": {
-      "status": "ready",
+      "status": "done",
       "description": "the planner agent should always use wave headers when launched via kasmos. a plan i just brainstormed had to go back to planner agent to add the headers",
       "branch": "plan/fix-planner-missing-waves",
       "topic": "workflow",
       "created_at": "2026-02-25T18:40:28.678650334Z"
     },
     "2026-02-25-improve-cli-tools.md": {
-      "status": "ready",
+      "status": "done",
       "description": "update cli-tools to be more strict and ensure rg is ALWAYS used over grep as well as other tools",
       "branch": "plan/improve-cli-tools",
       "topic": "tools",
       "created_at": "2026-02-25T17:38:32.640854935Z"
+    },
+    "2026-02-25-new-plan-tab-cycle.md": {
+      "status": "done",
+      "description": "tab and shift tab should cycle through the 2 inputs not deselect once u reach end",
+      "branch": "plan/new-plan-tab-cycle",
+      "topic": "ui",
+      "created_at": "2026-02-25T20:41:20.135133593Z"
     },
     "2026-02-25-prompt-via-cli.md": {
       "status": "done",
@@ -379,6 +401,19 @@
       "branch": "plan/prompt-via-cli",
       "topic": "automation",
       "created_at": "2026-02-25T17:31:48.642511235Z"
+    },
+    "2026-02-25-reintegrate-auto-accept.md": {
+      "status": "ready",
+      "branch": "plan/reintegrate-auto-accept",
+      "topic": "automation",
+      "created_at": "2026-02-25T19:53:16.45886024Z"
+    },
+    "2026-02-25-release-v1-0-0.md": {
+      "status": "ready",
+      "description": "create github release, update versioning in project and deploy to homebrew",
+      "branch": "plan/release-v1-0-0",
+      "topic": "workflow",
+      "created_at": "2026-02-25T20:40:48.870776932Z"
     },
     "2026-02-25-scroll-overflow.md": {
       "status": "done",
@@ -388,14 +423,14 @@
       "created_at": "2026-02-25T00:00:00Z"
     },
     "2026-02-25-show-plan-name-for-topics.md": {
-      "status": "ready",
+      "status": "done",
       "description": "show the plan name you just entered when selecting a topic name because i have a bad memory and forget what plan i was adding",
       "branch": "plan/show-plan-name-for-topics",
       "topic": "workflow",
       "created_at": "2026-02-25T18:29:04.610125585Z"
     },
     "2026-02-25-simplify-plan-creation.md": {
-      "status": "reviewing",
+      "status": "done",
       "description": "add name and description for new plans to a single form popup. focuses on name by default - user can use tab navigation to the description input or use arrow down/up to navigate. hitting enter from either input creates the plan since description is optional",
       "branch": "plan/simplify-plan-creation",
       "topic": "workflow",
@@ -408,12 +443,10 @@
       "topic": "automation",
       "created_at": "2026-02-25T22:00:00Z"
     },
-    "2026-02-25-contextual-status-bar.md": {
+    "2026-02-25-enforce-cli-tools.md": {
       "status": "ready",
-      "description": "top status bar showing contextual info (wave progress, repo name, branch) based on focused/selected item",
-      "branch": "plan/contextual-status-bar",
-      "topic": "ui",
-      "created_at": "2026-02-25T22:00:00Z"
+      "description": "automate cli-tools enforcement hooks installation during kas init for claude and opencode harnesses",
+      "topic": "automation"
     }
   }
 }
