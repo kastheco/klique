@@ -457,7 +457,7 @@ func TestStartClaudeWithLongPromptUsesFile(t *testing.T) {
 
 	workdir := t.TempDir()
 	s := newTmuxSession("claude-long", "claude", false, ptyFactory, cmdExec)
-	longPrompt := strings.Repeat("x", maxInlinePromptLen+1)
+	longPrompt := strings.Repeat("x", MaxInlinePromptLen+1)
 	s.SetInitialPrompt(longPrompt)
 
 	err := s.Start(workdir)

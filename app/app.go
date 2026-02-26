@@ -1081,7 +1081,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.triggerPlanStage(msg.planFile, "implement")
 	case instanceStartedMsg:
 		if msg.err != nil {
-			m.list.Kill()
+			// Remove the specific instance that failed — not the currently selected one.
+			msg.instance.Kill()
+			m.list.RemoveByTitle(msg.instance.Title)
+			m.removeFromAllInstances(msg.instance.Title)
 			m.updateSidebarItems()
 			return m, m.handleError(msg.err)
 		}

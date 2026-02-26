@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// maxInlinePromptLen is the threshold above which prompts are written to a
-// temp file and referenced via @file instead of being inlined as a shell arg.
-// Long prompts can exceed tmux/exec argument limits and silently fail session
-// creation.
-const maxInlinePromptLen = 8192
+// MaxInlinePromptLen is the threshold above which prompts should not be
+// inlined as shell arguments. Long prompts can exceed tmux/exec argument
+// limits and silently fail session creation. Callers should fall back to
+// send-keys delivery for prompts exceeding this length.
+const MaxInlinePromptLen = 8192
 
 // promptDir is the subdirectory within the workdir where prompt files are stored.
 // Lives inside the project so Claude Code can read @file references without
@@ -29,7 +29,7 @@ func shellEscapeSingleQuote(s string) string {
 // <workDir>/.kasmos/ and referenced via Claude Code's @file syntax.
 // The temp file path is stored in t.promptFile for cleanup by Close().
 func (t *TmuxSession) promptArg(workDir string) string {
-	if len(t.initialPrompt) <= maxInlinePromptLen {
+	if len(t.initialPrompt) <= MaxInlinePromptLen {
 		return shellEscapeSingleQuote(t.initialPrompt)
 	}
 

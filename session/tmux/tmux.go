@@ -206,7 +206,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	if t.initialPrompt != "" {
 		switch {
 		case isOpenCodeProgram(t.program):
-			program = program + " --prompt " + shellEscapeSingleQuote(t.initialPrompt)
+			program = program + " --prompt " + t.promptArg(workDir)
 		case isClaudeProgram(t.program):
 			program = program + " " + t.promptArg(workDir)
 		}
