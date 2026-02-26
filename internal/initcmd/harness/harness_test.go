@@ -1,6 +1,9 @@
 package harness
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -116,6 +119,85 @@ func TestCodexAdapter(t *testing.T) {
 func TestCodexAdapter_InstallEnforcement(t *testing.T) {
 	c := &Codex{}
 	assert.NoError(t, c.InstallEnforcement())
+}
+
+func TestClaudeAdapter_InstallEnforcement(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	c := &Claude{}
+	require.NoError(t, c.InstallEnforcement())
+
+	// Hook script written and executable
+	hookPath := filepath.Join(tmpHome, ".claude", "hooks", "enforce-cli-tools.sh")
+	assert.FileExists(t, hookPath)
+	info, err := os.Stat(hookPath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0o111 != 0, "hook script must be executable")
+
+	// settings.json has PreToolUse entry
+	settingsPath := filepath.Join(tmpHome, ".claude", "settings.json")
+	assert.FileExists(t, settingsPath)
+	data, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "enforce-cli-tools.sh")
+	assert.Contains(t, string(data), "PreToolUse")
+
+	// Idempotent: running again doesn't duplicate
+	require.NoError(t, c.InstallEnforcement())
+	data2, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(data2), "enforce-cli-tools.sh"),
+		"must not duplicate hook entry on re-run")
+}
+
+func TestClaudeAdapter_InstallEnforcement_PreservesExisting(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Pre-populate settings.json with existing hooks
+	claudeDir := filepath.Join(tmpHome, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
+	existing := `{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [{ "type": "command", "command": "notify.sh" }]
+      }
+    ]
+  }
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(existing), 0o644))
+
+	c := &Claude{}
+	require.NoError(t, c.InstallEnforcement())
+
+	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	require.NoError(t, err)
+	// Both old and new hooks present
+	assert.Contains(t, string(data), "notify.sh")
+	assert.Contains(t, string(data), "enforce-cli-tools.sh")
+	assert.Contains(t, string(data), "PreToolUse")
+	assert.Contains(t, string(data), "Notification")
+}
+
+func TestOpenCodeAdapter_InstallEnforcement(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	o := &OpenCode{}
+	require.NoError(t, o.InstallEnforcement())
+
+	pluginPath := filepath.Join(tmpHome, ".config", "opencode", "plugins", "enforce-cli-tools.js")
+	assert.FileExists(t, pluginPath)
+	data, err := os.ReadFile(pluginPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "tool.execute.before")
+	assert.Contains(t, string(data), "grep")
+	assert.Contains(t, string(data), "rg")
+
+	require.NoError(t, o.InstallEnforcement())
 }
 
 func TestOpenCodeAdapter(t *testing.T) {
