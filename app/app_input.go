@@ -126,34 +126,12 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if itemRow >= 0 {
 			m.tabbedWindow.ClearDocumentMode()
 			m.nav.ClickItem(itemRow + m.nav.GetScrollOffset())
-			m.filterInstancesByTopic()
 			return m, m.instanceChanged()
-		}
-	} else if x < m.navWidth+0 {
-		// Click in instance list (middle column)
-		m.setFocusSlot(slotNav)
-
-		localX := x - m.navWidth
-		// Check if clicking on filter tabs
-		if filter, ok := m.nav.HandleTabClick(localX, contentY); ok {
-			m.nav.SetStatusFilter(filter)
-			return m, m.instanceChanged()
-		}
-
-		// Instance list items start after the header (blank lines + tabs + blank lines)
-		listY := contentY - 4
-		if listY >= 0 {
-			itemIdx := m.nav.GetItemAtRow(listY)
-			if itemIdx >= 0 {
-				m.tabbedWindow.ClearDocumentMode()
-				m.nav.SetSelectedInstance(itemIdx)
-				return m, m.instanceChanged()
-			}
 		}
 	} else {
 		// Click in preview/diff area (right column): focus whichever center tab is visible
 		m.setFocusSlot(slotAgent + m.tabbedWindow.GetActiveTab())
-		localX := x - m.navWidth - 0
+		localX := x - m.navWidth
 		if m.tabbedWindow.HandleTabClick(localX, contentY) {
 			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 			return m, m.instanceChanged()
@@ -166,57 +144,15 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // handleRightClick builds and shows a context menu based on what was right-clicked.
 func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 	if x < m.navWidth {
-		// Right-click in sidebar
+		// Right-click in nav panel
 		itemRow := contentY - 4
 		if itemRow >= 0 {
 			m.nav.ClickItem(itemRow + m.nav.GetScrollOffset())
-			m.filterInstancesByTopic()
 		}
 		// Plan header: show plan context menu
 		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 			return m.openPlanContextMenu()
 		}
-		// Topic header: show topic context menu
-		if m.nav.IsSelectedTopicHeader() {
-			return m.openTopicContextMenu()
-		}
-		return m, nil
-	} else if x >= m.navWidth && x < m.navWidth+0 {
-		// Right-click in instance list (middle column) — select the item first
-		listY := contentY - 4
-		if listY >= 0 {
-			itemIdx := m.nav.GetItemAtRow(listY)
-			if itemIdx >= 0 {
-				m.nav.SetSelectedInstance(itemIdx)
-			}
-		}
-		selected := m.nav.GetSelectedInstance()
-		if selected == nil {
-			return m, nil
-		}
-		items := []overlay.ContextMenuItem{
-			{Label: "open", Action: "open_instance"},
-			{Label: "kill", Action: "kill_instance"},
-		}
-		if selected.Status == session.Paused {
-			items = append(items, overlay.ContextMenuItem{Label: "resume", Action: "resume_instance"})
-		} else {
-			items = append(items, overlay.ContextMenuItem{Label: "pause", Action: "pause_instance"})
-		}
-		if selected.Started() && selected.Status != session.Paused {
-			items = append(items, overlay.ContextMenuItem{Label: "focus agent", Action: "send_prompt_instance"})
-		}
-		items = append(items, overlay.ContextMenuItem{Label: "rename", Action: "rename_instance"})
-		items = append(items, overlay.ContextMenuItem{Label: "push branch", Action: "push_instance"})
-		items = append(items, overlay.ContextMenuItem{Label: "create pr", Action: "create_pr_instance"})
-		// Wave task: offer manual completion
-		if selected.TaskNumber > 0 {
-			if orch, ok := m.waveOrchestrators[selected.PlanFile]; ok && orch.IsTaskRunning(selected.TaskNumber) {
-				items = append(items, overlay.ContextMenuItem{Label: "mark complete", Action: "mark_task_complete"})
-			}
-		}
-		m.contextMenu = overlay.NewContextMenu(x, y, items)
-		m.state = stateContextMenu
 		return m, nil
 	}
 	return m, nil
@@ -619,7 +555,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 				m.removeFromAllInstances(m.pendingPlannerInstanceTitle)
 				m.saveAllInstances()
-				m.updateSidebarItems()
+				m.updateNavPanelStatus()
 				m.pendingPlannerInstanceTitle = ""
 			}
 			m.state = stateDefault
@@ -713,7 +649,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.loadPlanState()
 			m.updateSidebarPlans()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
@@ -779,7 +715,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						return m, m.handleError(err)
 					}
 					m.updateSidebarPlans()
-					m.updateSidebarItems()
+					m.updateNavPanelStatus()
 				}
 			}
 			m.state = stateDefault
@@ -869,27 +805,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle search state — allows typing to filter AND arrow keys to navigate topics
+	// Handle search state — allows typing to filter AND arrow keys to navigate
 	if m.state == stateSearch {
 		switch {
 		case msg.String() == "esc":
 			m.nav.DeactivateSearch()
-			m.nav.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
-			m.filterInstancesByTopic()
 			return m, nil
 		case msg.String() == "enter":
 			m.nav.DeactivateSearch()
-			m.nav.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
 			return m, nil
 		case msg.String() == "up":
 			m.nav.Up()
-			m.filterSearchWithTopic()
 			return m, m.instanceChanged()
 		case msg.String() == "down":
 			m.nav.Down()
-			m.filterSearchWithTopic()
 			return m, m.instanceChanged()
 		case msg.Type == tea.KeyBackspace:
 			q := m.nav.GetSearchQuery()
@@ -897,15 +828,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				runes := []rune(q)
 				m.nav.SetSearchQuery(string(runes[:len(runes)-1]))
 			}
-			m.filterBySearch()
 			return m, nil
 		case msg.Type == tea.KeySpace:
 			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + " ")
-			m.filterBySearch()
 			return m, nil
 		case msg.Type == tea.KeyRunes:
 			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + string(msg.Runes))
-			m.filterBySearch()
 			return m, nil
 		}
 		return m, nil
@@ -979,7 +907,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.nav.Remove()
 			m.removeFromAllInstances(title)
 			_ = m.saveAllInstances()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
 		return m, nil
@@ -1042,7 +970,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		switch m.focusSlot {
 		case slotNav:
 			m.nav.Up()
-			m.filterInstancesByTopic()
 		case slotAgent, slotDiff, slotInfo:
 			m.tabbedWindow.ScrollUp()
 		}
@@ -1052,22 +979,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		switch m.focusSlot {
 		case slotNav:
 			m.nav.Down()
-			m.filterInstancesByTopic()
 		case slotAgent, slotDiff, slotInfo:
 			m.tabbedWindow.ScrollDown()
 		}
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.nextFocusSlot()
-		return m, m.instanceChanged()
-	case keys.KeyFilterAll:
-		m.nav.SetStatusFilter(ui.StatusFilterAll)
-		return m, m.instanceChanged()
-	case keys.KeyFilterActive:
-		m.nav.SetStatusFilter(ui.StatusFilterActive)
-		return m, m.instanceChanged()
-	case keys.KeyCycleSort:
-		m.nav.CycleSortMode()
 		return m, m.instanceChanged()
 	case keys.KeySpace:
 		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
@@ -1079,8 +996,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if m.focusSlot == slotNav && m.nav.ToggleSelectedExpand() {
 			return m, nil
 		}
-		// In tree mode, Space on non-expandable rows (stages) is a no-op
-		if m.focusSlot == slotNav && m.nav.IsTreeMode() {
+		// In nav panel, Space on non-expandable rows is a no-op
+		if m.focusSlot == slotNav {
 			return m, nil
 		}
 		return m.openContextMenu()
@@ -1206,7 +1123,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
-		// If the sidebar is focused, handle tree-mode interactions.
+		// If the nav panel is focused, handle plan/instance interactions.
 		if m.focusSlot == slotNav {
 			if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 				m.state = stateClickUpSearch
@@ -1214,19 +1131,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.textInputOverlay.SetSize(50, 3)
 				return m, nil
 			}
-			// Stage row: trigger that lifecycle stage directly.
-			if planFile, stage, isStage := m.nav.GetSelectedPlanStage(); isStage {
-				return m.triggerPlanStage(planFile, stage)
-			}
-			// Plan header: open plan context menu
+			// Plan header or plan file: open plan context menu
 			if m.nav.IsSelectedPlanHeader() {
 				return m.openPlanContextMenu()
 			}
-			// Topic header: open topic context menu
-			if m.nav.IsSelectedTopicHeader() {
-				return m.openTopicContextMenu()
-			}
-			// Plan file selected: show context menu with start/view/push/pr options
 			if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 				return m.openPlanContextMenu()
 			}
@@ -1275,21 +1183,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
-		listVisible := m.nav.TotalInstances() > 0
-		switch m.focusSlot {
-		case slotInfo:
-			if listVisible {
-				m.setFocusSlot(slotNav)
-			} else {
-				m.setFocusSlot(slotNav)
-			}
-		case slotAgent, slotDiff:
-			if listVisible {
-				m.setFocusSlot(slotNav)
-			} else {
-				m.setFocusSlot(slotNav)
-			}
-		case slotNav:
+		if m.focusSlot != slotNav {
 			m.setFocusSlot(slotNav)
 		}
 		return m, nil
@@ -1321,10 +1215,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeySearch:
 		m.nav.ActivateSearch()
-		m.nav.SelectFirst() // Reset to "All" when starting search
+		m.nav.SelectFirst()
 		m.state = stateSearch
 		m.setFocusSlot(slotNav)
-		m.nav.SetFilter("") // Show all instances
 		return m, nil
 	default:
 		return m, nil

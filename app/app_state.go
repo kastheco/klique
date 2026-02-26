@@ -117,7 +117,7 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 	return data
 }
 
-func (m *home) updateSidebarItems() {
+func (m *home) updateNavPanelStatus() {
 	// Count running/notification instances for status (used by the "All" count badge).
 	// Since topics are now plan-state-based (not instance-based), we still track
 	// instance activity for the top-level status indicators.
@@ -266,87 +266,6 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	return m, m.instanceChanged()
 }
 
-// filterInstancesByTopic updates the instance list highlight filter based on the
-// current sidebar selection. In tree mode, this highlights matching instances and
-// boosts them to the top. In flat mode, it falls back to the existing SetFilter behavior.
-func (m *home) filterInstancesByTopic() {
-	selectedID := m.nav.GetSelectedID()
-
-	if !m.nav.IsTreeMode() {
-		// Flat mode fallback: reachable during startup before SetTopicsAndPlans
-		// is first called (e.g. rebuildInstanceList calls us before updateSidebarPlans).
-		// Once tree mode is active it is never disabled, so this path is transient.
-		switch {
-		case selectedID == ui.SidebarAll:
-			m.nav.SetFilter("")
-		case selectedID == ui.SidebarUngrouped:
-			m.nav.SetFilter(ui.SidebarUngrouped)
-		case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
-			m.nav.SetFilter("")
-		default:
-			m.nav.SetFilter(selectedID)
-		}
-		return
-	}
-
-	// Tree mode: use highlight filter
-	switch {
-	case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
-		planFile := selectedID[len(ui.SidebarPlanPrefix):]
-		m.nav.SetHighlightFilter("plan", planFile)
-	case strings.HasPrefix(selectedID, ui.SidebarTopicPrefix):
-		topicName := selectedID[len(ui.SidebarTopicPrefix):]
-		m.nav.SetHighlightFilter("topic", topicName)
-	case strings.HasPrefix(selectedID, ui.SidebarPlanStagePrefix):
-		// Stage selected — highlight parent plan
-		planFile := m.nav.GetSelectedPlanFile()
-		if planFile != "" {
-			m.nav.SetHighlightFilter("plan", planFile)
-		} else {
-			m.nav.SetHighlightFilter("", "")
-		}
-	default:
-		m.nav.SetHighlightFilter("", "")
-	}
-}
-
-// filterSearchWithTopic applies the search query scoped to the currently selected topic.
-func (m *home) filterSearchWithTopic() {
-	query := strings.ToLower(m.nav.GetSearchQuery())
-	selectedID := m.nav.GetSelectedID()
-	topicFilter := ""
-	switch selectedID {
-	case ui.SidebarAll:
-		topicFilter = ""
-	case ui.SidebarUngrouped:
-		topicFilter = ui.SidebarUngrouped
-	default:
-		topicFilter = selectedID
-	}
-	m.nav.SetSearchFilterWithTopic(query, topicFilter)
-}
-
-func (m *home) filterBySearch() {
-	query := strings.ToLower(m.nav.GetSearchQuery())
-	if query == "" {
-		m.nav.UpdateMatchCounts(nil, 0)
-		m.filterInstancesByTopic()
-		return
-	}
-	m.nav.SetSearchFilter(query)
-
-	// Calculate match counts for sidebar dimming
-	matchesByTopic := make(map[string]int)
-	totalMatches := 0
-	for _, inst := range m.nav.GetInstances() {
-		if strings.Contains(strings.ToLower(inst.Title), query) {
-			matchesByTopic[""]++
-			totalMatches++
-		}
-	}
-	m.nav.UpdateMatchCounts(matchesByTopic, totalMatches)
-}
-
 // rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
 func (m *home) rebuildInstanceList() {
 	m.nav.Clear()
@@ -356,12 +275,11 @@ func (m *home) rebuildInstanceList() {
 			m.nav.AddInstance(inst)()
 		}
 	}
-	m.filterInstancesByTopic()
 	// Reload plan state for the new active repo.
 	m.planStateDir = filepath.Join(m.activeRepoPath, "docs", "plans")
 	m.loadPlanState()
 	m.updateSidebarPlans()
-	m.updateSidebarItems()
+	m.updateNavPanelStatus()
 }
 
 // getKnownRepos returns distinct repo paths from allInstances, recent repos, plus activeRepoPath.
@@ -466,7 +384,7 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Clear notification when user selects this instance — they've seen it
 	if selected != nil && selected.Notified {
 		selected.Notified = false
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 	}
 
 	// Manage preview terminal lifecycle on selection change.
@@ -507,6 +425,16 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
+	// Auto-switch tab based on selection type: plan header → info tab, instance → agent tab.
+	// Only auto-switch when the nav panel is focused to avoid hijacking explicit tab selection.
+	if m.focusSlot == slotNav {
+		if selected != nil {
+			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		} else if m.nav.IsSelectedPlanHeader() {
+			m.tabbedWindow.SetActiveTab(ui.InfoTab)
+		}
+	}
+
 	// Collect async commands.
 	var cmds []tea.Cmd
 	if spawnCmd != nil {
@@ -537,10 +465,74 @@ func statusString(s session.Status) string {
 	}
 }
 
-// updateInfoPane refreshes the info tab data from the selected instance.
+// updateInfoPaneForPlanHeader populates the info tab when a plan header is selected
+// (no instance). Shows plan metadata and instance summary counts.
+func (m *home) updateInfoPaneForPlanHeader() {
+	planFile := m.nav.GetSelectedPlanFile()
+	if planFile == "" || m.planState == nil {
+		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
+		return
+	}
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
+		return
+	}
+	data := ui.InfoData{
+		IsPlanHeaderSelected: true,
+		PlanName:             planstate.DisplayName(planFile),
+		PlanStatus:           string(entry.Status),
+		PlanTopic:            entry.Topic,
+		PlanBranch:           entry.Branch,
+	}
+	if !entry.CreatedAt.IsZero() {
+		data.PlanCreated = entry.CreatedAt.Format("2006-01-02")
+	}
+	// Count instances belonging to this plan.
+	for _, inst := range m.nav.GetInstances() {
+		if inst.PlanFile != planFile {
+			continue
+		}
+		data.PlanInstanceCount++
+		switch {
+		case inst.Status == session.Running || inst.Status == session.Loading:
+			data.PlanRunningCount++
+		case inst.Status == session.Paused:
+			data.PlanPausedCount++
+		default:
+			data.PlanReadyCount++
+		}
+	}
+	// Include wave progress if an orchestrator exists for this plan.
+	if orch, ok := m.waveOrchestrators[planFile]; ok {
+		data.TotalWaves = orch.TotalWaves()
+		data.TotalTasks = orch.TotalTasks()
+		tasks := orch.CurrentWaveTasks()
+		data.WaveTasks = make([]ui.WaveTaskInfo, len(tasks))
+		for i, task := range tasks {
+			state := "pending"
+			if orch.IsTaskComplete(task.Number) {
+				state = "complete"
+			} else if orch.IsTaskFailed(task.Number) {
+				state = "failed"
+			} else if orch.IsTaskRunning(task.Number) {
+				state = "running"
+			}
+			data.WaveTasks[i] = ui.WaveTaskInfo{Number: task.Number, State: state}
+		}
+	}
+	m.tabbedWindow.SetInfoData(data)
+}
+
+// updateInfoPane refreshes the info tab data from the selected instance or plan header.
 func (m *home) updateInfoPane() {
 	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
+		// No instance selected — check if a plan header is selected.
+		if m.nav.IsSelectedPlanHeader() {
+			m.updateInfoPaneForPlanHeader()
+			return
+		}
 		m.tabbedWindow.SetInfoData(ui.InfoData{HasInstance: false})
 		return
 	}
@@ -1000,7 +992,7 @@ func (m *home) createPlanEntry(name, description, topic string) error {
 		return err
 	}
 	m.updateSidebarPlans()
-	m.updateSidebarItems()
+	m.updateNavPanelStatus()
 	return nil
 }
 
@@ -1065,7 +1057,7 @@ func (m *home) finalizePlanCreation(name, description string) error {
 
 	m.loadPlanState()
 	m.updateSidebarPlans()
-	m.updateSidebarItems()
+	m.updateNavPanelStatus()
 	return nil
 }
 
@@ -1112,7 +1104,7 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 
 	m.loadPlanState()
 	m.updateSidebarPlans()
-	m.updateSidebarItems()
+	m.updateNavPanelStatus()
 
 	prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan file.
 

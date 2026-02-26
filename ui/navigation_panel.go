@@ -15,11 +15,7 @@ import (
 const ZoneRepoSwitch = "repo-switch"
 
 const (
-	SidebarAll               = "__all__"
-	SidebarUngrouped         = "__ungrouped__"
 	SidebarPlanPrefix        = "__plan__"
-	SidebarTopicPrefix       = "__topic__"
-	SidebarPlanStagePrefix   = "__plan_stage__"
 	SidebarPlanHistoryToggle = "__plan_history_toggle__"
 	SidebarImportClickUp     = "__import_clickup__"
 )
@@ -36,22 +32,6 @@ type TopicStatus struct {
 	HasRunning      bool
 	HasNotification bool
 }
-
-type StatusFilter int
-
-const (
-	StatusFilterAll StatusFilter = iota
-	StatusFilterActive
-)
-
-type SortMode int
-
-const (
-	SortNewest SortMode = iota
-	SortOldest
-	SortName
-	SortStatus
-)
 
 type navRowKind int
 
@@ -84,8 +64,6 @@ type NavigationPanel struct {
 	scrollOffset int
 
 	plans         []PlanDisplay
-	topics        []TopicDisplay
-	ungrouped     []PlanDisplay
 	instances     []*session.Instance
 	historyPlans  []PlanDisplay
 	cancelled     []PlanDisplay
@@ -103,9 +81,6 @@ type NavigationPanel struct {
 
 	width, height int
 	focused       bool
-
-	statusFilter StatusFilter
-	sortMode     SortMode
 }
 
 type TopicDisplay struct {
@@ -142,8 +117,6 @@ func (n *NavigationPanel) SetPlans(plans []PlanDisplay) {
 }
 
 func (n *NavigationPanel) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {
-	n.topics = topics
-	n.ungrouped = ungrouped
 	n.historyPlans = history
 	if len(cancelled) > 0 {
 		n.cancelled = cancelled[0]
@@ -598,33 +571,12 @@ func (n *NavigationPanel) SetSessionPreviewSize(width, height int) error {
 	return err
 }
 
-func (n *NavigationPanel) GetSelectedPlanStage() (planFile, stage string, ok bool) {
-	return "", "", false
-}
-
-func (n *NavigationPanel) IsSelectedTopicHeader() bool               { return false }
-func (n *NavigationPanel) GetSelectedTopicName() string              { return "" }
-func (n *NavigationPanel) UpdateMatchCounts(_ map[string]int, _ int) {}
 func (n *NavigationPanel) SelectFirst() {
 	if len(n.rows) > 0 {
 		n.selectedIdx = 0
 		n.clampScroll()
 	}
 }
-func (n *NavigationPanel) IsTreeMode() bool { return true }
-
-func (n *NavigationPanel) SetFilter(_ string)                   {}
-func (n *NavigationPanel) SetHighlightFilter(_, _ string)       {}
-func (n *NavigationPanel) SetSearchFilter(_ string)             {}
-func (n *NavigationPanel) SetSearchFilterWithTopic(_, _ string) {}
-func (n *NavigationPanel) HandleTabClick(_, _ int) (StatusFilter, bool) {
-	return 0, false
-}
-func (n *NavigationPanel) SetStatusFilter(filter StatusFilter) { n.statusFilter = filter }
-func (n *NavigationPanel) GetStatusFilter() StatusFilter       { return n.statusFilter }
-func (n *NavigationPanel) CycleSortMode()                      { n.sortMode = (n.sortMode + 1) % 4 }
-func (n *NavigationPanel) GetSortMode() SortMode               { return n.sortMode }
-func (n *NavigationPanel) GetItemAtRow(row int) int            { return row + n.scrollOffset }
 
 func (n *NavigationPanel) SelectedSpaceAction() string {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {

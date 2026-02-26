@@ -323,7 +323,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	h.updateSidebarPlans()
-	h.updateSidebarItems()
+	h.updateNavPanelStatus()
 
 	// Reconstruct in-memory wave orchestrators for plans that were mid-wave
 	// when kasmos was last restarted. Must run after loadPlanState and instance load.
@@ -888,7 +888,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		m.updateInfoPane()
 		completionCmd := m.checkPlanCompletion()
 		asyncCmds = append(asyncCmds, signalCmds...)
@@ -911,7 +911,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleError(msg)
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m, m.instanceChanged()
 	case previewTerminalReadyMsg:
 		// Discard stale attach if selection changed while spawning.
@@ -930,7 +930,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nav.Kill()
 		m.removeFromAllInstances(msg.title)
 		m.saveAllInstances()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case planStageConfirmedMsg:
 		// User confirmed past the topic-concurrency gate — execute the stage.
@@ -939,7 +939,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload plan state and refresh sidebar after async plan mutation.
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m, tea.WindowSize()
 	case clickUpTaskFetchedMsg:
 		if msg.Err != nil {
@@ -992,7 +992,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.removeFromAllInstances(inst.Title)
 		}
 		m.saveAllInstances()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		m.toastManager.Info(fmt.Sprintf("wave orchestration aborted for %s",
 			planstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.toastTickCmd())
@@ -1021,7 +1021,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 
 		// Spawn reviewer agent for the completed plan.
 		var reviewerCmd tea.Cmd
@@ -1051,7 +1051,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 
 		var reviewerCmd tea.Cmd
 		if cmd := m.spawnReviewer(planFile); cmd != nil {
@@ -1067,7 +1067,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.saveAllInstances()
 		}
 		m.pendingPlannerInstanceTitle = ""
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m.triggerPlanStage(msg.planFile, "implement")
 	case instanceStartedMsg:
 		if msg.err != nil {
@@ -1075,7 +1075,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = msg.instance.Kill()
 			m.nav.RemoveByTitle(msg.instance.Title)
 			m.removeFromAllInstances(msg.instance.Title)
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			return m, m.handleError(msg.err)
 		}
 		// Instance started successfully — add to master list, save and finalize
@@ -1083,7 +1083,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err := m.saveAllInstances(); err != nil {
 			return m, m.handleError(err)
 		}
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		if fn, ok := m.instanceFinalizers[msg.instance]; ok {
 			fn()
 			delete(m.instanceFinalizers, msg.instance)

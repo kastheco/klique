@@ -27,7 +27,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.removeFromAllInstances(title)
 			m.nav.Kill()
 			m.saveAllInstances()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
@@ -118,36 +118,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.textInputOverlay = overlay.NewTextInputOverlay("rename instance", selected.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
-
-	case "rename_topic_new":
-		topicName := m.nav.GetSelectedTopicName()
-		if topicName == "" {
-			return m, nil
-		}
-		m.state = stateRenameInstance // reuse rename overlay state
-		m.textInputOverlay = overlay.NewTextInputOverlay("rename topic", topicName)
-		m.textInputOverlay.SetSize(50, 3)
-		return m, nil
-
-	case "delete_topic_new":
-		topicName := m.nav.GetSelectedTopicName()
-		if topicName == "" || m.planState == nil {
-			return m, nil
-		}
-		// Ungroup all plans in this topic
-		for filename, entry := range m.planState.Plans {
-			if entry.Topic == topicName {
-				entry.Topic = ""
-				m.planState.Plans[filename] = entry
-			}
-		}
-		delete(m.planState.TopicEntries, topicName)
-		if err := m.planState.Save(); err != nil {
-			return m, m.handleError(err)
-		}
-		m.updateSidebarPlans()
-		m.updateSidebarItems()
-		return m, tea.WindowSize()
 
 	case "mark_task_complete":
 		selected := m.nav.GetSelectedInstance()
@@ -267,7 +237,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			_ = m.saveAllInstances()
 			m.loadPlanState()
 			m.updateSidebarPlans()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			return planRefreshMsg{}
 		}
 		return m, m.confirmAction(fmt.Sprintf("merge '%s' branch into main?", planName), mergeAction)
@@ -295,7 +265,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m, tea.WindowSize()
 
 	case "resume_implement":
@@ -308,7 +278,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m, tea.WindowSize()
 
 	case "cancel_plan":
@@ -323,7 +293,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			}
 			m.loadPlanState()
 			m.updateSidebarPlans()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			return nil
 		}
 		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
@@ -338,7 +308,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m.spawnPlanAgent(planFile, "plan", buildModifyPlanPrompt(planFile))
 
 	case "start_over_plan":
@@ -368,7 +338,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			_ = m.saveAllInstances()
 			m.loadPlanState()
 			m.updateSidebarPlans()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			return planRefreshMsg{}
 		}
 		return m, m.confirmAction(fmt.Sprintf("start over plan '%s'? this resets the branch.", planName), startOverAction)
@@ -484,15 +454,12 @@ func (m *home) findPlanInstance() *session.Instance {
 }
 
 // openContextMenu builds a context menu for the currently focused/selected item
-// (sidebar topic/plan or instance) and positions it next to the selected item.
+// (plan or instance) and positions it next to the selected item.
 func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	if m.focusSlot == slotNav {
-		// Sidebar focused — use plan or topic context menu
+		// Nav panel focused — use plan context menu if a plan is selected
 		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 			return m.openPlanContextMenu()
-		}
-		if m.nav.IsSelectedTopicHeader() {
-			return m.openTopicContextMenu()
 		}
 		return m, nil
 	}
@@ -605,22 +572,6 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 	return m, m.confirmAction(message, pushAction)
 }
 
-func (m *home) openTopicContextMenu() (tea.Model, tea.Cmd) {
-	topicName := m.nav.GetSelectedTopicName()
-	if topicName == "" {
-		return m, nil
-	}
-	items := []overlay.ContextMenuItem{
-		{Label: "rename topic", Action: "rename_topic_new"},
-		{Label: "delete topic (ungroup plans)", Action: "delete_topic_new"},
-	}
-	x := m.navWidth
-	y := 1 + 4 + m.nav.GetSelectedIdx()
-	m.contextMenu = overlay.NewContextMenu(x, y, items)
-	m.state = stateContextMenu
-	return m, nil
-}
-
 // triggerPlanStage handles a user action on a plan lifecycle stage row.
 // It checks if the stage is locked, applies the concurrency gate for the
 // implement stage, and then executes the stage transition.
@@ -695,7 +646,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
 	case "solo":
 		if err := m.fsmSetImplementing(planFile); err != nil {
@@ -703,7 +654,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		// Check if plan .md file exists on disk to decide prompt content.
 		planName := planstate.DisplayName(planFile)
 		planPath := filepath.Join(m.activeRepoPath, "docs", "plans", planFile)
@@ -729,7 +680,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			}
 			m.loadPlanState()
 			m.updateSidebarPlans()
-			m.updateSidebarItems()
+			m.updateNavPanelStatus()
 			m.toastManager.Info("plan needs ## Wave headers — respawning planner to annotate.")
 			wavePrompt := fmt.Sprintf(
 				"The plan at docs/plans/%s is missing ## Wave N headers required for wave-based implementation. "+
@@ -749,7 +700,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		return m.startNextWave(orch, entry)
 	case "review":
 		if err := m.fsmSetReviewing(planFile); err != nil {
@@ -757,7 +708,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.updateNavPanelStatus()
 		planName := planstate.DisplayName(planFile)
 		reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
 		return m.spawnPlanAgent(planFile, "review", reviewPrompt)
@@ -769,7 +720,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	}
 	m.loadPlanState()
 	m.updateSidebarPlans()
-	m.updateSidebarItems()
+	m.updateNavPanelStatus()
 	return m, nil
 }
 
