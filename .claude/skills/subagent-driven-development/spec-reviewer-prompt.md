@@ -55,7 +55,23 @@ Task tool (general-purpose):
 
     **Verify by reading code, not by trusting report.**
 
-    Report:
-    - ✅ Spec compliant (if everything matches after code inspection)
-    - ❌ Issues found: [list specifically what's missing or extra, with file:line references]
+    Report using the structured format:
+
+    ## review round N
+
+    If clean (zero issues found after inspection):
+    - ✅ Spec compliant — zero issues
+
+    If issues found:
+    ### critical
+    - [file:line] description — why it matters
+
+    ### important
+    - [file:line] description — why it matters
+
+    ### minor
+    - [file:line] description — why it matters
+
+    ALL tiers are blocking. Every issue must be resolved before approval.
+    There is no "note for later" category.
 ```

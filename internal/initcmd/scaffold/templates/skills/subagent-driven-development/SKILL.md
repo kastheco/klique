@@ -253,6 +253,7 @@ Done!
 - Start implementation on main/master branch without explicit user consent
 - Skip wave-level reviews (spec compliance AND code quality)
 - Proceed with unfixed issues from review
+- Treat Minor issues as non-blocking — all tiers must pass
 - Dispatch multiple implementation subagents in parallel (conflicts)
 - Make subagent read plan file (provide full text instead)
 - Skip scene-setting context (subagent needs to understand where task fits)
@@ -268,10 +269,12 @@ Done!
 - Don't rush them into implementation
 
 **If reviewer finds issues:**
-- Dispatch fix subagent with specific instructions
-- Reviewer reviews again
-- Repeat until approved
+- ALL tiers are blocking — Critical, Important, and Minor
+- Dispatch fix subagent with specific instructions for every flagged issue
+- Reviewer reviews again after fixes
+- Repeat until reviewer reports zero issues
 - Don't skip the re-review
+- Don't skip Minor issues — they are not "nice to have"
 
 **If subagent fails task:**
 - Dispatch fix subagent with specific instructions
