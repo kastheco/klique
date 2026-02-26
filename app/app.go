@@ -851,6 +851,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		completionCmd := m.checkPlanCompletion()
 		asyncCmds = append(asyncCmds, signalCmds...)
 		asyncCmds = append(asyncCmds, tickUpdateMetadataCmd, completionCmd)
+		// Restart toast tick loop if any toasts were created during this tick
+		// (e.g. by transitionToReview or spawnCoderWithFeedback).
+		if m.toastManager.HasActiveToasts() {
+			asyncCmds = append(asyncCmds, m.toastTickCmd())
+		}
 		return m, tea.Batch(asyncCmds...)
 	case tea.MouseMsg:
 		return m.handleMouse(msg)

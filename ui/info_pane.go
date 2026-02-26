@@ -119,11 +119,25 @@ func statusColor(status string) lipgloss.TerminalColor {
 }
 
 func (p *InfoPane) renderRow(label, value string) string {
-	return infoLabelStyle.Render(label) + infoValueStyle.Render(value)
+	valueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))
+	if valueWidth < 10 {
+		valueWidth = 10
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		infoLabelStyle.Render(label),
+		infoValueStyle.Width(valueWidth).Render(value),
+	)
 }
 
 func (p *InfoPane) renderStatusRow(label, value string) string {
-	return infoLabelStyle.Render(label) + lipgloss.NewStyle().Foreground(statusColor(value)).Render(value)
+	valueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))
+	if valueWidth < 10 {
+		valueWidth = 10
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		infoLabelStyle.Render(label),
+		lipgloss.NewStyle().Foreground(statusColor(value)).Width(valueWidth).Render(value),
+	)
 }
 
 func (p *InfoPane) renderDivider() string {
