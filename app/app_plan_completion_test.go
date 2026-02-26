@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -929,4 +930,178 @@ func TestPRCreatedMsg_TransitionsPendingPRPlanToDone(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusDone, entry.Status,
 		"plan should transition to done only when PR creation succeeds")
+}
+
+// TestReviewCreatePRMsg_CancelTitleKeepsPendingApproval verifies canceling PR
+// title entry keeps the approval gate active while clearing PR flow marker.
+func TestReviewCreatePRMsg_CancelTitleKeepsPendingApproval(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewList(&sp, false)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  list,
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		plannerPrompted:       make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	model, _ := h.Update(reviewCreatePRMsg{planFile: planFile})
+	step1 := model.(*home)
+	require.Equal(t, statePRTitle, step1.state)
+	require.Equal(t, planFile, step1.pendingPRPlanFile)
+
+	model, _ = step1.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	step2 := model.(*home)
+	assert.Equal(t, stateDefault, step2.state)
+	assert.Equal(t, "", step2.pendingPRPlanFile)
+	assert.True(t, step2.pendingApprovals[planFile],
+		"canceling PR title should preserve pending approval gate")
+
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status)
+}
+
+// TestReviewCreatePRMsg_CancelBodyKeepsPendingApproval verifies canceling PR
+// body entry keeps the approval gate active while clearing PR flow marker.
+func TestReviewCreatePRMsg_CancelBodyKeepsPendingApproval(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewList(&sp, false)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  list,
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		plannerPrompted:       make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	model, _ := h.Update(reviewCreatePRMsg{planFile: planFile})
+	step1 := model.(*home)
+	require.Equal(t, statePRTitle, step1.state)
+
+	model, _ = step1.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	step2 := model.(*home)
+	require.Equal(t, statePRBody, step2.state)
+	require.Equal(t, planFile, step2.pendingPRPlanFile)
+
+	model, _ = step2.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	step3 := model.(*home)
+	assert.Equal(t, stateDefault, step3.state)
+	assert.Equal(t, "", step3.pendingPRPlanFile)
+	assert.True(t, step3.pendingApprovals[planFile],
+		"canceling PR body should preserve pending approval gate")
+
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status)
+}
+
+// TestReviewCreatePRMsg_ErrorKeepsPendingApproval verifies PR creation failures
+// do not advance plan status and keep approval gate active.
+func TestReviewCreatePRMsg_ErrorKeepsPendingApproval(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  ui.NewList(&sp, false),
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		pendingPRPlanFile:     planFile,
+		plannerPrompted:       make(map[string]bool),
+		pendingPRToastID:      "toast-123",
+	}
+
+	_, _ = h.Update(prErrorMsg{id: "toast-123", err: errors.New("pr failed")})
+	assert.Equal(t, "", h.pendingPRPlanFile)
+	assert.True(t, h.pendingApprovals[planFile],
+		"PR error should keep pending approval gate for retry")
+
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status)
 }
