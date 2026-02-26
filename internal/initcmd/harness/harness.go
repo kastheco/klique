@@ -18,6 +18,7 @@ type Harness interface {
 	ListModels() ([]string, error)
 	BuildFlags(agent AgentConfig) []string
 	InstallSuperpowers() error
+	InstallEnforcement() error
 	SupportsTemperature() bool
 	SupportsEffort() bool
 	ListEffortLevels(model string) []string

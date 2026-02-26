@@ -68,6 +68,22 @@ func Run(opts Options) error {
 		}
 	}
 
+	// Stage 4a-3: Install CLI-tools enforcement hooks
+	fmt.Println("\nInstalling enforcement hooks...")
+	for _, name := range state.SelectedHarness {
+		h := registry.Get(name)
+		if h == nil {
+			continue
+		}
+		fmt.Printf("  %-12s ", name)
+		if err := h.InstallEnforcement(); err != nil {
+			fmt.Printf("FAILED: %v\n", err)
+			// Non-fatal: continue with other harnesses
+		} else {
+			fmt.Println("OK")
+		}
+	}
+
 	// Stage 4b: Write TOML config
 	fmt.Println("\nWriting config...")
 	tc := state.ToTOMLConfig()
