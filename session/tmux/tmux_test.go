@@ -146,7 +146,7 @@ func recordKilledSessions(killedSessions *[]string) func(cmd *exec.Cmd) error {
 }
 
 func TestCleanupSessions(t *testing.T) {
-	t.Run("kills kas, legacy klique/hivemind, and lazygit sessions", func(t *testing.T) {
+	t.Run("kills kas and legacy klique/hivemind sessions", func(t *testing.T) {
 		var killedSessions []string
 		cmdExec := cmd_test.MockCmdExec{
 			RunFunc: recordKilledSessions(&killedSessions),
