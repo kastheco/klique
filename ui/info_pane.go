@@ -1,6 +1,42 @@
 package ui
 
-import "github.com/charmbracelet/bubbles/viewport"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	infoSectionStyle = lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)
+	infoDividerStyle = lipgloss.NewStyle().Foreground(ColorOverlay)
+	infoLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Width(20)
+	infoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)
+)
+
+func statusColor(status string) lipgloss.TerminalColor {
+	switch status {
+	case "implementing":
+		return ColorIris
+	case "done":
+		return ColorFoam
+	case "reviewing":
+		return ColorGold
+	case "running":
+		return ColorFoam
+	case "ready":
+		return ColorMuted
+	case "planning":
+		return ColorIris
+	case "cancelled":
+		return ColorMuted
+	case "paused":
+		return ColorMuted
+	default:
+		return ColorText
+	}
+}
 
 // InfoData holds the data to render in the info pane.
 // Built by the app layer from instance + plan + wave state.
@@ -89,5 +125,121 @@ func (p *InfoPane) String() string {
 
 // render builds the styled content string. Called internally when data changes.
 func (p *InfoPane) render() string {
-	return "info pane placeholder"
+	var sections []string
+
+	if p.data.HasPlan {
+		sections = append(sections, p.renderPlanSection())
+	}
+	sections = append(sections, p.renderInstanceSection())
+	if len(p.data.WaveTasks) > 0 {
+		sections = append(sections, p.renderWaveSection())
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+func (p *InfoPane) renderRow(label, value string) string {
+	return infoLabelStyle.Render(label) + infoValueStyle.Render(value)
+}
+
+func (p *InfoPane) renderStatusRow(label, value string) string {
+	return infoLabelStyle.Render(label) + lipgloss.NewStyle().Foreground(statusColor(value)).Render(value)
+}
+
+func (p *InfoPane) renderDivider() string {
+	w := p.width - 4
+	if w < 10 {
+		w = 10
+	}
+	return infoDividerStyle.Render(strings.Repeat("─", w))
+}
+
+func (p *InfoPane) renderPlanSection() string {
+	lines := []string{
+		infoSectionStyle.Render("plan"),
+		p.renderDivider(),
+	}
+	if p.data.PlanName != "" {
+		lines = append(lines, p.renderRow("name", p.data.PlanName))
+	}
+	if p.data.PlanDescription != "" {
+		lines = append(lines, p.renderRow("description", p.data.PlanDescription))
+	}
+	if p.data.PlanStatus != "" {
+		lines = append(lines, p.renderStatusRow("status", p.data.PlanStatus))
+	}
+	if p.data.PlanTopic != "" {
+		lines = append(lines, p.renderRow("topic", p.data.PlanTopic))
+	}
+	if p.data.PlanBranch != "" {
+		lines = append(lines, p.renderRow("branch", p.data.PlanBranch))
+	}
+	if p.data.PlanCreated != "" {
+		lines = append(lines, p.renderRow("created", p.data.PlanCreated))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (p *InfoPane) renderInstanceSection() string {
+	lines := []string{
+		infoSectionStyle.Render("instance"),
+		p.renderDivider(),
+	}
+	if p.data.Title != "" {
+		lines = append(lines, p.renderRow("title", p.data.Title))
+	}
+	if p.data.AgentType != "" {
+		lines = append(lines, p.renderRow("role", p.data.AgentType))
+	}
+	if p.data.Program != "" {
+		lines = append(lines, p.renderRow("program", p.data.Program))
+	}
+	if p.data.Status != "" {
+		lines = append(lines, p.renderStatusRow("status", p.data.Status))
+	}
+	if p.data.Branch != "" {
+		lines = append(lines, p.renderRow("branch", p.data.Branch))
+	}
+	if p.data.Path != "" {
+		lines = append(lines, p.renderRow("path", p.data.Path))
+	}
+	if p.data.Created != "" {
+		lines = append(lines, p.renderRow("created", p.data.Created))
+	}
+	if p.data.WaveNumber > 0 {
+		lines = append(lines, p.renderRow("wave", fmt.Sprintf("%d/%d", p.data.WaveNumber, p.data.TotalWaves)))
+	}
+	if p.data.TaskNumber > 0 {
+		lines = append(lines, p.renderRow("task", fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (p *InfoPane) renderWaveSection() string {
+	lines := []string{
+		infoSectionStyle.Render("wave progress"),
+		p.renderDivider(),
+	}
+	for _, task := range p.data.WaveTasks {
+		var glyph string
+		var glyphColor lipgloss.TerminalColor
+		switch task.State {
+		case "complete":
+			glyph = "✓"
+			glyphColor = ColorFoam
+		case "running":
+			glyph = "●"
+			glyphColor = ColorIris
+		case "failed":
+			glyph = "✗"
+			glyphColor = ColorLove
+		default:
+			glyph = "○"
+			glyphColor = ColorMuted
+		}
+		label := fmt.Sprintf("task %d", task.Number)
+		value := lipgloss.NewStyle().Foreground(glyphColor).Render(glyph) + " " + task.State
+		lines = append(lines, infoLabelStyle.Render(label)+value)
+	}
+	return strings.Join(lines, "\n")
 }
