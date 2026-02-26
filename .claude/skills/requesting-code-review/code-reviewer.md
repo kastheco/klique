@@ -73,7 +73,7 @@ git diff {BASE_SHA}..{HEAD_SHA}
 #### Important (Should Fix)
 [Architecture problems, missing features, poor error handling, test gaps]
 
-#### Minor (Nice to Have)
+#### Minor (Must Fix)
 [Code style, optimization opportunities, documentation improvements]
 
 **For each issue:**
@@ -87,9 +87,10 @@ git diff {BASE_SHA}..{HEAD_SHA}
 
 ### Assessment
 
-**Ready to merge?** [Yes/No/With fixes]
+**Clean?** [Yes/No]
 
-**Reasoning:** [Technical assessment in 1-2 sentences]
+If Yes: zero issues found — approve.
+If No: list all issues above. ALL tiers are blocking — every issue must be resolved.
 
 ## Critical Rules
 
@@ -99,6 +100,7 @@ git diff {BASE_SHA}..{HEAD_SHA}
 - Explain WHY issues matter
 - Acknowledge strengths
 - Give clear verdict
+- Treat ALL tiers as blocking — no "note for later"
 
 **DON'T:**
 - Say "looks good" without checking
@@ -106,6 +108,8 @@ git diff {BASE_SHA}..{HEAD_SHA}
 - Give feedback on code you didn't review
 - Be vague ("improve error handling")
 - Avoid giving a clear verdict
+- Approve with outstanding issues at any tier
+- Use "Ready to merge: With fixes" — either clean or not
 
 ## Example Output
 
@@ -140,7 +144,7 @@ git diff {BASE_SHA}..{HEAD_SHA}
 
 ### Assessment
 
-**Ready to merge: With fixes**
+**Clean: No**
 
-**Reasoning:** Core implementation is solid with good architecture and tests. Important issues (help text, date validation) are easily fixed and don't affect core functionality.
+Two Important issues (help text, date validation) and one Minor issue (progress indicators) must be resolved before approval.
 ```
