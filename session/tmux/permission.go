@@ -15,27 +15,42 @@ const (
 )
 
 // SendPermissionResponse sends the appropriate key sequence to the opencode pane
-// to respond to its permission dialog. opencode uses a TUI selector navigated with
-// arrow keys and confirmed with Enter; Escape dismisses/rejects.
+// to respond to its permission dialog. opencode presents three choices in this order:
+//
+//	Allow once | Allow always | Reject
+//
+// The first option ("Allow once") is already highlighted by default. Arrow keys
+// navigate horizontally; Enter confirms the highlighted option.
 //
 // Key sequences:
-//   - AllowAlways: Enter (first option is "allow always" by default)
-//   - AllowOnce:   Right then Enter (navigate to second option)
-//   - Reject:      Escape
+//   - AllowOnce:   Enter (first option is already selected)
+//   - AllowAlways: Right → Enter → Enter (navigate to second option, confirm)
+//   - Reject:      Right → Right → Enter (navigate to third option, confirm)
 func (t *TmuxSession) SendPermissionResponse(choice PermissionChoice) error {
-	var args []string
 	switch choice {
-	case PermissionAllowAlways:
-		// "allow always" is the first option — just confirm with Enter.
-		args = []string{"send-keys", "-t", t.sanitizedName, "Enter"}
 	case PermissionAllowOnce:
-		// Navigate right to "allow once", then confirm.
-		args = []string{"send-keys", "-t", t.sanitizedName, "Right", "Enter"}
+		// "Allow once" is the first (default) option — just confirm with Enter.
+		return t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Enter"))
+	case PermissionAllowAlways:
+		// Navigate right to "Allow always" (second option), then confirm twice.
+		if err := t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Right")); err != nil {
+			return err
+		}
+		if err := t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Enter")); err != nil {
+			return err
+		}
+		return t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Enter"))
 	case PermissionReject:
-		// Escape dismisses the dialog and rejects the permission.
-		args = []string{"send-keys", "-t", t.sanitizedName, "Escape"}
+		// Navigate right twice to "Reject" (third option), then confirm.
+		if err := t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Right")); err != nil {
+			return err
+		}
+		if err := t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Right")); err != nil {
+			return err
+		}
+		return t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Enter"))
 	default:
-		args = []string{"send-keys", "-t", t.sanitizedName, "Escape"}
+		// Unknown choice — default to rejecting for safety.
+		return t.cmdExec.Run(exec.Command("tmux", "send-keys", "-t", t.sanitizedName, "Right", "Right", "Enter"))
 	}
-	return t.cmdExec.Run(exec.Command("tmux", args...))
 }

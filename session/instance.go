@@ -118,6 +118,11 @@ type Instance struct {
 	// This distinguishes "no cache yet" from a valid empty pane capture.
 	CachedContentSet bool
 
+	// PermissionRespondedAt is the time the last permission response was sent or the
+	// permission modal was shown for this instance. Used to debounce repeated detection
+	// of the same prompt across metadata ticks while opencode processes the key sequence.
+	PermissionRespondedAt time.Time
+
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
 

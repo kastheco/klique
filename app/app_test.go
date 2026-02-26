@@ -30,22 +30,23 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
-func newTestHome() *home {
+func newTestHome(t *testing.T) *home {
 	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 	return &home{
-		ctx:            context.Background(),
-		state:          stateDefault,
-		appConfig:      config.DefaultConfig(),
-		nav:            ui.NewNavigationPanel(&spin),
-		menu:           ui.NewMenu(),
-		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
-		activeRepoPath: os.TempDir(),
-		program:        "opencode",
+		ctx:             context.Background(),
+		state:           stateDefault,
+		appConfig:       config.DefaultConfig(),
+		nav:             ui.NewNavigationPanel(&spin),
+		menu:            ui.NewMenu(),
+		tabbedWindow:    ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		activeRepoPath:  os.TempDir(),
+		program:         "opencode",
+		permissionCache: config.NewPermissionCache(t.TempDir()),
 	}
 }
 
 func TestSpawnAdHocAgent_DefaultCreatesWorktree(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	model, cmd := h.spawnAdHocAgent("my-agent", "", "")
 	updated := model.(*home)
 	instances := updated.nav.GetInstances()
@@ -57,7 +58,7 @@ func TestSpawnAdHocAgent_DefaultCreatesWorktree(t *testing.T) {
 }
 
 func TestSpawnAdHocAgent_BranchOverride(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	model, cmd := h.spawnAdHocAgent("my-agent", "feature/login", "")
 	updated := model.(*home)
 	instances := updated.nav.GetInstances()
@@ -68,7 +69,7 @@ func TestSpawnAdHocAgent_BranchOverride(t *testing.T) {
 }
 
 func TestSpawnAdHocAgent_PathOverride(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	model, cmd := h.spawnAdHocAgent("my-agent", "", "/tmp/custom-path")
 	updated := model.(*home)
 	instances := updated.nav.GetInstances()
@@ -79,7 +80,7 @@ func TestSpawnAdHocAgent_PathOverride(t *testing.T) {
 }
 
 func TestSpawnAgent_KeyOpensFormOverlay(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	h.keySent = true
 	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	updated := model.(*home)
@@ -88,7 +89,7 @@ func TestSpawnAgent_KeyOpensFormOverlay(t *testing.T) {
 }
 
 func TestSpawnAgent_EscCancels(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	h.state = stateSpawnAgent
 	h.formOverlay = overlay.NewSpawnFormOverlay("spawn agent", 60)
 
@@ -100,7 +101,7 @@ func TestSpawnAgent_EscCancels(t *testing.T) {
 }
 
 func TestSpawnAgent_SubmitCreatesInstance(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 	h.state = stateSpawnAgent
 	h.formOverlay = overlay.NewSpawnFormOverlay("spawn agent", 60)
 
@@ -568,15 +569,17 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 func TestFocusRing(t *testing.T) {
 	t.Skip("focus ring expectations are being updated for nav-only layout")
 
-	newTestHome := func() *home {
+	newTestHome := func(t *testing.T) *home {
+		t.Helper()
 		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 		return &home{
-			ctx:          context.Background(),
-			state:        stateDefault,
-			appConfig:    config.DefaultConfig(),
-			nav:          ui.NewNavigationPanel(&spin),
-			menu:         ui.NewMenu(),
-			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			ctx:             context.Background(),
+			state:           stateDefault,
+			appConfig:       config.DefaultConfig(),
+			nav:             ui.NewNavigationPanel(&spin),
+			menu:            ui.NewMenu(),
+			tabbedWindow:    ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			permissionCache: config.NewPermissionCache(t.TempDir()),
 		}
 	}
 
@@ -601,7 +604,7 @@ func TestFocusRing(t *testing.T) {
 	// --- Tab ring cycling ---
 
 	t.Run("Tab advances through center tabs: agent → diff", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotAgent)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
@@ -610,7 +613,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Tab advances through center tabs: diff → git", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotDiff)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
@@ -619,7 +622,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Tab wraps center tabs: git → agent", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotInfo)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
@@ -628,7 +631,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Tab from sidebar lands on agent", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
@@ -637,7 +640,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Tab from list lands on agent", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
@@ -646,7 +649,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Shift+Tab moves backward through center tabs: diff → agent", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotDiff)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -655,7 +658,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Shift+Tab wraps center tabs: agent → git", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotAgent)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -664,7 +667,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("Shift+Tab from sidebar lands on git", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -673,7 +676,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("t jumps to list slot when instances exist", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotNav)
 
@@ -683,7 +686,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("t is no-op when list is empty", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
@@ -694,7 +697,7 @@ func TestFocusRing(t *testing.T) {
 	// --- Direct slot jumps ---
 
 	t.Run("! jumps to agent slot", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
@@ -703,7 +706,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("@ jumps to diff slot", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
@@ -712,7 +715,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("# jumps to git slot", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")})
@@ -721,7 +724,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("s is no-op (sidebar focus shortcut removed)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
@@ -730,7 +733,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("s does not show hidden sidebar", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.sidebarHidden = true
 		h.setFocusSlot(slotNav)
 
@@ -743,7 +746,7 @@ func TestFocusRing(t *testing.T) {
 	// --- Sidebar toggle (ctrl+s) ---
 
 	t.Run("ctrl+s hides sidebar and moves focus from sidebar to agent slot", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.sidebarHidden = false
 		h.setFocusSlot(slotNav)
 
@@ -754,7 +757,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+s hides sidebar and keeps focus when agent slot is focused", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.sidebarHidden = false
 		h.setFocusSlot(slotAgent)
 
@@ -765,7 +768,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+s shows sidebar and keeps focus when sidebar is hidden", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.sidebarHidden = true
 		h.setFocusSlot(slotNav)
 
@@ -779,7 +782,7 @@ func TestFocusRing(t *testing.T) {
 	// When instances exist, list acts as a waypoint between sidebar and tabs.
 
 	t.Run("← from agent moves to list (instances exist)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotAgent)
 
@@ -789,7 +792,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("← from diff moves to list (instances exist)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotDiff)
 
@@ -799,7 +802,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("← from list moves to sidebar", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotNav)
 
@@ -809,7 +812,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("→ from sidebar moves to list (instances exist)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotNav)
 
@@ -819,7 +822,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("→ from list moves to agent", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		h.setFocusSlot(slotNav)
 
@@ -829,7 +832,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("→ from agent is no-op (already rightmost)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotAgent)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
@@ -840,7 +843,7 @@ func TestFocusRing(t *testing.T) {
 	// --- Arrow keys skip list when no instances ---
 
 	t.Run("← from agent skips to sidebar (no instances)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotAgent)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
@@ -849,7 +852,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("→ from sidebar skips to agent (no instances)", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		h.setFocusSlot(slotNav)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
@@ -860,7 +863,7 @@ func TestFocusRing(t *testing.T) {
 	// --- Ctrl+Up/Down: cycle active instances with wrapping ---
 
 	t.Run("ctrl+down cycles to next active instance", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
@@ -872,7 +875,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+down wraps from last to first", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
@@ -884,7 +887,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+up cycles to previous active instance", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
@@ -896,7 +899,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+up wraps from first to last", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
 		addTestInstance(t, h)
@@ -908,7 +911,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+down skips paused instances", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h) // 0: active
 		addTestInstance(t, h) // 1: will be paused
 		addTestInstance(t, h) // 2: active
@@ -921,7 +924,7 @@ func TestFocusRing(t *testing.T) {
 	})
 
 	t.Run("ctrl+up skips paused instances", func(t *testing.T) {
-		h := newTestHome()
+		h := newTestHome(t)
 		addTestInstance(t, h) // 0: active
 		addTestInstance(t, h) // 1: will be paused
 		addTestInstance(t, h) // 2: active

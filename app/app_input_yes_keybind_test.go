@@ -12,7 +12,7 @@ import (
 )
 
 func TestHandleKeyPress_YesKeyQueuesPromptForPromptDetectedInstance(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 
 	inst, err := session.NewInstance(session.InstanceOptions{Title: "t1", Path: os.TempDir(), Program: "opencode"})
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestHandleKeyPress_YesKeyQueuesPromptForPromptDetectedInstance(t *testing.T
 }
 
 func TestHandleKeyPress_YesKeyIgnoredWhenInstanceIsNotPromptDetected(t *testing.T) {
-	h := newTestHome()
+	h := newTestHome(t)
 
 	inst, err := session.NewInstance(session.InstanceOptions{Title: "t2", Path: os.TempDir(), Program: "opencode"})
 	require.NoError(t, err)

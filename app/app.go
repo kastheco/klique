@@ -284,7 +284,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
-	permCache := config.NewPermissionCache(activeRepoPath)
+	permCache := config.NewPermissionCache("")
 	if configDir, err := config.GetConfigDir(); err == nil {
 		permCache = config.NewPermissionCache(configDir)
 		_ = permCache.Load()
@@ -704,16 +704,22 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Permission prompt detection for opencode instances.
-			if md.PermissionPrompt != nil && m.state == stateDefault {
+			// Guard: skip if we already responded recently (5s cooldown prevents duplicate
+			// sends across consecutive metadata ticks while opencode processes the keys).
+			if md.PermissionPrompt != nil && m.state == stateDefault &&
+				(inst.PermissionRespondedAt.IsZero() || time.Since(inst.PermissionRespondedAt) > 5*time.Second) {
 				pp := md.PermissionPrompt
 				if pp.Pattern != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(pp.Pattern) {
-					// Auto-approve cached pattern — send keys asynchronously.
+					// Auto-approve cached pattern — mark cooldown then send keys asynchronously.
+					inst.PermissionRespondedAt = time.Now()
 					i := inst
 					asyncCmds = append(asyncCmds, func() tea.Msg {
 						return permissionAutoApproveMsg{instance: i}
 					})
 				} else {
-					// Show the permission modal overlay.
+					// Show the permission modal overlay and mark cooldown so the modal isn't
+					// re-triggered while statePermission is active.
+					inst.PermissionRespondedAt = time.Now()
 					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
 					m.permissionOverlay.SetWidth(55)
 					m.pendingPermissionInstance = inst
@@ -1384,13 +1390,6 @@ type clickUpTaskFetchedMsg struct {
 // and the response should be sent to the opencode pane without showing the modal.
 type permissionAutoApproveMsg struct {
 	instance *session.Instance
-}
-
-// permissionResponseMsg is sent after the user selects a choice in the permission overlay.
-type permissionResponseMsg struct {
-	instance *session.Instance
-	choice   overlay.PermissionChoice
-	pattern  string
 }
 
 // addInstanceFinalizer registers a finalizer for the given instance.

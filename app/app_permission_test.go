@@ -11,7 +11,7 @@ import (
 )
 
 func TestPermissionDetection_ShowsOverlayForOpenCode(t *testing.T) {
-	m := newTestHome()
+	m := newTestHome(t)
 	inst := &session.Instance{
 		Title:   "test-agent",
 		Program: "opencode",
@@ -75,7 +75,7 @@ func TestPermissionOverlay_EscDismisses(t *testing.T) {
 }
 
 func TestPermissionCache_AutoApprovesCachedPattern(t *testing.T) {
-	m := newTestHome()
+	m := newTestHome(t)
 	m.permissionCache = config.NewPermissionCache(t.TempDir())
 	m.permissionCache.Remember("/opt/*")
 	assert.True(t, m.permissionCache.IsAllowedAlways("/opt/*"))
