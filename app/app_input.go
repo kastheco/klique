@@ -32,7 +32,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		return nil, false
 	}
 
-	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
+	if m.nav.GetSelectedInstance() != nil && m.nav.GetSelectedInstance().Paused() && name == keys.KeyEnter {
 		return nil, false
 	}
 	// (no special-cased keys to skip here)
@@ -52,7 +52,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Track hover state for the repo button on any mouse event
 	repoHovered := zone.Get(ui.ZoneRepoSwitch).InBounds(msg)
-	m.sidebar.SetRepoHovered(repoHovered)
+	m.nav.SetRepoHovered(repoHovered)
 
 	if msg.Action != tea.MouseActionPress {
 		return m, nil
@@ -60,7 +60,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Handle scroll wheel — always scrolls content (never navigates files)
 	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected != nil && selected.Status != session.Paused {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
@@ -110,13 +110,13 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Determine which column was clicked
-	if x < m.sidebarWidth {
+	if x < m.navWidth {
 		// Click in sidebar
-		m.setFocusSlot(slotSidebar)
+		m.setFocusSlot(slotNav)
 
 		// Search bar is at rows 0-2 in the sidebar content (border takes 3 rows)
 		if contentY >= 0 && contentY <= 2 {
-			m.sidebar.ActivateSearch()
+			m.nav.ActivateSearch()
 			m.state = stateSearch
 			return m, nil
 		}
@@ -125,35 +125,35 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		itemRow := contentY - 4
 		if itemRow >= 0 {
 			m.tabbedWindow.ClearDocumentMode()
-			m.sidebar.ClickItem(itemRow + m.sidebar.GetScrollOffset())
+			m.nav.ClickItem(itemRow + m.nav.GetScrollOffset())
 			m.filterInstancesByTopic()
 			return m, m.instanceChanged()
 		}
-	} else if x < m.sidebarWidth+m.listWidth {
+	} else if x < m.navWidth+0 {
 		// Click in instance list (middle column)
-		m.setFocusSlot(slotList)
+		m.setFocusSlot(slotNav)
 
-		localX := x - m.sidebarWidth
+		localX := x - m.navWidth
 		// Check if clicking on filter tabs
-		if filter, ok := m.list.HandleTabClick(localX, contentY); ok {
-			m.list.SetStatusFilter(filter)
+		if filter, ok := m.nav.HandleTabClick(localX, contentY); ok {
+			m.nav.SetStatusFilter(filter)
 			return m, m.instanceChanged()
 		}
 
 		// Instance list items start after the header (blank lines + tabs + blank lines)
 		listY := contentY - 4
 		if listY >= 0 {
-			itemIdx := m.list.GetItemAtRow(listY)
+			itemIdx := m.nav.GetItemAtRow(listY)
 			if itemIdx >= 0 {
 				m.tabbedWindow.ClearDocumentMode()
-				m.list.SetSelectedInstance(itemIdx)
+				m.nav.SetSelectedInstance(itemIdx)
 				return m, m.instanceChanged()
 			}
 		}
 	} else {
 		// Click in preview/diff area (right column): focus whichever center tab is visible
 		m.setFocusSlot(slotAgent + m.tabbedWindow.GetActiveTab())
-		localX := x - m.sidebarWidth - m.listWidth
+		localX := x - m.navWidth - 0
 		if m.tabbedWindow.HandleTabClick(localX, contentY) {
 			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 			return m, m.instanceChanged()
@@ -165,32 +165,32 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 // handleRightClick builds and shows a context menu based on what was right-clicked.
 func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
-	if x < m.sidebarWidth {
+	if x < m.navWidth {
 		// Right-click in sidebar
 		itemRow := contentY - 4
 		if itemRow >= 0 {
-			m.sidebar.ClickItem(itemRow + m.sidebar.GetScrollOffset())
+			m.nav.ClickItem(itemRow + m.nav.GetScrollOffset())
 			m.filterInstancesByTopic()
 		}
 		// Plan header: show plan context menu
-		if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
+		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 			return m.openPlanContextMenu()
 		}
 		// Topic header: show topic context menu
-		if m.sidebar.IsSelectedTopicHeader() {
+		if m.nav.IsSelectedTopicHeader() {
 			return m.openTopicContextMenu()
 		}
 		return m, nil
-	} else if x >= m.sidebarWidth && x < m.sidebarWidth+m.listWidth {
+	} else if x >= m.navWidth && x < m.navWidth+0 {
 		// Right-click in instance list (middle column) — select the item first
 		listY := contentY - 4
 		if listY >= 0 {
-			itemIdx := m.list.GetItemAtRow(listY)
+			itemIdx := m.nav.GetItemAtRow(listY)
 			if itemIdx >= 0 {
-				m.list.SetSelectedInstance(itemIdx)
+				m.nav.SetSelectedInstance(itemIdx)
 			}
 		}
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -255,7 +255,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			m.newInstance = nil
 			m.promptAfterName = false
-			m.list.Kill()
+			m.nav.Kill()
 			return m, tea.Sequence(
 				tea.WindowSize(),
 				func() tea.Msg {
@@ -320,7 +320,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(err)
 			}
 		case tea.KeyEsc:
-			m.list.Kill()
+			m.nav.Kill()
 			m.state = stateDefault
 			m.newInstance = nil
 			m.instanceChanged()
@@ -341,7 +341,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Check if the form was submitted or canceled
 		if shouldClose {
-			selected := m.list.GetSelectedInstance()
+			selected := m.nav.GetSelectedInstance()
 			// TODO: this should never happen since we set the instance in the previous state.
 			if selected == nil {
 				return m, nil
@@ -379,7 +379,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			if m.textInputOverlay.IsSubmitted() {
 				prTitle := m.textInputOverlay.GetValue()
-				selected := m.list.GetSelectedInstance()
+				selected := m.nav.GetSelectedInstance()
 				if selected != nil && prTitle != "" {
 					m.pendingPRTitle = prTitle
 					m.textInputOverlay = nil
@@ -420,7 +420,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.textInputOverlay.IsSubmitted() {
 				prBody := m.textInputOverlay.GetValue()
 				prTitle := m.pendingPRTitle
-				selected := m.list.GetSelectedInstance()
+				selected := m.nav.GetSelectedInstance()
 				if selected != nil && prTitle != "" {
 					m.textInputOverlay = nil
 					m.pendingPRTitle = ""
@@ -460,7 +460,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			if m.textInputOverlay.IsSubmitted() {
 				newName := m.textInputOverlay.GetValue()
-				selected := m.list.GetSelectedInstance()
+				selected := m.nav.GetSelectedInstance()
 				if selected != nil && newName != "" {
 					selected.Title = newName
 					m.saveAllInstances()
@@ -502,9 +502,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
 		if msg.Type == tea.KeyCtrlUp || msg.Type == tea.KeyCtrlDown {
 			if msg.Type == tea.KeyCtrlUp {
-				m.list.CyclePrevActive()
+				m.nav.CyclePrevActive()
 			} else {
-				m.list.CycleNextActive()
+				m.nav.CycleNextActive()
 			}
 			cmd := m.instanceChanged()
 			// Re-enter focus mode for the newly selected instance
@@ -537,7 +537,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			if m.textInputOverlay.IsSubmitted() {
 				value := m.textInputOverlay.GetValue()
-				selected := m.list.GetSelectedInstance()
+				selected := m.nav.GetSelectedInstance()
 				if selected != nil && value != "" {
 					if err := selected.SendPrompt(value); err != nil {
 						m.textInputOverlay = nil
@@ -611,7 +611,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			// Planner-exit "no": kill planner instance, mark prompted, leave plan ready.
 			if m.pendingPlannerInstanceTitle != "" {
-				for _, inst := range m.list.GetInstances() {
+				for _, inst := range m.nav.GetInstances() {
 					if inst.Title == m.pendingPlannerInstanceTitle {
 						m.plannerPrompted[inst.PlanFile] = true
 						break
@@ -873,38 +873,38 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateSearch {
 		switch {
 		case msg.String() == "esc":
-			m.sidebar.DeactivateSearch()
-			m.sidebar.UpdateMatchCounts(nil, 0)
+			m.nav.DeactivateSearch()
+			m.nav.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
 			m.filterInstancesByTopic()
 			return m, nil
 		case msg.String() == "enter":
-			m.sidebar.DeactivateSearch()
-			m.sidebar.UpdateMatchCounts(nil, 0)
+			m.nav.DeactivateSearch()
+			m.nav.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
 			return m, nil
 		case msg.String() == "up":
-			m.sidebar.Up()
+			m.nav.Up()
 			m.filterSearchWithTopic()
 			return m, m.instanceChanged()
 		case msg.String() == "down":
-			m.sidebar.Down()
+			m.nav.Down()
 			m.filterSearchWithTopic()
 			return m, m.instanceChanged()
 		case msg.Type == tea.KeyBackspace:
-			q := m.sidebar.GetSearchQuery()
+			q := m.nav.GetSearchQuery()
 			if len(q) > 0 {
 				runes := []rune(q)
-				m.sidebar.SetSearchQuery(string(runes[:len(runes)-1]))
+				m.nav.SetSearchQuery(string(runes[:len(runes)-1]))
 			}
 			m.filterBySearch()
 			return m, nil
 		case msg.Type == tea.KeySpace:
-			m.sidebar.SetSearchQuery(m.sidebar.GetSearchQuery() + " ")
+			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + " ")
 			m.filterBySearch()
 			return m, nil
 		case msg.Type == tea.KeyRunes:
-			m.sidebar.SetSearchQuery(m.sidebar.GetSearchQuery() + string(msg.Runes))
+			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + string(msg.Runes))
 			m.filterBySearch()
 			return m, nil
 		}
@@ -923,7 +923,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// If in preview tab and in scroll mode, exit scroll mode
 		if !m.tabbedWindow.IsInDiffTab() && m.tabbedWindow.IsPreviewInScrollMode() {
 			// Use the selected instance from the list
-			selected := m.list.GetSelectedInstance()
+			selected := m.nav.GetSelectedInstance()
 			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
 			if err != nil {
 				return m, m.handleError(err)
@@ -953,9 +953,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Ctrl+Up/Down: cycle through active instances (wrapping)
 	if msg.Type == tea.KeyCtrlUp || msg.Type == tea.KeyCtrlDown {
 		if msg.Type == tea.KeyCtrlUp {
-			m.list.CyclePrevActive()
+			m.nav.CyclePrevActive()
 		} else {
-			m.list.CycleNextActive()
+			m.nav.CycleNextActive()
 		}
 		return m, m.instanceChanged()
 	}
@@ -973,10 +973,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Delete key: dismiss a finished (non-running) instance from the list.
 	if msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace {
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected != nil && selected.Status != session.Running && selected.Status != session.Loading {
 			title := selected.Title
-			m.list.Remove()
+			m.nav.Remove()
 			m.removeFromAllInstances(title)
 			_ = m.saveAllInstances()
 			m.updateSidebarItems()
@@ -994,7 +994,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
-		if m.list.TotalInstances() >= GlobalInstanceLimit {
+		if m.nav.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
@@ -1007,16 +1007,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 
-		m.addInstanceFinalizer(instance, m.list.AddInstance(instance))
+		m.addInstanceFinalizer(instance, m.nav.AddInstance(instance))
 		m.newInstance = instance
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		m.nav.SetSelectedInstance(m.nav.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
 		m.promptAfterName = true
 
 		return m, nil
 	case keys.KeyNewSkipPermissions:
-		if m.list.TotalInstances() >= GlobalInstanceLimit {
+		if m.nav.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
@@ -1030,9 +1030,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 
-		m.addInstanceFinalizer(instance, m.list.AddInstance(instance))
+		m.addInstanceFinalizer(instance, m.nav.AddInstance(instance))
 		m.newInstance = instance
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		m.nav.SetSelectedInstance(m.nav.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
 
@@ -1040,51 +1040,47 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyUp:
 		m.tabbedWindow.ClearDocumentMode()
 		switch m.focusSlot {
-		case slotSidebar:
-			m.sidebar.Up()
+		case slotNav:
+			m.nav.Up()
 			m.filterInstancesByTopic()
 		case slotAgent, slotDiff, slotInfo:
 			m.tabbedWindow.ScrollUp()
-		case slotList:
-			m.list.Up()
 		}
 		return m, m.instanceChanged()
 	case keys.KeyDown:
 		m.tabbedWindow.ClearDocumentMode()
 		switch m.focusSlot {
-		case slotSidebar:
-			m.sidebar.Down()
+		case slotNav:
+			m.nav.Down()
 			m.filterInstancesByTopic()
 		case slotAgent, slotDiff, slotInfo:
 			m.tabbedWindow.ScrollDown()
-		case slotList:
-			m.list.Down()
 		}
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.nextFocusSlot()
 		return m, m.instanceChanged()
 	case keys.KeyFilterAll:
-		m.list.SetStatusFilter(ui.StatusFilterAll)
+		m.nav.SetStatusFilter(ui.StatusFilterAll)
 		return m, m.instanceChanged()
 	case keys.KeyFilterActive:
-		m.list.SetStatusFilter(ui.StatusFilterActive)
+		m.nav.SetStatusFilter(ui.StatusFilterActive)
 		return m, m.instanceChanged()
 	case keys.KeyCycleSort:
-		m.list.CycleSortMode()
+		m.nav.CycleSortMode()
 		return m, m.instanceChanged()
 	case keys.KeySpace:
-		if m.focusSlot == slotSidebar && m.sidebar.GetSelectedID() == ui.SidebarImportClickUp {
+		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
 			m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
 			m.textInputOverlay.SetSize(50, 3)
 			return m, nil
 		}
-		if m.focusSlot == slotSidebar && m.sidebar.ToggleSelectedExpand() {
+		if m.focusSlot == slotNav && m.nav.ToggleSelectedExpand() {
 			return m, nil
 		}
 		// In tree mode, Space on non-expandable rows (stages) is a no-op
-		if m.focusSlot == slotSidebar && m.sidebar.IsTreeMode() {
+		if m.focusSlot == slotNav && m.nav.IsTreeMode() {
 			return m, nil
 		}
 		return m.openContextMenu()
@@ -1102,13 +1098,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if m.focusSlot == slotInfo {
 			return m, nil
 		}
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
 		return m, m.enterFocusMode()
 	case keys.KeySendYes:
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.PromptDetected {
 			return m, nil
 		}
@@ -1117,7 +1113,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyKill:
 		// Soft kill: terminate tmux session only, keep instance in list.
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
@@ -1129,7 +1125,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	case keys.KeyAbort:
 		// Full abort: kill tmux, remove worktree, remove from list + persistence.
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -1155,7 +1151,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		message := fmt.Sprintf("[!] abort session '%s'? this removes the worktree.", selected.Title)
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -1178,7 +1174,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		message := fmt.Sprintf("[!] push changes from session '%s'?", selected.Title)
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCreatePR:
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -1187,7 +1183,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 	case keys.KeyCheckout:
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -1201,7 +1197,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		})
 		return m, nil
 	case keys.KeyResume:
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -1211,34 +1207,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
 		// If the sidebar is focused, handle tree-mode interactions.
-		if m.focusSlot == slotSidebar {
-			if m.sidebar.GetSelectedID() == ui.SidebarImportClickUp {
+		if m.focusSlot == slotNav {
+			if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 				m.state = stateClickUpSearch
 				m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
 				m.textInputOverlay.SetSize(50, 3)
 				return m, nil
 			}
 			// Stage row: trigger that lifecycle stage directly.
-			if planFile, stage, isStage := m.sidebar.GetSelectedPlanStage(); isStage {
+			if planFile, stage, isStage := m.nav.GetSelectedPlanStage(); isStage {
 				return m.triggerPlanStage(planFile, stage)
 			}
 			// Plan header: open plan context menu
-			if m.sidebar.IsSelectedPlanHeader() {
+			if m.nav.IsSelectedPlanHeader() {
 				return m.openPlanContextMenu()
 			}
 			// Topic header: open topic context menu
-			if m.sidebar.IsSelectedTopicHeader() {
+			if m.nav.IsSelectedTopicHeader() {
 				return m.openTopicContextMenu()
 			}
 			// Plan file selected: show context menu with start/view/push/pr options
-			if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
+			if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 				return m.openPlanContextMenu()
 			}
 		}
-		if m.list.NumInstances() == 0 {
+		if m.nav.NumInstances() == 0 {
 			return m, nil
 		}
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
@@ -1248,7 +1244,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
-			ch, err := m.list.Attach()
+			ch, err := m.nav.Attach()
 			if err != nil {
 				m.handleError(err)
 				return
@@ -1259,8 +1255,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyFocusList:
 		// t key always jumps directly to the instance list — no-op when list is hidden.
-		if m.list.TotalInstances() > 0 {
-			m.setFocusSlot(slotList)
+		if m.nav.TotalInstances() > 0 {
+			m.setFocusSlot(slotNav)
 		}
 		return m, nil
 	case keys.KeyViewPlan:
@@ -1273,42 +1269,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// Hide sidebar
 			m.sidebarHidden = true
 			// If sidebar was focused, move focus to agent tab
-			if m.focusSlot == slotSidebar {
+			if m.focusSlot == slotNav {
 				m.setFocusSlot(slotAgent)
 			}
 		}
 		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
-		listVisible := m.list.TotalInstances() > 0
+		listVisible := m.nav.TotalInstances() > 0
 		switch m.focusSlot {
 		case slotInfo:
 			if listVisible {
-				m.setFocusSlot(slotList)
+				m.setFocusSlot(slotNav)
 			} else {
-				m.setFocusSlot(slotSidebar)
+				m.setFocusSlot(slotNav)
 			}
 		case slotAgent, slotDiff:
 			if listVisible {
-				m.setFocusSlot(slotList)
+				m.setFocusSlot(slotNav)
 			} else {
-				m.setFocusSlot(slotSidebar)
+				m.setFocusSlot(slotNav)
 			}
-		case slotList:
-			m.setFocusSlot(slotSidebar)
+		case slotNav:
+			m.setFocusSlot(slotNav)
 		}
 		return m, nil
 	case keys.KeyArrowRight:
-		listVisible := m.list.TotalInstances() > 0
 		switch m.focusSlot {
 		case slotInfo:
 			// Not running — no-op (already rightmost)
-		case slotSidebar:
-			if listVisible {
-				m.setFocusSlot(slotList)
-			} else {
-				m.setFocusSlot(slotAgent)
-			}
-		case slotList:
+		case slotNav:
 			m.setFocusSlot(slotAgent)
 		case slotAgent, slotDiff:
 			// Already rightmost — no-op
@@ -1319,7 +1308,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.formOverlay = overlay.NewFormOverlay("new plan", 60)
 		return m, nil
 	case keys.KeySpawnAgent:
-		if m.list.TotalInstances() >= GlobalInstanceLimit {
+		if m.nav.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
@@ -1331,11 +1320,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())
 		return m, nil
 	case keys.KeySearch:
-		m.sidebar.ActivateSearch()
-		m.sidebar.SelectFirst() // Reset to "All" when starting search
+		m.nav.ActivateSearch()
+		m.nav.SelectFirst() // Reset to "All" when starting search
 		m.state = stateSearch
-		m.setFocusSlot(slotSidebar)
-		m.list.SetFilter("") // Show all instances
+		m.setFocusSlot(slotNav)
+		m.nav.SetFilter("") // Show all instances
 		return m, nil
 	default:
 		return m, nil

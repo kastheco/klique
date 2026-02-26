@@ -108,14 +108,13 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 	}
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	h := &home{
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		list:               list,
+		nav:         list,
 		menu:               ui.NewMenu(),
-		sidebar:            ui.NewSidebar(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
@@ -166,14 +165,13 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 	}
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	h := &home{
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		list:               list,
+		nav:         list,
 		menu:               ui.NewMenu(),
-		sidebar:            ui.NewSidebar(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
@@ -262,14 +260,13 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "test solo", "plan/test-solo", time.Now()))
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	h := &home{
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		list:               list,
+		nav:         list,
 		menu:               ui.NewMenu(),
-		sidebar:            ui.NewSidebar(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
@@ -384,8 +381,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 		planState:      ps,
 		planStateDir:   plansDir,
 		fsm:            newFSMForTest(plansDir).PlanStateMachine,
-		list:           ui.NewList(&sp, false),
-		sidebar:        ui.NewSidebar(),
+		nav:         ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
@@ -393,7 +389,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 	}
 
 	h.updateSidebarPlans()
-	require.True(t, h.sidebar.SelectByID(ui.SidebarPlanPrefix+planFile), "plan should be selectable in sidebar")
+	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+planFile), "plan should be selectable in sidebar")
 
 	_, _ = h.executeContextAction("mark_plan_done")
 

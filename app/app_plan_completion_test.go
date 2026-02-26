@@ -71,16 +71,15 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 	require.NoError(t, err)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(inst)
 
 	h := &home{
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         list,
+		nav:         list,
 		menu:         ui.NewMenu(),
-		sidebar:      ui.NewSidebar(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
 		planState:    ps,
@@ -182,16 +181,15 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 	require.NoError(t, err)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(inst)
 
 	h := &home{
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         list,
+		nav:         list,
 		menu:         ui.NewMenu(),
-		sidebar:      ui.NewSidebar(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
 		planState:    ps,
@@ -285,8 +283,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		list:                  ui.NewList(&sp, false),
-		sidebar:               ui.NewSidebar(),
+		nav:         ui.NewNavigationPanel(&sp),
 	}
 
 	// Construct a metadataResultMsg as the goroutine would: stale PlanState +
@@ -341,16 +338,15 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	require.NoError(t, err)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(coderInst)
 
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
 		appConfig:             config.DefaultConfig(),
-		list:                  list,
+		nav:         list,
 		menu:                  ui.NewMenu(),
-		sidebar:               ui.NewSidebar(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
@@ -375,7 +371,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 
 	// A reviewer instance must have been added to the list.
 	var foundReviewer bool
-	for _, inst := range h.list.GetInstances() {
+	for _, inst := range h.nav.GetInstances() {
 		if inst.PlanFile == planFile && inst.IsReviewer {
 			foundReviewer = true
 			break
@@ -422,16 +418,15 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	reviewerInst.IsReviewer = true
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(reviewerInst)
 
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
 		appConfig:             config.DefaultConfig(),
-		list:                  list,
+		nav:         list,
 		menu:                  ui.NewMenu(),
-		sidebar:               ui.NewSidebar(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
@@ -457,7 +452,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 
 	// A coder instance must have been added with feedback in its prompt.
 	var foundCoder bool
-	for _, inst := range h.list.GetInstances() {
+	for _, inst := range h.nav.GetInstances() {
 		if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
 			foundCoder = true
 			assert.Contains(t, inst.QueuedPrompt, feedback,

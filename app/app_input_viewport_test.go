@@ -27,9 +27,8 @@ func TestHandleKeyPress_DocumentModeConsumesViewportNavigationKeys(t *testing.T)
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         ui.NewList(&spin, false),
+		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		sidebar:      ui.NewSidebar(),
 		tabbedWindow: tw,
 		keySent:      true,
 	}
@@ -59,9 +58,8 @@ func TestHandleKeyPress_DocumentModeScrollsWithDownKey(t *testing.T) {
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         ui.NewList(&spin, false),
+		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		sidebar:      ui.NewSidebar(),
 		tabbedWindow: tw,
 		focusSlot:    slotAgent, // agent slot focused → down scrolls preview
 		keySent:      true,

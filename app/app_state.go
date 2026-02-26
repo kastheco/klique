@@ -59,15 +59,15 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 		FocusMode: m.state == stateFocusAgent,
 	}
 
-	if m.sidebar == nil || m.list == nil {
+	if m.nav == nil {
 		if data.Branch == "" {
 			data.Branch = "main"
 		}
 		return data
 	}
 
-	planFile := m.sidebar.GetSelectedPlanFile()
-	selected := m.list.GetSelectedInstance()
+	planFile := m.nav.GetSelectedPlanFile()
+	selected := m.nav.GetSelectedInstance()
 
 	switch {
 	case planFile != "" && m.planState != nil:
@@ -125,7 +125,7 @@ func (m *home) updateSidebarItems() {
 	planStatuses := make(map[string]ui.TopicStatus)
 	ungroupedCount := 0
 
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		ungroupedCount++
 		started := inst.Started()
 
@@ -139,24 +139,22 @@ func (m *home) updateSidebarItems() {
 		planStatuses[inst.PlanFile] = mergePlanStatus(planSt, inst, started)
 	}
 
-	m.sidebar.SetItems(nil, nil, ungroupedCount, nil, topicStatuses, planStatuses)
+	m.nav.SetItems(nil, nil, ungroupedCount, nil, topicStatuses, planStatuses)
 }
 
 // focusSlot constants for readability.
 const (
-	slotSidebar = 0
-	slotAgent   = 1
-	slotDiff    = 2
-	slotInfo    = 3
-	slotList    = 4
-	slotCount   = 5
+	slotNav   = 0
+	slotAgent = 1
+	slotDiff  = 2
+	slotInfo  = 3
+	slotCount = 4
 )
 
 // setFocusSlot updates which pane has focus and syncs visual state.
 func (m *home) setFocusSlot(slot int) {
 	m.focusSlot = slot
-	m.sidebar.SetFocused(slot == slotSidebar)
-	m.list.SetFocused(slot == slotList)
+	m.nav.SetFocused(slot == slotNav)
 	m.menu.SetFocusSlot(slot)
 
 	// Center pane is focused when any of the 3 center tabs is active.
@@ -180,7 +178,7 @@ func (m *home) nextFocusSlot() {
 		m.setFocusSlot(slotDiff)
 	case slotDiff:
 		m.setFocusSlot(slotInfo)
-	default: // slotInfo, slotSidebar, slotList — all land on agent
+	default: // slotInfo, slotNav — all land on agent
 		m.setFocusSlot(slotAgent)
 	}
 }
@@ -192,7 +190,7 @@ func (m *home) prevFocusSlot() {
 		m.setFocusSlot(slotAgent)
 	case slotInfo:
 		m.setFocusSlot(slotDiff)
-	default: // slotAgent, slotSidebar, slotList — all land on info
+	default: // slotAgent, slotNav — all land on info
 		m.setFocusSlot(slotInfo)
 	}
 }
@@ -203,7 +201,7 @@ func (m *home) prevFocusSlot() {
 // terminal. Only spawns a new terminal if none is attached yet (rare fallback).
 func (m *home) enterFocusMode() tea.Cmd {
 	m.tabbedWindow.ClearDocumentMode()
-	selected := m.list.GetSelectedInstance()
+	selected := m.nav.GetSelectedInstance()
 	if selected == nil || !selected.Started() || selected.Status == session.Paused {
 		return nil
 	}
@@ -272,21 +270,21 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 // current sidebar selection. In tree mode, this highlights matching instances and
 // boosts them to the top. In flat mode, it falls back to the existing SetFilter behavior.
 func (m *home) filterInstancesByTopic() {
-	selectedID := m.sidebar.GetSelectedID()
+	selectedID := m.nav.GetSelectedID()
 
-	if !m.sidebar.IsTreeMode() {
+	if !m.nav.IsTreeMode() {
 		// Flat mode fallback: reachable during startup before SetTopicsAndPlans
 		// is first called (e.g. rebuildInstanceList calls us before updateSidebarPlans).
 		// Once tree mode is active it is never disabled, so this path is transient.
 		switch {
 		case selectedID == ui.SidebarAll:
-			m.list.SetFilter("")
+			m.nav.SetFilter("")
 		case selectedID == ui.SidebarUngrouped:
-			m.list.SetFilter(ui.SidebarUngrouped)
+			m.nav.SetFilter(ui.SidebarUngrouped)
 		case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
-			m.list.SetFilter("")
+			m.nav.SetFilter("")
 		default:
-			m.list.SetFilter(selectedID)
+			m.nav.SetFilter(selectedID)
 		}
 		return
 	}
@@ -295,27 +293,27 @@ func (m *home) filterInstancesByTopic() {
 	switch {
 	case strings.HasPrefix(selectedID, ui.SidebarPlanPrefix):
 		planFile := selectedID[len(ui.SidebarPlanPrefix):]
-		m.list.SetHighlightFilter("plan", planFile)
+		m.nav.SetHighlightFilter("plan", planFile)
 	case strings.HasPrefix(selectedID, ui.SidebarTopicPrefix):
 		topicName := selectedID[len(ui.SidebarTopicPrefix):]
-		m.list.SetHighlightFilter("topic", topicName)
+		m.nav.SetHighlightFilter("topic", topicName)
 	case strings.HasPrefix(selectedID, ui.SidebarPlanStagePrefix):
 		// Stage selected — highlight parent plan
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile != "" {
-			m.list.SetHighlightFilter("plan", planFile)
+			m.nav.SetHighlightFilter("plan", planFile)
 		} else {
-			m.list.SetHighlightFilter("", "")
+			m.nav.SetHighlightFilter("", "")
 		}
 	default:
-		m.list.SetHighlightFilter("", "")
+		m.nav.SetHighlightFilter("", "")
 	}
 }
 
 // filterSearchWithTopic applies the search query scoped to the currently selected topic.
 func (m *home) filterSearchWithTopic() {
-	query := strings.ToLower(m.sidebar.GetSearchQuery())
-	selectedID := m.sidebar.GetSelectedID()
+	query := strings.ToLower(m.nav.GetSearchQuery())
+	selectedID := m.nav.GetSelectedID()
 	topicFilter := ""
 	switch selectedID {
 	case ui.SidebarAll:
@@ -325,37 +323,37 @@ func (m *home) filterSearchWithTopic() {
 	default:
 		topicFilter = selectedID
 	}
-	m.list.SetSearchFilterWithTopic(query, topicFilter)
+	m.nav.SetSearchFilterWithTopic(query, topicFilter)
 }
 
 func (m *home) filterBySearch() {
-	query := strings.ToLower(m.sidebar.GetSearchQuery())
+	query := strings.ToLower(m.nav.GetSearchQuery())
 	if query == "" {
-		m.sidebar.UpdateMatchCounts(nil, 0)
+		m.nav.UpdateMatchCounts(nil, 0)
 		m.filterInstancesByTopic()
 		return
 	}
-	m.list.SetSearchFilter(query)
+	m.nav.SetSearchFilter(query)
 
 	// Calculate match counts for sidebar dimming
 	matchesByTopic := make(map[string]int)
 	totalMatches := 0
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if strings.Contains(strings.ToLower(inst.Title), query) {
 			matchesByTopic[""]++
 			totalMatches++
 		}
 	}
-	m.sidebar.UpdateMatchCounts(matchesByTopic, totalMatches)
+	m.nav.UpdateMatchCounts(matchesByTopic, totalMatches)
 }
 
 // rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
 func (m *home) rebuildInstanceList() {
-	m.list.Clear()
+	m.nav.Clear()
 	for _, inst := range m.allInstances {
 		repoPath := inst.GetRepoPath()
 		if repoPath == "" || repoPath == m.activeRepoPath {
-			m.list.AddInstance(inst)()
+			m.nav.AddInstance(inst)()
 		}
 	}
 	m.filterInstancesByTopic()
@@ -437,7 +435,7 @@ func (m *home) switchToRepo(selection string) {
 		return
 	}
 	m.activeRepoPath = rp
-	m.sidebar.SetRepoName(filepath.Base(rp))
+	m.nav.SetRepoName(filepath.Base(rp))
 	if state, ok := m.appState.(*config.State); ok {
 		state.AddRecentRepo(rp)
 	}
@@ -463,7 +461,7 @@ func (m *home) removeFromAllInstances(title string) {
 // It returns a tea.Cmd when an async operation is needed (terminal spawn).
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
-	selected := m.list.GetSelectedInstance()
+	selected := m.nav.GetSelectedInstance()
 
 	// Clear notification when user selects this instance — they've seen it
 	if selected != nil && selected.Notified {
@@ -541,7 +539,7 @@ func statusString(s session.Status) string {
 
 // updateInfoPane refreshes the info tab data from the selected instance.
 func (m *home) updateInfoPane() {
-	selected := m.list.GetSelectedInstance()
+	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		m.tabbedWindow.SetInfoData(ui.InfoData{HasInstance: false})
 		return
@@ -620,7 +618,7 @@ func (m *home) loadPlanState() {
 // updateSidebarPlans pushes the current plans into the sidebar using the three-level tree API.
 func (m *home) updateSidebarPlans() {
 	if m.planState == nil {
-		m.sidebar.SetTopicsAndPlans(nil, nil, nil)
+		m.nav.SetTopicsAndPlans(nil, nil, nil)
 		return
 	}
 
@@ -690,9 +688,9 @@ func (m *home) updateSidebarPlans() {
 	for _, t := range topics {
 		allVisiblePlans = append(allVisiblePlans, t.Plans...)
 	}
-	m.sidebar.SetPlans(allVisiblePlans)
+	m.nav.SetPlans(allVisiblePlans)
 
-	m.sidebar.SetTopicsAndPlans(topics, ungrouped, history)
+	m.nav.SetTopicsAndPlans(topics, ungrouped, history)
 
 }
 
@@ -708,12 +706,12 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 	// that still shows StatusDone after transitionToReview already ran and set
 	// StatusReviewing. Without this guard, a second reviewer is spawned.
 	reviewerPlans := make(map[string]bool)
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.IsReviewer && inst.PlanFile != "" {
 			reviewerPlans[inst.PlanFile] = true
 		}
 	}
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.PlanFile == "" || inst.IsReviewer {
 			continue
 		}
@@ -755,7 +753,7 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 // Does NOT perform any FSM transition — the caller is responsible for that.
 // Solo agent plans are excluded — the user ends those manually.
 func (m *home) spawnReviewer(planFile string) tea.Cmd {
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.PlanFile == planFile && inst.SoloAgent {
 			return nil
 		}
@@ -794,8 +792,8 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	reviewerInst.IsReviewer = true
 	reviewerInst.QueuedPrompt = prompt
 
-	m.addInstanceFinalizer(reviewerInst, m.list.AddInstance(reviewerInst))
-	m.list.SelectInstance(reviewerInst) // sort-order safe, unlike index arithmetic
+	m.addInstanceFinalizer(reviewerInst, m.nav.AddInstance(reviewerInst))
+	m.nav.SelectInstance(reviewerInst) // sort-order safe, unlike index arithmetic
 
 	m.toastManager.Success(fmt.Sprintf("implementation complete → review started for %s", planName))
 
@@ -861,7 +859,7 @@ func normalizeOpenCodeModelID(model string) string {
 func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	// First pass: identify matching instances by title.
 	var titles []string
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.PlanFile != planFile {
 			continue
 		}
@@ -878,7 +876,7 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	// Second pass: remove from both lists, then kill tmux.
 	// Removal first ensures the death-detection tick cannot see the dead instance.
 	for _, title := range titles {
-		inst := m.list.RemoveByTitle(title)
+		inst := m.nav.RemoveByTitle(title)
 		m.removeFromAllInstances(title)
 		if inst != nil {
 			if err := inst.Kill(); err != nil {
@@ -923,8 +921,8 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	}
 	coderInst.QueuedPrompt = prompt
 
-	m.addInstanceFinalizer(coderInst, m.list.AddInstance(coderInst))
-	m.list.SelectInstance(coderInst)
+	m.addInstanceFinalizer(coderInst, m.nav.AddInstance(coderInst))
+	m.nav.SelectInstance(coderInst)
 
 	m.toastManager.Info(fmt.Sprintf("review changes requested → re-implementing %s", planName))
 
@@ -942,7 +940,7 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 // The rendered output is cached; on cache miss the glamour render runs async
 // via a tea.Cmd so the UI stays responsive.
 func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
-	planFile := m.sidebar.GetSelectedPlanFile()
+	planFile := m.nav.GetSelectedPlanFile()
 	if planFile == "" {
 		return m, nil
 	}
@@ -1290,8 +1288,8 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 		}
 	}
 
-	m.addInstanceFinalizer(inst, m.list.AddInstance(inst))
-	m.list.SelectInstance(inst)
+	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+	m.nav.SelectInstance(inst)
 	return m, tea.Batch(tea.WindowSize(), startCmd)
 }
 
@@ -1361,8 +1359,8 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 		}
 	}
 
-	m.addInstanceFinalizer(inst, m.list.AddInstance(inst))
-	m.list.SelectInstance(inst)
+	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+	m.nav.SelectInstance(inst)
 	return m, tea.Batch(tea.WindowSize(), startCmd)
 }
 
@@ -1403,7 +1401,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 		paused     bool
 	}
 	byPlan := make(map[string][]taskInst)
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.TaskNumber == 0 || inst.PlanFile == "" {
 			continue
 		}
@@ -1512,7 +1510,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 		inst.LoadingMessage = "Connecting to shared worktree..."
 
 		// AddInstance registers in the list immediately; finalizer sets repo name after start.
-		m.addInstanceFinalizer(inst, m.list.AddInstance(inst))
+		m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
@@ -1557,13 +1555,13 @@ func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.Plan
 	// Collect first to avoid mutating the list while iterating.
 	planFile := orch.PlanFile()
 	var staleInsts []*session.Instance
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.PlanFile == planFile && retryingTasks[inst.TaskNumber] {
 			staleInsts = append(staleInsts, inst)
 		}
 	}
 	for _, inst := range staleInsts {
-		m.list.RemoveByTitle(inst.Title)
+		m.nav.RemoveByTitle(inst.Title)
 		m.removeFromAllInstances(inst.Title)
 	}
 

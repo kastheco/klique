@@ -42,16 +42,15 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 	inst.SoloAgent = true
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(inst)
 
 	h := &home{
 		ctx:               context.Background(),
 		state:             stateDefault,
 		appConfig:         config.DefaultConfig(),
-		list:              list,
+		nav:         list,
 		menu:              ui.NewMenu(),
-		sidebar:           ui.NewSidebar(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		planState:         ps,

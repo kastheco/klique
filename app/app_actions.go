@@ -21,23 +21,23 @@ import (
 func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	switch action {
 	case "kill_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected != nil {
 			title := selected.Title
 			m.removeFromAllInstances(title)
-			m.list.Kill()
+			m.nav.Kill()
 			m.saveAllInstances()
 			m.updateSidebarItems()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
 	case "open_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {
 			return m, nil
 		}
 		return m, func() tea.Msg {
-			ch, err := m.list.Attach()
+			ch, err := m.nav.Attach()
 			if err != nil {
 				return err
 			}
@@ -46,7 +46,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 
 	case "pause_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected != nil && selected.Status != session.Paused {
 			if err := selected.Pause(); err != nil {
 				return m, m.handleError(err)
@@ -56,7 +56,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
 	case "resume_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected != nil && selected.Status == session.Paused {
 			if err := selected.Resume(); err != nil {
 				return m, m.handleError(err)
@@ -66,14 +66,14 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
 	case "push_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
 		return m.pushSelectedInstance()
 
 	case "create_pr_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -83,14 +83,14 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "send_prompt_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
 		return m, m.enterFocusMode()
 
 	case "copy_worktree_path":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -102,7 +102,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "copy_branch_name":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -110,7 +110,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "rename_instance":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
@@ -120,7 +120,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "rename_topic_new":
-		topicName := m.sidebar.GetSelectedTopicName()
+		topicName := m.nav.GetSelectedTopicName()
 		if topicName == "" {
 			return m, nil
 		}
@@ -130,7 +130,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "delete_topic_new":
-		topicName := m.sidebar.GetSelectedTopicName()
+		topicName := m.nav.GetSelectedTopicName()
 		if topicName == "" || m.planState == nil {
 			return m, nil
 		}
@@ -150,7 +150,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.WindowSize()
 
 	case "mark_task_complete":
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if selected == nil || selected.TaskNumber == 0 {
 			return m, nil
 		}
@@ -164,7 +164,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.instanceChanged(), m.toastTickCmd())
 
 	case "change_topic":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
@@ -177,28 +177,28 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "start_plan":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
 		return m.triggerPlanStage(planFile, "plan")
 
 	case "start_implement":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
 		return m.triggerPlanStage(planFile, "implement")
 
 	case "start_solo":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
 		return m.triggerPlanStage(planFile, "solo")
 
 	case "start_review":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
@@ -231,14 +231,14 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, m.handleError(fmt.Errorf("no active session for this plan"))
 		}
 		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
-		m.list.SelectInstance(planInst)
+		m.nav.SelectInstance(planInst)
 		m.state = statePRTitle
 		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planInst.Title)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
 	case "merge_plan":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
@@ -273,7 +273,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, m.confirmAction(fmt.Sprintf("merge '%s' branch into main?", planName), mergeAction)
 
 	case "mark_plan_done":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
@@ -299,7 +299,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.WindowSize()
 
 	case "resume_implement":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
@@ -312,7 +312,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, tea.WindowSize()
 
 	case "cancel_plan":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
@@ -329,7 +329,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
 
 	case "modify_plan":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
@@ -342,7 +342,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m.spawnPlanAgent(planFile, "plan", buildModifyPlanPrompt(planFile))
 
 	case "start_over_plan":
-		planFile := m.sidebar.GetSelectedPlanFile()
+		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
 			return m, nil
 		}
@@ -471,11 +471,11 @@ func (m *home) fsmForceToPlanning(planFile string) error {
 // findPlanInstance returns the instance bound to the currently selected plan in the sidebar.
 // Returns nil if no plan is selected or no instance is bound to it.
 func (m *home) findPlanInstance() *session.Instance {
-	planFile := m.sidebar.GetSelectedPlanFile()
+	planFile := m.nav.GetSelectedPlanFile()
 	if planFile == "" {
 		return nil
 	}
-	for _, inst := range m.list.GetInstances() {
+	for _, inst := range m.nav.GetInstances() {
 		if inst.PlanFile == planFile {
 			return inst
 		}
@@ -486,19 +486,19 @@ func (m *home) findPlanInstance() *session.Instance {
 // openContextMenu builds a context menu for the currently focused/selected item
 // (sidebar topic/plan or instance) and positions it next to the selected item.
 func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
-	if m.focusSlot == slotSidebar {
+	if m.focusSlot == slotNav {
 		// Sidebar focused — use plan or topic context menu
-		if planFile := m.sidebar.GetSelectedPlanFile(); planFile != "" {
+		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
 			return m.openPlanContextMenu()
 		}
-		if m.sidebar.IsSelectedTopicHeader() {
+		if m.nav.IsSelectedTopicHeader() {
 			return m.openTopicContextMenu()
 		}
 		return m, nil
 	}
 
 	// Instance list focused — build instance context menu
-	selected := m.list.GetSelectedInstance()
+	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		return m, nil
 	}
@@ -524,15 +524,15 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 		}
 	}
 	// Position at the left edge of the instance list (middle column)
-	x := m.sidebarWidth
-	y := 1 + 4 + m.list.GetSelectedIdx()*4 // PaddingTop(1) + header rows + item offset
+	x := m.navWidth
+	y := 1 + 4 + m.nav.GetSelectedIdx()*4 // PaddingTop(1) + header rows + item offset
 	m.contextMenu = overlay.NewContextMenu(x, y, items)
 	m.state = stateContextMenu
 	return m, nil
 }
 
 func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
-	planFile := m.sidebar.GetSelectedPlanFile()
+	planFile := m.nav.GetSelectedPlanFile()
 	if planFile == "" {
 		return m, nil
 	}
@@ -577,8 +577,8 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 		overlay.ContextMenuItem{Label: "cancel plan", Action: "cancel_plan"},
 	)
 
-	x := m.sidebarWidth
-	y := 1 + 4 + m.sidebar.GetSelectedIdx()
+	x := m.navWidth
+	y := 1 + 4 + m.nav.GetSelectedIdx()
 	m.contextMenu = overlay.NewContextMenu(x, y, items)
 	m.state = stateContextMenu
 	return m, nil
@@ -586,7 +586,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 
 // pushSelectedInstance pushes the selected instance's branch changes.
 func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
-	selected := m.list.GetSelectedInstance()
+	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		return m, nil
 	}
@@ -606,7 +606,7 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 }
 
 func (m *home) openTopicContextMenu() (tea.Model, tea.Cmd) {
-	topicName := m.sidebar.GetSelectedTopicName()
+	topicName := m.nav.GetSelectedTopicName()
 	if topicName == "" {
 		return m, nil
 	}
@@ -614,8 +614,8 @@ func (m *home) openTopicContextMenu() (tea.Model, tea.Cmd) {
 		{Label: "rename topic", Action: "rename_topic_new"},
 		{Label: "delete topic (ungroup plans)", Action: "delete_topic_new"},
 	}
-	x := m.sidebarWidth
-	y := 1 + 4 + m.sidebar.GetSelectedIdx()
+	x := m.navWidth
+	y := 1 + 4 + m.nav.GetSelectedIdx()
 	m.contextMenu = overlay.NewContextMenu(x, y, items)
 	m.state = stateContextMenu
 	return m, nil

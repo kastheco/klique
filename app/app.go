@@ -137,8 +137,8 @@ type home struct {
 
 	// -- UI Components --
 
-	// list displays the list of instances
-	list *ui.List
+	// nav displays plans + instances
+	nav *ui.NavigationPanel
 	// menu displays the bottom menu
 	menu *ui.Menu
 	// statusBar displays the top contextual status bar
@@ -160,10 +160,9 @@ type home struct {
 	// pendingConfirmAction stores the tea.Cmd to run asynchronously when confirmed
 	pendingConfirmAction tea.Cmd
 
-	// sidebar displays the topic sidebar
-	sidebar *ui.Sidebar
+	// nav handles unified navigation state
 	// focusSlot tracks which pane has keyboard focus in the Tab ring:
-	// 0=sidebar, 1=agent tab, 2=diff tab, 3=info tab, 4=instance list
+	// 0=nav, 1=agent tab, 2=diff tab, 3=info tab
 	focusSlot int
 	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
@@ -188,12 +187,11 @@ type home struct {
 	clickUpResults []clickup.SearchResult
 
 	// Layout dimensions for mouse hit-testing
-	sidebarWidth  int
-	listWidth     int
+	navWidth      int
 	tabsWidth     int
 	contentHeight int
 
-	// sidebarHidden tracks whether the sidebar is collapsed (ctrl+s toggle)
+	// sidebarHidden tracks whether the nav is collapsed (ctrl+s toggle)
 	sidebarHidden bool
 
 	// Terminal dimensions for the global background fill.
@@ -296,12 +294,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		pendingReviewFeedback: make(map[string]string),
 	}
 	h.fsm = planfsm.New(h.planStateDir)
-	h.list = ui.NewList(&h.spinner, autoYes)
+	h.nav = ui.NewNavigationPanel(&h.spinner)
 	h.toastManager = overlay.NewToastManager(&h.spinner)
-	h.sidebar = ui.NewSidebar()
-	h.sidebar.SetRepoName(filepath.Base(activeRepoPath))
+
+	h.nav.SetRepoName(filepath.Base(activeRepoPath))
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
-	h.setFocusSlot(slotSidebar) // Start with left sidebar focused
+	h.setFocusSlot(slotNav)
 	h.loadPlanState()
 
 	// Load saved instances
@@ -313,11 +311,11 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 
 	h.allInstances = instances
 
-	// Add instances matching active repo to the list
+	// Add instances matching active repo to the nav
 	for _, instance := range instances {
 		repoPath := instance.GetRepoPath()
 		if repoPath == "" || repoPath == h.activeRepoPath {
-			h.list.AddInstance(instance)()
+			h.nav.AddInstance(instance)()
 			if autoYes {
 				instance.AutoYes = true
 			}
@@ -342,22 +340,17 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// Three-column layout: sidebar (18%), instance list (20%), preview (remaining)
-	// The instance list column is hidden when there are no instances.
-	var sidebarWidth int
+	// Two-column layout: nav + preview
+	var navWidth int
 	if m.sidebarHidden {
-		sidebarWidth = 0
+		navWidth = 0
 	} else {
-		sidebarWidth = int(float32(msg.Width) * 0.25)
-		if sidebarWidth < 20 {
-			sidebarWidth = 20
+		navWidth = msg.Width * 30 / 100
+		if navWidth < 25 {
+			navWidth = 25
 		}
 	}
-	var listWidth int
-	if m.list.TotalInstances() > 0 {
-		listWidth = int(float32(msg.Width) * 0.20)
-	}
-	tabsWidth := msg.Width - sidebarWidth - listWidth
+	tabsWidth := msg.Width - navWidth
 
 	// Keep the keybind rail compact and give the saved rows to the three columns.
 	menuHeight := 1
@@ -377,18 +370,15 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
-	m.list.SetSize(listWidth, contentHeight)
-	m.sidebar.SetSize(sidebarWidth, contentHeight)
+	m.nav.SetSize(navWidth, contentHeight)
 
 	// Store for mouse hit-testing
-	m.sidebarWidth = sidebarWidth
-	m.listWidth = listWidth
+	m.navWidth = navWidth
 	m.tabsWidth = tabsWidth
 	m.contentHeight = contentHeight
 
-	// If the list column disappeared while it had focus, move to sidebar.
-	if listWidth == 0 && m.focusSlot == slotList {
-		m.setFocusSlot(slotSidebar)
+	if navWidth == 0 && m.focusSlot == slotNav {
+		m.setFocusSlot(slotAgent)
 	}
 
 	if m.textInputOverlay != nil {
@@ -402,7 +392,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	if m.previewTerminal != nil {
 		m.previewTerminal.Resize(previewWidth, previewHeight)
 	}
-	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
+	if err := m.nav.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
 		log.ErrorLog.Print(err)
 	}
 	m.menu.SetSize(msg.Width, menuHeight)
@@ -457,7 +447,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else if m.previewTerminal == nil && !m.tabbedWindow.IsDocumentMode() {
 			// No terminal — show appropriate fallback state.
-			selected := m.list.GetSelectedInstance()
+			selected := m.nav.GetSelectedInstance()
 			if selected != nil && selected.Started() && selected.Status != session.Paused && selected.Status != session.Loading {
 				// Instance is running but terminal hasn't attached yet — show connecting indicator.
 				m.tabbedWindow.SetConnectingState()
@@ -491,7 +481,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case clickUpDetectedMsg:
 		m.clickUpConfig = &msg.Config
-		m.sidebar.SetClickUpAvailable(true)
+		m.nav.SetClickUpAvailable(true)
 		return m, nil
 	case clickUpSearchResultMsg:
 		if msg.Err != nil {
@@ -524,7 +514,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// copied but the pointers are shared — CollectMetadata only reads
 		// instance fields that don't change between ticks (started, Status,
 		// tmuxSession, gitWorktree, Program).
-		instances := m.list.GetInstances()
+		instances := m.nav.GetInstances()
 		snapshots := make([]*session.Instance, len(instances))
 		copy(snapshots, instances)
 		planStateDir := m.planStateDir // snapshot for goroutine
@@ -608,7 +598,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch sig.Event {
 			case planfsm.ImplementFinished:
 				// Pause the coder that wrote this signal.
-				for _, inst := range m.list.GetInstances() {
+				for _, inst := range m.nav.GetInstances() {
 					if inst.PlanFile == sig.PlanFile && inst.AgentType == session.AgentTypeCoder {
 						inst.ImplementationComplete = true
 						_ = inst.Pause()
@@ -622,7 +612,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				feedback := sig.Body
 				m.pendingReviewFeedback[sig.PlanFile] = feedback
 				// Pause the reviewer that wrote this signal.
-				for _, inst := range m.list.GetInstances() {
+				for _, inst := range m.nav.GetInstances() {
 					if inst.PlanFile == sig.PlanFile && inst.IsReviewer {
 						_ = inst.Pause()
 						break
@@ -640,7 +630,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply collected metadata to instances — zero I/O, just field writes.
 		// All subprocess calls (TapEnter, SendPrompt) are deferred to tea.Cmds.
 		instanceMap := make(map[string]*session.Instance)
-		for _, inst := range m.list.GetInstances() {
+		for _, inst := range m.nav.GetInstances() {
 			instanceMap[inst.Title] = inst
 		}
 
@@ -705,7 +695,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Clear activity for non-started / paused instances
-		for _, inst := range m.list.GetInstances() {
+		for _, inst := range m.nav.GetInstances() {
 			if !inst.Started() || inst.Paused() {
 				inst.LastActivity = nil
 			}
@@ -725,7 +715,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, md := range msg.Results {
 				tmuxAliveMap[md.Title] = md.TmuxAlive
 			}
-			for _, inst := range m.list.GetInstances() {
+			for _, inst := range m.nav.GetInstances() {
 				if inst.PlanFile == "" || !inst.IsReviewer || !inst.Started() || inst.Paused() {
 					continue
 				}
@@ -747,7 +737,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// plan is StatusPlanning (no sentinel written, tmux-death fallback) or
 			// StatusReady (sentinel processed this tick, FSM transitioned). Skip if
 			// already prompted (yes/no answered) or if a confirm overlay is active.
-			for _, inst := range m.list.GetInstances() {
+			for _, inst := range m.nav.GetInstances() {
 				if m.state == stateConfirm {
 					break
 				}
@@ -783,7 +773,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// implementation branch before advancing to reviewing.
 			// Skip when a confirmation overlay is already showing to avoid re-prompting
 			// on every tick while the user is deciding.
-			for _, inst := range m.list.GetInstances() {
+			for _, inst := range m.nav.GetInstances() {
 				if m.state == stateConfirm {
 					break
 				}
@@ -852,7 +842,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					planName := planstate.DisplayName(planFile)
 
 					// Pause all task instances (they're done, free up resources).
-					for _, inst := range m.list.GetInstances() {
+					for _, inst := range m.nav.GetInstances() {
 						if inst.PlanFile == capturedPlanFile && inst.TaskNumber > 0 {
 							inst.ImplementationComplete = true
 							_ = inst.Pause()
@@ -925,7 +915,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.instanceChanged()
 	case previewTerminalReadyMsg:
 		// Discard stale attach if selection changed while spawning.
-		selected := m.list.GetSelectedInstance()
+		selected := m.nav.GetSelectedInstance()
 		if msg.err != nil || selected == nil || selected.Title != msg.instanceTitle {
 			if msg.term != nil {
 				msg.term.Close()
@@ -937,7 +927,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case killInstanceMsg:
 		// Async pre-kill checks passed — safe to mutate model in Update.
-		m.list.Kill()
+		m.nav.Kill()
 		m.removeFromAllInstances(msg.title)
 		m.saveAllInstances()
 		m.updateSidebarItems()
@@ -968,7 +958,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		planName := planstate.DisplayName(msg.planFile)
 		for _, task := range orch.CurrentWaveTasks() {
 			taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
-			for _, inst := range m.list.GetInstances() {
+			for _, inst := range m.nav.GetInstances() {
 				if inst.Title == taskTitle && inst.PromptDetected {
 					if err := inst.Pause(); err != nil {
 						log.WarningLog.Printf("could not pause task %s: %v", taskTitle, err)
@@ -996,8 +986,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		for _, inst := range taskInsts {
-			if m.list.SelectInstance(inst) {
-				m.list.Kill()
+			if m.nav.SelectInstance(inst) {
+				m.nav.Kill()
 			}
 			m.removeFromAllInstances(inst.Title)
 		}
@@ -1012,7 +1002,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		planName := planstate.DisplayName(planFile)
 
 		// Push the implementation branch (best-effort, non-blocking).
-		for _, inst := range m.list.GetInstances() {
+		for _, inst := range m.nav.GetInstances() {
 			if inst.PlanFile == planFile && inst.TaskNumber > 0 {
 				worktree, err := inst.GetGitWorktree()
 				if err == nil {
@@ -1051,7 +1041,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Mark the coder instance as implementation-complete and pause it.
-		for _, inst := range m.list.GetInstances() {
+		for _, inst := range m.nav.GetInstances() {
 			if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
 				inst.ImplementationComplete = true
 				_ = inst.Pause()
@@ -1082,8 +1072,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case instanceStartedMsg:
 		if msg.err != nil {
 			// Remove the specific instance that failed — not the currently selected one.
-			msg.instance.Kill()
-			m.list.RemoveByTitle(msg.instance.Title)
+			_ = msg.instance.Kill()
+			m.nav.RemoveByTitle(msg.instance.Title)
 			m.removeFromAllInstances(msg.instance.Title)
 			m.updateSidebarItems()
 			return m, m.handleError(msg.err)
@@ -1110,7 +1100,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.path != "" {
 			m.activeRepoPath = msg.path
-			m.sidebar.SetRepoName(filepath.Base(msg.path))
+			m.nav.SetRepoName(filepath.Base(msg.path))
 			if state, ok := m.appState.(*config.State); ok {
 				state.AddRecentRepo(msg.path)
 			}
@@ -1150,14 +1140,10 @@ func (m *home) View() string {
 	colStyle := lipgloss.NewStyle().Height(m.contentHeight)
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
 
-	// Layout: sidebar | instance list (middle) | preview/tabs (right)
-	// The instance list column is omitted when there are no instances.
+	// Layout: nav | preview/tabs
 	var cols []string
 	if !m.sidebarHidden {
-		cols = append(cols, colStyle.Render(m.sidebar.String()))
-	}
-	if m.listWidth > 0 {
-		cols = append(cols, colStyle.Render(m.list.String()))
+		cols = append(cols, colStyle.Render(m.nav.String()))
 	}
 	cols = append(cols, previewWithPadding)
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
@@ -1166,8 +1152,8 @@ func (m *home) View() string {
 		m.statusBar.SetData(m.computeStatusBarData())
 		statusBarView = m.statusBar.String()
 	}
-	if m.menu != nil && m.sidebar != nil {
-		m.menu.SetSidebarSpaceAction(m.sidebar.SelectedSpaceAction())
+	if m.menu != nil && m.nav != nil {
+		m.menu.SetSidebarSpaceAction(m.nav.SelectedSpaceAction())
 	}
 
 	mainView := lipgloss.JoinVertical(

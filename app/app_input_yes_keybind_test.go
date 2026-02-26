@@ -20,8 +20,8 @@ func TestHandleKeyPress_YesKeyQueuesPromptForPromptDetectedInstance(t *testing.T
 	inst.SetStatus(session.Running)
 	inst.PromptDetected = true
 
-	h.list.AddInstance(inst)()
-	h.list.SetSelectedInstance(0)
+	h.nav.AddInstance(inst)()
+	h.nav.SetSelectedInstance(0)
 	h.keySent = true
 
 	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
@@ -39,8 +39,8 @@ func TestHandleKeyPress_YesKeyIgnoredWhenInstanceIsNotPromptDetected(t *testing.
 	inst.MarkStartedForTest()
 	inst.SetStatus(session.Running)
 
-	h.list.AddInstance(inst)()
-	h.list.SetSelectedInstance(0)
+	h.nav.AddInstance(inst)()
+	h.nav.SetSelectedInstance(0)
 	h.keySent = true
 
 	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})

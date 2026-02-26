@@ -24,14 +24,13 @@ import (
 func waveFlowHome(t *testing.T, ps *planstate.PlanState, plansDir string, orchMap map[string]*WaveOrchestrator) *home {
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	h := &home{
 		ctx:               context.Background(),
 		state:             stateDefault,
 		appConfig:         config.DefaultConfig(),
-		list:              list,
+		nav:         list,
 		menu:              ui.NewMenu(),
-		sidebar:           ui.NewSidebar(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		planState:         ps,
@@ -62,9 +61,8 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 		ctx:                        context.Background(),
 		state:                      stateConfirm,
 		appConfig:                  config.DefaultConfig(),
-		list:                       ui.NewList(&sp, false),
+		nav:         ui.NewNavigationPanel(&sp),
 		menu:                       ui.NewMenu(),
-		sidebar:                    ui.NewSidebar(),
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
 		waveOrchestrators:          map[string]*WaveOrchestrator{"test.md": orch},
@@ -116,7 +114,7 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 	inst.SetStatus(session.Paused)
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "paused-task-T1", TmuxAlive: false}},
@@ -199,9 +197,8 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 		ctx:                        context.Background(),
 		state:                      stateConfirm,
 		appConfig:                  config.DefaultConfig(),
-		list:                       ui.NewList(&sp, false),
+		nav:         ui.NewNavigationPanel(&sp),
 		menu:                       ui.NewMenu(),
-		sidebar:                    ui.NewSidebar(),
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
 		waveOrchestrators:          map[string]*WaveOrchestrator{planFile: orch},
@@ -246,7 +243,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	list := ui.NewList(&sp, false)
+	list := ui.NewNavigationPanel(&sp)
 	h := &home{
 		ctx:               context.Background(),
 		state:             stateDefault,
@@ -256,9 +253,8 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 		fsm:               planfsm.New(plansDir),
 		activeRepoPath:    dir,
 		program:           "opencode",
-		list:              list,
+		nav:         list,
 		menu:              ui.NewMenu(),
-		sidebar:           ui.NewSidebar(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		waveOrchestrators: make(map[string]*WaveOrchestrator),
@@ -311,7 +307,7 @@ func TestPlannerExit_ShowsImplementConfirm(t *testing.T) {
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
 	h.plannerPrompted = make(map[string]bool)
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "planner-exit-inst", TmuxAlive: false}},
@@ -351,7 +347,7 @@ func TestPlannerExit_NoRePromptAfterAnswer(t *testing.T) {
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
 	h.plannerPrompted = map[string]bool{planFile: true} // already answered
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "planner-no-reprompt", TmuxAlive: false}},
@@ -387,7 +383,7 @@ func TestPlannerExit_NoPromptWhileAlive(t *testing.T) {
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
 	h.plannerPrompted = make(map[string]bool)
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "planner-alive", TmuxAlive: true}},
@@ -419,9 +415,8 @@ func TestPlannerExit_EscPreservesForRePrompt(t *testing.T) {
 		ctx:                         context.Background(),
 		state:                       stateConfirm,
 		appConfig:                   config.DefaultConfig(),
-		list:                        ui.NewList(&sp, false),
+		nav:         ui.NewNavigationPanel(&sp),
 		menu:                        ui.NewMenu(),
-		sidebar:                     ui.NewSidebar(),
 		tabbedWindow:                ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:                overlay.NewToastManager(&sp),
 		waveOrchestrators:           make(map[string]*WaveOrchestrator),
@@ -429,7 +424,7 @@ func TestPlannerExit_EscPreservesForRePrompt(t *testing.T) {
 		pendingPlannerInstanceTitle: "planner-esc-inst",
 		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'esc-reprompt' is ready. Start implementation?"),
 	}
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	// Press esc
 	keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
@@ -485,7 +480,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	h.fsm = planfsm.New(plansDir)
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "all-complete-W1-T1", TmuxAlive: true}},
@@ -580,7 +575,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	h.fsm = planfsm.New(plansDir)
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "multi-wave-W2-T2", TmuxAlive: true}},
@@ -662,16 +657,16 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	h.allInstances = []*session.Instance{inst1, failedInst6}
 	h.activeRepoPath = dir
 	h.program = "claude"
-	_ = h.list.AddInstance(inst1)
-	_ = h.list.AddInstance(failedInst6)
+	_ = h.nav.AddInstance(inst1)
+	_ = h.nav.AddInstance(failedInst6)
 
 	// Verify we start with 2 instances
-	require.Len(t, h.list.GetInstances(), 2, "should start with 2 instances")
+	require.Len(t, h.nav.GetInstances(), 2, "should start with 2 instances")
 
 	// Count instances with TaskNumber==6 before retry
 	countTask6 := func() int {
 		count := 0
-		for _, inst := range h.list.GetInstances() {
+		for _, inst := range h.nav.GetInstances() {
 			if inst.TaskNumber == 6 && inst.PlanFile == planFile {
 				count++
 			}
@@ -687,7 +682,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	h.retryFailedWaveTasks(orch, entry)
 
 	// The old failed task 6 instance must have been removed from the list.
-	for _, inst := range h.list.GetInstances() {
+	for _, inst := range h.nav.GetInstances() {
 		if inst == failedInst6 {
 			t.Fatal("old failed task-6 instance must be removed from the list on retry")
 		}
@@ -702,7 +697,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 
 	// Task 1 instance must still be there (it wasn't retried)
 	foundTask1 := false
-	for _, inst := range h.list.GetInstances() {
+	for _, inst := range h.nav.GetInstances() {
 		if inst.TaskNumber == 1 && inst.PlanFile == planFile {
 			foundTask1 = true
 		}
@@ -734,9 +729,8 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		ctx:                         context.Background(),
 		state:                       stateConfirm,
 		appConfig:                   config.DefaultConfig(),
-		list:                        ui.NewList(&sp, false),
+		nav:         ui.NewNavigationPanel(&sp),
 		menu:                        ui.NewMenu(),
-		sidebar:                     ui.NewSidebar(),
 		tabbedWindow:                ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:                overlay.NewToastManager(&sp),
 		storage:                     storage,
@@ -746,7 +740,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'cancel-kill' is ready. Start implementation?"),
 		allInstances:                []*session.Instance{inst},
 	}
-	_ = h.list.AddInstance(inst)
+	_ = h.nav.AddInstance(inst)
 
 	// Press 'n' (cancel key — default for confirmation overlay)
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
