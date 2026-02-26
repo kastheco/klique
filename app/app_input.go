@@ -1022,6 +1022,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
+		// Info tab is read-only — don't enter focus mode
+		if m.focusSlot == slotInfo {
+			return m, nil
+		}
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil

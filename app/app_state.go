@@ -147,6 +147,7 @@ const (
 	slotAgent   = 1
 	slotDiff    = 2
 	slotGit     = 3
+	slotInfo    = slotGit
 	slotList    = 4
 	slotCount   = 5
 )
