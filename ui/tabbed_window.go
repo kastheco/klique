@@ -78,9 +78,9 @@ func (w *TabbedWindow) SetFocused(focused bool) {
 func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, info *InfoPane) *TabbedWindow {
 	return &TabbedWindow{
 		tabs: []string{
-			"\uea85 Agent",
-			"\ueae1 Diff",
-			"\uea74 Info",
+			"\uea85 agent",
+			"\ueae1 diff",
+			"\uea74 info",
 		},
 		preview:    preview,
 		diff:       diff,
