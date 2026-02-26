@@ -164,6 +164,7 @@ func (i *Instance) StartOnBranch(branch string) error {
 	} else {
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
+	tmuxSession.SetAgentType(i.AgentType)
 	tmuxSession.ProgressFunc = func(stage int, desc string) {
 		i.setLoadingProgress(3+stage, desc)
 	}

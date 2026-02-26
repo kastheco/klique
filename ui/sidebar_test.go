@@ -369,7 +369,7 @@ func TestSidebar_ImportRowVisible(t *testing.T) {
 	s.SetTopicsAndPlans(nil, nil, nil)
 
 	rendered := s.String()
-	assert.Contains(t, rendered, "Import from ClickUp")
+	assert.Contains(t, rendered, "import from clickup")
 }
 
 func TestSidebar_ImportRowHidden(t *testing.T) {
@@ -379,7 +379,7 @@ func TestSidebar_ImportRowHidden(t *testing.T) {
 	s.SetTopicsAndPlans(nil, nil, nil)
 
 	rendered := s.String()
-	assert.NotContains(t, rendered, "Import from ClickUp")
+	assert.NotContains(t, rendered, "import from clickup")
 }
 
 func TestSidebar_GetSelectedID_ImportRow(t *testing.T) {

@@ -91,7 +91,7 @@ const (
 	rowKindStage                               // plan lifecycle stage
 	rowKindHistoryToggle                       // "History" toggle row
 	rowKindCancelled                           // cancelled plan (strikethrough)
-	rowKindImportAction                        // "+ Import from ClickUp" action row
+	rowKindImportAction                        // "+ import from clickup" action row
 )
 
 // sidebarRow is a single rendered row in the sidebar.
@@ -749,7 +749,7 @@ func (s *Sidebar) rebuildRows() {
 		rows = append(rows, sidebarRow{
 			Kind:   rowKindImportAction,
 			ID:     SidebarImportClickUp,
-			Label:  "+ Import from ClickUp",
+			Label:  "+ import from clickup",
 			Indent: 0,
 		})
 	}
