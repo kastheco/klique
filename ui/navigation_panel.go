@@ -41,6 +41,7 @@ const (
 	navRowPlanHeader navRowKind = iota
 	navRowInstance
 	navRowSoloHeader
+	navRowTopicHeader
 	navRowImportAction
 	navRowHistoryToggle
 	navRowHistoryPlan
@@ -204,7 +205,9 @@ func (n *NavigationPanel) rebuildRows() {
 	})
 
 	rows := make([]navRow, 0, len(plans)+len(n.instances)+len(n.historyPlans)+len(n.cancelled)+4)
-	for _, p := range plans {
+
+	// Helper to append a plan header + its child instances.
+	appendPlan := func(p PlanDisplay) {
 		insts := instancesByPlan[p.Filename]
 		hasRunning, hasNotification := aggregateNavPlanStatus(insts, n.planStatuses[p.Filename])
 		collapsed := n.isPlanCollapsed(p.Filename, hasRunning, hasNotification)
@@ -230,7 +233,23 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	if len(solo) > 0 {
+	// Emit active plans (sort key 0=attention, 1=running), then solo, then idle (sort key 2).
+	soloInserted := false
+	for _, p := range plans {
+		sk := navPlanSortKey(p, instancesByPlan[p.Filename], n.planStatuses[p.Filename])
+		if sk >= 2 && !soloInserted {
+			soloInserted = true
+			if len(solo) > 0 {
+				rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "solo"})
+				for _, inst := range solo {
+					rows = append(rows, navRow{Kind: navRowInstance, ID: "inst:" + inst.Title, Label: inst.Title, Instance: inst})
+				}
+			}
+		}
+		appendPlan(p)
+	}
+	// If all plans were active (or no plans), solo goes at the end of plans.
+	if !soloInserted && len(solo) > 0 {
 		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "solo"})
 		for _, inst := range solo {
 			rows = append(rows, navRow{Kind: navRowInstance, ID: "inst:" + inst.Title, Label: inst.Title, Instance: inst})
@@ -698,7 +717,7 @@ func (n *NavigationPanel) navInstanceStatusIcon(inst *session.Instance) string {
 	switch inst.Status {
 	case session.Running, session.Loading:
 		if n.spinner != nil {
-			return n.spinner.View()
+			return strings.TrimRight(n.spinner.View(), " ")
 		}
 		return navRunningIconStyle.Render("●")
 	case session.Ready:
@@ -736,6 +755,19 @@ func navSectionLabel(key int) string {
 	}
 }
 
+// navDividerLine builds a full-width rule like "──── label ────" spanning w cells.
+func navDividerLine(label string, w int) string {
+	inner := " " + label + " "
+	innerW := runewidth.StringWidth(inner)
+	remaining := w - innerW
+	if remaining < 2 {
+		return navHistoryDivStyle.Render(inner)
+	}
+	left := remaining / 2
+	right := remaining - left
+	return navHistoryDivStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
+}
+
 // renderNavRow renders a single row's content (without selection styling).
 func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 	switch row.Kind {
@@ -766,15 +798,23 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 
 	case navRowInstance:
 		inst := row.Instance
+		isSolo := row.PlanFile == ""
+
 		if inst == nil {
+			if isSolo {
+				return row.Label
+			}
 			return "    " + row.Label
 		}
 		title := navInstanceTitle(inst)
 		statusIcon := n.navInstanceStatusIcon(inst)
 		statusW := lipgloss.Width(statusIcon)
 
-		const indentW = 4
-		// Layout: indent(4) + title + gap + space(1) + status
+		indentW := 4
+		if isSolo {
+			indentW = 0
+		}
+		// Layout: indent + title + gap + space(1) + status
 		maxLabel := contentWidth - indentW - 1 - statusW
 		if maxLabel < 3 {
 			maxLabel = 3
@@ -788,17 +828,24 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		if gap < 0 {
 			gap = 0
 		}
-		return "    " + navInstanceLabelStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
+
+		indent := "    "
+		labelStyle := navInstanceLabelStyle
+		if isSolo {
+			indent = ""
+			labelStyle = navPlanLabelStyle
+		}
+		return indent + labelStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
 
 	case navRowSoloHeader:
-		return navHistoryDivStyle.Render("── solo ──")
+		return navDividerLine("solo", contentWidth)
 
 	case navRowHistoryToggle:
 		chevron := "▸"
 		if !row.Collapsed {
 			chevron = "▾"
 		}
-		return navHistoryDivStyle.Render("── " + chevron + " history ──")
+		return navDividerLine(chevron+" history", contentWidth)
 
 	case navRowHistoryPlan:
 		label := row.Label
@@ -850,7 +897,7 @@ func (n *NavigationPanel) String() string {
 		height = 4
 	}
 
-	itemWidth := innerWidth
+	itemWidth := innerWidth - 2   // border has Padding(0,1) → content area is 2 chars narrower
 	contentWidth := itemWidth - 2 // account for Padding(0,1) in row styles
 	if contentWidth < 4 {
 		contentWidth = 4
@@ -901,7 +948,7 @@ func (n *NavigationPanel) String() string {
 			}
 			if sk != lastPlanKey {
 				label := navSectionLabel(sk)
-				divLine := navSectionDivStyle.Width(itemWidth).Render("── " + label + " ──")
+				divLine := navDividerLine(label, itemWidth)
 				items = append(items, visItem{line: divLine, rowIdx: -1})
 				lastPlanKey = sk
 			}
