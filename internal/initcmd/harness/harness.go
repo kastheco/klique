@@ -2,8 +2,8 @@ package harness
 
 // AgentConfig holds the wizard-collected configuration for one agent role.
 type AgentConfig struct {
-	Role        string   // "coder", "reviewer", "planner", or custom
-	Harness     string   // "claude", "opencode", "codex"
+	Role        string // "coder", "reviewer", "planner", or custom
+	Harness     string // "opencode", "claude", "codex"
 	Model       string
 	Temperature *float64 // nil = harness default
 	Effort      string   // "" = harness default
@@ -32,8 +32,8 @@ type Registry struct {
 // NewRegistry creates a registry with all built-in harness adapters.
 func NewRegistry() *Registry {
 	r := &Registry{harnesses: make(map[string]Harness)}
-	r.Register(&Claude{})
 	r.Register(&OpenCode{})
+	r.Register(&Claude{})
 	r.Register(&Codex{})
 	return r
 }

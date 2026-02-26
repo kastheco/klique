@@ -4,7 +4,6 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -20,70 +19,91 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestGetClaudeCommand(t *testing.T) {
-	t.Run("finds claude in PATH", func(t *testing.T) {
-		originalPath := os.Getenv("PATH")
+func TestGetDefaultCommand(t *testing.T) {
+	t.Run("finds opencode in PATH", func(t *testing.T) {
+		tempDir := t.TempDir()
+		opencodePath := filepath.Join(tempDir, "opencode")
+
+		err := os.WriteFile(opencodePath, []byte("#!/bin/bash\necho 'mock opencode'"), 0755)
+		require.NoError(t, err)
+
+		t.Setenv("PATH", tempDir)
+		t.Setenv("SHELL", "/bin/sh")
+
+		result, err := GetDefaultCommand()
+
+		assert.NoError(t, err)
+		assert.True(t, strings.Contains(result, "opencode"))
+	})
+
+	t.Run("falls back to claude when opencode is missing", func(t *testing.T) {
 		tempDir := t.TempDir()
 		claudePath := filepath.Join(tempDir, "claude")
 
 		err := os.WriteFile(claudePath, []byte("#!/bin/bash\necho 'mock claude'"), 0755)
 		require.NoError(t, err)
 
-		t.Setenv("PATH", tempDir+":"+originalPath)
-		t.Setenv("SHELL", "/bin/bash")
+		t.Setenv("PATH", tempDir)
+		t.Setenv("SHELL", "/bin/sh")
 
-		result, err := GetClaudeCommand()
+		result, err := GetDefaultCommand()
 
 		assert.NoError(t, err)
 		assert.True(t, strings.Contains(result, "claude"))
 	})
 
-	t.Run("handles missing claude command", func(t *testing.T) {
+	t.Run("handles missing opencode and claude commands", func(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Setenv("PATH", tempDir)
-		t.Setenv("SHELL", "/bin/bash")
+		t.Setenv("SHELL", "/bin/sh")
 
-		result, err := GetClaudeCommand()
+		result, err := GetDefaultCommand()
 
 		assert.Error(t, err)
 		assert.Equal(t, "", result)
-		assert.Contains(t, err.Error(), "claude command not found")
+		assert.Contains(t, err.Error(), "neither opencode nor claude command found")
 	})
 
 	t.Run("handles empty SHELL environment", func(t *testing.T) {
-		originalPath := os.Getenv("PATH")
-		originalShell := os.Getenv("SHELL")
 		tempDir := t.TempDir()
-		claudePath := filepath.Join(tempDir, "claude")
+		opencodePath := filepath.Join(tempDir, "opencode")
 
-		err := os.WriteFile(claudePath, []byte("#!/bin/bash\necho 'mock claude'"), 0755)
+		err := os.WriteFile(opencodePath, []byte("#!/bin/bash\necho 'mock opencode'"), 0755)
 		require.NoError(t, err)
 
-		t.Setenv("PATH", tempDir+":"+originalPath)
-		os.Unsetenv("SHELL")
-		t.Cleanup(func() {
-			if originalShell != "" {
-				os.Setenv("SHELL", originalShell)
-			}
-		})
+		t.Setenv("PATH", tempDir)
+		t.Setenv("HOME", tempDir)
+		t.Setenv("SHELL", "")
 
-		result, err := GetClaudeCommand()
+		result, err := GetDefaultCommand()
 
 		assert.NoError(t, err)
-		assert.True(t, strings.Contains(result, "claude"))
+		assert.True(t, strings.Contains(result, "opencode"))
+	})
+
+	t.Run("prefers opencode when both commands exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		opencodePath := filepath.Join(tempDir, "opencode")
+		claudePath := filepath.Join(tempDir, "claude")
+
+		err := os.WriteFile(opencodePath, []byte("#!/bin/bash\necho 'mock opencode'"), 0755)
+		require.NoError(t, err)
+		err = os.WriteFile(claudePath, []byte("#!/bin/bash\necho 'mock claude'"), 0755)
+		require.NoError(t, err)
+
+		t.Setenv("PATH", tempDir)
+		t.Setenv("SHELL", "/bin/sh")
+
+		result, err := GetDefaultCommand()
+
+		assert.NoError(t, err)
+		assert.True(t, strings.Contains(result, "opencode"))
 	})
 
 	t.Run("handles alias parsing", func(t *testing.T) {
-		aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
-
-		output := "claude: aliased to /usr/local/bin/claude"
-		matches := aliasRegex.FindStringSubmatch(output)
-		assert.Len(t, matches, 2)
-		assert.Equal(t, "/usr/local/bin/claude", matches[1])
-
-		output = "/usr/local/bin/claude"
-		matches = aliasRegex.FindStringSubmatch(output)
-		assert.Len(t, matches, 0)
+		assert.Equal(t, "/usr/local/bin/opencode", parseCommandOutput("opencode: aliased to /usr/local/bin/opencode"))
+		assert.Equal(t, "/usr/local/bin/opencode", parseCommandOutput("/usr/local/bin/opencode"))
+		assert.Equal(t, "", parseCommandOutput("   \n"))
 	})
 }
 
@@ -97,6 +117,16 @@ func TestDefaultConfig(t *testing.T) {
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.True(t, strings.HasSuffix(config.BranchPrefix, "/"))
+	})
+
+	t.Run("falls back to opencode when command detection fails", func(t *testing.T) {
+		tempDir := t.TempDir()
+		t.Setenv("PATH", tempDir)
+		t.Setenv("SHELL", "/bin/sh")
+
+		config := DefaultConfig()
+
+		assert.Equal(t, "opencode", config.DefaultProgram)
 	})
 }
 

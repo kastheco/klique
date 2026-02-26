@@ -18,14 +18,14 @@ func TestNewRegistry(t *testing.T) {
 	})
 
 	t.Run("All returns stable order", func(t *testing.T) {
-		assert.Equal(t, []string{"claude", "opencode", "codex"}, r.All())
+		assert.Equal(t, []string{"opencode", "claude", "codex"}, r.All())
 	})
 
 	t.Run("DetectAll returns results for every harness", func(t *testing.T) {
 		results := r.DetectAll()
 		require.Len(t, results, 3)
-		assert.Equal(t, "claude", results[0].Name)
-		assert.Equal(t, "opencode", results[1].Name)
+		assert.Equal(t, "opencode", results[0].Name)
+		assert.Equal(t, "claude", results[1].Name)
 		assert.Equal(t, "codex", results[2].Name)
 	})
 }

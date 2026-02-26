@@ -14,8 +14,10 @@ import (
 
 const (
 	ConfigFileName = "config.json"
-	defaultProgram = "claude"
+	defaultProgram = "opencode"
 )
+
+var aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
 
 // GetConfigDir returns the path to the application's configuration directory.
 // Uses XDG-compliant ~/.config/kasmos/. On first run, migrates legacy
@@ -82,9 +84,9 @@ type Config struct {
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
-	program, err := GetClaudeCommand()
+	program, err := GetDefaultCommand()
 	if err != nil {
-		log.ErrorLog.Printf("failed to get claude command: %v", err)
+		log.ErrorLog.Printf("failed to get default command: %v", err)
 		program = defaultProgram
 	}
 
@@ -123,13 +125,25 @@ func (c *Config) IsTelemetryEnabled() bool {
 	return *c.TelemetryEnabled
 }
 
-// GetClaudeCommand attempts to find the "claude" command in the user's shell
+// GetDefaultCommand attempts to find the preferred default command.
 // It checks in the following order:
-// 1. Shell alias resolution: using "which" command
-// 2. PATH lookup
+// 1. opencode command
+// 2. claude command
 //
-// If both fail, it returns an error.
-func GetClaudeCommand() (string, error) {
+// For each command, it checks shell alias resolution first, then PATH lookup.
+func GetDefaultCommand() (string, error) {
+	if path, err := findCommand("opencode"); err == nil {
+		return path, nil
+	}
+
+	if path, err := findCommand("claude"); err == nil {
+		return path, nil
+	}
+
+	return "", fmt.Errorf("neither opencode nor claude command found in aliases or PATH")
+}
+
+func findCommand(name string) (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/bash" // Default to bash if SHELL is not set
@@ -139,36 +153,43 @@ func GetClaudeCommand() (string, error) {
 	// For zsh, source .zshrc; for bash, source .bashrc
 	var shellCmd string
 	if strings.Contains(shell, "zsh") {
-		shellCmd = "source ~/.zshrc &>/dev/null || true; which claude"
+		shellCmd = fmt.Sprintf("source ~/.zshrc &>/dev/null || true; which %s", name)
 	} else if strings.Contains(shell, "bash") {
-		shellCmd = "source ~/.bashrc &>/dev/null || true; which claude"
+		shellCmd = fmt.Sprintf("source ~/.bashrc &>/dev/null || true; which %s", name)
 	} else {
-		shellCmd = "which claude"
+		shellCmd = fmt.Sprintf("which %s", name)
 	}
 
 	cmd := exec.Command(shell, "-c", shellCmd)
 	output, err := cmd.Output()
 	if err == nil && len(output) > 0 {
-		path := strings.TrimSpace(string(output))
+		path := parseCommandOutput(string(output))
 		if path != "" {
-			// Check if the output is an alias definition and extract the actual path
-			// Handle formats like "claude: aliased to /path/to/claude" or other shell-specific formats
-			aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
-			matches := aliasRegex.FindStringSubmatch(path)
-			if len(matches) > 1 {
-				path = matches[1]
-			}
 			return path, nil
 		}
 	}
 
 	// Otherwise, try to find in PATH directly
-	claudePath, err := exec.LookPath("claude")
+	commandPath, err := exec.LookPath(name)
 	if err == nil {
-		return claudePath, nil
+		return commandPath, nil
 	}
 
-	return "", fmt.Errorf("claude command not found in aliases or PATH")
+	return "", fmt.Errorf("%s command not found in aliases or PATH", name)
+}
+
+func parseCommandOutput(output string) string {
+	path := strings.TrimSpace(output)
+	if path == "" {
+		return ""
+	}
+
+	matches := aliasRegex.FindStringSubmatch(path)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	return path
 }
 
 func LoadConfig() *Config {
