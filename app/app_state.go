@@ -16,7 +16,6 @@ import (
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
-	"github.com/kastheco/kasmos/internal/mcpclient"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
@@ -1029,87 +1028,6 @@ func (m *home) finalizePlanCreation(name, description string) error {
 	m.updateSidebarPlans()
 	m.updateSidebarItems()
 	return nil
-}
-
-func (m *home) searchClickUp(query string) tea.Cmd {
-	return func() tea.Msg {
-		importer, err := m.getOrCreateImporter()
-		if err != nil {
-			return clickUpSearchResultMsg{Err: err}
-		}
-		results, err := importer.Search(query)
-		return clickUpSearchResultMsg{Results: results, Err: err}
-	}
-}
-
-func (m *home) getOrCreateImporter() (*clickup.Importer, error) {
-	if m.clickUpImporter != nil {
-		return m.clickUpImporter, nil
-	}
-	if m.clickUpConfig == nil {
-		return nil, fmt.Errorf("no clickup mcp server configured")
-	}
-
-	transport, err := m.createTransport(*m.clickUpConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := mcpclient.NewClient(transport)
-	if err != nil {
-		return nil, err
-	}
-	if err := client.Initialize(); err != nil {
-		return nil, fmt.Errorf("mcp initialize: %w", err)
-	}
-	if _, err := client.ListTools(); err != nil {
-		return nil, fmt.Errorf("mcp list tools: %w", err)
-	}
-
-	m.clickUpImporter = clickup.NewImporter(client)
-	return m.clickUpImporter, nil
-}
-
-func (m *home) createTransport(cfg clickup.MCPServerConfig) (mcpclient.Transport, error) {
-	switch cfg.Type {
-	case "http":
-		token, err := m.getClickUpToken()
-		if err != nil {
-			return nil, err
-		}
-		return mcpclient.NewHTTPTransport(cfg.URL, token), nil
-	case "stdio":
-		envSlice := make([]string, 0, len(cfg.Env))
-		for k, v := range cfg.Env {
-			envSlice = append(envSlice, k+"="+v)
-		}
-		return mcpclient.NewStdioTransport(cfg.Command, cfg.Args, envSlice)
-	default:
-		return nil, fmt.Errorf("unsupported transport type: %s", cfg.Type)
-	}
-}
-
-func (m *home) getClickUpToken() (string, error) {
-	path := mcpclient.TokenPath()
-	tok, err := mcpclient.LoadToken(path)
-	if err == nil && !tok.IsExpired() {
-		return tok.AccessToken, nil
-	}
-
-	oauthCfg := mcpclient.OAuthConfig{
-		AuthURL:  "https://app.clickup.com/api",
-		TokenURL: "https://api.clickup.com/api/v2/oauth/token",
-		ClientID: "kasmos",
-	}
-
-	tok, err = mcpclient.OAuthFlow(m.ctx, oauthCfg, nil)
-	if err != nil {
-		return "", fmt.Errorf("oauth: %w", err)
-	}
-	if err := mcpclient.SaveToken(path, tok); err != nil {
-		log.WarningLog.Printf("could not save clickup oauth token: %v", err)
-	}
-	return tok.AccessToken, nil
 }
 
 func (m *home) fetchClickUpTask(taskID string) tea.Cmd {
