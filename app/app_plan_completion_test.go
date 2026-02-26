@@ -752,3 +752,181 @@ func TestReviewerDeath_ApproveThenExitFocus_ShowsMergeOrPRPopup(t *testing.T) {
 	assert.Equal(t, "m", step4.confirmationOverlay.ConfirmKey)
 	assert.Equal(t, "p", step4.confirmationOverlay.CancelKey)
 }
+
+// TestReviewMergeAction_CancelKeepsPendingApproval verifies that opening and
+// canceling the review-merge confirm does not clear pending approval state.
+func TestReviewMergeAction_CancelKeepsPendingApproval(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  ui.NewList(&sp, false),
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		plannerPrompted:       make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	h.updateSidebarPlans()
+	require.True(t, h.sidebar.SelectByID(ui.SidebarPlanPrefix+planFile))
+
+	model, _ := h.executeContextAction("review_merge")
+	updated, ok := model.(*home)
+	require.True(t, ok)
+	assert.True(t, updated.pendingApprovals[planFile],
+		"pending approval must remain set before user confirms merge")
+
+	model, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	updated = model.(*home)
+	assert.True(t, updated.pendingApprovals[planFile],
+		"pending approval must remain set when merge confirmation is canceled")
+}
+
+// TestReviewMergeMsg_ErrorKeepsPendingApproval verifies merge-message error
+// paths do not clear pending approval state.
+func TestReviewMergeMsg_ErrorKeepsPendingApproval(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  ui.NewList(&sp, false),
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		plannerPrompted:       make(map[string]bool),
+	}
+
+	_, _ = h.Update(reviewMergeMsg{planFile: planFile})
+	assert.True(t, h.pendingApprovals[planFile],
+		"pending approval must remain set if merge cannot start")
+}
+
+// TestReviewCreatePRMsg_DoesNotTransitionOrClearPending verifies that entering
+// review create-pr flow does not mark plan done or clear pending approval yet.
+func TestReviewCreatePRMsg_DoesNotTransitionOrClearPending(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewList(&sp, false)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  list,
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		plannerPrompted:       make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	model, _ := h.Update(reviewCreatePRMsg{planFile: planFile})
+	updated := model.(*home)
+	assert.Equal(t, statePRTitle, updated.state,
+		"review create-pr should enter PR title flow")
+	assert.True(t, updated.pendingApprovals[planFile],
+		"pending approval must remain until PR is successfully created")
+
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status,
+		"plan must remain reviewing until PR creation succeeds")
+}
+
+// TestPRCreatedMsg_TransitionsPendingPRPlanToDone verifies a successful PR
+// completion is the point where plan state advances and pending approval clears.
+func TestPRCreatedMsg_TransitionsPendingPRPlanToDone(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		list:                  ui.NewList(&sp, false),
+		menu:                  ui.NewMenu(),
+		sidebar:               ui.NewSidebar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		pendingApprovals:      map[string]bool{planFile: true},
+		pendingPRPlanFile:     planFile,
+		plannerPrompted:       make(map[string]bool),
+		pendingPRToastID:      "toast-123",
+	}
+
+	_, _ = h.Update(prCreatedMsg{})
+	assert.Equal(t, "", h.pendingPRPlanFile,
+		"pending PR plan marker should clear after PR success")
+	assert.False(t, h.pendingApprovals[planFile],
+		"pending approval should clear after PR success")
+
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusDone, entry.Status,
+		"plan should transition to done only when PR creation succeeds")
+}

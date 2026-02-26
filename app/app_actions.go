@@ -77,6 +77,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil {
 			return m, nil
 		}
+		m.pendingPRPlanFile = ""
 		m.state = statePRTitle
 		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", selected.Title)
 		m.textInputOverlay.SetSize(60, 3)
@@ -232,6 +233,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
 		m.list.SelectInstance(planInst)
+		m.pendingPRPlanFile = ""
 		m.state = statePRTitle
 		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planInst.Title)
 		m.textInputOverlay.SetSize(60, 3)
@@ -277,8 +279,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
-		delete(m.pendingApprovals, planFile)
-		m.pendingApprovalPRAction = nil
 		planName := planstate.DisplayName(planFile)
 		capturedPlanFile := planFile
 		mergeAction := func() tea.Msg {
@@ -291,8 +291,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
-		delete(m.pendingApprovals, planFile)
-		m.pendingApprovalPRAction = nil
 		capturedPlanFile := planFile
 		return m, func() tea.Msg {
 			return reviewCreatePRMsg{planFile: capturedPlanFile}

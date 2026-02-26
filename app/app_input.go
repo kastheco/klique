@@ -402,6 +402,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.textInputOverlay = nil
 			m.state = stateDefault
+			m.pendingPRPlanFile = ""
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
 		}
@@ -442,6 +443,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.textInputOverlay = nil
 			m.pendingPRTitle = ""
+			m.pendingPRPlanFile = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()

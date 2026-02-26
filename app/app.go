@@ -156,6 +156,9 @@ type home struct {
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
+	// pendingPRPlanFile tracks plan-bound PR flows where successful PR creation
+	// should advance plan state from reviewing to done.
+	pendingPRPlanFile string
 	// pendingChangeTopicPlan stores the plan filename during the change-topic flow
 	pendingChangeTopicPlan string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
@@ -421,11 +424,27 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.toastManager.Resolve(m.pendingPRToastID, overlay.ToastSuccess, "PR created!")
 		m.pendingPRToastID = ""
+		if m.pendingPRPlanFile != "" {
+			planFile := m.pendingPRPlanFile
+			m.pendingPRPlanFile = ""
+			if m.fsm == nil {
+				return m, m.handleError(fmt.Errorf("no plan state machine loaded"))
+			}
+			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
+				return m, m.handleError(err)
+			}
+			delete(m.pendingApprovals, planFile)
+			m.pendingApprovalPRAction = nil
+			m.loadPlanState()
+			m.updateSidebarPlans()
+			m.updateSidebarItems()
+		}
 		return m, m.toastTickCmd()
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)
 		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())
 		m.pendingPRToastID = ""
+		m.pendingPRPlanFile = ""
 		return m, m.toastTickCmd()
 	case planRenderedMsg:
 		if msg.err != nil {
@@ -1077,8 +1096,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	case reviewMergeMsg:
 		planFile := msg.planFile
-		delete(m.pendingApprovals, planFile)
-		m.pendingApprovalPRAction = nil
 		if m.planState == nil {
 			return m, m.handleError(fmt.Errorf("no plan state loaded"))
 		}
@@ -1107,6 +1124,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(capturedPlanFile, planfsm.ReviewApproved); err != nil {
 				return err
 			}
+			delete(m.pendingApprovals, capturedPlanFile)
+			m.pendingApprovalPRAction = nil
 			_ = m.saveAllInstances()
 			m.loadPlanState()
 			m.updateSidebarPlans()
@@ -1115,8 +1134,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case reviewCreatePRMsg:
 		planFile := msg.planFile
-		delete(m.pendingApprovals, planFile)
-		m.pendingApprovalPRAction = nil
 		var planInst *session.Instance
 		for _, inst := range m.list.GetInstances() {
 			if inst.PlanFile == planFile {
@@ -1132,12 +1149,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = statePRTitle
 		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planName)
 		m.textInputOverlay.SetSize(60, 3)
-		if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
-			log.WarningLog.Printf("could not mark plan %q done after pr: %v", planFile, err)
-		}
-		m.loadPlanState()
-		m.updateSidebarPlans()
-		m.updateSidebarItems()
+		m.pendingPRPlanFile = planFile
 		return m, nil
 	case instanceStartedMsg:
 		if msg.err != nil {
