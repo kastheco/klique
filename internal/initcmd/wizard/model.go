@@ -79,6 +79,9 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.step >= 0 && m.step < len(m.steps) {
 			m.steps[m.step].Apply(m.state)
 		}
+		if m.step == 0 && len(m.state.Agents) == 0 {
+			m.state.Agents = initAgentsFromExisting(m.state.SelectedHarness, m.existing)
+		}
 		if m.step >= m.totalSteps-1 {
 			return m, tea.Quit
 		}

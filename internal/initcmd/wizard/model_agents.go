@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kastheco/kasmos/config"
 )
 
 type agentMode int
@@ -34,6 +35,44 @@ type agentStepModel struct {
 
 	tempInput    textinput.Model
 	effortLevels map[string][]string
+}
+
+func initAgentsFromExisting(harnesses []string, existing *config.TOMLConfigResult) []AgentState {
+	roles := DefaultAgentRoles()
+	defaults := RoleDefaults()
+	agents := make([]AgentState, 0, len(roles))
+
+	defaultHarness := ""
+	if len(harnesses) > 0 {
+		defaultHarness = harnesses[0]
+	}
+
+	for _, role := range roles {
+		as := defaults[role]
+		if as.Role == "" {
+			as = AgentState{Role: role, Enabled: true}
+		}
+		if as.Harness == "" {
+			as.Harness = defaultHarness
+		}
+
+		if existing != nil {
+			if profile, ok := existing.Profiles[role]; ok {
+				as.Harness = profile.Program
+				as.Model = profile.Model
+				as.Effort = profile.Effort
+				as.Enabled = profile.Enabled
+				as.Temperature = ""
+				if profile.Temperature != nil {
+					as.Temperature = fmt.Sprintf("%g", *profile.Temperature)
+				}
+			}
+		}
+
+		agents = append(agents, as)
+	}
+
+	return agents
 }
 
 func newAgentStep(agents []AgentState, harnesses []string, modelCache map[string][]string) *agentStepModel {
