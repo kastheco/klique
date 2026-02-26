@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -34,6 +35,18 @@ type InfoData struct {
 	PlanBranch      string
 	PlanCreated     string
 
+	// Plan summary fields (shown when plan header is selected, no instance).
+	PlanInstanceCount int
+	PlanRunningCount  int
+	PlanReadyCount    int
+	PlanPausedCount   int
+	PlanAddedLines    int
+	PlanRemovedLines  int
+
+	// Resource fields (shown when instance is selected).
+	CPUPercent float64
+	MemMB      float64
+
 	// Wave fields (zero values = no wave).
 	AgentType  string
 	WaveNumber int
@@ -46,6 +59,8 @@ type InfoData struct {
 	HasPlan bool
 	// HasInstance is true when an instance is selected.
 	HasInstance bool
+	// IsPlanHeaderSelected distinguishes plan header vs instance selection.
+	IsPlanHeaderSelected bool
 }
 
 // WaveTaskInfo describes a single task in the current wave.
@@ -95,7 +110,7 @@ func (p *InfoPane) ScrollDown() {
 
 // String renders the info pane content.
 func (p *InfoPane) String() string {
-	if !p.data.HasInstance {
+	if !p.data.HasInstance && !p.data.IsPlanHeaderSelected {
 		return "no instance selected"
 	}
 	return p.viewport.View()
@@ -206,6 +221,65 @@ func (p *InfoPane) renderInstanceSection() string {
 	if p.data.TaskNumber > 0 {
 		lines = append(lines, p.renderRow("task", fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)))
 	}
+	if p.data.CPUPercent > 0 || p.data.MemMB > 0 {
+		lines = append(lines, p.renderRow("cpu", fmt.Sprintf("%.0f%%", math.Round(p.data.CPUPercent))))
+		lines = append(lines, p.renderRow("memory", fmt.Sprintf("%.0fM", p.data.MemMB)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (p *InfoPane) renderPlanSummary() string {
+	lines := []string{
+		infoSectionStyle.Render("plan"),
+		p.renderDivider(),
+	}
+	if p.data.PlanName != "" {
+		lines = append(lines, p.renderRow("name", p.data.PlanName))
+	}
+	if p.data.PlanStatus != "" {
+		lines = append(lines, p.renderStatusRow("status", p.data.PlanStatus))
+	}
+	if p.data.PlanTopic != "" {
+		lines = append(lines, p.renderRow("topic", p.data.PlanTopic))
+	}
+	if p.data.PlanBranch != "" {
+		lines = append(lines, p.renderRow("branch", p.data.PlanBranch))
+	}
+	if p.data.PlanCreated != "" {
+		lines = append(lines, p.renderRow("created", p.data.PlanCreated))
+	}
+
+	if p.data.PlanInstanceCount > 0 {
+		summary := fmt.Sprintf("%d", p.data.PlanInstanceCount)
+		parts := []string{}
+		if p.data.PlanRunningCount > 0 {
+			parts = append(parts, fmt.Sprintf("%d running", p.data.PlanRunningCount))
+		}
+		if p.data.PlanReadyCount > 0 {
+			parts = append(parts, fmt.Sprintf("%d ready", p.data.PlanReadyCount))
+		}
+		if p.data.PlanPausedCount > 0 {
+			parts = append(parts, fmt.Sprintf("%d paused", p.data.PlanPausedCount))
+		}
+		if len(parts) > 0 {
+			summary += " (" + strings.Join(parts, ", ") + ")"
+		}
+		lines = append(lines, p.renderRow("instances", summary))
+	}
+
+	if p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {
+		diff := fmt.Sprintf("+%d -%d", p.data.PlanAddedLines, p.data.PlanRemovedLines)
+		lines = append(lines, p.renderRow("lines changed", diff))
+	}
+
+	lines = append(lines, "")
+	viewDocStyle := lipgloss.NewStyle().
+		Foreground(ColorFoam).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorOverlay).
+		Padding(0, 2)
+	lines = append(lines, viewDocStyle.Render("enter: view plan doc"))
+
 	return strings.Join(lines, "\n")
 }
 
@@ -240,17 +314,24 @@ func (p *InfoPane) renderWaveSection() string {
 
 // render builds the content string. Called internally when data changes.
 func (p *InfoPane) render() string {
-	if !p.data.HasInstance {
+	if !p.data.HasInstance && !p.data.IsPlanHeaderSelected {
 		return "no instance selected"
 	}
 
 	var sections []string
-	if p.data.HasPlan {
-		sections = append(sections, p.renderPlanSection())
-	}
-	sections = append(sections, p.renderInstanceSection())
-	if len(p.data.WaveTasks) > 0 {
-		sections = append(sections, p.renderWaveSection())
+	if p.data.IsPlanHeaderSelected {
+		sections = append(sections, p.renderPlanSummary())
+		if len(p.data.WaveTasks) > 0 {
+			sections = append(sections, p.renderWaveSection())
+		}
+	} else {
+		if p.data.HasPlan {
+			sections = append(sections, p.renderPlanSection())
+		}
+		sections = append(sections, p.renderInstanceSection())
+		if len(p.data.WaveTasks) > 0 {
+			sections = append(sections, p.renderWaveSection())
+		}
 	}
 
 	return strings.Join(sections, "\n\n")

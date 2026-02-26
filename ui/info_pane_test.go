@@ -115,3 +115,38 @@ func TestInfoPane_Scrolling(t *testing.T) {
 	after := p.String()
 	assert.NotEqual(t, before, after)
 }
+
+func TestInfoPane_PlanSummary(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(60, 30)
+	pane.SetData(InfoData{
+		IsPlanHeaderSelected: true,
+		PlanName:             "my-feature",
+		PlanStatus:           "implementing",
+		PlanInstanceCount:    3,
+		PlanRunningCount:     2,
+		PlanReadyCount:       1,
+	})
+
+	output := pane.String()
+	assert.Contains(t, output, "my-feature")
+	assert.Contains(t, output, "implementing")
+	assert.Contains(t, output, "3 (2 running, 1 ready)")
+	assert.Contains(t, output, "view plan doc")
+}
+
+func TestInfoPane_InstanceWithResources(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(60, 30)
+	pane.SetData(InfoData{
+		HasInstance: true,
+		Title:       "task 1",
+		Status:      "running",
+		CPUPercent:  12.5,
+		MemMB:       340,
+	})
+
+	output := pane.String()
+	assert.Contains(t, output, "13%")
+	assert.Contains(t, output, "340M")
+}
