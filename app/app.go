@@ -6,6 +6,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/internal/clickup"
 	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
@@ -78,6 +79,12 @@ const (
 	stateRepoSwitch
 	// stateChangeTopic is the state when the user is changing a plan's topic via picker.
 	stateChangeTopic
+	// stateClickUpSearch is the state when the user is typing a ClickUp search query.
+	stateClickUpSearch
+	// stateClickUpPicker is the state when the user is picking from ClickUp search results.
+	stateClickUpPicker
+	// stateClickUpFetching is when kasmos is fetching a full task from ClickUp.
+	stateClickUpFetching
 )
 
 type home struct {
@@ -165,6 +172,12 @@ type home struct {
 	contextMenu *overlay.ContextMenu
 	// pickerOverlay is the topic picker overlay for move-to-topic
 	pickerOverlay *overlay.PickerOverlay
+	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
+	clickUpConfig *clickup.MCPServerConfig
+	// clickUpImporter handles search/fetch via MCP (nil until first use)
+	clickUpImporter *clickup.Importer
+	// clickUpResults stores the latest search results for the picker
+	clickUpResults []clickup.SearchResult
 
 	// Layout dimensions for mouse hit-testing
 	sidebarWidth  int
@@ -1243,6 +1256,28 @@ type coderCompleteMsg struct {
 // after a planner session finishes.
 type plannerCompleteMsg struct {
 	planFile string
+}
+
+// clickUpDetectedMsg is sent at startup when ClickUp MCP is detected.
+type clickUpDetectedMsg struct {
+	Config clickup.MCPServerConfig
+}
+
+// clickUpSearchResultMsg is sent when ClickUp search completes.
+type clickUpSearchResultMsg struct {
+	Results []clickup.SearchResult
+	Err     error
+}
+
+// clickUpTaskFetchedMsg is sent when a full ClickUp task is fetched.
+type clickUpTaskFetchedMsg struct {
+	Task *clickup.Task
+	Err  error
+}
+
+// clickUpImportCompleteMsg is sent when the plan scaffold is written.
+type clickUpImportCompleteMsg struct {
+	PlanFile string
 }
 
 // addInstanceFinalizer registers a finalizer for the given instance.
