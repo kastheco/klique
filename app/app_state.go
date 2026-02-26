@@ -1030,16 +1030,6 @@ func (m *home) finalizePlanCreation(name, description string) error {
 	return nil
 }
 
-func (m *home) fetchClickUpTask(taskID string) tea.Cmd {
-	return func() tea.Msg {
-		if m.clickUpImporter == nil {
-			return clickUpTaskFetchedMsg{Err: fmt.Errorf("importer not initialized")}
-		}
-		task, err := m.clickUpImporter.FetchTask(taskID)
-		return clickUpTaskFetchedMsg{Task: task, Err: err}
-	}
-}
-
 func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 	if task == nil {
 		m.toastManager.Error("clickup fetch failed: empty task payload")
@@ -1054,19 +1044,8 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		m.toastManager.Error("failed to create plans dir: " + err.Error())
 		return m, m.toastTickCmd()
 	}
+	filename = dedupePlanFilename(plansDir, filename)
 	planPath := filepath.Join(plansDir, filename)
-
-	if _, err := os.Stat(planPath); err == nil {
-		for i := 2; i < 100; i++ {
-			alt := strings.TrimSuffix(filename, ".md") + fmt.Sprintf("-%d.md", i)
-			altPath := filepath.Join(plansDir, alt)
-			if _, err := os.Stat(altPath); os.IsNotExist(err) {
-				filename = alt
-				planPath = altPath
-				break
-			}
-		}
-	}
 
 	scaffold := clickup.ScaffoldPlan(*task)
 	if err := os.WriteFile(planPath, []byte(scaffold), 0o644); err != nil {
@@ -1108,6 +1087,23 @@ The plan file is at: docs/plans/%s`, filename)
 		return model, m.toastTickCmd()
 	}
 	return model, tea.Batch(cmd, m.toastTickCmd())
+}
+
+func dedupePlanFilename(plansDir, filename string) string {
+	planPath := filepath.Join(plansDir, filename)
+	if _, err := os.Stat(planPath); os.IsNotExist(err) {
+		return filename
+	}
+
+	base := strings.TrimSuffix(filename, ".md")
+	for i := 2; i < 100; i++ {
+		candidate := fmt.Sprintf("%s-%d.md", base, i)
+		if _, err := os.Stat(filepath.Join(plansDir, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+
+	return filename
 }
 
 // shouldPromptPushAfterCoderExit returns true when a coder session has exited

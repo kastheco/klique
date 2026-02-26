@@ -45,9 +45,16 @@ func TestImportClickUpTask_WritesScaffold(t *testing.T) {
 func TestScaffoldFilename_Dedup(t *testing.T) {
 	dir := t.TempDir()
 	base := clickup.ScaffoldFilename("Test Task", "2026-02-24")
-	// Create the base file
+
+	// No collision keeps original filename.
+	assert.Equal(t, base, dedupePlanFilename(dir, base))
+
+	// First collision returns -2 suffix.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, base), []byte("x"), 0o644))
-	// Verify file exists
-	_, err := os.Stat(filepath.Join(dir, base))
-	assert.NoError(t, err)
+	name2 := dedupePlanFilename(dir, base)
+	assert.Equal(t, "2026-02-24-test-task-2.md", name2)
+
+	// Second collision returns -3 suffix.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name2), []byte("x"), 0o644))
+	assert.Equal(t, "2026-02-24-test-task-3.md", dedupePlanFilename(dir, base))
 }

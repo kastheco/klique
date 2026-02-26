@@ -548,12 +548,7 @@ func (s *Sidebar) Left() {
 func (s *Sidebar) ClickItem(row int) {
 	if s.useTreeMode {
 		if row >= 0 && row < len(s.rows) {
-			switch s.rows[row].Kind {
-			case rowKindImportAction:
-				s.selectedIdx = row
-			default:
-				s.selectedIdx = row
-			}
+			s.selectedIdx = row
 		}
 		return
 	}

@@ -1322,11 +1322,6 @@ type clickUpTaskFetchedMsg struct {
 	Err  error
 }
 
-// clickUpImportCompleteMsg is sent when the plan scaffold is written.
-type clickUpImportCompleteMsg struct {
-	PlanFile string
-}
-
 // addInstanceFinalizer registers a finalizer for the given instance.
 // Lazily initializes the map so tests that don't pre-initialize it still work.
 func (m *home) addInstanceFinalizer(inst *session.Instance, fn func()) {
