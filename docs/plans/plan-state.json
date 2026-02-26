@@ -333,7 +333,7 @@
       "created_at": "2026-02-24T23:14:58.827108721Z"
     },
     "2026-02-24-review-approval-gate.md": {
-      "status": "done",
+      "status": "ready",
       "description": "manual approval gate after automated review — two-popup flow for merge/PR before plan can be marked done",
       "branch": "plan/review-approval-gate",
       "topic": "automation",

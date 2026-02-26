@@ -1,9 +1,10 @@
 package ui
 
 import (
-	"github.com/kastheco/kasmos/keys"
 	"strings"
+	"time"
 
+	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/session"
 
 	"github.com/charmbracelet/lipgloss"
@@ -193,7 +194,29 @@ func (m *Menu) SetSize(width, height int) {
 	m.height = height
 }
 
+// focusModeFrames defines the animation frames for the interactive mode indicator.
+var focusModeFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+var focusDotStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)
+var focusLabelStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)
+var focusHintKeyStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+var focusHintDescStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
+func (m *Menu) renderFocusMode() string {
+	// Animated spinner frame based on wall-clock time (~100ms per frame).
+	frame := focusModeFrames[int(time.Now().UnixMilli()/100)%len(focusModeFrames)]
+	badge := focusLabelStyle.Render("interactive") + " " + focusDotStyle.Render(frame)
+	hint := focusHintKeyStyle.Render("ctrl+space") + " " + focusHintDescStyle.Render("exit")
+	content := badge + "  " + hint
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
+}
+
 func (m *Menu) String() string {
+	if m.isFocusMode {
+		return m.renderFocusMode()
+	}
+
 	var s strings.Builder
 
 	// Define group boundaries dynamically based on option count

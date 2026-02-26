@@ -73,11 +73,6 @@ var statusBarWaveLabelStyle = lipgloss.NewStyle().
 	Foreground(ColorSubtle).
 	Background(ColorSurface)
 
-var statusBarFocusPillStyle = lipgloss.NewStyle().
-	Foreground(ColorLove).
-	Background(ColorSurface).
-	Bold(true)
-
 func planStatusStyle(status string) string {
 	var fg lipgloss.TerminalColor
 	switch status {
@@ -144,24 +139,5 @@ func (s *StatusBar) String() string {
 	sep := statusBarSepStyle.Render(statusBarSep)
 	leftContent := strings.Join(parts, sep)
 
-	if !s.data.FocusMode {
-		return statusBarStyle.Width(s.width).Render(leftContent)
-	}
-
-	// Render centered "▸ interactive" pill.
-	// usable width = s.width minus 2 for statusBarStyle padding (0,1 = 1 left + 1 right).
-	const pill = "▸ interactive"
-	renderedPill := statusBarFocusPillStyle.Render(pill)
-	usable := s.width - 2
-	leftLen := lipgloss.Width(leftContent)
-	pillLen := lipgloss.Width(renderedPill)
-	center := (usable - pillLen) / 2
-	gap := center - leftLen
-	if gap < 1 {
-		gap = 1
-	}
-	spacer := lipgloss.NewStyle().Background(ColorSurface).Render(strings.Repeat(" ", gap))
-	combined := leftContent + spacer + renderedPill
-
-	return statusBarStyle.Width(s.width).Render(combined)
+	return statusBarStyle.Width(s.width).Render(leftContent)
 }

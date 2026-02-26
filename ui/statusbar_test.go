@@ -146,7 +146,7 @@ func TestStatusBar_EmptyData(t *testing.T) {
 	}
 }
 
-func TestStatusBar_FocusMode(t *testing.T) {
+func TestStatusBar_FocusModeNoLongerShowsPill(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)
 	sb.SetData(StatusBarData{
@@ -156,18 +156,6 @@ func TestStatusBar_FocusMode(t *testing.T) {
 	})
 
 	result := sb.String()
-	assert.Contains(t, result, "▸ interactive")
-}
-
-func TestStatusBar_NoFocusMode(t *testing.T) {
-	sb := NewStatusBar()
-	sb.SetSize(100)
-	sb.SetData(StatusBarData{
-		RepoName:  "kasmos",
-		Branch:    "main",
-		FocusMode: false,
-	})
-
-	result := sb.String()
-	assert.NotContains(t, result, "interactive")
+	assert.NotContains(t, result, "interactive",
+		"interactive indicator moved to bottom menu bar")
 }

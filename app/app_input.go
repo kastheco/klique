@@ -402,7 +402,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.textInputOverlay = nil
 			m.state = stateDefault
-			m.pendingPRPlanFile = ""
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
 		}
@@ -443,7 +442,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.textInputOverlay = nil
 			m.pendingPRTitle = ""
-			m.pendingPRPlanFile = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -479,12 +477,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateFocusAgent {
 		// Ctrl+Space exits focus mode
 		if msg.Type == tea.KeyCtrlAt {
-			selected := m.list.GetSelectedInstance()
 			m.exitFocusMode()
-			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
-				m.reviewApprovalConfirmAction(selected.PlanFile)
-				return m, nil
-			}
 			return m, tea.WindowSize()
 		}
 
@@ -500,12 +493,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			jumpSlot, doJump = slotInfo, true
 		}
 		if doJump {
-			selected := m.list.GetSelectedInstance()
 			m.exitFocusMode()
-			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
-				m.reviewApprovalConfirmAction(selected.PlanFile)
-				return m, nil
-			}
 			m.setFocusSlot(jumpSlot)
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
@@ -582,7 +570,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
 			m.pendingWaveConfirmPlanFile = ""
-			m.pendingApprovalPRAction = nil
 			// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
 			// This prevents blocking the UI during I/O (git push, etc.).
 			return m, action
@@ -598,7 +585,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
 			m.pendingWaveConfirmPlanFile = ""
-			m.pendingApprovalPRAction = nil
 			return m, abortAction
 		case m.confirmationOverlay.CancelKey:
 			// If this is the failed-wave dialog and 'n' (next wave) is the cancel key,
@@ -612,19 +598,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.pendingWaveNextAction = nil
 				m.pendingWaveConfirmPlanFile = ""
 				return m, nextAction
-			}
-			// Reviewer approval dialogs use cancel key for either reject (redo) or
-			// create-pr actions.
-			if m.pendingApprovalPRAction != nil {
-				cancelAction := m.pendingApprovalPRAction
-				m.state = stateDefault
-				m.confirmationOverlay = nil
-				m.pendingConfirmAction = nil
-				m.pendingWaveAbortAction = nil
-				m.pendingWaveNextAction = nil
-				m.pendingWaveConfirmPlanFile = ""
-				m.pendingApprovalPRAction = nil
-				return m, cancelAction
 			}
 			// "No" — user explicitly declined.
 			// Reset the orchestrator confirm latch when the user cancels a wave prompt,
@@ -653,7 +626,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
-			m.pendingApprovalPRAction = nil
 			return m, nil
 		case "esc":
 			// Esc — preserve everything, allow re-prompt on next tick (after cooldown).
@@ -671,7 +643,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
-			m.pendingApprovalPRAction = nil
 			return m, nil
 		default:
 			return m, nil
@@ -1396,30 +1367,6 @@ func (m *home) waveFailedConfirmAction(message, planFile string, entry planstate
 	m.pendingWaveAbortAction = func() tea.Msg {
 		return waveAbortMsg{planFile: capturedPlanFile}
 	}
-}
-
-// reviewApprovalConfirmAction shows merge/create-pr options for a plan with
-// pending review approval. Keys: m=merge, p=create pr, esc=dismiss.
-func (m *home) reviewApprovalConfirmAction(planFile string) {
-	planName := planstate.DisplayName(planFile)
-
-	m.state = stateConfirm
-	m.confirmationOverlay = overlay.NewConfirmationOverlay(
-		fmt.Sprintf("merge to main or create pr for '%s'?\n\n[m] merge  [p] create pr  [esc] dismiss", planName),
-	)
-	m.confirmationOverlay.ConfirmKey = "m"
-	m.confirmationOverlay.CancelKey = "p"
-	m.confirmationOverlay.SetWidth(60)
-
-	capturedPlanFile := planFile
-	m.pendingConfirmAction = func() tea.Msg {
-		return reviewMergeMsg{planFile: capturedPlanFile}
-	}
-	m.pendingApprovalPRAction = func() tea.Msg {
-		return reviewCreatePRMsg{planFile: capturedPlanFile}
-	}
-	m.pendingWaveNextAction = nil
-	m.pendingWaveAbortAction = nil
 }
 
 // keydownCallback clears the menu option highlighting after 500ms.

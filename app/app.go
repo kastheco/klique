@@ -156,9 +156,6 @@ type home struct {
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
-	// pendingPRPlanFile tracks plan-bound PR flows where successful PR creation
-	// should advance plan state from reviewing to done.
-	pendingPRPlanFile string
 	// pendingChangeTopicPlan stores the plan filename during the change-topic flow
 	pendingChangeTopicPlan string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
@@ -236,14 +233,6 @@ type home struct {
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
 	pendingReviewFeedback map[string]string
-
-	// pendingApprovals tracks plans whose automated review approved but the user
-	// has not yet confirmed merge/pr. Keyed by plan filename.
-	pendingApprovals map[string]bool
-
-	// pendingApprovalPRAction stores the context-specific cancel-key action used by
-	// review approval flows to avoid collisions with wave confirm actions.
-	pendingApprovalPRAction tea.Cmd
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -284,7 +273,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
-		pendingApprovals:      make(map[string]bool),
 	}
 	h.fsm = planfsm.New(h.planStateDir)
 	h.list = ui.NewList(&h.spinner, autoYes)
@@ -424,27 +412,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.toastManager.Resolve(m.pendingPRToastID, overlay.ToastSuccess, "PR created!")
 		m.pendingPRToastID = ""
-		if m.pendingPRPlanFile != "" {
-			planFile := m.pendingPRPlanFile
-			m.pendingPRPlanFile = ""
-			if m.fsm == nil {
-				return m, m.handleError(fmt.Errorf("no plan state machine loaded"))
-			}
-			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
-				return m, m.handleError(err)
-			}
-			delete(m.pendingApprovals, planFile)
-			m.pendingApprovalPRAction = nil
-			m.loadPlanState()
-			m.updateSidebarPlans()
-			m.updateSidebarItems()
-		}
 		return m, m.toastTickCmd()
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)
 		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())
 		m.pendingPRToastID = ""
-		m.pendingPRPlanFile = ""
 		return m, m.toastTickCmd()
 	case planRenderedMsg:
 		if msg.err != nil {
@@ -573,24 +545,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Side-effect cmds (reviewer/coder spawns) are collected and batched below.
 		var signalCmds []tea.Cmd
 		for _, sig := range msg.Signals {
-			// Intercept review-approved: keep plan in reviewing and gate completion
-			// behind explicit user approval.
-			if sig.Event == planfsm.ReviewApproved {
-				planfsm.ConsumeSignal(sig)
-				m.pendingApprovals[sig.PlanFile] = true
-				if m.state != stateConfirm {
-					planName := planstate.DisplayName(sig.PlanFile)
-					capturedPlanFile := sig.PlanFile
-					m.confirmAction(
-						fmt.Sprintf("review approved - %s\n\n[y] read review  [esc] dismiss", planName),
-						func() tea.Msg {
-							return reviewApprovalFocusMsg{planFile: capturedPlanFile}
-						},
-					)
-				}
-				continue
-			}
-
 			if err := m.fsm.Transition(sig.PlanFile, sig.Event); err != nil {
 				log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.PlanFile, err)
 				planfsm.ConsumeSignal(sig)
@@ -731,27 +685,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if entry.Status != planstate.StatusReviewing {
 					continue
 				}
-				// Reviewer death -> approval popup (manual gate).
-				if !m.pendingApprovals[inst.PlanFile] {
-					m.pendingApprovals[inst.PlanFile] = true
-					planName := planstate.DisplayName(inst.PlanFile)
-					if m.state != stateConfirm {
-						capturedPlanFile := inst.PlanFile
-						m.state = stateConfirm
-						m.confirmationOverlay = overlay.NewConfirmationOverlay(
-							fmt.Sprintf("reviewer exited - approve '%s'?\n\n[y] approve  [n] reject (redo review)  [esc] dismiss", planName),
-						)
-						m.confirmationOverlay.SetWidth(60)
-						m.pendingConfirmAction = func() tea.Msg {
-							return reviewApprovalFocusMsg{planFile: capturedPlanFile}
-						}
-						m.pendingWaveNextAction = nil
-						m.pendingWaveAbortAction = nil
-						m.confirmationOverlay.CancelKey = "n"
-						m.pendingApprovalPRAction = func() tea.Msg {
-							return reviewerRedoMsg{planFile: capturedPlanFile}
-						}
-					}
+				// Reviewer death → ReviewApproved: one-shot FSM transition, rare event.
+				if err := m.fsm.Transition(inst.PlanFile, planfsm.ReviewApproved); err != nil {
+					log.WarningLog.Printf("could not mark plan %q completed: %v", inst.PlanFile, err)
 				}
 			}
 
@@ -1083,79 +1019,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPlannerInstanceTitle = ""
 		m.updateSidebarItems()
 		return m.triggerPlanStage(msg.planFile, "implement")
-	case reviewerRedoMsg:
-		delete(m.pendingApprovals, msg.planFile)
-		if cmd := m.spawnReviewer(msg.planFile); cmd != nil {
-			m.toastManager.Info(fmt.Sprintf("restarting review for %s", planstate.DisplayName(msg.planFile)))
-			return m, tea.Batch(m.toastTickCmd(), cmd)
-		}
-		return m, nil
-	case reviewApprovalFocusMsg:
-		for _, inst := range m.list.GetInstances() {
-			if inst.PlanFile == msg.planFile && inst.IsReviewer {
-				m.list.SelectInstance(inst)
-				return m, m.enterFocusMode()
-			}
-		}
-		m.toastManager.Info(fmt.Sprintf("reviewer session not found for %s - use context menu to merge or create pr", planstate.DisplayName(msg.planFile)))
-		return m, m.toastTickCmd()
-	case reviewMergeMsg:
-		planFile := msg.planFile
-		if m.planState == nil {
-			return m, m.handleError(fmt.Errorf("no plan state loaded"))
-		}
-		entry, ok := m.planState.Entry(planFile)
-		if !ok {
-			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
-		}
-		branch := entry.Branch
-		if branch == "" {
-			branch = git.PlanBranchFromFile(planFile)
-		}
-		planName := planstate.DisplayName(planFile)
-		m.toastManager.Loading(fmt.Sprintf("merging '%s' to main...", planName))
-		capturedPlanFile := planFile
-		capturedBranch := branch
-		return m, tea.Batch(m.toastTickCmd(), func() tea.Msg {
-			for i := len(m.allInstances) - 1; i >= 0; i-- {
-				if m.allInstances[i].PlanFile == capturedPlanFile {
-					_ = m.allInstances[i].Kill()
-					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
-				}
-			}
-			if err := git.MergePlanBranch(m.activeRepoPath, capturedBranch); err != nil {
-				return err
-			}
-			if err := m.fsm.Transition(capturedPlanFile, planfsm.ReviewApproved); err != nil {
-				return err
-			}
-			delete(m.pendingApprovals, capturedPlanFile)
-			m.pendingApprovalPRAction = nil
-			_ = m.saveAllInstances()
-			m.loadPlanState()
-			m.updateSidebarPlans()
-			m.updateSidebarItems()
-			return planRefreshMsg{}
-		})
-	case reviewCreatePRMsg:
-		planFile := msg.planFile
-		var planInst *session.Instance
-		for _, inst := range m.list.GetInstances() {
-			if inst.PlanFile == planFile {
-				planInst = inst
-				break
-			}
-		}
-		if planInst == nil {
-			return m, m.handleError(fmt.Errorf("no active session for plan %s (start review first or use review & merge)", planFile))
-		}
-		m.list.SelectInstance(planInst)
-		planName := planstate.DisplayName(planFile)
-		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planName)
-		m.textInputOverlay.SetSize(60, 3)
-		m.pendingPRPlanFile = planFile
-		return m, nil
 	case instanceStartedMsg:
 		if msg.err != nil {
 			m.list.Kill()
@@ -1379,28 +1242,6 @@ type coderCompleteMsg struct {
 // plannerCompleteMsg is sent when the user confirms starting implementation
 // after a planner session finishes.
 type plannerCompleteMsg struct {
-	planFile string
-}
-
-// reviewApprovalFocusMsg is sent when the user confirms "read review" in the
-// review-approved popup. It selects the reviewer and enters focus mode.
-type reviewApprovalFocusMsg struct {
-	planFile string
-}
-
-// reviewMergeMsg is sent when the user chooses merge in the post-review popup.
-type reviewMergeMsg struct {
-	planFile string
-}
-
-// reviewCreatePRMsg is sent when the user chooses create pr in the post-review popup.
-type reviewCreatePRMsg struct {
-	planFile string
-}
-
-// reviewerRedoMsg is sent when the user rejects reviewer-death approval and
-// asks to restart review.
-type reviewerRedoMsg struct {
 	planFile string
 }
 

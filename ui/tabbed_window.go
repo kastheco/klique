@@ -107,12 +107,9 @@ func (w *TabbedWindow) SetSize(width, height int) {
 	w.width = AdjustPreviewWidth(width)
 	w.height = height
 
-	// Calculate the content height by subtracting:
-	// 1. Tab height (including border and padding)
-	// 2. Window style vertical frame size
-	// 3. Additional padding/spacing (2 for the newline and spacing)
+	// Calculate the content height by subtracting the tab row and window border.
 	tabHeight := activeTabStyle.GetVerticalFrameSize() + 1
-	contentHeight := height - tabHeight - windowStyle.GetVerticalFrameSize() - 2
+	contentHeight := height - tabHeight - windowStyle.GetVerticalFrameSize()
 	contentWidth := w.width - windowStyle.GetHorizontalFrameSize()
 
 	w.preview.SetSize(contentWidth, contentHeight)
@@ -426,7 +423,7 @@ func (w *TabbedWindow) String() string {
 	innerWidth := w.width - ws.GetHorizontalFrameSize()
 	window := ws.Render(
 		lipgloss.Place(
-			innerWidth, w.height-2-ws.GetVerticalFrameSize()-tabHeight,
+			innerWidth, w.height-ws.GetVerticalFrameSize()-tabHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
 	return lipgloss.JoinVertical(lipgloss.Left, row, window)
