@@ -483,9 +483,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case clickUpDetectedMsg:
 		m.clickUpConfig = &msg.Config
-		if sidebar, ok := any(m.sidebar).(interface{ SetClickUpAvailable(bool) }); ok {
-			sidebar.SetClickUpAvailable(true)
-		}
+		m.sidebar.SetClickUpAvailable(true)
 		return m, nil
 	case tickUpdateMetadataMessage:
 		// Snapshot the instance list for the goroutine. The slice header is
