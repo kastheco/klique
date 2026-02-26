@@ -411,6 +411,7 @@ func (m *home) Init() tea.Cmd {
 		},
 		tickUpdateMetadataCmd,
 		m.toastTickCmd(),
+		detectClickUpCmd(m.activeRepoPath),
 	)
 }
 
@@ -479,6 +480,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case keyupMsg:
 		m.menu.ClearKeydown()
+		return m, nil
+	case clickUpDetectedMsg:
+		m.clickUpConfig = &msg.Config
+		if sidebar, ok := any(m.sidebar).(interface{ SetClickUpAvailable(bool) }); ok {
+			sidebar.SetClickUpAvailable(true)
+		}
 		return m, nil
 	case tickUpdateMetadataMessage:
 		// Snapshot the instance list for the goroutine. The slice header is
@@ -1337,5 +1344,16 @@ func (m *home) toastTickCmd() tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(50 * time.Millisecond)
 		return overlay.ToastTickMsg{}
+	}
+}
+
+func detectClickUpCmd(repoPath string) tea.Cmd {
+	return func() tea.Msg {
+		claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+		cfg, found := clickup.DetectMCP(repoPath, claudeDir)
+		if !found {
+			return nil
+		}
+		return clickUpDetectedMsg{Config: cfg}
 	}
 }
