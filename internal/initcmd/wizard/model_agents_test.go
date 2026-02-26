@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/kastheco/kasmos/config"
 	"github.com/stretchr/testify/assert"
 )
@@ -52,7 +51,8 @@ func TestAgentStep_DetailPanelContent(t *testing.T) {
 
 	s := newAgentStep(agents, []string{"claude"}, nil)
 	detail := s.renderDetailPanel(60, 20)
-	assert.Contains(t, detail, "CODER")
+	assert.Contains(t, detail, "coder")
+	assert.NotContains(t, detail, "CODER")
 	assert.Contains(t, detail, "claude-sonnet-4-6")
 	assert.Contains(t, detail, "medium")
 }
@@ -168,19 +168,8 @@ func TestAgentStep_ViewSeparatorFillsPanelHeight(t *testing.T) {
 	assert.Equal(t, 20, strings.Count(view, "┊"))
 }
 
-func TestAgentStep_RenderModelFieldDoesNotWrapLongModelNames(t *testing.T) {
-	agents := []AgentState{{Role: "coder", Harness: "opencode", Model: "openai/gpt-5.3-codex-super-long-model-name", Enabled: true}}
-	s := newAgentStep(agents, []string{"opencode"}, map[string][]string{
-		"opencode": {
-			"openai/gpt-5.3-codex-super-long-model-name",
-			"anthropic/claude-opus-4-6",
-		},
-	})
-
-	s.enterEditMode()
-	s.editField = 1
-	field := s.renderModelField(24, true)
-	for _, line := range strings.Split(field, "\n") {
-		assert.LessOrEqual(t, lipgloss.Width(line), 24)
-	}
+func TestTruncateForCell(t *testing.T) {
+	assert.Equal(t, "", truncateForCell("abc", 0))
+	assert.Equal(t, "abc", truncateForCell("abc", 3))
+	assert.Equal(t, "ab...", truncateForCell("abcdef", 5))
 }

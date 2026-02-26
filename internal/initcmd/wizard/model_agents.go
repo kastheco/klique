@@ -162,9 +162,20 @@ func (m *agentStepModel) View(width, height int) string {
 
 	left := m.renderRolePanel(leftWidth, height)
 	right := m.renderDetailPanel(rightWidth, height)
-	separator := separatorStyle.Render("┊")
+	separator := renderVerticalSeparator(height)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
+}
+
+func renderVerticalSeparator(height int) string {
+	if height < 1 {
+		height = 1
+	}
+	rows := make([]string, height)
+	for i := range rows {
+		rows[i] = separatorStyle.Render("┊")
+	}
+	return strings.Join(rows, "\n")
 }
 
 func (m *agentStepModel) Apply(state *State) {
@@ -206,7 +217,7 @@ func (m *agentStepModel) renderRolePanel(width, height int) string {
 		width = 1
 	}
 
-	rows := []string{titleStyle.Render("ROLES"), ""}
+	rows := []string{titleStyle.Render("roles"), ""}
 	for i := 0; i <= m.maxNavigableIndex() && i < len(m.agents); i++ {
 		agent := m.agents[i]
 
@@ -268,7 +279,7 @@ func (m *agentStepModel) renderDetailPanel(width, height int) string {
 	}
 
 	lines := []string{
-		titleStyle.Render(strings.ToUpper(a.Role)),
+		titleStyle.Render(a.Role),
 		subtitleStyle.Render(RoleDescription(a.Role)),
 		"",
 		fmt.Sprintf("%s %s", labelStyle.Render("harness:"), valueStyle.Render(a.Harness)),
@@ -444,7 +455,7 @@ func (m *agentStepModel) renderEditPanel(width, height int) string {
 	a := m.agents[m.cursor]
 
 	lines := []string{
-		titleStyle.Render(strings.ToUpper(a.Role) + " ── editing"),
+		titleStyle.Render(a.Role + " ── editing"),
 		subtitleStyle.Render(RoleDescription(a.Role)),
 		"",
 		m.renderCycleField("harness", a.Harness, m.editField == 0),
@@ -489,8 +500,8 @@ func (m *agentStepModel) renderTemperatureField(active bool) string {
 }
 
 func (m *agentStepModel) renderModelField(width int, active bool) string {
-	if width < 24 {
-		width = 24
+	if width < 12 {
+		width = 12
 	}
 	header := labelStyle.Render("model:")
 	if active {
@@ -505,6 +516,10 @@ func (m *agentStepModel) renderModelField(width int, active bool) string {
 	if len(m.filteredModels) == 0 {
 		rows = append(rows, roleMutedStyle.Render("no models"))
 	} else {
+		innerWidth := width - 4
+		if innerWidth < 1 {
+			innerWidth = 1
+		}
 		m.ensureModelCursorVisible()
 		end := m.modelOffset + 6
 		if end > len(m.filteredModels) {
@@ -519,7 +534,7 @@ func (m *agentStepModel) renderModelField(width int, active bool) string {
 					lineStyle = fieldActiveStyle
 				}
 			}
-			rows = append(rows, lineStyle.Render(prefix+" "+m.filteredModels[i]))
+			rows = append(rows, lineStyle.Render(truncateForCell(prefix+" "+m.filteredModels[i], innerWidth)))
 		}
 	}
 
@@ -530,6 +545,28 @@ func (m *agentStepModel) renderModelField(width int, active bool) string {
 		Width(width).
 		Render(strings.Join(rows, "\n"))
 	return lipgloss.JoinVertical(lipgloss.Left, header, box)
+}
+
+func truncateForCell(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return strings.Repeat(".", width)
+	}
+	runes := []rune(value)
+	kept := make([]rune, 0, len(runes))
+	for _, r := range runes {
+		candidate := string(append(append([]rune(nil), kept...), r))
+		if lipgloss.Width(candidate)+3 > width {
+			break
+		}
+		kept = append(kept, r)
+	}
+	return string(kept) + "..."
 }
 
 func (m *agentStepModel) moveModelCursor(delta int) {

@@ -55,9 +55,9 @@ func (r *reviewStep) View(width, height int) string {
 	rows := make([]string, 0, len(r.agents)+12)
 	rows = append(rows,
 		renderReviewStepDots(),
-		titleStyle.Render("Review Configuration"),
+		titleStyle.Render("review configuration"),
 		separatorStyle.Render(strings.Repeat("─", max(1, width-2))),
-		lipgloss.NewStyle().Foreground(colorFoam).Render("Harnesses: "+strings.Join(r.harnesses, " ")),
+		lipgloss.NewStyle().Foreground(colorFoam).Render("harnesses: "+strings.Join(r.harnesses, " ")),
 		"",
 	)
 

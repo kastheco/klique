@@ -15,6 +15,8 @@ func TestReviewStep_RendersSummary(t *testing.T) {
 
 	r := newReviewStep(agents, []string{"claude", "opencode"})
 	view := r.View(100, 36)
+	assert.Contains(t, view, "review configuration")
+	assert.NotContains(t, view, "Review Configuration")
 	assert.Contains(t, view, "claude-sonnet-4-6")
 	assert.Contains(t, view, "gpt-5.3-codex")
 	assert.Contains(t, view, "disabled") // planner
