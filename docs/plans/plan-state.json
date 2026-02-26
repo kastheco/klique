@@ -465,6 +465,13 @@
       "topic": "ui",
       "created_at": "2026-02-26T02:26:10.767895938Z"
     },
+    "2026-02-26-new-cli-command.md": {
+      "status": "ready",
+      "description": "kas new [title] [description] # new cli command (also runnable via kas n alias) to quickly create a new plan (no topic) with optional description via cli without having to launch tui",
+      "branch": "plan/new-cli-command",
+      "topic": "tools",
+      "created_at": "2026-02-26T05:07:21.925625953Z"
+    },
     "2026-02-26-opencode-default-harness.md": {
       "status": "done",
       "description": "opencode should be the default harness for each agent type, not claude",
