@@ -51,7 +51,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 // handleMouse processes mouse events for click and scroll interactions.
 func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Track hover state for the repo button on any mouse event
-	repoHovered := zone.Get(ui.ZoneRepoSwitch).InBounds(msg)
+	repoHovered := zone.Get(ui.ZoneNavRepo).InBounds(msg)
 	m.nav.SetRepoHovered(repoHovered)
 
 	if msg.Action != tea.MouseActionPress {

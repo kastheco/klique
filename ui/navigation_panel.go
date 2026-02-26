@@ -14,9 +14,6 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// ZoneRepoSwitch is kept for backward compatibility; new code should use ZoneNavRepo.
-const ZoneRepoSwitch = ZoneNavRepo
-
 const (
 	SidebarPlanPrefix        = "__plan__"
 	SidebarTopicPrefix       = "__topic__"
