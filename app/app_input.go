@@ -1388,6 +1388,18 @@ func keyToBytes(msg tea.KeyMsg) []byte {
 		return []byte{0x1b}
 	case tea.KeyShiftTab:
 		return []byte("\x1b[Z")
+	case tea.KeyShiftUp:
+		return []byte("\x1b[1;2A")
+	case tea.KeyShiftDown:
+		return []byte("\x1b[1;2B")
+	case tea.KeyShiftRight:
+		return []byte("\x1b[1;2C")
+	case tea.KeyShiftLeft:
+		return []byte("\x1b[1;2D")
+	case tea.KeyShiftHome:
+		return []byte("\x1b[1;2H")
+	case tea.KeyShiftEnd:
+		return []byte("\x1b[1;2F")
 	default:
 		// Forward any ctrl+letter key as its raw control character byte.
 		// bubbletea KeyCtrlA..KeyCtrlZ have sequential values 0x01..0x1A.

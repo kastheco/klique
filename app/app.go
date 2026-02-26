@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
@@ -1116,6 +1118,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	default:
+		// Forward unknown CSI sequences (kitty keyboard protocol, etc.) to the
+		// embedded PTY when in focus/interactive mode. Bubbletea emits these as
+		// an unexported []byte-based type; use reflect to extract raw bytes.
+		if m.state == stateFocusAgent && m.previewTerminal != nil {
+			v := reflect.ValueOf(msg)
+			if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
+				if data := v.Bytes(); len(data) > 0 {
+					_ = m.previewTerminal.SendKey(data)
+				}
+				return m, nil
+			}
+		}
 	}
 	return m, nil
 }
