@@ -596,7 +596,7 @@ func TestWriteOpenCodeProject_IncludesNonOpencodeAgents(t *testing.T) {
 
 	// Reviewer block also present even though harness is claude
 	assert.Contains(t, s, `"reviewer"`)
-	assert.Contains(t, s, `"claude-opus-4-6"`)
+	assert.Contains(t, s, `"anthropic/claude-opus-4-6"`)
 }
 
 func TestRun_OpencodeConfigGenerated(t *testing.T) {

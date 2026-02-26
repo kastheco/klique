@@ -121,7 +121,7 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 			continue
 		}
 
-		rendered = strings.ReplaceAll(rendered, "{{"+upper+"_MODEL}}", agent.Model)
+		rendered = strings.ReplaceAll(rendered, "{{"+upper+"_MODEL}}", normalizeOpenCodeModel(agent.Harness, agent.Model))
 
 		// Temperature: bare number or remove line
 		if agent.Temperature != nil {
@@ -141,6 +141,21 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 	rendered = stripTrailingCommas(rendered)
 
 	return rendered, nil
+}
+
+func normalizeOpenCodeModel(harnessName, model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" || strings.Contains(model, "/") {
+		return model
+	}
+
+	// Claude model names are typically bare (e.g. "claude-opus-4-6") while
+	// OpenCode expects provider/model format.
+	if harnessName == "claude" {
+		return "anthropic/" + model
+	}
+
+	return model
 }
 
 // stripTrailingCommas removes JSON trailing commas that arise when removeJSONBlock

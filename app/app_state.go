@@ -778,6 +778,7 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	// Use the reviewer profile if configured, otherwise fall back to default program.
 	reviewProfile := m.appConfig.ResolveProfile("spec_review", m.program)
 	reviewProgram := reviewProfile.BuildCommand()
+	reviewProgram = withOpenCodeModelFlag(reviewProgram, reviewProfile.Model)
 
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     planName + "-review",
@@ -806,6 +807,46 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		err := reviewerInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: reviewerInst, err: err}
 	}
+}
+
+func withOpenCodeModelFlag(program, model string) string {
+	model = normalizeOpenCodeModelID(model)
+	if model == "" {
+		return program
+	}
+
+	tokens := strings.Fields(program)
+	if len(tokens) == 0 {
+		return program
+	}
+	if filepath.Base(tokens[0]) != "opencode" {
+		return program
+	}
+
+	for i, tok := range tokens {
+		if tok == "--model" || tok == "-m" {
+			if i+1 < len(tokens) {
+				return program
+			}
+			return program
+		}
+		if strings.HasPrefix(tok, "--model=") {
+			return program
+		}
+	}
+
+	return program + " --model " + model
+}
+
+func normalizeOpenCodeModelID(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" || strings.Contains(model, "/") {
+		return model
+	}
+	if strings.HasPrefix(model, "claude-") {
+		return "anthropic/" + model
+	}
+	return model
 }
 
 // killExistingPlanAgent finds and kills any existing instance for the given plan
