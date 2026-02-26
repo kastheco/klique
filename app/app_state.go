@@ -1491,7 +1491,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 
 	var cmds []tea.Cmd
 	for _, task := range tasks {
-		prompt := buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves())
+		prompt := buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))
 
 		inst, err := session.NewInstance(session.InstanceOptions{
 			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
@@ -1501,6 +1501,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 			AgentType:  session.AgentTypeCoder,
 			TaskNumber: task.Number,
 			WaveNumber: orch.CurrentWaveNumber(),
+			PeerCount:  len(tasks),
 		})
 		if err != nil {
 			return m, m.handleError(err)
