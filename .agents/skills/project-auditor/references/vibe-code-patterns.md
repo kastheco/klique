@@ -410,22 +410,22 @@ Run these checks on suspected vibe-coded projects:
 ### Quick Scans
 ```bash
 # Find TODO/FIXME comments
-rg "TODO\|FIXME\|HACK\|XXX" -g "*.py" -g "*.ts" -g "*.js"
+rg "TODO|FIXME|HACK|XXX" -g "*.py" -g "*.ts" -g "*.js"
 
 # Find empty functions
-rg -n "pass$\|return$\|{}" -g "*.py"
+rg -n "^\s*(pass|return)\s*$" -g "*.py"
 
 # Find unused imports (Python)
 ruff check --select F401 .
 
 # Find console.log/print statements
-rg "console.log\|print(" -g "*.py" -g "*.ts" -g "*.js"
+rg "console\.log|print\(" -g "*.py" -g "*.ts" -g "*.js"
 
 # Find hardcoded URLs
-rg -E "https?://[a-z0-9]" -g "*.py" -g "*.ts" -g "*.js" -g "!*test*" -g "!node_modules"
+rg "https?://[a-z0-9]" -g "*.py" -g "*.ts" -g "*.js" -g "!*test*" -g "!node_modules"
 
 # Find potential secrets
-rg -E "(password|secret|key|token)\s*=\s*['\"][^'\"]+['\"]" -g "*.py" -g "*.ts" -g "*.js"
+rg "(password|secret|key|token)\s*=\s*['\"][^'\"]+['\"]" -g "*.py" -g "*.ts" -g "*.js"
 ```
 
 ### Structural Analysis
