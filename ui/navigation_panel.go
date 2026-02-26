@@ -608,17 +608,48 @@ func (n *NavigationPanel) CyclePrevActive() {
 }
 
 func (n *NavigationPanel) cycleActive(step int) {
-	if len(n.instances) == 0 {
-		return
-	}
-	start := n.SelectedIndex()
-	for i := 1; i <= len(n.instances); i++ {
-		idx := (start + i*step + len(n.instances)*2) % len(n.instances)
-		if !n.instances[idx].Paused() {
-			n.SelectInstance(n.instances[idx])
-			return
+	// Build the cycle list in visual (top-to-bottom) order so Ctrl+Up/Down
+	// follows the on-screen layout across attention/active/solo sections.
+	// For collapsed plan headers, insert their hidden instances at the
+	// header's position so cycling can auto-expand them.
+	var ordered []*session.Instance
+	for _, row := range n.rows {
+		switch {
+		case row.Kind == navRowInstance && row.Instance != nil:
+			if !row.Instance.Paused() {
+				ordered = append(ordered, row.Instance)
+			}
+		case row.Kind == navRowPlanHeader && row.Collapsed:
+			// Plan is collapsed — its instances aren't in rows.
+			// Insert them here so they appear at the right visual position.
+			for _, inst := range n.instances {
+				if inst.PlanFile == row.PlanFile && !inst.Paused() {
+					ordered = append(ordered, inst)
+				}
+			}
 		}
 	}
+	if len(ordered) == 0 {
+		return
+	}
+
+	// Find current position. Match by instance pointer from the selected row.
+	cur := -1
+	sel := n.GetSelectedInstance()
+	if sel != nil {
+		for i, inst := range ordered {
+			if inst == sel {
+				cur = i
+				break
+			}
+		}
+	}
+	if cur < 0 {
+		cur = 0
+	}
+
+	next := (cur + step + len(ordered)) % len(ordered)
+	n.SelectInstance(ordered[next])
 }
 
 func (n *NavigationPanel) GetInstances() []*session.Instance { return n.instances }
@@ -758,6 +789,8 @@ func navInstanceTitle(inst *session.Instance) string {
 		return fmt.Sprintf("wave %d · task %d", inst.WaveNumber, inst.TaskNumber)
 	case inst.AgentType == session.AgentTypeReviewer && inst.PlanFile != "":
 		return "review"
+	case inst.AgentType == session.AgentTypePlanner && inst.PlanFile != "":
+		return "planning"
 	case inst.SoloAgent && inst.PlanFile != "":
 		return planstate.DisplayName(inst.PlanFile)
 	case inst.AgentType == session.AgentTypeCoder && inst.PlanFile != "" && inst.WaveNumber == 0:
