@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-// EmbeddedSkillNames is the list of skill names that kas init writes to .agents/skills/.
+// EmbeddedSkillNames is the list of skill names that kas setup writes to .agents/skills/.
 var EmbeddedSkillNames = []string{"cli-tools", "golang-pro", "tmux-orchestration", "tui-design"}
 
 // AuditProject checks <dir>/.agents/skills/ against expected embedded skills

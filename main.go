@@ -182,9 +182,10 @@ func init() {
 	var forceFlag bool
 	var cleanFlag bool
 
-	kasInitCmd := &cobra.Command{
-		Use:   "init",
-		Short: "Configure agent harnesses, install superpowers, and scaffold project files",
+	kasSetupCmd := &cobra.Command{
+		Use:     "setup",
+		Aliases: []string{"init"},
+		Short:   "Configure agent harnesses, install superpowers, and scaffold project files",
 		Long: `Run an interactive wizard to:
   1. Detect and select agent CLIs (claude, opencode, codex)
   2. Configure agent roles (coder, reviewer, planner) with model and tuning
@@ -198,13 +199,13 @@ func init() {
 		},
 	}
 
-	kasInitCmd.Flags().BoolVar(&forceFlag, "force", false, "Overwrite existing project scaffold files")
-	kasInitCmd.Flags().BoolVar(&cleanFlag, "clean", false, "Ignore existing config, start with factory defaults")
+	kasSetupCmd.Flags().BoolVar(&forceFlag, "force", false, "Overwrite existing project scaffold files")
+	kasSetupCmd.Flags().BoolVar(&cleanFlag, "clean", false, "Ignore existing config, start with factory defaults")
 
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
-	rootCmd.AddCommand(kasInitCmd)
+	rootCmd.AddCommand(kasSetupCmd)
 }
 
 func main() {

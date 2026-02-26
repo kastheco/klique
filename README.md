@@ -70,7 +70,7 @@ kasmos
 on first run, use the setup wizard to configure your agent harnesses and install skills:
 
 ```bash
-kasmos init
+kasmos setup
 ```
 
 the wizard detects installed agent CLIs, lets you assign roles (planner / coder / reviewer), and scaffolds the project files kasmos needs.
@@ -85,7 +85,7 @@ usage:
   kasmos [command]
 
 available commands:
-  init        configure agent harnesses, install superpowers, and scaffold project files
+  setup       configure agent harnesses, install superpowers, and scaffold project files
   reset       reset all stored instances and clean up tmux sessions and worktrees
   debug       print debug information like config paths
   version     print the version number

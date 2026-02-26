@@ -79,7 +79,7 @@ detected harness's global skill directory:
   Codex:        (native, no sync needed)
 
 Replaces stale symlinks. Skips user-managed directories and symlink-based
-skills (e.g. superpowers/) which are managed by 'kas init'.`,
+skills (e.g. superpowers/) which are managed by 'kas setup'.`,
 		RunE: runSkillsSync,
 	}
 }

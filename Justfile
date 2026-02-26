@@ -18,8 +18,8 @@ bi: build install
 bin:
     kas
 
-init:
-    kas init --force
+setup:
+    kas setup --force
 
 # Build + install + run
 kas: build install bin

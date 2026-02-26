@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse hook: block legacy CLI tools, enforce modern replacements.
-# Installed by kasmos init. Source of truth: cli-tools skill.
+# Installed by kasmos setup. Source of truth: cli-tools skill.
 # Reads Bash tool_input.command from stdin JSON and rejects banned commands.
 
 INPUT=$(cat)

@@ -10,13 +10,13 @@ import (
 	"github.com/kastheco/kasmos/internal/initcmd/wizard"
 )
 
-// Options holds the CLI flags for kas init.
+// Options holds the CLI flags for kas setup.
 type Options struct {
 	Force bool // overwrite existing project scaffold files
 	Clean bool // ignore existing config, start with factory defaults
 }
 
-// Run executes the kas init workflow.
+// Run executes the kas setup workflow.
 func Run(opts Options) error {
 	registry := harness.NewRegistry()
 

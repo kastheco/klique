@@ -16,7 +16,7 @@ type OpenCode struct{}
 
 const openCodeEnforceCLIToolsPlugin = `/**
  * CLI-tools enforcement plugin for OpenCode.
- * Installed by kasmos init. Blocks banned CLI tools and suggests replacements.
+ * Installed by kasmos setup. Blocks banned CLI tools and suggests replacements.
  */
 export const EnforceCLIToolsPlugin = async ({ client, directory }) => {
   const BANNED = [
