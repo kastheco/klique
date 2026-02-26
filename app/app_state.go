@@ -1102,7 +1102,7 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	}
 
-	branch := "plan/" + strings.TrimSuffix(filename, ".md")
+	branch := gitpkg.PlanBranchFromFile(filename)
 	if err := m.planState.Register(filename, task.Name, branch, time.Now()); err != nil {
 		m.toastManager.Error("failed to register imported plan: " + err.Error())
 		return m, m.toastTickCmd()
