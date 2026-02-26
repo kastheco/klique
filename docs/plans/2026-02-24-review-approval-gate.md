@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** After automated review completes (reviewer writes `review-approved` signal or dies), block auto-transition to `done` and instead show a two-popup manual approval flow — first to read the review, then to merge or create a PR.
+**Goal:** After automated review completes (reviewer writes `review-approved` signal or its tmux dies), block auto-transition to `done` and require manual user approval via popups before the plan can be marked done.
 
-**Architecture:** Add `pendingApprovals map[string]bool` to `home` struct to track plans awaiting user approval. Intercept `ReviewApproved` at both entry points (signal handler and reviewer-death detector) to set the flag and show Popup 1 instead of calling `fsm.Transition`. Popup 1 selects the reviewer instance and enters focus mode. When focus mode exits on a reviewer with a pending approval, show Popup 2 with merge/PR/dismiss choices. Context menu also offers merge/PR for `reviewing` plans as an alternate path.
+**Architecture:** Two trigger paths with distinct popups. Path A (sentinel): show "review approved" confirmation → focus on reviewer → merge/PR choice. Path B (reviewer death): show "approve?" with y/n/esc — y enters Path A, n respawns reviewer, esc dismisses. `pendingApprovals map[string]bool` tracks plans awaiting merge/PR. Dedicated `pendingApprovalPRAction` avoids state collision with wave orchestration. Context menu offers merge/PR as alternate path for `reviewing` plans.
 
 **Tech Stack:** Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, testify
 
@@ -12,30 +12,36 @@
 
 ## Wave 1: State Infrastructure
 
-### Task 1: Add `pendingApprovals` field to home struct
+### Task 1: Add `pendingApprovals` and `pendingApprovalPRAction` fields to home struct
 
 **Files:**
-- Modify: `app/app.go:227-230` (add field after `pendingReviewFeedback`)
-- Modify: `app/app.go:268` (initialize in `newHome()`)
+- Modify: `app/app.go` (add fields after `pendingReviewFeedback`, initialize in `newHome()`)
 
-**Step 1: Add the field to the home struct**
+**Step 1: Add the fields to the home struct**
 
-In `app/app.go`, after line 229 (`pendingReviewFeedback map[string]string`), add:
+In `app/app.go`, after line 235 (`pendingReviewFeedback map[string]string`), add:
 
 ```go
 	// pendingApprovals tracks plans whose automated review approved but the user
 	// hasn't yet confirmed merge/PR. Keyed by plan filename. In-memory only —
 	// on restart, reviewer-death fallback re-triggers the approval popup.
 	pendingApprovals map[string]bool
+
+	// pendingApprovalPRAction stores the "create PR" action for the post-review
+	// merge/PR popup (Popup 2). Isolated from pendingWaveNextAction to avoid
+	// state collision with wave orchestration dialogs.
+	pendingApprovalPRAction tea.Cmd
 ```
 
 **Step 2: Initialize in `newHome()`**
 
-In `app/app.go` at line 268, after `pendingReviewFeedback: make(map[string]string),`, add:
+In `app/app.go`, after line 275 (`pendingReviewFeedback: make(map[string]string),`), add:
 
 ```go
-		pendingApprovals:      make(map[string]bool),
+		pendingApprovals: make(map[string]bool),
 ```
+
+(`pendingApprovalPRAction` is nil by default, no init needed.)
 
 **Step 3: Verify it compiles**
 
@@ -46,25 +52,21 @@ Expected: SUCCESS
 
 ```bash
 git add app/app.go
-git commit -m "feat(approval): add pendingApprovals field to home struct"
+git commit -m "feat(approval): add pendingApprovals and pendingApprovalPRAction fields"
 ```
 
 ### Task 2: Add `pendingApprovals` to test helpers
 
 **Files:**
-- Modify: `app/app_plan_completion_test.go:271-282` (first test helper)
-- Modify: `app/app_plan_completion_test.go:339-355` (second test helper)
-- Modify: `app/app_plan_completion_test.go:420-436` (third test helper)
+- Modify: `app/app_plan_completion_test.go` (all `&home{...}` literals)
 
-**Step 1: Add field to all three test `home` struct literals**
+**Step 1: Add field to all test `home` struct literals**
 
-Each test helper that constructs a `&home{...}` literal needs `pendingApprovals: make(map[string]bool)`. Add it next to the existing `pendingReviewFeedback` line in each.
+Each test helper that constructs a `&home{...}` literal needs `pendingApprovals: make(map[string]bool)`. Add it next to the existing `pendingReviewFeedback` line in each. There are three locations — find `pendingReviewFeedback: make(map[string]string),` in each:
 
-The three locations (line numbers approximate — find `pendingReviewFeedback: make(map[string]string),` in each):
-
-1. `TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState` (~line 275)
-2. `TestImplementFinishedSignal_SpawnsReviewer` (~line 351)
-3. `TestReviewChangesSignal_RespawnsCoder` (~line 432)
+1. `TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState` (~line 283)
+2. `TestImplementFinishedSignal_SpawnsReviewer` (~line 359)
+3. `TestReviewChangesSignal_RespawnsCoder` (~line 440)
 
 **Step 2: Verify tests compile**
 
@@ -78,9 +80,52 @@ git add app/app_plan_completion_test.go
 git commit -m "fix(test): add pendingApprovals to test home struct literals"
 ```
 
-## Wave 2: Intercept ReviewApproved — Show Popup 1
+### Task 3: Define new msg types
 
-### Task 3: Write tests for approval interception
+**Files:**
+- Modify: `app/app.go` (add near other msg types around line 1206)
+
+**Step 1: Add msg types**
+
+```go
+// reviewApprovalFocusMsg is sent when the user confirms "read review" in the
+// review-approved popup. Selects the reviewer instance and enters focus mode.
+type reviewApprovalFocusMsg struct {
+	planFile string
+}
+
+// reviewMergeMsg is sent when the user chooses "merge" in the post-review popup.
+type reviewMergeMsg struct {
+	planFile string
+}
+
+// reviewCreatePRMsg is sent when the user chooses "create PR" in the post-review popup.
+type reviewCreatePRMsg struct {
+	planFile string
+}
+
+// reviewerRedoMsg is sent when the user rejects a reviewer-death approval (presses 'n').
+// Respawns the reviewer for the given plan.
+type reviewerRedoMsg struct {
+	planFile string
+}
+```
+
+**Step 2: Verify it compiles**
+
+Run: `go build ./app/...`
+Expected: SUCCESS
+
+**Step 3: Commit**
+
+```bash
+git add app/app.go
+git commit -m "feat(approval): define review approval msg types"
+```
+
+## Wave 2: Intercept ReviewApproved — Path A (Sentinel)
+
+### Task 4: Write tests for sentinel-path approval interception
 
 **Files:**
 - Modify: `app/app_plan_completion_test.go` (append new tests)
@@ -126,7 +171,7 @@ func TestReviewApprovedSignal_SetsPendingApproval(t *testing.T) {
 		list:                  list,
 		menu:                  ui.NewMenu(),
 		sidebar:               ui.NewSidebar(),
-		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
@@ -178,88 +223,35 @@ git add app/app_plan_completion_test.go
 git commit -m "test(approval): add failing test for review-approved interception"
 ```
 
-### Task 4: Intercept `ReviewApproved` signal in signal handler
+### Task 5: Intercept `ReviewApproved` signal in signal handler
 
 **Files:**
-- Modify: `app/app.go:522-558` (signal processing loop in `metadataResultMsg` handler)
+- Modify: `app/app.go` (~line 546, the signal processing loop in `metadataResultMsg` handler)
 
-**Step 1: Add `ReviewApproved` case to the signal handler**
+**Step 1: Add `ReviewApproved` intercept before `fsm.Transition`**
 
-In `app/app.go`, inside the `switch sig.Event` block (~line 532), the `ReviewApproved` event
-currently falls through to the default path (no `case` for it), so `fsm.Transition` at line 524
-handles it. We need to intercept it BEFORE that.
-
-Replace the signal loop (lines 522-558) with:
+In `app/app.go`, inside the signal loop (`for _, sig := range msg.Signals {`), add a `ReviewApproved` interception *before* the `fsm.Transition` call at line 548. Insert immediately after the `for` line:
 
 ```go
-		var signalCmds []tea.Cmd
-		for _, sig := range msg.Signals {
 			// Intercept ReviewApproved: block FSM transition, show approval popup instead.
 			if sig.Event == planfsm.ReviewApproved {
 				planfsm.ConsumeSignal(sig)
 				m.pendingApprovals[sig.PlanFile] = true
-				planName := planstate.DisplayName(sig.PlanFile)
-				capturedPlanFile := sig.PlanFile
-				m.confirmAction(
-					fmt.Sprintf("review approved — %s", planName),
-					func() tea.Msg {
-						return reviewApprovalFocusMsg{planFile: capturedPlanFile}
-					},
-				)
+				if m.state != stateConfirm {
+					planName := planstate.DisplayName(sig.PlanFile)
+					capturedPlanFile := sig.PlanFile
+					m.confirmAction(
+						fmt.Sprintf("review approved — %s\n\n[y] read review  [esc] dismiss", planName),
+						func() tea.Msg {
+							return reviewApprovalFocusMsg{planFile: capturedPlanFile}
+						},
+					)
+				}
 				continue
 			}
-
-			if err := m.fsm.Transition(sig.PlanFile, sig.Event); err != nil {
-				log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.PlanFile, err)
-				planfsm.ConsumeSignal(sig)
-				continue
-			}
-			planfsm.ConsumeSignal(sig)
-
-			// Side effects: spawn agents in response to successful transitions.
-			switch sig.Event {
-			case planfsm.ImplementFinished:
-				// Pause the coder that wrote this signal.
-				for _, inst := range m.list.GetInstances() {
-					if inst.PlanFile == sig.PlanFile && inst.AgentType == session.AgentTypeCoder {
-						inst.ImplementationComplete = true
-						_ = inst.Pause()
-						break
-					}
-				}
-				if cmd := m.spawnReviewer(sig.PlanFile); cmd != nil {
-					signalCmds = append(signalCmds, cmd)
-				}
-			case planfsm.ReviewChangesRequested:
-				feedback := sig.Body
-				m.pendingReviewFeedback[sig.PlanFile] = feedback
-				// Pause the reviewer that wrote this signal.
-				for _, inst := range m.list.GetInstances() {
-					if inst.PlanFile == sig.PlanFile && inst.IsReviewer {
-						_ = inst.Pause()
-						break
-					}
-				}
-				if cmd := m.spawnCoderWithFeedback(sig.PlanFile, feedback); cmd != nil {
-					signalCmds = append(signalCmds, cmd)
-				}
-			}
-		}
 ```
 
-**Step 2: Define the `reviewApprovalFocusMsg` type**
-
-Add near the other msg types in `app/app.go` (around the `coderCompleteMsg`, `plannerCompleteMsg` types):
-
-```go
-// reviewApprovalFocusMsg is sent when the user confirms Popup 1 (review approved).
-// It selects the reviewer instance and enters focus mode so the user can read the review.
-type reviewApprovalFocusMsg struct {
-	planFile string
-}
-```
-
-**Step 3: Handle `reviewApprovalFocusMsg` in Update**
+**Step 2: Handle `reviewApprovalFocusMsg` in Update**
 
 Add a case in the `Update` function's type switch (near other msg handlers):
 
@@ -277,32 +269,34 @@ Add a case in the `Update` function's type switch (near other msg handlers):
 		return m, m.toastTickCmd()
 ```
 
-**Step 4: Run the test**
+**Step 3: Run the test**
 
 Run: `go test ./app/... -run TestReviewApprovedSignal_SetsPendingApproval -count=1 -v`
 Expected: PASS
 
-**Step 5: Commit**
+**Step 4: Commit**
 
 ```bash
 git add app/app.go
 git commit -m "feat(approval): intercept review-approved signal with approval popup"
 ```
 
-### Task 5: Intercept reviewer-death auto-approve
+## Wave 3: Intercept Reviewer Death — Path B
+
+### Task 6: Write test for reviewer-death approval popup
 
 **Files:**
-- Modify: `app/app.go:647-668` (reviewer death detection block in `metadataResultMsg`)
+- Modify: `app/app_plan_completion_test.go` (append new test)
 
-**Step 1: Write a test for reviewer-death interception**
+**Step 1: Write test**
 
 Append to `app/app_plan_completion_test.go`:
 
 ```go
-// TestReviewerDeath_SetsPendingApproval verifies that when a reviewer's tmux
-// session dies while the plan is in reviewing state, pendingApprovals is set
-// instead of auto-transitioning to done.
-func TestReviewerDeath_SetsPendingApproval(t *testing.T) {
+// TestReviewerDeath_ShowsApprovalPopup verifies that when a reviewer's tmux
+// session dies while the plan is in reviewing state, a y/n/esc approval popup
+// is shown instead of auto-transitioning to done.
+func TestReviewerDeath_ShowsApprovalPopup(t *testing.T) {
 	const planFile = "2026-02-23-feature.md"
 
 	dir := t.TempDir()
@@ -336,7 +330,7 @@ func TestReviewerDeath_SetsPendingApproval(t *testing.T) {
 		list:                  list,
 		menu:                  ui.NewMenu(),
 		sidebar:               ui.NewSidebar(),
-		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
@@ -358,27 +352,39 @@ func TestReviewerDeath_SetsPendingApproval(t *testing.T) {
 
 	_, _ = h.Update(msg)
 
-	// pendingApprovals must be set.
-	assert.True(t, h.pendingApprovals[planFile],
-		"reviewer death must set pendingApprovals instead of transitioning to done")
-
-	// Plan status must still be "reviewing".
+	// Plan status must still be "reviewing" — NOT "done".
 	reloaded, _ := planstate.Load(plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusReviewing, entry.Status,
 		"plan must stay in reviewing after reviewer death until user approves")
+
+	// Confirmation overlay must be shown (y/n/esc).
+	assert.Equal(t, stateConfirm, h.state,
+		"confirmation overlay must be shown for reviewer death")
 }
 ```
 
 **Step 2: Run test to verify it fails**
 
-Run: `go test ./app/... -run TestReviewerDeath_SetsPendingApproval -count=1 -v`
+Run: `go test ./app/... -run TestReviewerDeath_ShowsApprovalPopup -count=1 -v`
 Expected: FAIL — reviewer death currently calls `fsm.Transition(ReviewApproved)`.
 
-**Step 3: Replace reviewer-death auto-approve with pending approval**
+**Step 3: Commit failing test**
 
-In `app/app.go`, replace lines 664-668 (the reviewer death block):
+```bash
+git add app/app_plan_completion_test.go
+git commit -m "test(approval): add failing test for reviewer-death approval popup"
+```
+
+### Task 7: Replace reviewer-death auto-approve with y/n/esc popup
+
+**Files:**
+- Modify: `app/app.go` (~line 688, the reviewer death block)
+
+**Step 1: Replace the reviewer-death auto-approve**
+
+In `app/app.go`, replace lines 688-691:
 
 ```go
 			// Reviewer death → ReviewApproved: one-shot FSM transition, rare event.
@@ -390,51 +396,105 @@ In `app/app.go`, replace lines 664-668 (the reviewer death block):
 With:
 
 ```go
-			// Reviewer death → pending approval (manual gate).
-			// Don't auto-transition to done — set pending approval so the user
-			// can review and choose merge/PR via popup or context menu.
+			// Reviewer death → approval popup (manual gate).
+			// Don't auto-transition to done — show y/n/esc popup so the user
+			// can approve, reject (redo), or dismiss.
 			if !m.pendingApprovals[inst.PlanFile] {
-				m.pendingApprovals[inst.PlanFile] = true
 				planName := planstate.DisplayName(inst.PlanFile)
 				if m.state != stateConfirm {
 					capturedPlanFile := inst.PlanFile
-					m.confirmAction(
-						fmt.Sprintf("review approved — %s", planName),
-						func() tea.Msg {
-							return reviewApprovalFocusMsg{planFile: capturedPlanFile}
-						},
+					m.state = stateConfirm
+					m.confirmationOverlay = overlay.NewConfirmationOverlay(
+						fmt.Sprintf("reviewer exited — approve '%s'?\n\n[y] approve  [n] reject (redo review)  [esc] dismiss", planName),
 					)
+					m.confirmationOverlay.SetWidth(60)
+					m.pendingConfirmAction = func() tea.Msg {
+						return reviewApprovalFocusMsg{planFile: capturedPlanFile}
+					}
+					m.pendingWaveNextAction = nil
+					m.pendingWaveAbortAction = nil
+					// Store reject action: 'n' key triggers CancelKey handler.
+					m.confirmationOverlay.CancelKey = "n"
+					// We need a dedicated field for the reject action.
+					// Reuse pendingConfirmAction for 'y' and handle 'n' as a reviewerRedoMsg.
+					capturedPlanFileForReject := inst.PlanFile
+					m.pendingApprovalPRAction = func() tea.Msg {
+						return reviewerRedoMsg{planFile: capturedPlanFileForReject}
+					}
 				}
 			}
 ```
 
-**Step 4: Run both tests**
+**Step 2: Handle `reviewerRedoMsg` in Update**
 
-Run: `go test ./app/... -run "TestReviewerDeath_SetsPendingApproval|TestReviewApprovedSignal_SetsPendingApproval" -count=1 -v`
+Add a case in the `Update` type switch:
+
+```go
+	case reviewerRedoMsg:
+		// User rejected the reviewer-death approval — respawn the reviewer.
+		if cmd := m.spawnReviewer(msg.planFile); cmd != nil {
+			m.toastManager.Info(fmt.Sprintf("restarting review for %s", planstate.DisplayName(msg.planFile)))
+			return m, tea.Batch(m.toastTickCmd(), cmd)
+		}
+		return m, nil
+```
+
+**Step 3: Update `stateConfirm` CancelKey handler for reviewer-death popup**
+
+In `app/app_input.go`, in the `case m.confirmationOverlay.CancelKey:` block (~line 589), after the existing `pendingWaveNextAction` check, add a check for the reviewer-death reject:
+
+```go
+		case m.confirmationOverlay.CancelKey:
+			// If this is the failed-wave dialog and 'n' (next wave) is the cancel key,
+			// fire the advance action instead of the normal cancel/re-prompt logic.
+			if m.pendingWaveNextAction != nil {
+				nextAction := m.pendingWaveNextAction
+				m.state = stateDefault
+				m.confirmationOverlay = nil
+				m.pendingConfirmAction = nil
+				m.pendingWaveAbortAction = nil
+				m.pendingWaveNextAction = nil
+				m.pendingWaveConfirmPlanFile = ""
+				return m, nextAction
+			}
+			// If this is the reviewer-death approval dialog, 'n' triggers reject (redo).
+			if m.pendingApprovalPRAction != nil {
+				rejectAction := m.pendingApprovalPRAction
+				m.state = stateDefault
+				m.confirmationOverlay = nil
+				m.pendingConfirmAction = nil
+				m.pendingApprovalPRAction = nil
+				return m, rejectAction
+			}
+```
+
+The rest of the CancelKey handler remains unchanged.
+
+**Step 4: Run the test**
+
+Run: `go test ./app/... -run TestReviewerDeath_ShowsApprovalPopup -count=1 -v`
 Expected: PASS
 
 **Step 5: Run full test suite**
 
 Run: `go test ./app/... -count=1`
-Expected: PASS (existing tests should still pass — they don't check for `done` transition from ReviewApproved signal path)
+Expected: PASS
 
 **Step 6: Commit**
 
 ```bash
-git add app/app.go app/app_plan_completion_test.go
-git commit -m "feat(approval): intercept reviewer death with pending approval popup"
+git add app/app.go app/app_input.go app/app_plan_completion_test.go
+git commit -m "feat(approval): replace reviewer-death auto-approve with y/n/esc popup"
 ```
 
-## Wave 3: Popup 2 — Post-Focus Merge/PR Choice
+## Wave 4: Popup 2 — Post-Focus Merge/PR Choice
 
-### Task 6: Add `reviewApprovalConfirmAction` helper
+### Task 8: Add `reviewApprovalConfirmAction` helper
 
 **Files:**
-- Modify: `app/app_input.go` (add helper near `waveStandardConfirmAction`)
+- Modify: `app/app_input.go` (add helper after `waveFailedConfirmAction` ~line 1370)
 
 **Step 1: Add helper function**
-
-Add after `waveFailedConfirmAction` (~line 1406) in `app/app_input.go`:
 
 ```go
 // reviewApprovalConfirmAction shows a three-choice dialog for a plan with
@@ -454,90 +514,13 @@ func (m *home) reviewApprovalConfirmAction(planFile string) {
 	m.pendingConfirmAction = func() tea.Msg {
 		return reviewMergeMsg{planFile: capturedPlanFile}
 	}
-	m.pendingWaveNextAction = func() tea.Msg {
+	// Use dedicated field to avoid collision with wave orchestration.
+	m.pendingApprovalPRAction = func() tea.Msg {
 		return reviewCreatePRMsg{planFile: capturedPlanFile}
 	}
+	m.pendingWaveNextAction = nil
+	m.pendingWaveAbortAction = nil
 }
-```
-
-**Step 2: Define msg types**
-
-Add to `app/app.go` near other msg types:
-
-```go
-// reviewMergeMsg is sent when the user chooses "merge" in the post-review popup.
-type reviewMergeMsg struct {
-	planFile string
-}
-
-// reviewCreatePRMsg is sent when the user chooses "create PR" in the post-review popup.
-type reviewCreatePRMsg struct {
-	planFile string
-}
-```
-
-**Step 3: Verify it compiles**
-
-Run: `go build ./app/...`
-Expected: SUCCESS
-
-**Step 4: Commit**
-
-```bash
-git add app/app_input.go app/app.go
-git commit -m "feat(approval): add review approval confirm helper and msg types"
-```
-
-### Task 7: Show Popup 2 when exiting focus mode from a reviewer with pending approval
-
-**Files:**
-- Modify: `app/app_input.go:478-500` (focus mode key handler, Ctrl+Space exit path)
-
-**Step 1: Modify focus mode exit to check for pending approval**
-
-In `app/app_input.go`, replace the Ctrl+Space exit block (lines 481-483):
-
-```go
-		if msg.Type == tea.KeyCtrlAt {
-			m.exitFocusMode()
-			return m, tea.WindowSize()
-		}
-```
-
-With:
-
-```go
-		if msg.Type == tea.KeyCtrlAt {
-			// Check if the focused instance is a reviewer with a pending approval.
-			selected := m.list.GetSelectedInstance()
-			m.exitFocusMode()
-			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
-				m.reviewApprovalConfirmAction(selected.PlanFile)
-				return m, nil
-			}
-			return m, tea.WindowSize()
-		}
-```
-
-Also update the `!`/`@`/`#` jump-slot exit paths (lines 489-499). After `m.exitFocusMode()` and before the tab switch logic, add the same check. Replace:
-
-```go
-		if doJump {
-			wasGitTab := m.tabbedWindow.IsInGitTab()
-			m.exitFocusMode()
-```
-
-With:
-
-```go
-		if doJump {
-			selected := m.list.GetSelectedInstance()
-			wasGitTab := m.tabbedWindow.IsInGitTab()
-			m.exitFocusMode()
-			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
-				m.reviewApprovalConfirmAction(selected.PlanFile)
-				return m, nil
-			}
 ```
 
 **Step 2: Verify it compiles**
@@ -549,10 +532,83 @@ Expected: SUCCESS
 
 ```bash
 git add app/app_input.go
+git commit -m "feat(approval): add review approval confirm helper"
+```
+
+### Task 9: Show Popup 2 when exiting focus mode from a reviewer with pending approval
+
+**Files:**
+- Modify: `app/app_input.go` (~line 479, Ctrl+Space exit path; ~line 495, jump-slot exit path)
+
+**Step 1: Modify Ctrl+Space focus mode exit**
+
+Replace lines 479-481:
+
+```go
+		if msg.Type == tea.KeyCtrlAt {
+			m.exitFocusMode()
+			return m, tea.WindowSize()
+		}
+```
+
+With:
+
+```go
+		if msg.Type == tea.KeyCtrlAt {
+			selected := m.list.GetSelectedInstance()
+			m.exitFocusMode()
+			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
+				m.reviewApprovalConfirmAction(selected.PlanFile)
+				return m, nil
+			}
+			return m, tea.WindowSize()
+		}
+```
+
+**Step 2: Modify jump-slot exit path**
+
+Replace lines 495-498:
+
+```go
+		if doJump {
+			m.exitFocusMode()
+			m.setFocusSlot(jumpSlot)
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		}
+```
+
+With:
+
+```go
+		if doJump {
+			selected := m.list.GetSelectedInstance()
+			m.exitFocusMode()
+			if selected != nil && selected.IsReviewer && selected.PlanFile != "" && m.pendingApprovals[selected.PlanFile] {
+				m.reviewApprovalConfirmAction(selected.PlanFile)
+				return m, nil
+			}
+			m.setFocusSlot(jumpSlot)
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		}
+```
+
+**Step 3: Update CancelKey handler in stateConfirm for Popup 2**
+
+The CancelKey `p` in Popup 2 needs to fire `pendingApprovalPRAction`. In `app/app_input.go`, the CancelKey handler (line 589) already checks `pendingWaveNextAction` first. The `pendingApprovalPRAction` check added in Task 7 will also handle this — when CancelKey is `p` and `pendingApprovalPRAction` is set, it fires the PR action. This is correct for both reviewer-death (Task 7) and Popup 2 (this task).
+
+**Step 4: Verify it compiles**
+
+Run: `go build ./app/...`
+Expected: SUCCESS
+
+**Step 5: Commit**
+
+```bash
+git add app/app_input.go
 git commit -m "feat(approval): show merge/pr popup when exiting focus mode from approved reviewer"
 ```
 
-### Task 8: Handle `reviewMergeMsg` and `reviewCreatePRMsg` in Update
+### Task 10: Handle `reviewMergeMsg` and `reviewCreatePRMsg` in Update
 
 **Files:**
 - Modify: `app/app.go` (add cases to `Update` type switch)
@@ -608,7 +664,8 @@ Add to the type switch in `Update()`:
 	case reviewCreatePRMsg:
 		planFile := msg.planFile
 		delete(m.pendingApprovals, planFile)
-		// Find the reviewer instance for this plan to get its worktree.
+		m.pendingApprovalPRAction = nil
+		// Find an instance for this plan so the PR flow can use it.
 		var planInst *session.Instance
 		for _, inst := range m.list.GetInstances() {
 			if inst.PlanFile == planFile {
@@ -652,16 +709,16 @@ git add app/app.go
 git commit -m "feat(approval): handle merge and create-pr messages from approval popup"
 ```
 
-## Wave 4: Context Menu Alternate Path
+## Wave 5: Context Menu Alternate Path
 
-### Task 9: Add merge/PR options to reviewing plan context menu
+### Task 11: Add merge/PR options to reviewing plan context menu
 
 **Files:**
-- Modify: `app/app_actions.go:525-530` (plan context menu for `StatusReviewing`)
+- Modify: `app/app_actions.go` (~line 552, plan context menu for `StatusReviewing`)
 
 **Step 1: Update the reviewing context menu**
 
-In `app/app_actions.go`, replace the `StatusReviewing` case (lines 525-530):
+Replace lines 552-556:
 
 ```go
 		case planstate.StatusReviewing:
@@ -685,7 +742,7 @@ With:
 
 **Step 2: Add action handlers for `review_merge` and `review_create_pr`**
 
-In `app/app_actions.go`, in the `executeContextAction` switch, add two new cases (near the existing `merge_plan` case):
+In `app/app_actions.go`, in the `executeContextAction` switch, add two new cases (near the existing `merge_plan` case around line 240):
 
 ```go
 	case "review_merge":
@@ -775,16 +832,30 @@ git add app/app_actions.go
 git commit -m "feat(approval): add review & merge / create pr context menu options"
 ```
 
-## Wave 5: Edge Cases and Cleanup
+## Wave 6: Edge Cases and Cleanup
 
-### Task 10: Clear pending approval on plan cancel/start-over
+### Task 12: Clear pending approval on plan cancel/start-over/mark-done
 
 **Files:**
-- Modify: `app/app_actions.go` (cancel_plan and start_over_plan handlers)
+- Modify: `app/app_actions.go` (cancel_plan, start_over_plan, mark_plan_done handlers)
 
-**Step 1: Add cleanup to cancel_plan handler**
+**Step 1: Add cleanup to `mark_plan_done` handler**
 
-In `app/app_actions.go`, in the `cancel_plan` case (~line 286), add `delete(m.pendingApprovals, planFile)` before the `cancelAction` closure:
+In the `mark_plan_done` case (~line 275), add `delete(m.pendingApprovals, planFile)` after getting the planFile:
+
+```go
+	case "mark_plan_done":
+		planFile := m.sidebar.GetSelectedPlanFile()
+		if planFile == "" || m.planState == nil {
+			return m, nil
+		}
+		delete(m.pendingApprovals, planFile)
+		// Solo agents finish at "implementing" — advance through reviewing in one step.
+```
+
+**Step 2: Add cleanup to `cancel_plan` handler**
+
+In the `cancel_plan` case (~line 307), add `delete(m.pendingApprovals, planFile)` after getting the planFile:
 
 ```go
 	case "cancel_plan":
@@ -794,16 +865,11 @@ In `app/app_actions.go`, in the `cancel_plan` case (~line 286), add `delete(m.pe
 		}
 		delete(m.pendingApprovals, planFile)
 		planName := planstate.DisplayName(planFile)
-		// ... rest unchanged
 ```
 
-**Step 2: Add cleanup to start_over_plan handler**
+**Step 3: Add cleanup to `start_over_plan` handler**
 
-Find the `start_over_plan` case and add `delete(m.pendingApprovals, planFile)` similarly.
-
-**Step 3: Add cleanup to mark_plan_done handler**
-
-In the `mark_plan_done` case (~line 267), add `delete(m.pendingApprovals, planFile)` before the FSM transition.
+In the `start_over_plan` case (~line 337), add `delete(m.pendingApprovals, planFile)` after getting the planFile.
 
 **Step 4: Verify it compiles**
 
@@ -822,81 +888,34 @@ git add app/app_actions.go
 git commit -m "fix(approval): clear pending approvals on cancel/start-over/mark-done"
 ```
 
-### Task 11: Prevent duplicate approval popups
+### Task 13: Clear `pendingApprovalPRAction` in esc handler
 
 **Files:**
-- Modify: `app/app.go` (both interception sites)
+- Modify: `app/app_input.go` (~line 641, esc handler in stateConfirm)
 
-**Step 1: Guard signal-path interception against duplicate popups**
+**Step 1: Add cleanup**
 
-In the signal handler's `ReviewApproved` interception (added in Task 4), change the confirm popup to only show if not already in `stateConfirm`:
-
-The code already has `m.confirmAction(...)` which sets `stateConfirm`. But if a popup is already showing (e.g. wave advance), we should skip showing another. Wrap the confirm call:
+In the esc handler block, after line 644 (`m.pendingWaveAbortAction = nil`), add:
 
 ```go
-			if sig.Event == planfsm.ReviewApproved {
-				planfsm.ConsumeSignal(sig)
-				m.pendingApprovals[sig.PlanFile] = true
-				if m.state != stateConfirm {
-					planName := planstate.DisplayName(sig.PlanFile)
-					capturedPlanFile := sig.PlanFile
-					m.confirmAction(
-						fmt.Sprintf("review approved — %s", planName),
-						func() tea.Msg {
-							return reviewApprovalFocusMsg{planFile: capturedPlanFile}
-						},
-					)
-				}
-				continue
-			}
+			m.pendingApprovalPRAction = nil
 ```
 
-The reviewer-death path (Task 5) already has this guard. This makes them consistent.
+Also add it in the ConfirmKey handler cleanup (~line 570) and the `a` abort handler cleanup (~line 585).
 
-**Step 2: Guard reviewer-death path against already-approved plans**
+**Step 2: Verify it compiles**
 
-The reviewer-death block already checks `!m.pendingApprovals[inst.PlanFile]` (added in Task 5). Good.
+Run: `go build ./app/...`
+Expected: SUCCESS
 
-**Step 3: Verify**
-
-Run: `go test ./app/... -count=1`
-Expected: PASS
-
-**Step 4: Commit**
+**Step 3: Commit**
 
 ```bash
-git add app/app.go
-git commit -m "fix(approval): guard against duplicate approval popups"
+git add app/app_input.go
+git commit -m "fix(approval): clear pendingApprovalPRAction in all stateConfirm exit paths"
 ```
 
-### Task 12: Esc from Popup 2 clears approval state cleanly
-
-**Files:**
-- Modify: `app/app_input.go:604-653` (cancel key handler in stateConfirm)
-
-**Step 1: Verify esc behavior**
-
-The `esc` path in the `stateConfirm` handler (lines 645-653) already resets `m.state = stateDefault` and clears overlays. When the user presses Esc on Popup 2:
-- `pendingWaveNextAction` is set (we reuse it for the PR action) — it gets cleared
-- `pendingApprovals` stays set — this is correct, the plan remains in `reviewing` and the user can come back via context menu
-
-No code change needed for the esc path. The CancelKey (`p`) path fires `pendingWaveNextAction` which is the `reviewCreatePRMsg`. If the user presses `n` on the default cancel key handler, it would fire `pendingWaveNextAction` — but we set CancelKey to `p`, so the mapping is:
-- `m` (ConfirmKey) → merge
-- `p` (CancelKey) → create PR (fires `pendingWaveNextAction`)
-- `esc` → dismiss, keep pending
-
-This is correct — no additional code needed for this task. Just verify.
-
-**Step 2: Run full test suite one final time**
-
-Run: `go test ./... -count=1`
-Expected: PASS
-
-**Step 3: Commit (if any changes were needed)**
-
-No commit needed if no changes. If any edge case fixes were required, commit them.
-
-### Task 13: Final verification
+### Task 14: Final verification
 
 **Step 1: Build the full binary**
 
@@ -918,8 +937,11 @@ Expected: No new typos
 1. Start kasmos
 2. Pick a plan in `reviewing` state
 3. Verify context menu shows "review & merge" and "create pr & push"
-4. If a reviewer is running: wait for it to die or write `review-approved` signal
-5. Verify Popup 1 appears ("review approved — ...")
-6. Press enter → should enter focus mode on reviewer
+4. If a reviewer is running: wait for it to die
+5. Verify popup appears: "reviewer exited — approve '{plan}'?" with y/n/esc
+6. Press `y` → should enter focus mode on reviewer
 7. Exit focus mode (Ctrl+Space) → Popup 2 should appear with m/p/esc choices
 8. Press `m` → merge completes, plan moves to done
+9. For sentinel path: wait for reviewer to write `review-approved`
+10. Verify popup: "review approved — {plan}" with y/esc
+11. Press `y` → focus mode → exit → merge/PR popup
