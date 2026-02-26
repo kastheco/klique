@@ -506,12 +506,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
 
-		// Alt+Up/Down: cycle through instances (wrapping) while staying in focus mode
+		// Alt+Up/Down: cycle through active instances (wrapping) while staying in focus mode
 		if msg.Alt && (msg.Type == tea.KeyUp || msg.Type == tea.KeyDown) {
 			if msg.Type == tea.KeyUp {
-				m.list.CyclePrev()
+				m.list.CyclePrevActive()
 			} else {
-				m.list.CycleNext()
+				m.list.CycleNextActive()
 			}
 			cmd := m.instanceChanged()
 			// Re-enter focus mode for the newly selected instance
@@ -889,12 +889,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	}
 
-	// Alt+Up/Down: cycle through instances (wrapping)
+	// Alt+Up/Down: cycle through active instances (wrapping)
 	if msg.Alt && (msg.Type == tea.KeyUp || msg.Type == tea.KeyDown) {
 		if msg.Type == tea.KeyUp {
-			m.list.CyclePrev()
+			m.list.CyclePrevActive()
 		} else {
-			m.list.CycleNext()
+			m.list.CycleNextActive()
 		}
 		return m, m.instanceChanged()
 	}

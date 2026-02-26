@@ -97,6 +97,40 @@ func (l *List) CyclePrev() {
 	l.ensureSelectedVisible()
 }
 
+// CycleNextActive selects the next non-paused instance, wrapping around.
+// If no active instance exists, selection stays unchanged.
+func (l *List) CycleNextActive() {
+	n := len(l.items)
+	if n == 0 {
+		return
+	}
+	for i := 1; i <= n; i++ {
+		idx := (l.selectedIdx + i) % n
+		if !l.items[idx].Paused() {
+			l.selectedIdx = idx
+			l.ensureSelectedVisible()
+			return
+		}
+	}
+}
+
+// CyclePrevActive selects the previous non-paused instance, wrapping around.
+// If no active instance exists, selection stays unchanged.
+func (l *List) CyclePrevActive() {
+	n := len(l.items)
+	if n == 0 {
+		return
+	}
+	for i := 1; i <= n; i++ {
+		idx := (l.selectedIdx - i + n) % n
+		if !l.items[idx].Paused() {
+			l.selectedIdx = idx
+			l.ensureSelectedVisible()
+			return
+		}
+	}
+}
+
 // allTabText and activeTabText are the rendered tab labels with hotkey indicators.
 const allTabText = "1 All"
 const activeTabText = "2 Active"

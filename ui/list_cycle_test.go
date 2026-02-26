@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/kastheco/kasmos/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,4 +74,67 @@ func TestListCycleNext_EmptyList(t *testing.T) {
 func TestListCyclePrev_EmptyList(t *testing.T) {
 	l := makeScrollTestList(t, 0)
 	l.CyclePrev() // should not panic
+}
+
+func TestListCycleNextActive_SkipsPaused(t *testing.T) {
+	l := makeScrollTestList(t, 4)
+	l.items[1].Status = session.Paused
+	l.items[2].Status = session.Paused
+	l.selectedIdx = 0
+
+	l.CycleNextActive()
+	assert.Equal(t, 3, l.SelectedIndex(), "CycleNextActive should skip paused items")
+}
+
+func TestListCyclePrevActive_SkipsPaused(t *testing.T) {
+	l := makeScrollTestList(t, 4)
+	l.items[2].Status = session.Paused
+	l.items[1].Status = session.Paused
+	l.selectedIdx = 3
+
+	l.CyclePrevActive()
+	assert.Equal(t, 0, l.SelectedIndex(), "CyclePrevActive should skip paused items")
+}
+
+func TestListCycleNextActive_AllPausedStaysput(t *testing.T) {
+	l := makeScrollTestList(t, 3)
+	for _, item := range l.items {
+		item.Status = session.Paused
+	}
+	l.selectedIdx = 1
+
+	l.CycleNextActive()
+	assert.Equal(t, 1, l.SelectedIndex(), "CycleNextActive should not move when all paused")
+}
+
+func TestListCycleNextActive_WrapsToBeginning(t *testing.T) {
+	l := makeScrollTestList(t, 4)
+	l.items[1].Status = session.Paused
+	l.items[2].Status = session.Paused
+	l.items[3].Status = session.Paused
+	l.selectedIdx = 0
+
+	l.CycleNextActive()
+	assert.Equal(t, 0, l.SelectedIndex(), "CycleNextActive should wrap back to self if only active")
+}
+
+func TestListCyclePrevActive_WrapsToEnd(t *testing.T) {
+	l := makeScrollTestList(t, 4)
+	l.items[0].Status = session.Paused
+	l.items[1].Status = session.Paused
+	l.items[2].Status = session.Paused
+	l.selectedIdx = 3
+
+	l.CyclePrevActive()
+	assert.Equal(t, 3, l.SelectedIndex(), "CyclePrevActive should wrap back to self if only active")
+}
+
+func TestListCycleNextActive_EmptyList(t *testing.T) {
+	l := makeScrollTestList(t, 0)
+	l.CycleNextActive() // should not panic
+}
+
+func TestListCyclePrevActive_EmptyList(t *testing.T) {
+	l := makeScrollTestList(t, 0)
+	l.CyclePrevActive() // should not panic
 }
