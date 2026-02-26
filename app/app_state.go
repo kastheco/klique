@@ -765,15 +765,10 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		return nil
 	}
 
-	// Use the reviewer profile if configured, otherwise fall back to default program.
-	reviewProfile := m.appConfig.ResolveProfile("spec_review", m.program)
-	reviewProgram := reviewProfile.BuildCommand()
-	reviewProgram = withOpenCodeModelFlag(reviewProgram, reviewProfile.Model)
-
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     planName + "-review",
 		Path:      m.activeRepoPath,
-		Program:   reviewProgram,
+		Program:   m.programForAgent(session.AgentTypeReviewer),
 		PlanFile:  planFile,
 		AgentType: session.AgentTypeReviewer,
 	})
@@ -826,6 +821,35 @@ func withOpenCodeModelFlag(program, model string) string {
 	}
 
 	return program + " --model " + model
+}
+
+// programForAgent resolves the program command for a given agent type
+// (e.g. "coder", "planner") using the kasmos config profile. Falls back to
+// m.program if no profile is configured. Appends --model for opencode.
+// An empty agentType uses the "chat" profile directly.
+func (m *home) programForAgent(agentType string) string {
+	if m.appConfig == nil {
+		return m.program
+	}
+	// Map agent types to config phases or profile names.
+	var profile config.AgentProfile
+	switch agentType {
+	case session.AgentTypeCoder:
+		profile = m.appConfig.ResolveProfile("implementing", m.program)
+	case session.AgentTypePlanner:
+		profile = m.appConfig.ResolveProfile("planning", m.program)
+	case session.AgentTypeReviewer:
+		profile = m.appConfig.ResolveProfile("quality_review", m.program)
+	default:
+		// Ad-hoc / solo — use the "chat" profile if available.
+		if p, ok := m.appConfig.Profiles["chat"]; ok && p.Enabled && p.Program != "" {
+			profile = p
+		} else {
+			return m.program
+		}
+	}
+	prog := profile.BuildCommand()
+	return withOpenCodeModelFlag(prog, profile.Model)
 }
 
 func normalizeOpenCodeModelID(model string) string {
@@ -903,7 +927,7 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	coderInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     planName + "-implement",
 		Path:      m.activeRepoPath,
-		Program:   m.program,
+		Program:   m.programForAgent(session.AgentTypeCoder),
 		PlanFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
@@ -1246,7 +1270,7 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   name,
 		Path:    path,
-		Program: m.program,
+		Program: m.programForAgent(""),
 	})
 	if err != nil {
 		return m, m.handleError(err)
@@ -1300,7 +1324,7 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     planstate.DisplayName(planFile) + "-" + action,
 		Path:      m.activeRepoPath,
-		Program:   m.program,
+		Program:   m.programForAgent(agentType),
 		PlanFile:  planFile,
 		AgentType: agentType,
 	})
@@ -1486,7 +1510,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 		inst, err := session.NewInstance(session.InstanceOptions{
 			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
 			Path:       m.activeRepoPath,
-			Program:    m.program,
+			Program:    m.programForAgent(session.AgentTypeCoder),
 			PlanFile:   planFile,
 			AgentType:  session.AgentTypeCoder,
 			TaskNumber: task.Number,

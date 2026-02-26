@@ -929,7 +929,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
 			Path:    m.activeRepoPath,
-			Program: m.program,
+			Program: m.programForAgent(""),
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -951,7 +951,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
 			Path:            m.activeRepoPath,
-			Program:         m.program,
+			Program:         m.programForAgent(""),
 			SkipPermissions: true,
 		})
 		if err != nil {
