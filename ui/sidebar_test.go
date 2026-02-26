@@ -362,6 +362,41 @@ func TestSidebarTreeRender_HistoryToggle(t *testing.T) {
 	assert.Contains(t, output, "History")
 }
 
+func TestSidebar_ImportRowVisible(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetClickUpAvailable(true)
+	s.SetTopicsAndPlans(nil, nil, nil)
+
+	rendered := s.String()
+	assert.Contains(t, rendered, "Import from ClickUp")
+}
+
+func TestSidebar_ImportRowHidden(t *testing.T) {
+	s := NewSidebar()
+	s.SetSize(40, 20)
+	s.SetClickUpAvailable(false)
+	s.SetTopicsAndPlans(nil, nil, nil)
+
+	rendered := s.String()
+	assert.NotContains(t, rendered, "Import from ClickUp")
+}
+
+func TestSidebar_GetSelectedID_ImportRow(t *testing.T) {
+	s := NewSidebar()
+	s.SetClickUpAvailable(true)
+	s.SetTopicsAndPlans(nil, nil, nil)
+
+	for i := 0; i < len(s.rows); i++ {
+		if s.rows[i].ID == SidebarImportClickUp {
+			s.selectedIdx = i
+			break
+		}
+	}
+
+	assert.Equal(t, SidebarImportClickUp, s.GetSelectedID())
+}
+
 func TestSidebarTreeRender_CancelledPlan(t *testing.T) {
 	s := NewSidebar()
 	s.SetSize(40, 20)

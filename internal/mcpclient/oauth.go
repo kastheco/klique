@@ -74,9 +74,10 @@ func GeneratePKCE() (verifier, challenge string) {
 
 // OAuthConfig holds the OAuth application settings for the PKCE flow.
 type OAuthConfig struct {
-	AuthURL  string // Authorization endpoint (e.g. "https://app.clickup.com/api")
-	TokenURL string // Token exchange endpoint
-	ClientID string
+	AuthURL     string // Authorization endpoint (e.g. "https://app.clickup.com/api")
+	TokenURL    string // Token exchange endpoint
+	ClientID    string
+	RedirectURI string // Reserved for explicit callback URI overrides.
 }
 
 // OAuthFlow performs the browser-based OAuth 2.1 PKCE flow and returns a token.
@@ -136,6 +137,8 @@ func OAuthFlow(ctx context.Context, cfg OAuthConfig, openBrowser func(string) er
 		return nil, err
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-time.After(5 * time.Minute):
+		return nil, fmt.Errorf("oauth timeout: no callback received within 5 minutes")
 	}
 
 	return exchangeCode(cfg, code, verifier, redirectURI)

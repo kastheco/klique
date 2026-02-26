@@ -14,6 +14,7 @@ import (
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
@@ -1027,6 +1028,82 @@ func (m *home) finalizePlanCreation(name, description string) error {
 	m.updateSidebarPlans()
 	m.updateSidebarItems()
 	return nil
+}
+
+func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
+	if task == nil {
+		m.toastManager.Error("clickup fetch failed: empty task payload")
+		return m, m.toastTickCmd()
+	}
+
+	date := time.Now().Format("2006-01-02")
+	filename := clickup.ScaffoldFilename(task.Name, date)
+
+	plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
+	if err := os.MkdirAll(plansDir, 0o755); err != nil {
+		m.toastManager.Error("failed to create plans dir: " + err.Error())
+		return m, m.toastTickCmd()
+	}
+	filename = dedupePlanFilename(plansDir, filename)
+	planPath := filepath.Join(plansDir, filename)
+
+	scaffold := clickup.ScaffoldPlan(*task)
+	if err := os.WriteFile(planPath, []byte(scaffold), 0o644); err != nil {
+		m.toastManager.Error("failed to write plan: " + err.Error())
+		return m, m.toastTickCmd()
+	}
+
+	if m.planState == nil {
+		m.loadPlanState()
+	}
+	if m.planState == nil {
+		m.toastManager.Error("failed to register imported plan: plan state unavailable")
+		return m, m.toastTickCmd()
+	}
+
+	branch := "plan/" + strings.TrimSuffix(filename, ".md")
+	if err := m.planState.Register(filename, task.Name, branch, time.Now()); err != nil {
+		m.toastManager.Error("failed to register imported plan: " + err.Error())
+		return m, m.toastTickCmd()
+	}
+
+	if err := m.fsm.Transition(filename, planfsm.PlanStart); err != nil {
+		log.WarningLog.Printf("clickup import transition failed for %q: %v", filename, err)
+	}
+
+	m.loadPlanState()
+	m.updateSidebarPlans()
+	m.updateSidebarItems()
+
+	prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan file.
+
+Determine if the task is well-specified enough for implementation or needs further analysis. Write a proper implementation plan with ## Wave sections, task breakdowns, architecture notes, and tech stack. Use the ClickUp subtasks as a starting point but reorganize into waves based on dependencies.
+
+The plan file is at: docs/plans/%s`, filename)
+
+	m.toastManager.Success("imported! spawning planner...")
+	model, cmd := m.spawnPlanAgent(filename, "plan", prompt)
+	if cmd == nil {
+		return model, m.toastTickCmd()
+	}
+	return model, tea.Batch(cmd, m.toastTickCmd())
+}
+
+func dedupePlanFilename(plansDir, filename string) string {
+	planPath := filepath.Join(plansDir, filename)
+	if _, err := os.Stat(planPath); os.IsNotExist(err) {
+		return filename
+	}
+
+	base := strings.TrimSuffix(filename, ".md")
+	for i := 2; i < 100; i++ {
+		candidate := fmt.Sprintf("%s-%d.md", base, i)
+		if _, err := os.Stat(filepath.Join(plansDir, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+
+	return filename
 }
 
 // shouldPromptPushAfterCoderExit returns true when a coder session has exited

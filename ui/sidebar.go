@@ -62,6 +62,7 @@ const (
 	SidebarTopicPrefix       = "__topic__"
 	SidebarPlanStagePrefix   = "__plan_stage__"
 	SidebarPlanHistoryToggle = "__plan_history_toggle__"
+	SidebarImportClickUp     = "__import_clickup__"
 )
 
 // PlanDisplay holds plan info for sidebar rendering.
@@ -90,6 +91,7 @@ const (
 	rowKindStage                               // plan lifecycle stage
 	rowKindHistoryToggle                       // "History" toggle row
 	rowKindCancelled                           // cancelled plan (strikethrough)
+	rowKindImportAction                        // "+ Import from ClickUp" action row
 )
 
 // sidebarRow is a single rendered row in the sidebar.
@@ -145,6 +147,16 @@ var topicLabelStyle = lipgloss.NewStyle().Foreground(ColorText).Bold(true)
 // historyToggleStyle is for the history section divider.
 var historyToggleStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 
+// importActionStyle is for the clickable import row.
+var importActionStyle = lipgloss.NewStyle().
+	Foreground(ColorFoam).
+	Padding(0, 1)
+
+var importActionSelectedStyle = lipgloss.NewStyle().
+	Background(ColorFoam).
+	Foreground(ColorBase).
+	Padding(0, 1)
+
 // Legend styles for the status indicator key at the bottom of the sidebar.
 var legendLabelStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 var legendSepStyle = lipgloss.NewStyle().Foreground(ColorOverlay)
@@ -165,11 +177,12 @@ type SidebarItem struct {
 
 // Sidebar is the left-most panel showing topics and search.
 type Sidebar struct {
-	items         []SidebarItem
-	plans         []PlanDisplay
-	selectedIdx   int
-	height, width int
-	focused       bool
+	items            []SidebarItem
+	plans            []PlanDisplay
+	selectedIdx      int
+	height, width    int
+	focused          bool
+	clickUpAvailable bool // true when ClickUp MCP is detected
 
 	searchActive bool
 	searchQuery  string
@@ -523,7 +536,7 @@ func (s *Sidebar) Left() {
 				return
 			}
 		}
-	case rowKindHistoryToggle, rowKindCancelled:
+	case rowKindHistoryToggle, rowKindCancelled, rowKindImportAction:
 		if s.selectedIdx > 0 {
 			s.selectedIdx--
 		}
@@ -598,6 +611,12 @@ func (s *Sidebar) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDispl
 		s.treeCancelled = cancelled[0]
 	}
 	s.useTreeMode = true
+	s.rebuildRows()
+}
+
+// SetClickUpAvailable controls whether the import action row is visible.
+func (s *Sidebar) SetClickUpAvailable(available bool) {
+	s.clickUpAvailable = available
 	s.rebuildRows()
 }
 
@@ -723,6 +742,16 @@ func (s *Sidebar) rebuildRows() {
 				}
 			}
 		}
+	}
+
+	// Import action (only when ClickUp MCP is detected)
+	if s.clickUpAvailable {
+		rows = append(rows, sidebarRow{
+			Kind:   rowKindImportAction,
+			ID:     SidebarImportClickUp,
+			Label:  "+ Import from ClickUp",
+			Indent: 0,
+		})
 	}
 
 	// History toggle (if there are finished plans)
@@ -962,6 +991,7 @@ func (s *Sidebar) renderTreeRows(b *strings.Builder, itemWidth int) {
 	for relIdx, row := range s.rows[startRow:endRow] {
 		absIdx := relIdx + startRow
 		var line string
+		rawLine := false
 
 		switch row.Kind {
 		case rowKindTopic:
@@ -974,6 +1004,15 @@ func (s *Sidebar) renderTreeRows(b *strings.Builder, itemWidth int) {
 			line = s.renderHistoryToggleRow(contentWidth)
 		case rowKindCancelled:
 			line = s.renderCancelledRow(row, absIdx, contentWidth)
+		case rowKindImportAction:
+			line = s.renderImportRow(row, absIdx, contentWidth)
+			rawLine = true
+		}
+
+		if rawLine {
+			b.WriteString(line)
+			b.WriteString("\n")
+			continue
 		}
 
 		// Apply selection styling — strip inner ANSI so the selection
@@ -1115,6 +1154,13 @@ func (s *Sidebar) renderHistoryToggleRow(_ int) string {
 		chevron = "▾"
 	}
 	return historyToggleStyle.Render("── " + chevron + " History ──")
+}
+
+func (s *Sidebar) renderImportRow(row sidebarRow, idx, width int) string {
+	if idx == s.selectedIdx {
+		return importActionSelectedStyle.Width(width).Render(row.Label)
+	}
+	return importActionStyle.Width(width).Render(row.Label)
 }
 
 // renderCancelledRow renders a cancelled plan with strikethrough.

@@ -8,6 +8,7 @@ import (
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,7 +23,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -782,6 +783,62 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle ClickUp search input state
+	if m.state == stateClickUpSearch {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+
+		closed := m.textInputOverlay.HandleKeyPress(msg)
+		if closed {
+			if m.textInputOverlay.IsSubmitted() {
+				query := strings.TrimSpace(m.textInputOverlay.GetValue())
+				if query != "" {
+					m.state = stateClickUpFetching
+					m.textInputOverlay = nil
+					m.toastManager.Info("searching clickup...")
+					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
+				}
+			}
+			m.state = stateDefault
+			m.textInputOverlay = nil
+		}
+		return m, nil
+	}
+
+	// Handle ClickUp task picker state
+	if m.state == stateClickUpPicker {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		closed := m.pickerOverlay.HandleKeyPress(msg)
+		if closed {
+			if m.pickerOverlay.IsSubmitted() {
+				selected := m.pickerOverlay.Value()
+				if selected != "" {
+					for _, r := range m.clickUpResults {
+						label := r.ID + " · " + r.Name
+						if strings.HasPrefix(selected, label) {
+							m.state = stateClickUpFetching
+							m.pickerOverlay = nil
+							m.toastManager.Info("fetching task details...")
+							return m, tea.Batch(m.fetchClickUpTaskWithTimeout(r.ID), m.toastTickCmd())
+						}
+					}
+				}
+			}
+			m.state = stateDefault
+			m.pickerOverlay = nil
+		}
+		return m, nil
+	}
+
+	if m.state == stateClickUpFetching {
+		return m, nil
+	}
+
 	// Handle search state — allows typing to filter AND arrow keys to navigate topics
 	if m.state == stateSearch {
 		switch {
@@ -1008,6 +1065,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.CycleSortMode()
 		return m, m.instanceChanged()
 	case keys.KeySpace:
+		if m.focusSlot == slotSidebar && m.sidebar.GetSelectedID() == ui.SidebarImportClickUp {
+			m.state = stateClickUpSearch
+			m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
+			m.textInputOverlay.SetSize(50, 3)
+			return m, nil
+		}
 		if m.focusSlot == slotSidebar && m.sidebar.ToggleSelectedExpand() {
 			return m, nil
 		}
@@ -1132,6 +1195,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyEnter:
 		// If the sidebar is focused, handle tree-mode interactions.
 		if m.focusSlot == slotSidebar {
+			if m.sidebar.GetSelectedID() == ui.SidebarImportClickUp {
+				m.state = stateClickUpSearch
+				m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
+				m.textInputOverlay.SetSize(50, 3)
+				return m, nil
+			}
 			// Stage row: trigger that lifecycle stage directly.
 			if planFile, stage, isStage := m.sidebar.GetSelectedPlanStage(); isStage {
 				return m.triggerPlanStage(planFile, stage)

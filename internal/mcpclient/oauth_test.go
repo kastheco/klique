@@ -104,9 +104,10 @@ func TestOAuthFlow_ExchangesCode(t *testing.T) {
 	defer tokenSrv.Close()
 
 	cfg := mcpclient.OAuthConfig{
-		AuthURL:  "http://localhost/auth",
-		TokenURL: tokenSrv.URL,
-		ClientID: "test-client",
+		AuthURL:     "http://localhost/auth",
+		TokenURL:    tokenSrv.URL,
+		ClientID:    "test-client",
+		RedirectURI: "",
 	}
 
 	// openBrowser simulates the OAuth callback by parsing the redirect_uri
@@ -137,9 +138,10 @@ func TestOAuthFlow_ExchangesCode(t *testing.T) {
 
 func TestOAuthFlow_Timeout(t *testing.T) {
 	cfg := mcpclient.OAuthConfig{
-		AuthURL:  "http://localhost/auth",
-		TokenURL: "http://localhost/token",
-		ClientID: "test-client",
+		AuthURL:     "http://localhost/auth",
+		TokenURL:    "http://localhost/token",
+		ClientID:    "test-client",
+		RedirectURI: "",
 	}
 
 	// openBrowser does nothing — simulates user never authorizing
