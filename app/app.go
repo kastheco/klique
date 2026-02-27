@@ -102,6 +102,8 @@ const (
 	statePermission
 	// stateTmuxBrowser is the state when the tmux session browser overlay is shown.
 	stateTmuxBrowser
+	// stateChatAboutPlan is the state when the user is typing a question about a plan.
+	stateChatAboutPlan
 )
 
 type home struct {
@@ -185,6 +187,8 @@ type home struct {
 	pendingPRTitle string
 	// pendingChangeTopicPlan stores the plan filename during the change-topic flow
 	pendingChangeTopicPlan string
+	// pendingChatAboutPlan stores the plan filename during the chat-about-plan flow
+	pendingChatAboutPlan string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
 
@@ -1439,6 +1443,8 @@ func (m *home) View() string {
 	case m.state == stateContextMenu && m.contextMenu != nil:
 		cx, cy := m.contextMenu.GetPosition()
 		result = overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
+	case m.state == stateChatAboutPlan && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateTmuxBrowser && m.tmuxBrowser != nil:
 		result = overlay.PlaceOverlay(0, 0, m.tmuxBrowser.Render(), mainView, true, true)
 	default:

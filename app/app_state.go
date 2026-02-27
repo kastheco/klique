@@ -1699,6 +1699,80 @@ func (m *home) discoverTmuxSessions() tea.Cmd {
 	}
 }
 
+// buildChatAboutPlanPrompt builds the custodian prompt for a chat-about-plan session.
+func buildChatAboutPlanPrompt(planFile string, entry planstate.PlanEntry, question string) string {
+	name := planstate.DisplayName(planFile)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("You are answering a question about the plan '%s'.\n\n", name))
+	sb.WriteString("## Plan Context\n\n")
+	sb.WriteString(fmt.Sprintf("- **File:** docs/plans/%s\n", planFile))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", entry.Status))
+	if entry.Description != "" {
+		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", entry.Description))
+	}
+	if entry.Branch != "" {
+		sb.WriteString(fmt.Sprintf("- **Branch:** %s\n", entry.Branch))
+	}
+	if entry.Topic != "" {
+		sb.WriteString(fmt.Sprintf("- **Topic:** %s\n", entry.Topic))
+	}
+	sb.WriteString(fmt.Sprintf("\nRead the plan file at docs/plans/%s for full details.\n\n", planFile))
+	sb.WriteString("## User Question\n\n")
+	sb.WriteString(question)
+	return sb.String()
+}
+
+// spawnChatAboutPlan spawns a custodian agent pre-loaded with the plan context and user question.
+func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd) {
+	if m.planState == nil {
+		return m, m.handleError(fmt.Errorf("no plan state loaded"))
+	}
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+	}
+	prompt := buildChatAboutPlanPrompt(planFile, entry, question)
+	planName := planstate.DisplayName(planFile)
+	title := planName + "-chat"
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     title,
+		Path:      m.activeRepoPath,
+		Program:   m.programForAgent(session.AgentTypeCustodian),
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeCustodian,
+	})
+	if err != nil {
+		return m, m.handleError(err)
+	}
+	inst.QueuedPrompt = prompt
+	inst.SetStatus(session.Loading)
+	inst.LoadingTotal = 5
+	inst.LoadingMessage = "preparing chat..."
+
+	// Use the plan's branch worktree if available, otherwise main.
+	var startCmd tea.Cmd
+	branch := m.planBranch(planFile)
+	if branch != "" {
+		shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, branch)
+		startCmd = func() tea.Msg {
+			if err := shared.Setup(); err != nil {
+				return instanceStartedMsg{instance: inst, err: err}
+			}
+			err := inst.StartInSharedWorktree(shared, branch)
+			return instanceStartedMsg{instance: inst, err: err}
+		}
+	} else {
+		startCmd = func() tea.Msg {
+			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
+		}
+	}
+
+	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+	m.nav.SelectInstance(inst)
+	return m, tea.Batch(tea.WindowSize(), startCmd)
+}
+
 // adoptOrphanSession creates a new Instance backed by an existing orphaned tmux session.
 func (m *home) adoptOrphanSession(item overlay.TmuxBrowserItem) (tea.Model, tea.Cmd) {
 	inst, err := session.NewInstance(session.InstanceOptions{

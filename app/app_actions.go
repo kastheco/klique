@@ -196,6 +196,19 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
+	case "chat_about_plan":
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		m.pendingChatAboutPlan = planFile
+		m.state = stateChatAboutPlan
+		m.textInputOverlay = overlay.NewTextInputOverlay("ask about this plan", "")
+		m.textInputOverlay.SetSize(60, 5)
+		m.textInputOverlay.SetMultiline(true)
+		m.textInputOverlay.SetPlaceholder("what would you like to know?")
+		return m, nil
+
 	case "push_plan_branch":
 		planInst := m.findPlanInstance()
 		if planInst == nil {
@@ -579,6 +592,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 		)
 	}
 	items = append(items,
+		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
 		overlay.ContextMenuItem{Label: "view plan", Action: "view_plan"},
 		overlay.ContextMenuItem{Label: "rename plan", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
