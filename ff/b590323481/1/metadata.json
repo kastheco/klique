@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.8",
   "checkpoint_id": "ffb590323481",
+  "session_id": "ses_35ecea75affeOoj9kE5Cvh7pxb",
   "strategy": "manual-commit",
+  "created_at": "2026-02-27T23:39:56.312190475Z",
   "branch": "main",
   "checkpoints_count": 0,
   "files_touched": [
@@ -12,27 +14,24 @@
     "internal/initcmd/scaffold/templates/skills/kasmos-reviewer/SKILL.md",
     "main.go"
   ],
-  "sessions": [
-    {
-      "metadata": "/ff/b590323481/0/metadata.json",
-      "transcript": "/ff/b590323481/0/full.jsonl",
-      "context": "",
-      "content_hash": "/ff/b590323481/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/ff/b590323481/1/metadata.json",
-      "transcript": "/ff/b590323481/1/full.jsonl",
-      "context": "/ff/b590323481/1/context.md",
-      "content_hash": "/ff/b590323481/1/content_hash.txt",
-      "prompt": "/ff/b590323481/1/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "81e306dfd2e8",
+  "checkpoint_transcript_start": 17,
+  "transcript_lines_at_start": 17,
   "token_usage": {
     "input_tokens": 0,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
     "output_tokens": 0,
     "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-27T23:39:55.839995852Z",
+    "agent_lines": 46,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 46,
+    "agent_percentage": 100
   }
 }
