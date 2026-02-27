@@ -225,7 +225,7 @@ func TestPermissionDetection_ShowsOverlayForOpenCode(t *testing.T) {
 	m.nav.SetSelectedInstance(0)
 
 	// Simulate metadata tick with permission prompt detected
-	inst.CachedContent = "△ Permission required\n  ← Access external directory /opt\n\nPatterns\n\n- /opt/*\n"
+	inst.CachedContent = "△ Permission required\n  ← Access external directory /opt\n\nPatterns\n\n- /opt/*\n\n Allow once   Allow always   Reject\n"
 	inst.CachedContentSet = true
 
 	pp := session.ParsePermissionPrompt(inst.CachedContent, inst.Program)

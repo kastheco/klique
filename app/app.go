@@ -705,18 +705,22 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Permission prompt detection for opencode.
 			if md.PermissionPrompt != nil && m.state == stateDefault {
 				pp := md.PermissionPrompt
-				if pp.Pattern != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(pp.Pattern) {
-					// Auto-approve cached pattern — but only once per prompt appearance.
-					// Without this guard, every 500ms metadata tick fires a new
-					// permissionAutoApproveMsg while the pane still shows the prompt,
-					// sending duplicate key sequences that corrupt opencode's input state.
-					if m.permissionHandled[inst] != pp.Pattern {
-						m.permissionHandled[inst] = pp.Pattern
-						i := inst
-						asyncCmds = append(asyncCmds, func() tea.Msg {
-							return permissionAutoApproveMsg{instance: i}
-						})
-					}
+				// Guard key: use pattern if available, else sentinel.
+				// Must match what app_input.go sets on confirm.
+				guardKey := pp.Pattern
+				if guardKey == "" {
+					guardKey = "__handled__"
+				}
+
+				if _, handled := m.permissionHandled[inst]; handled {
+					// Already handled this prompt appearance — skip until cleared.
+				} else if pp.Pattern != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(pp.Pattern) {
+					// Auto-approve cached pattern.
+					m.permissionHandled[inst] = guardKey
+					i := inst
+					asyncCmds = append(asyncCmds, func() tea.Msg {
+						return permissionAutoApproveMsg{instance: i}
+					})
 				} else {
 					// Show modal (statePermission blocks re-entry on subsequent ticks).
 					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
@@ -855,6 +859,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Only prompt for one instance per tick to avoid stacking overlays.
 				break
+			}
+
+			// Solo agent death detection: mark solo agents as exited when their
+			// tmux session dies so the UI renders them greyed-out + strikethrough.
+			for _, inst := range m.nav.GetInstances() {
+				if !inst.SoloAgent || inst.Exited {
+					continue
+				}
+				alive, collected := tmuxAliveMap[inst.Title]
+				if collected && !alive {
+					inst.Exited = true
+				}
 			}
 
 			// Wave completion monitoring: check task completion and trigger wave transitions.

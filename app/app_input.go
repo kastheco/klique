@@ -621,6 +621,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.permissionOverlay = nil
 				m.state = stateDefault
 
+				// Guard against re-trigger: the pane still shows the permission
+				// prompt for a few ticks while the key sequence propagates.
+				// Without this, the next metadata tick re-opens the modal.
+				if inst != nil {
+					guardKey := pattern
+					if guardKey == "" {
+						guardKey = "__handled__"
+					}
+					m.permissionHandled[inst] = guardKey
+				}
+
 				if inst != nil {
 					// overlay.PermissionChoice and tmux.PermissionChoice share the same
 					// iota ordering, so a direct cast is safe.
@@ -632,6 +643,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						return nil
 					}
 				}
+			}
+			// Esc dismiss — also guard so the same prompt doesn't re-open.
+			if m.pendingPermissionInstance != nil {
+				guardKey := m.permissionOverlay.Pattern()
+				if guardKey == "" {
+					guardKey = "__handled__"
+				}
+				m.permissionHandled[m.pendingPermissionInstance] = guardKey
 			}
 			m.permissionOverlay = nil
 			m.pendingPermissionInstance = nil

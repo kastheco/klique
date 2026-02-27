@@ -1,8 +1,9 @@
 package session
 
 import (
-	"regexp"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // PermissionPrompt represents a detected permission request from an agent.
@@ -13,9 +14,6 @@ type PermissionPrompt struct {
 	Pattern string
 }
 
-// ansiStripRe strips ANSI escape sequences for permission prompt parsing.
-var ansiStripRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
 // ParsePermissionPrompt scans pane content for an opencode "Permission required" dialog.
 // Returns nil if no permission prompt is detected or if the program is not opencode.
 func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
@@ -23,12 +21,28 @@ func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
 		return nil
 	}
 
-	clean := ansiStripRe.ReplaceAllString(content, "")
+	clean := ansi.Strip(content)
 	lines := strings.Split(clean, "\n")
 
+	// Only scan the bottom 25 lines of the pane. The permission dialog is
+	// rendered at the bottom of opencode's TUI (~10 lines for the dialog
+	// plus status bar). Scanning the full pane false-positives on
+	// conversation text that discusses permissions.
+	const tailLines = 25
+	startLine := len(lines) - tailLines
+	if startLine < 0 {
+		startLine = 0
+	}
+	lines = lines[startLine:]
+
+	// Two structural checks to avoid false-positives from conversation text:
+	//  1. "△ Permission required" header (the △ glyph is opencode UI chrome)
+	//  2. Button bar with "Allow once" + "Allow always" on the same line
+	// Both must appear within the tail window.
 	permIdx := -1
 	for i, line := range lines {
-		if strings.Contains(strings.TrimSpace(line), "Permission required") {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "△") && strings.Contains(trimmed, "Permission required") {
 			permIdx = i
 			break
 		}
@@ -37,9 +51,21 @@ func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
 		return nil
 	}
 
+	hasButtons := false
+	for _, line := range lines[permIdx:] {
+		if strings.Contains(line, "Allow once") && strings.Contains(line, "Allow always") {
+			hasButtons = true
+			break
+		}
+	}
+	if !hasButtons {
+		return nil
+	}
+
 	prompt := &PermissionPrompt{}
 
-	// Description is on the next non-empty line after "Permission required", strip leading "← ".
+	// Description is on the next non-empty line after "Permission required".
+	// Strip leading arrow prefixes — opencode uses both "← " and "→ ".
 	for i := permIdx + 1; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(lines[i])
 		if trimmed == "" {
@@ -47,6 +73,8 @@ func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
 		}
 		trimmed = strings.TrimPrefix(trimmed, "← ")
 		trimmed = strings.TrimPrefix(trimmed, "←")
+		trimmed = strings.TrimPrefix(trimmed, "→ ")
+		trimmed = strings.TrimPrefix(trimmed, "→")
 		trimmed = strings.TrimSpace(trimmed)
 		prompt.Description = trimmed
 		break

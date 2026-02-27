@@ -43,7 +43,7 @@ Patterns
 }
 
 func TestParsePermissionPrompt_HandlesAnsiCodes(t *testing.T) {
-	content := "\x1b[33m△\x1b[0m \x1b[1mPermission required\x1b[0m\n  ← Access external directory /tmp\n\nPatterns\n\n- /tmp/*\n"
+	content := "\x1b[33m△\x1b[0m \x1b[1mPermission required\x1b[0m\n  ← Access external directory /tmp\n\nPatterns\n\n- /tmp/*\n\n Allow once   Allow always   Reject\n"
 	result := ParsePermissionPrompt(content, "opencode")
 	assert.NotNil(t, result)
 	assert.Equal(t, "Access external directory /tmp", result.Description)
@@ -51,9 +51,20 @@ func TestParsePermissionPrompt_HandlesAnsiCodes(t *testing.T) {
 }
 
 func TestParsePermissionPrompt_MissingPattern(t *testing.T) {
-	content := "△ Permission required\n  ← Access external directory /opt\n"
+	content := "△ Permission required\n  ← Access external directory /opt\n\n Allow once   Allow always   Reject\n"
 	result := ParsePermissionPrompt(content, "opencode")
 	assert.NotNil(t, result)
 	assert.Equal(t, "Access external directory /opt", result.Description)
 	assert.Empty(t, result.Pattern)
+}
+
+func TestParsePermissionPrompt_IgnoresConversationText(t *testing.T) {
+	// Conversation text that mentions "Permission required" but lacks the actual
+	// dialog buttons should NOT trigger the overlay.
+	content := `The pane still shows "Permission required" for a
+few ticks while the keys propagate. The next
+metadata tick (500ms) sees the prompt, m.state ==
+stateDefault and opens the modal again.`
+	result := ParsePermissionPrompt(content, "opencode")
+	assert.Nil(t, result, "should not match conversation text without dialog buttons")
 }
