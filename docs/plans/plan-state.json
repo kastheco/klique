@@ -599,7 +599,7 @@
       "created_at": "2026-02-27T06:41:42.078871243Z"
     },
     "2026-02-27-simplify-new-plan.md": {
-      "status": "planning",
+      "status": "done",
       "description": "simplify creation of a new plan by only using one multiline input field labeled something like \"describe what you want to work on...\" as a label then use either a headless claude code call to sonnet-4-6 to derive a title or do it without ai if you can easily. descriptionw will be what the user entered",
       "branch": "plan/simplify-new-plan",
       "topic": "workflow",
