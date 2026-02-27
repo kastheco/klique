@@ -16,6 +16,7 @@ type TextInputOverlay struct {
 	OnSubmit      func()
 	width, height int
 	multiline     bool
+	sizeSet       bool // true after the first SetSize call
 }
 
 // NewTextInputOverlay creates a new text input overlay with the given title and initial value.
@@ -53,6 +54,10 @@ func (t *TextInputOverlay) SetPlaceholder(text string) {
 }
 
 func (t *TextInputOverlay) SetSize(width, height int) {
+	if t.sizeSet {
+		return // ignore resize events after initial sizing
+	}
+	t.sizeSet = true
 	t.textarea.SetHeight(height)
 	t.width = width
 	t.height = height
