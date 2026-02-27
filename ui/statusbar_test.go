@@ -224,6 +224,47 @@ func TestStatusBar_EmptyData(t *testing.T) {
 	}
 }
 
+func TestStatusBar_TmuxSessionCount(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(100)
+	sb.SetData(StatusBarData{
+		RepoName:         "kasmos",
+		Branch:           "main",
+		TmuxSessionCount: 3,
+	})
+
+	plain := stripANSI(sb.String())
+	assert.Contains(t, plain, "tmux:3")
+}
+
+func TestStatusBar_TmuxSessionCountZeroHidden(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(100)
+	sb.SetData(StatusBarData{
+		RepoName:         "kasmos",
+		Branch:           "main",
+		TmuxSessionCount: 0,
+	})
+
+	plain := stripANSI(sb.String())
+	assert.NotContains(t, plain, "tmux:")
+}
+
+func TestStatusBar_TmuxSessionCountWithPlanStatus(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+	sb.SetData(StatusBarData{
+		RepoName:         "kasmos",
+		Branch:           "feat/auth",
+		PlanStatus:       "implementing",
+		TmuxSessionCount: 5,
+	})
+
+	plain := stripANSI(sb.String())
+	assert.Contains(t, plain, "implementing")
+	assert.Contains(t, plain, "tmux:5")
+}
+
 func TestStatusBar_FocusModeNoLongerShowsPill(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)

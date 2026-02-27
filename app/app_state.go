@@ -58,8 +58,9 @@ func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool
 // computeStatusBarData builds the StatusBarData from the current app state.
 func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{
-		RepoName:  filepath.Base(m.activeRepoPath),
-		FocusMode: m.state == stateFocusAgent,
+		RepoName:         filepath.Base(m.activeRepoPath),
+		FocusMode:        m.state == stateFocusAgent,
+		TmuxSessionCount: m.tmuxSessionCount,
 	}
 
 	if m.nav == nil {
@@ -1615,8 +1616,8 @@ func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.Plan
 	return m.spawnWaveTasks(orch, tasks, entry)
 }
 
-// discoverTmuxOrphans returns a tea.Cmd that lists orphaned kas_ tmux sessions.
-func (m *home) discoverTmuxOrphans() tea.Cmd {
+// discoverTmuxSessions returns a tea.Cmd that lists all kas_ tmux sessions (managed + orphaned).
+func (m *home) discoverTmuxSessions() tea.Cmd {
 	knownNames := make([]string, 0, len(m.allInstances))
 	for _, inst := range m.allInstances {
 		if inst.Started() && inst.TmuxAlive() {
@@ -1624,8 +1625,8 @@ func (m *home) discoverTmuxOrphans() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		orphans, err := tmux.DiscoverOrphans(cmd2.MakeExecutor(), knownNames)
-		return tmuxOrphansMsg{sessions: orphans, err: err}
+		sessions, err := tmux.DiscoverAll(cmd2.MakeExecutor(), knownNames)
+		return tmuxSessionsMsg{sessions: sessions, err: err}
 	}
 }
 

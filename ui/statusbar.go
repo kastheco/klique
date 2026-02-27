@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -18,13 +19,14 @@ const (
 
 // StatusBarData holds the contextual information displayed in the status bar.
 type StatusBarData struct {
-	RepoName   string
-	Branch     string
-	PlanName   string      // empty = no plan context
-	PlanStatus string      // "ready", "planning", "implementing", "reviewing", "done"
-	WaveLabel  string      // "wave 2/4" or empty
-	TaskGlyphs []TaskGlyph // per-task status for wave progress
-	FocusMode  bool        // true when in interactive/focus mode
+	RepoName         string
+	Branch           string
+	PlanName         string      // empty = no plan context
+	PlanStatus       string      // "ready", "planning", "implementing", "reviewing", "done"
+	WaveLabel        string      // "wave 2/4" or empty
+	TaskGlyphs       []TaskGlyph // per-task status for wave progress
+	FocusMode        bool        // true when in interactive/focus mode
+	TmuxSessionCount int         // total kas_ tmux sessions (0 = hide)
 }
 
 // StatusBar is the top status bar component.
@@ -73,6 +75,10 @@ var statusBarWaveLabelStyle = lipgloss.NewStyle().
 	Foreground(ColorSubtle).
 	Background(ColorSurface)
 
+var statusBarTmuxCountStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Background(ColorSurface)
+
 func planStatusStyle(status string) string {
 	var fg lipgloss.TerminalColor
 	switch status {
@@ -113,20 +119,28 @@ func (s *StatusBar) centerBranchGroup() string {
 }
 
 func (s *StatusBar) leftStatusGroup() string {
+	var parts []string
+
 	if s.data.WaveLabel != "" && len(s.data.TaskGlyphs) > 0 {
 		glyphParts := make([]string, 0, len(s.data.TaskGlyphs))
 		for _, g := range s.data.TaskGlyphs {
 			glyphParts = append(glyphParts, taskGlyphStr(g))
 		}
 		glyphs := strings.Join(glyphParts, " ")
-		return glyphs + " " + statusBarWaveLabelStyle.Render(s.data.WaveLabel)
+		parts = append(parts, glyphs+" "+statusBarWaveLabelStyle.Render(s.data.WaveLabel))
+	} else if s.data.PlanStatus != "" {
+		parts = append(parts, planStatusStyle(s.data.PlanStatus))
 	}
 
-	if s.data.PlanStatus != "" {
-		return planStatusStyle(s.data.PlanStatus)
+	if s.data.TmuxSessionCount > 0 {
+		tmuxLabel := fmt.Sprintf("tmux:%d", s.data.TmuxSessionCount)
+		parts = append(parts, statusBarTmuxCountStyle.Render(tmuxLabel))
 	}
 
-	return ""
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, statusBarSepStyle.Render(" · "))
 }
 
 func (s *StatusBar) String() string {
