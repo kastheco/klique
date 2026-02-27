@@ -432,14 +432,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				planFile := m.nav.GetSelectedPlanFile()
 				if planFile != "" && newName != "" && m.planState != nil {
 					oldFile := planFile
-					if err := m.planState.Rename(oldFile, newName); err != nil {
+					newFile, err := m.planState.Rename(oldFile, newName)
+					if err != nil {
 						m.textInputOverlay = nil
 						m.state = stateDefault
 						m.menu.SetState(ui.StateDefault)
 						return m, m.handleError(err)
 					}
 					// Update any instances that referenced the old plan file.
-					newFile := m.planState.RenamedFilename(oldFile, newName)
 					for _, inst := range m.nav.GetInstances() {
 						if inst.PlanFile == oldFile {
 							inst.PlanFile = newFile

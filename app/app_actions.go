@@ -178,6 +178,17 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "view_plan":
 		return m.viewSelectedPlan()
 
+	case "rename_plan":
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		currentName := planstate.DisplayName(planFile)
+		m.state = stateRenamePlan
+		m.textInputOverlay = overlay.NewTextInputOverlay("rename plan", currentName)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
 	case "push_plan_branch":
 		planInst := m.findPlanInstance()
 		if planInst == nil {
@@ -559,6 +570,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 	}
 	items = append(items,
 		overlay.ContextMenuItem{Label: "view plan", Action: "view_plan"},
+		overlay.ContextMenuItem{Label: "rename plan", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
 		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},
 		overlay.ContextMenuItem{Label: "mark done", Action: "mark_plan_done"},

@@ -425,6 +425,78 @@ func DisplayName(filename string) string {
 	return name
 }
 
+// Rename renames a plan by giving it a new display name slug.
+// It renames the .md file on disk (if it exists), rekeys the planstate entry,
+// and persists the updated state. The date prefix of the old filename is preserved.
+// newName should be a human-readable name (e.g., "auth refactor") which will be
+// slugified automatically. Returns the new filename on success.
+func (ps *PlanState) Rename(oldFilename, newName string) (string, error) {
+	entry, ok := ps.Plans[oldFilename]
+	if !ok {
+		return "", fmt.Errorf("plan not found: %s", oldFilename)
+	}
+	if newName == "" {
+		return "", fmt.Errorf("new name cannot be empty")
+	}
+
+	// Build new filename preserving the date prefix (YYYY-MM-DD-) if present.
+	newSlug := slugify(newName)
+	if newSlug == "" {
+		return "", fmt.Errorf("new name produced an empty slug")
+	}
+	var newFilename string
+	if len(oldFilename) > 11 && oldFilename[4] == '-' && oldFilename[7] == '-' && oldFilename[10] == '-' {
+		newFilename = oldFilename[:11] + newSlug + ".md"
+	} else {
+		newFilename = newSlug + ".md"
+	}
+
+	if newFilename == oldFilename {
+		return oldFilename, nil // nothing to do
+	}
+	if _, exists := ps.Plans[newFilename]; exists {
+		return "", fmt.Errorf("a plan named %q already exists", newFilename)
+	}
+
+	// Rename file on disk if it exists.
+	oldPath := filepath.Join(ps.Dir, oldFilename)
+	newPath := filepath.Join(ps.Dir, newFilename)
+	if _, err := os.Stat(oldPath); err == nil {
+		if err := os.Rename(oldPath, newPath); err != nil {
+			return "", fmt.Errorf("rename plan file: %w", err)
+		}
+	}
+
+	// Rekey the planstate entry.
+	ps.Plans[newFilename] = entry
+	delete(ps.Plans, oldFilename)
+
+	return newFilename, ps.save()
+}
+
+// slugify converts a human name to a lowercase, hyphen-separated slug.
+// "My Cool Feature!" → "my-cool-feature"
+func slugify(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	// Replace any sequence of non-alphanumeric characters with a hyphen.
+	result := make([]rune, 0, len(name))
+	inHyphen := false
+	for _, r := range name {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			result = append(result, r)
+			inHyphen = false
+		} else if !inHyphen && len(result) > 0 {
+			result = append(result, '-')
+			inHyphen = true
+		}
+	}
+	// Trim trailing hyphen.
+	for len(result) > 0 && result[len(result)-1] == '-' {
+		result = result[:len(result)-1]
+	}
+	return string(result)
+}
+
 // reconcileFilenames checks each plan key against the actual files on disk.
 // If the exact filename is missing but a file with the same slug (date-stripped
 // suffix) exists, the entry is rekeyed to the real filename. Returns the number

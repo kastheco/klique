@@ -308,6 +308,80 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRename(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create old plan file on disk
+	oldFile := "2026-02-20-my-feature.md"
+	newFile := "2026-02-20-auth-refactor.md"
+	oldPath := filepath.Join(dir, oldFile)
+	newPath := filepath.Join(dir, newFile)
+	require.NoError(t, os.WriteFile(oldPath, []byte("# old plan"), 0o644))
+
+	ps := &PlanState{
+		Dir: dir,
+		Plans: map[string]PlanEntry{
+			oldFile: {Status: StatusReady, Branch: "plan/my-feature"},
+		},
+		TopicEntries: make(map[string]TopicEntry),
+	}
+
+	newFilename, err := ps.Rename(oldFile, "auth-refactor")
+	require.NoError(t, err)
+	assert.Equal(t, newFile, newFilename)
+
+	// Old key removed, new key added with same entry
+	assert.NotContains(t, ps.Plans, oldFile)
+	assert.Contains(t, ps.Plans, newFile)
+	assert.Equal(t, StatusReady, ps.Plans[newFile].Status)
+	assert.Equal(t, "plan/my-feature", ps.Plans[newFile].Branch)
+
+	// File renamed on disk
+	_, err = os.Stat(oldPath)
+	assert.True(t, os.IsNotExist(err), "old file should not exist")
+	_, err = os.Stat(newPath)
+	assert.NoError(t, err, "new file should exist")
+
+	// Persisted to disk
+	ps2, err := Load(dir)
+	require.NoError(t, err)
+	assert.Contains(t, ps2.Plans, newFile)
+	assert.NotContains(t, ps2.Plans, oldFile)
+}
+
+func TestRenameNonExistentPlan(t *testing.T) {
+	dir := t.TempDir()
+	ps := &PlanState{
+		Dir:          dir,
+		Plans:        map[string]PlanEntry{},
+		TopicEntries: make(map[string]TopicEntry),
+	}
+
+	_, err := ps.Rename("nonexistent.md", "new-name")
+	assert.Error(t, err)
+}
+
+func TestRenameNoFileOnDisk(t *testing.T) {
+	// Rename should succeed even if the .md file doesn't exist on disk
+	dir := t.TempDir()
+	oldFile := "2026-02-20-my-feature.md"
+	newFile := "2026-02-20-new-name.md"
+
+	ps := &PlanState{
+		Dir: dir,
+		Plans: map[string]PlanEntry{
+			oldFile: {Status: StatusPlanning},
+		},
+		TopicEntries: make(map[string]TopicEntry),
+	}
+
+	got, err := ps.Rename(oldFile, "new-name")
+	require.NoError(t, err)
+	assert.Equal(t, newFile, got)
+	assert.Contains(t, ps.Plans, newFile)
+	assert.NotContains(t, ps.Plans, oldFile)
+}
+
 func TestLoadLegacyFlatFormat(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plan-state.json")
