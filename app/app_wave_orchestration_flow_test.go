@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -707,6 +708,38 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 		}
 	}
 	assert.True(t, foundTask1, "task 1 instance must not be affected by task 6 retry")
+}
+
+// TestWaveSignal_TriggersImplementation verifies that a wave signal file written
+// in .signals/ is correctly picked up by ScanWaveSignals and parsed into a
+// WaveSignal with the correct WaveNumber and PlanFile fields, ready for TUI consumption.
+func TestWaveSignal_TriggersImplementation(t *testing.T) {
+	plansDir := t.TempDir()
+	signalsDir := filepath.Join(plansDir, ".signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
+
+	// Create a plan with wave headers
+	planContent := "# Test\n\n**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\nDo the thing.\n"
+	planFile := "2026-02-20-wave-signal-test.md"
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
+
+	// Register plan as implementing
+	ps := &planstate.PlanState{Dir: plansDir, Plans: make(map[string]planstate.PlanEntry), TopicEntries: make(map[string]planstate.TopicEntry)}
+	ps.Plans[planFile] = planstate.PlanEntry{
+		Status: "implementing",
+		Branch: "plan/wave-signal-test",
+	}
+	require.NoError(t, ps.Save())
+
+	// Write a wave signal
+	signalFile := fmt.Sprintf("implement-wave-1-%s", planFile)
+	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, signalFile), nil, 0o644))
+
+	// Verify signal is scannable
+	waveSignals := planfsm.ScanWaveSignals(plansDir)
+	require.Len(t, waveSignals, 1)
+	assert.Equal(t, 1, waveSignals[0].WaveNumber)
+	assert.Equal(t, planFile, waveSignals[0].PlanFile)
 }
 
 // TestPlannerExit_CancelKillsInstanceAndMarksPrompted verifies that pressing "n"

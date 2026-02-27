@@ -9,6 +9,7 @@ import (
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/mcpclient"
@@ -613,9 +614,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			var waveSignals []planfsm.WaveSignal
+			if planStateDir != "" {
+				waveSignals = planfsm.ScanWaveSignals(planStateDir)
+			}
+
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
 			time.Sleep(500 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, TmuxSessionCount: tmuxCount}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, TmuxSessionCount: tmuxCount}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
@@ -661,6 +667,57 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(msg.Signals) > 0 {
 			m.loadPlanState() // refresh after signal processing
+		}
+
+		// Process wave signals — trigger implementation for specific waves.
+		for _, ws := range msg.WaveSignals {
+			planfsm.ConsumeWaveSignal(ws)
+
+			// Check if orchestrator already exists
+			if _, exists := m.waveOrchestrators[ws.PlanFile]; exists {
+				m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", planstate.DisplayName(ws.PlanFile)))
+				continue
+			}
+
+			// Read and parse the plan
+			plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
+			content, err := os.ReadFile(filepath.Join(plansDir, ws.PlanFile))
+			if err != nil {
+				log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.PlanFile, err)
+				continue
+			}
+			plan, err := planparser.Parse(string(content))
+			if err != nil {
+				m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", planstate.DisplayName(ws.PlanFile)))
+				continue
+			}
+
+			if ws.WaveNumber > len(plan.Waves) {
+				m.toastManager.Error(fmt.Sprintf("plan has %d waves, requested wave %d", len(plan.Waves), ws.WaveNumber))
+				continue
+			}
+
+			entry, ok := m.planState.Entry(ws.PlanFile)
+			if !ok {
+				continue
+			}
+
+			orch := NewWaveOrchestrator(ws.PlanFile, plan)
+			m.waveOrchestrators[ws.PlanFile] = orch
+
+			// Fast-forward to the requested wave
+			for i := 1; i < ws.WaveNumber; i++ {
+				tasks := orch.StartNextWave()
+				for _, t := range tasks {
+					orch.MarkTaskComplete(t.Number)
+				}
+			}
+
+			mdl, cmd := m.startNextWave(orch, entry)
+			m = mdl.(*home)
+			if cmd != nil {
+				signalCmds = append(signalCmds, cmd)
+			}
 		}
 
 		// Apply collected metadata to instances — zero I/O, just field writes.
@@ -1564,6 +1621,7 @@ type metadataResultMsg struct {
 	Results          []instanceMetadata
 	PlanState        *planstate.PlanState // pre-loaded plan state (nil if dir not set)
 	Signals          []planfsm.Signal     // agent sentinel files found this tick
+	WaveSignals      []planfsm.WaveSignal // implement-wave-N signal files found this tick
 	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions
 }
 
