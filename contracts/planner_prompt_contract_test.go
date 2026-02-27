@@ -22,6 +22,7 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 		"docs/plans/.signals/planner-finished-",
 		"KASMOS_MANAGED",
 		"Do not edit `plan-state.json` directly",
+		"plan review", // planner must reference the review step
 	}
 
 	for _, needle := range required {
