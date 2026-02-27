@@ -235,9 +235,43 @@ func (m *Menu) renderFocusMode() string {
 	frame := focusModeFrames[int(time.Now().UnixMilli()/100)%len(focusModeFrames)]
 	badge := focusLabelStyle.Render("interactive") + " " + focusDotStyle.Render(frame)
 	hint := focusHintKeyStyle.Render("ctrl+space") + " " + focusHintDescStyle.Render("exit")
-	content := badge + "  " + hint
+	centeredContent := badge + "  " + hint
 
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
+	centeredWidth := lipgloss.Width(centeredContent)
+	centeredStart := (m.width - centeredWidth) / 2
+	if centeredStart < 0 {
+		centeredStart = 0
+	}
+
+	tmuxRendered := ""
+	tmuxWidth := 0
+	if m.tmuxSessionCount > 0 {
+		tmuxRendered = statusBarTmuxCountStyle.Render(fmt.Sprintf("tmux:%d", m.tmuxSessionCount))
+		tmuxWidth = lipgloss.Width(tmuxRendered)
+	}
+	rightStart := m.width - tmuxWidth - 1
+	if rightStart < centeredStart+centeredWidth {
+		rightStart = centeredStart + centeredWidth
+	}
+
+	var line strings.Builder
+	cursor := 0
+	writeAt := func(start, visualWidth int, text string) {
+		if text == "" || start < cursor {
+			return
+		}
+		if start > cursor {
+			line.WriteString(strings.Repeat(" ", start-cursor))
+		}
+		line.WriteString(text)
+		cursor = start + visualWidth
+	}
+	writeAt(centeredStart, centeredWidth, centeredContent)
+	writeAt(rightStart, tmuxWidth, tmuxRendered)
+	if cursor < m.width {
+		line.WriteString(strings.Repeat(" ", m.width-cursor))
+	}
+	return line.String()
 }
 
 func (m *Menu) String() string {
