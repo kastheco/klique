@@ -191,13 +191,6 @@
       "created_at": "0001-01-01T00:00:00Z",
       "implemented": "2026-02-22"
     },
-    "2026-02-26-bubblezone-mouse.md": {
-      "status": "ready",
-      "description": "bubblezone zone-per-element mouse hit detection, focus-mode escape via click, SGR mouse forwarding to PTY",
-      "branch": "plan/bubblezone",
-      "topic": "ui",
-      "created_at": "2026-02-22T08:28:43.336094301Z"
-    },
     "2026-02-22-center-col-v-align.md": {
       "status": "done",
       "description": "center column is scrolled up slightly and also not bottom aligned",
@@ -420,7 +413,7 @@
       "created_at": "2026-02-25T19:53:16.45886024Z"
     },
     "2026-02-25-release-v1-0-0.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "create github release, update versioning in project and deploy to homebrew",
       "branch": "plan/release-v1-0-0",
       "topic": "workflow",
@@ -454,6 +447,13 @@
       "topic": "automation",
       "created_at": "2026-02-25T22:00:00Z"
     },
+    "2026-02-26-bubblezone-mouse.md": {
+      "status": "done",
+      "description": "bubblezone zone-per-element mouse hit detection, focus-mode escape via click, SGR mouse forwarding to PTY",
+      "branch": "plan/bubblezone",
+      "topic": "ui",
+      "created_at": "2026-02-22T08:28:43.336094301Z"
+    },
     "2026-02-26-cleanup-superpowers-cmds.md": {
       "status": "done",
       "description": "it seems some superpowers plans keep pushing claude to use grep (specifically writing-plans just now). these should be overriden to reference their modern counterparts",
@@ -469,25 +469,39 @@
       "created_at": "2026-02-26T02:26:10.767895938Z"
     },
     "2026-02-26-detect-allow-perms.md": {
-      "status": "implementing",
+      "status": "done",
       "description": "detect when opencode is asking for perms to Allow once, Allow always, Reject. show a popup dialog allowing the user to pick then propagate their change to the session. if they choose approve always (which should be default selection), you'll send right arrow -\u003e enter -\u003e enter. approve once is a single enter. reject is right arrow -\u003e right arrow -\u003e enter",
       "branch": "plan/detect-allow-perms",
       "topic": "automation",
       "created_at": "2026-02-26T20:16:31.684660209Z"
     },
+    "2026-02-26-enter-not-reachable.md": {
+      "status": "done",
+      "description": "can't reach the enter button via keyboard navigation in info tab. also move info tab to first position, agent second diff third",
+      "branch": "plan/enter-not-reachable",
+      "topic": "ui",
+      "created_at": "2026-02-26T21:49:47.811876321Z"
+    },
     "2026-02-26-kas-verify-loop.md": {
-      "status": "reviewing",
+      "status": "done",
       "description": "update reviewer instructions to loop reviewer \u003c-\u003e fixer until all tiers pass and ALL issues have been addressed, no matter the severity",
       "branch": "plan/kas-verify-loop",
       "topic": "automation",
       "created_at": "2026-02-26T20:15:09.857895365Z"
     },
     "2026-02-26-new-cli-command.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "kas new [title] [description] # new cli command (also runnable via kas n alias) to quickly create a new plan (no topic) with optional description via cli without having to launch tui",
       "branch": "plan/new-cli-command",
       "topic": "tools",
       "created_at": "2026-02-26T05:07:21.925625953Z"
+    },
+    "2026-02-26-no-plan-to-implement-prompt.md": {
+      "status": "ready",
+      "description": "you have to manually kill the planner agent before kasmos shows you the dialog to start implementation",
+      "branch": "plan/no-plan-to-implement-prompt",
+      "topic": "automation",
+      "created_at": "2026-02-26T23:00:00Z"
     },
     "2026-02-26-opencode-default-harness.md": {
       "status": "done",
@@ -497,7 +511,7 @@
       "created_at": "2026-02-26T02:24:21.577814842Z"
     },
     "2026-02-26-redesign-instance-list.md": {
-      "status": "implementing",
+      "status": "done",
       "created_at": "0001-01-01T00:00:00Z"
     },
     "2026-02-26-sentry-analysis.md": {
@@ -520,6 +534,13 @@
       "branch": "plan/stepthrough-worktrees",
       "topic": "verify",
       "created_at": "2026-02-26T05:12:08.563058582Z"
+    },
+    "2026-02-26-tmux-session-browser.md": {
+      "status": "implementing",
+      "description": "TUI overlay to browse, kill, and adopt orphaned tmux sessions",
+      "branch": "plan/tmux-session-browser",
+      "topic": "ui",
+      "created_at": "2026-02-26T17:30:00Z"
     },
     "2026-02-26-validate-recent-merges.md": {
       "status": "ready",

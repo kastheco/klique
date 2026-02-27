@@ -8,9 +8,12 @@
 
 **Tech Stack:** Go, cobra, `config/planstate`, `session/git`
 
-**Size:** Small (estimated ~1.5 hours, 3 tasks, no waves)
+**Size:** Small (estimated ~1.5 hours, 3 tasks, 2 waves)
 
 ---
+
+## Wave 1: Extract Shared Helpers
+> **No prior dependencies.** Moves plan scaffolding functions out of the TUI package so the headless CLI can import them.
 
 ### Task 1: Extract plan scaffolding helpers into `config/planstate`
 
@@ -200,6 +203,9 @@ git commit -m "refactor: extract plan scaffolding helpers to config/planstate"
 ```
 
 ---
+
+## Wave 2: CLI Command & Tests
+> **Depends on Wave 1:** The cobra command imports the exported `planstate.BuildPlanFilename`, `SlugifyPlanName`, etc. that Task 1 creates.
 
 ### Task 2: Add `kas new` cobra command
 

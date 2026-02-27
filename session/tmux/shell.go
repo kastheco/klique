@@ -24,50 +24,62 @@ func shellEscapeSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
-// promptArg returns the shell argument for the initial prompt. Short prompts
-// are shell-escaped inline; long prompts are written to a file under
-// <workDir>/.kasmos/ and referenced via Claude Code's @file syntax.
-// The temp file path is stored in t.promptFile for cleanup by Close().
-func (t *TmuxSession) promptArg(workDir string) string {
-	if len(t.initialPrompt) <= MaxInlinePromptLen {
-		return shellEscapeSingleQuote(t.initialPrompt)
-	}
-
+// writePromptFile writes the prompt to a temp file under <workDir>/.kasmos/
+// and stores the path in t.promptFile for cleanup by Close().
+// Returns the absolute path, or "" on error.
+func (t *TmuxSession) writePromptFile(workDir string) string {
 	dir := filepath.Join(workDir, promptDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return shellEscapeSingleQuote(t.initialPrompt)
+		return ""
 	}
 
 	f, err := os.CreateTemp(dir, "prompt-*.md")
 	if err != nil {
-		return shellEscapeSingleQuote(t.initialPrompt)
+		return ""
 	}
 
 	if _, err := f.WriteString(t.initialPrompt); err != nil {
 		f.Close()
 		os.Remove(f.Name())
-		return shellEscapeSingleQuote(t.initialPrompt)
+		return ""
 	}
 	f.Close()
-
 	t.promptFile = f.Name()
+	return t.promptFile
+}
+
+// promptArgClaude returns the shell argument for Claude Code's initial prompt.
+// Short prompts are shell-escaped inline; long prompts are written to a file
+// and referenced via Claude Code's @file syntax.
+func (t *TmuxSession) promptArgClaude(workDir string) string {
+	if len(t.initialPrompt) <= MaxInlinePromptLen {
+		return shellEscapeSingleQuote(t.initialPrompt)
+	}
+	absPath := t.writePromptFile(workDir)
+	if absPath == "" {
+		return shellEscapeSingleQuote(t.initialPrompt)
+	}
 	// Claude Code's @file syntax reads the file contents as the prompt.
-	// Use a relative path from the workdir since that's the tmux session's cwd.
-	rel, err := filepath.Rel(workDir, t.promptFile)
+	rel, err := filepath.Rel(workDir, absPath)
 	if err != nil {
-		rel = t.promptFile
+		rel = absPath
 	}
 	return "@" + rel
 }
 
-// promptArgOpenCode returns the prompt argument for opencode's --prompt flag.
-// Identical to promptArg — opencode accepts the same @file syntax for long prompts.
+// promptArgOpenCode returns the shell argument for opencode's --prompt flag.
+// Short prompts are shell-escaped inline; long prompts are written to a file
+// and read back via shell command substitution since opencode doesn't support
+// file references.
 func (t *TmuxSession) promptArgOpenCode(workDir string) string {
-	return t.promptArg(workDir)
-}
-
-// promptArgClaude returns the prompt argument for claude's positional prompt arg.
-// Identical to promptArg — uses Claude Code's @file syntax for long prompts.
-func (t *TmuxSession) promptArgClaude(workDir string) string {
-	return t.promptArg(workDir)
+	if len(t.initialPrompt) <= MaxInlinePromptLen {
+		return shellEscapeSingleQuote(t.initialPrompt)
+	}
+	absPath := t.writePromptFile(workDir)
+	if absPath == "" {
+		return shellEscapeSingleQuote(t.initialPrompt)
+	}
+	// opencode --prompt expects a string value. Use command substitution
+	// to read the file contents since opencode has no @file syntax.
+	return "\"$(cat " + shellEscapeSingleQuote(absPath) + ")\""
 }

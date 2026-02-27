@@ -28,6 +28,7 @@ const (
 	ImplementFinished      Event = "implement_finished"
 	ReviewApproved         Event = "review_approved"
 	ReviewChangesRequested Event = "review_changes_requested"
+	RequestReview          Event = "request_review"
 	StartOver              Event = "start_over"
 	Reimplement            Event = "reimplement"
 	Cancel                 Event = "cancel"
@@ -38,7 +39,7 @@ const (
 // never by agent sentinel files.
 func (e Event) IsUserOnly() bool {
 	switch e {
-	case StartOver, Reimplement, Cancel, Reopen:
+	case StartOver, Reimplement, RequestReview, Cancel, Reopen:
 		return true
 	}
 	return false
@@ -67,9 +68,10 @@ var transitionTable = map[Status]map[Event]Status{
 		Cancel:                 StatusCancelled,
 	},
 	StatusDone: {
-		StartOver:   StatusPlanning,
-		Reimplement: StatusImplementing, // resume implementation without resetting branch
-		Cancel:      StatusCancelled,    // explicit user cancellation from done
+		StartOver:     StatusPlanning,
+		Reimplement:   StatusImplementing, // resume implementation without resetting branch
+		RequestReview: StatusReviewing,    // retrigger review for unmerged branches
+		Cancel:        StatusCancelled,    // explicit user cancellation from done
 	},
 	StatusCancelled: {
 		Reopen: StatusPlanning,

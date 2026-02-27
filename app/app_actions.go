@@ -269,6 +269,22 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.updateNavPanelStatus()
 		return m, tea.WindowSize()
 
+	case "request_review":
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" || m.planState == nil {
+			return m, nil
+		}
+		if err := m.fsm.Transition(planFile, planfsm.RequestReview); err != nil {
+			return m, m.handleError(err)
+		}
+		m.loadPlanState()
+		m.updateSidebarPlans()
+		m.updateNavPanelStatus()
+		if cmd := m.spawnReviewer(planFile); cmd != nil {
+			return m, cmd
+		}
+		return m, tea.WindowSize()
+
 	case "resume_implement":
 		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" || m.planState == nil {
@@ -535,6 +551,7 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 				)
 			case planstate.StatusDone:
 				items = append(items,
+					overlay.ContextMenuItem{Label: "request review", Action: "request_review"},
 					overlay.ContextMenuItem{Label: "resume implement", Action: "resume_implement"},
 				)
 			}

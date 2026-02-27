@@ -12,6 +12,8 @@
 
 ---
 
+## Wave 1
+
 ### Task 1: Core Review Instructions
 
 Update the three files that form the TUI-orchestrated review protocol: the review prompt template, the code-reviewer template, and the requesting-code-review skill.
@@ -211,6 +213,8 @@ git commit -m "feat: all-tier blocking review loop — core review instructions"
 ```
 
 ---
+
+## Wave 2
 
 ### Task 2: Subagent Review Skills
 

@@ -547,6 +547,53 @@ func TestDiscoverOrphans(t *testing.T) {
 	}
 }
 
+func TestStartOpenCodeWithLongPromptUsesCommandSubstitution(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session does not exist yet")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "capture-pane") {
+				return []byte("Ask anything"), nil
+			}
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	s := newTmuxSession("oc-long", "opencode", false, ptyFactory, cmdExec)
+	longPrompt := strings.Repeat("x", MaxInlinePromptLen+1)
+	s.SetInitialPrompt(longPrompt)
+
+	err := s.Start(workdir)
+	require.NoError(t, err)
+
+	// opencode should use $(cat ...) not @file syntax.
+	cmdStr := cmd2.ToString(ptyFactory.cmds[0])
+	require.Contains(t, cmdStr, "$(cat ")
+	require.Contains(t, cmdStr, ".kasmos/prompt-")
+	require.NotContains(t, cmdStr, "@.kasmos/prompt-", "opencode must not use Claude's @file syntax")
+	require.NotContains(t, cmdStr, longPrompt, "long prompt must not be inlined")
+
+	// The prompt file should contain the full prompt.
+	require.NotEmpty(t, s.promptFile)
+	content, err := os.ReadFile(s.promptFile)
+	require.NoError(t, err)
+	assert.Equal(t, longPrompt, string(content))
+
+	// Close should clean up the temp file.
+	s.Close()
+	_, err = os.Stat(s.promptFile)
+	assert.True(t, os.IsNotExist(err), "prompt file should be removed after Close")
+}
+
 func TestStartOpenCodeWithPromptContainingSingleQuotes(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 
