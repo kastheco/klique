@@ -536,14 +536,14 @@
       "created_at": "2026-02-26T05:12:08.563058582Z"
     },
     "2026-02-26-tmux-session-browser.md": {
-      "status": "implementing",
+      "status": "done",
       "description": "TUI overlay to browse, kill, and adopt orphaned tmux sessions",
       "branch": "plan/tmux-session-browser",
       "topic": "ui",
       "created_at": "2026-02-26T17:30:00Z"
     },
     "2026-02-26-validate-recent-merges.md": {
-      "status": "ready",
+      "status": "cancelled",
       "description": "some work looks like it might've been lost or reverted, review the last few plans merged to determine what's been merged, what's been lost, and what can be recovered",
       "branch": "plan/validate-recent-merges",
       "topic": "verify",
@@ -556,12 +556,60 @@
       "topic": "automation",
       "created_at": "2026-02-26T16:42:11.713212759Z"
     },
-    "2026-02-27-release-1-0-0-failures.md": {
+    "2026-02-27-always-focus-sidebar.md": {
       "status": "ready",
+      "description": "the purple focus highlight and keyboard should always cling to the sidebar outside of interactive or attach mode. hitting tab required me to navigate left to get back to sidebar when it should just kept my selection and shown the agent tab instead",
+      "branch": "plan/always-focus-sidebar",
+      "topic": "ui",
+      "created_at": "2026-02-27T16:54:32.618130648Z"
+    },
+    "2026-02-27-audit-log.md": {
+      "status": "ready",
+      "description": "log all actions (new 'coder' agent spawned, finished successfully/failed, etc etc). useful for debugging but also browsing history and tracking who did what and why automatically",
+      "branch": "plan/audit-log",
+      "topic": "automation",
+      "created_at": "2026-02-27T07:36:50.243680437Z"
+    },
+    "2026-02-27-ctrl-ud-pagination.md": {
+      "status": "done",
+      "description": "configure ctrl+u for paginate up in agent session, d for down. it's not currently working",
+      "branch": "plan/ctrl-ud-pagination",
+      "topic": "workflow",
+      "created_at": "2026-02-27T07:25:38.786253804Z"
+    },
+    "2026-02-27-disable-cla-for-prs.md": {
+      "status": "done",
+      "branch": "plan/disable-cla-for-prs",
+      "topic": "workflow",
+      "created_at": "2026-02-27T16:50:23.219250196Z",
+      "implemented": "2026-02-27"
+    },
+    "2026-02-27-fix-wave-header-generation.md": {
+      "status": "ready",
+      "branch": "plan/fix-wave-header-generation",
+      "topic": "automation",
+      "created_at": "2026-02-27T16:16:33.640848697Z"
+    },
+    "2026-02-27-release-1-0-0-failures.md": {
+      "status": "done",
       "description": "check github to see the failure reasons and fix then redeploy v1.0.0",
       "branch": "plan/release-1-0-0-failures",
       "topic": "verify",
       "created_at": "2026-02-27T06:41:42.078871243Z"
+    },
+    "2026-02-27-simplify-new-plan.md": {
+      "status": "ready",
+      "description": "simplify creation of a new plan by only using one multiline input field labeled something like \"describe what you want to work on...\" as a label then use either a headless claude code call to sonnet-4-6 to derive a title or do it without ai if you can easily. descriptionw will be what the user entered",
+      "branch": "plan/simplify-new-plan",
+      "topic": "workflow",
+      "created_at": "2026-02-27T15:52:02.820017802Z"
+    },
+    "2026-02-27-tmux-session-summary.md": {
+      "status": "done",
+      "description": "show a summary of active tmux sessions that would be shown if you did shift t keybind to browse the sessions, in addition to ones that are shown that aren't in there that are already, like, adopted or were the born with the same plan",
+      "branch": "plan/tmux-session-summary",
+      "topic": "ui",
+      "created_at": "2026-02-27T07:41:00.300934469Z"
     }
   }
 }
