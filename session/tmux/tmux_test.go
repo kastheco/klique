@@ -547,6 +547,121 @@ func TestDiscoverOrphans(t *testing.T) {
 	}
 }
 
+func TestDiscoverAll(t *testing.T) {
+	tests := []struct {
+		name        string
+		tmuxOutput  string
+		tmuxErr     error
+		knownNames  []string
+		wantTotal   int
+		wantManaged int
+		wantErr     bool
+	}{
+		{
+			name:        "no sessions running",
+			tmuxErr:     &exec.ExitError{},
+			knownNames:  nil,
+			wantTotal:   0,
+			wantManaged: 0,
+		},
+		{
+			name:        "all sessions managed",
+			tmuxOutput:  "kas_foo|1740000000|1|0|80|24\nkas_bar|1740000000|1|0|120|40\n",
+			knownNames:  []string{"kas_foo", "kas_bar"},
+			wantTotal:   2,
+			wantManaged: 2,
+		},
+		{
+			name:        "mix of managed and orphaned",
+			tmuxOutput:  "kas_foo|1740000000|1|0|80|24\nkas_orphan|1740000000|1|0|80|24\n",
+			knownNames:  []string{"kas_foo"},
+			wantTotal:   2,
+			wantManaged: 1,
+		},
+		{
+			name:        "non-kas sessions ignored",
+			tmuxOutput:  "myshell|1740000000|1|0|80|24\nkas_orphan|1740000000|1|0|80|24\n",
+			knownNames:  nil,
+			wantTotal:   1,
+			wantManaged: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmdExec := cmd_test.NewMockExecutor()
+			if tt.tmuxErr != nil {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return nil, tt.tmuxErr
+				}
+			} else {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return []byte(tt.tmuxOutput), nil
+				}
+			}
+
+			sessions, err := DiscoverAll(cmdExec, tt.knownNames)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Len(t, sessions, tt.wantTotal)
+
+			managedCount := 0
+			for _, s := range sessions {
+				if s.Managed {
+					managedCount++
+				}
+			}
+			assert.Equal(t, tt.wantManaged, managedCount)
+		})
+	}
+}
+
+func TestCountKasSessions(t *testing.T) {
+	tests := []struct {
+		name       string
+		tmuxOutput string
+		tmuxErr    error
+		want       int
+	}{
+		{
+			name:    "no tmux server",
+			tmuxErr: &exec.ExitError{},
+			want:    0,
+		},
+		{
+			name:       "two kas sessions one foreign",
+			tmuxOutput: "kas_foo:1 windows\nkas_bar:1 windows\nmyshell:2 windows\n",
+			want:       2,
+		},
+		{
+			name:       "no kas sessions",
+			tmuxOutput: "myshell:1 windows\n",
+			want:       0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmdExec := cmd_test.NewMockExecutor()
+			if tt.tmuxErr != nil {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return nil, tt.tmuxErr
+				}
+			} else {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return []byte(tt.tmuxOutput), nil
+				}
+			}
+
+			count := CountKasSessions(cmdExec)
+			assert.Equal(t, tt.want, count)
+		})
+	}
+}
+
 func TestStartOpenCodeWithLongPromptUsesCommandSubstitution(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 

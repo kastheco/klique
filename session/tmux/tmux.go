@@ -526,6 +526,91 @@ func DiscoverOrphans(cmdExec cmd.Executor, knownNames []string) ([]OrphanSession
 	return orphans, nil
 }
 
+// SessionInfo represents any kas_ tmux session (managed or orphaned).
+type SessionInfo struct {
+	Name     string    // raw tmux session name, e.g. "kas_auth-refactor-implement"
+	Title    string    // human name with "kas_" prefix stripped
+	Created  time.Time // session creation time
+	Windows  int       // window count
+	Attached bool      // whether another client is attached
+	Width    int       // pane columns
+	Height   int       // pane rows
+	Managed  bool      // true if matched a known instance name
+}
+
+// DiscoverAll lists all kas_-prefixed tmux sessions, marking each as Managed
+// if its name appears in knownNames. knownNames should contain the sanitized
+// tmux names of all current Instances (e.g. from ToKasTmuxNamePublic).
+func DiscoverAll(cmdExec cmd.Executor, knownNames []string) ([]SessionInfo, error) {
+	lsCmd := exec.Command("tmux", "ls", "-F",
+		"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}")
+	output, err := cmdExec.Output(lsCmd)
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list tmux sessions: %w", err)
+	}
+
+	known := make(map[string]bool, len(knownNames))
+	for _, n := range knownNames {
+		known[n] = true
+	}
+
+	var sessions []SessionInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 6)
+		if len(parts) < 6 {
+			continue
+		}
+		name := parts[0]
+		if !strings.HasPrefix(name, TmuxPrefix) {
+			continue
+		}
+
+		var created time.Time
+		if epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+			created = time.Unix(epoch, 0)
+		}
+		windows, _ := strconv.Atoi(parts[2])
+		attached := parts[3] != "0"
+		width, _ := strconv.Atoi(parts[4])
+		height, _ := strconv.Atoi(parts[5])
+
+		sessions = append(sessions, SessionInfo{
+			Name:     name,
+			Title:    strings.TrimPrefix(name, TmuxPrefix),
+			Created:  created,
+			Windows:  windows,
+			Attached: attached,
+			Width:    width,
+			Height:   height,
+			Managed:  known[name],
+		})
+	}
+	return sessions, nil
+}
+
+// CountKasSessions returns the number of kas_-prefixed tmux sessions.
+// Returns 0 if no tmux server is running or on any error.
+func CountKasSessions(cmdExec cmd.Executor) int {
+	lsCmd := exec.Command("tmux", "ls")
+	output, err := cmdExec.Output(lsCmd)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if strings.HasPrefix(line, TmuxPrefix) {
+			count++
+		}
+	}
+	return count
+}
+
 // ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.
 func ToKasTmuxNamePublic(name string) string {
 	return toKasTmuxName(name)
