@@ -1209,6 +1209,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pickerOverlay.SetTitle(
 						fmt.Sprintf("assign to topic for '%s'", msg.title),
 					)
+					return m, tea.WindowSize()
 				}
 			}
 		}
