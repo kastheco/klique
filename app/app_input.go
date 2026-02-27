@@ -1019,9 +1019,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
-		if m.nav.TotalInstances() >= GlobalInstanceLimit {
+		if m.tmuxSessionCount >= GlobalInstanceLimit {
 			return m, m.handleError(
-				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)", GlobalInstanceLimit, m.tmuxSessionCount))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
@@ -1041,9 +1041,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNewSkipPermissions:
-		if m.nav.TotalInstances() >= GlobalInstanceLimit {
+		if m.tmuxSessionCount >= GlobalInstanceLimit {
 			return m, m.handleError(
-				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)", GlobalInstanceLimit, m.tmuxSessionCount))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
@@ -1305,9 +1305,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.textInputOverlay.SetSize(70, 8)
 		return m, nil
 	case keys.KeySpawnAgent:
-		if m.nav.TotalInstances() >= GlobalInstanceLimit {
+		if m.tmuxSessionCount >= GlobalInstanceLimit {
 			return m, m.handleError(
-				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)", GlobalInstanceLimit, m.tmuxSessionCount))
 		}
 		m.state = stateSpawnAgent
 		m.formOverlay = overlay.NewSpawnFormOverlay("spawn agent", 60)
