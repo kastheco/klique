@@ -760,10 +760,11 @@
       "created_at": "2026-02-27T07:41:00.300934469Z"
     },
     "2026-02-27-custodian-version-bump.md": {
-      "status": "ready",
+      "status": "done",
       "description": "teach custodian agent to bump version in main.go before tagging releases so CI/CD validation passes",
       "topic": "workflow",
-      "created_at": "2026-02-27T23:00:00Z"
+      "created_at": "2026-02-27T23:00:00Z",
+      "implemented": "2026-02-27"
     }
   }
 }
