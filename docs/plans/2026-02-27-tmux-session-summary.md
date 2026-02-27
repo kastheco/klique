@@ -8,9 +8,13 @@
 
 **Tech Stack:** Go, bubbletea, lipgloss, tmux CLI
 
-**Size:** Medium (estimated ~3 hours, 4 tasks, no waves)
+**Size:** Medium (estimated ~3 hours, 4 tasks, 2 waves)
 
 ---
+
+## Wave 1: Data Layer + Overlay Components
+
+> **No prior dependencies.** Tasks 1 and 2 are independent — Task 1 adds types/functions to `session/tmux`, Task 2 extends the overlay in `ui/overlay`. They can be implemented in parallel.
 
 ### Task 1: `DiscoverAll` + `CountKasSessions` in tmux package
 
@@ -382,6 +386,10 @@ git commit -m "feat: extend tmux browser overlay to show managed sessions"
 ```
 
 ---
+
+## Wave 2: App Integration + Status Bar
+
+> **Depends on Wave 1:** Task 3 imports `tmux.SessionInfo` and `tmux.DiscoverAll` from Task 1, and maps into `overlay.TmuxBrowserItem` (with new fields from Task 2). Task 4 relies on `tmuxSessionCount` wired in Task 3.
 
 ### Task 3: Wire unified discovery + session count into the app layer
 

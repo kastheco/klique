@@ -704,13 +704,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			m.updateSidebarPlans()
 			m.updateNavPanelStatus()
 			m.toastManager.Info("plan needs ## Wave headers — respawning planner to annotate.")
-			wavePrompt := fmt.Sprintf(
-				"The plan at docs/plans/%s is missing ## Wave N headers required for wave-based implementation. "+
-					"Please annotate the plan by grouping tasks under ## Wave 1, ## Wave 2, … sections. "+
-					"Keep all existing task content intact; only add the Wave headers.",
-				planFile,
-			)
-			_, spawnCmd := m.spawnPlanAgent(planFile, "plan", wavePrompt)
+			_, spawnCmd := m.spawnPlanAgent(planFile, "plan", buildWaveAnnotationPrompt(planFile))
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return planRefreshMsg{} }, spawnCmd)
 		}
 

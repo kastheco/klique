@@ -23,8 +23,8 @@ Before writing ANY tasks, classify the feature by estimated total implementation
 
 | Size | Estimated effort | Max tasks | Waves | Review model |
 |------|-----------------|-----------|-------|--------------|
-| **Trivial** | < 30 min | 1 | None | Self-review only |
-| **Small** | 30 min – 2 hours | 2–3 | None (flat) | Single review after all tasks |
+| **Trivial** | < 30 min | 1 | 1 (## Wave 1 required) | Self-review only |
+| **Small** | 30 min – 2 hours | 2–3 | 1 (## Wave 1 required) | Single review after all tasks |
 | **Medium** | 2–6 hours | 3–6 | 1–2 waves | Review per wave |
 | **Large** | 6+ hours | 6–12 | 2–4 waves | Review per wave |
 
@@ -69,8 +69,11 @@ Waves create review checkpoints and dependency barriers. They have real cost (ag
 - Different subsystems need sequential integration (e.g., data layer before UI)
 - Risk isolation: risky foundation work should be reviewed before building on it
 
-**When NOT to use waves:**
-- All tasks are independent (use a flat list)
+**Minimum wave requirement (CRITICAL):**
+**Every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration — a plan without any `## Wave N` section cannot be implemented through kasmos. Even a single-task trivial plan must wrap its task under `## Wave 1`.
+
+**When NOT to use multiple waves:**
+- All tasks are independent (use a single ## Wave 1 with all tasks)
 - Feature is small (< 3 tasks)
 - The "dependency" is just file-level imports (the compiler catches that)
 

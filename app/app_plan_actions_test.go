@@ -25,6 +25,24 @@ func TestBuildPlanPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "Goal: Refactor JWT auth") {
 		t.Fatalf("prompt missing goal")
 	}
+	// Wave headers are required for kasmos orchestration — the prompt must
+	// instruct the planner to include them.
+	assert.Contains(t, prompt, "Wave", "plan prompt must mention Wave headers for kasmos orchestration")
+	assert.Contains(t, prompt, "writing-plans", "plan prompt must reference the writing-plans skill")
+}
+
+func TestBuildWaveAnnotationPrompt(t *testing.T) {
+	prompt := buildWaveAnnotationPrompt("2026-02-27-my-feature.md")
+	assert.Contains(t, prompt, "2026-02-27-my-feature.md", "prompt must reference the plan file")
+	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
+	assert.Contains(t, prompt, "commit", "prompt must instruct the planner to commit after annotation")
+	assert.Contains(t, prompt, "planner-finished-", "prompt must include the signal file instruction")
+}
+
+func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
+	prompt := buildWaveAnnotationPrompt("2026-02-27-trivial.md")
+	// Even trivial plans must be wrapped in at least ## Wave 1
+	assert.Contains(t, prompt, "## Wave 1", "prompt must specify ## Wave 1 as the minimum structure")
 }
 
 func TestBuildImplementPrompt(t *testing.T) {

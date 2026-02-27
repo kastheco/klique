@@ -1249,8 +1249,34 @@ func (m *home) planBranch(planFile string) string {
 }
 
 // buildPlanPrompt returns the initial prompt for a planner agent session.
+// The prompt explicitly requires ## Wave N headers because kasmos uses them
+// for wave orchestration — without them, implementation cannot start.
 func buildPlanPrompt(planName, description string) string {
-	return fmt.Sprintf("Plan %s. Goal: %s.", planName, description)
+	return fmt.Sprintf(
+		"Plan %s. Goal: %s. "+
+			"Use the `writing-plans` superpowers skill. "+
+			"The plan MUST include ## Wave N sections (at minimum ## Wave 1) "+
+			"grouping all tasks — kasmos requires Wave headers to orchestrate implementation.",
+		planName, description,
+	)
+}
+
+// buildWaveAnnotationPrompt returns the prompt used when a planner is respawned
+// to add ## Wave headers to an existing plan that is missing them.
+// It instructs the planner to annotate the plan, commit the change, and write
+// the sentinel signal so kasmos can resume the implementation flow.
+func buildWaveAnnotationPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"The plan at docs/plans/%[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
+			"Please annotate the plan by wrapping all tasks under ## Wave N sections. "+
+			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
+			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
+			"After annotating:\n"+
+			"1. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
+			"2. Signal completion: touch docs/plans/.signals/planner-finished-%[1]s\n"+
+			"Do not edit plan-state.json directly.",
+		planFile,
+	)
 }
 
 // buildImplementPrompt returns the prompt for a coder agent session.
