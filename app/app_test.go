@@ -1324,6 +1324,39 @@ func TestFocusMode_ReusesPreviewTerminal(t *testing.T) {
 	assert.Equal(t, stateDefault, h.state, "state should remain default when instance is not started")
 }
 
+func TestHandleQuit_NoActiveSessions_QuitsImmediately(t *testing.T) {
+	h := newTestHome()
+	h.toastManager = overlay.NewToastManager(&h.spinner)
+
+	// Add a paused instance (not active)
+	inst := &session.Instance{Title: "paused-agent", Status: session.Paused}
+	h.nav.AddInstance(inst)
+
+	_, cmd := h.handleQuit()
+
+	// Should return tea.Quit directly (no confirmation)
+	assert.Equal(t, stateDefault, h.state, "state should remain default (no confirmation overlay)")
+	assert.Nil(t, h.confirmationOverlay, "no confirmation overlay should be shown")
+	require.NotNil(t, cmd, "should return a quit command")
+}
+
+func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
+	h := newTestHome()
+	h.toastManager = overlay.NewToastManager(&h.spinner)
+
+	// Add a running instance
+	inst := &session.Instance{Title: "running-agent", Status: session.Running}
+	h.nav.AddInstance(inst)
+
+	_, cmd := h.handleQuit()
+
+	// Should show confirmation, not quit immediately
+	assert.Equal(t, stateConfirm, h.state, "state should be stateConfirm")
+	require.NotNil(t, h.confirmationOverlay, "confirmation overlay must be shown")
+	assert.Nil(t, cmd, "confirmAction returns nil cmd (action stored in pendingConfirmAction)")
+	assert.NotNil(t, h.pendingConfirmAction, "pending action must be set")
+}
+
 // TestExitFocusMode_KeepsPreviewTerminal verifies that exitFocusMode does NOT close
 // previewTerminal — it stays alive for preview rendering.
 func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {

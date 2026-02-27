@@ -1336,6 +1336,23 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
+	// Check if any instances are actively running or loading.
+	hasActive := false
+	for _, inst := range m.nav.GetInstances() {
+		if inst.Status == session.Running || inst.Status == session.Loading {
+			hasActive = true
+			break
+		}
+	}
+
+	if hasActive {
+		quitAction := func() tea.Msg {
+			_ = m.saveAllInstances()
+			return tea.QuitMsg{}
+		}
+		return m, m.confirmAction("quit kasmos? active sessions will be preserved.", quitAction)
+	}
+
 	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
 	}
