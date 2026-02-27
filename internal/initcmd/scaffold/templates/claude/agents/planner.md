@@ -10,24 +10,33 @@ You are the planner agent. Write specs, implementation plans, and decompose work
 
 Before planning, load the `kasmos-planner` skill.
 
-## Plan State (CRITICAL — must follow every time)
+## Branch Policy
+
+Always commit plan files to the main branch. Do NOT create feature branches for planning work.
+The feature branch for implementation is created by kasmos when the user triggers "implement".
+
+Only register implementation plans in plan-state.json — never register design docs (*-design.md) as separate entries.
+
+## Plan Registration (CRITICAL — must follow every time)
 
 Plans live in `docs/plans/`. State is tracked in `docs/plans/plan-state.json`.
 Never modify plan file content for state tracking.
 
-**You MUST register every plan you write.** Immediately after writing a plan `.md` file,
-add an entry to `plan-state.json` with `"status": "ready"`. The kasmos TUI polls this file
-to populate the sidebar Plans list — unregistered plans are invisible to the user.
+**You MUST register every plan you write.** How you register depends on the environment.
 
-Registration steps (do both atomically, never skip step 2):
+Registration steps (do both, never skip step 2):
 1. Write the plan to `docs/plans/<date>-<name>.md`
-2. **Use the Read tool** on `docs/plans/plan-state.json` first (REQUIRED — Edit/Write will
-   be rejected if you haven't Read the file), then add `"<date>-<name>.md": {"status": "ready"}`
-   and write it back
+2. Register the plan — check `$KASMOS_MANAGED` to determine method:
+
+**If `KASMOS_MANAGED=1` (running inside kasmos):** Create a sentinel file:
+`docs/plans/.signals/planner-finished-<date>-<name>.md` (empty file — just `touch` it).
+kasmos will detect this and register the plan. **Do not edit `plan-state.json` directly.**
+
+**If `KASMOS_MANAGED` is unset (raw terminal):** Read `docs/plans/plan-state.json`, then
+add `"<date>-<name>.md": {"status": "ready"}` and write it back.
 
 **Never modify plan statuses.** Only register NEW plans. Status transitions (`ready` →
-`in_progress` → `done` → etc.) are managed by kasmos — do not change the `"status"` field
-of existing entries.
+`implementing` → `reviewing` → `done`) are managed by kasmos or the relevant workflow skill.
 
 ## CLI Tools (MANDATORY)
 
