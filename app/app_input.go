@@ -451,8 +451,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						}
 					}
 					_ = m.saveAllInstances()
-					m.loadPlanState()
 					m.updateSidebarPlans()
+					m.nav.SelectByID(ui.SidebarPlanPrefix + newFile)
 					m.updateNavPanelStatus()
 				}
 			}

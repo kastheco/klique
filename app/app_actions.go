@@ -319,10 +319,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
 				return err
 			}
-			m.loadPlanState()
-			m.updateSidebarPlans()
-			m.updateNavPanelStatus()
-			return nil
+			return planRefreshMsg{}
 		}
 		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
 
