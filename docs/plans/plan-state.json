@@ -585,7 +585,7 @@
       "created_at": "2026-02-27T18:36:48.99087766Z"
     },
     "2026-02-27-chat-and-custodial-customizations.md": {
-      "status": "planning",
+      "status": "reviewing",
       "description": "chat and custodial customizations\n\nallow configuring chat/custodial agent types via setup wizard (optionally) and rename custodial to custodian",
       "branch": "plan/chat-and-custodial-customizations",
       "topic": "tools",
@@ -715,8 +715,9 @@
       "created_at": "2026-02-27T07:41:00.300934469Z"
     },
     "2026-02-27-chat-and-custodial-customizations.md": {
-      "status": "ready",
+      "status": "reviewing",
       "description": "rename custodial to custodian and make chat/custodian agent types configurable in the setup wizard",
+      "branch": "plan/chat-and-custodial-customizations",
       "topic": "workflow",
       "created_at": "2026-02-27T22:00:00.000000000Z"
     }
