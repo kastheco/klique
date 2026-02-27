@@ -209,6 +209,40 @@ func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
 		"no confirmation overlay when plannerPrompted is already true")
 }
 
+// TestPlannerTmuxDeath_NoFallbackDialog verifies that when a planner pane dies
+// but NO sentinel was written (plan still in StatusPlanning), NO confirmation
+// dialog is shown. The plan must remain in StatusPlanning.
+//
+// This is the definitive regression test for the removed tmux-death fallback:
+// spurious transitions must not occur just because the planner process died.
+func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
+	const planFile = "2026-02-27-no-fallback.md"
+	h, ps, _, _ := plannerSignalHome(t, planFile)
+
+	// No sentinel written — plan stays in StatusPlanning.
+	// The planner pane dies (TmuxAlive: false), but there are no signals.
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "test-plan-planner", TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.NotEqual(t, stateConfirm, updated.state,
+		"tmux death without sentinel must NOT show a confirm dialog")
+	assert.Nil(t, updated.confirmationOverlay,
+		"tmux death without sentinel must NOT set confirmationOverlay")
+
+	// Plan must remain in StatusPlanning (not advanced).
+	entry, ok := updated.planState.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusPlanning, entry.Status,
+		"plan must remain StatusPlanning when planner pane dies without a sentinel")
+}
+
 // TestPlannerFinishedSignal_SkipsWhenConfirmActive verifies that when
 // state == stateConfirm, no new dialog is shown (avoids clobbering an active overlay).
 func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {

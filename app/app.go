@@ -878,45 +878,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tmuxAliveMap[md.Title] = md.TmuxAlive
 			}
 
-			// Planner-exit → implement-prompt: fires when a planner pane dies and the
-			// plan is StatusPlanning (no sentinel written, tmux-death fallback) or
-			// StatusReady (sentinel processed this tick, FSM transitioned). Skip if
-			// already prompted (yes/no answered) or if a confirm overlay is active.
-			for _, inst := range m.nav.GetInstances() {
-				if m.state == stateConfirm {
-					break
-				}
-				if inst.AgentType != session.AgentTypePlanner || inst.PlanFile == "" {
-					continue
-				}
-				if m.plannerPrompted[inst.PlanFile] {
-					continue
-				}
-				alive, collected := tmuxAliveMap[inst.Title]
-				if !collected || alive {
-					continue
-				}
-				entry, ok := m.planState.Entry(inst.PlanFile)
-				// Fire for StatusPlanning (crash fallback) and StatusReady (sentinel path).
-				if !ok || (entry.Status != planstate.StatusPlanning && entry.Status != planstate.StatusReady) {
-					continue
-				}
-				capturedPlanFile := inst.PlanFile
-				capturedTitle := inst.Title
-				// Focus the planner instance so the user can see its output behind the overlay.
-				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
-					asyncCmds = append(asyncCmds, cmd)
-				}
-				m.confirmAction(
-					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(capturedPlanFile)),
-					func() tea.Msg {
-						return plannerCompleteMsg{planFile: capturedPlanFile}
-					},
-				)
-				m.pendingPlannerInstanceTitle = capturedTitle
-				break // one prompt per tick
-			}
-
 			// Coder-exit → push-prompt: when a coder session's tmux pane has exited
 			// and the plan is still in StatusImplementing, prompt the user to push the
 			// implementation branch before advancing to reviewing.

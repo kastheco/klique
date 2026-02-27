@@ -284,167 +284,6 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Planner-exit detection and confirmation flow tests
-// ---------------------------------------------------------------------------
-
-// TestPlannerExit_ShowsImplementConfirm verifies that when a planner session's
-// tmux pane dies and the plan status is StatusPlanning, a confirmation dialog appears.
-func TestPlannerExit_ShowsImplementConfirm(t *testing.T) {
-	const planFile = "2026-02-22-planner-exit.md"
-
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
-	require.NoError(t, ps.Register(planFile, "planner exit test", "plan/planner-exit", time.Now()))
-	// The planner was launched so status is StatusPlanning — prompt fires when pane dies.
-	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
-
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:   "planner-exit-inst",
-		Path:    t.TempDir(),
-		Program: "claude",
-	})
-	require.NoError(t, err)
-	inst.AgentType = session.AgentTypePlanner
-	inst.PlanFile = planFile
-
-	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.plannerPrompted = make(map[string]bool)
-	_ = h.nav.AddInstance(inst)
-
-	msg := metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "planner-exit-inst", TmuxAlive: false}},
-		PlanState: ps,
-	}
-	model, _ := h.Update(msg)
-	updated := model.(*home)
-
-	assert.Equal(t, stateConfirm, updated.state,
-		"state must be stateConfirm when planner dies and plan is ready")
-	require.NotNil(t, updated.confirmationOverlay,
-		"confirmation overlay must be set for planner-exit prompt")
-	assert.Equal(t, "planner-exit-inst", updated.pendingPlannerInstanceTitle,
-		"pendingPlannerInstanceTitle must be set to the planner instance title")
-}
-
-// TestPlannerExit_NoRePromptAfterAnswer verifies that once the user has answered
-// the planner-exit prompt (plannerPrompted[planFile] = true), the dialog doesn't reappear.
-func TestPlannerExit_NoRePromptAfterAnswer(t *testing.T) {
-	const planFile = "2026-02-22-no-reprompt.md"
-
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
-	require.NoError(t, ps.Register(planFile, "no reprompt test", "plan/no-reprompt", time.Now()))
-
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:   "planner-no-reprompt",
-		Path:    t.TempDir(),
-		Program: "claude",
-	})
-	require.NoError(t, err)
-	inst.AgentType = session.AgentTypePlanner
-	inst.PlanFile = planFile
-
-	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.plannerPrompted = map[string]bool{planFile: true} // already answered
-	_ = h.nav.AddInstance(inst)
-
-	msg := metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "planner-no-reprompt", TmuxAlive: false}},
-		PlanState: ps,
-	}
-	model, _ := h.Update(msg)
-	updated := model.(*home)
-
-	assert.Equal(t, stateDefault, updated.state,
-		"state must remain stateDefault when plannerPrompted is already true")
-}
-
-// TestPlannerExit_NoPromptWhileAlive verifies that while the planner tmux pane
-// is still alive, no confirmation prompt appears.
-func TestPlannerExit_NoPromptWhileAlive(t *testing.T) {
-	const planFile = "2026-02-22-still-alive.md"
-
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
-	require.NoError(t, ps.Register(planFile, "still alive test", "plan/still-alive", time.Now()))
-
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:   "planner-alive",
-		Path:    t.TempDir(),
-		Program: "claude",
-	})
-	require.NoError(t, err)
-	inst.AgentType = session.AgentTypePlanner
-	inst.PlanFile = planFile
-
-	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.plannerPrompted = make(map[string]bool)
-	_ = h.nav.AddInstance(inst)
-
-	msg := metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "planner-alive", TmuxAlive: true}},
-		PlanState: ps,
-	}
-	model, _ := h.Update(msg)
-	updated := model.(*home)
-
-	assert.Equal(t, stateDefault, updated.state,
-		"state must remain stateDefault while planner tmux pane is alive")
-}
-
-// TestPlannerExit_EscPreservesForRePrompt verifies that pressing esc on the
-// planner-exit dialog does NOT mark plannerPrompted, allowing re-prompt next tick.
-func TestPlannerExit_EscPreservesForRePrompt(t *testing.T) {
-	const planFile = "2026-02-22-esc-reprompt.md"
-
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:   "planner-esc-inst",
-		Path:    t.TempDir(),
-		Program: "claude",
-	})
-	require.NoError(t, err)
-	inst.AgentType = session.AgentTypePlanner
-	inst.PlanFile = planFile
-
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	h := &home{
-		ctx:                         context.Background(),
-		state:                       stateConfirm,
-		appConfig:                   config.DefaultConfig(),
-		nav:                         ui.NewNavigationPanel(&sp),
-		menu:                        ui.NewMenu(),
-		tabbedWindow:                ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
-		toastManager:                overlay.NewToastManager(&sp),
-		waveOrchestrators:           make(map[string]*WaveOrchestrator),
-		plannerPrompted:             make(map[string]bool),
-		pendingPlannerInstanceTitle: "planner-esc-inst",
-		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'esc-reprompt' is ready. Start implementation?"),
-	}
-	_ = h.nav.AddInstance(inst)
-
-	// Press esc
-	keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
-	model, _ := h.handleKeyPress(keyMsg)
-	updated := model.(*home)
-
-	assert.Equal(t, stateDefault, updated.state,
-		"state must return to default after esc")
-	assert.Empty(t, updated.plannerPrompted,
-		"plannerPrompted must NOT be set after esc — allows re-prompt")
-	assert.Empty(t, updated.pendingPlannerInstanceTitle,
-		"pendingPlannerInstanceTitle must be cleared after esc")
-}
-
-// ---------------------------------------------------------------------------
 // All-waves-complete → review flow tests
 // ---------------------------------------------------------------------------
 
@@ -922,8 +761,8 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 }
 
 // TestPlannerExit_FocusesPlannerInstance_BeforeConfirm verifies that when a
-// planner finishes and the "start implementation?" dialog shows, the planner
-// instance is auto-focused so its output is visible behind the overlay.
+// PlannerFinished signal is processed, the planner instance is auto-focused
+// so its output is visible behind the overlay.
 func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	const planFile = "2026-02-21-focus-planner.md"
 
@@ -933,7 +772,8 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	ps, err := planstate.Load(plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus planner test", "plan/focus-planner", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusReady)
+	// Plan is StatusPlanning — the PlannerFinished signal will transition it to StatusReady.
+	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
 
 	plannerInst := &session.Instance{
 		Title:     "focus-planner-plan",
@@ -950,18 +790,25 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
 	h.plannerPrompted = make(map[string]bool)
 	h.pendingReviewFeedback = make(map[string]string)
+	h.fsm = planfsm.New(plansDir)
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(plannerInst)
 	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
 	h.nav.SetSelectedInstance(0)
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 
+	// Use the signal-driven path: PlannerFinished signal triggers the dialog.
+	signal := planfsm.Signal{
+		Event:    planfsm.PlannerFinished,
+		PlanFile: planFile,
+	}
 	msg := metadataResultMsg{
 		Results: []instanceMetadata{
 			{Title: "other-agent", TmuxAlive: true},
-			{Title: "focus-planner-plan", TmuxAlive: false},
+			{Title: "focus-planner-plan", TmuxAlive: true},
 		},
 		PlanState: ps,
+		Signals:   []planfsm.Signal{signal},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
