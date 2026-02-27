@@ -482,6 +482,71 @@ func TestStartClaudeWithLongPromptUsesFile(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "prompt file should be removed after Close")
 }
 
+func TestDiscoverOrphans(t *testing.T) {
+	tests := []struct {
+		name       string
+		tmuxOutput string
+		tmuxErr    error
+		knownNames []string
+		wantCount  int
+		wantErr    bool
+	}{
+		{
+			name:       "no sessions running",
+			tmuxErr:    &exec.ExitError{},
+			knownNames: nil,
+			wantCount:  0,
+		},
+		{
+			name:       "all sessions tracked",
+			tmuxOutput: "kas_foo|1740000000|1|0|80|24\nkas_bar|1740000000|1|0|120|40\n",
+			knownNames: []string{"kas_foo", "kas_bar"},
+			wantCount:  0,
+		},
+		{
+			name:       "one orphan among tracked",
+			tmuxOutput: "kas_foo|1740000000|1|0|80|24\nkas_orphan|1740000000|1|0|80|24\n",
+			knownNames: []string{"kas_foo"},
+			wantCount:  1,
+		},
+		{
+			name:       "non-kas sessions ignored",
+			tmuxOutput: "myshell|1740000000|1|0|80|24\nkas_orphan|1740000000|1|0|80|24\n",
+			knownNames: nil,
+			wantCount:  1,
+		},
+		{
+			name:       "attached session detected",
+			tmuxOutput: "kas_orphan|1740000000|1|1|80|24\n",
+			knownNames: nil,
+			wantCount:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmdExec := cmd_test.NewMockExecutor()
+			if tt.tmuxErr != nil {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return nil, tt.tmuxErr
+				}
+			} else {
+				cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+					return []byte(tt.tmuxOutput), nil
+				}
+			}
+
+			orphans, err := DiscoverOrphans(cmdExec, tt.knownNames)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Len(t, orphans, tt.wantCount)
+		})
+	}
+}
+
 func TestStartOpenCodeWithPromptContainingSingleQuotes(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 

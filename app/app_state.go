@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/glamour"
+	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
@@ -20,7 +21,9 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
+	"github.com/kastheco/kasmos/ui/overlay"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -1598,4 +1601,40 @@ func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.Plan
 	m.toastManager.Info(fmt.Sprintf("retrying %d failed task(s) in wave %d",
 		len(tasks), orch.CurrentWaveNumber()))
 	return m.spawnWaveTasks(orch, tasks, entry)
+}
+
+// discoverTmuxOrphans returns a tea.Cmd that lists orphaned kas_ tmux sessions.
+func (m *home) discoverTmuxOrphans() tea.Cmd {
+	knownNames := make([]string, 0, len(m.allInstances))
+	for _, inst := range m.allInstances {
+		if inst.Started() && inst.TmuxAlive() {
+			knownNames = append(knownNames, tmux.ToKasTmuxNamePublic(inst.Title))
+		}
+	}
+	return func() tea.Msg {
+		orphans, err := tmux.DiscoverOrphans(cmd2.MakeExecutor(), knownNames)
+		return tmuxOrphansMsg{sessions: orphans, err: err}
+	}
+}
+
+// adoptOrphanSession creates a new Instance backed by an existing orphaned tmux session.
+func (m *home) adoptOrphanSession(item overlay.TmuxBrowserItem) (tea.Model, tea.Cmd) {
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   item.Title,
+		Path:    m.activeRepoPath,
+		Program: "unknown",
+	})
+	if err != nil {
+		return m, m.handleError(err)
+	}
+
+	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+	m.nav.SelectInstance(inst)
+
+	m.toastManager.Info(fmt.Sprintf("adopting session '%s'", item.Title))
+
+	return m, func() tea.Msg {
+		err := inst.AdoptOrphanTmuxSession(item.Name)
+		return instanceStartedMsg{instance: inst, err: err}
+	}
 }

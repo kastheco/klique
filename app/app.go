@@ -96,6 +96,8 @@ const (
 	stateClickUpFetching
 	// statePermission is when an opencode permission prompt is detected and the modal is shown.
 	statePermission
+	// stateTmuxBrowser is the state when the tmux session browser overlay is shown.
+	stateTmuxBrowser
 )
 
 type home struct {
@@ -186,6 +188,8 @@ type home struct {
 	contextMenu *overlay.ContextMenu
 	// pickerOverlay is the topic picker overlay for move-to-topic
 	pickerOverlay *overlay.PickerOverlay
+	// tmuxBrowser is the tmux session browser overlay.
+	tmuxBrowser *overlay.TmuxBrowserOverlay
 	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
 	clickUpConfig *clickup.MCPServerConfig
 	// clickUpImporter handles search/fetch via MCP (nil until first use)
@@ -1115,6 +1119,42 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.toastManager.Info(fmt.Sprintf("implementation complete for '%s' — starting review", planName))
 		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
+	case tmuxOrphansMsg:
+		if msg.err != nil {
+			return m, m.handleError(msg.err)
+		}
+		if len(msg.sessions) == 0 {
+			if m.toastManager != nil {
+				m.toastManager.Info("no orphaned tmux sessions found")
+				return m, m.toastTickCmd()
+			}
+			return m, nil
+		}
+		items := make([]overlay.TmuxBrowserItem, len(msg.sessions))
+		for i, s := range msg.sessions {
+			items[i] = overlay.TmuxBrowserItem{
+				Name:     s.Name,
+				Title:    s.Title,
+				Created:  s.Created,
+				Windows:  s.Windows,
+				Attached: s.Attached,
+				Width:    s.Width,
+				Height:   s.Height,
+			}
+		}
+		m.tmuxBrowser = overlay.NewTmuxBrowserOverlay(items)
+		m.state = stateTmuxBrowser
+		return m, nil
+	case tmuxKillResultMsg:
+		if msg.err != nil {
+			m.toastManager.Error(fmt.Sprintf("failed to kill session: %v", msg.err))
+		} else {
+			m.toastManager.Success(fmt.Sprintf("killed session '%s'", msg.name))
+		}
+		return m, m.toastTickCmd()
+	case tmuxAttachReturnMsg:
+		m.toastManager.Info("detached from tmux session")
+		return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
 	case permissionAutoApproveMsg:
 		if msg.instance != nil && msg.instance.Started() {
 			i := msg.instance
@@ -1278,6 +1318,8 @@ func (m *home) View() string {
 	case m.state == stateContextMenu && m.contextMenu != nil:
 		cx, cy := m.contextMenu.GetPosition()
 		result = overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
+	case m.state == stateTmuxBrowser && m.tmuxBrowser != nil:
+		result = overlay.PlaceOverlay(0, 0, m.tmuxBrowser.Render(), mainView, true, true)
 	default:
 		result = mainView
 	}
@@ -1394,6 +1436,21 @@ type coderCompleteMsg struct {
 type plannerCompleteMsg struct {
 	planFile string
 }
+
+// tmuxOrphansMsg carries discovered orphaned tmux sessions.
+type tmuxOrphansMsg struct {
+	sessions []tmux.OrphanSession
+	err      error
+}
+
+// tmuxKillResultMsg is sent after an orphaned tmux session is killed.
+type tmuxKillResultMsg struct {
+	name string
+	err  error
+}
+
+// tmuxAttachReturnMsg is sent when the user detaches from a passively attached orphan session.
+type tmuxAttachReturnMsg struct{}
 
 // clickUpDetectedMsg is sent at startup when ClickUp MCP is detected.
 type clickUpDetectedMsg struct {

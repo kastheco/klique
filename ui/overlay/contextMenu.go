@@ -142,7 +142,7 @@ func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
 			return c.filtered[c.selectedIdx].item.Action, true
 		}
 		return "", false
-	case "up", "k":
+	case "up":
 		if len(c.filtered) > 0 {
 			start := c.selectedIdx
 			for {
@@ -155,7 +155,7 @@ func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
 				}
 			}
 		}
-	case "down", "j":
+	case "down":
 		if len(c.filtered) > 0 {
 			start := c.selectedIdx
 			for {

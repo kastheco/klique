@@ -6,6 +6,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"os"
@@ -1206,6 +1207,42 @@ func TestPreviewTerminalReadyMsg_StaleDiscard(t *testing.T) {
 	assert.Equal(t, "", homeModel.previewTerminalInstance,
 		"previewTerminalInstance should not be set for stale msg")
 	assert.Nil(t, cmd, "no cmd should be returned for stale msg")
+}
+
+func TestTmuxBrowserActions(t *testing.T) {
+	t.Run("tmuxOrphansMsg with no orphans shows toast", func(t *testing.T) {
+		h := newTestHome()
+		msg := tmuxOrphansMsg{sessions: nil}
+		model, _ := h.Update(msg)
+		hm := model.(*home)
+		assert.Nil(t, hm.tmuxBrowser)
+		assert.Equal(t, stateDefault, hm.state)
+	})
+
+	t.Run("tmuxOrphansMsg with orphans opens browser", func(t *testing.T) {
+		h := newTestHome()
+		msg := tmuxOrphansMsg{
+			sessions: []tmux.OrphanSession{
+				{Name: "kas_test", Title: "test", Width: 80, Height: 24},
+			},
+		}
+		model, _ := h.Update(msg)
+		hm := model.(*home)
+		assert.NotNil(t, hm.tmuxBrowser)
+		assert.Equal(t, stateTmuxBrowser, hm.state)
+	})
+
+	t.Run("dismiss returns to default state", func(t *testing.T) {
+		h := newTestHome()
+		h.tmuxBrowser = overlay.NewTmuxBrowserOverlay([]overlay.TmuxBrowserItem{
+			{Name: "kas_test", Title: "test"},
+		})
+		h.state = stateTmuxBrowser
+		model, _ := h.handleTmuxBrowserAction(overlay.BrowserDismiss)
+		hm := model.(*home)
+		assert.Nil(t, hm.tmuxBrowser)
+		assert.Equal(t, stateDefault, hm.state)
+	})
 }
 
 // TestPreviewTerminalReadyMsg_AcceptsCurrentInstance verifies that previewTerminalReadyMsg

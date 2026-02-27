@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/kastheco/kasmos/config/planfsm"
@@ -737,6 +738,69 @@ func validatePlanHasWaves(plansDir, planFile string) error {
 	}
 	_, err = planparser.Parse(string(content))
 	return err
+}
+
+// handleTmuxBrowserAction dispatches actions from the tmux session browser overlay.
+func (m *home) handleTmuxBrowserAction(action overlay.BrowserAction) (tea.Model, tea.Cmd) {
+	switch action {
+	case overlay.BrowserDismiss:
+		m.tmuxBrowser = nil
+		m.state = stateDefault
+		return m, nil
+
+	case overlay.BrowserKill:
+		if m.tmuxBrowser == nil {
+			return m, nil
+		}
+		item := m.tmuxBrowser.SelectedItem()
+		if item.Name == "" {
+			return m, nil
+		}
+		name := item.Name
+		m.tmuxBrowser.RemoveSelected()
+		if m.tmuxBrowser.IsEmpty() {
+			m.tmuxBrowser = nil
+			m.state = stateDefault
+		}
+		return m, func() tea.Msg {
+			killCmd := exec.Command("tmux", "kill-session", "-t", name)
+			err := killCmd.Run()
+			return tmuxKillResultMsg{name: name, err: err}
+		}
+
+	case overlay.BrowserAdopt:
+		if m.tmuxBrowser == nil {
+			return m, nil
+		}
+		item := m.tmuxBrowser.SelectedItem()
+		if item.Name == "" {
+			return m, nil
+		}
+		m.tmuxBrowser = nil
+		m.state = stateDefault
+		return m.adoptOrphanSession(overlay.TmuxBrowserItem{
+			Name:  item.Name,
+			Title: item.Title,
+		})
+
+	case overlay.BrowserAttach:
+		if m.tmuxBrowser == nil {
+			return m, nil
+		}
+		item := m.tmuxBrowser.SelectedItem()
+		if item.Name == "" {
+			return m, nil
+		}
+		m.tmuxBrowser = nil
+		m.state = stateDefault
+		name := item.Name
+		return m, tea.ExecProcess(exec.Command("tmux", "attach-session", "-t", name), func(err error) tea.Msg {
+			return tmuxAttachReturnMsg{}
+		})
+
+	default:
+		return m, nil
+	}
 }
 
 // isLocked returns true if the given stage cannot be triggered given the current plan status.

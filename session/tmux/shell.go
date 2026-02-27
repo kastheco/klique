@@ -59,3 +59,15 @@ func (t *TmuxSession) promptArg(workDir string) string {
 	}
 	return "@" + rel
 }
+
+// promptArgOpenCode returns the prompt argument for opencode's --prompt flag.
+// Identical to promptArg — opencode accepts the same @file syntax for long prompts.
+func (t *TmuxSession) promptArgOpenCode(workDir string) string {
+	return t.promptArg(workDir)
+}
+
+// promptArgClaude returns the prompt argument for claude's positional prompt arg.
+// Identical to promptArg — uses Claude Code's @file syntax for long prompts.
+func (t *TmuxSession) promptArgClaude(workDir string) string {
+	return t.promptArg(workDir)
+}

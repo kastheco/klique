@@ -23,6 +23,7 @@ Key points:
 - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`
 - Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)
 - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. "push changes from 'foo'?" not "Push changes from 'foo'?"
+- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.
 
 ## Active Work
 

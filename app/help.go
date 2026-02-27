@@ -52,6 +52,7 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("c")+descStyle.Render("             - checkout branch (pause + copy branch name)"),
 		keyStyle.Render("P")+descStyle.Render("             - create pull request"),
 		keyStyle.Render("R")+descStyle.Render("             - switch repo"),
+		keyStyle.Render("T")+descStyle.Render("             - browse orphaned tmux sessions"),
 		keyStyle.Render("1/2")+descStyle.Render("           - filter: all / active only"),
 		keyStyle.Render("3")+descStyle.Render("             - cycle sort mode"),
 		"",

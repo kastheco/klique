@@ -369,6 +369,20 @@ func (i *Instance) Pause() error {
 	return nil
 }
 
+// AdoptOrphanTmuxSession connects this instance to an existing orphaned tmux session
+// identified by its raw tmux name. No worktree is created — the session keeps its
+// existing working directory.
+func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
+	ts := tmux.NewTmuxSessionFromExisting(tmuxName, i.Program, i.SkipPermissions)
+	i.tmuxSession = ts
+	if err := ts.Restore(); err != nil {
+		return fmt.Errorf("failed to adopt orphan session %s: %w", tmuxName, err)
+	}
+	i.started = true
+	i.SetStatus(Ready)
+	return nil
+}
+
 // Resume recreates the worktree and restarts the tmux session
 func (i *Instance) Resume() error {
 	if !i.started {

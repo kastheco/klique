@@ -24,7 +24,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission || m.state == stateTmuxBrowser {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -81,6 +81,11 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.state == stateRepoSwitch && msg.Button == tea.MouseButtonLeft {
 		m.pickerOverlay = nil
+		m.state = stateDefault
+		return m, nil
+	}
+	if m.state == stateTmuxBrowser && msg.Button == tea.MouseButtonLeft {
+		m.tmuxBrowser = nil
 		m.state = stateDefault
 		return m, nil
 	}
@@ -855,6 +860,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	if m.state == stateTmuxBrowser {
+		if m.tmuxBrowser == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		action := m.tmuxBrowser.HandleKeyPress(msg)
+		return m.handleTmuxBrowserAction(action)
+	}
+
 	// Handle search state — allows typing to filter AND arrow keys to navigate
 	if m.state == stateSearch {
 		switch {
@@ -1266,6 +1280,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateRepoSwitch
 		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())
 		return m, nil
+	case keys.KeyTmuxBrowser:
+		return m, m.discoverTmuxOrphans()
 	case keys.KeySearch:
 		m.nav.ActivateSearch()
 		m.nav.SelectFirst()

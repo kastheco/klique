@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,18 @@ func newTmuxSession(name string, program string, skipPermissions bool, ptyFactor
 		skipPermissions: skipPermissions,
 		ptyFactory:      ptyFactory,
 		cmdExec:         cmdExec,
+	}
+}
+
+// NewTmuxSessionFromExisting creates a TmuxSession that wraps an already-running
+// tmux session identified by its raw sanitized name. Used for adopting orphans.
+func NewTmuxSessionFromExisting(sanitizedName string, program string, skipPermissions bool) *TmuxSession {
+	return &TmuxSession{
+		sanitizedName:   sanitizedName,
+		program:         program,
+		skipPermissions: skipPermissions,
+		ptyFactory:      MakePtyFactory(),
+		cmdExec:         cmd.MakeExecutor(),
 	}
 }
 
@@ -442,4 +455,78 @@ func CleanupSessions(cmdExec cmd.Executor) error {
 		}
 	}
 	return nil
+}
+
+// OrphanSession represents a kas_ tmux session not tracked by any kasmos Instance.
+type OrphanSession struct {
+	Name     string    // raw tmux session name, e.g. "kas_auth-refactor-implement"
+	Title    string    // human name with "kas_" prefix stripped
+	Created  time.Time // session creation time
+	Windows  int       // window count
+	Attached bool      // whether another client is attached
+	Width    int       // pane columns
+	Height   int       // pane rows
+}
+
+// DiscoverOrphans lists kas_-prefixed tmux sessions that are NOT in knownNames.
+// knownNames should contain the sanitized tmux names of all current Instances.
+func DiscoverOrphans(cmdExec cmd.Executor, knownNames []string) ([]OrphanSession, error) {
+	lsCmd := exec.Command("tmux", "ls", "-F",
+		"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}")
+	output, err := cmdExec.Output(lsCmd)
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return nil, nil // no tmux server running or no sessions
+		}
+		return nil, fmt.Errorf("failed to list tmux sessions: %w", err)
+	}
+
+	known := make(map[string]bool, len(knownNames))
+	for _, n := range knownNames {
+		known[n] = true
+	}
+
+	var orphans []OrphanSession
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 6)
+		if len(parts) < 6 {
+			continue
+		}
+		name := parts[0]
+		if !strings.HasPrefix(name, TmuxPrefix) {
+			continue
+		}
+		if known[name] {
+			continue
+		}
+
+		var created time.Time
+		if epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+			created = time.Unix(epoch, 0)
+		}
+		windows, _ := strconv.Atoi(parts[2])
+		attached := parts[3] != "0"
+		width, _ := strconv.Atoi(parts[4])
+		height, _ := strconv.Atoi(parts[5])
+
+		title := strings.TrimPrefix(name, TmuxPrefix)
+		orphans = append(orphans, OrphanSession{
+			Name:     name,
+			Title:    title,
+			Created:  created,
+			Windows:  windows,
+			Attached: attached,
+			Width:    width,
+			Height:   height,
+		})
+	}
+	return orphans, nil
+}
+
+// ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.
+func ToKasTmuxNamePublic(name string) string {
+	return toKasTmuxName(name)
 }
