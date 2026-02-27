@@ -1129,11 +1129,12 @@ func (n *NavigationPanel) String() string {
 		body += "\n"
 	}
 
-	// Legend — status icon key
-	legend := navRunningIconStyle.Render("●") + navLegendLabelStyle.Render(" running") +
+	// Legend — status icon key, centered in the pane
+	legendContent := navIdleIconStyle.Render("○") + navLegendLabelStyle.Render(" idle") +
+		"  " + navRunningIconStyle.Render("●") + navLegendLabelStyle.Render(" running") +
 		"  " + navNotifyIconStyle.Render("◉") + navLegendLabelStyle.Render(" review") +
-		"  " + navIdleIconStyle.Render("○") + navLegendLabelStyle.Render(" idle") +
 		"  " + navCompletedIconStyle.Render("●") + navLegendLabelStyle.Render(" done")
+	legend := lipgloss.NewStyle().Width(innerWidth).Align(lipgloss.Center).Render(legendContent)
 
 	// Repo switcher
 	var repoSection string
