@@ -3,6 +3,9 @@
     "automation": {
       "created_at": "2026-02-24T23:14:58.827108721Z"
     },
+    "bugs": {
+      "created_at": "2026-02-27T22:27:26.796165229Z"
+    },
     "sidebar": {
       "created_at": "2026-02-22T18:00:00Z"
     },
@@ -470,7 +473,7 @@
     },
     "2026-02-26-detect-allow-perms.md": {
       "status": "done",
-      "description": "detect when opencode is asking for perms to Allow once, Allow always, Reject. show a popup dialog allowing the user to pick then propagate their change to the session. if they choose approve always (which should be default selection), you'll send right arrow -\u003e enter -\u003e enter. approve once is a single enter. reject is right arrow -\u003e right arrow -\u003e enter",
+      "description": "detect when opencode is asking for perms to Allow once, Allow always, Reject. show a popup dialog allowing the user to pick then propagate their change to the session. if they choose approve always (which should be default selection), you'll send right arrow -> enter -> enter. approve once is a single enter. reject is right arrow -> right arrow -> enter",
       "branch": "plan/detect-allow-perms",
       "topic": "automation",
       "created_at": "2026-02-26T20:16:31.684660209Z"
@@ -484,7 +487,7 @@
     },
     "2026-02-26-kas-verify-loop.md": {
       "status": "done",
-      "description": "update reviewer instructions to loop reviewer \u003c-\u003e fixer until all tiers pass and ALL issues have been addressed, no matter the severity",
+      "description": "update reviewer instructions to loop reviewer <-> fixer until all tiers pass and ALL issues have been addressed, no matter the severity",
       "branch": "plan/kas-verify-loop",
       "topic": "automation",
       "created_at": "2026-02-26T20:15:09.857895365Z"
@@ -556,6 +559,13 @@
       "topic": "automation",
       "created_at": "2026-02-26T16:42:11.713212759Z"
     },
+    "2026-02-27-ai-slugs-not-working.md": {
+      "status": "ready",
+      "description": "ai-slugs-not-working\n\nit keeps using a truncated version of the first line because i dont normally use newlines (except for here)",
+      "branch": "plan/ai-slugs-not-working",
+      "topic": "bugs",
+      "created_at": "2026-02-27T22:27:26.796165229Z"
+    },
     "2026-02-27-always-focus-sidebar.md": {
       "status": "done",
       "description": "the purple focus highlight and keyboard should always cling to the sidebar outside of interactive or attach mode. hitting tab required me to navigate left to get back to sidebar when it should just kept my selection and shown the agent tab instead",
@@ -584,6 +594,13 @@
       "topic": "ui",
       "created_at": "2026-02-27T18:36:48.99087766Z"
     },
+    "2026-02-27-chat-about-this-menu-option-that-opens-up.md": {
+      "status": "ready",
+      "description": "chat about this menu option that opens up custodian agent with plan info and prompts user to ask a question",
+      "branch": "plan/chat-about-this-menu-option-that-opens-up",
+      "topic": "ui",
+      "created_at": "2026-02-27T22:26:55.041161118Z"
+    },
     "2026-02-27-chat-and-custodial-customizations.md": {
       "status": "done",
       "description": "rename custodial to custodian and make chat/custodian agent types configurable in the setup wizard",
@@ -598,6 +615,13 @@
       "topic": "verify",
       "created_at": "2026-02-27T17:57:15.490968411Z"
     },
+    "2026-02-27-create-fix-agent-and-skill.md": {
+      "status": "ready",
+      "description": "create a debugging skill and agent type (should probably replace custodian) that's equipped to handle custodian's work but more importantly, is specialized in debugging and investigating issues, tieing up loose ends and targeted verification",
+      "branch": "plan/create-a-debugging-skill-and-agent-type-should",
+      "topic": "tools",
+      "created_at": "2026-02-27T22:07:33.623625523Z"
+    },
     "2026-02-27-create-kasmos-custodial-agent.md": {
       "status": "done",
       "description": "create custodial agent designed to efficiently and effectively handle touchup tasks and quick fixes geared around issues or ux gaps in the kasmos workflow. things like resetting a plan's status/overriding it, finishing the development branch by merging to main or creating a pr, etc.",
@@ -606,7 +630,7 @@
       "created_at": "2026-02-27T17:47:32.295296289Z"
     },
     "2026-02-27-ctrl-ud-pagination.md": {
-      "status": "done",
+      "status": "cancelled",
       "description": "configure ctrl+u for paginate up in agent session, d for down. it's not currently working",
       "branch": "plan/ctrl-ud-pagination",
       "topic": "workflow",
@@ -625,6 +649,13 @@
       "topic": "automation",
       "created_at": "2026-02-27T16:16:33.640848697Z",
       "implemented": "2026-02-27"
+    },
+    "2026-02-27-implement-a-custom-kas-verify-tiered-review-process-for.md": {
+      "status": "cancelled",
+      "description": "implement a custom /kas.verify tiered review process for PRs (evaluate using codex code review or some other github integration to use specific skills/review process we need to research it). this should trigger for new prs (not drafts) and kasmos should monitor the state of it somewhere non-invasive like a status bar (maybe bottom left or right?)",
+      "branch": "plan/implement-a-custom-kas-verify-tiered-review-process-for",
+      "topic": "verify",
+      "created_at": "2026-02-27T21:57:06.660976295Z"
     },
     "2026-02-27-improve-planner-to-implementation.md": {
       "status": "cancelled",
@@ -651,8 +682,15 @@
       "topic": "workflow",
       "created_at": "2026-02-27T00:00:00Z"
     },
+    "2026-02-27-new-plan-issues.md": {
+      "status": "ready",
+      "description": "new-plan-issues\n\ndisappears if confirmation dialog shows while making a new plan, losing all contents. also, the box gets bigger when the agent pane either loads a session or switches (due to exit, etc)",
+      "branch": "plan/new-plan-issues",
+      "topic": "ui",
+      "created_at": "2026-02-27T21:49:21.082140797Z"
+    },
     "2026-02-27-plan-review.md": {
-      "status": "reviewing",
+      "status": "done",
       "description": "plan-review\n\nimplement automatic plan reviews and fixing before writing the plan and proceeding to implementation (either manual or automatic, basically last step in planning is to review the plan)",
       "branch": "plan/plan-review",
       "topic": "automation",
@@ -673,7 +711,7 @@
       "created_at": "2026-02-27T06:41:42.078871243Z"
     },
     "2026-02-27-release-v1-1.md": {
-      "status": "ready",
+      "status": "done",
       "description": "release v1.1\n\ncreate new tag to trigger build for v1.1.0 encorporating changes since last night",
       "branch": "plan/release-v1-1",
       "topic": "workflow",
@@ -681,7 +719,7 @@
     },
     "2026-02-27-reliable-planner-completion.md": {
       "status": "done",
-      "description": "make planner explicitly confirm with user before signaling completion, instead of relying on agent remembering to touch sentinel after Q\u0026A",
+      "description": "make planner explicitly confirm with user before signaling completion, instead of relying on agent remembering to touch sentinel after Q&A",
       "branch": "plan/reliable-planner-completion",
       "topic": "workflow",
       "created_at": "2026-02-27T19:15:00Z"
@@ -695,10 +733,17 @@
     },
     "2026-02-27-review-use-kas-verify.md": {
       "status": "ready",
-      "description": "review use kas.verify\n\nthe review process should use a customized version of /kas.verify to perform tiered analysis instead of the simpler review process used now.",
+      "description": "review use kas.verify\n\nthe review process should use a customized version of /kas.verify to perform tiered analysis instead of the simpler review process used now. evaluate using codex code review or some other github integration to use specific skills/review process (needs research). this should trigger for new PRs (not drafts) and kasmos should monitor the state of it somewhere non-invasive like a status bar (maybe bottom left or right?).",
       "branch": "plan/review-use-kas-verify",
       "topic": "automation",
       "created_at": "2026-02-27T20:18:11.25355817Z"
+    },
+    "2026-02-27-set-status-context-menu.md": {
+      "status": "ready",
+      "description": "set status context menu\n\ncurrently there is no way to update a plan status (eg. to fix if incorrect) without triggering automation side effects. i want to be able to correct a wrong plan that got out of sync without automation picking it up",
+      "branch": "plan/set-status-context-menu",
+      "topic": "ui",
+      "created_at": "2026-02-27T21:10:02.331577094Z"
     },
     "2026-02-27-simplify-new-plan.md": {
       "status": "done",
@@ -713,6 +758,12 @@
       "branch": "plan/tmux-session-summary",
       "topic": "ui",
       "created_at": "2026-02-27T07:41:00.300934469Z"
+    },
+    "2026-02-27-custodian-version-bump.md": {
+      "status": "ready",
+      "description": "teach custodian agent to bump version in main.go before tagging releases so CI/CD validation passes",
+      "topic": "workflow",
+      "created_at": "2026-02-27T23:00:00Z"
     }
   }
 }
