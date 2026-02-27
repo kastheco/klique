@@ -1738,9 +1738,9 @@ func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     title,
 		Path:      m.activeRepoPath,
-		Program:   m.programForAgent(session.AgentTypeCustodian),
+		Program:   m.programForAgent(session.AgentTypeFixer),
 		PlanFile:  planFile,
-		AgentType: session.AgentTypeCustodian,
+		AgentType: session.AgentTypeFixer,
 	})
 	if err != nil {
 		return m, m.handleError(err)
