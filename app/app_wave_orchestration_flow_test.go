@@ -791,3 +791,229 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 	assert.Empty(t, updated.pendingPlannerInstanceTitle,
 		"pendingPlannerInstanceTitle must be cleared after cancel")
 }
+
+// --- Focus-before-overlay tests ---
+// These verify that agent-related overlays auto-focus the relevant instance
+// so the user can see the agent output behind the dialog.
+
+// TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown verifies that
+// showing the wave-complete confirmation auto-selects a task instance for
+// that plan so the agent output is visible behind the overlay.
+func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
+	const planFile = "2026-02-21-focus-wave.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "focus wave test", "plan/focus-wave", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	planName := planstate.DisplayName(planFile)
+
+	// Add an "other" instance first (so it's selected by default), then the task instance.
+	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
+	otherInst.MarkStartedForTest()
+	taskTitle := fmt.Sprintf("%s-W1-T1", planName)
+	taskInst := &session.Instance{
+		Title:      taskTitle,
+		Program:    "opencode",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	}
+	taskInst.MarkStartedForTest()
+	taskInst.PromptDetected = true
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(otherInst)
+	_ = h.nav.AddInstance(taskInst)
+	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.nav.SetSelectedInstance(0)
+	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "other-agent", TmuxAlive: true},
+			{Title: taskTitle, TmuxAlive: true},
+		},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateConfirm, updated.state, "should show wave-advance confirm")
+	// The task instance should be selected, not the other one.
+	assert.Equal(t, taskInst, updated.nav.GetSelectedInstance(),
+		"wave-advance overlay should auto-focus a task instance for the plan")
+}
+
+// TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown verifies that the
+// failed-wave decision dialog auto-focuses a task instance for the plan.
+func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
+	const planFile = "2026-02-21-focus-failed.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "focus failed test", "plan/focus-failed", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	planName := planstate.DisplayName(planFile)
+
+	// "other" instance selected by default.
+	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
+	otherInst.MarkStartedForTest()
+	taskTitle := fmt.Sprintf("%s-W1-T1", planName)
+	taskInst := &session.Instance{
+		Title:      taskTitle,
+		Program:    "opencode",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	}
+	taskInst.MarkStartedForTest()
+	taskInst.SetStatus(session.Paused) // paused = treated as failed
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(otherInst)
+	_ = h.nav.AddInstance(taskInst)
+	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.nav.SetSelectedInstance(0)
+	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "other-agent", TmuxAlive: true},
+			{Title: taskTitle, TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateConfirm, updated.state, "should show failed-wave decision")
+	assert.Equal(t, taskInst, updated.nav.GetSelectedInstance(),
+		"failed-wave overlay should auto-focus a task instance for the plan")
+}
+
+// TestPlannerExit_FocusesPlannerInstance_BeforeConfirm verifies that when a
+// planner finishes and the "start implementation?" dialog shows, the planner
+// instance is auto-focused so its output is visible behind the overlay.
+func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
+	const planFile = "2026-02-21-focus-planner.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "focus planner test", "plan/focus-planner", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReady)
+
+	plannerInst := &session.Instance{
+		Title:     "focus-planner-plan",
+		Program:   "opencode",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypePlanner,
+	}
+	plannerInst.MarkStartedForTest()
+
+	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
+	otherInst.MarkStartedForTest()
+
+	h := waveFlowHome(t, ps, plansDir, nil)
+	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
+	h.plannerPrompted = make(map[string]bool)
+	h.pendingReviewFeedback = make(map[string]string)
+	_ = h.nav.AddInstance(otherInst)
+	_ = h.nav.AddInstance(plannerInst)
+	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.nav.SetSelectedInstance(0)
+	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "other-agent", TmuxAlive: true},
+			{Title: "focus-planner-plan", TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateConfirm, updated.state, "should show planner-exit confirm")
+	assert.Equal(t, plannerInst, updated.nav.GetSelectedInstance(),
+		"planner-exit overlay should auto-focus the planner instance")
+}
+
+// TestCoderExit_FocusesCoderInstance_BeforePushConfirm verifies that when a
+// coder finishes (tmux dies) and the "push branch?" dialog shows, the coder
+// instance is auto-focused so its output is visible behind the overlay.
+func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
+	const planFile = "2026-02-21-focus-coder.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "focus coder test", "plan/focus-coder", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	coderInst := &session.Instance{
+		Title:     "focus-coder-implement",
+		Program:   "opencode",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	}
+	coderInst.MarkStartedForTest()
+
+	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
+	otherInst.MarkStartedForTest()
+
+	h := waveFlowHome(t, ps, plansDir, nil)
+	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
+	h.plannerPrompted = make(map[string]bool)
+	h.pendingReviewFeedback = make(map[string]string)
+	_ = h.nav.AddInstance(otherInst)
+	_ = h.nav.AddInstance(coderInst)
+	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.nav.SetSelectedInstance(0)
+	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "other-agent", TmuxAlive: true},
+			{Title: "focus-coder-implement", TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateConfirm, updated.state, "should show coder-exit push confirm")
+	assert.Equal(t, coderInst, updated.nav.GetSelectedInstance(),
+		"coder-exit overlay should auto-focus the coder instance")
+}

@@ -283,3 +283,38 @@ func TestPermissionCache_AutoApprovesCachedPattern(t *testing.T) {
 	m.permissionCache.Remember("/opt/*")
 	assert.True(t, m.permissionCache.IsAllowedAlways("/opt/*"))
 }
+
+// TestUpdate_PermissionPrompt_FocusesInstanceBeforeOverlay verifies that when a
+// permission prompt is detected for a non-selected instance, that instance becomes
+// selected before the overlay is shown — so the user sees the agent output behind it.
+func TestUpdate_PermissionPrompt_FocusesInstanceBeforeOverlay(t *testing.T) {
+	m := newTestHomeWithCache(t)
+
+	// Add two instances; select the first one.
+	inst1 := &session.Instance{Title: "agent-1", Program: "opencode"}
+	inst1.MarkStartedForTest()
+	m.nav.AddInstance(inst1)()
+
+	inst2 := &session.Instance{Title: "agent-2", Program: "opencode"}
+	inst2.MarkStartedForTest()
+	m.nav.AddInstance(inst2)()
+
+	m.nav.SetSelectedInstance(0)
+	assert.Equal(t, inst1, m.nav.GetSelectedInstance(), "precondition: agent-1 selected")
+
+	// Permission prompt fires on agent-2 (not the selected one).
+	pp := &session.PermissionPrompt{Pattern: "/opt/*", Description: "Access /opt"}
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "agent-1"},
+			{Title: "agent-2", PermissionPrompt: pp},
+		},
+	}
+
+	_, _ = m.Update(msg)
+
+	assert.Equal(t, statePermission, m.state)
+	// The nav selection should have switched to agent-2.
+	assert.Equal(t, inst2, m.nav.GetSelectedInstance(),
+		"permission overlay should auto-focus the instance that triggered it")
+}

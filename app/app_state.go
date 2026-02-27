@@ -463,6 +463,39 @@ func (m *home) instanceChanged() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// focusInstanceForOverlay selects the given instance in the nav panel and
+// switches the preview to show its output behind an overlay dialog. The user
+// can see the agent's terminal behind the overlay to understand context before
+// responding. Returns a tea.Cmd if an async terminal spawn is needed.
+func (m *home) focusInstanceForOverlay(inst *session.Instance) tea.Cmd {
+	if inst == nil {
+		return nil
+	}
+	m.nav.SelectInstance(inst)
+	return m.instanceChanged()
+}
+
+// focusPlanInstanceForOverlay selects the best instance belonging to the given
+// plan file, preferring running instances. This is used before showing overlay
+// dialogs about plan lifecycle events (wave completion, etc.) so the user can
+// see the agent output behind the overlay.
+func (m *home) focusPlanInstanceForOverlay(planFile string) tea.Cmd {
+	var best *session.Instance
+	for _, inst := range m.nav.GetInstances() {
+		if inst.PlanFile != planFile {
+			continue
+		}
+		if best == nil {
+			best = inst
+		}
+		// Prefer running instances over ready/paused ones.
+		if inst.Status == session.Running && best.Status != session.Running {
+			best = inst
+		}
+	}
+	return m.focusInstanceForOverlay(best)
+}
+
 func statusString(s session.Status) string {
 	switch s {
 	case session.Running:

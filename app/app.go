@@ -786,6 +786,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return permissionAutoApproveMsg{instance: i}
 					})
 				} else {
+					// Focus the instance so the user can see the agent output behind the overlay.
+					if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+						asyncCmds = append(asyncCmds, cmd)
+					}
 					// Show modal (statePermission blocks re-entry on subsequent ticks).
 					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
 					m.permissionOverlay.SetWidth(55)
@@ -890,6 +894,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				capturedPlanFile := inst.PlanFile
 				capturedTitle := inst.Title
+				// Focus the planner instance so the user can see its output behind the overlay.
+				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+					asyncCmds = append(asyncCmds, cmd)
+				}
 				m.confirmAction(
 					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(capturedPlanFile)),
 					func() tea.Msg {
@@ -921,6 +929,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Wave completion is handled by the orchestrator, not the coder-exit prompt.
 				if inst.TaskNumber > 0 {
 					continue
+				}
+				// Focus the coder instance so the user can see its output behind the overlay.
+				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+					asyncCmds = append(asyncCmds, cmd)
 				}
 				if cmd := m.promptPushBranchThenAdvance(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
@@ -995,6 +1007,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.waveOrchestrators, planFile)
 
 					if m.state != stateConfirm {
+						// Focus a task instance so the user can see agent output behind the overlay.
+						if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
+							asyncCmds = append(asyncCmds, cmd)
+						}
 						message := fmt.Sprintf("all waves complete for '%s'. push branch and start review?", planName)
 						m.confirmAction(message, func() tea.Msg {
 							return waveAllCompleteMsg{planFile: capturedPlanFile}
@@ -1016,6 +1032,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					capturedPlanFile := planFile
 					capturedEntry := entry
 					planName := planstate.DisplayName(planFile)
+					// Focus a task instance so the user can see agent output behind the overlay.
+					if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
+						asyncCmds = append(asyncCmds, cmd)
+					}
 					if failed > 0 {
 						message := fmt.Sprintf(
 							"%s — wave %d: %d/%d tasks complete, %d failed.\n\n"+
