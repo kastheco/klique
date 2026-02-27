@@ -262,6 +262,63 @@ git commit -m "feat: [what this task delivers]"
 
 do all of these immediately after saving the plan file. do not skip any.
 
+## plan review
+
+after writing the plan file, review it against this checklist before committing.
+this is mandatory — do not skip it, even for trivial plans. fix every failure
+inline (edit the plan file directly) before proceeding to commit + signal.
+
+### structural checks
+
+- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without
+  wave headers cannot be executed by kasmos.
+- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.
+- [ ] **task numbering sequential** — task numbers are sequential across the entire plan
+  (Task 1, Task 2, ..., not restarting per wave).
+- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,
+  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.
+- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a
+  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are
+  independent, they should be in a single wave.
+
+### task quality checks
+
+- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.
+  paths must be exact (no placeholders like `path/to/...`).
+- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,
+  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).
+  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.
+- [ ] **test commands runnable** — `go test` commands reference real package paths that will
+  exist after the task's files are created. no `./path/to/package/...` placeholders.
+- [ ] **commit messages present** — every task ends with a concrete `git commit -m "..."` step.
+- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an
+  adjacent task.
+- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.
+
+### coherence checks
+
+- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?
+  flag any task that doesn't.
+- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you
+  find yourself adding "while we're at it" tasks, remove them.
+- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the
+  same wave (those should be in separate waves). tasks within a wave must be independently
+  implementable.
+- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they
+  do, either merge the tasks or move one to a later wave.
+
+### review outcome
+
+if all checks pass: proceed to commit + signal.
+
+if any check fails: fix the plan file inline, then re-run the failed checks. do not
+proceed until all checks pass. common fixes:
+- missing wave headers → wrap all tasks under `## Wave 1`
+- missing TDD steps → add the 5-step structure to each task
+- vague file paths → look up actual paths with `fd` or `rg`
+- micro-task → merge into adjacent task, renumber
+- file conflicts in same wave → reorder into separate waves
+
 ### 1. create todos
 
 call `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:
