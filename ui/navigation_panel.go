@@ -350,22 +350,20 @@ func (n *NavigationPanel) rebuildRows() {
 }
 
 func navInstanceSortKey(inst *session.Instance) int {
-	if inst.Notified {
-		return 0
-	}
 	if inst.ImplementationComplete {
-		return 4
+		return 3
 	}
 	switch inst.Status {
 	case session.Running, session.Loading:
-		return 1
-	case session.Ready:
-		return 2
+		return 0
 	case session.Paused:
-		return 3
-	default:
-		return 5
+		return 2
 	}
+	if inst.Notified {
+		return 1
+	}
+	// Ready / unknown
+	return 3
 }
 
 func navPlanSortKey(_ PlanDisplay, insts []*session.Instance, st TopicStatus) int {
