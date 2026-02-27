@@ -112,8 +112,8 @@
       "temperature": {{REVIEWER_TEMP}},
       "textVerbosity": "medium"
     },
-    "custodian": {
-      "model": "{{CUSTODIAN_MODEL}}",
+    "fixer": {
+      "model": "{{FIXER_MODEL}}",
       "permission": {
         "bash": "allow",
         "edit": "allow",
@@ -131,8 +131,8 @@
         "read": "allow",
         "write": "allow"
       },
-      {{CUSTODIAN_EFFORT_LINE}}
-      "temperature": {{CUSTODIAN_TEMP}},
+      {{FIXER_EFFORT_LINE}}
+      "temperature": {{FIXER_TEMP}},
       "textVerbosity": "low"
     }
   }
