@@ -783,19 +783,6 @@ func TestFocusRing(t *testing.T) {
 
 	// --- Enter key blocked on info tab ---
 
-	t.Run("Enter is no-op when info tab is active", func(t *testing.T) {
-		h := newTestHome()
-		addTestInstance(t, h)
-		h.tabbedWindow.SetActiveTab(ui.InfoTab)
-
-		// Enter (bound to 'o') must not trigger attach when info tab is visible.
-		// State stays stateDefault and focusSlot stays slotNav.
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
-
-		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must stay focused")
-		assert.Equal(t, stateDefault, homeModel.state, "state must remain default")
-	})
-
 	// --- Ctrl+Up/Down: cycle active instances with wrapping ---
 
 	t.Run("ctrl+down cycles to next active instance", func(t *testing.T) {

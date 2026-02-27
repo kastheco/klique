@@ -1099,10 +1099,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
-		// Info tab is read-only — don't enter focus mode.
-		if m.tabbedWindow.IsInInfoTab() {
-			return m, nil
-		}
 		// Ensure the agent tab is visible when entering focus mode.
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		selected := m.nav.GetSelectedInstance()
@@ -1222,10 +1218,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
-		// Info tab is read-only — enter has no effect there.
-		if m.tabbedWindow.IsInInfoTab() {
-			return m, nil
-		}
 		// Sidebar always has focus: handle plan/instance interactions first.
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
