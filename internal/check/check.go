@@ -56,19 +56,11 @@ type ProjectSkillEntry struct {
 	HarnessStatus map[string]SkillStatus // harness name → status
 }
 
-// SuperpowersResult holds superpowers check for one harness.
-type SuperpowersResult struct {
-	Name      string
-	Installed bool
-	Detail    string
-}
-
 // AuditResult is the complete output of kas check.
 type AuditResult struct {
-	Global      []HarnessResult
-	Project     []ProjectSkillEntry
-	Superpowers []SuperpowersResult
-	InProject   bool // whether cwd is a kas project
+	Global    []HarnessResult
+	Project   []ProjectSkillEntry
+	InProject bool // whether cwd is a kas project
 }
 
 // Audit runs all three audit layers and returns a complete result.
@@ -94,9 +86,6 @@ func Audit(home, projectDir string, registry *harness.Registry) *AuditResult {
 	if result.InProject {
 		result.Project = AuditProject(projectDir, harnessNames)
 	}
-
-	// Superpowers audit.
-	result.Superpowers = AuditSuperpowers(home, harnessNames)
 
 	return result
 }
@@ -125,12 +114,6 @@ func (r *AuditResult) Summary() (int, int) {
 			if st == StatusSynced {
 				ok++
 			}
-		}
-	}
-	for _, sp := range r.Superpowers {
-		total++
-		if sp.Installed {
-			ok++
 		}
 	}
 	return ok, total

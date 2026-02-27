@@ -12,17 +12,17 @@ import (
 func TestAuditGlobal_SyncedAndSkipped(t *testing.T) {
 	home := t.TempDir()
 
-	// Create canonical skills: foo (real dir), bar (real dir), superpowers (symlink)
+	// Create canonical skills: foo (real dir), bar (real dir), external-skill (symlink)
 	agentsSkills := filepath.Join(home, ".agents", "skills")
 	for _, name := range []string{"foo", "bar"} {
 		dir := filepath.Join(agentsSkills, name)
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("test"), 0o644))
 	}
-	// superpowers is a symlink (externally managed)
-	extRepo := filepath.Join(home, "superpowers-repo")
+	// external-skill is a symlink (externally managed)
+	extRepo := filepath.Join(home, "external-repo")
 	require.NoError(t, os.MkdirAll(extRepo, 0o755))
-	require.NoError(t, os.Symlink(extRepo, filepath.Join(agentsSkills, "superpowers")))
+	require.NoError(t, os.Symlink(extRepo, filepath.Join(agentsSkills, "external-skill")))
 
 	// Create harness dir with foo symlinked correctly
 	claudeSkills := filepath.Join(home, ".claude", "skills")
@@ -45,7 +45,7 @@ func TestAuditGlobal_SyncedAndSkipped(t *testing.T) {
 
 	assert.Equal(t, StatusSynced, byName["foo"].Status, "foo should be synced")
 	assert.Equal(t, StatusMissing, byName["bar"].Status, "bar should be missing (no link in harness)")
-	assert.Equal(t, StatusSkipped, byName["superpowers"].Status, "superpowers should be skipped (symlink source)")
+	assert.Equal(t, StatusSkipped, byName["external-skill"].Status, "external-skill should be skipped (symlink source)")
 	assert.Equal(t, StatusOrphan, byName["stale"].Status, "stale should be orphan (no source)")
 }
 

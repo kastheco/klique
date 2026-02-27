@@ -2,9 +2,7 @@ package harness
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 // Codex implements Harness for the Codex CLI.
@@ -38,35 +36,6 @@ func (c *Codex) BuildFlags(agent AgentConfig) []string {
 	}
 	flags = append(flags, agent.ExtraFlags...)
 	return flags
-}
-
-func (c *Codex) InstallSuperpowers() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-
-	repoDir := filepath.Join(home, ".codex", "superpowers")
-
-	if err := cloneOrPull(repoDir, "https://github.com/obra/superpowers.git"); err != nil {
-		return err
-	}
-
-	// Symlink skills
-	skillsDir := filepath.Join(home, ".agents", "skills")
-	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
-		return fmt.Errorf("create skills dir: %w", err)
-	}
-	skillsLink := filepath.Join(skillsDir, "superpowers")
-	skillsSrc := filepath.Join(repoDir, "skills")
-	if err := os.Remove(skillsLink); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove existing skills link: %w", err)
-	}
-	if err := os.Symlink(skillsSrc, skillsLink); err != nil {
-		return fmt.Errorf("symlink skills: %w", err)
-	}
-
-	return nil
 }
 
 func (c *Codex) InstallEnforcement() error { return nil }

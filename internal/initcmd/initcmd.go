@@ -36,23 +36,7 @@ func Run(opts Options) error {
 		return fmt.Errorf("wizard: %w", err)
 	}
 
-	// Stage 4a: Install superpowers into selected harnesses
-	fmt.Println("\nInstalling superpowers...")
-	for _, name := range state.SelectedHarness {
-		h := registry.Get(name)
-		if h == nil {
-			continue
-		}
-		fmt.Printf("  %-12s ", name)
-		if err := h.InstallSuperpowers(); err != nil {
-			fmt.Printf("FAILED: %v\n", err)
-			// Non-fatal: continue with other harnesses
-		} else {
-			fmt.Println("OK")
-		}
-	}
-
-	// Stage 4a-2: Sync personal skills to all harness global dirs
+	// Stage 4a: Sync personal skills to all harness global dirs
 	fmt.Println("\nSyncing personal skills...")
 	home, err := os.UserHomeDir()
 	if err != nil {

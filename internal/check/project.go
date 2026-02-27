@@ -5,8 +5,14 @@ import (
 	"path/filepath"
 )
 
-// EmbeddedSkillNames is the list of skill names that kas setup writes to .agents/skills/.
-var EmbeddedSkillNames = []string{"cli-tools", "golang-pro", "tmux-orchestration", "tui-design"}
+// EmbeddedSkillNames is the list of kasmos agent skill names that kas setup writes to .agents/skills/.
+var EmbeddedSkillNames = []string{
+	"kasmos-coder",
+	"kasmos-custodial",
+	"kasmos-lifecycle",
+	"kasmos-planner",
+	"kasmos-reviewer",
+}
 
 // AuditProject checks <dir>/.agents/skills/ against expected embedded skills
 // and verifies harness project skill dirs have valid symlinks.

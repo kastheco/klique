@@ -19,11 +19,10 @@ func newCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Audit skills sync health across all harnesses",
-		Long: `Audits all three skill layers and reports completeness per harness:
+		Long: `Audits skill layers and reports completeness per harness:
 
   1. Global skills  (~/.agents/skills/ → harness global dirs)
   2. Project skills (.agents/skills/ → harness project dirs)
-  3. Superpowers    (plugin installation per harness)
 
 Exit code 0 if 100% healthy, exit code 1 otherwise.`,
 		RunE: runCheck,
@@ -56,7 +55,6 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	if result.InProject {
 		renderProject(cmd, result.Project, verbose)
 	}
-	renderSuperpowers(cmd, result.Superpowers)
 
 	ok, total := result.Summary()
 	pct := 0
@@ -166,24 +164,6 @@ func renderProject(cmd *cobra.Command, entries []check.ProjectSkillEntry, verbos
 		}
 
 		fmt.Fprintf(out, "  %s %-22s %s\n", overallGlyph, e.Name, strings.Join(parts, "  "))
-	}
-}
-
-func renderSuperpowers(cmd *cobra.Command, results []check.SuperpowersResult) {
-	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "\nSuperpowers:\n")
-
-	if len(results) == 0 {
-		fmt.Fprintf(out, "  (no harnesses support superpowers)\n")
-		return
-	}
-
-	for _, r := range results {
-		glyph := "✓"
-		if !r.Installed {
-			glyph = "✗"
-		}
-		fmt.Fprintf(out, "  %-12s %s %s\n", r.Name, glyph, r.Detail)
 	}
 }
 

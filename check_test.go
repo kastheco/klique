@@ -48,9 +48,8 @@ func captureCheckOutput(t *testing.T, setupFn func(home, project string)) string
 func TestCheckCmd_EmptyEnvironment(t *testing.T) {
 	out := captureCheckOutput(t, nil)
 
-	// Should always have the three sections
+	// Should always have the two sections
 	assert.Contains(t, out, "Global skills")
-	assert.Contains(t, out, "Superpowers")
 	assert.Contains(t, out, "Health:")
 }
 
@@ -68,11 +67,10 @@ func TestCheckCmd_InProject(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "Project skills")
-	// All embedded skills should appear
-	assert.Contains(t, out, "golang-pro")
-	assert.Contains(t, out, "tui-design")
-	assert.Contains(t, out, "cli-tools")
-	assert.Contains(t, out, "tmux-orchestration")
+	// All embedded kasmos skills should appear
+	assert.Contains(t, out, "kasmos-coder")
+	assert.Contains(t, out, "kasmos-planner")
+	assert.Contains(t, out, "kasmos-reviewer")
 }
 
 func TestCheckCmd_SyncedSkillsShowCheckmark(t *testing.T) {

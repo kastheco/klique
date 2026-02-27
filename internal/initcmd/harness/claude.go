@@ -89,28 +89,6 @@ func (c *Claude) BuildFlags(agent AgentConfig) []string {
 	return flags
 }
 
-func (c *Claude) InstallSuperpowers() error {
-	// Check if already installed
-	out, err := exec.Command("claude", "plugin", "list").Output()
-	if err == nil && strings.Contains(string(out), "superpowers") {
-		return nil // already installed
-	}
-
-	// Add marketplace
-	cmd := exec.Command("claude", "plugin", "marketplace", "add", "obra/superpowers-marketplace")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("add marketplace: %s: %w", string(out), err)
-	}
-
-	// Install plugin
-	cmd = exec.Command("claude", "plugin", "install", "superpowers@superpowers-marketplace")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("install plugin: %s: %w", string(out), err)
-	}
-
-	return nil
-}
-
 func (c *Claude) InstallEnforcement() error {
 	home, err := os.UserHomeDir()
 	if err != nil {

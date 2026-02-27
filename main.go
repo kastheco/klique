@@ -185,11 +185,11 @@ func init() {
 	kasSetupCmd := &cobra.Command{
 		Use:     "setup",
 		Aliases: []string{"init"},
-		Short:   "Configure agent harnesses, install superpowers, and scaffold project files",
+		Short:   "Configure agent harnesses and scaffold project files",
 		Long: `Run an interactive wizard to:
   1. Detect and select agent CLIs (claude, opencode, codex)
   2. Configure agent roles (coder, reviewer, planner) with model and tuning
-  3. Install superpowers skills into each harness
+  3. Install cli-tools enforcement hooks into each harness
   4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return initcmd.Run(initcmd.Options{

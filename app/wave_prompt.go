@@ -12,7 +12,7 @@ func buildTaskPrompt(plan *planparser.Plan, task planparser.Task, waveNumber, to
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Implement Task %d: %s\n\n", task.Number, task.Title))
-	sb.WriteString("Use the `kasmos-coder` skill.\n\n")
+	sb.WriteString("Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n")
 
 	// Plan context
 	header := plan.HeaderContext()

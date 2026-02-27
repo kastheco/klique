@@ -20,11 +20,11 @@ func TestSyncGlobalSkills_Claude(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("test"), 0o644))
 	}
 
-	// Create a symlink skill (simulating superpowers — should be skipped)
-	require.NoError(t, os.MkdirAll(filepath.Join(home, "superpowers-repo", "skills"), 0o755))
+	// Create a symlink skill (simulating an externally-managed skill — should be skipped)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, "external-repo", "skills"), 0o755))
 	require.NoError(t, os.Symlink(
-		filepath.Join(home, "superpowers-repo", "skills"),
-		filepath.Join(agentsSkills, "superpowers"),
+		filepath.Join(home, "external-repo", "skills"),
+		filepath.Join(agentsSkills, "external-skill"),
 	))
 
 	err := SyncGlobalSkills(home, "claude")
@@ -38,9 +38,9 @@ func TestSyncGlobalSkills_Claude(t *testing.T) {
 		assert.Equal(t, filepath.Join("..", "..", ".agents", "skills", name), target)
 	}
 
-	// superpowers symlink should NOT be created (already managed by InstallSuperpowers)
-	_, err = os.Readlink(filepath.Join(home, ".claude", "skills", "superpowers"))
-	assert.Error(t, err, "superpowers should not be synced")
+	// externally-managed symlink-source should NOT be propagated
+	_, err = os.Readlink(filepath.Join(home, ".claude", "skills", "external-skill"))
+	assert.Error(t, err, "symlink-source skills should not be synced")
 }
 
 func TestSyncGlobalSkills_OpenCode(t *testing.T) {

@@ -12,19 +12,19 @@ import (
 func TestAuditProject_SyncedAndMissing(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .agents/skills/ with tui-design and golang-pro
+	// Create .agents/skills/ with kasmos-coder and kasmos-planner (not all skills)
 	agentsSkills := filepath.Join(dir, ".agents", "skills")
-	for _, name := range []string{"tui-design", "golang-pro"} {
+	for _, name := range []string{"kasmos-coder", "kasmos-planner"} {
 		skillDir := filepath.Join(agentsSkills, name)
 		require.NoError(t, os.MkdirAll(skillDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("test"), 0o644))
 	}
 
-	// Create .claude/skills/ with tui-design symlinked
+	// Create .claude/skills/ with kasmos-coder symlinked
 	claudeSkills := filepath.Join(dir, ".claude", "skills")
 	require.NoError(t, os.MkdirAll(claudeSkills, 0o755))
-	tuiTarget := filepath.Join("..", "..", ".agents", "skills", "tui-design")
-	require.NoError(t, os.Symlink(tuiTarget, filepath.Join(claudeSkills, "tui-design")))
+	coderTarget := filepath.Join("..", "..", ".agents", "skills", "kasmos-coder")
+	require.NoError(t, os.Symlink(coderTarget, filepath.Join(claudeSkills, "kasmos-coder")))
 
 	// .opencode/skills/ is empty (no symlinks)
 	opencodeSkills := filepath.Join(dir, ".opencode", "skills")
@@ -37,25 +37,21 @@ func TestAuditProject_SyncedAndMissing(t *testing.T) {
 		byName[r.Name] = r
 	}
 
-	// tui-design: in canonical, claude synced, opencode missing
-	tui := byName["tui-design"]
-	assert.True(t, tui.InCanonical, "tui-design should be in canonical")
-	assert.Equal(t, StatusSynced, tui.HarnessStatus["claude"], "tui-design: claude should be synced")
-	assert.Equal(t, StatusMissing, tui.HarnessStatus["opencode"], "tui-design: opencode should be missing")
+	// kasmos-coder: in canonical, claude synced, opencode missing
+	coder := byName["kasmos-coder"]
+	assert.True(t, coder.InCanonical, "kasmos-coder should be in canonical")
+	assert.Equal(t, StatusSynced, coder.HarnessStatus["claude"], "kasmos-coder: claude should be synced")
+	assert.Equal(t, StatusMissing, coder.HarnessStatus["opencode"], "kasmos-coder: opencode should be missing")
 
-	// golang-pro: in canonical, both missing
-	gp := byName["golang-pro"]
-	assert.True(t, gp.InCanonical, "golang-pro should be in canonical")
-	assert.Equal(t, StatusMissing, gp.HarnessStatus["claude"], "golang-pro: claude should be missing")
-	assert.Equal(t, StatusMissing, gp.HarnessStatus["opencode"], "golang-pro: opencode should be missing")
+	// kasmos-planner: in canonical, both missing (no symlinks created)
+	planner := byName["kasmos-planner"]
+	assert.True(t, planner.InCanonical, "kasmos-planner should be in canonical")
+	assert.Equal(t, StatusMissing, planner.HarnessStatus["claude"], "kasmos-planner: claude should be missing")
+	assert.Equal(t, StatusMissing, planner.HarnessStatus["opencode"], "kasmos-planner: opencode should be missing")
 
-	// cli-tools: not in canonical (missing from .agents/skills/)
-	cliTools := byName["cli-tools"]
-	assert.False(t, cliTools.InCanonical, "cli-tools should not be in canonical")
-
-	// tmux-orchestration: not in canonical
-	tmux := byName["tmux-orchestration"]
-	assert.False(t, tmux.InCanonical, "tmux-orchestration should not be in canonical")
+	// kasmos-reviewer: not in canonical (missing from .agents/skills/)
+	reviewer := byName["kasmos-reviewer"]
+	assert.False(t, reviewer.InCanonical, "kasmos-reviewer should not be in canonical")
 }
 
 func TestAuditProject_AllSynced(t *testing.T) {
@@ -87,13 +83,13 @@ func TestAuditProject_BrokenSymlink(t *testing.T) {
 	dir := t.TempDir()
 
 	agentsSkills := filepath.Join(dir, ".agents", "skills")
-	skillDir := filepath.Join(agentsSkills, "golang-pro")
+	skillDir := filepath.Join(agentsSkills, "kasmos-coder")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 
 	claudeSkills := filepath.Join(dir, ".claude", "skills")
 	require.NoError(t, os.MkdirAll(claudeSkills, 0o755))
 	// Broken symlink
-	require.NoError(t, os.Symlink("/nonexistent", filepath.Join(claudeSkills, "golang-pro")))
+	require.NoError(t, os.Symlink("/nonexistent", filepath.Join(claudeSkills, "kasmos-coder")))
 
 	results := AuditProject(dir, []string{"claude"})
 
@@ -102,7 +98,7 @@ func TestAuditProject_BrokenSymlink(t *testing.T) {
 		byName[r.Name] = r
 	}
 
-	gp := byName["golang-pro"]
-	assert.True(t, gp.InCanonical)
-	assert.Equal(t, StatusBroken, gp.HarnessStatus["claude"], "golang-pro: claude should be broken")
+	coder := byName["kasmos-coder"]
+	assert.True(t, coder.InCanonical)
+	assert.Equal(t, StatusBroken, coder.HarnessStatus["claude"], "kasmos-coder: claude should be broken")
 }

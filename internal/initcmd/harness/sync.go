@@ -24,8 +24,8 @@ func GlobalSkillsDir(home, harnessName string) string {
 // SyncGlobalSkills creates symlinks from a harness's global skill directory
 // to ~/.agents/skills/<skill> for each personal skill.
 //
-// Skips entries in ~/.agents/skills/ that are themselves symlinks (managed
-// externally, e.g. superpowers). Replaces existing symlinks in the destination.
+// Skips entries in ~/.agents/skills/ that are themselves symlinks (externally
+// managed skills). Replaces existing symlinks in the destination.
 // Skips non-symlink entries in the destination (user-managed directories).
 //
 // For codex, this is a no-op since codex reads from ~/.agents/skills/ directly.
@@ -57,8 +57,7 @@ func SyncGlobalSkills(home, harnessName string) error {
 			continue
 		}
 
-		// Skip entries that are themselves symlinks (e.g. superpowers/)
-		// These are managed by InstallSuperpowers, not by us.
+		// Skip entries that are themselves symlinks (externally managed skills).
 		srcPath := filepath.Join(canonicalDir, name)
 		fi, err := os.Lstat(srcPath)
 		if err != nil {

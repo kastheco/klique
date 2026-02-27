@@ -146,7 +146,7 @@ func (s *State) ToTOMLConfig() *config.TOMLConfig {
 }
 
 // ToAgentConfigs converts wizard state to harness.AgentConfig slice
-// for use by scaffold and superpowers install.
+// for use by scaffold.
 //
 // The chat role is special: it is not user-configurable per harness, so a
 // single AgentState entry is stored with the first selected harness. To ensure

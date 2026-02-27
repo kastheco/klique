@@ -23,7 +23,6 @@ func TestAudit_InProject(t *testing.T) {
 	assert.True(t, result.InProject, "should detect kas project")
 	assert.NotNil(t, result.Global)
 	assert.NotNil(t, result.Project)
-	assert.NotNil(t, result.Superpowers)
 }
 
 func TestAudit_NotInProject(t *testing.T) {
@@ -59,7 +58,6 @@ func TestAudit_Summary_AllSynced(t *testing.T) {
 
 	ok, total := result.Summary()
 	// Global: 1 synced (my-skill for claude) + opencode missing + codex synced
-	// Superpowers: claude (not installed in test env) + opencode (not installed)
 	assert.GreaterOrEqual(t, total, 1, "should have at least one check")
 	assert.GreaterOrEqual(t, ok, 0)
 	assert.LessOrEqual(t, ok, total)
