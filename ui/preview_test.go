@@ -413,6 +413,40 @@ func TestPreviewPaneString_CentersFallbackContentInShortHeight(t *testing.T) {
 	require.Equal(t, 3, markerLine)
 }
 
+// TestPreviewPane_RawTerminalContent_NoEllipsis verifies that content pushed via
+// SetRawContent (the VT emulator path) is rendered without clipping or an
+// ellipsis marker, even when the number of lines exactly matches the pane height.
+// Previously, String() unconditionally subtracted 1 from the available height,
+// causing the last line of every embedded terminal frame to be dropped and
+// replaced with "...".
+func TestPreviewPane_RawTerminalContent_NoEllipsis(t *testing.T) {
+	const rows = 24
+	previewPane := NewPreviewPane()
+	previewPane.SetSize(80, rows)
+
+	// Build a rows-line string that simulates a VT-emulator snapshot.
+	// Each line is uniquely identifiable so we can check the last one is present.
+	lineStrs := make([]string, rows)
+	for i := range rows {
+		lineStrs[i] = fmt.Sprintf("terminal line %d", i+1)
+	}
+	rawContent := strings.Join(lineStrs, "\n")
+
+	previewPane.SetRawContent(rawContent)
+
+	rendered := previewPane.String()
+	plain := stripPreviewANSI(rendered)
+
+	// The last line must appear in the output.
+	lastLine := fmt.Sprintf("terminal line %d", rows)
+	require.Contains(t, plain, lastLine,
+		"last VT-emulator line should appear in rendered output (no clipping)")
+
+	// No ellipsis should be injected by the preview pane.
+	require.NotContains(t, plain, "...",
+		"preview pane must not inject '...' for raw terminal content")
+}
+
 func testDocumentLines(n int) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {

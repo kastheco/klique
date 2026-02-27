@@ -33,6 +33,10 @@ type PreviewPane struct {
 	// isDocument is true when the preview is showing a rendered document (plan markdown).
 	// While set, UpdateContent() is a no-op so the tick loop doesn't overwrite the content.
 	isDocument bool
+	// isRawTerminal is true when content was pushed via SetRawContent from the VT emulator.
+	// In this mode the VT emulator already sized the screen to exactly p.height rows, so
+	// String() must NOT subtract 1 for an ellipsis row — doing so would drop the last line.
+	isRawTerminal bool
 	// springAnim drives the banner load-in animation on launch.
 	springAnim *SpringAnim
 }
@@ -66,6 +70,7 @@ func (p *PreviewPane) SetRawContent(content string) {
 	p.previewState = previewState{text: content}
 	p.isScrolling = false
 	p.isDocument = false
+	p.isRawTerminal = true
 }
 
 func (p *PreviewPane) SetSize(width, maxHeight int) {
@@ -81,6 +86,7 @@ func (p *PreviewPane) setFallbackState(message string) {
 		fallback:    true,
 		fallbackMsg: message,
 	}
+	p.isRawTerminal = false
 }
 
 // SetDocumentContent sets the preview to show a rendered document (e.g. plan markdown)
@@ -90,6 +96,7 @@ func (p *PreviewPane) SetDocumentContent(content string) {
 	p.previewState = previewState{fallback: false}
 	p.isScrolling = false
 	p.isDocument = true
+	p.isRawTerminal = false
 	p.viewport.SetContent(content)
 	p.viewport.GotoTop()
 }
@@ -142,6 +149,7 @@ func (p *PreviewPane) setFallbackContent(content string) {
 		fallback: true,
 		text:     content,
 	}
+	p.isRawTerminal = false
 }
 
 // SetAnimateBanner enables or disables the idle banner animation.
@@ -410,9 +418,14 @@ func (p *PreviewPane) String() string {
 		return lipgloss.JoinHorizontal(lipgloss.Top, viewContent, scrollbar)
 	}
 
-	// Normal mode display
-	// Calculate available height accounting for border and margin
-	availableHeight := p.height - 1 //  1 for ellipsis
+	// Normal mode display.
+	// For raw terminal content (VT emulator output) the emulator already sized
+	// the screen to exactly p.height rows — do not subtract 1 or inject "...".
+	// For other content (non-raw) reserve one row for the ellipsis overflow indicator.
+	availableHeight := p.height
+	if !p.isRawTerminal {
+		availableHeight-- // 1 for ellipsis
+	}
 
 	lines := strings.Split(p.previewState.text, "\n")
 
@@ -420,7 +433,9 @@ func (p *PreviewPane) String() string {
 	if availableHeight > 0 {
 		if len(lines) > availableHeight {
 			lines = lines[:availableHeight]
-			lines = append(lines, "...")
+			if !p.isRawTerminal {
+				lines = append(lines, "...")
+			}
 		} else {
 			// Pad with empty lines to fill available height
 			padding := availableHeight - len(lines)
