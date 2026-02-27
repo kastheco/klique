@@ -741,6 +741,9 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	planFile := coderInst.PlanFile
 	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
 		log.WarningLog.Printf("could not set plan %q to reviewing: %v", planFile, err)
+		// Mark complete to break the retry loop — checkPlanCompletion fires
+		// every tick and would re-attempt this transition indefinitely.
+		coderInst.ImplementationComplete = true
 		return nil // FSM rejected — plan is not in implementing state, don't spawn reviewer.
 	}
 

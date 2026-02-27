@@ -102,10 +102,13 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	content, err := t.CapturePaneContent()
 	if err != nil {
 		t.monitor.captureFailures++
-		// Log the first failure and then only every 30th (roughly every 15s at 500ms ticks)
-		// to avoid flooding the log when a pane is gone.
-		if t.monitor.captureFailures == 1 || t.monitor.captureFailures%30 == 0 {
-			log.ErrorLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
+		// Log the first failure as an error, then downgrade subsequent failures
+		// to warnings (Sentry breadcrumbs only) to avoid bombarding Sentry with
+		// CaptureMessage events when a pane is permanently gone.
+		if t.monitor.captureFailures == 1 {
+			log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
+		} else if t.monitor.captureFailures%30 == 0 {
+			log.WarningLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
 				t.monitor.captureFailures, err)
 		}
 		return false, false
@@ -152,8 +155,10 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 	raw, err := t.CapturePaneContent()
 	if err != nil {
 		t.monitor.captureFailures++
-		if t.monitor.captureFailures == 1 || t.monitor.captureFailures%30 == 0 {
-			log.ErrorLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
+		if t.monitor.captureFailures == 1 {
+			log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
+		} else if t.monitor.captureFailures%30 == 0 {
+			log.WarningLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
 				t.monitor.captureFailures, err)
 		}
 		return false, false, "", false
