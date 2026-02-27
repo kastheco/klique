@@ -1242,26 +1242,53 @@ func TestPreviewTerminalReadyMsg_StaleDiscard(t *testing.T) {
 }
 
 func TestTmuxBrowserActions(t *testing.T) {
-	t.Run("tmuxOrphansMsg with no orphans shows toast", func(t *testing.T) {
+	t.Run("tmuxSessionsMsg with no sessions shows toast", func(t *testing.T) {
 		h := newTestHome()
-		msg := tmuxOrphansMsg{sessions: nil}
+		msg := tmuxSessionsMsg{sessions: nil}
 		model, _ := h.Update(msg)
 		hm := model.(*home)
 		assert.Nil(t, hm.tmuxBrowser)
 		assert.Equal(t, stateDefault, hm.state)
 	})
 
-	t.Run("tmuxOrphansMsg with orphans opens browser", func(t *testing.T) {
+	t.Run("tmuxSessionsMsg with sessions opens browser", func(t *testing.T) {
 		h := newTestHome()
-		msg := tmuxOrphansMsg{
-			sessions: []tmux.OrphanSession{
-				{Name: "kas_test", Title: "test", Width: 80, Height: 24},
+		msg := tmuxSessionsMsg{
+			sessions: []tmux.SessionInfo{
+				{Name: "kas_test", Title: "test", Width: 80, Height: 24, Managed: false},
 			},
 		}
 		model, _ := h.Update(msg)
 		hm := model.(*home)
 		assert.NotNil(t, hm.tmuxBrowser)
 		assert.Equal(t, stateTmuxBrowser, hm.state)
+	})
+
+	t.Run("managed sessions are enriched with instance metadata", func(t *testing.T) {
+		h := newTestHome()
+		inst, _ := session.NewInstance(session.InstanceOptions{
+			Title:   "auth-impl",
+			Path:    "/tmp",
+			Program: "claude",
+		})
+		inst.PlanFile = "2026-02-27-auth.md"
+		inst.AgentType = session.AgentTypeCoder
+		inst.MarkStartedForTest()
+		inst.SetTmuxSession(tmux.NewTmuxSession("auth-impl", "claude", false))
+		h.allInstances = append(h.allInstances, inst)
+
+		msg := tmuxSessionsMsg{
+			sessions: []tmux.SessionInfo{
+				{Name: "kas_auth-impl", Title: "auth-impl", Width: 80, Height: 24, Managed: true},
+			},
+		}
+		model, _ := h.Update(msg)
+		hm := model.(*home)
+		require.NotNil(t, hm.tmuxBrowser)
+		item := hm.tmuxBrowser.SelectedItem()
+		assert.True(t, item.Managed)
+		assert.Equal(t, "coder", item.AgentType)
+		assert.Equal(t, "2026-02-27-auth.md", item.PlanFile)
 	})
 
 	t.Run("dismiss returns to default state", func(t *testing.T) {

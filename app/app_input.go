@@ -1310,7 +1310,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())
 		return m, nil
 	case keys.KeyTmuxBrowser:
-		return m, m.discoverTmuxOrphans()
+		return m, m.discoverTmuxSessions()
 	case keys.KeySearch:
 		m.nav.ActivateSearch()
 		m.nav.SelectFirst()

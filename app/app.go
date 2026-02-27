@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
@@ -190,6 +191,8 @@ type home struct {
 	pickerOverlay *overlay.PickerOverlay
 	// tmuxBrowser is the tmux session browser overlay.
 	tmuxBrowser *overlay.TmuxBrowserOverlay
+	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
+	tmuxSessionCount int
 	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
 	clickUpConfig *clickup.MCPServerConfig
 	// clickUpImporter handles search/fetch via MCP (nil until first use)
@@ -610,8 +613,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
 			time.Sleep(500 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, TmuxSessionCount: tmuxCount}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
@@ -771,6 +775,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.PlanState != nil && len(msg.Signals) == 0 {
 			m.planState = msg.PlanState
 		}
+
+		// Store the latest tmux session count for the status bar.
+		m.tmuxSessionCount = msg.TmuxSessionCount
 
 		// Inline reviewer completion check using cached TmuxAlive from metadata
 		// (replaces checkReviewerCompletion which called tmux has-session per reviewer).
@@ -1135,16 +1142,23 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.toastManager.Info(fmt.Sprintf("implementation complete for '%s' — starting review", planName))
 		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
-	case tmuxOrphansMsg:
+	case tmuxSessionsMsg:
 		if msg.err != nil {
 			return m, m.handleError(msg.err)
 		}
 		if len(msg.sessions) == 0 {
 			if m.toastManager != nil {
-				m.toastManager.Info("no orphaned tmux sessions found")
+				m.toastManager.Info("no kas tmux sessions found")
 				return m, m.toastTickCmd()
 			}
 			return m, nil
+		}
+		// Build instance lookup for enrichment.
+		instMap := make(map[string]*session.Instance, len(m.allInstances))
+		for _, inst := range m.allInstances {
+			if inst.Started() {
+				instMap[tmux.ToKasTmuxNamePublic(inst.Title)] = inst
+			}
 		}
 		items := make([]overlay.TmuxBrowserItem, len(msg.sessions))
 		for i, s := range msg.sessions {
@@ -1156,6 +1170,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Attached: s.Attached,
 				Width:    s.Width,
 				Height:   s.Height,
+				Managed:  s.Managed,
+			}
+			if inst, ok := instMap[s.Name]; ok {
+				items[i].PlanFile = inst.PlanFile
+				items[i].AgentType = inst.AgentType
+				items[i].Status = statusString(inst.Status)
 			}
 		}
 		m.tmuxBrowser = overlay.NewTmuxBrowserOverlay(items)
@@ -1453,9 +1473,9 @@ type plannerCompleteMsg struct {
 	planFile string
 }
 
-// tmuxOrphansMsg carries discovered orphaned tmux sessions.
-type tmuxOrphansMsg struct {
-	sessions []tmux.OrphanSession
+// tmuxSessionsMsg carries discovered kas_ tmux sessions (managed + orphaned).
+type tmuxSessionsMsg struct {
+	sessions []tmux.SessionInfo
 	err      error
 }
 
@@ -1527,9 +1547,10 @@ type instanceMetadata struct {
 
 // metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
-	Results   []instanceMetadata
-	PlanState *planstate.PlanState // pre-loaded plan state (nil if dir not set)
-	Signals   []planfsm.Signal     // agent sentinel files found this tick
+	Results          []instanceMetadata
+	PlanState        *planstate.PlanState // pre-loaded plan state (nil if dir not set)
+	Signals          []planfsm.Signal     // agent sentinel files found this tick
+	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
