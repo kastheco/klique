@@ -5,7 +5,19 @@ Version: 3.4.x (kislyuk/yq — Python-based jq wrapper)
 
 YAML/JSON processor. Wraps `jq` to add YAML support — transcodes YAML to JSON, applies jq filters, and optionally transcodes back. Uses standard jq filter syntax.
 
-**Important:** This is the Python `yq` (kislyuk/yq), not the Go `yq` (mikefarah/yq). Syntax differs significantly between the two.
+---
+
+> **CRITICAL: Two incompatible `yq` tools exist.**
+>
+> | Tool | Origin | Syntax |
+> |------|--------|--------|
+> | **kislyuk/yq** (this reference) | Python pip | jq filter syntax — `-y` for YAML output |
+> | **mikefarah/yq** | Go binary | Own YAML path syntax — incompatible |
+>
+> Check which is installed: `yq --version` — Python yq shows `yq 3.x.x`, Go yq shows `yq (https://github.com/mikefarah/yq) v4.x.x`.
+> Install Python yq: `pip install yq` (requires `jq` to be installed first).
+
+---
 
 ## Basic Usage
 
@@ -44,6 +56,11 @@ yq '.spec.containers[0].image' pod.yaml
 yq -y '.version = "2.0.0"' file.yaml
 ```
 
+### In-place edit
+```bash
+yq -i -y '.version = "3.0"' config.yaml
+```
+
 ### Add a new field
 ```bash
 yq -y '.metadata.labels.env = "production"' file.yaml
@@ -80,14 +97,9 @@ yq -y '.' file.json                    # JSON in, YAML out
 yq -y '.name' file1.yaml file2.yaml
 ```
 
-### In-place edit
-```bash
-yq -i -y '.version = "3.0"' config.yaml
-```
+## jq Filter Reference
 
-## jq Filter Cheat Sheet
-
-Since yq uses jq syntax, common jq patterns apply:
+Since yq uses jq syntax, standard jq patterns apply:
 
 ```bash
 .                          # identity (whole document)
@@ -95,19 +107,12 @@ Since yq uses jq syntax, common jq patterns apply:
 .key.nested                # nested field
 .[0]                       # array index
 .[]                        # iterate array
-.[] | select(.x == "y")   # filter
-keys                       # object keys
-length                     # count
+.[] | select(.x == "y")   # filter by condition
+keys                       # object keys as array
+length                     # count items or string length
 map(. + 1)                 # transform array elements
 to_entries                 # {k:v} -> [{key:k, value:v}]
 del(.key)                  # remove field
 . + {"new": "field"}       # add field
 if .x then .y else .z end # conditional
 ```
-
-## When to Use yq vs Alternatives
-
-- **yq**: Reading/modifying YAML, JSON config files with structural awareness
-- **jq**: JSON-only operations (yq delegates to jq internally)
-- **sd/sed**: Only for trivial string replacements where structure doesn't matter
-- **manual edit**: When the change is too complex for a filter expression

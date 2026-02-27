@@ -22,6 +22,8 @@ cat file | sd 'old' 'new'             # pipe mode
 | `-f FLAGS` | Regex flags: `c` case-sensitive, `i` case-insensitive, `m` multi-line, `s` dotall, `w` full words, `e` disable multi-line |
 | `-n N`, `--max-replacements N` | Limit replacements per file (0 = unlimited) |
 
+> **Use `-f w` (word boundary) when your pattern is a substring of longer identifiers.** Without it, `sd 'foo' 'bar'` also replaces `foobar`, `prefoo`, etc. This is the most common source of over-broad replacements.
+
 ## Regex Syntax
 
 sd uses Rust's `regex` crate syntax (similar to PCRE but not identical):
@@ -47,6 +49,16 @@ sd 'func\(.*?\)' 'func()' file.go
 sd 'oldName' 'newName' src/**/*.go
 ```
 
+### Word-boundary matching (avoid replacing substrings)
+```bash
+sd -f w 'foo' 'bar' file.go          # replaces 'foo' but not 'foobar' or 'prefoo'
+```
+
+### Preview before applying
+```bash
+sd -p 'dangerous_pattern' 'safe_replacement' file.go
+```
+
 ### Fixed string (no regex interpretation)
 ```bash
 sd -F 'array[0]' 'array[idx]' file.go
@@ -57,29 +69,12 @@ sd -F 'array[0]' 'array[idx]' file.go
 sd -f i 'todo' 'DONE' file.md
 ```
 
-### Word-boundary matching
-```bash
-sd -f w 'foo' 'bar' file.go          # replaces 'foo' but not 'foobar'
-```
-
 ### Multi-line with dotall
 ```bash
 sd -f s 'start.*?end' 'REPLACED' file.txt
-```
-
-### Preview before applying
-```bash
-sd -p 'dangerous_pattern' 'safe_replacement' file.go
 ```
 
 ### Stdin/stdout pipe
 ```bash
 ast-grep run -p 'pattern' --json | sd 'old' 'new'
 ```
-
-## When to Use sd vs Alternatives
-
-- **sd**: Simple string/regex replacements in files. Fastest path for non-structural changes.
-- **ast-grep**: When replacement must be syntax-aware (renaming symbols without hitting strings/comments)
-- **comby**: When replacement involves balanced delimiters or multi-line structural patterns
-- **sed**: BANNED. Use `sd` instead — always.

@@ -39,25 +39,45 @@ typos --format json            # machine-readable JSON
 
 ## Configuration
 
-typos uses `_typos.toml`, `typos.toml`, or `.typos.toml` in the project root:
+typos uses `_typos.toml`, `typos.toml`, or `.typos.toml` in the project root. The most common need is suppressing false positives for domain-specific terms.
 
 ```toml
-# Ignore specific words globally
+# Suppress false positives: map "detected-typo" -> "intended-word"
+# If both are the same, typos treats it as intentional and skips it.
 [default.extend-words]
-nto = "nto"        # not a typo in this project
-ques = "ques"
+nto = "nto"        # project-specific abbreviation, not "not"
+ques = "ques"      # "queues" abbreviation used as-is
+ser = "ser"        # serialization shorthand
 
-# Ignore specific identifiers
+# Suppress false positives for identifiers (camelCase, PascalCase tokens)
 [default.extend-identifiers]
-MyTypo = "MyTypo"
+MyCustomIdent = "MyCustomIdent"   # legacy identifier, not a typo
+FooBarBaz = "FooBarBaz"
 
-# Per-file-type configuration
+# Per-language configuration (applies only to that file type)
 [type.rust.extend-words]
-ser = "ser"        # serialization abbreviation
+ser = "ser"        # Rust serialization convention
 
-# Exclude paths
+[type.go.extend-words]
+init = "init"      # Go init functions
+
+# Exclude paths entirely
 [files]
-extend-exclude = ["vendor/", "*.generated.go"]
+extend-exclude = ["vendor/", "*.generated.go", "testdata/"]
+```
+
+### Adding a False Positive Exclusion
+
+When `typos` flags something that is not actually a typo:
+
+1. Run `typos` to identify flagged words
+2. Add an entry to `[default.extend-words]` mapping the flagged word to itself
+3. Re-run `typos` to confirm the false positive is suppressed
+
+Example: if typos flags `auth` as a typo for `auth` (it won't, but as a pattern):
+```toml
+[default.extend-words]
+auth = "auth"
 ```
 
 ## Common Workflow
@@ -72,16 +92,10 @@ typos --diff
 # 3. Auto-fix
 typos --write-changes
 
-# 4. Review remaining (may need manual config for false positives)
+# 4. For remaining false positives, add to typos.toml then re-run
 typos
 ```
 
 ## Pre-commit Integration
 
 Run `typos` before commits to catch typos early. Pair with `--format brief` for CI output.
-
-## When to Use typos vs Alternatives
-
-- **typos**: Automated spell checking of code — fast, understands identifiers
-- **Manual review**: For domain-specific terms that typos doesn't know
-- **codespell**: Alternative spell checker (Python-based, slower)
