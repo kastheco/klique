@@ -659,6 +659,13 @@
       "description": "design doc for kasmos-native skills system",
       "created_at": "2026-02-27T00:00:00Z"
     },
+    "2026-02-27-kasmos-custom-skills.md": {
+      "status": "reviewing",
+      "description": "audit cli-tools references, add rg deep reference, write 5 kasmos-native skills (lifecycle/planner/coder/reviewer/custodial), update agent templates and prompt builders, remove old superpowers-derived scaffolded skills",
+      "branch": "plan/kasmos-custom-skills",
+      "topic": "workflow",
+      "created_at": "2026-02-27T00:00:00Z"
+    },
     "2026-02-27-kasmos-native-skills.md": {
       "status": "ready",
       "description": "replace superpowers skills with 5 kasmos-native skills",
