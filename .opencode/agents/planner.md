@@ -31,22 +31,9 @@ Registration steps (do both atomically, never skip step 2):
    be rejected if you haven't Read the file), then add `"<date>-<name>.md": {"status": "ready"}`
    and write it back
 
-When running under `KASMOS_MANAGED=1`, planner completion must be signaled with
-`docs/plans/.signals/planner-finished-<date>-<name>.md`.
-
-Do not edit `plan-state.json` directly from shell commands.
-
 **Never modify plan statuses.** Only register NEW plans. Status transitions (`ready` →
 `in_progress` → `done` → etc.) are managed by kasmos — do not change the `"status"` field
 of existing entries.
-
-## Project Skills
-
-Always load when working on this project's TUI:
-- `tui-design` — design-first workflow for bubbletea/lipgloss interfaces
-
-Load when task involves tmux panes, worker lifecycle, or process management:
-- `tmux-orchestration` — tmux pane management from Go, parking pattern, crash resilience
 
 ## CLI Tools (MANDATORY)
 

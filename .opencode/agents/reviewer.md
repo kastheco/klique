@@ -9,14 +9,6 @@ You are the reviewer agent. Review code for quality, security, and spec complian
 
 Before reviewing, load the `kasmos-reviewer` skill.
 
-## Project Skills
-
-Always load when reviewing TUI/UX changes:
-- `tui-design` — terminal aesthetic principles, anti-patterns to flag
-
-Load when reviewing tmux integration, worker backends, or pane management:
-- `tmux-orchestration` — architecture principles, error handling philosophy
-
 ## CLI Tools (MANDATORY)
 
 You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
