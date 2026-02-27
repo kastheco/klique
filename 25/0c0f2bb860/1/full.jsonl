@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772232170531,
-      "updated": 1772232185873
+      "updated": 1772232201646
     }
   },
   "messages": [
@@ -452,7 +452,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772232185864
+          "created": 1772232185864,
+          "completed": 1772232197587
         },
         "parentID": "REDACTED",
         "modelID": "claude-sonnet-4-6",
@@ -465,15 +466,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 34500,
+          "input": 1,
+          "output": 109,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 34026,
+            "write": 364
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_ca1451808001OHM5NG7X0XBz7B",
         "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
       },
@@ -501,22 +504,206 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add main.go && git commit -m \"chore: bump version to 1.1.2\"",
               "description": "Commit version bump"
             },
+            "output": "[main 37bd29c] chore: bump version to 1.1.2\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+            "title": "Commit version bump",
             "metadata": {
-              "output": "",
-              "description": "Commit version bump"
+              "output": "[main 37bd29c] chore: bump version to 1.1.2\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+              "exit": 0,
+              "description": "Commit version bump",
+              "truncated": false
             },
             "time": {
-              "start": 1772232187778
+              "start": 1772232187777,
+              "end": 1772232197578
             }
           },
           "id": "prt_ca1451c8d001DGzjWGhKn0i4Pj",
           "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
           "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34500,
+            "input": 1,
+            "output": 109,
+            "reasoning": 0,
+            "cache": {
+              "read": 34026,
+              "write": 364
+            }
+          },
+          "id": "prt_ca14545cb001q915Mm5f6BKNiN",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232197588,
+          "completed": 1772232201638
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34656,
+          "input": 1,
+          "output": 104,
+          "reasoning": 0,
+          "cache": {
+            "read": 34390,
+            "write": 161
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca14545d4001kstJ6gK0e7JkTp",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "id": "prt_ca1454a6e001OW2vHxKNxqxP6q",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TQLE8sXrcguGcScPTjLSXz",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git tag \"v1.1.2\" && git push origin main \"v1.1.2\"",
+              "description": "Tag v1.1.2 and push to remote"
+            },
+            "output": "[entire] Pushing session logs to origin...\nTo github.com:kastheco/kasmos.git\n   f588508..37bd29c  main -> main\n * [new tag]         v1.1.2 -> v1.1.2\n",
+            "title": "Tag v1.1.2 and push to remote",
+            "metadata": {
+              "output": "[entire] Pushing session logs to origin...\nTo github.com:kastheco/kasmos.git\n   f588508..37bd29c  main -> main\n * [new tag]         v1.1.2 -> v1.1.2\n",
+              "exit": 0,
+              "description": "Tag v1.1.2 and push to remote",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232199438,
+              "end": 1772232201629
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34656,
+            "input": 1,
+            "output": 104,
+            "reasoning": 0,
+            "cache": {
+              "read": 34390,
+              "write": 161
+            }
+          },
+          "id": "prt_ca145559e001vqmnvgVKTaDLsK",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232201638,
+          "completed": 1772232203828
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34813,
+          "input": 1,
+          "output": 85,
+          "reasoning": 0,
+          "cache": {
+            "read": 34551,
+            "write": 176
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_ca14555a6001MwmdNltOcQ3TGO",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "id": "prt_ca1455898001HOLjG1y4RThhh6",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
+        },
+        {
+          "type": "text",
+          "text": "Done. Released `v1.1.2`:\n\n- `main.go` bumped: `1.1.0` → `1.1.2`\n- Commit: `37bd29c` — `chore: bump version to 1.1.2`\n- Tag `v1.1.2` pushed → CI `Release` workflow will trigger",
+          "time": {
+            "start": 1772232203800,
+            "end": 1772232203800
+          },
+          "id": "prt_ca1455899001UWpgzWbfnYkybu",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34813,
+            "input": 1,
+            "output": 85,
+            "reasoning": 0,
+            "cache": {
+              "read": 34551,
+              "write": 176
+            }
+          },
+          "id": "prt_ca1455e2c001uVixtbuyqHYtzt",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
         }
       ]
     }
