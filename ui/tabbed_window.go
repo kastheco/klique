@@ -249,21 +249,21 @@ func (w *TabbedWindow) ScrollDown() {
 	}
 }
 
-// HalfPageUp scrolls the active pane up by half a page.
+// HalfPageUp scrolls the preview pane up by half a page.
+// Always targets the preview (agent session) regardless of which tab is active,
+// since ctrl+u/d is the primary way to paginate agent output.
 func (w *TabbedWindow) HalfPageUp() {
-	if w.activeTab == PreviewTab {
-		if err := w.preview.HalfPageUp(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to half page up: %v", err)
-		}
+	if err := w.preview.HalfPageUp(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to half page up: %v", err)
 	}
 }
 
-// HalfPageDown scrolls the active pane down by half a page.
+// HalfPageDown scrolls the preview pane down by half a page.
+// Always targets the preview (agent session) regardless of which tab is active,
+// since ctrl+u/d is the primary way to paginate agent output.
 func (w *TabbedWindow) HalfPageDown() {
-	if w.activeTab == PreviewTab {
-		if err := w.preview.HalfPageDown(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to half page down: %v", err)
-		}
+	if err := w.preview.HalfPageDown(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to half page down: %v", err)
 	}
 }
 
