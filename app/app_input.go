@@ -118,10 +118,9 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Zone-based click: tab headers — loop over all tab zones
+	// Zone-based click: tab headers — switch visible tab without stealing sidebar focus.
 	for i, zoneID := range ui.TabZoneIDs {
 		if zone.Get(zoneID).InBounds(msg) {
-			m.setFocusSlot(slotInfo + i)
 			m.tabbedWindow.SetActiveTab(i)
 			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 			return m, m.instanceChanged()
@@ -146,8 +145,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Click in tabbed window area (not on a tab header): focus the active tab
-	m.setFocusSlot(slotInfo + m.tabbedWindow.GetActiveTab())
+	// Click in tabbed window area — sidebar retains focus.
 	return m, nil
 }
 
@@ -429,20 +427,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.WindowSize()
 		}
 
-		// !/@ /#: exit focus mode and jump to specific tab slot
-		var jumpSlot int
+		// !/@ /#: exit focus mode and switch to the corresponding center tab.
+		// Sidebar retains focus (slotNav) — only the visible tab changes.
+		var jumpTab int
 		var doJump bool
 		switch msg.String() {
 		case "!":
-			jumpSlot, doJump = slotAgent, true
+			jumpTab, doJump = ui.PreviewTab, true
 		case "@":
-			jumpSlot, doJump = slotDiff, true
+			jumpTab, doJump = ui.DiffTab, true
 		case "#":
-			jumpSlot, doJump = slotInfo, true
+			jumpTab, doJump = ui.InfoTab, true
 		}
 		if doJump {
 			m.exitFocusMode()
-			m.setFocusSlot(jumpSlot)
+			m.tabbedWindow.SetActiveTab(jumpTab)
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
 
@@ -1091,19 +1090,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m.openContextMenu()
 	case keys.KeyInfoTab:
-		// Jump directly to info slot
-		if m.focusSlot == slotInfo {
+		// Switch visible tab to info without stealing sidebar focus.
+		if m.tabbedWindow.IsInInfoTab() {
 			return m, nil
 		}
-		m.setFocusSlot(slotInfo)
+		m.tabbedWindow.SetActiveTab(ui.InfoTab)
 		return m, m.instanceChanged()
 	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
 		// Info tab is read-only — don't enter focus mode.
-		if m.focusSlot == slotInfo {
+		if m.tabbedWindow.IsInInfoTab() {
 			return m, nil
 		}
+		// Ensure the agent tab is visible when entering focus mode.
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		selected := m.nav.GetSelectedInstance()
 		// When a plan header is selected (no instance), find the best instance for that plan.
 		if selected == nil {
@@ -1221,25 +1222,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
-		// Info tab is read-only — enter is unreachable there.
-		if m.focusSlot == slotInfo {
+		// Info tab is read-only — enter has no effect there.
+		if m.tabbedWindow.IsInInfoTab() {
 			return m, nil
 		}
-		// If the nav panel is focused, handle plan/instance interactions.
-		if m.focusSlot == slotNav {
-			if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
-				m.state = stateClickUpSearch
-				m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
-				m.textInputOverlay.SetSize(50, 3)
-				return m, nil
-			}
-			// Plan header or plan file: open plan context menu
-			if m.nav.IsSelectedPlanHeader() {
-				return m.openPlanContextMenu()
-			}
-			if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-				return m.openPlanContextMenu()
-			}
+		// Sidebar always has focus: handle plan/instance interactions first.
+		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
+			m.state = stateClickUpSearch
+			m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
+			m.textInputOverlay.SetSize(50, 3)
+			return m, nil
+		}
+		// Plan header or plan file: open plan context menu
+		if m.nav.IsSelectedPlanHeader() {
+			return m.openPlanContextMenu()
+		}
+		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
+			return m.openPlanContextMenu()
 		}
 		if m.nav.NumInstances() == 0 {
 			return m, nil
@@ -1285,17 +1284,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
-		if m.focusSlot != slotNav {
-			m.setFocusSlot(slotNav)
-		}
+		// Sidebar always has focus — no-op.
 		return m, nil
 	case keys.KeyArrowRight:
-		switch m.focusSlot {
-		case slotNav:
-			m.setFocusSlot(slotInfo)
-		case slotInfo, slotAgent, slotDiff:
-			// Already in center area — no-op
+		// Toggle expand/collapse on the selected sidebar item (same as space's expand behavior).
+		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
+			m.state = stateClickUpSearch
+			m.textInputOverlay = overlay.NewTextInputOverlay("search clickup tasks", "")
+			m.textInputOverlay.SetSize(50, 3)
+			return m, nil
 		}
+		m.nav.ToggleSelectedExpand()
 		return m, nil
 	case keys.KeyNewPlan:
 		m.state = stateNewPlan

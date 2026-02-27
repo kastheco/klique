@@ -175,40 +175,30 @@ func (m *home) setFocusSlot(slot int) {
 	}
 }
 
-// nextFocusSlot advances the focus ring forward through the 3 center tabs only.
-// Tab only cycles info → agent → diff → info. Use 's'/'t' to reach the sidebars.
-// When called from the sidebar, advances from the currently visible tab so the
-// user doesn't have to press Tab twice (once to "focus" the window, again to move).
+// nextFocusSlot cycles the visible center tab forward (info → agent → diff → info).
+// The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
+// displayed tab changes. This is called by Tab and →.
 func (m *home) nextFocusSlot() {
-	current := m.focusSlot
-	if current == slotNav {
-		current = m.tabbedWindow.GetActiveTab() + slotInfo
-	}
-	switch current {
-	case slotInfo:
-		m.setFocusSlot(slotAgent)
-	case slotAgent:
-		m.setFocusSlot(slotDiff)
-	default: // slotDiff — wraps to info
-		m.setFocusSlot(slotInfo)
+	switch m.tabbedWindow.GetActiveTab() {
+	case ui.InfoTab:
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+	case ui.PreviewTab:
+		m.tabbedWindow.SetActiveTab(ui.DiffTab)
+	default: // ui.DiffTab — wraps to info
+		m.tabbedWindow.SetActiveTab(ui.InfoTab)
 	}
 }
 
-// prevFocusSlot moves the focus ring backward through the 3 center tabs only.
-// Like nextFocusSlot, it advances from the currently visible tab when called
-// from the sidebar.
+// prevFocusSlot cycles the visible center tab backward (info → diff → agent → info).
+// The sidebar always retains keyboard focus (focusSlot stays slotNav).
 func (m *home) prevFocusSlot() {
-	current := m.focusSlot
-	if current == slotNav {
-		current = m.tabbedWindow.GetActiveTab() + slotInfo
-	}
-	switch current {
-	case slotAgent:
-		m.setFocusSlot(slotInfo)
-	case slotDiff:
-		m.setFocusSlot(slotAgent)
-	default: // slotInfo — wraps to diff
-		m.setFocusSlot(slotDiff)
+	switch m.tabbedWindow.GetActiveTab() {
+	case ui.PreviewTab:
+		m.tabbedWindow.SetActiveTab(ui.InfoTab)
+	case ui.DiffTab:
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+	default: // ui.InfoTab — wraps to diff
+		m.tabbedWindow.SetActiveTab(ui.DiffTab)
 	}
 }
 
@@ -261,25 +251,26 @@ func (m *home) exitFocusMode() {
 	m.menu.SetFocusMode(false)
 }
 
-// switchToTab switches to the specified tab slot.
+// switchToTab changes the visible center tab without stealing focus from the sidebar.
+// The sidebar (slotNav) always retains keyboard focus.
 func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
-	var targetSlot int
+	var targetTab int
 	switch name {
 	case keys.KeyTabAgent:
-		targetSlot = slotAgent
+		targetTab = ui.PreviewTab
 	case keys.KeyTabDiff:
-		targetSlot = slotDiff
+		targetTab = ui.DiffTab
 	case keys.KeyTabInfo:
-		targetSlot = slotInfo
+		targetTab = ui.InfoTab
 	default:
 		return m, nil
 	}
 
-	if m.focusSlot == targetSlot {
+	if m.tabbedWindow.GetActiveTab() == targetTab {
 		return m, nil
 	}
 
-	m.setFocusSlot(targetSlot)
+	m.tabbedWindow.SetActiveTab(targetTab)
 	return m, m.instanceChanged()
 }
 

@@ -601,101 +601,66 @@ func TestFocusRing(t *testing.T) {
 		return homeModel
 	}
 
-	// --- Tab ring cycling (info → agent → diff → info) ---
+	// --- Tab cycles active center tab; sidebar (slotNav) always retains focus ---
 
-	t.Run("Tab advances through center tabs: info → agent", func(t *testing.T) {
+	t.Run("Tab cycles active tab from info to agent, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotInfo)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
-
-		assert.Equal(t, slotAgent, homeModel.focusSlot)
-	})
-
-	t.Run("Tab advances through center tabs: agent → diff", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotAgent)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
-
-		assert.Equal(t, slotDiff, homeModel.focusSlot)
-	})
-
-	t.Run("Tab wraps center tabs: diff → info", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotDiff)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
-
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
-	})
-
-	t.Run("Tab from sidebar advances from active tab (info → agent)", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotNav)
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.Equal(t, slotAgent, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to agent")
 	})
 
-	t.Run("Tab from sidebar advances from active tab (agent → diff)", func(t *testing.T) {
+	t.Run("Tab cycles active tab from agent to diff, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.Equal(t, slotDiff, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to diff")
 	})
 
-	t.Run("Tab from sidebar advances from active tab (diff → info)", func(t *testing.T) {
+	t.Run("Tab wraps active tab from diff to info, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
 		h.tabbedWindow.SetActiveTab(ui.DiffTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to info")
 	})
 
-	t.Run("Shift+Tab moves backward through center tabs: diff → agent", func(t *testing.T) {
+	t.Run("Shift+Tab reverses active tab from agent to info, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotDiff)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
-
-		assert.Equal(t, slotAgent, homeModel.focusSlot)
-	})
-
-	t.Run("Shift+Tab moves backward: agent → info", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotAgent)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
-
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
-	})
-
-	t.Run("Shift+Tab from sidebar reverses from active tab (info → diff)", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotNav)
-		h.tabbedWindow.SetActiveTab(ui.InfoTab)
-
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
-
-		assert.Equal(t, slotDiff, homeModel.focusSlot)
-	})
-
-	t.Run("Shift+Tab from sidebar reverses from active tab (agent → info)", func(t *testing.T) {
-		h := newTestHome()
-		h.setFocusSlot(slotNav)
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
 
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to info")
+	})
+
+	t.Run("Shift+Tab reverses active tab from diff to agent, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.DiffTab)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to agent")
+	})
+
+	t.Run("Shift+Tab wraps active tab from info to diff, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to diff")
 	})
 
 	t.Run("T jumps to nav slot when instances exist", func(t *testing.T) {
@@ -708,33 +673,36 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotNav, homeModel.focusSlot)
 	})
 
-	// --- Direct slot jumps ---
+	// --- Direct tab jumps (!/@/#) switch active tab without stealing sidebar focus ---
 
-	t.Run("! jumps to agent slot", func(t *testing.T) {
+	t.Run("! switches active tab to agent, sidebar keeps focus", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
 
-		assert.Equal(t, slotAgent, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "! must switch to agent tab")
 	})
 
-	t.Run("@ jumps to diff slot", func(t *testing.T) {
+	t.Run("@ switches active tab to diff, sidebar keeps focus", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
 
-		assert.Equal(t, slotDiff, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "@ must switch to diff tab")
 	})
 
-	t.Run("# jumps to info slot", func(t *testing.T) {
+	t.Run("# switches active tab to info, sidebar keeps focus", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")})
 
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "# must switch to info tab")
 	})
 
 	t.Run("s is no-op (sidebar focus shortcut removed)", func(t *testing.T) {
@@ -794,47 +762,38 @@ func TestFocusRing(t *testing.T) {
 
 	// --- Arrow key navigation ---
 
-	t.Run("← from any center tab moves to nav", func(t *testing.T) {
-		for _, slot := range []int{slotInfo, slotAgent, slotDiff} {
-			h := newTestHome()
-			h.setFocusSlot(slot)
+	t.Run("← is no-op (sidebar already focused)", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-			homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
 
-			assert.Equal(t, slotNav, homeModel.focusSlot)
-		}
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must remain focused after ←")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must not change on ←")
 	})
 
-	t.Run("→ from nav moves to info (first center tab)", func(t *testing.T) {
+	t.Run("→ toggles expand on selected sidebar item", func(t *testing.T) {
 		h := newTestHome()
-		h.setFocusSlot(slotNav)
-
+		// Without a plan header selected, ToggleSelectedExpand returns false,
+		// so → is effectively a no-op — sidebar stays focused.
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
 
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
-	})
-
-	t.Run("→ from center tabs is no-op", func(t *testing.T) {
-		for _, slot := range []int{slotInfo, slotAgent, slotDiff} {
-			h := newTestHome()
-			h.setFocusSlot(slot)
-
-			homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
-
-			assert.Equal(t, slot, homeModel.focusSlot)
-		}
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus after →")
 	})
 
 	// --- Enter key blocked on info tab ---
 
-	t.Run("Enter is no-op when info tab is focused", func(t *testing.T) {
+	t.Run("Enter is no-op when info tab is active", func(t *testing.T) {
 		h := newTestHome()
 		addTestInstance(t, h)
-		h.setFocusSlot(slotInfo)
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
+		// Enter (bound to 'o') must not trigger attach when info tab is visible.
+		// State stays stateDefault and focusSlot stays slotNav.
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
 
-		assert.Equal(t, slotInfo, homeModel.focusSlot)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must stay focused")
+		assert.Equal(t, stateDefault, homeModel.state, "state must remain default")
 	})
 
 	// --- Ctrl+Up/Down: cycle active instances with wrapping ---

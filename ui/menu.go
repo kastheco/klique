@@ -153,13 +153,12 @@ func (m *Menu) updateOptions() {
 			m.systemGroupSize = emptySystemGroupSize
 		}
 	case StateDefault:
-		if m.focusSlot == MenuSlotSidebar {
-			m.addSidebarOptions(true)
-		} else if m.instance != nil {
+		// Sidebar always has focus; show instance actions when an instance is
+		// selected so the user can see relevant keybinds without switching panes.
+		if m.instance != nil {
 			m.addInstanceOptions()
 		} else {
-			m.options = defaultMenuOptions
-			m.systemGroupSize = defaultSystemGroupSize
+			m.addSidebarOptions(true)
 		}
 	case StateNewInstance:
 		m.options = newInstanceMenuOptions
