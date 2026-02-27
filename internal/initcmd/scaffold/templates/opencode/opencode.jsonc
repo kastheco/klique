@@ -88,7 +88,7 @@
       "permission": {
         "bash": "allow",
         "edit": {
-          "*": "deny",
+          "*": "ask",
           "/tmp/*": "allow",
           "/tmp/**": "allow"
         },
@@ -103,7 +103,7 @@
         "grep": "allow",
         "read": "allow",
         "write": {
-          "*": "deny",
+          "*": "ask",
           "/tmp/*": "allow",
           "/tmp/**": "allow"
         }

@@ -88,7 +88,7 @@
             "permission": {
                 "bash": "allow",
                 "edit": {
-                    "*": "deny",
+                    "*": "ask",
                     "/tmp/*": "allow",
                     "/tmp/**": "allow"
                 },
@@ -103,7 +103,7 @@
                 "grep": "allow",
                 "read": "allow",
                 "write": {
-                    "*": "deny",
+                    "*": "ask",
                     "/tmp/*": "allow",
                     "/tmp/**": "allow"
                 }
@@ -113,7 +113,7 @@
             "textVerbosity": "medium"
         },
         "custodial": {
-            "model": "anthropic/claude-sonnet-4-6",
+            "model": "anthropic/claude-opus-4-6",
             "permission": {
                 "bash": "allow",
                 "edit": "allow",
