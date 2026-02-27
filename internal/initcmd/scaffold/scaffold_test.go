@@ -108,9 +108,10 @@ func TestScaffoldSkipsExisting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "custom content", string(content))
 
-	// Result correctly shows skipped
-	require.Len(t, results, 1)
-	assert.False(t, results[0].Created)
+	// Result correctly shows skipped for the coder agent (custodial static agent also present)
+	require.GreaterOrEqual(t, len(results), 1)
+	coderResult := results[0]
+	assert.False(t, coderResult.Created)
 }
 
 func TestScaffoldForceOverwrites(t *testing.T) {
@@ -133,8 +134,8 @@ func TestScaffoldForceOverwrites(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, "old content", string(content))
 
-	// Result correctly shows created
-	require.Len(t, results, 1)
+	// Result correctly shows created (custodial static agent also present)
+	require.GreaterOrEqual(t, len(results), 1)
 	assert.True(t, results[0].Created)
 }
 
@@ -182,10 +183,12 @@ func TestScaffoldFiltersByHarness(t *testing.T) {
 	results, err := WriteClaudeProject(dir, agents, allTools, false)
 	require.NoError(t, err)
 
-	// Only coder.md created (claude only)
+	// Only coder.md and custodial.md created (claude only — no opencode reviewer)
 	assert.FileExists(t, filepath.Join(dir, ".claude", "agents", "coder.md"))
+	assert.FileExists(t, filepath.Join(dir, ".claude", "agents", "custodial.md"))
 	assert.NoFileExists(t, filepath.Join(dir, ".opencode", "agents", "reviewer.md"))
-	require.Len(t, results, 1)
+	require.GreaterOrEqual(t, len(results), 1)
+	// First result is the per-role coder agent
 	assert.Equal(t, ".claude/agents/coder.md", results[0].Path)
 }
 

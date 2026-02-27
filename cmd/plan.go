@@ -80,6 +80,9 @@ func executePlanTransition(plansDir, planFile, event string) (string, error) {
 // executePlanImplement transitions a plan into implementing state and writes
 // a wave signal file so the TUI metadata tick can pick it up.
 func executePlanImplement(plansDir, planFile string, wave int) error {
+	if wave < 1 {
+		return fmt.Errorf("wave number must be >= 1, got %d", wave)
+	}
 	fsm := planfsm.New(plansDir)
 	ps, err := planstate.Load(plansDir)
 	if err != nil {

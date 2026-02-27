@@ -80,7 +80,18 @@ func writePerRoleProject(dir, harnessName string, agents []harness.AgentConfig, 
 
 // WriteClaudeProject scaffolds .claude/ project files.
 func WriteClaudeProject(dir string, agents []harness.AgentConfig, selectedTools []string, force bool) ([]WriteResult, error) {
-	return writePerRoleProject(dir, "claude", agents, selectedTools, force)
+	results, err := writePerRoleProject(dir, "claude", agents, selectedTools, force)
+	if err != nil {
+		return nil, err
+	}
+
+	// Scaffold static agent files (e.g. custodial) that are always present
+	// regardless of wizard configuration.
+	staticResults, err := writeStaticAgents(dir, "claude", force)
+	if err != nil {
+		return nil, err
+	}
+	return append(results, staticResults...), nil
 }
 
 // renderOpenCodeConfig reads the embedded opencode.jsonc template and substitutes

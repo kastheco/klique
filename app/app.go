@@ -699,6 +699,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			entry, ok := m.planState.Entry(ws.PlanFile)
 			if !ok {
+				log.WarningLog.Printf("wave signal: plan %s not found in plan state", ws.PlanFile)
 				continue
 			}
 
