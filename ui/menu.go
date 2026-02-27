@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -53,6 +54,9 @@ type Menu struct {
 	// systemGroupSize is the number of items in the trailing system group
 	// (used for separator placement). Defaults to 4 if unset.
 	systemGroupSize int
+
+	// tmuxSessionCount is displayed right-aligned in the bottom bar.
+	tmuxSessionCount int
 }
 
 var defaultMenuOptions = []keys.KeyName{keys.KeyNewPlan, keys.KeySearch, keys.KeySpace, keys.KeyHelp, keys.KeyQuit}
@@ -71,6 +75,8 @@ func NewMenu() *Menu {
 		sidebarSpaceAction: "toggle",
 	}
 }
+
+func (m *Menu) SetTmuxSessionCount(count int) { m.tmuxSessionCount = count }
 
 func (m *Menu) Keydown(name keys.KeyName) {
 	m.keyDown = name
@@ -329,5 +335,40 @@ func (m *Menu) String() string {
 	}
 
 	centeredMenuText := menuStyle.Render(s.String())
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, centeredMenuText)
+	menuWidth := lipgloss.Width(centeredMenuText)
+
+	tmuxRendered := ""
+	tmuxWidth := 0
+	if m.tmuxSessionCount > 0 {
+		tmuxRendered = statusBarTmuxCountStyle.Render(fmt.Sprintf("tmux:%d", m.tmuxSessionCount))
+		tmuxWidth = lipgloss.Width(tmuxRendered)
+	}
+
+	menuStart := (m.width - menuWidth) / 2
+	if menuStart < 0 {
+		menuStart = 0
+	}
+	rightStart := m.width - tmuxWidth - 1
+	if rightStart < menuStart+menuWidth {
+		rightStart = menuStart + menuWidth
+	}
+
+	var line strings.Builder
+	cursor := 0
+	writeAt := func(start, visualWidth int, text string) {
+		if text == "" || start < cursor {
+			return
+		}
+		if start > cursor {
+			line.WriteString(strings.Repeat(" ", start-cursor))
+		}
+		line.WriteString(text)
+		cursor = start + visualWidth
+	}
+	writeAt(menuStart, menuWidth, centeredMenuText)
+	writeAt(rightStart, tmuxWidth, tmuxRendered)
+	if cursor < m.width {
+		line.WriteString(strings.Repeat(" ", m.width-cursor))
+	}
+	return line.String()
 }

@@ -24,7 +24,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission || m.state == stateTmuxBrowser {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenamePlan || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateChangeTopic || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission || m.state == stateTmuxBrowser {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -123,7 +123,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if zone.Get(zoneID).InBounds(msg) {
 			m.tabbedWindow.SetActiveTab(i)
 			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
-			return m, m.instanceChanged()
+			return m, nil
 		}
 	}
 
@@ -419,6 +419,51 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle plan rename state
+	if m.state == stateRenamePlan {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				newName := strings.TrimSpace(m.textInputOverlay.GetValue())
+				planFile := m.nav.GetSelectedPlanFile()
+				if planFile != "" && newName != "" && m.planState != nil {
+					oldFile := planFile
+					if err := m.planState.Rename(oldFile, newName); err != nil {
+						m.textInputOverlay = nil
+						m.state = stateDefault
+						m.menu.SetState(ui.StateDefault)
+						return m, m.handleError(err)
+					}
+					// Update any instances that referenced the old plan file.
+					newFile := m.planState.RenamedFilename(oldFile, newName)
+					for _, inst := range m.nav.GetInstances() {
+						if inst.PlanFile == oldFile {
+							inst.PlanFile = newFile
+						}
+					}
+					for _, inst := range m.allInstances {
+						if inst.PlanFile == oldFile {
+							inst.PlanFile = newFile
+						}
+					}
+					_ = m.saveAllInstances()
+					m.loadPlanState()
+					m.updateSidebarPlans()
+					m.updateNavPanelStatus()
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
 	// Handle focus mode — forward keys directly to the agent's PTY
 	if m.state == stateFocusAgent {
 		// Ctrl+Space exits focus mode
@@ -442,7 +487,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if doJump {
 			m.exitFocusMode()
 			m.tabbedWindow.SetActiveTab(jumpTab)
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			return m, tea.WindowSize()
 		}
 
 		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
@@ -989,10 +1034,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m.handleQuit()
 	}
 
-	// Shift+Tab: reverse focus ring cycle
+	// Shift+Tab: reverse focus ring cycle (don't call instanceChanged — it auto-switches tabs)
 	if msg.Type == tea.KeyShiftTab {
 		m.prevFocusSlot()
-		return m, m.instanceChanged()
+		return m, nil
 	}
 
 	// Delete key: dismiss a finished (non-running) instance from the list.
@@ -1077,7 +1122,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.nextFocusSlot()
-		return m, m.instanceChanged()
+		return m, nil
 	case keys.KeySpace:
 		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
@@ -1095,7 +1140,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		m.tabbedWindow.SetActiveTab(ui.InfoTab)
-		return m, m.instanceChanged()
+		return m, nil
 	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:

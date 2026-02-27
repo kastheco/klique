@@ -256,7 +256,7 @@ func (n *NavigationPanel) rebuildRows() {
 
 	// Solo instances between active and idle.
 	if len(solo) > 0 {
-		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "solo"})
+		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "agents"})
 		for _, inst := range solo {
 			rows = append(rows, navRow{Kind: navRowInstance, ID: "inst:" + inst.Title, Label: inst.Title, Instance: inst})
 		}
@@ -967,7 +967,7 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		return indent + labelStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
 
 	case navRowSoloHeader:
-		return navDividerLine("solo", contentWidth)
+		return navDividerLine("agents", contentWidth)
 
 	case navRowTopicHeader:
 		chevron := "▸"

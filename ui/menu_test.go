@@ -90,3 +90,32 @@ func TestMenu_InstanceWithoutPromptHidesYesKeybind(t *testing.T) {
 		t.Fatalf("menu should hide yes keybind when instance has no prompt; got: %q", out)
 	}
 }
+
+func TestMenu_TmuxSessionCountRightAligned(t *testing.T) {
+	m := NewMenu()
+	m.SetSize(120, 1)
+	m.SetState(StateEmpty)
+	m.SetTmuxSessionCount(7)
+
+	out := stripMenuANSI(m.String())
+	if !strings.Contains(out, "tmux:7") {
+		t.Fatalf("menu should contain tmux:7; got: %q", out)
+	}
+	// tmux label should appear near the right edge (after the centered menu content)
+	idx := strings.Index(out, "tmux:7")
+	if idx < 80 {
+		t.Fatalf("tmux:7 should be right-aligned (index >= 80), got index %d in: %q", idx, out)
+	}
+}
+
+func TestMenu_TmuxSessionCountZeroHidden(t *testing.T) {
+	m := NewMenu()
+	m.SetSize(120, 1)
+	m.SetState(StateEmpty)
+	m.SetTmuxSessionCount(0)
+
+	out := stripMenuANSI(m.String())
+	if strings.Contains(out, "tmux:") {
+		t.Fatalf("menu should hide tmux count when zero; got: %q", out)
+	}
+}

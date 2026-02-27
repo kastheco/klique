@@ -131,7 +131,7 @@ func TestSpawnAgent_SubmitCreatesInstance(t *testing.T) {
 	last := instances[len(instances)-1]
 	assert.Equal(t, "test-agent", last.Title)
 	assert.Equal(t, "", last.PlanFile, "ad-hoc instance must have no PlanFile")
-	assert.Equal(t, "", last.AgentType, "ad-hoc instance must have no AgentType")
+	assert.Equal(t, session.AgentTypeCustodial, last.AgentType, "spawned instance must be custodial")
 	assert.Equal(t, session.Loading, last.Status)
 }
 

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -130,11 +129,6 @@ func (s *StatusBar) leftStatusGroup() string {
 		parts = append(parts, glyphs+" "+statusBarWaveLabelStyle.Render(s.data.WaveLabel))
 	} else if s.data.PlanStatus != "" {
 		parts = append(parts, planStatusStyle(s.data.PlanStatus))
-	}
-
-	if s.data.TmuxSessionCount > 0 {
-		tmuxLabel := fmt.Sprintf("tmux:%d", s.data.TmuxSessionCount)
-		parts = append(parts, statusBarTmuxCountStyle.Render(tmuxLabel))
 	}
 
 	if len(parts) == 0 {

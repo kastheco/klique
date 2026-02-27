@@ -78,6 +78,8 @@ const (
 	statePRBody
 	// stateRenameInstance is the state when the user is renaming an instance.
 	stateRenameInstance
+	// stateRenamePlan is the state when the user is renaming a plan.
+	stateRenamePlan
 	// stateRenameTopic is the state when the user is renaming a topic.
 	stateRenameTopic
 	// stateSendPrompt is the state when the user is sending a prompt via text overlay.
@@ -834,8 +836,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.planState = msg.PlanState
 		}
 
-		// Store the latest tmux session count for the status bar.
+		// Store the latest tmux session count for the bottom bar.
 		m.tmuxSessionCount = msg.TmuxSessionCount
+		m.menu.SetTmuxSessionCount(m.tmuxSessionCount)
 
 		// Inline reviewer completion check using cached TmuxAlive from metadata
 		// (replaces checkReviewerCompletion which called tmux has-session per reviewer).

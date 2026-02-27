@@ -270,7 +270,7 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	}
 
 	m.tabbedWindow.SetActiveTab(targetTab)
-	return m, m.instanceChanged()
+	return m, nil
 }
 
 // rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
@@ -857,8 +857,10 @@ func (m *home) programForAgent(agentType string) string {
 		profile = m.appConfig.ResolveProfile("planning", m.program)
 	case session.AgentTypeReviewer:
 		profile = m.appConfig.ResolveProfile("quality_review", m.program)
+	case session.AgentTypeCustodial:
+		profile = m.appConfig.ResolveProfile("custodial", m.program)
 	default:
-		// Ad-hoc / solo — use the "chat" profile if available.
+		// Ad-hoc — use the "chat" profile if available.
 		if p, ok := m.appConfig.Profiles["chat"]; ok && p.Enabled && p.Program != "" {
 			profile = p
 		} else {
@@ -1316,12 +1318,13 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   name,
 		Path:    path,
-		Program: m.programForAgent(""),
+		Program: m.programForAgent(session.AgentTypeCustodial),
 	})
 	if err != nil {
 		return m, m.handleError(err)
 	}
 
+	inst.AgentType = session.AgentTypeCustodial
 	inst.SetStatus(session.Loading)
 	inst.LoadingTotal = 8
 	inst.LoadingMessage = "preparing session..."
