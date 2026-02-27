@@ -351,6 +351,40 @@ func TestIsSelectedPlanHeader(t *testing.T) {
 	assert.False(t, n.IsSelectedPlanHeader())
 }
 
+func TestSoloHeaderSkippedDuringNavigation(t *testing.T) {
+	n := newTestPanel()
+	plans := []PlanDisplay{{Filename: "plan.md"}}
+	instances := []*session.Instance{
+		makeInst("plan-impl", "plan.md", session.Running),
+		makeInst("adhoc", "", session.Running),
+	}
+	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true}}
+	n.SetData(plans, instances, nil, nil, statuses)
+
+	// Layout: [0]=plan header, [1]=plan-impl, [2]=solo header, [3]=adhoc
+
+	// Down from plan-impl should skip solo header, land on adhoc
+	n.selectedIdx = 1
+	n.Down()
+	assert.Equal(t, 3, n.selectedIdx, "Down should skip solo header")
+
+	// Up from adhoc should skip solo header, land on plan-impl
+	n.Up()
+	assert.Equal(t, 1, n.selectedIdx, "Up should skip solo header")
+}
+
+func TestSoloHeaderSkippedBySelectFirst(t *testing.T) {
+	n := newTestPanel()
+	instances := []*session.Instance{
+		makeInst("adhoc", "", session.Running),
+	}
+	n.SetData(nil, instances, nil, nil, nil)
+
+	// Layout: [0]=solo header, [1]=adhoc
+	n.SelectFirst()
+	assert.Equal(t, 1, n.selectedIdx, "SelectFirst should skip solo header")
+}
+
 func TestSelectByID(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{

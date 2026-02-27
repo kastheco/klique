@@ -122,7 +122,16 @@ func Load(dir string) (*PlanState, error) {
 		}
 	}
 
-	return &PlanState{Dir: dir, Plans: wrapped.Plans, TopicEntries: wrapped.Topics}, nil
+	ps := &PlanState{Dir: dir, Plans: wrapped.Plans, TopicEntries: wrapped.Topics}
+
+	// Reconcile stale filenames: if a plan-state key doesn't match an actual
+	// file on disk (e.g. date changed between planning and follow-up), fuzzy-
+	// match by slug and rekey the entry. This is self-healing and persisted.
+	if rekeyed := ps.reconcileFilenames(); rekeyed > 0 {
+		_ = ps.save()
+	}
+
+	return ps, nil
 }
 
 // Topics returns all topic entries sorted by name.
@@ -371,6 +380,47 @@ func DisplayName(filename string) string {
 		name = name[11:]
 	}
 	return name
+}
+
+// reconcileFilenames checks each plan key against the actual files on disk.
+// If the exact filename is missing but a file with the same slug (date-stripped
+// suffix) exists, the entry is rekeyed to the real filename. Returns the number
+// of entries rekeyed.
+func (ps *PlanState) reconcileFilenames() int {
+	rekeyed := 0
+	for filename, entry := range ps.Plans {
+		path := filepath.Join(ps.Dir, filename)
+		if _, err := os.Stat(path); err == nil {
+			continue // file exists, nothing to do
+		}
+
+		slug := DisplayName(filename) // strip date + .md
+		if slug == "" {
+			continue
+		}
+
+		// Glob for *-<slug>.md in the plans directory.
+		matches, err := filepath.Glob(filepath.Join(ps.Dir, "*-"+slug+".md"))
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+
+		// Use the most recent match (last alphabetically = latest date).
+		sort.Strings(matches)
+		newFilename := filepath.Base(matches[len(matches)-1])
+		if newFilename == filename {
+			continue
+		}
+		// Don't overwrite an existing entry.
+		if _, exists := ps.Plans[newFilename]; exists {
+			continue
+		}
+
+		ps.Plans[newFilename] = entry
+		delete(ps.Plans, filename)
+		rekeyed++
+	}
+	return rekeyed
 }
 
 func (ps *PlanState) save() error {

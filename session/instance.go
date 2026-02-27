@@ -74,6 +74,9 @@ type Instance struct {
 	// SoloAgent is true when this instance was spawned via "start solo agent" — no
 	// automatic lifecycle transitions (push prompt, review spawning) apply.
 	SoloAgent bool
+	// Exited is true when a solo agent's tmux session has died. Used by the UI
+	// to render killed solo agents with greyed-out strikethrough styling.
+	Exited bool
 	// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.
 	QueuedPrompt string
 

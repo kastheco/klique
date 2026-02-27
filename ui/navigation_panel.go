@@ -450,6 +450,14 @@ func (n *NavigationPanel) ToggleSelectedExpand() bool {
 func (n *NavigationPanel) Up() {
 	if n.selectedIdx > 0 {
 		n.selectedIdx--
+		// Skip non-selectable divider rows.
+		if n.selectedIdx >= 0 && n.rows[n.selectedIdx].Kind == navRowSoloHeader {
+			if n.selectedIdx > 0 {
+				n.selectedIdx--
+			} else {
+				n.selectedIdx++
+			}
+		}
 		n.clampScroll()
 	}
 }
@@ -457,6 +465,14 @@ func (n *NavigationPanel) Up() {
 func (n *NavigationPanel) Down() {
 	if n.selectedIdx+1 < len(n.rows) {
 		n.selectedIdx++
+		// Skip non-selectable divider rows.
+		if n.selectedIdx < len(n.rows) && n.rows[n.selectedIdx].Kind == navRowSoloHeader {
+			if n.selectedIdx+1 < len(n.rows) {
+				n.selectedIdx++
+			} else {
+				n.selectedIdx--
+			}
+		}
 		n.clampScroll()
 	}
 }
@@ -715,6 +731,10 @@ func (n *NavigationPanel) SetSessionPreviewSize(width, height int) error {
 func (n *NavigationPanel) SelectFirst() {
 	if len(n.rows) > 0 {
 		n.selectedIdx = 0
+		// Skip non-selectable divider rows.
+		if n.rows[0].Kind == navRowSoloHeader && len(n.rows) > 1 {
+			n.selectedIdx = 1
+		}
 		n.clampScroll()
 	}
 }
@@ -798,6 +818,9 @@ func navInstanceTitle(inst *session.Instance) string {
 
 // navInstanceStatusIcon returns a styled status glyph for an instance.
 func (n *NavigationPanel) navInstanceStatusIcon(inst *session.Instance) string {
+	if inst.SoloAgent && inst.Exited {
+		return navCancelledLblStyle.Render("✕")
+	}
 	if inst.ImplementationComplete {
 		return navCompletedIconStyle.Render("✓")
 	}
@@ -928,6 +951,18 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		if isSolo {
 			indent = ""
 			labelStyle = navPlanLabelStyle
+		}
+		// Killed solo agents: grey + strikethrough.
+		if inst.SoloAgent && inst.Exited {
+			labelStyle = navCancelledLblStyle
+			statusIcon = navCancelledLblStyle.Render("✕")
+			statusW = lipgloss.Width(statusIcon)
+			// Recompute gap with updated status width.
+			usedW = indentW + runewidth.StringWidth(title) + 1 + statusW
+			gap = contentWidth - usedW
+			if gap < 0 {
+				gap = 0
+			}
 		}
 		return indent + labelStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
 

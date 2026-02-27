@@ -113,7 +113,7 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		nav:         list,
+		nav:                list,
 		menu:               ui.NewMenu(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
@@ -170,7 +170,7 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		nav:         list,
+		nav:                list,
 		menu:               ui.NewMenu(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
@@ -265,7 +265,7 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 		planState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
-		nav:         list,
+		nav:                list,
 		menu:               ui.NewMenu(),
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
@@ -381,7 +381,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 		planState:      ps,
 		planStateDir:   plansDir,
 		fsm:            newFSMForTest(plansDir).PlanStateMachine,
-		nav:         ui.NewNavigationPanel(&sp),
+		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),

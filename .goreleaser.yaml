@@ -1,4 +1,4 @@
-version: 2.9
+version: 2
 
 builds:
   - binary: kasmos
@@ -13,14 +13,16 @@ builds:
       - CGO_ENABLED=0
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
-brews:
+homebrew_casks:
   - repository:
       owner: kastheco
       name: homebrew-tap
@@ -29,12 +31,8 @@ brews:
     homepage: "https://github.com/kastheco/kasmos"
     description: "kas - A TUI-based agent-driven IDE for managing multiple AI agents"
     license: "AGPL-3.0"
-    install: |
-      bin.install "kasmos"
-      bin.install_symlink "kasmos" => "kas"
-      bin.install_symlink "kasmos" => "kms"
-    test: |
-      system "#{bin}/kas", "version"
+    binaries:
+      - kasmos
 
 release:
   prerelease: auto

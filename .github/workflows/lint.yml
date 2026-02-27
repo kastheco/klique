@@ -26,13 +26,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version-file: 'go.mod'
           cache: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.60.1
+          version: v1.64.6
           args: --timeout=3m --out-format=line-number --fast --max-issues-per-linter=0 --max-same-issues=0
           skip-cache: false
           only-new-issues: true

@@ -399,6 +399,13 @@
       "topic": "ui",
       "created_at": "2026-02-25T20:41:20.135133593Z"
     },
+    "2026-02-25-opencode-default-harness.md": {
+      "status": "done",
+      "description": "opencode should be the default harness for each agent type, not claude",
+      "branch": "plan/opencode-default-harness",
+      "topic": "workflow",
+      "created_at": "2026-02-26T02:24:21.577814842Z"
+    },
     "2026-02-25-prompt-via-cli.md": {
       "status": "done",
       "description": "instead of waiting for the session to become ready to send the prompt text, supply it via --prompt (opencode) or -p (claude) when launching the agent directly",
@@ -411,13 +418,6 @@
       "branch": "plan/reintegrate-auto-accept",
       "topic": "automation",
       "created_at": "2026-02-25T19:53:16.45886024Z"
-    },
-    "2026-02-25-release-v1-0-0.md": {
-      "status": "planning",
-      "description": "create github release, update versioning in project and deploy to homebrew",
-      "branch": "plan/release-v1-0-0",
-      "topic": "workflow",
-      "created_at": "2026-02-25T20:40:48.870776932Z"
     },
     "2026-02-25-scroll-overflow.md": {
       "status": "done",
@@ -503,16 +503,16 @@
       "topic": "automation",
       "created_at": "2026-02-26T23:00:00Z"
     },
-    "2026-02-26-opencode-default-harness.md": {
-      "status": "done",
-      "description": "opencode should be the default harness for each agent type, not claude",
-      "branch": "plan/opencode-default-harness",
-      "topic": "workflow",
-      "created_at": "2026-02-26T02:24:21.577814842Z"
-    },
     "2026-02-26-redesign-instance-list.md": {
       "status": "done",
       "created_at": "0001-01-01T00:00:00Z"
+    },
+    "2026-02-26-release-v1-0-0.md": {
+      "status": "done",
+      "description": "create github release, update versioning in project and deploy to homebrew",
+      "branch": "plan/release-v1-0-0",
+      "topic": "workflow",
+      "created_at": "2026-02-25T20:40:48.870776932Z"
     },
     "2026-02-26-sentry-analysis.md": {
       "status": "ready",
@@ -555,6 +555,13 @@
       "branch": "plan/yes-keybind",
       "topic": "automation",
       "created_at": "2026-02-26T16:42:11.713212759Z"
+    },
+    "2026-02-27-release-1-0-0-failures.md": {
+      "status": "ready",
+      "description": "check github to see the failure reasons and fix then redeploy v1.0.0",
+      "branch": "plan/release-1-0-0-failures",
+      "topic": "verify",
+      "created_at": "2026-02-27T06:41:42.078871243Z"
     }
   }
 }

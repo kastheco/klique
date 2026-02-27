@@ -630,9 +630,30 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotInfo, homeModel.focusSlot)
 	})
 
-	t.Run("Tab from sidebar lands on info", func(t *testing.T) {
+	t.Run("Tab from sidebar advances from active tab (info → agent)", func(t *testing.T) {
 		h := newTestHome()
 		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
+
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("Tab from sidebar advances from active tab (agent → diff)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
+
+		assert.Equal(t, slotDiff, homeModel.focusSlot)
+	})
+
+	t.Run("Tab from sidebar advances from active tab (diff → info)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.DiffTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
 
@@ -657,13 +678,24 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, slotInfo, homeModel.focusSlot)
 	})
 
-	t.Run("Shift+Tab from sidebar lands on diff", func(t *testing.T) {
+	t.Run("Shift+Tab from sidebar reverses from active tab (info → diff)", func(t *testing.T) {
 		h := newTestHome()
 		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
 		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
 
 		assert.Equal(t, slotDiff, homeModel.focusSlot)
+	})
+
+	t.Run("Shift+Tab from sidebar reverses from active tab (agent → info)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotNav)
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+
+		assert.Equal(t, slotInfo, homeModel.focusSlot)
 	})
 
 	t.Run("t jumps to nav slot when instances exist", func(t *testing.T) {

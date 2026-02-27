@@ -176,25 +176,37 @@ func (m *home) setFocusSlot(slot int) {
 
 // nextFocusSlot advances the focus ring forward through the 3 center tabs only.
 // Tab only cycles info → agent → diff → info. Use 's'/'t' to reach the sidebars.
+// When called from the sidebar, advances from the currently visible tab so the
+// user doesn't have to press Tab twice (once to "focus" the window, again to move).
 func (m *home) nextFocusSlot() {
-	switch m.focusSlot {
+	current := m.focusSlot
+	if current == slotNav {
+		current = m.tabbedWindow.GetActiveTab() + slotInfo
+	}
+	switch current {
 	case slotInfo:
 		m.setFocusSlot(slotAgent)
 	case slotAgent:
 		m.setFocusSlot(slotDiff)
-	default: // slotDiff, slotNav — all land on info
+	default: // slotDiff — wraps to info
 		m.setFocusSlot(slotInfo)
 	}
 }
 
 // prevFocusSlot moves the focus ring backward through the 3 center tabs only.
+// Like nextFocusSlot, it advances from the currently visible tab when called
+// from the sidebar.
 func (m *home) prevFocusSlot() {
-	switch m.focusSlot {
+	current := m.focusSlot
+	if current == slotNav {
+		current = m.tabbedWindow.GetActiveTab() + slotInfo
+	}
+	switch current {
 	case slotAgent:
 		m.setFocusSlot(slotInfo)
 	case slotDiff:
 		m.setFocusSlot(slotAgent)
-	default: // slotInfo, slotNav — all land on diff
+	default: // slotInfo — wraps to diff
 		m.setFocusSlot(slotDiff)
 	}
 }

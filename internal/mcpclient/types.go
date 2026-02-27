@@ -4,10 +4,10 @@ import "encoding/json"
 
 // JSONRPCRequest is a JSON-RPC 2.0 request.
 type JSONRPCRequest struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      int         `json:"id"`
-	Method  string      `json:"method"`
-	Params  any `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 // JSONRPCResponse is a JSON-RPC 2.0 response.
