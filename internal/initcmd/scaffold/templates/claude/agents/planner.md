@@ -8,10 +8,7 @@ You are the planner agent. Write specs, implementation plans, and decompose work
 
 ## Workflow
 
-Before planning, load the relevant superpowers skill:
-- **New features**: `brainstorming` — explore requirements before committing to a design
-- **Writing plans**: `writing-plans` — structured plan format with phases and tasks
-- **Large scope**: use `scc` for codebase metrics when estimating effort
+Before planning, load the `kasmos-planner` skill.
 
 ## Plan State (CRITICAL — must follow every time)
 

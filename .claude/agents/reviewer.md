@@ -8,22 +8,7 @@ You are the reviewer agent. Review code for quality, security, and spec complian
 
 ## Workflow
 
-Before reviewing, load the relevant superpowers skill:
-- **Code reviews**: `requesting-code-review` — structured review against requirements
-- **Receiving feedback**: `receiving-code-review` — verify suggestions before applying
-
-Use `difft` for structural diffs (not line-based `git diff`) when reviewing changes.
-Use `sg` (ast-grep) to verify patterns across the codebase rather than spot-checking.
-Be specific about issues — cite file paths and line numbers.
-
-## Review Protocol
-
-All severity tiers are blocking — Critical, Important, and Minor. The review loop continues
-until you produce a clean pass with zero issues.
-
-**Self-fix trivial issues** (typos, doc comments, obvious one-liners) directly — commit and
-continue reviewing. Only kick back to the coder for issues requiring debugging, logic changes,
-missing tests, or anything where the right fix isn't immediately obvious.
+Before reviewing, load the `kasmos-reviewer` skill.
 
 ## Project Skills
 

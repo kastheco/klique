@@ -2,19 +2,18 @@
 
 ## Coder
 Implementation agent. Writes code, fixes bugs, runs tests.
-Follow TDD: write failing test first, implement, verify green.
-Load superpowers skills: `test-driven-development`, `systematic-debugging`, `verification-before-completion`.
+Load the `kasmos-coder` skill.
 
 ## Reviewer
 Review agent. Checks quality, security, spec compliance.
 Use `difft` for structural diffs (not line-based `git diff`).
 Use `sg` (ast-grep) to verify patterns across the codebase.
-Load superpowers skills: `requesting-code-review`, `receiving-code-review`.
+Load the `kasmos-reviewer` skill.
 
 ## Planner
 Planning agent. Writes specs, plans, decomposes work into packages.
 Use `scc` for codebase metrics when scoping work.
-Load superpowers skills: `brainstorming`, `writing-plans`.
+Load the `kasmos-planner` skill.
 
 ## Plan State (CRITICAL)
 Plans live in `docs/plans/`. State tracked in `docs/plans/plan-state.json`.

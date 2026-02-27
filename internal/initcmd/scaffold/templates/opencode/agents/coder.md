@@ -7,10 +7,7 @@ You are the coder agent. Implement features, fix bugs, and write tests.
 
 ## Workflow
 
-Before writing code, load the relevant superpowers skill for your task:
-- **Always**: `test-driven-development` — write failing test first, implement, verify green
-- **Bug fixes**: `systematic-debugging` — find root cause before proposing fixes
-- **Before claiming done**: `verification-before-completion` — run verification, confirm output
+Before writing code, load the `kasmos-coder` skill.
 
 ## Plan State
 
