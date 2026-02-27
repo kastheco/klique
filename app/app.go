@@ -622,7 +622,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, TmuxSessionCount: tmuxCount}
 		}
 	case metadataResultMsg:
@@ -1631,10 +1631,11 @@ type metadataResultMsg struct {
 	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions
 }
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
+// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 200ms. We iterate
+// over all instances and capture their output, but each tmux capture-pane call is <5ms so this is fine
+// even at 20 instances (~100ms total). 200ms gives 5 ticks/sec for responsive signal processing.
 var tickUpdateMetadataCmd = func() tea.Msg {
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	return tickUpdateMetadataMessage{}
 }
 

@@ -107,7 +107,7 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		// CaptureMessage events when a pane is permanently gone.
 		if t.monitor.captureFailures == 1 {
 			log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
-		} else if t.monitor.captureFailures%30 == 0 {
+		} else if t.monitor.captureFailures%75 == 0 {
 			log.WarningLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
 				t.monitor.captureFailures, err)
 		}
@@ -140,9 +140,9 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 
 	// Content unchanged — only report !updated after a debounce threshold so that
 	// brief pauses (API waits, thinking between tool calls) don't cause false
-	// Running→Ready transitions. ~6 ticks × 500ms = 3s of stability required.
+	// Running→Ready transitions. ~15 ticks × 200ms = 3s of stability required.
 	t.monitor.unchangedTicks++
-	if t.monitor.unchangedTicks < 6 {
+	if t.monitor.unchangedTicks < 15 {
 		// Still debouncing — report as updated to keep status as Running.
 		return true, hasPrompt
 	}
@@ -157,7 +157,7 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 		t.monitor.captureFailures++
 		if t.monitor.captureFailures == 1 {
 			log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
-		} else if t.monitor.captureFailures%30 == 0 {
+		} else if t.monitor.captureFailures%75 == 0 {
 			log.WarningLog.Printf("error capturing pane content in status monitor (failure #%d): %v",
 				t.monitor.captureFailures, err)
 		}
@@ -188,7 +188,7 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 	}
 
 	t.monitor.unchangedTicks++
-	if t.monitor.unchangedTicks < 6 {
+	if t.monitor.unchangedTicks < 15 {
 		return true, hasPrompt, content, true
 	}
 	return false, hasPrompt, content, true
