@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"testing"
 	"time"
 
 	"github.com/kastheco/kasmos/config"
@@ -14,8 +16,6 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
-	"os"
-	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -1365,30 +1365,20 @@ func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
 // setupPlanState sets up an in-memory plan state on h for test use.
 // It creates a temp directory, registers the plan, seeds the status, and
 // refreshes the nav panel so SelectByID works immediately afterward.
-func (h *home) setupPlanState(planFile string, status planstate.Status, topic string) {
-	dir, err := os.MkdirTemp("", "kasmos-test-*")
-	if err != nil {
-		panic(fmt.Sprintf("setupPlanState: MkdirTemp: %v", err))
-	}
+func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.Status, topic string) {
+	t.Helper()
+	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
-	if err := os.MkdirAll(plansDir, 0o755); err != nil {
-		panic(fmt.Sprintf("setupPlanState: MkdirAll: %v", err))
-	}
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := planstate.Load(plansDir)
-	if err != nil {
-		panic(fmt.Sprintf("setupPlanState: Load: %v", err))
-	}
+	require.NoError(t, err)
 	name := planstate.DisplayName(planFile)
-	if err := ps.Create(planFile, name, "plan/"+name, topic, time.Now()); err != nil {
-		panic(fmt.Sprintf("setupPlanState: Create: %v", err))
-	}
+	require.NoError(t, ps.Create(planFile, name, "plan/"+name, topic, time.Now()))
 	// Seed the status directly (bypass FSM).
 	entry := ps.Plans[planFile]
 	entry.Status = status
 	ps.Plans[planFile] = entry
-	if err := ps.Save(); err != nil {
-		panic(fmt.Sprintf("setupPlanState: Save: %v", err))
-	}
+	require.NoError(t, ps.Save())
 	h.planState = ps
 	h.planStateDir = plansDir
 	h.fsm = planfsm.New(plansDir)
@@ -1398,7 +1388,7 @@ func (h *home) setupPlanState(planFile string, status planstate.Status, topic st
 
 func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState("test-plan.md", planstate.StatusImplementing, "test topic")
+	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "test topic")
 
 	// Select the plan in the nav panel
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
@@ -1413,7 +1403,7 @@ func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 
 func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState("test-plan.md", planstate.StatusImplementing, "")
+	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "")
 
 	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
