@@ -1389,6 +1389,8 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateRenameInstance && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateRenamePlan && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateNewPlan && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateSpawnAgent && m.formOverlay != nil:
