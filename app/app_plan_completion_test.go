@@ -470,6 +470,71 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	assert.Equal(t, planstate.StatusImplementing, entry.Status)
 }
 
+// TestReviewerTmuxDeath_DoesNotAutoApprove verifies that when a reviewer's tmux
+// session dies (e.g. killed manually), the plan is NOT automatically transitioned
+// to done. Approval must come exclusively from an explicit review-approved sentinel.
+//
+// Note: session.Instance.Started() is not settable from outside the session package
+// without real tmux, so this test uses a non-started instance. The guard catches any
+// reimplementation that drops the started check — a started instance would require
+// an integration test. The behavioral contract is: no auto-approve on reviewer death.
+func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   planfsm.New(plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+	}
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: reviewerInst.Title, TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+
+	_, _ = h.Update(msg)
+
+	// Plan must remain in reviewing — tmux death is not an approval signal.
+	reloaded, _ := planstate.Load(plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReviewing, entry.Status,
+		"reviewer tmux death must not auto-approve — plan must stay reviewing")
+}
+
 // TestIsLocked_FinishedLockedWhenDone verifies that the "finished" stage is
 // locked when the plan is already done, preventing a spurious FSM error.
 func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {

@@ -840,29 +840,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tmuxSessionCount = msg.TmuxSessionCount
 		m.menu.SetTmuxSessionCount(m.tmuxSessionCount)
 
-		// Inline reviewer completion check using cached TmuxAlive from metadata
-		// (replaces checkReviewerCompletion which called tmux has-session per reviewer).
 		if m.planState != nil {
 			tmuxAliveMap := make(map[string]bool, len(msg.Results))
 			for _, md := range msg.Results {
 				tmuxAliveMap[md.Title] = md.TmuxAlive
-			}
-			for _, inst := range m.nav.GetInstances() {
-				if inst.PlanFile == "" || !inst.IsReviewer || !inst.Started() || inst.Paused() {
-					continue
-				}
-				alive, collected := tmuxAliveMap[inst.Title]
-				if !collected || alive {
-					continue
-				}
-				entry := m.planState.Plans[inst.PlanFile]
-				if entry.Status != planstate.StatusReviewing {
-					continue
-				}
-				// Reviewer death → ReviewApproved: one-shot FSM transition, rare event.
-				if err := m.fsm.Transition(inst.PlanFile, planfsm.ReviewApproved); err != nil {
-					log.WarningLog.Printf("could not mark plan %q completed: %v", inst.PlanFile, err)
-				}
 			}
 
 			// Planner-exit → implement-prompt: fires when a planner pane dies and the
