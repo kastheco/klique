@@ -20,15 +20,19 @@ const (
 	BrowserAttach                // enter or o (search empty)
 )
 
-// TmuxBrowserItem holds metadata for a single orphaned tmux session.
+// TmuxBrowserItem holds metadata for a single tmux session (managed or orphaned).
 type TmuxBrowserItem struct {
-	Name     string
-	Title    string
-	Created  time.Time
-	Windows  int
-	Attached bool
-	Width    int
-	Height   int
+	Name      string
+	Title     string
+	Created   time.Time
+	Windows   int
+	Attached  bool
+	Width     int
+	Height    int
+	Managed   bool   // true = tracked by a kasmos instance
+	PlanFile  string // plan filename (managed only)
+	AgentType string // "planner"/"coder"/"reviewer" (managed only)
+	Status    string // "running"/"ready"/"loading"/"paused" (managed only)
 }
 
 var browserBorderStyle = lipgloss.NewStyle().
@@ -141,7 +145,7 @@ func (b *TmuxBrowserOverlay) HandleKeyPress(msg tea.KeyMsg) BrowserAction {
 				}
 				return BrowserNone
 			case "a":
-				if len(b.filtered) > 0 {
+				if len(b.filtered) > 0 && !b.SelectedItem().Managed {
 					return BrowserAdopt
 				}
 				return BrowserNone
@@ -217,8 +221,18 @@ func (b *TmuxBrowserOverlay) Render() string {
 				attachedIndicator = "● "
 			}
 
+			// Badge for managed items
+			badge := ""
+			if item.Managed {
+				badgeText := "managed"
+				if item.AgentType != "" {
+					badgeText = item.AgentType
+				}
+				badge = browserMutedStyle.Render(" [" + badgeText + "]")
+			}
+
 			label := fmt.Sprintf("%-28s %8s %s%s",
-				truncateStr(item.Title, 28), age, attachedIndicator, dims)
+				truncateStr(item.Title, 28), age, attachedIndicator, dims) + badge
 
 			if i == b.selectedIdx {
 				s.WriteString(browserSelectedStyle.Width(innerWidth).Render("▸ " + label))
@@ -229,7 +243,11 @@ func (b *TmuxBrowserOverlay) Render() string {
 		}
 	}
 
-	s.WriteString(browserHintStyle.Render("↑↓ navigate • k kill • a adopt • o attach • esc close"))
+	hint := "↑↓ navigate · k kill · o attach · esc close"
+	if len(b.filtered) > 0 && !b.SelectedItem().Managed {
+		hint = "↑↓ navigate · k kill · a adopt · o attach · esc close"
+	}
+	s.WriteString(browserHintStyle.Render(hint))
 
 	return browserBorderStyle.Width(b.width).Render(s.String())
 }

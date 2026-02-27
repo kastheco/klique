@@ -135,3 +135,45 @@ func TestTmuxBrowserOverlay_Empty(t *testing.T) {
 	rendered := b.Render()
 	assert.Contains(t, rendered, "no sessions")
 }
+
+func TestTmuxBrowserOverlay_ManagedItemBlocksAdopt(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "kas_managed", Title: "managed", Created: time.Now(), Managed: true, AgentType: "coder"},
+	}
+	b := NewTmuxBrowserOverlay(items)
+
+	// "a" should be a no-op for managed items
+	action := b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	assert.Equal(t, BrowserNone, action)
+}
+
+func TestTmuxBrowserOverlay_OrphanItemAllowsAdopt(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "kas_orphan", Title: "orphan", Created: time.Now(), Managed: false},
+	}
+	b := NewTmuxBrowserOverlay(items)
+
+	action := b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	assert.Equal(t, BrowserAdopt, action)
+}
+
+func TestTmuxBrowserOverlay_ManagedItemRendersAgentType(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "kas_auth", Title: "auth", Created: time.Now(), Managed: true, AgentType: "coder", PlanFile: "auth-plan"},
+	}
+	b := NewTmuxBrowserOverlay(items)
+	rendered := b.Render()
+	assert.Contains(t, rendered, "coder")
+}
+
+func TestTmuxBrowserOverlay_MixedItems(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "kas_managed", Title: "managed", Created: time.Now(), Managed: true, AgentType: "planner"},
+		{Name: "kas_orphan", Title: "orphan", Created: time.Now(), Managed: false},
+	}
+	b := NewTmuxBrowserOverlay(items)
+	rendered := b.Render()
+	assert.Contains(t, rendered, "managed")
+	assert.Contains(t, rendered, "orphan")
+	assert.Contains(t, rendered, "planner")
+}
