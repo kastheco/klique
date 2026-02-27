@@ -584,6 +584,13 @@
       "topic": "ui",
       "created_at": "2026-02-27T18:36:48.99087766Z"
     },
+    "2026-02-27-chat-and-custodial-customizations.md": {
+      "status": "planning",
+      "description": "chat and custodial customizations\n\nallow configuring chat/custodial agent types via setup wizard (optionally) and rename custodial to custodian",
+      "branch": "plan/chat-and-custodial-customizations",
+      "topic": "tools",
+      "created_at": "2026-02-27T20:38:56.312200505Z"
+    },
     "2026-02-27-cleanup-tracked-state.md": {
       "status": "ready",
       "description": "cleanup tracked state\n\nreevaluate what files should be tracked in git. anything covered by scaffolding should probably be excluded and I'm sure there's others that we shouldn't be tracking but are (.codex, .opencode, .claude, etc). evaluate all tracked files and if they reflect best practices for the libraries/frameworks in use",
@@ -628,7 +635,7 @@
     },
     "2026-02-27-kasmos-custom-skills.md": {
       "status": "done",
-      "description": "replace superpowers skills with 5 kasmos-native skills",
+      "description": "audit cli-tools references, add rg deep reference, write 5 kasmos-native skills (lifecycle/planner/coder/reviewer/custodial), update agent templates and prompt builders, remove old superpowers-derived scaffolded skills",
       "branch": "plan/kasmos-custom-skills",
       "topic": "workflow",
       "created_at": "2026-02-27T00:00:00Z"
@@ -636,6 +643,12 @@
     "2026-02-27-kasmos-native-skills-design.md": {
       "status": "done",
       "description": "design doc for kasmos-native skills system",
+      "created_at": "2026-02-27T00:00:00Z"
+    },
+    "2026-02-27-kasmos-native-skills.md": {
+      "status": "done",
+      "description": "replace superpowers skills with 5 kasmos-native skills",
+      "topic": "workflow",
       "created_at": "2026-02-27T00:00:00Z"
     },
     "2026-02-27-plan-review.md": {
@@ -667,8 +680,9 @@
       "created_at": "2026-02-27T19:07:35.357546336Z"
     },
     "2026-02-27-reliable-planner-completion.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "make planner explicitly confirm with user before signaling completion, instead of relying on agent remembering to touch sentinel after Q\u0026A",
+      "branch": "plan/reliable-planner-completion",
       "topic": "workflow",
       "created_at": "2026-02-27T19:15:00Z"
     },
@@ -700,23 +714,11 @@
       "topic": "ui",
       "created_at": "2026-02-27T07:41:00.300934469Z"
     },
-    "2026-02-27-kasmos-native-skills-design.md": {
-      "status": "done",
-      "description": "design doc for kasmos-native skills system",
-      "created_at": "2026-02-27T00:00:00Z"
-    },
-    "2026-02-27-kasmos-custom-skills.md": {
-      "status": "done",
-      "description": "audit cli-tools references, add rg deep reference, write 5 kasmos-native skills (lifecycle/planner/coder/reviewer/custodial), update agent templates and prompt builders, remove old superpowers-derived scaffolded skills",
-      "branch": "plan/kasmos-custom-skills",
+    "2026-02-27-chat-and-custodial-customizations.md": {
+      "status": "ready",
+      "description": "rename custodial to custodian and make chat/custodian agent types configurable in the setup wizard",
       "topic": "workflow",
-      "created_at": "2026-02-27T00:00:00Z"
-    },
-    "2026-02-27-kasmos-native-skills.md": {
-      "status": "done",
-      "description": "replace superpowers skills with 5 kasmos-native skills",
-      "topic": "workflow",
-      "created_at": "2026-02-27T00:00:00Z"
+      "created_at": "2026-02-27T22:00:00.000000000Z"
     }
   }
 }
