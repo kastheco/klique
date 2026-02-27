@@ -417,11 +417,23 @@ func (n *NavigationPanel) SetRepoName(name string)    { n.repoName = name }
 func (n *NavigationPanel) SetRepoHovered(h bool)      { n.repoHovered = h }
 func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.rebuildRows() }
 
-func (n *NavigationPanel) ActivateSearch()         { n.searchActive = true; n.searchQuery = "" }
-func (n *NavigationPanel) DeactivateSearch()       { n.searchActive = false; n.searchQuery = "" }
-func (n *NavigationPanel) IsSearchActive() bool    { return n.searchActive }
-func (n *NavigationPanel) GetSearchQuery() string  { return n.searchQuery }
-func (n *NavigationPanel) SetSearchQuery(q string) { n.searchQuery = q }
+func (n *NavigationPanel) ActivateSearch()        { n.searchActive = true; n.searchQuery = "" }
+func (n *NavigationPanel) DeactivateSearch()      { n.searchActive = false; n.searchQuery = "" }
+func (n *NavigationPanel) IsSearchActive() bool   { return n.searchActive }
+func (n *NavigationPanel) GetSearchQuery() string { return n.searchQuery }
+func (n *NavigationPanel) SetSearchQuery(q string) {
+	n.searchQuery = q
+	// If the current selection is hidden by the new filter, snap to the first visible row.
+	if q != "" && len(n.rows) > 0 && !n.rowMatchesSearch(n.selectedIdx) {
+		for i := range n.rows {
+			if n.rows[i].Kind != navRowSoloHeader && n.rowMatchesSearch(i) {
+				n.selectedIdx = i
+				n.clampScroll()
+				return
+			}
+		}
+	}
+}
 
 func (n *NavigationPanel) ToggleSelectedExpand() bool {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
@@ -448,33 +460,48 @@ func (n *NavigationPanel) ToggleSelectedExpand() bool {
 }
 
 func (n *NavigationPanel) Up() {
-	if n.selectedIdx > 0 {
+	orig := n.selectedIdx
+	for n.selectedIdx > 0 {
 		n.selectedIdx--
-		// Skip non-selectable divider rows.
-		if n.selectedIdx >= 0 && n.rows[n.selectedIdx].Kind == navRowSoloHeader {
-			if n.selectedIdx > 0 {
-				n.selectedIdx--
-			} else {
-				n.selectedIdx++
-			}
+		if n.rows[n.selectedIdx].Kind == navRowSoloHeader {
+			continue // skip non-selectable divider
+		}
+		if !n.rowMatchesSearch(n.selectedIdx) {
+			continue // skip rows hidden by search filter
 		}
 		n.clampScroll()
+		return
 	}
+	// No valid row found above — revert.
+	n.selectedIdx = orig
 }
 
 func (n *NavigationPanel) Down() {
-	if n.selectedIdx+1 < len(n.rows) {
+	orig := n.selectedIdx
+	for n.selectedIdx+1 < len(n.rows) {
 		n.selectedIdx++
-		// Skip non-selectable divider rows.
-		if n.selectedIdx < len(n.rows) && n.rows[n.selectedIdx].Kind == navRowSoloHeader {
-			if n.selectedIdx+1 < len(n.rows) {
-				n.selectedIdx++
-			} else {
-				n.selectedIdx--
-			}
+		if n.rows[n.selectedIdx].Kind == navRowSoloHeader {
+			continue
+		}
+		if !n.rowMatchesSearch(n.selectedIdx) {
+			continue
 		}
 		n.clampScroll()
+		return
 	}
+	n.selectedIdx = orig
+}
+
+// rowMatchesSearch returns true if the row at idx is visible under the current
+// search filter. Always true when search is inactive or query is empty.
+func (n *NavigationPanel) rowMatchesSearch(idx int) bool {
+	if !n.searchActive || n.searchQuery == "" {
+		return true
+	}
+	row := n.rows[idx]
+	q := strings.ToLower(n.searchQuery)
+	return strings.Contains(strings.ToLower(row.Label), q) ||
+		strings.Contains(strings.ToLower(row.PlanFile), q)
 }
 
 func (n *NavigationPanel) Left() {
