@@ -13,7 +13,13 @@ docs/plans/.signals/
 docs/plans/.plan-state.lock
 *.bak
 *.test
+# Bundled skill data (large, fetched locally)
 .agents/skills/bubbletea/
-.opencode/skills/bubbletea
-.claude/skills/bubbletea
-.codex/skills/bubbletea
+
+# Scaffold-generated skill symlinks (created by kq init, point to .agents/skills/)
+# Actual skill directories in .claude/skills/ (with SKILL.md) remain tracked.
+.opencode/skills/*
+.codex/skills/*
+# .claude/skills/ has both real dirs and symlinks — ignore files (symlinks), keep dirs
+.claude/skills/*
+!.claude/skills/*/
