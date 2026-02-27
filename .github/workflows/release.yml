@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
 
 jobs:
   build:
@@ -22,8 +28,12 @@ jobs:
           # Extract version from main.go
           VERSION=$(grep -E '^[[:space:]]*version[[:space:]]*=' main.go | sed -E 's/.*"([^"]+)".*/\1/')
           
-          # Get the tag name (remove refs/tags/ prefix)
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          # Get the tag name: prefer workflow_dispatch input, fall back to GITHUB_REF
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG_NAME="${{ github.event.inputs.tag }}"
+          else
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+          fi
           
           # Remove 'v' prefix from tag if present
           TAG_VERSION=${TAG_NAME#v}
@@ -39,6 +49,10 @@ jobs:
           fi
           
           echo "✅ Tag version matches main.go version: $VERSION"
+
+      - name: Set tag ref for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "GITHUB_REF=refs/tags/${{ github.event.inputs.tag }}" >> $GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v5
