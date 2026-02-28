@@ -388,21 +388,14 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		h.fsm = planfsm.New(h.planStateDir)
 	}
 
-	// Initialize audit logger. When planstore is SQLite-backed (no PlanStore URL),
-	// share the same DB file so both tables coexist without conflicts.
-	// When planstore is HTTP-backed or unconfigured, use a no-op logger.
-	if appConfig.PlanStore == "" {
-		// SQLite-backed: open (or create) the shared planstore DB for audit events.
-		dbPath := planstore.ResolvedDBPath()
-		if al, err := auditlog.NewSQLiteLogger(dbPath); err != nil {
-			log.WarningLog.Printf("audit logger init failed: %v", err)
-			h.auditLogger = auditlog.NopLogger()
-		} else {
-			h.auditLogger = al
-		}
-	} else {
-		// HTTP-backed or unconfigured: discard audit events for now.
+	// Initialize audit logger. Always uses local SQLite regardless of plan
+	// store backend — audit events are purely local state.
+	dbPath := planstore.ResolvedDBPath()
+	if al, err := auditlog.NewSQLiteLogger(dbPath); err != nil {
+		log.WarningLog.Printf("audit logger init failed: %v", err)
 		h.auditLogger = auditlog.NopLogger()
+	} else {
+		h.auditLogger = al
 	}
 
 	h.nav = ui.NewNavigationPanel(&h.spinner)
