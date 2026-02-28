@@ -360,15 +360,25 @@ implementation complete. what would you like to do?
 which option?
 ```
 
-**Option 1 — Merge locally:**
+**Option 1 — Merge locally (worktree-safe):**
 ```bash
-git checkout <base-branch>
-git pull
-git merge <feature-branch>
-<run tests on merged result>
-git branch -d <feature-branch>
+# First, rebase onto latest main so the merge is a fast-forward
+git fetch origin <base-branch>
+git rebase origin/<base-branch>
+<run tests on rebased result>
+
+# Merge from the ROOT worktree (that's where <base-branch> is checked out)
+ROOT_WORKTREE="$(git worktree list --porcelain | head -1 | sd '^worktree ' '')"
+git -C "$ROOT_WORKTREE" merge <feature-branch>
+
+# Clean up
 git worktree remove <worktree-path>
+git branch -d <feature-branch>
 ```
+> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is
+> already checked out in the root worktree. Git prevents a branch from being checked out
+> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using
+> `git -C`.
 
 **Option 2 — Push and create PR:**
 ```bash
@@ -389,9 +399,9 @@ Keep the worktree until the PR merges.
 
 **Option 4 — Discard:** Confirm first with exact text `discard`. Then:
 ```bash
-git checkout <base-branch>
-git branch -D <feature-branch>
+# Remove worktree first (must leave it before deleting), then delete the branch
 git worktree remove <worktree-path>
+git branch -D <feature-branch>
 ```
 
 Update `plan-state.json` to `"done"` after options 1, 2, or 4.

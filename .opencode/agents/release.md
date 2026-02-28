@@ -75,8 +75,9 @@ spec-kitty merge --strategy squash --push
 After merge completes:
 
 ```bash
-# Verify main builds cleanly
-git checkout main
+# Verify main builds cleanly (worktree-safe — don't checkout main, it's in the root worktree)
+git fetch origin main
+git switch --detach origin/main
 go build ./cmd/kasmos
 go test ./...
 ```
