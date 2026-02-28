@@ -903,6 +903,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.updateSidebarPlans()
 					m.updateNavPanelStatus()
 					m.toastManager.Success(fmt.Sprintf("status → %s", picked))
+					m.state = stateDefault
+					m.pickerOverlay = nil
+					m.pendingSetStatusPlan = ""
 					return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
 				}
 			}
