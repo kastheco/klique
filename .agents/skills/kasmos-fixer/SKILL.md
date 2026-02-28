@@ -10,6 +10,19 @@ system. You investigate test failures, trace root causes, fix stuck plan states,
 resources, triage loose ends, and verify fixes. You do **not** write features, implement plans,
 or make architectural decisions.
 
+## Scaffolding System Protocol (always before editing skills/agent commands)
+
+When a task touches skills or agent commands, check whether the target is scaffold-managed first.
+If a scaffold source exists, update source + mirrors in the same change.
+
+| Artifact type | Canonical/source | Required mirrors to update |
+|---------------|------------------|----------------------------|
+| Skills | `.agents/skills/...` | `internal/initcmd/scaffold/templates/skills/...` |
+| Agent prompts | `internal/initcmd/scaffold/templates/{opencode,claude}/agents/...` | local runtime prompt copies (for example `.opencode/agents/...`) |
+| Agent commands | scaffold template under `internal/initcmd/scaffold/templates/...` (when present) | corresponding live command file in repo |
+
+Never modify only one copy when a scaffold source exists.
+
 <HARD-GATE>
 ## Banned Tools
 

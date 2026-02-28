@@ -13,6 +13,7 @@ docs/plans/.signals/
 docs/plans/.plan-state.lock
 *.bak
 *.test
+.mcp.json
 # Bundled skill data (large, fetched locally)
 .agents/skills/bubbletea/
 

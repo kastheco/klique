@@ -285,6 +285,11 @@ func TestWriteProjectSkills(t *testing.T) {
 
 	// Generic project skills written (including cli-tools)
 	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "cli-tools", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "kasmos-fixer", "SKILL.md"))
+
+	fixerSkill, err := os.ReadFile(filepath.Join(dir, ".agents", "skills", "kasmos-fixer", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(fixerSkill), "Scaffolding System Protocol (always before editing skills/agent commands)")
 
 	// cli-tools resource files included
 	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "cli-tools", "resources", "ast-grep.md"))
@@ -659,6 +664,7 @@ func TestScaffold_IncludesFixerAgent(t *testing.T) {
 	content, err := os.ReadFile(fixerPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "fixer")
+	assert.Contains(t, string(content), "Scaffolding System (first step for skills/agent commands)")
 
 	// Check opencode.jsonc includes fixer block
 	var foundConfig bool

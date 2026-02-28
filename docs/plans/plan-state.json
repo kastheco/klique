@@ -6,6 +6,9 @@
     "bugs": {
       "created_at": "2026-02-27T22:27:26.796165229Z"
     },
+    "enhancements": {
+      "created_at": "2026-02-28T16:57:37.666963074Z"
+    },
     "sidebar": {
       "created_at": "2026-02-22T18:00:00Z"
     },
@@ -473,7 +476,7 @@
     },
     "2026-02-26-detect-allow-perms.md": {
       "status": "done",
-      "description": "detect when opencode is asking for perms to Allow once, Allow always, Reject. show a popup dialog allowing the user to pick then propagate their change to the session. if they choose approve always (which should be default selection), you'll send right arrow -> enter -> enter. approve once is a single enter. reject is right arrow -> right arrow -> enter",
+      "description": "detect when opencode is asking for perms to Allow once, Allow always, Reject. show a popup dialog allowing the user to pick then propagate their change to the session. if they choose approve always (which should be default selection), you'll send right arrow -\u003e enter -\u003e enter. approve once is a single enter. reject is right arrow -\u003e right arrow -\u003e enter",
       "branch": "plan/detect-allow-perms",
       "topic": "automation",
       "created_at": "2026-02-26T20:16:31.684660209Z"
@@ -487,13 +490,13 @@
     },
     "2026-02-26-kas-verify-loop.md": {
       "status": "done",
-      "description": "update reviewer instructions to loop reviewer <-> fixer until all tiers pass and ALL issues have been addressed, no matter the severity",
+      "description": "update reviewer instructions to loop reviewer \u003c-\u003e fixer until all tiers pass and ALL issues have been addressed, no matter the severity",
       "branch": "plan/kas-verify-loop",
       "topic": "automation",
       "created_at": "2026-02-26T20:15:09.857895365Z"
     },
     "2026-02-26-new-plan-cli-command.md": {
-      "status": "planning",
+      "status": "cancelled",
       "description": "kas new [title] [description] # new cli command (also runnable via kas n alias) to quickly create a new plan (no topic) with optional description via cli without having to launch tui",
       "branch": "plan/new-cli-command",
       "topic": "tools",
@@ -575,7 +578,7 @@
       "created_at": "2026-02-27T16:54:32.618130648Z"
     },
     "2026-02-27-audit-log.md": {
-      "status": "ready",
+      "status": "planning",
       "description": "log all actions (new 'coder' agent spawned, finished successfully/failed, etc etc). useful for debugging but also browsing history and tracking who did what and why automatically",
       "branch": "plan/audit-log",
       "topic": "automation",
@@ -596,7 +599,7 @@
       "created_at": "2026-02-27T18:36:48.99087766Z"
     },
     "2026-02-27-chat-about-this-menu-option-that-opens-up.md": {
-      "status": "ready",
+      "status": "done",
       "description": "chat about this menu option that opens up custodian agent with plan info and prompts user to ask a question",
       "branch": "plan/chat-about-this-menu-option-that-opens-up",
       "topic": "ui",
@@ -617,7 +620,7 @@
       "created_at": "2026-02-27T17:57:15.490968411Z"
     },
     "2026-02-27-create-fix-agent-and-skill.md": {
-      "status": "ready",
+      "status": "done",
       "description": "create a debugging skill and agent type (should probably replace custodian) that's equipped to handle custodian's work but more importantly, is specialized in debugging and investigating issues, tieing up loose ends and targeted verification",
       "branch": "plan/create-a-debugging-skill-and-agent-type-should",
       "topic": "tools",
@@ -636,6 +639,13 @@
       "branch": "plan/ctrl-ud-pagination",
       "topic": "workflow",
       "created_at": "2026-02-27T07:25:38.786253804Z"
+    },
+    "2026-02-27-custodian-version-bump.md": {
+      "status": "done",
+      "description": "teach custodian agent to bump version in main.go before tagging releases so CI/CD validation passes",
+      "topic": "workflow",
+      "created_at": "2026-02-27T23:00:00Z",
+      "implemented": "2026-02-27"
     },
     "2026-02-27-disable-cla-for-prs.md": {
       "status": "done",
@@ -684,7 +694,7 @@
       "created_at": "2026-02-27T00:00:00Z"
     },
     "2026-02-27-new-plan-issues.md": {
-      "status": "ready",
+      "status": "done",
       "description": "new-plan-issues\n\ndisappears if confirmation dialog shows while making a new plan, losing all contents. also, the box gets bigger when the agent pane either loads a session or switches (due to exit, etc)",
       "branch": "plan/new-plan-issues",
       "topic": "ui",
@@ -720,7 +730,7 @@
     },
     "2026-02-27-reliable-planner-completion.md": {
       "status": "done",
-      "description": "make planner explicitly confirm with user before signaling completion, instead of relying on agent remembering to touch sentinel after Q&A",
+      "description": "make planner explicitly confirm with user before signaling completion, instead of relying on agent remembering to touch sentinel after Q\u0026A",
       "branch": "plan/reliable-planner-completion",
       "topic": "workflow",
       "created_at": "2026-02-27T19:15:00Z"
@@ -739,13 +749,6 @@
       "topic": "automation",
       "created_at": "2026-02-27T20:18:11.25355817Z"
     },
-    "2026-02-27-set-status-context-menu.md": {
-      "status": "ready",
-      "description": "set status context menu\n\ncurrently there is no way to update a plan status (eg. to fix if incorrect) without triggering automation side effects. i want to be able to correct a wrong plan that got out of sync without automation picking it up",
-      "branch": "plan/set-status-context-menu",
-      "topic": "ui",
-      "created_at": "2026-02-27T21:10:02.331577094Z"
-    },
     "2026-02-27-simplify-new-plan.md": {
       "status": "done",
       "description": "simplify creation of a new plan by only using one multiline input field labeled something like \"describe what you want to work on...\" as a label then use either a headless claude code call to sonnet-4-6 to derive a title or do it without ai if you can easily. descriptionw will be what the user entered",
@@ -760,12 +763,47 @@
       "topic": "ui",
       "created_at": "2026-02-27T07:41:00.300934469Z"
     },
-    "2026-02-27-custodian-version-bump.md": {
+    "2026-02-28-auto-advance-waves.md": {
+      "status": "ready",
+      "description": "auto-advance-waves\n\nadd a config option (default=false) also controllable via UI that enables/disables autoadvancing waves after one completes",
+      "branch": "plan/auto-advance-waves",
+      "topic": "automation",
+      "created_at": "2026-02-28T17:15:57.90506839Z"
+    },
+    "2026-02-28-improve-plan-storage-system.md": {
       "status": "done",
-      "description": "teach custodian agent to bump version in main.go before tagging releases so CI/CD validation passes",
-      "topic": "workflow",
-      "created_at": "2026-02-27T23:00:00Z",
-      "implemented": "2026-02-27"
+      "description": "improve-plan-storage-system\n\nThe current implementation for storing plans in a JSON file is proving to be very problematic as far as merging in features and the plan state getting reverted or regressed. So I want to come up with a better way to store these plans. I think it would be cool if I could run an MCP server or run something on my PC, and I'm able to pull from that optionally from the config, or maybe we move to a local SQLite database. I'm not sure, but this file-based one is proving problematic jumping between machines, as well as when trying to merge in work that was done in parallel in worktrees.",
+      "branch": "plan/improve-plan-storage-system",
+      "topic": "enhancements",
+      "created_at": "2026-02-28T16:57:37.666963074Z"
+    },
+    "2026-02-28-review-didnt-autostart.md": {
+      "status": "done",
+      "description": "review-didnt-autostart\n\nthe review didn't automatically start for improve-plan-storage-system even though all wave tasks were shown done with checkmarks. the plan was still at 'implementing' and i had to use the context menu on the plan name to start a review",
+      "branch": "plan/review-didnt-autostart",
+      "topic": "bugs",
+      "created_at": "2026-02-28T19:37:45.991072081Z"
+    },
+    "2026-02-28-set-status-context-menu.md": {
+      "status": "done",
+      "description": "set status context menu\n\ncurrently there is no way to update a plan status (eg. to fix if incorrect) without triggering automation side effects. i want to be able to correct a wrong plan that got out of sync without automation picking it up",
+      "branch": "plan/set-status-context-menu",
+      "topic": "ui",
+      "created_at": "2026-02-27T21:10:02.331577094Z"
+    },
+    "2026-02-28-skip-plan-slug-ai-generation.md": {
+      "status": "done",
+      "description": "skip-plan-slug-ai-generation\n\nif the description i provide is multiple lines and the first line is already a viable slug without truncation, use it instead of ai",
+      "branch": "plan/skip-plan-slug-ai-generation",
+      "topic": "bugs",
+      "created_at": "2026-02-28T17:16:33.633408661Z"
+    },
+    "2026-02-28-web-ui.md": {
+      "status": "ready",
+      "description": "web-ui\n\ncreate a web version of the ui using bubbtea. tap into the improve-plan-storage-system's new 'kasmos serve' to power any remote functionality required because i want to be able to run that on my desktop and access the web version from any device over tailscale",
+      "branch": "plan/web-ui",
+      "topic": "ui",
+      "created_at": "2026-02-28T19:35:57.665463807Z"
     }
   }
 }
