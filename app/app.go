@@ -268,6 +268,11 @@ type home struct {
 	// NOT set on esc — allows re-prompt.
 	plannerPrompted map[string]bool
 
+	// deferredPlannerDialogs holds plan files whose PlannerFinished dialog
+	// could not be shown because an overlay was active at signal-processing time.
+	// On each metadata tick, any queued plans are shown once the overlay clears.
+	deferredPlannerDialogs []string
+
 	// pendingPlannerInstanceTitle is the title of the planner instance that
 	// triggered the current planner-exit confirmation dialog.
 	pendingPlannerInstanceTitle string
@@ -715,7 +720,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case planfsm.PlannerFinished:
 				capturedPlanFile := sig.PlanFile
-				if m.plannerPrompted[capturedPlanFile] || m.isUserInOverlay() {
+				if m.plannerPrompted[capturedPlanFile] {
+					break
+				}
+				if m.isUserInOverlay() {
+					// Overlay is active — defer the dialog to the next tick
+					// instead of silently dropping it. The sentinel has already
+					// been consumed and the FSM transitioned; we must not lose
+					// the "show dialog" side effect.
+					m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
 					break
 				}
 				// Focus the planner instance so the user sees its output behind the overlay.
@@ -739,6 +752,31 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(msg.Signals) > 0 {
 			m.loadPlanState() // refresh after signal processing
+		}
+
+		// Retry deferred PlannerFinished dialogs — show the first queued plan
+		// whose dialog was skipped because an overlay was active at signal time.
+		if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
+			planFile := m.deferredPlannerDialogs[0]
+			m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
+			if !m.plannerPrompted[planFile] {
+				for _, inst := range m.nav.GetInstances() {
+					if inst.PlanFile == planFile && inst.AgentType == session.AgentTypePlanner {
+						if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+						m.pendingPlannerInstanceTitle = inst.Title
+						break
+					}
+				}
+				m.pendingPlannerPlanFile = planFile
+				m.confirmAction(
+					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(planFile)),
+					func() tea.Msg {
+						return plannerCompleteMsg{planFile: planFile}
+					},
+				)
+			}
 		}
 
 		// Process wave signals — trigger implementation for specific waves.

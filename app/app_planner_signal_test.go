@@ -243,6 +243,57 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 		"plan must remain StatusPlanning when planner pane dies without a sentinel")
 }
 
+// TestPlannerFinishedSignal_DeferredWhenOverlayActive verifies that when the
+// PlannerFinished signal arrives while an overlay is active, the dialog is NOT
+// lost — it is deferred and shown on the next metadata tick once the overlay clears.
+func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
+	const planFile = "2026-02-27-feature.md"
+	h, ps, _, _ := plannerSignalHome(t, planFile)
+
+	// Simulate an active overlay (e.g. new-plan form is open).
+	existingOverlay := overlay.NewConfirmationOverlay("unrelated question?")
+	h.state = stateConfirm
+	h.confirmationOverlay = existingOverlay
+
+	signal := planfsm.Signal{
+		Event:    planfsm.PlannerFinished,
+		PlanFile: planFile,
+	}
+	msg := metadataResultMsg{
+		PlanState: ps,
+		Signals:   []planfsm.Signal{signal},
+	}
+
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Overlay must be untouched — we must NOT clobber it.
+	assert.Same(t, existingOverlay, updated.confirmationOverlay,
+		"existing overlay must not be replaced while active")
+
+	// The plan file must be queued for deferred dialog.
+	assert.Contains(t, updated.deferredPlannerDialogs, planFile,
+		"plan file must be queued in deferredPlannerDialogs when overlay was active")
+
+	// Now simulate the overlay clearing (state returns to default).
+	updated.state = stateDefault
+	updated.confirmationOverlay = nil
+
+	// Send an empty metadata tick — deferred dialog should fire.
+	emptyMsg := metadataResultMsg{PlanState: ps}
+	model2, _ := updated.Update(emptyMsg)
+	updated2 := model2.(*home)
+
+	assert.Equal(t, stateConfirm, updated2.state,
+		"deferred PlannerFinished dialog must show on next tick after overlay clears")
+	assert.NotNil(t, updated2.confirmationOverlay,
+		"confirmation overlay must be set for deferred dialog")
+	assert.Empty(t, updated2.deferredPlannerDialogs,
+		"deferredPlannerDialogs must be cleared after showing the dialog")
+	assert.Equal(t, planFile, updated2.pendingPlannerPlanFile,
+		"pendingPlannerPlanFile must be set for the deferred plan")
+}
+
 // TestPlannerFinishedSignal_SkipsWhenConfirmActive verifies that when
 // state == stateConfirm, no new dialog is shown (avoids clobbering an active overlay).
 func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
