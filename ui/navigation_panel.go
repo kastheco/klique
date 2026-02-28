@@ -468,7 +468,7 @@ func navInstanceSortKey(inst *session.Instance) int {
 	return 3
 }
 
-func navPlanSortKey(_ PlanDisplay, insts []*session.Instance, st TopicStatus) int {
+func navPlanSortKey(p PlanDisplay, insts []*session.Instance, st TopicStatus) int {
 	hasNotification := st.HasNotification
 	hasRunning := st.HasRunning
 	for _, inst := range insts {
@@ -483,6 +483,12 @@ func navPlanSortKey(_ PlanDisplay, insts []*session.Instance, st TopicStatus) in
 		return 0
 	}
 	if hasRunning {
+		return 1
+	}
+	// Plans in active lifecycle states (implementing, reviewing) should
+	// appear in the "active" section even without running instances —
+	// e.g. after a restart when the agent's tmux session is gone.
+	if p.Status == "implementing" || p.Status == "reviewing" {
 		return 1
 	}
 	return 2
@@ -1179,7 +1185,12 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		return navCancelledLblStyle.Render(label) + strings.Repeat(" ", gap) + " " + navCancelledLblStyle.Render("✕")
 
 	case navRowImportAction:
-		return row.Label
+		labelW := runewidth.StringWidth(row.Label)
+		pad := contentWidth - labelW
+		if pad < 0 {
+			pad = 0
+		}
+		return strings.Repeat(" ", pad) + row.Label
 
 	default:
 		return row.Label
