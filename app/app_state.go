@@ -1894,28 +1894,15 @@ func (m *home) audit(kind auditlog.EventKind, msg string, opts ...auditlog.Event
 }
 
 // refreshAuditPane queries the audit logger and updates the audit pane display.
-// Called after every audit() emit and on navigation selection changes.
+// Shows a global activity feed — not filtered by sidebar selection.
 func (m *home) refreshAuditPane() {
 	if m.auditPane == nil || m.auditLogger == nil {
 		return
 	}
 
-	// Build filter based on current selection.
 	filter := auditlog.QueryFilter{
 		Project: m.planStoreProject,
 		Limit:   50,
-	}
-	filterLabel := "all"
-
-	// Narrow by selected plan or instance if available.
-	if m.nav != nil {
-		if inst := m.nav.GetSelectedInstance(); inst != nil {
-			filter.InstanceTitle = inst.Title
-			filterLabel = inst.Title
-		} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-			filter.PlanFile = planFile
-			filterLabel = planFile
-		}
 	}
 
 	events, err := m.auditLogger.Query(filter)
@@ -1938,5 +1925,9 @@ func (m *home) refreshAuditPane() {
 	}
 
 	m.auditPane.SetEvents(displays)
-	m.auditPane.SetFilter(filterLabel)
+
+	// Push updated audit view into the nav panel.
+	if m.nav != nil && m.auditPane.Visible() {
+		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.Height())
+	}
 }

@@ -54,6 +54,7 @@ type navRow struct {
 	ID              string
 	Label           string
 	PlanFile        string
+	PlanStatus      string // plan lifecycle status (e.g. "implementing", "reviewing")
 	Instance        *session.Instance
 	Collapsed       bool
 	HasRunning      bool
@@ -110,6 +111,10 @@ type NavigationPanel struct {
 
 	repoName    string
 	repoHovered bool
+
+	// Audit section rendered by the AuditPane and displayed inside the border.
+	auditView   string
+	auditHeight int
 
 	width, height int
 	focused       bool
@@ -256,8 +261,9 @@ func (n *NavigationPanel) InspectPlan(planFile string) {
 
 func (n *NavigationPanel) rebuildRows() {
 	prevID := ""
-	if n.selectedIdx >= 0 && n.selectedIdx < len(n.rows) {
-		prevID = n.rows[n.selectedIdx].ID
+	prevIdx := n.selectedIdx
+	if prevIdx >= 0 && prevIdx < len(n.rows) {
+		prevID = n.rows[prevIdx].ID
 	}
 
 	instancesByPlan := make(map[string][]*session.Instance)
@@ -309,6 +315,7 @@ func (n *NavigationPanel) rebuildRows() {
 			ID:              SidebarPlanPrefix + p.Filename,
 			Label:           planstate.DisplayName(p.Filename),
 			PlanFile:        p.Filename,
+			PlanStatus:      p.Status,
 			Collapsed:       collapsed,
 			HasRunning:      hasRunning,
 			HasNotification: hasNotification,
@@ -441,6 +448,27 @@ func (n *NavigationPanel) rebuildRows() {
 				return
 			}
 		}
+		// prevID not found — the selected plan may have been transiently
+		// absent from an async remote-store reload. Clamp to the same
+		// numeric position so the selection doesn't jump to a random row.
+		// Skip non-selectable divider rows.
+		if prevIdx >= len(rows) {
+			prevIdx = len(rows) - 1
+		}
+		if prevIdx < 0 {
+			prevIdx = 0
+		}
+		n.selectedIdx = prevIdx
+		// If we landed on a non-selectable divider, nudge down then up.
+		if n.selectedIdx < len(rows) && rows[n.selectedIdx].Kind == navRowSoloHeader {
+			if n.selectedIdx+1 < len(rows) {
+				n.selectedIdx++
+			} else if n.selectedIdx > 0 {
+				n.selectedIdx--
+			}
+		}
+		n.clampScroll()
+		return
 	}
 	if n.selectedIdx >= len(rows) {
 		n.selectedIdx = len(rows) - 1
@@ -519,6 +547,13 @@ func (n *NavigationPanel) SetSize(width, height int) {
 	n.width, n.height = width, height
 	n.clampScroll()
 }
+
+// SetAuditView sets pre-rendered audit pane content to display inside the border.
+func (n *NavigationPanel) SetAuditView(view string, h int) {
+	n.auditView = view
+	n.auditHeight = h
+}
+
 func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }
 func (n *NavigationPanel) IsFocused() bool            { return n.focused }
 func (n *NavigationPanel) SetRepoName(name string)    { n.repoName = name }
@@ -1267,6 +1302,8 @@ func (n *NavigationPanel) String() string {
 				sk = 0
 			} else if row.HasRunning {
 				sk = 1
+			} else if row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
+				sk = 1
 			}
 			if sk != lastPlanKey {
 				label := navSectionLabel(sk)
@@ -1356,8 +1393,10 @@ func (n *NavigationPanel) String() string {
 		repoSection = zone.Mark(ZoneNavRepo, repoBtn)
 	}
 
-	// Assemble content with bottom-pinned legend + repo button
+	// Assemble content with bottom-pinned audit + legend + repo button
 	topContent := searchBox + "\n" + body
+
+	// Bottom section: legend + optional repo button
 	var bottomSection string
 	if repoSection != "" {
 		bottomSection = legend + "\n" + repoSection
@@ -1367,11 +1406,23 @@ func (n *NavigationPanel) String() string {
 
 	topLines := strings.Count(topContent, "\n") + 1
 	bottomLines := strings.Count(bottomSection, "\n") + 1
-	gap := height - topLines - bottomLines + 1
+
+	// Reserve space for the audit section if present.
+	auditLines := 0
+	if n.auditView != "" && n.auditHeight > 0 {
+		auditLines = n.auditHeight
+	}
+
+	gap := height - topLines - bottomLines - auditLines + 1
 	if gap < 1 {
 		gap = 1
 	}
-	innerContent := topContent + strings.Repeat("\n", gap) + bottomSection
+
+	innerContent := topContent + strings.Repeat("\n", gap)
+	if n.auditView != "" && n.auditHeight > 0 {
+		innerContent += n.auditView + "\n"
+	}
+	innerContent += bottomSection
 
 	bordered := border.Width(innerWidth).Height(height).Render(innerContent)
 	placed := lipgloss.Place(n.width, n.height, lipgloss.Left, lipgloss.Top, bordered)

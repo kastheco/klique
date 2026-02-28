@@ -506,23 +506,21 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 
-	// Split sidebar height between nav and audit pane when audit pane is visible.
+	// Nav panel gets full content height — audit pane is rendered inside its border.
+	m.nav.SetSize(navWidth, contentHeight)
 	if m.auditPane != nil && m.auditPane.Visible() && navWidth > 0 {
-		navH := contentHeight * 60 / 100
-		if navH < 5 {
-			navH = 5
+		// Size audit pane for the nav panel's inner content area.
+		auditInnerW := navWidth - 4 // border (2) + padding (2)
+		auditH := 8                 // 1 header + 7 event lines
+		if contentHeight < 20 {
+			auditH = 5 // compact for small terminals
 		}
-		auditH := contentHeight - navH
-		if auditH < 3 {
-			auditH = 3
-			navH = contentHeight - auditH
-		}
-		m.nav.SetSize(navWidth, navH)
-		m.auditPane.SetSize(navWidth, auditH)
+		m.auditPane.SetSize(auditInnerW, auditH)
+		m.nav.SetAuditView(m.auditPane.String(), auditH)
 	} else {
-		m.nav.SetSize(navWidth, contentHeight)
+		m.nav.SetAuditView("", 0)
 		if m.auditPane != nil {
-			m.auditPane.SetSize(navWidth, 0)
+			m.auditPane.SetSize(0, 0)
 		}
 	}
 
@@ -1591,11 +1589,7 @@ func (m *home) View() string {
 	// Layout: nav | preview/tabs
 	var cols []string
 	if !m.sidebarHidden {
-		sidebarCol := m.nav.String()
-		if m.auditPane != nil && m.auditPane.Visible() {
-			sidebarCol = lipgloss.JoinVertical(lipgloss.Left, m.nav.String(), m.auditPane.String())
-		}
-		cols = append(cols, colStyle.Render(sidebarCol))
+		cols = append(cols, colStyle.Render(m.nav.String()))
 	}
 	cols = append(cols, previewWithPadding)
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)

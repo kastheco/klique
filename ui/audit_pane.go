@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 // AuditEventDisplay is a pre-formatted event for rendering in the audit pane.
@@ -17,14 +18,14 @@ type AuditEventDisplay struct {
 	Level   string         // "info", "warn", "error"
 }
 
-// AuditPane renders a scrollable list of recent audit events below the sidebar.
+// AuditPane renders a scrollable activity feed inside the navigation panel border.
 type AuditPane struct {
-	events      []AuditEventDisplay
-	viewport    viewport.Model
-	width       int
-	height      int
-	visible     bool
-	filterLabel string
+	events   []AuditEventDisplay
+	viewport viewport.Model
+	width    int
+	height   int
+	visible  bool
+	filter   string // optional plan file filter for scoping displayed events
 }
 
 // NewAuditPane creates a new AuditPane (visible by default).
@@ -39,7 +40,7 @@ func NewAuditPane() *AuditPane {
 // SetSize updates the pane dimensions and rebuilds the viewport content.
 func (p *AuditPane) SetSize(w, h int) {
 	p.width = w
-	// Reserve 1 line for the header.
+	// Reserve 1 line for the header divider.
 	bodyH := h - 1
 	if bodyH < 0 {
 		bodyH = 0
@@ -57,11 +58,6 @@ func (p *AuditPane) SetEvents(events []AuditEventDisplay) {
 	p.viewport.GotoTop()
 }
 
-// SetFilter updates the filter label shown in the header.
-func (p *AuditPane) SetFilter(label string) {
-	p.filterLabel = label
-}
-
 // ScrollDown scrolls the viewport down by n lines.
 func (p *AuditPane) ScrollDown(n int) {
 	p.viewport.LineDown(n)
@@ -77,53 +73,104 @@ func (p *AuditPane) Visible() bool {
 	return p.visible
 }
 
+// Height returns the current total height of the pane (header + body).
+func (p *AuditPane) Height() int {
+	return p.height
+}
+
 // ToggleVisible flips the visibility state.
 func (p *AuditPane) ToggleVisible() {
 	p.visible = !p.visible
 }
 
+// Styles for the audit pane — Rosé Pine Moon palette.
 var (
-	auditHeaderStyle = lipgloss.NewStyle().Foreground(ColorMuted)
-	auditTimeStyle   = lipgloss.NewStyle().Foreground(ColorMuted)
-	auditMsgStyle    = lipgloss.NewStyle().Foreground(ColorText)
-	auditEmptyStyle  = lipgloss.NewStyle().Foreground(ColorMuted)
+	auditDividerStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+	auditLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted)
+	auditTimeStyle    = lipgloss.NewStyle().Foreground(ColorOverlay)
+	auditMsgStyle     = lipgloss.NewStyle().Foreground(ColorSubtle)
+	auditWarnMsgStyle = lipgloss.NewStyle().Foreground(ColorGold)
+	auditErrMsgStyle  = lipgloss.NewStyle().Foreground(ColorLove)
+	auditEmptyIcon    = lipgloss.NewStyle().Foreground(ColorOverlay)
+	auditEmptyStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Italic(true)
+	auditRowPad       = lipgloss.NewStyle().PaddingLeft(1)
 )
 
-// String renders the audit pane: a 1-line header + scrollable body.
+// SetFilter sets a plan file filter. When non-empty, the header shows the plan name
+// and only matching events are displayed.
+func (p *AuditPane) SetFilter(planFile string) {
+	p.filter = planFile
+	p.viewport.SetContent(p.renderBody())
+}
+
+// Filter returns the current filter value.
+func (p *AuditPane) Filter() string {
+	return p.filter
+}
+
+// String renders the audit pane: a 1-line header divider + scrollable body.
 func (p *AuditPane) String() string {
 	header := p.renderHeader()
 	body := p.viewport.View()
 	return lipgloss.JoinVertical(lipgloss.Left, header, body)
 }
 
+// renderHeader builds a centered divider: ────── log ──────
+// Matches the nav panel's navDividerLine aesthetic exactly.
+// When a filter is active, shows "log: <filter>" instead.
 func (p *AuditPane) renderHeader() string {
-	left := "── log ──"
-	right := p.filterLabel
-	if right == "" {
-		right = "all"
+	inner := " log "
+	if p.filter != "" {
+		inner = " log: " + p.filter + " "
 	}
-
-	leftW := lipgloss.Width(left)
-	rightW := lipgloss.Width(right)
-	gap := p.width - leftW - rightW
-	if gap < 1 {
-		gap = 1
+	innerW := runewidth.StringWidth(inner)
+	remaining := p.width - innerW
+	if remaining < 2 {
+		return auditDividerStyle.Render(inner)
 	}
-	line := left + strings.Repeat(" ", gap) + right
-	return auditHeaderStyle.Render(line)
+	left := remaining / 2
+	right := remaining - left
+	return auditDividerStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
 }
 
+// renderBody builds the scrollable event list content.
 func (p *AuditPane) renderBody() string {
 	if len(p.events) == 0 {
-		return auditEmptyStyle.Render("no events")
+		return auditRowPad.Render(
+			auditEmptyIcon.Render("·") + " " + auditEmptyStyle.Render("no events"),
+		)
+	}
+
+	// Available width for message text after time + icon + padding.
+	// Layout per row: " HH:MM  ◆  message"
+	//                  1  5   2 1 2 = 11 chars of overhead
+	const overhead = 11
+	msgWidth := p.width - overhead
+	if msgWidth < 10 {
+		msgWidth = 10
 	}
 
 	lines := make([]string, 0, len(p.events))
 	for _, e := range p.events {
 		icon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)
-		time := auditTimeStyle.Render(e.Time)
-		msg := auditMsgStyle.Render(e.Message)
-		line := time + " " + icon + " " + msg
+		ts := auditTimeStyle.Render(e.Time)
+
+		// Level-aware message styling.
+		msg := e.Message
+		if runewidth.StringWidth(msg) > msgWidth {
+			msg = runewidth.Truncate(msg, msgWidth-1, "…")
+		}
+		var styledMsg string
+		switch e.Level {
+		case "error":
+			styledMsg = auditErrMsgStyle.Render(msg)
+		case "warn":
+			styledMsg = auditWarnMsgStyle.Render(msg)
+		default:
+			styledMsg = auditMsgStyle.Render(msg)
+		}
+
+		line := auditRowPad.Render(ts + "  " + icon + "  " + styledMsg)
 		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
