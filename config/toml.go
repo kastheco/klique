@@ -48,6 +48,7 @@ type TOMLConfig struct {
 	Agents    map[string]TOMLAgent `toml:"agents"`
 	UI        TOMLUIConfig         `toml:"ui"`
 	Telemetry TOMLTelemetryConfig  `toml:"telemetry"`
+	PlanStore string               `toml:"plan_store,omitempty"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
@@ -56,6 +57,7 @@ type TOMLConfigResult struct {
 	PhaseRoles       map[string]string
 	AnimateBanner    bool
 	TelemetryEnabled *bool
+	PlanStore        string
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -71,6 +73,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		PhaseRoles:       tc.Phases,
 		AnimateBanner:    tc.UI.AnimateBanner,
 		TelemetryEnabled: tc.Telemetry.Enabled,
+		PlanStore:        tc.PlanStore,
 	}
 
 	for name, agent := range tc.Agents {
