@@ -319,6 +319,11 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
+	// Import action pinned at the top of the list, below the search bar.
+	if n.clickUpAvail {
+		rows = append(rows, navRow{Kind: navRowImportAction, ID: SidebarImportClickUp, Label: "+ import from clickup"})
+	}
+
 	// Dead section: done plans with instances or manually inspected.
 	// Shown above active plans so they're accessible for cleanup.
 	if len(n.deadPlans) > 0 {
@@ -398,10 +403,6 @@ func (n *NavigationPanel) rebuildRows() {
 		if !emitted[p.Filename] {
 			appendPlan(p, 0)
 		}
-	}
-
-	if n.clickUpAvail {
-		rows = append(rows, navRow{Kind: navRowImportAction, ID: SidebarImportClickUp, Label: "+ import from clickup"})
 	}
 
 	if len(n.historyPlans) > 0 {
