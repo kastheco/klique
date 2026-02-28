@@ -1,0 +1,17 @@
+the logo animation and call to action don't show on startup anymore. it drops me into the info tab of a random plan
+
+---
+
+it's in ansi shadow block art
+
+---
+
+i'd prefer to keep info the default but show the logo until they navigate in teh sidebar
+
+---
+
+why am i getting notifications for focus-wave-W1-T1 finishing when you stop working?
+
+---
+
+commit both separately and push a new version v1.1.4
