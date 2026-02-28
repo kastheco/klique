@@ -61,3 +61,31 @@ func TestHeuristicPlanTitle_SingleLineNoPunctuation_Truncates(t *testing.T) {
 	words := len(splitWords(got))
 	assert.LessOrEqual(t, words, 6)
 }
+
+func TestFirstLineIsViableSlug_MultilineShortFirstLine(t *testing.T) {
+	desc := "fix auth token refresh\ndetails about the bug and how to reproduce it"
+	assert.True(t, firstLineIsViableSlug(desc))
+}
+
+func TestFirstLineIsViableSlug_SingleLine(t *testing.T) {
+	// Single-line descriptions should NOT be considered viable — they need AI
+	desc := "fix auth token refresh"
+	assert.False(t, firstLineIsViableSlug(desc))
+}
+
+func TestFirstLineIsViableSlug_MultilineLongFirstLine(t *testing.T) {
+	// First line is too long (>6 words after filler strip) — needs AI
+	desc := "refactor the entire authentication subsystem to use JWT tokens\nmore details here"
+	assert.False(t, firstLineIsViableSlug(desc))
+}
+
+func TestFirstLineIsViableSlug_MultilineWithFiller(t *testing.T) {
+	// First line has filler prefix but after stripping is ≤6 words
+	desc := "i want to fix auth refresh\ndetails about the bug"
+	assert.True(t, firstLineIsViableSlug(desc))
+}
+
+func TestFirstLineIsViableSlug_EmptyFirstLine(t *testing.T) {
+	desc := "\nactual description here"
+	assert.False(t, firstLineIsViableSlug(desc))
+}

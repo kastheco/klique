@@ -248,6 +248,26 @@ func TestIsUserInOverlay(t *testing.T) {
 	}
 }
 
+func TestNewPlanSubmitSkipsAIWhenFirstLineIsViableSlug(t *testing.T) {
+	h := &home{
+		state:            stateNewPlan,
+		textInputOverlay: overlay.NewTextInputOverlay("new plan", "fix auth refresh\ndetails about the bug"),
+	}
+	h.textInputOverlay.SetMultiline(true)
+
+	// Tab to submit button, then Enter
+	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
+	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+
+	updated, ok := model.(*home)
+	require.True(t, ok)
+	// Should skip stateNewPlanDeriving and go straight to topic picker
+	require.Equal(t, stateNewPlanTopic, updated.state)
+	require.Equal(t, "fix auth refresh", updated.pendingPlanName)
+	// No AI command should be returned
+	require.Nil(t, cmd)
+}
+
 func TestNewPlanOverlaySizePreservedOnSpuriousWindowSize(t *testing.T) {
 	s := spinner.New()
 	h := &home{

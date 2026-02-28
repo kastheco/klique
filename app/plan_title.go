@@ -71,6 +71,47 @@ func heuristicPlanTitle(description string) string {
 	return strings.Join(words[:6], " ")
 }
 
+// firstLineIsViableSlug returns true when the description is multiline and the
+// first line (after filler-stripping) is short enough to use as a slug without
+// truncation — meaning heuristicPlanTitle would return it verbatim.
+func firstLineIsViableSlug(description string) bool {
+	text := strings.TrimSpace(description)
+	if text == "" {
+		return false
+	}
+
+	// Must be multiline — single-line descriptions benefit from AI summarization
+	idx := strings.IndexByte(text, '\n')
+	if idx < 0 {
+		return false
+	}
+
+	firstLine := strings.TrimSpace(text[:idx])
+	if firstLine == "" {
+		return false
+	}
+
+	// Strip filler prefixes (same logic as heuristicPlanTitle)
+	lower := strings.ToLower(firstLine)
+	fillers := []string{
+		"i want to ", "i'd like to ", "we need to ", "we should ",
+		"please ", "let's ", "let us ", "can you ", "could you ",
+	}
+	for _, f := range fillers {
+		if strings.HasPrefix(lower, f) {
+			firstLine = firstLine[len(f):]
+			break
+		}
+	}
+	firstLine = strings.TrimSpace(firstLine)
+	if firstLine == "" {
+		return false
+	}
+
+	// Viable if ≤6 words (no truncation needed)
+	return len(splitWords(firstLine)) <= 6
+}
+
 // splitWords splits text on whitespace, returning non-empty tokens.
 func splitWords(s string) []string {
 	raw := strings.Fields(s)

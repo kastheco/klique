@@ -756,6 +756,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.pendingPlanName = heuristicPlanTitle(description)
 				m.pendingPlanDesc = description
 				m.textInputOverlay = nil
+
+				// If the first line is already a viable slug, skip AI derivation
+				if firstLineIsViableSlug(description) {
+					topicNames := m.getTopicNames()
+					topicNames = append([]string{"(No topic)"}, topicNames...)
+					pickerTitle := fmt.Sprintf("assign to topic for '%s'", m.pendingPlanName)
+					m.pickerOverlay = overlay.NewPickerOverlay(pickerTitle, topicNames)
+					m.pickerOverlay.SetAllowCustom(true)
+					m.state = stateNewPlanTopic
+					return m, nil
+				}
+
 				m.state = stateNewPlanDeriving
 				if m.toastManager != nil {
 					m.toastManager.Info("deriving title...")
