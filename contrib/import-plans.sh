@@ -57,9 +57,9 @@ while IFS= read -r topic_json; do
     -d "$payload")
 
   case "$status" in
-    201) echo "  + topic: ${name}"; ((topic_ok++)) ;;
-    409) echo "  ~ topic: ${name} (exists)"; ((topic_skip++)) ;;
-    *)   echo "  ! topic: ${name} (HTTP ${status})"; ((topic_fail++)) ;;
+    201) echo "  + topic: ${name}"; ((topic_ok++)) || true ;;
+    409) echo "  ~ topic: ${name} (exists)"; ((topic_skip++)) || true ;;
+    *)   echo "  ! topic: ${name} (HTTP ${status})"; ((topic_fail++)) || true ;;
   esac
 done < <(jq -c '.topics // {} | to_entries[]' "$JSON_FILE")
 
@@ -82,9 +82,9 @@ while IFS= read -r plan_json; do
     -d "$payload")
 
   case "$status" in
-    201) echo "  + plan: ${filename}"; ((plan_ok++)) ;;
-    409) echo "  ~ plan: ${filename} (exists)"; ((plan_skip++)) ;;
-    *)   echo "  ! plan: ${filename} (HTTP ${status})"; ((plan_fail++)) ;;
+    201) echo "  + plan: ${filename}"; ((plan_ok++)) || true ;;
+    409) echo "  ~ plan: ${filename} (exists)"; ((plan_skip++)) || true ;;
+    *)   echo "  ! plan: ${filename} (HTTP ${status})"; ((plan_fail++)) || true ;;
   esac
 done < <(jq -c '.plans // {} | to_entries[]' "$JSON_FILE")
 
