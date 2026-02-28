@@ -21,7 +21,7 @@ kasmos turns your terminal into a multi-agent control center. each task gets its
 
 ## installation
 
-#### homebrew *(coming soon)*
+#### homebrew
 
 ```bash
 brew install kastheco/tap/kasmos
