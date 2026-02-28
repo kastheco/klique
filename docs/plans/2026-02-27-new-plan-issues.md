@@ -1,208 +1,185 @@
-# New Plan Input Overlay Bugs
+# New Plan Overlay Bugs Implementation Plan
 
-**Goal:** Fix two bugs in the new-plan text input overlay: (1) confirmation dialogs overwrite the input state, losing user content; (2) the overlay resizes when the agent pane loads or switches sessions.
+**Goal:** Fix two bugs in the new-plan creation flow: (1) async confirmation dialogs (planner finished, wave complete, coder exit) clobber the new-plan overlay state, losing all user input; (2) the new-plan text input box grows when the agent pane loads a session or switches, because `tea.WindowSize()` emitted as a side-effect triggers a percentage-based resize.
 
-**Architecture:** Both bugs stem from the interaction between `stateNewPlan` and other app state transitions. Bug 1: `confirmAction()` unconditionally sets `m.state = stateConfirm`, destroying the `stateNewPlan` context. Fix: guard `confirmAction()` (and all other state-overwriting paths that fire from async ticks) to defer when an input overlay is active. Bug 2: `updateHandleWindowSizeEvent()` re-sizes the `textInputOverlay` on every `tea.WindowSize` event, but many actions emit `tea.WindowSize()` as a side-effect (e.g. `instanceStartedMsg`, `killInstanceMsg`). Fix: the overlay should record its initial size at creation and ignore subsequent `SetSize` calls, or `updateHandleWindowSizeEvent` should only resize when the terminal dimensions actually change.
+**Architecture:** Both bugs live in `app/app.go`. Bug 1: the `metadataResultMsg` handler has four code paths that transition to `stateConfirm` but only guard against `m.state == stateConfirm` — they don't check for `stateNewPlan`, `stateNewPlanTopic`, or any other active overlay state. Fix: add an `isUserInOverlay()` predicate and use it everywhere. Bug 2: `updateHandleWindowSizeEvent()` unconditionally calls `textInputOverlay.SetSize(width*0.6, height*0.4)` on every `tea.WindowSizeMsg`, but `tea.WindowSize()` is emitted as a batched side-effect by `instanceStartedMsg`, `killInstanceMsg`, and several other handlers. Fix: track whether the terminal dimensions actually changed and only resize overlays when they did.
 
-**Tech Stack:** Go, bubbletea, lipgloss, overlay package (`ui/overlay/`)
+**Tech Stack:** Go, bubbletea (tea.Cmd/tea.Msg), overlay package
 
-**Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)
+**Size:** Small (estimated ~40 min, 1 task, 1 wave)
 
 ---
 
-## Wave 1: Fix Input Overlay State and Sizing
+## Wave 1: Overlay State Protection and Resize Guard
 
-### Task 1: Guard State Transitions While Input Overlay Is Active
+### Task 1: Guard overlay states from async interrupts and spurious resizes
 
 **Files:**
-- Modify: `app/app_input.go`
 - Modify: `app/app.go`
+- Modify: `ui/overlay/textInput.go`
 - Test: `app/app_plan_creation_test.go`
 
 **Step 1: write the failing test**
 
-Add a test that simulates entering `stateNewPlan`, then receiving a `confirmAction` call (as would happen from a `PlannerFinished` signal or wave completion during the metadata tick). Assert that the state remains `stateNewPlan` and the `textInputOverlay` is preserved.
+Add two tests: one for the confirmation-clobber bug, one for the resize bug.
 
 ```go
-func TestConfirmActionDeferredWhileNewPlanActive(t *testing.T) {
-    h := &home{
-        state:            stateNewPlan,
-        textInputOverlay: overlay.NewTextInputOverlay("new plan", "my plan description"),
+func TestIsUserInOverlay(t *testing.T) {
+    tests := []struct {
+        state    state
+        expected bool
+    }{
+        {stateDefault, false},
+        {stateNewPlan, true},
+        {stateNewPlanTopic, true},
+        {stateConfirm, true},
+        {statePrompt, true},
+        {stateSpawnAgent, true},
+        {stateFocusAgent, true},
+        {statePermission, true},
     }
+    for _, tt := range tests {
+        h := &home{state: tt.state}
+        require.Equal(t, tt.expected, h.isUserInOverlay(),
+            "isUserInOverlay() for state %d", tt.state)
+    }
+}
+
+func TestNewPlanOverlaySizePreservedOnSpuriousWindowSize(t *testing.T) {
+    s := spinner.New()
+    h := &home{
+        state:        stateNewPlan,
+        tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+        nav:          ui.NewNavigationPanel(&s),
+        menu:         ui.NewMenu(),
+    }
+    // Simulate initial terminal size.
+    h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 200, Height: 50})
+
+    // Now create the overlay with a fixed size.
+    h.textInputOverlay = overlay.NewTextInputOverlay("new plan", "")
     h.textInputOverlay.SetMultiline(true)
+    h.textInputOverlay.SetSize(70, 8)
 
-    // Simulate a confirmation action arriving while typing
-    h.confirmAction("some confirmation?", func() tea.Msg { return nil })
+    // Simulate a spurious WindowSize (same dimensions, triggered by instanceStartedMsg).
+    h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 200, Height: 50})
 
-    // State should NOT have changed to stateConfirm
-    require.Equal(t, stateNewPlan, h.state)
-    require.NotNil(t, h.textInputOverlay)
-    require.Nil(t, h.confirmationOverlay)
-}
-```
-
-Also add a test for the topic picker state:
-
-```go
-func TestConfirmActionDeferredWhileTopicPickerActive(t *testing.T) {
-    h := &home{
-        state:           stateNewPlanTopic,
-        pendingPlanName: "test plan",
-        pendingPlanDesc: "test description",
-        pickerOverlay:   overlay.NewPickerOverlay("topic", []string{"(No topic)"}),
-    }
-
-    h.confirmAction("some confirmation?", func() tea.Msg { return nil })
-
-    require.Equal(t, stateNewPlanTopic, h.state)
-    require.NotNil(t, h.pickerOverlay)
-    require.Nil(t, h.confirmationOverlay)
+    // Overlay should still be 70 wide, not 120 (200*0.6).
+    require.Equal(t, 70, h.textInputOverlay.Width())
+    require.Equal(t, 8, h.textInputOverlay.Height())
 }
 ```
 
 **Step 2: run test to verify it fails**
 
 ```bash
-go test ./app/... -run TestConfirmActionDeferredWhileNewPlanActive -v
-go test ./app/... -run TestConfirmActionDeferredWhileTopicPickerActive -v
+go test ./app/... -run "TestIsUserInOverlay|TestNewPlanOverlaySizePreservedOnSpuriousWindowSize" -v
 ```
 
-expected: FAIL — `confirmAction` currently overwrites state unconditionally.
+expected: FAIL — `isUserInOverlay` undefined, `Width()`/`Height()` undefined, and the resize check doesn't exist.
 
 **Step 3: write minimal implementation**
 
-In `app/app_input.go`, modify `confirmAction()` to check if an input overlay is active. If so, defer the confirmation by ignoring it (the metadata tick will re-trigger it on the next cycle when the overlay is dismissed):
+Three changes in `app/app.go`:
+
+**(a)** Add `isUserInOverlay()` method:
 
 ```go
-func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
-    // Guard: don't overwrite active input overlays — the user is typing.
-    // The metadata tick will re-trigger the confirmation after the overlay closes.
-    if m.isInputOverlayActive() {
-        return nil
-    }
-    m.state = stateConfirm
-    m.pendingConfirmAction = action
-    m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-    m.confirmationOverlay.SetWidth(50)
-    return nil
-}
-```
-
-Add the helper method to `app/app_input.go` or `app/app.go`:
-
-```go
-// isInputOverlayActive returns true when the user is actively typing in an
-// input overlay that should not be interrupted by confirmation dialogs.
-func (m *home) isInputOverlayActive() bool {
+// isUserInOverlay returns true when the user is actively interacting with
+// any modal overlay. Used to prevent async metadata-tick handlers from
+// clobbering the active overlay by showing a confirmation dialog.
+func (m *home) isUserInOverlay() bool {
     switch m.state {
-    case stateNewPlan, stateNewPlanTopic, statePrompt, stateSendPrompt,
-        statePRTitle, statePRBody, stateRenameInstance, stateRenamePlan,
-        stateSpawnAgent, stateClickUpSearch, stateSearch:
-        return true
+    case stateDefault:
+        return false
     }
-    return false
+    return true
 }
 ```
 
-Also guard the direct `m.state = stateConfirm` assignments in `app.go`'s `Update()` method (the `PlannerFinished` signal handler and `waveFailedConfirmAction`/`waveStandardConfirmAction` callers already check `m.state != stateConfirm` — extend those checks to also skip when `isInputOverlayActive()` returns true).
+This is deliberately conservative — every non-default state counts as "in overlay". This prevents any async handler from interrupting any active state.
 
-Specifically in the `metadataResultMsg` handler in `app.go`:
-- The `PlannerFinished` signal handler (around line 676) already checks `m.state == stateConfirm` — add `|| m.isInputOverlayActive()` to that guard.
-- The coder-exit push prompt (around line 888) already checks `m.state == stateConfirm` — add `|| m.isInputOverlayActive()`.
-- The wave completion monitoring (around lines 980, 996) already checks `m.state != stateConfirm` — add `&& !m.isInputOverlayActive()`.
-- The permission prompt detection (around line 798) already checks `m.state == stateDefault` — this is already safe.
+**(b)** Replace state guards in `metadataResultMsg` handler. Four locations:
+
+1. PlannerFinished signal (~line 695):
+   ```go
+   // before: if m.plannerPrompted[capturedPlanFile] || m.state == stateConfirm {
+   if m.plannerPrompted[capturedPlanFile] || m.isUserInOverlay() {
+   ```
+
+2. Coder-exit push prompt loop (~line 907):
+   ```go
+   // before: if m.state == stateConfirm {
+   if m.isUserInOverlay() {
+   ```
+
+3. Wave all-complete (~line 999):
+   ```go
+   // before: if m.state != stateConfirm {
+   if !m.isUserInOverlay() {
+   ```
+
+4. Wave decision confirm (~line 1015):
+   ```go
+   // before: if m.state != stateConfirm && ...
+   if !m.isUserInOverlay() && ...
+   ```
+
+**(c)** Guard overlay resize in `updateHandleWindowSizeEvent()`. Before setting `m.termWidth`/`m.termHeight`, check whether the terminal dimensions actually changed. Only resize overlays when they did:
+
+```go
+func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
+    // ... navWidth, tabsWidth calculation (unchanged) ...
+
+    // Detect actual terminal resize vs spurious tea.WindowSize() side-effects.
+    termResized := msg.Width != m.termWidth || msg.Height != m.termHeight
+
+    m.termWidth = msg.Width
+    m.termHeight = msg.Height
+    // ... toast, statusBar, tabbedWindow, nav sizing (unchanged) ...
+
+    // Only resize overlays when the terminal dimensions actually changed.
+    // Many handlers emit tea.WindowSize() as a batched side-effect (e.g.
+    // instanceStartedMsg) — those fire with the same dimensions and should
+    // not overwrite the overlay's explicit sizing.
+    if m.textInputOverlay != nil && termResized {
+        m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
+    }
+    if m.textOverlay != nil && termResized {
+        m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+    }
+
+    // ... rest unchanged ...
+}
+```
+
+**(d)** Add `Width()`/`Height()` accessors to `ui/overlay/textInput.go`:
+
+```go
+func (t *TextInputOverlay) Width() int  { return t.width }
+func (t *TextInputOverlay) Height() int { return t.height }
+```
 
 **Step 4: run test to verify it passes**
 
 ```bash
-go test ./app/... -run TestConfirmActionDeferred -v
+go test ./app/... -run "TestIsUserInOverlay|TestNewPlanOverlaySizePreservedOnSpuriousWindowSize" -v
 ```
 
 expected: PASS
 
-**Step 5: commit**
+Run the full test suite to check for regressions:
 
 ```bash
-git add app/app_input.go app/app.go app/app_plan_creation_test.go
-git commit -m "fix: guard confirmation dialogs from overwriting active input overlays"
+go test ./app/... -v
+go test ./ui/overlay/... -v
 ```
 
-### Task 2: Fix Text Input Overlay Resizing on Agent Pane Changes
-
-**Files:**
-- Modify: `ui/overlay/textInput.go`
-- Test: `ui/overlay/textInput_test.go`
-
-**Step 1: write the failing test**
-
-```go
-func TestTextInputOverlaySizeLockedAfterFirstSet(t *testing.T) {
-    o := NewTextInputOverlay("test", "initial value")
-    o.SetSize(70, 8)
-
-    // Simulate a window resize event re-calling SetSize with different dimensions
-    o.SetSize(120, 40)
-
-    // The overlay should retain its original size
-    rendered := o.Render()
-    // The rendered width should reflect the original 70, not 120
-    lines := strings.Split(rendered, "\n")
-    maxWidth := 0
-    for _, line := range lines {
-        w := lipgloss.Width(line)
-        if w > maxWidth {
-            maxWidth = w
-        }
-    }
-    // With padding+border the rendered width should be around 70, not 120+
-    require.Less(t, maxWidth, 90, "overlay should not have grown to window size")
-}
-```
-
-**Step 2: run test to verify it fails**
-
-```bash
-go test ./ui/overlay/... -run TestTextInputOverlaySizeLockedAfterFirstSet -v
-```
-
-expected: FAIL — `SetSize` currently always updates dimensions.
-
-**Step 3: write minimal implementation**
-
-Add a `sizeSet` flag to `TextInputOverlay` that prevents subsequent `SetSize` calls from changing the dimensions after the initial call:
-
-In `ui/overlay/textInput.go`:
-
-```go
-type TextInputOverlay struct {
-    // ... existing fields ...
-    sizeSet bool // true after the first SetSize call
-}
-
-func (t *TextInputOverlay) SetSize(width, height int) {
-    if t.sizeSet {
-        return // ignore resize events after initial sizing
-    }
-    t.sizeSet = true
-    t.textarea.SetHeight(height)
-    t.width = width
-    t.height = height
-}
-```
-
-This is the minimal fix. The `updateHandleWindowSizeEvent` in `app.go` (line 427-429) calls `m.textInputOverlay.SetSize(...)` on every window size event — with the `sizeSet` guard, only the first call (from the creation site) takes effect.
-
-**Step 4: run test to verify it passes**
-
-```bash
-go test ./ui/overlay/... -run TestTextInputOverlaySizeLockedAfterFirstSet -v
-```
-
-expected: PASS
+expected: all PASS
 
 **Step 5: commit**
 
 ```bash
-git add ui/overlay/textInput.go ui/overlay/textInput_test.go
-git commit -m "fix: lock text input overlay size after initial set to prevent resize on agent pane changes"
+git add app/app.go app/app_plan_creation_test.go ui/overlay/textInput.go
+git commit -m "fix: protect new-plan overlay from confirmation interrupts and spurious resizes"
 ```
