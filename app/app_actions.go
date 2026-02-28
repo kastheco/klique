@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
@@ -25,6 +26,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		selected := m.nav.GetSelectedInstance()
 		if selected != nil {
 			title := selected.Title
+			m.audit(auditlog.EventAgentKilled, "agent killed",
+				auditlog.WithInstance(title),
+				auditlog.WithAgent(selected.AgentType),
+				auditlog.WithPlan(selected.PlanFile),
+			)
 			m.removeFromAllInstances(title)
 			m.nav.Kill()
 			m.saveAllInstances()
@@ -52,6 +58,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := selected.Pause(); err != nil {
 				return m, m.handleError(err)
 			}
+			m.audit(auditlog.EventAgentPaused, "agent paused",
+				auditlog.WithInstance(selected.Title),
+				auditlog.WithAgent(selected.AgentType),
+				auditlog.WithPlan(selected.PlanFile),
+			)
 			m.saveAllInstances()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
@@ -62,6 +73,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := selected.Resume(); err != nil {
 				return m, m.handleError(err)
 			}
+			m.audit(auditlog.EventAgentResumed, "agent resumed",
+				auditlog.WithInstance(selected.Title),
+				auditlog.WithAgent(selected.AgentType),
+				auditlog.WithPlan(selected.PlanFile),
+			)
 			m.saveAllInstances()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
@@ -225,6 +241,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planInst == nil {
 			return m, m.handleError(fmt.Errorf("no active session for this plan"))
 		}
+		capturedPlanTitle := planInst.Title
+		capturedPlanBranch := planInst.Branch
 		pushAction := func() tea.Msg {
 			worktree, err := planInst.GetGitWorktree()
 			if err != nil {
@@ -233,6 +251,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := worktree.PushChanges("update from kas", true); err != nil {
 				return err
 			}
+			m.audit(auditlog.EventGitPush, fmt.Sprintf("pushed plan branch %s", capturedPlanBranch),
+				auditlog.WithInstance(capturedPlanTitle),
+			)
 			return nil
 		}
 		message := fmt.Sprintf("push changes from plan '%s'?", planInst.Title)
@@ -277,6 +298,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
 				return err
 			}
+			m.audit(auditlog.EventPlanMerged, "plan merged to main: "+planName,
+				auditlog.WithPlan(planFile))
 			_ = m.saveAllInstances()
 			m.loadPlanState()
 			m.updateSidebarPlans()
@@ -304,6 +327,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
 				return m, m.handleError(err)
 			}
+			m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → done (manual)",
+				auditlog.WithPlan(planFile))
 		}
 		m.loadPlanState()
 		m.updateSidebarPlans()
@@ -346,6 +371,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
 				return err
 			}
+			m.audit(auditlog.EventPlanCancelled, "plan cancelled by user: "+planName,
+				auditlog.WithPlan(planFile))
 			return planRefreshMsg{}
 		}
 		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
@@ -386,6 +413,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsmForceToPlanning(planFile); err != nil {
 				return err
 			}
+			m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → planning (start over)",
+				auditlog.WithPlan(planFile),
+				auditlog.WithDetail("start over: branch reset"))
 			_ = m.saveAllInstances()
 			m.loadPlanState()
 			m.updateSidebarPlans()
@@ -416,8 +446,15 @@ func (m *home) fsmSetImplementing(planFile string) error {
 		if err := m.fsm.Transition(planFile, planfsm.PlannerFinished); err != nil {
 			return err
 		}
+		m.audit(auditlog.EventPlanTransition, "planning → ready",
+			auditlog.WithPlan(planFile))
 	}
-	return m.fsm.Transition(planFile, planfsm.ImplementStart)
+	if err := m.fsm.Transition(planFile, planfsm.ImplementStart); err != nil {
+		return err
+	}
+	m.audit(auditlog.EventPlanTransition, string(current)+" → implementing",
+		auditlog.WithPlan(planFile))
+	return nil
 }
 
 // fsmSetReviewing walks the FSM to reviewing from any earlier state.
@@ -440,7 +477,12 @@ func (m *home) fsmSetReviewing(planFile string) error {
 			return err
 		}
 	}
-	return m.fsm.Transition(planFile, planfsm.ImplementFinished)
+	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+		return err
+	}
+	m.audit(auditlog.EventPlanTransition, string(current)+" → reviewing",
+		auditlog.WithPlan(planFile))
+	return nil
 }
 
 // fsmRevertToPlanning moves the plan back to planning state from implementing.
@@ -621,6 +663,8 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 	if selected == nil {
 		return m, nil
 	}
+	capturedTitle := selected.Title
+	capturedBranch := selected.Branch
 	pushAction := func() tea.Msg {
 		worktree, err := selected.GetGitWorktree()
 		if err != nil {
@@ -630,6 +674,9 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 		if err := worktree.PushChanges(commitMsg, true); err != nil {
 			return err
 		}
+		m.audit(auditlog.EventGitPush, fmt.Sprintf("pushed branch %s", capturedBranch),
+			auditlog.WithInstance(capturedTitle),
+		)
 		return nil
 	}
 	message := "push changes from '" + selected.Title + "'?"
@@ -708,6 +755,8 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err := m.fsm.Transition(planFile, planfsm.PlanStart); err != nil {
 			return m, m.handleError(err)
 		}
+		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → planning",
+			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
@@ -715,6 +764,8 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return m, m.handleError(err)
 		}
+		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → implementing (solo)",
+			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		// Check if plan .md file exists on disk to decide prompt content.
@@ -753,6 +804,8 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return m, m.handleError(err)
 		}
+		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → implementing",
+			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		return m.startNextWave(orch, entry)
@@ -760,6 +813,8 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err := m.fsmSetReviewing(planFile); err != nil {
 			return m, m.handleError(err)
 		}
+		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → reviewing",
+			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		planName := planstate.DisplayName(planFile)
@@ -771,6 +826,8 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
 		return m, m.handleError(err)
 	}
+	m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → done",
+		auditlog.WithPlan(planFile))
 	m.loadPlanState()
 	m.updateSidebarPlans()
 	return m, nil

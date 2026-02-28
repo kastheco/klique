@@ -70,6 +70,7 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("↑↓")+descStyle.Render("            - navigate within focused pane"),
 		keyStyle.Render("←→")+descStyle.Render("            - move between panes"),
 		keyStyle.Render("ctrl+s")+descStyle.Render("        - toggle sidebar visibility"),
+		keyStyle.Render("L")+descStyle.Render("             - toggle audit log pane"),
 		keyStyle.Render("/")+descStyle.Render("             - search plans and instances"),
 		keyStyle.Render("q")+descStyle.Render("             - quit"),
 	)

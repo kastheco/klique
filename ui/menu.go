@@ -177,11 +177,11 @@ func (m *Menu) updateOptions() {
 
 func (m *Menu) addSidebarOptions(includeNewPlan bool) {
 	// Sidebar-focused: show plan navigation keybinds
-	options := make([]keys.KeyName, 0, 7)
+	options := make([]keys.KeyName, 0, 8)
 	if includeNewPlan {
 		options = append(options, keys.KeyNewPlan)
 	}
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan, keys.KeyAuditToggle}
 	systemGroup := []keys.KeyName{keys.KeySearch, keys.KeyHelp, keys.KeyQuit}
 
 	options = append(options, actionGroup...)

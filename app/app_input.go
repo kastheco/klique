@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
@@ -293,10 +294,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, nil
 			}
 			if m.textInputOverlay.IsSubmitted() {
-				if err := selected.SendPrompt(m.textInputOverlay.GetValue()); err != nil {
+				promptText := m.textInputOverlay.GetValue()
+				if err := selected.SendPrompt(promptText); err != nil {
 					// TODO: we probably end up in a bad state here.
 					return m, m.handleError(err)
 				}
+				// Emit audit event for prompt sent (truncate to 200 chars).
+				msg := promptText
+				if len(msg) > 200 {
+					msg = msg[:200]
+				}
+				m.audit(auditlog.EventPromptSent, msg,
+					auditlog.WithInstance(selected.Title),
+				)
 			}
 
 			// Close the overlay and reset state
@@ -374,16 +384,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.menu.SetState(ui.StateDefault)
 					m.pendingPRToastID = m.toastManager.Loading("Creating PR...")
 					prToastID := m.pendingPRToastID
+					capturedTitle := selected.Title
+					capturedPRTitle := prTitle
 					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
-						commitMsg := fmt.Sprintf("[kas] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+						commitMsg := fmt.Sprintf("[kas] update from '%s' on %s", capturedTitle, time.Now().Format(time.RFC822))
 						worktree, err := selected.GetGitWorktree()
 						if err != nil {
 							return prErrorMsg{id: prToastID, err: err}
 						}
-						if err := worktree.CreatePR(prTitle, prBody, commitMsg); err != nil {
+						if err := worktree.CreatePR(capturedPRTitle, prBody, commitMsg); err != nil {
 							return prErrorMsg{id: prToastID, err: err}
 						}
-						return prCreatedMsg{}
+						return prCreatedMsg{instanceTitle: capturedTitle, prTitle: capturedPRTitle}
 					}, m.toastTickCmd())
 				}
 			}
@@ -566,6 +578,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						return m, m.handleError(err)
 					}
 					selected.SetStatus(session.Running)
+					// Emit audit event for prompt sent (truncate to 200 chars).
+					auditMsg := value
+					if len(auditMsg) > 200 {
+						auditMsg = auditMsg[:200]
+					}
+					m.audit(auditlog.EventPromptSent, auditMsg,
+						auditlog.WithInstance(selected.Title),
+					)
 				}
 			}
 			m.textInputOverlay = nil
@@ -713,6 +733,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					// iota ordering, so a direct cast is safe.
 					capturedInst := inst
 					capturedChoice := tmux.PermissionChoice(choice)
+					// Emit audit event for permission answered.
+					choiceStr := "allow once"
+					switch choice {
+					case overlay.PermissionAllowAlways:
+						choiceStr = "allow always"
+					case overlay.PermissionReject:
+						choiceStr = "reject"
+					}
+					m.audit(auditlog.EventPermissionAnswered, choiceStr,
+						auditlog.WithInstance(inst.Title),
+					)
 					m.pendingPermissionInstance = nil
 					return m, func() tea.Msg {
 						capturedInst.SendPermissionResponse(capturedChoice)
@@ -914,6 +945,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						m.pendingSetStatusPlan = ""
 						return m, m.handleError(err)
 					}
+					m.audit(auditlog.EventPlanTransition, "manual override → "+picked,
+						auditlog.WithPlan(m.pendingSetStatusPlan),
+						auditlog.WithDetail("manual override"))
 					m.loadPlanState()
 					m.updateSidebarPlans()
 					m.toastManager.Success(fmt.Sprintf("status → %s", picked))
@@ -1403,6 +1437,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 		}
 		return m, tea.WindowSize()
+	case keys.KeyAuditToggle:
+		if m.auditPane != nil {
+			m.auditPane.ToggleVisible()
+		}
+		return m, tea.WindowSize()
 	case keys.KeyArrowLeft:
 		// Sidebar always has focus — no-op.
 		return m, nil
@@ -1519,6 +1558,7 @@ func keyToBytes(msg tea.KeyMsg) []byte {
 func (m *home) handleError(err error) tea.Cmd {
 	log.ErrorLog.Printf("%v", err)
 	m.toastManager.Error(err.Error())
+	m.audit(auditlog.EventError, err.Error(), auditlog.WithLevel("error"))
 	return m.toastTickCmd()
 }
 

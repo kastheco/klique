@@ -48,6 +48,7 @@ func newTestHome() *home {
 		appConfig:      config.DefaultConfig(),
 		nav:            ui.NewNavigationPanel(&spin),
 		menu:           ui.NewMenu(),
+		auditPane:      ui.NewAuditPane(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		activeRepoPath: os.TempDir(),
 		program:        "opencode",

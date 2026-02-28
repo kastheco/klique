@@ -8,6 +8,7 @@ import (
 
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
@@ -44,8 +45,10 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 	defer sentrypkg.RecoverPanic()
 
 	zone.NewGlobal()
+	h := newHome(ctx, program, autoYes)
+	defer h.auditLogger.Close()
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		h,
 		tea.WithAltScreen(),
 		tea.WithMouseAllMotion(), // Full mouse tracking for hover + scroll + click
 	)
@@ -159,6 +162,8 @@ type home struct {
 
 	// nav displays plans + instances
 	nav *ui.NavigationPanel
+	// auditPane displays recent audit events below the nav panel
+	auditPane *ui.AuditPane
 	// menu displays the bottom menu
 	menu *ui.Menu
 	// statusBar displays the top contextual status bar
@@ -242,6 +247,9 @@ type home struct {
 	planStore planstore.Store
 	// planStoreProject is the project name used with the remote store (derived from repo basename).
 	planStoreProject string
+	// auditLogger records structured audit events to the planstore SQLite database.
+	// Falls back to NopLogger when planstore is HTTP-backed or unconfigured.
+	auditLogger auditlog.Logger
 
 	// previewTickCount counts preview ticks for throttled banner animation
 	previewTickCount int
@@ -341,6 +349,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:                   ctx,
 		spinner:               spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:                  ui.NewMenu(),
+		auditPane:             ui.NewAuditPane(),
 		statusBar:             ui.NewStatusBar(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		storage:               storage,
@@ -378,6 +387,24 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	} else {
 		h.fsm = planfsm.New(h.planStateDir)
 	}
+
+	// Initialize audit logger. When planstore is SQLite-backed (no PlanStore URL),
+	// share the same DB file so both tables coexist without conflicts.
+	// When planstore is HTTP-backed or unconfigured, use a no-op logger.
+	if appConfig.PlanStore == "" {
+		// SQLite-backed: open (or create) the shared planstore DB for audit events.
+		dbPath := planstore.ResolvedDBPath()
+		if al, err := auditlog.NewSQLiteLogger(dbPath); err != nil {
+			log.WarningLog.Printf("audit logger init failed: %v", err)
+			h.auditLogger = auditlog.NopLogger()
+		} else {
+			h.auditLogger = al
+		}
+	} else {
+		// HTTP-backed or unconfigured: discard audit events for now.
+		h.auditLogger = auditlog.NopLogger()
+	}
+
 	h.nav = ui.NewNavigationPanel(&h.spinner)
 	h.toastManager = overlay.NewToastManager(&h.spinner)
 
@@ -478,7 +505,26 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
-	m.nav.SetSize(navWidth, contentHeight)
+
+	// Split sidebar height between nav and audit pane when audit pane is visible.
+	if m.auditPane != nil && m.auditPane.Visible() && navWidth > 0 {
+		navH := contentHeight * 60 / 100
+		if navH < 5 {
+			navH = 5
+		}
+		auditH := contentHeight - navH
+		if auditH < 3 {
+			auditH = 3
+			navH = contentHeight - auditH
+		}
+		m.nav.SetSize(navWidth, navH)
+		m.auditPane.SetSize(navWidth, auditH)
+	} else {
+		m.nav.SetSize(navWidth, contentHeight)
+		if m.auditPane != nil {
+			m.auditPane.SetSize(navWidth, 0)
+		}
+	}
 
 	// Store for mouse hit-testing
 	m.navWidth = navWidth
@@ -536,6 +582,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.toastManager.Resolve(m.pendingPRToastID, overlay.ToastSuccess, "PR created!")
 		m.pendingPRToastID = ""
+		m.audit(auditlog.EventPRCreated, fmt.Sprintf("PR created: %s", msg.prTitle),
+			auditlog.WithInstance(msg.instanceTitle),
+		)
 		return m, m.toastTickCmd()
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)
@@ -951,6 +1000,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.permissionOverlay.SetWidth(55)
 					m.pendingPermissionInstance = inst
 					m.state = statePermission
+					m.audit(auditlog.EventPermissionDetected,
+						fmt.Sprintf("permission prompt detected for %s", inst.Title),
+						auditlog.WithInstance(inst.Title),
+					)
 				}
 			} else if md.PermissionPrompt == nil {
 				// Prompt cleared — remove the in-flight guard so a future permission
@@ -1050,6 +1103,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				alive, collected := tmuxAliveMap[inst.Title]
 				if collected && !alive {
 					inst.Exited = true
+					m.audit(auditlog.EventAgentFinished, fmt.Sprintf("agent finished: %s", inst.Title),
+						auditlog.WithInstance(inst.Title),
+						auditlog.WithAgent(inst.AgentType),
+						auditlog.WithPlan(inst.PlanFile),
+					)
 				}
 			}
 
@@ -1119,6 +1177,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 					delete(m.waveOrchestrators, planFile)
+					m.audit(auditlog.EventWaveCompleted, "all waves complete: "+planName,
+						auditlog.WithPlan(capturedPlanFile))
 
 					if !m.isUserInOverlay() {
 						// Focus a task instance so the user can see agent output behind the overlay.
@@ -1156,12 +1216,20 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						asyncCmds = append(asyncCmds, cmd)
 					}
 					if failed > 0 {
+						m.audit(auditlog.EventWaveFailed,
+							fmt.Sprintf("wave %d: %d/%d tasks failed", waveNum, failed, total),
+							auditlog.WithPlan(capturedPlanFile),
+							auditlog.WithWave(waveNum, 0))
 						message := fmt.Sprintf(
 							"%s — wave %d: %d/%d tasks complete, %d failed.\n\n"+
 								"[r] retry failed   [n] next wave   [a] abort",
 							planName, waveNum, completed, total, failed)
 						m.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)
 					} else {
+						m.audit(auditlog.EventWaveCompleted,
+							fmt.Sprintf("wave %d complete: %d/%d tasks", waveNum, completed, total),
+							auditlog.WithPlan(capturedPlanFile),
+							auditlog.WithWave(waveNum, 0))
 						message := fmt.Sprintf("%s — wave %d complete (%d/%d). start wave %d?",
 							planName, waveNum, completed, total, waveNum+1)
 						m.waveStandardConfirmAction(message, capturedPlanFile, capturedEntry)
@@ -1523,7 +1591,11 @@ func (m *home) View() string {
 	// Layout: nav | preview/tabs
 	var cols []string
 	if !m.sidebarHidden {
-		cols = append(cols, colStyle.Render(m.nav.String()))
+		sidebarCol := m.nav.String()
+		if m.auditPane != nil && m.auditPane.Visible() {
+			sidebarCol = lipgloss.JoinVertical(lipgloss.Left, m.nav.String(), m.auditPane.String())
+		}
+		cols = append(cols, colStyle.Render(sidebarCol))
 	}
 	cols = append(cols, previewWithPadding)
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
@@ -1644,7 +1716,10 @@ type permissionResponseMsg struct {
 }
 
 // prCreatedMsg is sent when async PR creation succeeds.
-type prCreatedMsg struct{}
+type prCreatedMsg struct {
+	instanceTitle string
+	prTitle       string
+}
 
 // prErrorMsg is sent when async PR creation fails.
 type prErrorMsg struct {

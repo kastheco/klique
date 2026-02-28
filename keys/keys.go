@@ -59,6 +59,8 @@ const (
 	KeySpaceExpand   // Space key with expand/collapse label (sidebar context)
 
 	KeyTmuxBrowser // t - browse orphaned tmux sessions
+
+	KeyAuditToggle // L - toggle audit log pane visibility
 )
 
 // Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.
@@ -96,6 +98,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"R":      KeyRepoSwitch,
 	"t":      KeyTmuxBrowser,
 	"s":      KeySpawnAgent,
+	"L":      KeyAuditToggle,
 	"T":      KeyFocusList,
 	"p":      KeyViewPlan,
 	"ctrl+s": KeyToggleSidebar,
@@ -248,6 +251,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyTmuxBrowser: key.NewBinding(
 		key.WithKeys("t"),
 		key.WithHelp("t", "tmux sessions"),
+	),
+
+	KeyAuditToggle: key.NewBinding(
+		key.WithKeys("L"),
+		key.WithHelp("L", "log"),
 	),
 
 	// -- Special keybindings --

@@ -119,3 +119,15 @@ func TestMenu_TmuxSessionCountZeroHidden(t *testing.T) {
 		t.Fatalf("menu should hide tmux count when zero; got: %q", out)
 	}
 }
+
+func TestMenu_SidebarShowsAuditLogHint(t *testing.T) {
+	m := NewMenu()
+	m.SetSize(200, 1)
+	m.SetState(StateDefault)
+	m.SetFocusSlot(MenuSlotSidebar)
+
+	out := stripMenuANSI(m.String())
+	if !strings.Contains(out, "L log") {
+		t.Fatalf("menu should show 'L log' audit toggle hint in sidebar; got: %q", out)
+	}
+}

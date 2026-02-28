@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
@@ -838,6 +839,12 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	m.addInstanceFinalizer(reviewerInst, m.nav.AddInstance(reviewerInst))
 	m.nav.SelectInstance(reviewerInst) // sort-order safe, unlike index arithmetic
 
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned reviewer for %s", planName),
+		auditlog.WithPlan(planFile),
+		auditlog.WithInstance(reviewerInst.Title),
+		auditlog.WithAgent(session.AgentTypeReviewer),
+	)
+
 	m.toastManager.Success(fmt.Sprintf("implementation complete → review started for %s", planName))
 
 	shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, branch)
@@ -1005,6 +1012,21 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 
 	m.addInstanceFinalizer(coderInst, m.nav.AddInstance(coderInst))
 	m.nav.SelectInstance(coderInst)
+
+	detail := ""
+	if feedback != "" {
+		if len(feedback) > 200 {
+			detail = feedback[:200] + "..."
+		} else {
+			detail = feedback
+		}
+	}
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned coder with reviewer feedback for %s", planName),
+		auditlog.WithPlan(planFile),
+		auditlog.WithInstance(coderInst.Title),
+		auditlog.WithAgent(session.AgentTypeCoder),
+		auditlog.WithDetail(detail),
+	)
 
 	m.toastManager.Info(fmt.Sprintf("review changes requested → re-implementing %s", planName))
 
@@ -1415,6 +1437,11 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 		}
 	}
 
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned fixer agent: %s", name),
+		auditlog.WithInstance(name),
+		auditlog.WithAgent(session.AgentTypeFixer),
+	)
+
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
 	return m, tea.Batch(tea.WindowSize(), startCmd)
@@ -1495,6 +1522,12 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 			return instanceStartedMsg{instance: inst, err: err}
 		}
 	}
+
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned %s for plan %s", agentType, planstate.DisplayName(planFile)),
+		auditlog.WithPlan(planFile),
+		auditlog.WithInstance(title),
+		auditlog.WithAgent(agentType),
+	)
 
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
@@ -1649,6 +1682,14 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 		// AddInstance registers in the list immediately; finalizer sets repo name after start.
 		m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 
+		m.audit(auditlog.EventAgentSpawned,
+			fmt.Sprintf("spawned coder for wave %d task %d", orch.CurrentWaveNumber(), task.Number),
+			auditlog.WithPlan(planFile),
+			auditlog.WithInstance(inst.Title),
+			auditlog.WithAgent(session.AgentTypeCoder),
+			auditlog.WithWave(orch.CurrentWaveNumber(), task.Number),
+		)
+
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
 			err := taskInst.StartInSharedWorktree(shared, entry.Branch)
@@ -1670,6 +1711,10 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 
 	waveNum := orch.CurrentWaveNumber()
 	m.toastManager.Info(fmt.Sprintf("wave %d started: %d task(s) running", waveNum, len(tasks)))
+	m.audit(auditlog.EventWaveStarted,
+		fmt.Sprintf("wave %d started: %d task(s)", waveNum, len(tasks)),
+		auditlog.WithPlan(orch.PlanFile()),
+		auditlog.WithWave(waveNum, 0))
 	return m.spawnWaveTasks(orch, tasks, entry)
 }
 
@@ -1790,6 +1835,12 @@ func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd
 		}
 	}
 
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned custodian chat for %s", planstate.DisplayName(planFile)),
+		auditlog.WithPlan(planFile),
+		auditlog.WithInstance(title),
+		auditlog.WithAgent(session.AgentTypeFixer),
+	)
+
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
 	return m, tea.Batch(tea.WindowSize(), startCmd)
@@ -1809,10 +1860,83 @@ func (m *home) adoptOrphanSession(item overlay.TmuxBrowserItem) (tea.Model, tea.
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
 
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("adopted orphan session: %s", item.Title),
+		auditlog.WithInstance(item.Title),
+	)
+
 	m.toastManager.Info(fmt.Sprintf("adopting session '%s'", item.Title))
 
 	return m, func() tea.Msg {
 		err := inst.AdoptOrphanTmuxSession(item.Name)
 		return instanceStartedMsg{instance: inst, err: err}
 	}
+}
+
+// audit emits a structured audit event, automatically filling in the Project
+// field from m.planStoreProject. Optional fields (PlanFile, InstanceTitle,
+// AgentType, WaveNumber, TaskNumber, Detail, Level) can be set via EventOption
+// functional options: WithPlan, WithInstance, WithAgent, WithWave, WithDetail,
+// WithLevel.
+func (m *home) audit(kind auditlog.EventKind, msg string, opts ...auditlog.EventOption) {
+	if m.auditLogger == nil {
+		return
+	}
+	e := auditlog.Event{
+		Kind:    kind,
+		Project: m.planStoreProject,
+		Message: msg,
+	}
+	for _, opt := range opts {
+		opt(&e)
+	}
+	m.auditLogger.Emit(e)
+	m.refreshAuditPane()
+}
+
+// refreshAuditPane queries the audit logger and updates the audit pane display.
+// Called after every audit() emit and on navigation selection changes.
+func (m *home) refreshAuditPane() {
+	if m.auditPane == nil || m.auditLogger == nil {
+		return
+	}
+
+	// Build filter based on current selection.
+	filter := auditlog.QueryFilter{
+		Project: m.planStoreProject,
+		Limit:   50,
+	}
+	filterLabel := "all"
+
+	// Narrow by selected plan or instance if available.
+	if m.nav != nil {
+		if inst := m.nav.GetSelectedInstance(); inst != nil {
+			filter.InstanceTitle = inst.Title
+			filterLabel = inst.Title
+		} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
+			filter.PlanFile = planFile
+			filterLabel = planFile
+		}
+	}
+
+	events, err := m.auditLogger.Query(filter)
+	if err != nil {
+		return
+	}
+
+	displays := make([]ui.AuditEventDisplay, 0, len(events))
+	for _, e := range events {
+		icon, color := ui.EventKindIcon(string(e.Kind))
+		timeStr := e.Timestamp.Format("15:04")
+		displays = append(displays, ui.AuditEventDisplay{
+			Time:    timeStr,
+			Kind:    string(e.Kind),
+			Icon:    icon,
+			Message: e.Message,
+			Color:   color,
+			Level:   e.Level,
+		})
+	}
+
+	m.auditPane.SetEvents(displays)
+	m.auditPane.SetFilter(filterLabel)
 }

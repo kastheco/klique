@@ -757,7 +757,7 @@
       "created_at": "2026-02-27T07:41:00.300934469Z"
     },
     "2026-02-27-audit-log.md": {
-      "status": "ready",
+      "status": "done",
       "description": "log all actions (new 'coder' agent spawned, finished successfully/failed, etc etc). useful for debugging but also browsing history and tracking who did what and why automatically",
       "branch": "plan/audit-log",
       "topic": "automation",
