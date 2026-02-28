@@ -900,3 +900,30 @@ func TestString_Legend(t *testing.T) {
 	assert.Contains(t, output, "review")
 	assert.Contains(t, output, "idle")
 }
+
+func TestString_ReviewingPlanAppearsActive(t *testing.T) {
+	n := newTestPanel()
+	n.SetSize(60, 40)
+	// Plan in "reviewing" status with NO running instances — simulates restart
+	// where the reviewer's tmux session is gone.
+	plans := []PlanDisplay{
+		{Filename: "reviewing-plan.md", Status: "reviewing"},
+		{Filename: "idle-plan.md", Status: "ready"},
+	}
+	n.SetData(plans, nil, nil, nil, nil)
+	output := n.String()
+	assert.Contains(t, output, "active", "reviewing plan should appear in active section")
+}
+
+func TestString_ImplementingPlanAppearsActive(t *testing.T) {
+	n := newTestPanel()
+	n.SetSize(60, 40)
+	// Plan in "implementing" status with NO running instances.
+	plans := []PlanDisplay{
+		{Filename: "impl-plan.md", Status: "implementing"},
+		{Filename: "idle-plan.md", Status: "ready"},
+	}
+	n.SetData(plans, nil, nil, nil, nil)
+	output := n.String()
+	assert.Contains(t, output, "active", "implementing plan should appear in active section")
+}
