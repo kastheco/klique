@@ -1,0 +1,752 @@
+{
+  "info": {
+    "id": "ses_355781dfbffeCuR98BwrbcNZTG",
+    "slug": "mighty-nebula",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Release cut",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 1,
+      "deletions": 1,
+      "files": 1
+    },
+    "time": {
+      "created": 1772387557892,
+      "updated": 1772387588736
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772387557912
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "main.go",
+              "before": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/app\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/daemon\"\n\tinitcmd \"github.com/kastheco/kasmos/internal/initcmd\"\n\tsentrypkg \"github.com/kastheco/kasmos/internal/sentry\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/spf13/cobra\"\n)\n\nvar (\n\tversion     = \"1.2.2\"\n\tprogramFlag string\n\tautoYesFlag bool\n\tdaemonFlag  bool\n\trootCmd     = &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tctx := context.Background()\n\n\t\t\tcfg := config.LoadConfig()\n\t\t\tif err := sentrypkg.Init(version, cfg.IsTelemetryEnabled()); err != nil {\n\t\t\t\t// Non-fatal: sentry failure should not prevent startup\n\t\t\t\t_ = err\n\t\t\t}\n\t\t\tdefer sentrypkg.Flush()\n\t\t\tdefer sentrypkg.RecoverPanic()\n\n\t\t\tlog.Initialize(daemonFlag, cfg.IsTelemetryEnabled())\n\t\t\tdefer log.Close()\n\n\t\t\tif daemonFlag {\n\t\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\t\t\t\tif err := daemon.RunDaemon(cfg); err != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to start daemon: %v\", err)\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\t// Check if we're in a git repository\n\t\t\tcurrentDir, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\n\t\t\tif !git.IsGitRepo(currentDir) {\n\t\t\t\treturn fmt.Errorf(\"error: kas must be run from within a git repository\")\n\t\t\t}\n\n\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\n\t\t\t// Program flag overrides config\n\t\t\tprogram := cfg.DefaultProgram\n\t\t\tif programFlag != \"\" {\n\t\t\t\tprogram = programFlag\n\t\t\t}\n\t\t\t// AutoYes flag overrides config\n\t\t\tautoYes := cfg.AutoYes\n\t\t\tif autoYesFlag {\n\t\t\t\tautoYes = true\n\t\t\t}\n\n\t\t\tsentrypkg.SetContext(program, autoYes, filepath.Base(currentDir))\n\n\t\t\tif autoYes {\n\t\t\t\tdefer func() {\n\t\t\t\t\tif err := daemon.LaunchDaemon(); err != nil {\n\t\t\t\t\t\tlog.ErrorLog.Printf(\"failed to launch daemon: %v\", err)\n\t\t\t\t\t}\n\t\t\t\t}()\n\t\t\t}\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to stop daemon: %v\", err)\n\t\t\t}\n\n\t\t\treturn app.Run(ctx, program, autoYes)\n\t\t},\n\t}\n\n\tresetCmd = &cobra.Command{\n\t\tUse:   \"reset\",\n\t\tShort: \"Reset all stored instances\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tstate := config.LoadState()\n\t\t\tstorage, err := session.NewStorage(state)\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to initialize storage: %w\", err)\n\t\t\t}\n\t\t\tif err := storage.DeleteAllInstances(); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to reset storage: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Storage has been reset successfully\")\n\n\t\t\tif err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup tmux sessions: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Tmux sessions have been cleaned up\")\n\n\t\t\tcwd, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\t\t\tif err := git.CleanupWorktrees(cwd); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup worktrees: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Worktrees have been cleaned up\")\n\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tfmt.Println(\"daemon has been stopped\")\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tdebugCmd = &cobra.Command{\n\t\tUse:   \"debug\",\n\t\tShort: \"Print debug information like config paths\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tcfg := config.LoadConfig()\n\n\t\t\tconfigDir, err := config.GetConfigDir()\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t\t\t}\n\t\t\tconfigJson, _ := json.MarshalIndent(cfg, \"\", \"  \")\n\n\t\t\tfmt.Printf(\"Config: %s\\n%s\\n\", filepath.Join(configDir, config.ConfigFileName), configJson)\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tversionCmd = &cobra.Command{\n\t\tUse:   \"version\",\n\t\tShort: \"Print the version number of kas\",\n\t\tRun: func(cmd *cobra.Command, args []string) {\n\t\t\tfmt.Printf(\"kas version %s\\n\", version)\n\t\t\tfmt.Printf(\"https://github.com/kastheco/kasmos/releases/tag/v%s\\n\", version)\n\t\t},\n\t}\n)\n\nfunc init() {\n\trootCmd.Flags().StringVarP(&programFlag, \"program\", \"p\", \"\",\n\t\t\"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')\")\n\trootCmd.Flags().BoolVarP(&autoYesFlag, \"autoyes\", \"y\", false,\n\t\t\"[experimental] If enabled, all instances will automatically accept prompts\")\n\trootCmd.Flags().BoolVar(&daemonFlag, \"daemon\", false, \"Run a program that loads all sessions\"+\n\t\t\" and runs autoyes mode on them.\")\n\n\t// Hide the daemonFlag as it's only for internal use\n\terr := rootCmd.Flags().MarkHidden(\"daemon\")\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tvar forceFlag bool\n\tvar cleanFlag bool\n\n\tkasSetupCmd := &cobra.Command{\n\t\tUse:     \"setup\",\n\t\tAliases: []string{\"init\"},\n\t\tShort:   \"Configure agent harnesses and scaffold project files\",\n\t\tLong: `Run an interactive wizard to:\n  1. Detect and select agent CLIs (claude, opencode, codex)\n  2. Configure agent roles (coder, reviewer, planner) with model and tuning\n  3. Install cli-tools enforcement hooks into each harness\n  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\treturn initcmd.Run(initcmd.Options{\n\t\t\t\tForce: forceFlag,\n\t\t\t\tClean: cleanFlag,\n\t\t\t})\n\t\t},\n\t}\n\n\tkasSetupCmd.Flags().BoolVar(&forceFlag, \"force\", false, \"Overwrite existing project scaffold files\")\n\tkasSetupCmd.Flags().BoolVar(&cleanFlag, \"clean\", false, \"Ignore existing config, start with factory defaults\")\n\n\trootCmd.AddCommand(debugCmd)\n\trootCmd.AddCommand(versionCmd)\n\trootCmd.AddCommand(resetCmd)\n\trootCmd.AddCommand(kasSetupCmd)\n\trootCmd.AddCommand(cmd2.NewPlanCmd())\n\trootCmd.AddCommand(cmd2.NewServeCmd())\n}\n\nfunc main() {\n\tif err := rootCmd.Execute(); err != nil {\n\t\tif errors.Is(err, errUnhealthy) {\n\t\t\tos.Exit(1)\n\t\t}\n\t\tfmt.Println(err)\n\t}\n}\n",
+              "after": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/app\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/daemon\"\n\tinitcmd \"github.com/kastheco/kasmos/internal/initcmd\"\n\tsentrypkg \"github.com/kastheco/kasmos/internal/sentry\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/spf13/cobra\"\n)\n\nvar (\n\tversion     = \"1.3.0\"\n\tprogramFlag string\n\tautoYesFlag bool\n\tdaemonFlag  bool\n\trootCmd     = &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tctx := context.Background()\n\n\t\t\tcfg := config.LoadConfig()\n\t\t\tif err := sentrypkg.Init(version, cfg.IsTelemetryEnabled()); err != nil {\n\t\t\t\t// Non-fatal: sentry failure should not prevent startup\n\t\t\t\t_ = err\n\t\t\t}\n\t\t\tdefer sentrypkg.Flush()\n\t\t\tdefer sentrypkg.RecoverPanic()\n\n\t\t\tlog.Initialize(daemonFlag, cfg.IsTelemetryEnabled())\n\t\t\tdefer log.Close()\n\n\t\t\tif daemonFlag {\n\t\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\t\t\t\tif err := daemon.RunDaemon(cfg); err != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to start daemon: %v\", err)\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\t// Check if we're in a git repository\n\t\t\tcurrentDir, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\n\t\t\tif !git.IsGitRepo(currentDir) {\n\t\t\t\treturn fmt.Errorf(\"error: kas must be run from within a git repository\")\n\t\t\t}\n\n\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\n\t\t\t// Program flag overrides config\n\t\t\tprogram := cfg.DefaultProgram\n\t\t\tif programFlag != \"\" {\n\t\t\t\tprogram = programFlag\n\t\t\t}\n\t\t\t// AutoYes flag overrides config\n\t\t\tautoYes := cfg.AutoYes\n\t\t\tif autoYesFlag {\n\t\t\t\tautoYes = true\n\t\t\t}\n\n\t\t\tsentrypkg.SetContext(program, autoYes, filepath.Base(currentDir))\n\n\t\t\tif autoYes {\n\t\t\t\tdefer func() {\n\t\t\t\t\tif err := daemon.LaunchDaemon(); err != nil {\n\t\t\t\t\t\tlog.ErrorLog.Printf(\"failed to launch daemon: %v\", err)\n\t\t\t\t\t}\n\t\t\t\t}()\n\t\t\t}\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to stop daemon: %v\", err)\n\t\t\t}\n\n\t\t\treturn app.Run(ctx, program, autoYes)\n\t\t},\n\t}\n\n\tresetCmd = &cobra.Command{\n\t\tUse:   \"reset\",\n\t\tShort: \"Reset all stored instances\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tstate := config.LoadState()\n\t\t\tstorage, err := session.NewStorage(state)\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to initialize storage: %w\", err)\n\t\t\t}\n\t\t\tif err := storage.DeleteAllInstances(); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to reset storage: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Storage has been reset successfully\")\n\n\t\t\tif err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup tmux sessions: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Tmux sessions have been cleaned up\")\n\n\t\t\tcwd, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\t\t\tif err := git.CleanupWorktrees(cwd); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup worktrees: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Worktrees have been cleaned up\")\n\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tfmt.Println(\"daemon has been stopped\")\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tdebugCmd = &cobra.Command{\n\t\tUse:   \"debug\",\n\t\tShort: \"Print debug information like config paths\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tcfg := config.LoadConfig()\n\n\t\t\tconfigDir, err := config.GetConfigDir()\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t\t\t}\n\t\t\tconfigJson, _ := json.MarshalIndent(cfg, \"\", \"  \")\n\n\t\t\tfmt.Printf(\"Config: %s\\n%s\\n\", filepath.Join(configDir, config.ConfigFileName), configJson)\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tversionCmd = &cobra.Command{\n\t\tUse:   \"version\",\n\t\tShort: \"Print the version number of kas\",\n\t\tRun: func(cmd *cobra.Command, args []string) {\n\t\t\tfmt.Printf(\"kas version %s\\n\", version)\n\t\t\tfmt.Printf(\"https://github.com/kastheco/kasmos/releases/tag/v%s\\n\", version)\n\t\t},\n\t}\n)\n\nfunc init() {\n\trootCmd.Flags().StringVarP(&programFlag, \"program\", \"p\", \"\",\n\t\t\"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')\")\n\trootCmd.Flags().BoolVarP(&autoYesFlag, \"autoyes\", \"y\", false,\n\t\t\"[experimental] If enabled, all instances will automatically accept prompts\")\n\trootCmd.Flags().BoolVar(&daemonFlag, \"daemon\", false, \"Run a program that loads all sessions\"+\n\t\t\" and runs autoyes mode on them.\")\n\n\t// Hide the daemonFlag as it's only for internal use\n\terr := rootCmd.Flags().MarkHidden(\"daemon\")\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tvar forceFlag bool\n\tvar cleanFlag bool\n\n\tkasSetupCmd := &cobra.Command{\n\t\tUse:     \"setup\",\n\t\tAliases: []string{\"init\"},\n\t\tShort:   \"Configure agent harnesses and scaffold project files\",\n\t\tLong: `Run an interactive wizard to:\n  1. Detect and select agent CLIs (claude, opencode, codex)\n  2. Configure agent roles (coder, reviewer, planner) with model and tuning\n  3. Install cli-tools enforcement hooks into each harness\n  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\treturn initcmd.Run(initcmd.Options{\n\t\t\t\tForce: forceFlag,\n\t\t\t\tClean: cleanFlag,\n\t\t\t})\n\t\t},\n\t}\n\n\tkasSetupCmd.Flags().BoolVar(&forceFlag, \"force\", false, \"Overwrite existing project scaffold files\")\n\tkasSetupCmd.Flags().BoolVar(&cleanFlag, \"clean\", false, \"Ignore existing config, start with factory defaults\")\n\n\trootCmd.AddCommand(debugCmd)\n\trootCmd.AddCommand(versionCmd)\n\trootCmd.AddCommand(resetCmd)\n\trootCmd.AddCommand(kasSetupCmd)\n\trootCmd.AddCommand(cmd2.NewPlanCmd())\n\trootCmd.AddCommand(cmd2.NewServeCmd())\n}\n\nfunc main() {\n\tif err := rootCmd.Execute(); err != nil {\n\t\tif errors.Is(err, errUnhealthy) {\n\t\t\tos.Exit(1)\n\t\t}\n\t\tfmt.Println(err)\n\t}\n}\n",
+              "additions": 1,
+              "deletions": 1,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "fixer",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "id": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "cut a new release",
+          "id": "prt_caa87e211001rR2UkD5cayt4Fx",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e2100015I5eeCbBQeGhsY"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387557919,
+          "completed": 1772387563872
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 28080,
+          "input": 3,
+          "output": 279,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 27798
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_caa87e21f001GTgT21VXZfEm1t",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "id": "prt_caa87eaf80018hfY9mb97T8uDh",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "text",
+          "text": "\n\nLet me load the fixer skill and check the current state first.",
+          "time": {
+            "start": 1772387560998,
+            "end": 1772387560998
+          },
+          "id": "prt_caa87eaf9001Yg5lbcq86TG75g",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-fixer"
+            },
+            "output": "<skill_content name=\"kasmos-fixer\">\n# Skill: kasmos-fixer\n\n# kasmos-fixer\n\nYou are the **fixer agent** — debugger, investigator, and operational troubleshooter of the kasmos\nsystem. You investigate test failures, trace root causes, fix stuck plan states, clean up stale\nresources, triage loose ends, and verify fixes. You do **not** write features, implement plans,\nor make architectural decisions.\n\n## Scaffolding System Protocol (always before editing skills/agent commands)\n\nWhen a task touches skills or agent commands, check whether the target is scaffold-managed first.\nIf a scaffold source exists, update source + mirrors in the same change.\n\n| Artifact type | Canonical/source | Required mirrors to update |\n|---------------|------------------|----------------------------|\n| Skills | `.agents/skills/...` | `internal/initcmd/scaffold/templates/skills/...` |\n| Agent prompts | `internal/initcmd/scaffold/templates/{opencode,claude}/agents/...` | local runtime prompt copies (for example `.opencode/agents/...`) |\n| Agent commands | scaffold template under `internal/initcmd/scaffold/templates/...` (when present) | corresponding live command file in repo |\n\nNever modify only one copy when a scaffold source exists.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions.\n</HARD-GATE>\n\n## Where You Fit\n\nYou are a **debugger, investigator, and operational troubleshooter**. Your scope spans both\ndebugging/investigation and operational cleanup:\n\n| You do | You don't do |\n|--------|-------------|\n| Investigate test failures and trace root causes | Write code or implement features |\n| Reproduce bugs and verify fixes | Review code or approve PRs |\n| Audit implementation completeness | Write or modify plan files |\n| Fix plans stuck in wrong states | Make architectural decisions |\n| Clean stale worktrees and branches | Start new plans or features |\n| Trigger wave execution via `kas plan implement` | Modify plan file **content** |\n| Triage plans and report status | Implement planner or coder work |\n| Merge or PR completed branches | — |\n| Recover from failed or aborted runs | — |\n\n**If asked to do feature work:** decline and redirect to the planner or coder role.\n\n### Plan lifecycle (reference)\n\n```\nready → planning → implementing → reviewing → done\n                                            ↑\n                                      cancelled (from any state)\n```\n\nYour typical intervention points: plans stuck in `implementing` or `reviewing`, test failures\nblocking progress, implementation completeness audits, or plans that finished but weren't\ntransitioned to `done`.\n\n---\n\n## Debugging Protocol\n\nWhen encountering test failures, build errors, or unexpected behavior — investigate before\nproposing fixes. Random patches mask the actual problem and create new ones.\n\n### Phase 1 — Evidence Gathering\n\nBefore attempting any fix:\n\n1. **Read error messages completely** — full stack traces, line numbers, error codes. Do not skim.\n2. **Reproduce the failure consistently** — what exact steps trigger it? Can you make it fail reliably?\n3. **Check recent changes** — `git log --oneline -20`, `git diff HEAD~1`, recent commits in affected packages\n4. **Add diagnostic instrumentation** — in multi-component systems, add logging/print at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. **Trace data flow** — where does the bad value originate? Trace backward up the call stack to the source.\n\n```bash\n# Quick evidence gathering\ngit log --oneline -20\ngit diff HEAD~1\ngo test ./failing/package/... -v -count=1 -run TestSpecificFailure 2>&1 | head -60\n```\n\n### Phase 2 — Pattern Analysis\n\nFind working examples in the codebase doing something similar:\n\n```bash\nrg 'PatternOfInterest' --type go\n```\n\nCompare them against the broken code. List **every difference** — don't assume \"that can't matter.\"\nUnderstand all dependencies: config, env, state, initialization order.\n\n### Phase 3 — Hypothesis Testing\n\nForm **one specific hypothesis**: \"I think X is the root cause because Y.\"\n\n- Test it with the **smallest possible change**\n- One variable at a time — never stack multiple guesses into a single patch\n- Verify: did it work? If not, form a new hypothesis from the new evidence.\n\n### Phase 4 — Fix Implementation\n\n1. Write a failing test reproducing the bug (TDD discipline applies to bugfixes)\n2. Implement the single fix addressing the root cause\n3. Verify the test now passes and no other tests regressed\n\n```bash\ngo test ./affected/package/... -v -count=1\ngo test ./... -count=1  # full suite regression check\n```\n\n### Escalation Rule\n\n**After 3 failed fixes: STOP.**\n\nEach fix revealing a new problem in a different place is an architectural signal, not a debugging\nproblem. Do not attempt fix #4. Escalate or document the situation instead.\n\n### Debugging Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\" (without evidence)\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n\n---\n\n## Investigation Protocol\n\nFor loose-end triage — auditing implementation completeness, checking coverage gaps, verifying\nedge cases:\n\n### Step 1 — Scan for Incomplete Work\n\n```bash\nrg 'TODO|FIXME|HACK|XXX|PLACEHOLDER' --type go\nrg 'TODO|FIXME' --type md docs/plans/\n```\n\n### Step 2 — Cross-reference Plan vs Implementation\n\nFor each task in the plan:\n1. Read the task description and expected file changes\n2. Verify those files exist and contain the described logic\n3. Run the tests the plan specifies — do they pass?\n4. Check for partial implementations (function stubs, empty returns, missing error handling)\n\n### Step 3 — Test Coverage Gaps\n\n```bash\ngo test ./... -count=1 -coverprofile=coverage.out\ngo tool cover -func=coverage.out | rg '0.0%'  # uncovered functions\n```\n\n### Step 4 — Error Handling Completeness\n\n```bash\n# Find unhandled errors\nrg 'err\\s*:?=.*\\n.*[^}]$' --type go -A 1  # rough heuristic\nrg '\\berr\\b.*:=.*\\n[^if]' --type go       # assignment not followed by if\n```\n\nReport findings: list each gap with file, line, and severity (blocking / non-blocking).\n\n---\n\n## Targeted Verification\n\nEvidence-first approach before claiming anything is fixed or working:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go build\ngo build ./...\n\n# Targeted test (preferred — scoped to changed package)\ngo test ./path/to/package/... -v -count=1\n\n# Full suite\ngo test ./... -count=1\n\n# Spell check before committing\ntypos\n\n# Verify specific behavior\nrg 'ExpectedPattern' path/to/file.go\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction before the verification command output is in view\n\n---\n\n## Cleanup Protocol\n\nRun `/kas.cleanup` or perform the three-pass cleanup manually. **Always dry-run first.**\n\n### Pass 1 — Stale Worktrees\n\nFind git worktrees whose associated plan is `done` or `cancelled`:\n\n```bash\ngit worktree list --porcelain\nkas plan list --status done\nkas plan list --status cancelled\n```\n\nCross-reference. For each stale worktree:\n1. Confirm with user: \"remove worktree for plan `<name>` (status: done)?\"\n2. `git worktree remove <path>` (add `--force` only if user confirms dirty state)\n\n### Pass 2 — Orphan Branches\n\nFind local `plan/*` branches with no corresponding entry in `docs/plans/plan-state.json`:\n\n```bash\ngit branch --list 'plan/*'\n```\n\nFor each branch not in plan-state.json:\n1. Show: branch name, last commit, commits-ahead-of-main count\n2. Confirm: \"delete orphan branch `<branch>`?\"\n3. `git branch -d <branch>` (use `-D` only if user confirms)\n\n### Pass 3 — Ghost Plan Entries\n\nFind entries in `docs/plans/plan-state.json` with no corresponding `.md` file:\n\n```bash\n# read plan-state.json, cross-reference with fd output\nfd -e md . docs/plans/\n```\n\nFor each ghost entry:\n1. Show: plan key, status, branch\n2. Confirm: \"remove ghost entry `<key>` from plan-state.json?\"\n3. Edit plan-state.json to remove the entry (use `jq` or direct edit, preserve formatting)\n\n---\n\n## Available CLI Commands\n\nAll state mutations go through the `kas` binary. Use `kas`, not `kq`.\n\n### `kas plan list [--status <status>]`\n\nList all plans with their status, branch, and topic. Supports status filter.\n\n```bash\nkas plan list                        # all plans\nkas plan list --status implementing  # only implementing plans\nkas plan list --status ready         # plans waiting to start\n```\n\n### `kas plan set-status <plan-file> <status> --force`\n\nForce-override a plan's status, bypassing the FSM transition table. Requires `--force`.\nValid statuses: `ready`, `planning`, `implementing`, `reviewing`, `done`, `cancelled`.\n\n```bash\nkas plan set-status docs/plans/2026-02-27-my-plan.md done --force\n```\n\nUse only when FSM transitions are blocked (e.g., a plan stuck with no valid event).\nAlways confirm with the user before executing.\n\n### `kas plan transition <plan-file> <event>`\n\nApply a named FSM event. Respects the transition table. Preferred over `set-status` when\na valid event exists.\n\nValid events: `plan_start`, `implement_start`, `review_start`, `review_approved`,\n`review_changes`, `cancel`, `reopen`\n\n```bash\nkas plan transition docs/plans/2026-02-27-my-plan.md review_approved\n```\n\nPrints resulting status on success. On failure, prints current status + valid events.\n\n### `kas plan implement <plan-file> [--wave N]`\n\nTransition plan to `implementing` and write a wave signal file so the TUI spawns the\nwave orchestrator. Default wave is 1.\n\n```bash\nkas plan implement docs/plans/2026-02-27-my-plan.md          # wave 1\nkas plan implement docs/plans/2026-02-27-my-plan.md --wave 3  # specific wave\n```\n\n---\n\n## Available Slash Commands\n\nThese one-shot commands are usable from any agent context:\n\n| Command | Purpose |\n|---------|---------|\n| `/kas.reset-plan <plan-file> <status>` | Force-override plan status (calls `kas plan set-status --force`). Shows before/after. |\n| `/kas.finish-branch [plan-file]` | Merge or PR a plan's branch. Infers plan from current branch if omitted. |\n| `/kas.cleanup [--dry-run]` | Three-pass cleanup: stale worktrees → orphan branches → ghost entries. Default dry-run. |\n| `/kas.implement <plan-file> [--wave N]` | Set plan to implementing, write wave signal. |\n| `/kas.triage` | Scan non-done/cancelled plans, show status + branch + last commit + worktree. Group by status. |\n\n---\n\n## Release Version Bump\n\nThe GitHub Actions `Release` workflow (`.github/workflows/release.yml`) validates that the git tag\nmatches the `version` constant in `main.go` (line 25). If they don't match, the build fails:\n\n```\nERROR: Tag version (1.1.1) does not match version in main.go (1.1.0)\nPlease ensure the tag matches the version defined in main.go\n```\n\n**Before creating any `v*` tag**, always bump `main.go` first:\n\n```bash\n# 1. decide the new version\nNEW_VERSION=\"X.Y.Z\"\n\n# 2. update main.go\nsd 'version\\s*=\\s*\"[^\"]*\"' \"version     = \\\"${NEW_VERSION}\\\"\" main.go\n\n# 3. verify the change\nrg '^\\s*version\\s*=' main.go\n# expected output: version     = \"X.Y.Z\"\n\n# 4. commit on main\ngit add main.go\ngit commit -m \"chore: bump version to ${NEW_VERSION}\"\n\n# 5. create tag and push both\ngit tag \"v${NEW_VERSION}\"\ngit push origin main \"v${NEW_VERSION}\"\n```\n\n**Pre-flight check:** before pushing a tag, always run:\n\n```bash\nrg '^\\s*version\\s*=' main.go\n```\n\nand confirm the version string matches the tag (without the `v` prefix).\n\n**Never push a `v*` tag without this check.** The CI step `Validate tag matches version in main.go`\nwill reject the build if they diverge.\n\n---\n\n## Safety Rules\n\n1. **`--force` required for status overrides** — `kas plan set-status` without `--force` is an error.\n   Never add `--force` without user confirmation.\n\n2. **Confirm before destructive ops** — worktree removal, branch deletion, and plan-state edits\n   are irreversible. Always show what will change and get explicit confirmation.\n\n3. **Never modify plan file content** — plan `.md` files are the source of truth authored by the\n   planner. You update status in `plan-state.json` via `kas` commands only. Never edit plan `.md`\n   content.\n\n4. **FSM transitions validate state** — prefer `kas plan transition` over `set-status`. The FSM\n   ensures consistent state. Use `set-status --force` only when a plan is genuinely stuck with no\n   valid FSM event.\n\n5. **Dry-run by default** — cleanup operations default to reporting what would change. Execute only\n   after the user reviews the dry-run output and confirms.\n\n6. **Shared worktree safety** — if `KASMOS_PEERS` is set, other agents may be writing files.\n   Never run `git add -A`, `git reset`, or formatters across the whole project.\n\n7. **Stop after 3 failed fixes** — if three distinct attempts to fix a bug have failed, stop\n   and escalate. Do not attempt a fourth fix. Each failed fix that reveals a new problem in a\n   different place is an architectural signal.\n\n8. **Evidence before assertions** — never claim a fix works without running verification.\n   Never claim tests pass without showing the output. \"Should work\" is not verification.\n\n---\n\n## Mode Signaling\n\n### Managed mode (`KASMOS_MANAGED=1`)\n\nYou are running as a kasmos-spawned instance. After completing an operation:\n\n1. Write a sentinel in `.kasmos/signals/`:\n   - cleanup: `fixer-cleanup-<timestamp>.md`\n   - triage: `fixer-triage-<timestamp>.md`\n   - general: `fixer-done-<timestamp>.md`\n2. **Stop.** Do not proceed further. Kasmos will handle next steps.\n\n### Manual mode (`KASMOS_MANAGED` unset)\n\nYou are running in a raw terminal session. After completing an operation:\n\n1. Report what changed (plans updated, worktrees removed, branches deleted, bugs fixed)\n2. Ask: \"anything else to investigate or clean up?\"\n3. Offer next steps if relevant (e.g., \"ready to trigger wave implementation?\")\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-fixer\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-fixer",
+            "metadata": {
+              "name": "kasmos-fixer",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-fixer",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387561628,
+              "end": 1772387561634
+            }
+          },
+          "id": "prt_caa87ee26001r7PvGY7g951tRn",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01MAYu99nAANg78iVYpfy2xY",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline -20",
+              "description": "Check recent commit history"
+            },
+            "output": "7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\na3244ca refactor(task-5 planstate): remove JSON fallback, store always required\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n35382f8 fix(ui): update legend to show plan statuses and center vertically\n39ec57a fix(app): add missing activity log entries for plan creation and k-kill\n7238019 feat(planstore): embed HTTP server in TUI lifecycle\nb41fd5c feat(planstate): add content storage methods delegating to planstore\nf886c6e feat(planstore): add content column to store interface and SQLite schema\n807c59f feat(planstore): add content endpoints to HTTP client and server\n4eb5cb7 merge plan branch plan/auto-advance-waves\n8b631bc fix(planstate): Use store.Rename for filename reconciliation\n49da0c3 plan: store plans in db\naad0500 feat(app): auto-advance waves when config option is enabled\nc6fe3e2 feat(ui): add auto-advance waves toggle to plan context menu\n0efe7fc feat(config): add AutoAdvanceWaves setting to TOML and JSON config\n30b5b36 plan: auto-advance waves\nde94a6e merge plan branch plan/remove-repo-switcher\n",
+            "title": "Check recent commit history",
+            "metadata": {
+              "output": "7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\na3244ca refactor(task-5 planstate): remove JSON fallback, store always required\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n35382f8 fix(ui): update legend to show plan statuses and center vertically\n39ec57a fix(app): add missing activity log entries for plan creation and k-kill\n7238019 feat(planstore): embed HTTP server in TUI lifecycle\nb41fd5c feat(planstate): add content storage methods delegating to planstore\nf886c6e feat(planstore): add content column to store interface and SQLite schema\n807c59f feat(planstore): add content endpoints to HTTP client and server\n4eb5cb7 merge plan branch plan/auto-advance-waves\n8b631bc fix(planstate): Use store.Rename for filename reconciliation\n49da0c3 plan: store plans in db\naad0500 feat(app): auto-advance waves when config option is enabled\nc6fe3e2 feat(ui): add auto-advance waves toggle to plan context menu\n0efe7fc feat(config): add AutoAdvanceWaves setting to TOML and JSON config\n30b5b36 plan: auto-advance waves\nde94a6e merge plan branch plan/remove-repo-switcher\n",
+              "exit": 0,
+              "description": "Check recent commit history",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387562187,
+              "end": 1772387562198
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_018CV6wnzkCsgaFeckNkVkxp",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git tag --sort=-v:refname | head -10",
+              "description": "List recent version tags"
+            },
+            "output": "v1.2.2\nv1.2.1\nv1.2.0\nv1.1.5\nv1.1.4\nv1.1.3\nv1.1.2\nv1.1.1\nv1.1.0\nv1.0.14\n",
+            "title": "List recent version tags",
+            "metadata": {
+              "output": "v1.2.2\nv1.2.1\nv1.2.0\nv1.1.5\nv1.1.4\nv1.1.3\nv1.1.2\nv1.1.1\nv1.1.0\nv1.0.14\n",
+              "exit": 0,
+              "description": "List recent version tags",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387562907,
+              "end": 1772387562911
+            }
+          },
+          "id": "prt_caa87f2cc00187fSjtcno1x10G",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01NKvNMHFewC1dNvUDK6rgGZ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg '^\\s*version\\s*=' main.go",
+              "description": "Check current version in main.go"
+            },
+            "output": "\tversion     = \"1.2.2\"\n",
+            "title": "Check current version in main.go",
+            "metadata": {
+              "output": "\tversion     = \"1.2.2\"\n",
+              "exit": 0,
+              "description": "Check current version in main.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387563842,
+              "end": 1772387563845
+            }
+          },
+          "id": "prt_caa87f59e0017NBg6GPh6Jdxr7",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "cost": 0,
+          "tokens": {
+            "total": 28080,
+            "input": 3,
+            "output": 279,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 27798
+            }
+          },
+          "id": "prt_caa87f958001jvmoBxOaCfEhh3",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87e21f001GTgT21VXZfEm1t"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387563873,
+          "completed": 1772387567460
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 33234,
+          "input": 1,
+          "output": 166,
+          "reasoning": 0,
+          "cache": {
+            "read": 27798,
+            "write": 5269
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_caa87f961001lJxT0fioQLXCsJ",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "id": "prt_caa87ff7b001SkwYrn8VXujCr4",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87f961001lJxT0fioQLXCsJ"
+        },
+        {
+          "type": "text",
+          "text": "Let me check what's changed since the last release tag to determine the appropriate version bump.",
+          "time": {
+            "start": 1772387566117,
+            "end": 1772387566117
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87f961001lJxT0fioQLXCsJ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01WeCkHHX4xymNKsvC6KhxtK",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log v1.2.2..HEAD --oneline",
+              "description": "Changes since last release"
+            },
+            "output": "7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\na3244ca refactor(task-5 planstate): remove JSON fallback, store always required\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n35382f8 fix(ui): update legend to show plan statuses and center vertically\n39ec57a fix(app): add missing activity log entries for plan creation and k-kill\n7238019 feat(planstore): embed HTTP server in TUI lifecycle\nb41fd5c feat(planstate): add content storage methods delegating to planstore\nf886c6e feat(planstore): add content column to store interface and SQLite schema\n807c59f feat(planstore): add content endpoints to HTTP client and server\n4eb5cb7 merge plan branch plan/auto-advance-waves\n8b631bc fix(planstate): Use store.Rename for filename reconciliation\n49da0c3 plan: store plans in db\naad0500 feat(app): auto-advance waves when config option is enabled\nc6fe3e2 feat(ui): add auto-advance waves toggle to plan context menu\n0efe7fc feat(config): add AutoAdvanceWaves setting to TOML and JSON config\n30b5b36 plan: auto-advance waves\nde94a6e merge plan branch plan/remove-repo-switcher\n2f2f2eb fix: revert out-of-scope changes (reviewer self-fix)\ne2f57b3 plan: AGPL escape clean-room rewrite of upstream code\ncce95ce fix(ui): coalesce stopped+started audit pairs into 'kasmos restarted'\n3a8f5fb refactor: remove RecentRepos from persisted config state\n4372f9d refactor: remove repo switcher UI, state, keybinding, and input handling\n790de25 fix(ui): bottom-align audit log and increase event limit to 200\n954cff6 fix(contracts): restore plan review section in planner prompt\n",
+            "title": "Changes since last release",
+            "metadata": {
+              "output": "7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\na3244ca refactor(task-5 planstate): remove JSON fallback, store always required\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n35382f8 fix(ui): update legend to show plan statuses and center vertically\n39ec57a fix(app): add missing activity log entries for plan creation and k-kill\n7238019 feat(planstore): embed HTTP server in TUI lifecycle\nb41fd5c feat(planstate): add content storage methods delegating to planstore\nf886c6e feat(planstore): add content column to store interface and SQLite schema\n807c59f feat(planstore): add content endpoints to HTTP client and server\n4eb5cb7 merge plan branch plan/auto-advance-waves\n8b631bc fix(planstate): Use store.Rename for filename reconciliation\n49da0c3 plan: store plans in db\naad0500 feat(app): auto-advance waves when config option is enabled\nc6fe3e2 feat(ui): add auto-advance waves toggle to plan context menu\n0efe7fc feat(config): add AutoAdvanceWaves setting to TOML and JSON config\n30b5b36 plan: auto-advance waves\nde94a6e merge plan branch plan/remove-repo-switcher\n2f2f2eb fix: revert out-of-scope changes (reviewer self-fix)\ne2f57b3 plan: AGPL escape clean-room rewrite of upstream code\ncce95ce fix(ui): coalesce stopped+started audit pairs into 'kasmos restarted'\n3a8f5fb refactor: remove RecentRepos from persisted config state\n4372f9d refactor: remove repo switcher UI, state, keybinding, and input handling\n790de25 fix(ui): bottom-align audit log and increase event limit to 200\n954cff6 fix(contracts): restore plan review section in planner prompt\n",
+              "exit": 0,
+              "description": "Changes since last release",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387566923,
+              "end": 1772387566926
+            }
+          },
+          "id": "prt_caa880225001awncVDjI3SJf4M",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87f961001lJxT0fioQLXCsJ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01W3z77AmRwK3rdjXavMWrVW",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git branch --show-current",
+              "description": "Check current branch"
+            },
+            "output": "main\n",
+            "title": "Check current branch",
+            "metadata": {
+              "output": "main\n",
+              "exit": 0,
+              "description": "Check current branch",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387567436,
+              "end": 1772387567439
+            }
+          },
+          "id": "prt_caa88054d001T5C9KKGxzSF1jo",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87f961001lJxT0fioQLXCsJ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "cost": 0,
+          "tokens": {
+            "total": 33234,
+            "input": 1,
+            "output": 166,
+            "reasoning": 0,
+            "cache": {
+              "read": 27798,
+              "write": 5269
+            }
+          },
+          "id": "prt_caa88075d001cqUW5sKtXJQDu1",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa87f961001lJxT0fioQLXCsJ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387567461,
+          "completed": 1772387582819
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34188,
+          "input": 1,
+          "output": 333,
+          "reasoning": 0,
+          "cache": {
+            "read": 33067,
+            "write": 787
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_caa880765001CXJUg3p59luzuu",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "id": "prt_caa880bfd001eptZvlr0djhOL0",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa880765001CXJUg3p59luzuu"
+        },
+        {
+          "type": "text",
+          "text": "Significant changes since v1.2.2:\n\n- **store-plans-in-db**: Plans now stored in SQLite DB (migration, content storage, HTTP endpoints, JSON fallback removal)\n- **auto-advance-waves**: New config option + UI toggle for automatic wave advancement\n- **remove-repo-switcher**: Removed repo switcher UI/state/keybinding\n- Various fixes (UI legend, activity logs, audit log)\n\nThis is a **minor** bump — new features (DB storage, auto-advance waves) + breaking removal (repo switcher). **v1.3.0** is appropriate.\n\nLet me verify the build is clean first:",
+          "time": {
+            "start": 1772387572252,
+            "end": 1772387572252
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa880765001CXJUg3p59luzuu"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go build ./...",
+              "description": "Verify build passes",
+              "timeout": 60000
+            },
+            "output": "",
+            "title": "Verify build passes",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Verify build passes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387573106,
+              "end": 1772387574158
+            }
+          },
+          "id": "prt_caa881a25001frZilGxubauWe2",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa880765001CXJUg3p59luzuu"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./... -count=1 2>&1 | tail -30",
+              "description": "Run full test suite",
+              "timeout": 120000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos\t0.013s\nok  \tgithub.com/kastheco/kasmos/app\t6.650s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.009s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.104s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/planfsm\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/planparser\t0.002s\nok  \tgithub.com/kastheco/kasmos/config/planstate\t0.013s\nok  \tgithub.com/kastheco/kasmos/config/planstore\t0.020s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.004s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.002s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.007s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.007s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.104s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.002s\nok  \tgithub.com/kastheco/kasmos/keys\t0.003s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/session\t0.018s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.026s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.106s\nok  \tgithub.com/kastheco/kasmos/ui\t0.023s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.008s\n",
+            "title": "Run full test suite",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos\t0.013s\nok  \tgithub.com/kastheco/kasmos/app\t6.650s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.009s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.104s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/planfsm\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/planparser\t0.002s\nok  \tgithub.com/kastheco/kasmos/config/planstate\t0.013s\nok  \tgithub.com/kastheco/kasmos/config/planstore\t0.020s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.004s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.002s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.007s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.007s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.104s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.002s\nok  \tgithub.com/kastheco/kasmos/keys\t0.003s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/session\t0.018s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.026s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.106s\nok  \tgithub.com/kastheco/kasmos/ui\t0.023s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.008s\n",
+              "exit": 0,
+              "description": "Run full test suite",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387573972,
+              "end": 1772387582810
+            }
+          },
+          "id": "prt_caa881d8a001BSwVltZRG7pLTN",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa880765001CXJUg3p59luzuu"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "cost": 0,
+          "tokens": {
+            "total": 34188,
+            "input": 1,
+            "output": 333,
+            "reasoning": 0,
+            "cache": {
+              "read": 33067,
+              "write": 787
+            }
+          },
+          "id": "prt_caa88435b001VSclq5OwYdae0Q",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa880765001CXJUg3p59luzuu"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387582820,
+          "completed": 1772387587071
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 35056,
+          "input": 1,
+          "output": 166,
+          "reasoning": 0,
+          "cache": {
+            "read": 33854,
+            "write": 1035
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_caa884363001KCIbhnSpz3JN6v",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "id": "prt_caa8847fa0018blK8PTkAOfBP8",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa884363001KCIbhnSpz3JN6v"
+        },
+        {
+          "type": "text",
+          "text": "Build clean, all tests pass. Proceeding with **v1.3.0**.\n\n**Plan:** bump `main.go` version to `1.3.0`, commit, tag `v1.3.0`, push both.",
+          "time": {
+            "start": 1772387585798,
+            "end": 1772387585798
+          },
+          "id": "prt_caa8847fb001cXbqT7Zeofy7lK",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa884363001KCIbhnSpz3JN6v"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01BX23AEpHBqUMPA2YkbXNG2",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "sd 'version\\s*=\\s*\"[^\"]*\"' 'version     = \"1.3.0\"' main.go",
+              "description": "Bump version to 1.3.0"
+            },
+            "output": "",
+            "title": "Bump version to 1.3.0",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Bump version to 1.3.0",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387586961,
+              "end": 1772387586971
+            }
+          },
+          "id": "prt_caa884f0a001wpxb1MH5g5pL41",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa884363001KCIbhnSpz3JN6v"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7ab6f69ac6422dfdfb93200f753c536149532094",
+          "cost": 0,
+          "tokens": {
+            "total": 35056,
+            "input": 1,
+            "output": 166,
+            "reasoning": 0,
+            "cache": {
+              "read": 33854,
+              "write": 1035
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa884363001KCIbhnSpz3JN6v"
+        },
+        {
+          "type": "patch",
+          "hash": "e915aa79af6fb608dd0166317ec718f4fb11a89d",
+          "files": [
+            "/home/kas/dev/kasmos/main.go"
+          ],
+          "id": "prt_caa8853fd0010Btxn6ibpGJmX6",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa884363001KCIbhnSpz3JN6v"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387587071,
+          "completed": 1772387588729
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 35169,
+          "input": 1,
+          "output": 87,
+          "reasoning": 0,
+          "cache": {
+            "read": 34889,
+            "write": 192
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_caa8853ff001Dl1egJ5kq8M0Ow",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7ab6f69ac6422dfdfb93200f753c536149532094",
+          "id": "prt_caa88580b001hgQe5fkp7uvBxZ",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa8853ff001Dl1egJ5kq8M0Ow"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg '^\\s*version\\s*=' main.go",
+              "description": "Verify version bump"
+            },
+            "output": "\tversion     = \"1.3.0\"\n",
+            "title": "Verify version bump",
+            "metadata": {
+              "output": "\tversion     = \"1.3.0\"\n",
+              "exit": 0,
+              "description": "Verify version bump",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772387588696,
+              "end": 1772387588699
+            }
+          },
+          "id": "prt_caa88580c001064lLNZqcbOA0b",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa8853ff001Dl1egJ5kq8M0Ow"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7ab6f69ac6422dfdfb93200f753c536149532094",
+          "cost": 0,
+          "tokens": {
+            "total": 35169,
+            "input": 1,
+            "output": 87,
+            "reasoning": 0,
+            "cache": {
+              "read": 34889,
+              "write": 192
+            }
+          },
+          "id": "prt_caa885a72001J6Hb7LDTVo45ZU",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa8853ff001Dl1egJ5kq8M0Ow"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772387588730
+        },
+        "parentID": "msg_caa87e2100015I5eeCbBQeGhsY",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "fixer",
+        "agent": "fixer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "id": "msg_caa885a7a001lE7nSQftoVNfk0",
+        "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7ab6f69ac6422dfdfb93200f753c536149532094",
+          "id": "prt_caa885e95001EJfJA3FIvyFWBE",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa885a7a001lE7nSQftoVNfk0"
+        },
+        {
+          "type": "text",
+          "text": "Version matches. Committing, tagging, and pushing:",
+          "time": {
+            "start": 1772387590221,
+            "end": 1772387590221
+          },
+          "id": "prt_caa885e96001v7cv6wr2IiwIo9",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa885a7a001lE7nSQftoVNfk0"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git add main.go && git commit -m \"chore: bump version to 1.3.0\"",
+              "description": "Commit version bump"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit version bump"
+            },
+            "time": {
+              "start": 1772387591160
+            }
+          },
+          "id": "prt_caa88604e0012ppnDtq67sDEhU",
+          "sessionID": "ses_355781dfbffeCuR98BwrbcNZTG",
+          "messageID": "msg_caa885a7a001lE7nSQftoVNfk0"
+        }
+      ]
+    }
+  ]
+}
