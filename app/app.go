@@ -47,6 +47,9 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 	zone.NewGlobal()
 	h := newHome(ctx, program, autoYes)
 	defer h.auditLogger.Close()
+	if h.permissionStore != nil {
+		defer h.permissionStore.Close()
+	}
 	p := tea.NewProgram(
 		h,
 		tea.WithAltScreen(),
@@ -315,8 +318,8 @@ type home struct {
 	permissionOverlay *overlay.PermissionOverlay
 	// pendingPermissionInstance is the instance that triggered the permission modal.
 	pendingPermissionInstance *session.Instance
-	// permissionCache caches "allow always" decisions keyed by permission pattern.
-	permissionCache *config.PermissionCache
+	// permissionStore persists "allow always" decisions in the shared SQLite database.
+	permissionStore config.PermissionStore
 	// permissionHandled tracks in-flight auto-approvals: instance → pattern.
 	// Prevents duplicate key sequences when the pane still shows the prompt
 	// across multiple metadata ticks while opencode processes the first response.
@@ -407,9 +410,15 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	permCacheDir := filepath.Join(activeRepoPath, ".kasmos")
-	permCache := config.NewPermissionCache(permCacheDir)
-	_ = permCache.Load()
-	h.permissionCache = permCache
+	permStore, err := config.NewSQLitePermissionStore(dbPath)
+	if err != nil {
+		log.WarningLog.Printf("permission store init failed: %v", err)
+	} else {
+		if migrateErr := config.MigratePermissionCache(permCacheDir, project, permStore); migrateErr != nil {
+			log.WarningLog.Printf("permission cache migration failed: %v", migrateErr)
+		}
+		h.permissionStore = permStore
+	}
 	h.permissionHandled = make(map[*session.Instance]string)
 
 	h.nav.SetRepoName(filepath.Base(activeRepoPath))
@@ -449,6 +458,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	return h
+}
+
+// activeProject returns the project name derived from the active repo path.
+// This matches how planstore derives the project name (filepath.Base of the repo path).
+func (m *home) activeProject() string {
+	return filepath.Base(m.activeRepoPath)
 }
 
 // isUserInOverlay returns true when the user is actively interacting with
@@ -975,7 +990,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if _, handled := m.permissionHandled[inst]; handled {
 					// Already handled this prompt appearance — skip until cleared.
-				} else if cacheKey != "" && m.permissionCache != nil && m.permissionCache.IsAllowedAlways(cacheKey) {
+				} else if cacheKey != "" && m.permissionStore != nil && m.permissionStore.IsAllowedAlways(m.activeProject(), cacheKey) {
 					// Auto-approve cached permission.
 					m.permissionHandled[inst] = guardKey
 					i := inst

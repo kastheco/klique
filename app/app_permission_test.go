@@ -14,9 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestHomeWithCache returns a home with a real permissionCache backed by a temp dir.
+// newTestHomeWithCache returns a home with a real permissionStore backed by an in-memory SQLite DB.
 func newTestHomeWithCache(t *testing.T) *home {
 	t.Helper()
+	permStore, err := config.NewSQLitePermissionStore(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { permStore.Close() })
+
 	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 	return &home{
 		ctx:               context.Background(),
@@ -28,7 +32,7 @@ func newTestHomeWithCache(t *testing.T) *home {
 		toastManager:      overlay.NewToastManager(&spin),
 		activeRepoPath:    t.TempDir(),
 		program:           "opencode",
-		permissionCache:   config.NewPermissionCache(t.TempDir()),
+		permissionStore:   permStore,
 		permissionHandled: make(map[*session.Instance]string),
 	}
 }
@@ -78,7 +82,7 @@ func TestUpdate_PermissionPromptDetection_ShowsOverlay(t *testing.T) {
 // fires permissionAutoApproveMsg (not the modal) on the first tick.
 func TestUpdate_PermissionAutoApprove_FiresOnCachedPattern(t *testing.T) {
 	m := newTestHomeWithCache(t)
-	m.permissionCache.Remember("/opt/*")
+	m.permissionStore.Remember(m.activeProject(), "/opt/*")
 
 	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
 	inst.MarkStartedForTest()
@@ -103,7 +107,7 @@ func TestUpdate_PermissionAutoApprove_FiresOnCachedPattern(t *testing.T) {
 // a second auto-approve, which would corrupt opencode's input state.
 func TestUpdate_PermissionAutoApprove_DeduplicatesOnMultipleTicks(t *testing.T) {
 	m := newTestHomeWithCache(t)
-	m.permissionCache.Remember("/opt/*")
+	m.permissionStore.Remember(m.activeProject(), "/opt/*")
 
 	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
 	inst.MarkStartedForTest()
@@ -133,7 +137,7 @@ func TestUpdate_PermissionAutoApprove_DeduplicatesOnMultipleTicks(t *testing.T) 
 // allowing a future prompt to trigger auto-approve again.
 func TestUpdate_PermissionAutoApprove_ClearsGuardWhenPromptGone(t *testing.T) {
 	m := newTestHomeWithCache(t)
-	m.permissionCache.Remember("/opt/*")
+	m.permissionStore.Remember(m.activeProject(), "/opt/*")
 
 	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
 	inst.MarkStartedForTest()
@@ -280,8 +284,8 @@ func TestPermissionOverlay_EscDismisses(t *testing.T) {
 
 func TestPermissionCache_AutoApprovesCachedPattern(t *testing.T) {
 	m := newTestHomeWithCache(t)
-	m.permissionCache.Remember("/opt/*")
-	assert.True(t, m.permissionCache.IsAllowedAlways("/opt/*"))
+	m.permissionStore.Remember("test-project", "/opt/*")
+	assert.True(t, m.permissionStore.IsAllowedAlways("test-project", "/opt/*"))
 }
 
 // TestUpdate_PermissionAutoApprove_DescriptionOnly verifies that prompts without
@@ -290,7 +294,7 @@ func TestPermissionCache_AutoApprovesCachedPattern(t *testing.T) {
 func TestUpdate_PermissionAutoApprove_DescriptionOnly(t *testing.T) {
 	m := newTestHomeWithCache(t)
 	// Cache by description (no pattern).
-	m.permissionCache.Remember("Execute bash command")
+	m.permissionStore.Remember(m.activeProject(), "Execute bash command")
 
 	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
 	inst.MarkStartedForTest()

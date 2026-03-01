@@ -709,9 +709,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				inst := m.pendingPermissionInstance
 
 				// Cache "allow always" decisions
-				if choice == overlay.PermissionAllowAlways && cacheKey != "" && m.permissionCache != nil {
-					m.permissionCache.Remember(cacheKey)
-					_ = m.permissionCache.Save()
+				if choice == overlay.PermissionAllowAlways && cacheKey != "" && m.permissionStore != nil {
+					m.permissionStore.Remember(m.activeProject(), cacheKey)
 				}
 
 				m.permissionOverlay = nil

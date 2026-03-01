@@ -8,6 +8,21 @@ import (
 	_ "modernc.org/sqlite" // register sqlite driver
 )
 
+// permissionCacheFile is the legacy JSON file name for the permission cache.
+// Kept here so permission_migrate.go can reference it after permission_cache.go is removed.
+const permissionCacheFile = "permission-cache.json"
+
+// CacheKey returns a non-empty key for permission caching.
+// Prefers the pattern (e.g. "/opt/*"); falls back to the description
+// (e.g. "Execute bash command") so that permission types without a
+// Patterns section can still be cached.
+func CacheKey(pattern, description string) string {
+	if pattern != "" {
+		return pattern
+	}
+	return description
+}
+
 const permissionSchema = `
 CREATE TABLE IF NOT EXISTS permissions (
 	id         INTEGER PRIMARY KEY,
