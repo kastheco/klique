@@ -166,7 +166,8 @@ type home struct {
 	// nav displays plans + instances
 	nav *ui.NavigationPanel
 	// auditPane displays recent audit events below the nav panel
-	auditPane *ui.AuditPane
+	auditPane         *ui.AuditPane
+	auditBootstrapped bool // true after first audit query on boot
 	// menu displays the bottom menu
 	menu *ui.Menu
 	// statusBar displays the top contextual status bar
@@ -523,6 +524,10 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 		// Pass full content height — the nav panel clamps to whatever space
 		// remains below the list content (active/plans sections + legend).
 		auditH := contentHeight
+		if !m.auditBootstrapped {
+			m.refreshAuditPane() // load historical events on first render
+			m.auditBootstrapped = true
+		}
 		m.auditPane.SetSize(auditInnerW, auditH)
 		m.nav.SetAuditView(m.auditPane.String(), auditH)
 	} else {
