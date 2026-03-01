@@ -118,7 +118,9 @@ func TestPlanTransition(t *testing.T) {
 
 func TestPlanCLI_EndToEnd(t *testing.T) {
 	store, dir := setupTestPlanState(t)
-	signalsDir := filepath.Join(dir, ".signals")
+	// dir is <root>/docs/plans; signals go to <root>/.kasmos/signals/
+	repoRoot := filepath.Dir(filepath.Dir(dir))
+	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// List all
@@ -156,7 +158,9 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 
 func TestPlanImplement(t *testing.T) {
 	store, dir := setupTestPlanState(t)
-	signalsDir := filepath.Join(dir, ".signals")
+	// dir is <root>/docs/plans; signals go to <root>/.kasmos/signals/
+	repoRoot := filepath.Dir(filepath.Dir(dir))
+	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	err := executePlanImplement(dir, "2026-02-20-test-plan.md", 1, store)

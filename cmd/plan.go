@@ -164,7 +164,9 @@ func executePlanImplement(plansDir, planFile string, wave int, store planstore.S
 	}
 
 	// Write the wave signal file consumed by the TUI metadata tick.
-	signalsDir := filepath.Join(plansDir, ".signals")
+	// plansDir is <repo>/docs/plans — go up two levels to reach the repo root.
+	repoRoot := filepath.Dir(filepath.Dir(plansDir))
+	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	if err := os.MkdirAll(signalsDir, 0o755); err != nil {
 		return err
 	}
@@ -312,20 +314,6 @@ func localSQLiteStore() (planstore.Store, error) {
 		return nil, fmt.Errorf("create kasmos config dir: %w", err)
 	}
 	return planstore.NewSQLiteStore(dbPath)
-}
-
-// resolveOrLocalStore returns the remote store if configured and reachable,
-// otherwise opens the local SQLite store. Always returns a non-nil store.
-func resolveOrLocalStore(plansDir string) (planstore.Store, string, error) {
-	remoteStore, project := resolveStoreConfig(plansDir)
-	if remoteStore != nil && remoteStore.Ping() == nil {
-		return remoteStore, project, nil
-	}
-	local, err := localSQLiteStore()
-	if err != nil {
-		return nil, "", err
-	}
-	return local, projectFromPlansDir(plansDir), nil
 }
 
 // loadPlanState loads plan state using the store backend.

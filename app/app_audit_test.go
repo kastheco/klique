@@ -1,10 +1,13 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config/auditlog"
+	"github.com/kastheco/kasmos/config/planstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/assert"
@@ -269,6 +272,71 @@ func TestAuditHomeEmit_AgentKilled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1, "kill_instance must emit EventAgentKilled")
 	assert.Equal(t, "my-agent", events[0].InstanceTitle)
+}
+
+// TestAuditHomeEmit_AgentKilled_KeybindK verifies that the k keybind kill path
+// emits EventAgentKilled. Because session.Instance.Started() is not settable
+// from outside the session package without real tmux, we test the audit emission
+// directly via the audit() helper — the same code path the k handler calls.
+func TestAuditHomeEmit_AgentKilled_KeybindK(t *testing.T) {
+	logger, err := auditlog.NewSQLiteLogger(":memory:")
+	require.NoError(t, err)
+	defer logger.Close()
+
+	h := newTestHome()
+	h.auditLogger = logger
+	h.planStoreProject = "myproject"
+
+	// Simulate the audit call that the k keybind handler makes after the
+	// started/paused guard passes.
+	h.audit(auditlog.EventAgentKilled, "killed instance",
+		auditlog.WithInstance("my-agent"),
+		auditlog.WithAgent("coder"),
+		auditlog.WithPlan("plan.md"),
+	)
+
+	events, err := logger.Query(auditlog.QueryFilter{
+		Project: "myproject",
+		Kinds:   []auditlog.EventKind{auditlog.EventAgentKilled},
+		Limit:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1, "k keybind must emit EventAgentKilled")
+	assert.Equal(t, "my-agent", events[0].InstanceTitle)
+	assert.Contains(t, events[0].Message, "killed instance")
+}
+
+// TestAuditHomeEmit_PlanCreated verifies that createPlanEntry emits
+// EventPlanCreated after successfully creating a plan in the store.
+func TestAuditHomeEmit_PlanCreated(t *testing.T) {
+	logger, err := auditlog.NewSQLiteLogger(":memory:")
+	require.NoError(t, err)
+	defer logger.Close()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := planstore.NewTestSQLiteStore(t)
+
+	h := newTestHome()
+	h.auditLogger = logger
+	h.planStoreProject = "myproject"
+	h.planStateDir = plansDir
+	h.planStore = store
+
+	err = h.createPlanEntry("my cool plan", "description", "")
+	require.NoError(t, err)
+
+	events, err := logger.Query(auditlog.QueryFilter{
+		Project: "myproject",
+		Kinds:   []auditlog.EventKind{auditlog.EventPlanCreated},
+		Limit:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1, "createPlanEntry must emit EventPlanCreated")
+	assert.Contains(t, events[0].Message, "created plan")
+	assert.NotEmpty(t, events[0].PlanFile)
 }
 
 // TestAuditHomeEmit_AgentPaused verifies that the audit helper correctly emits

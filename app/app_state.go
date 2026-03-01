@@ -1050,6 +1050,7 @@ func (m *home) createPlanEntry(name, description, topic string) error {
 		}
 		return err
 	}
+	m.audit(auditlog.EventPlanCreated, "created plan", auditlog.WithPlan(filename))
 	m.updateSidebarPlans()
 	return nil
 }

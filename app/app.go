@@ -406,6 +406,22 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.planStore = planstore.NewHTTPStore(planStoreURL, project)
 	h.fsm = planfsm.New(h.planStore, project, h.planStateDir)
 
+	// One-time migration: import plan-state.json into the DB if it exists.
+	// Use the embedded store directly (bypasses HTTP round-trip).
+	// Only runs when plan-state.json is present; subsequent boots skip this.
+	planStateJSON := filepath.Join(h.planStateDir, "plan-state.json")
+	if _, statErr := os.Stat(planStateJSON); statErr == nil {
+		migrated, migrateErr := planstore.MigrateFromJSON(embSrv.Store(), project, h.planStateDir)
+		if migrateErr != nil {
+			log.WarningLog.Printf("plan-state.json migration failed: %v", migrateErr)
+		} else {
+			log.InfoLog.Printf("migrated %d plans from plan-state.json to DB", migrated)
+			if renameErr := os.Rename(planStateJSON, planStateJSON+".migrated"); renameErr != nil {
+				log.WarningLog.Printf("failed to rename plan-state.json after migration: %v", renameErr)
+			}
+		}
+	}
+
 	// Initialize audit logger. Always uses local SQLite regardless of plan
 	// store backend — audit events are purely local state.
 	if al, err := auditlog.NewSQLiteLogger(dbPath); err != nil {
