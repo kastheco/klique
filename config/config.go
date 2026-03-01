@@ -77,6 +77,9 @@ type Config struct {
 	PhaseRoles map[string]string `json:"phase_roles,omitempty"`
 	// AnimateBanner controls the idle banner animation (disabled by default).
 	AnimateBanner bool `json:"animate_banner,omitempty"`
+	// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes
+	// with zero failures, bypassing the confirmation dialog (disabled by default).
+	AutoAdvanceWaves bool `json:"auto_advance_waves,omitempty"`
 	// TelemetryEnabled controls whether crash reporting via Sentry is active.
 	// Defaults to true when not set.
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
@@ -237,6 +240,9 @@ func LoadConfig() *Config {
 		}
 		if tomlResult.AnimateBanner {
 			config.AnimateBanner = true
+		}
+		if tomlResult.AutoAdvanceWaves {
+			config.AutoAdvanceWaves = true
 		}
 		if tomlResult.TelemetryEnabled != nil {
 			config.TelemetryEnabled = tomlResult.TelemetryEnabled

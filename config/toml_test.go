@@ -127,6 +127,23 @@ func TestSaveTOMLConfig(t *testing.T) {
 	})
 }
 
+func TestAutoAdvanceWaves(t *testing.T) {
+	t.Run("parses auto_advance_waves from UI section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "config.toml")
+		content := `
+[ui]
+animate_banner = true
+auto_advance_waves = true
+`
+		err := os.WriteFile(tomlPath, []byte(content), 0o644)
+		require.NoError(t, err)
+		tc, err := LoadTOMLConfigFrom(tomlPath)
+		require.NoError(t, err)
+		assert.True(t, tc.AutoAdvanceWaves)
+	})
+}
+
 func TestResolveProfileWithDisabledAgent(t *testing.T) {
 	t.Run("disabled agent falls back to default", func(t *testing.T) {
 		cfg := &Config{
