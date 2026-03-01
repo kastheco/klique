@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 // AuditEventDisplay is a pre-formatted event for rendering in the audit pane.
@@ -104,7 +104,7 @@ func (p *AuditPane) String() string {
 // Matches the nav panel's navDividerLine aesthetic exactly.
 func (p *AuditPane) renderHeader() string {
 	inner := " log "
-	innerW := runewidth.StringWidth(inner)
+	innerW := len(inner)
 	remaining := p.width - innerW
 	if remaining < 2 {
 		return auditDividerStyle.Render(inner)
@@ -130,29 +130,36 @@ func (p *AuditPane) renderBody() string {
 	if msgWidth < 10 {
 		msgWidth = 10
 	}
+	// Continuation lines indent to align under the message text.
+	const contIndent = overhead
 
 	lines := make([]string, 0, len(p.events))
 	for _, e := range p.events {
 		icon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)
 		ts := auditTimeStyle.Render(e.Time)
 
-		// Level-aware message styling.
-		msg := e.Message
-		if runewidth.StringWidth(msg) > msgWidth {
-			msg = runewidth.Truncate(msg, msgWidth-1, "…")
-		}
-		var styledMsg string
-		switch e.Level {
-		case "error":
-			styledMsg = auditErrMsgStyle.Render(msg)
-		case "warn":
-			styledMsg = auditWarnMsgStyle.Render(msg)
-		default:
-			styledMsg = auditMsgStyle.Render(msg)
-		}
+		// Word-wrap the message at msgWidth, then render each wrapped segment.
+		wrapped := wordwrap.String(e.Message, msgWidth)
+		segments := strings.Split(wrapped, "\n")
 
-		line := auditRowPad.Render(ts + "  " + icon + "  " + styledMsg)
-		lines = append(lines, line)
+		for i, seg := range segments {
+			var styledSeg string
+			switch e.Level {
+			case "error":
+				styledSeg = auditErrMsgStyle.Render(seg)
+			case "warn":
+				styledSeg = auditWarnMsgStyle.Render(seg)
+			default:
+				styledSeg = auditMsgStyle.Render(seg)
+			}
+			var line string
+			if i == 0 {
+				line = auditRowPad.Render(ts + "  " + icon + "  " + styledSeg)
+			} else {
+				line = auditRowPad.Render(strings.Repeat(" ", contIndent) + styledSeg)
+			}
+			lines = append(lines, line)
+		}
 	}
 	return strings.Join(lines, "\n")
 }
