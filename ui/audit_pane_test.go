@@ -56,11 +56,13 @@ func TestAuditPane_ScrollDown(t *testing.T) {
 			Level:   "info",
 		}
 	}
+	// SetEvents pins the viewport to the bottom (newest events visible).
+	// Scroll up toward older events and confirm newest is no longer in view.
 	pane.SetEvents(events)
-	pane.ScrollDown(5)
+	pane.ScrollUp(5)
 	output := pane.String()
-	// Should show events from the scrolled position, not the top
-	assert.NotContains(t, output, "event 0")
+	// After scrolling up, the most recent event should no longer be visible.
+	assert.NotContains(t, output, fmt.Sprintf("event %d", len(events)-1))
 }
 
 func TestAuditPane_ToggleVisibility(t *testing.T) {

@@ -1393,23 +1393,23 @@ func (n *NavigationPanel) String() string {
 		repoSection = zone.Mark(ZoneNavRepo, repoBtn)
 	}
 
-	// Assemble content with bottom-pinned audit + legend + repo button.
+	// Assemble content: list on top, legend + log pinned to bottom.
 	topContent := searchBox + "\n" + body
 
-	// Bottom section: legend + optional repo button
-	var bottomSection string
+	// Legend sits between history and the log divider.
+	var legendSection string
 	if repoSection != "" {
-		bottomSection = legend + "\n" + repoSection
+		legendSection = legend + "\n" + repoSection
 	} else {
-		bottomSection = legend
+		legendSection = legend
 	}
 
 	topLines := strings.Count(topContent, "\n") + 1
-	bottomLines := strings.Count(bottomSection, "\n") + 1
+	legendLines := strings.Count(legendSection, "\n") + 1
 
 	// Determine how many lines the audit section can use without overflowing.
 	// lipgloss .Height() doesn't truncate overflow, so we must never exceed height.
-	maxAudit := height - topLines - bottomLines // leaves gap=1 at this limit
+	maxAudit := height - topLines - legendLines // leaves gap=1 at this limit
 	actualAudit := 0
 	auditSection := ""
 	if n.auditView != "" && n.auditHeight > 0 && maxAudit >= 3 {
@@ -1417,24 +1417,24 @@ func (n *NavigationPanel) String() string {
 		if actualAudit > maxAudit {
 			actualAudit = maxAudit
 		}
-		// Truncate audit view to actualAudit lines.
-		vlines := strings.SplitN(n.auditView, "\n", actualAudit+1)
+		// Keep the last actualAudit lines (newest events are at the bottom).
+		vlines := strings.Split(n.auditView, "\n")
 		if len(vlines) > actualAudit {
-			vlines = vlines[:actualAudit]
+			vlines = vlines[len(vlines)-actualAudit:]
 		}
 		auditSection = strings.Join(vlines, "\n")
 	}
 
-	gap := height - topLines - bottomLines - actualAudit + 1
+	gap := height - topLines - legendLines - actualAudit + 1
 	if gap < 1 {
 		gap = 1
 	}
 
-	innerContent := topContent + strings.Repeat("\n", gap)
+	// Order: list … gap … legend … log
+	innerContent := topContent + strings.Repeat("\n", gap) + legendSection
 	if auditSection != "" {
-		innerContent += auditSection + "\n"
+		innerContent += "\n" + auditSection
 	}
-	innerContent += bottomSection
 
 	bordered := border.Width(innerWidth).Height(height).Render(innerContent)
 	placed := lipgloss.Place(n.width, n.height, lipgloss.Left, lipgloss.Top, bordered)

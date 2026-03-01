@@ -54,7 +54,7 @@ func (p *AuditPane) SetSize(w, h int) {
 func (p *AuditPane) SetEvents(events []AuditEventDisplay) {
 	p.events = events
 	p.viewport.SetContent(p.renderBody())
-	p.viewport.GotoTop()
+	p.viewport.GotoBottom()
 }
 
 // Events returns the current list of pre-formatted audit event displays.
@@ -140,8 +140,10 @@ func (p *AuditPane) renderBody() string {
 	// Continuation lines indent to align under the message text.
 	const contIndent = overhead
 
+	// Iterate oldest-first so newest events appear at the bottom.
 	lines := make([]string, 0, len(p.events))
-	for _, e := range p.events {
+	for i := len(p.events) - 1; i >= 0; i-- {
+		e := p.events[i]
 		icon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)
 		ts := auditTimeStyle.Render(e.Time)
 
