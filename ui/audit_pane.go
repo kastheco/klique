@@ -57,6 +57,13 @@ func (p *AuditPane) SetEvents(events []AuditEventDisplay) {
 	p.viewport.GotoTop()
 }
 
+// Events returns the current list of pre-formatted audit event displays.
+// Primarily used in tests to inspect formatted event data without needing
+// a sized viewport.
+func (p *AuditPane) Events() []AuditEventDisplay {
+	return p.events
+}
+
 // ScrollDown scrolls the viewport down by n lines.
 func (p *AuditPane) ScrollDown(n int) {
 	p.viewport.LineDown(n)

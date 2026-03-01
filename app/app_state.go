@@ -1913,7 +1913,7 @@ func (m *home) refreshAuditPane() {
 	displays := make([]ui.AuditEventDisplay, 0, len(events))
 	for _, e := range events {
 		icon, color := ui.EventKindIcon(string(e.Kind))
-		timeStr := e.Timestamp.Format("15:04")
+		timeStr := e.Timestamp.Local().Format("15:04")
 		msg := e.Message
 		// Prepend [plan-name] when the event has a plan context and the message
 		// doesn't already embed the plan name (some messages include it inline).

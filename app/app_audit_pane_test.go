@@ -2,8 +2,10 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,4 +35,40 @@ func TestAuditPaneRefresh_EmptyWithNilLogger(t *testing.T) {
 	assert.NotPanics(t, func() {
 		h.refreshAuditPane()
 	})
+}
+
+// TestRefreshAuditPane_TimestampInLocalTime verifies that audit event timestamps
+// are displayed in local time, not UTC. Timestamps are stored as UTC in the DB
+// and must be converted to local time before formatting for display.
+func TestRefreshAuditPane_TimestampInLocalTime(t *testing.T) {
+	logger, err := auditlog.NewSQLiteLogger(":memory:")
+	require.NoError(t, err)
+	defer logger.Close()
+
+	// Use a fixed UTC time: 20:00 UTC = 14:00 Central (UTC-6 in winter).
+	// We emit with an explicit timestamp so we can predict the local display.
+	utcTime := time.Date(2026, 2, 28, 20, 0, 0, 0, time.UTC)
+	logger.Emit(auditlog.Event{
+		Kind:      auditlog.EventPlanTransition,
+		Project:   "test",
+		Message:   "ready → implementing",
+		Timestamp: utcTime,
+	})
+
+	h := newTestHome()
+	h.auditLogger = logger
+	h.planStoreProject = "test"
+	h.refreshAuditPane()
+
+	// The displayed time must match local time, not UTC.
+	localTime := utcTime.Local()
+	expectedTimeStr := localTime.Format("15:04")
+	utcTimeStr := utcTime.Format("15:04")
+
+	// Inspect the formatted events directly (no sized viewport needed).
+	events := h.auditPane.Events()
+	require.Len(t, events, 1, "expected one audit event in pane")
+	assert.Equal(t, expectedTimeStr, events[0].Time,
+		"audit timestamp must be displayed in local time (got %q, UTC would be %q)",
+		events[0].Time, utcTimeStr)
 }
