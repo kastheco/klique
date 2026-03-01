@@ -12,8 +12,7 @@ import (
 )
 
 func TestScanSignals_ParsesValidSentinels(t *testing.T) {
-	dir := t.TempDir()
-	signalsDir := filepath.Join(dir, ".signals")
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	require.NoError(t, os.WriteFile(
@@ -23,7 +22,7 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 		filepath.Join(signalsDir, "review-changes-2026-02-22-bar.md"),
 		[]byte("fix the tests"), 0o644))
 
-	signals := ScanSignals(dir)
+	signals := ScanSignals(signalsDir)
 	require.Len(t, signals, 2)
 
 	// Sort by plan file for deterministic assertion
@@ -41,8 +40,7 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 }
 
 func TestScanSignals_IgnoresInvalidFiles(t *testing.T) {
-	dir := t.TempDir()
-	signalsDir := filepath.Join(dir, ".signals")
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	require.NoError(t, os.WriteFile(
@@ -52,19 +50,18 @@ func TestScanSignals_IgnoresInvalidFiles(t *testing.T) {
 		filepath.Join(signalsDir, ".hidden"),
 		nil, 0o644))
 
-	signals := ScanSignals(dir)
+	signals := ScanSignals(signalsDir)
 	assert.Empty(t, signals)
 }
 
 func TestScanSignals_EmptyDirReturnsNil(t *testing.T) {
-	dir := t.TempDir()
-	signals := ScanSignals(dir)
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
+	signals := ScanSignals(signalsDir)
 	assert.Nil(t, signals)
 }
 
 func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
-	dir := t.TempDir()
-	signalsDir := filepath.Join(dir, ".signals")
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// An agent trying to drop a cancel sentinel — should be ignored
@@ -72,7 +69,7 @@ func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
 		filepath.Join(signalsDir, "cancel-2026-02-22-foo.md"),
 		nil, 0o644))
 
-	signals := ScanSignals(dir)
+	signals := ScanSignals(signalsDir)
 	assert.Empty(t, signals)
 }
 
@@ -100,6 +97,19 @@ func TestConsumeSignal_DeletesFile(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestScanSignals_KasmosSignalsDir(t *testing.T) {
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(signalsDir, "planner-finished-test.md"),
+		[]byte(""), 0o644,
+	))
+
+	signals := ScanSignals(signalsDir)
+	require.Len(t, signals, 1)
+	assert.Equal(t, PlannerFinished, signals[0].Event)
+}
+
 // TestSignals_WithStoreFSM verifies that signals still trigger store-backed FSM transitions.
 // The sentinel file system is decoupled from storage — it just triggers FSM events.
 func TestSignals_WithStoreFSM(t *testing.T) {
@@ -114,17 +124,16 @@ func TestSignals_WithStoreFSM(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write a sentinel file in a temp signals dir
-	plansDir := t.TempDir()
-	signalsDir := filepath.Join(plansDir, ".signals")
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "planner-finished-test.md"), nil, 0o644))
 
-	signals := ScanSignals(plansDir)
+	signals := ScanSignals(signalsDir)
 	require.Len(t, signals, 1)
 	assert.Equal(t, PlannerFinished, signals[0].Event)
 
 	// Apply via store-backed FSM
-	fsm := New(store, "test-project", plansDir)
+	fsm := New(store, "test-project", signalsDir)
 	require.NoError(t, fsm.Transition("test.md", signals[0].Event))
 
 	entry, err := store.Get("test-project", "test.md")

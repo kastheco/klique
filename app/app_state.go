@@ -963,6 +963,25 @@ func (m *home) materializePlanFile(planFile, repoPath string) error {
 	return nil
 }
 
+// ingestPlanContent reads the plan markdown file from the given repo path and
+// stores its content in the DB via the plan store. This bridges the gap between
+// agents writing plan files to their worktree and the DB being the source of truth.
+// Called when a PlannerFinished signal is processed.
+func (m *home) ingestPlanContent(planFile, repoPath string) {
+	if m.planStore == nil || m.planState == nil {
+		return
+	}
+	planPath := filepath.Join(repoPath, "docs", "plans", planFile)
+	data, err := os.ReadFile(planPath)
+	if err != nil {
+		log.WarningLog.Printf("ingestPlanContent: cannot read %s: %v", planPath, err)
+		return
+	}
+	if err := m.planState.SetContent(planFile, string(data)); err != nil {
+		log.WarningLog.Printf("ingestPlanContent: cannot store content for %s: %v", planFile, err)
+	}
+}
+
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.
 // The rendered output is cached; on cache miss the glamour render runs async
 // via a tea.Cmd so the UI stays responsive.
@@ -1270,13 +1289,16 @@ func buildWaveAnnotationPrompt(planFile string) string {
 			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
 			"After annotating:\n"+
 			"1. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
-			"2. Signal completion: touch docs/plans/.signals/planner-finished-%[1]s\n"+
+			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
 			"Do not edit plan-state.json directly.",
 		planFile,
 	)
 }
 
 // buildImplementPrompt returns the prompt for a coder agent session.
+// The plan file is materialized to docs/plans/<planFile> in the agent's worktree
+// by the TUI before the agent starts. Agents write sentinel signals to
+// .kasmos/signals/ in their worktree; the TUI ingests them on completion.
 func buildImplementPrompt(planFile string) string {
 	return fmt.Sprintf(
 		"Implement docs/plans/%s using the `kasmos-coder` skill. Execute all tasks sequentially.",

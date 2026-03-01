@@ -56,8 +56,7 @@ func TestParseWaveSignal(t *testing.T) {
 }
 
 func TestScanSignals_IncludesWaveSignals(t *testing.T) {
-	dir := t.TempDir()
-	signalsDir := filepath.Join(dir, ".signals")
+	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// Write a regular signal and a wave signal
@@ -66,12 +65,12 @@ func TestScanSignals_IncludesWaveSignals(t *testing.T) {
 	require.NoError(t, os.WriteFile(
 		filepath.Join(signalsDir, "implement-wave-2-2026-02-20-test.md"), nil, 0o644))
 
-	signals := ScanSignals(dir)
+	signals := ScanSignals(signalsDir)
 	// Regular signal should be present
 	assert.Len(t, signals, 1, "only regular signals returned by ScanSignals")
 
 	// Wave signals have their own scanner
-	waveSignals := ScanWaveSignals(dir)
+	waveSignals := ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 2, waveSignals[0].WaveNumber)
 	assert.Equal(t, "2026-02-20-test.md", waveSignals[0].PlanFile)

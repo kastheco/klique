@@ -243,6 +243,9 @@ type home struct {
 	planState *planstate.PlanState
 	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
 	planStateDir string
+	// signalsDir is the directory where agent sentinel files are written.
+	// Defaults to <repoRoot>/.kasmos/signals/ (project-local, gitignored).
+	signalsDir string
 	// embeddedServer is the in-process HTTP+SQLite plan store server started on boot.
 	// Always non-nil after newHome() returns.
 	embeddedServer *planstore.EmbeddedServer
@@ -364,6 +367,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		appState:              appState,
 		activeRepoPath:        activeRepoPath,
 		planStateDir:          filepath.Join(activeRepoPath, "docs", "plans"),
+		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
 		planStoreProject:      project,
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),
@@ -696,6 +700,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		snapshots := make([]*session.Instance, len(instances))
 		copy(snapshots, instances)
 		planStateDir := m.planStateDir // snapshot for goroutine
+		signalsDir := m.signalsDir     // snapshot for goroutine
 		store := m.planStore           // snapshot for goroutine
 		project := m.planStoreProject  // snapshot for goroutine
 
@@ -736,14 +741,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Scan signals from the project-local signals directory (.kasmos/signals/).
 			var signals []planfsm.Signal
-			if planStateDir != "" {
-				signals = planfsm.ScanSignals(planStateDir)
+			if signalsDir != "" {
+				signals = planfsm.ScanSignals(signalsDir)
 			}
 
 			// Also scan signals from active worktrees — agents write
 			// sentinel files relative to their CWD which is the worktree,
-			// not the main repo.
+			// not the main repo. Worktrees use .kasmos/signals/ as well.
 			seen := make(map[string]bool)
 			for _, sig := range signals {
 				seen[sig.Key()] = true
@@ -753,8 +759,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if wt == "" {
 					continue
 				}
-				wtPlansDir := filepath.Join(wt, "docs", "plans")
-				for _, sig := range planfsm.ScanSignals(wtPlansDir) {
+				wtSignalsDir := filepath.Join(wt, ".kasmos", "signals")
+				for _, sig := range planfsm.ScanSignals(wtSignalsDir) {
 					if !seen[sig.Key()] {
 						seen[sig.Key()] = true
 						signals = append(signals, sig)
@@ -763,8 +769,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			var waveSignals []planfsm.WaveSignal
-			if planStateDir != "" {
-				waveSignals = planfsm.ScanWaveSignals(planStateDir)
+			if signalsDir != "" {
+				waveSignals = planfsm.ScanWaveSignals(signalsDir)
 			}
 
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
@@ -840,6 +846,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case planfsm.PlannerFinished:
 				capturedPlanFile := sig.PlanFile
+				// Ingest the plan content from the agent's worktree into the DB.
+				// Planners run on the main branch, so the plan file is in activeRepoPath.
+				m.ingestPlanContent(capturedPlanFile, m.activeRepoPath)
 				if m.plannerPrompted[capturedPlanFile] {
 					break
 				}

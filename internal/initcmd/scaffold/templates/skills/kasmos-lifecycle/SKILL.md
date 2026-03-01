@@ -25,7 +25,7 @@ State is persisted in `docs/plans/plan-state.json`. Agents never write directly 
 
 ## Signal File Mechanics
 
-Agents communicate state transitions by writing sentinel files into `docs/plans/.signals/`.
+Agents communicate state transitions by writing sentinel files into `.kasmos/signals/`.
 
 **Naming convention:** `<event>-<planfile>`
 
@@ -36,7 +36,7 @@ Examples:
 - `reviewer-requested-changes-2026-02-27-feature.md`
 
 **How kasmos processes sentinels:**
-1. kasmos scans `docs/plans/.signals/` every ~500ms
+1. kasmos scans `.kasmos/signals/` every ~500ms
 2. On detecting a sentinel, kasmos reads it, validates the event against the current plan state, and applies the transition
 3. The sentinel file is consumed (deleted) after processing — do not rely on it persisting
 4. Sentinel content is optional; kasmos uses the filename to determine the event type
@@ -44,7 +44,7 @@ Examples:
 **Writing a sentinel (agent side):**
 ```bash
 # Signal that planning is complete for a plan file
-touch docs/plans/.signals/planner-finished-2026-02-27-feature.md
+touch .kasmos/signals/planner-finished-2026-02-27-feature.md
 ```
 
 Keep sentinel writes as the **last action** before yielding control. Do not write a sentinel and then continue modifying plan files — kasmos may begin the next phase immediately.

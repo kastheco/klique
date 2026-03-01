@@ -553,13 +553,15 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 // in .signals/ is correctly picked up by ScanWaveSignals and parsed into a
 // WaveSignal with the correct WaveNumber and PlanFile fields, ready for TUI consumption.
 func TestWaveSignal_TriggersImplementation(t *testing.T) {
-	plansDir := t.TempDir()
-	signalsDir := filepath.Join(plansDir, ".signals")
+	repoRoot := t.TempDir()
+	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// Create a plan with wave headers
 	planContent := "# Test\n\n**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\nDo the thing.\n"
 	planFile := "2026-02-20-wave-signal-test.md"
+	plansDir := filepath.Join(repoRoot, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
 
 	// Register plan as implementing
@@ -574,8 +576,8 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 	signalFile := fmt.Sprintf("implement-wave-1-%s", planFile)
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, signalFile), nil, 0o644))
 
-	// Verify signal is scannable
-	waveSignals := planfsm.ScanWaveSignals(plansDir)
+	// Verify signal is scannable using the new .kasmos/signals/ convention
+	waveSignals := planfsm.ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 1, waveSignals[0].WaveNumber)
 	assert.Equal(t, planFile, waveSignals[0].PlanFile)

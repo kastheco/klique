@@ -49,12 +49,12 @@ cannot progress the plan lifecycle.
 
 If approved (zero issues remaining after self-fixes):
 ```
-echo "Approved. <brief summary>" > docs/plans/.signals/review-approved-{{PLAN_FILENAME}}
+echo "Approved. <brief summary>" > .kasmos/signals/review-approved-{{PLAN_FILENAME}}
 ```
 
 If changes are required (issues that need a coder):
 ```
-cat > docs/plans/.signals/review-changes-{{PLAN_FILENAME}} << 'SIGNAL'
+cat > .kasmos/signals/review-changes-{{PLAN_FILENAME}} << 'SIGNAL'
 ## review round N
 
 ### critical

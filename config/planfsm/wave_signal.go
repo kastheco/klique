@@ -33,11 +33,12 @@ func ParseWaveSignal(filename string) (WaveSignal, bool) {
 	}, true
 }
 
-// ScanWaveSignals reads docs/plans/.signals/ and returns parsed wave signals.
+// ScanWaveSignals reads the given signals directory and returns parsed wave signals.
 // These are handled separately from FSM signals because they don't map to
 // state transitions — they trigger wave orchestration in the TUI.
-func ScanWaveSignals(plansDir string) []WaveSignal {
-	signalsDir := filepath.Join(plansDir, ".signals")
+// The caller is responsible for passing the full signals directory path
+// (e.g. filepath.Join(repoRoot, ".kasmos", "signals")).
+func ScanWaveSignals(signalsDir string) []WaveSignal {
 	entries, err := os.ReadDir(signalsDir)
 	if err != nil {
 		return nil

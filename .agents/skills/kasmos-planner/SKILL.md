@@ -355,8 +355,8 @@ echo "${KASMOS_MANAGED:-}"
 kasmos is orchestrating this session. write a sentinel file and stop.
 
 ```bash
-mkdir -p docs/plans/.signals
-touch docs/plans/.signals/planner-finished-YYYY-MM-DD-<feature-name>.md
+mkdir -p .kasmos/signals
+touch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md
 ```
 
 the filename must match the plan filename exactly (with `planner-finished-` prefix).

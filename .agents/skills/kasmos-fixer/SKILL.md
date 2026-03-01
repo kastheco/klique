@@ -427,7 +427,7 @@ will reject the build if they diverge.
 
 You are running as a kasmos-spawned instance. After completing an operation:
 
-1. Write a sentinel in `docs/plans/.signals/`:
+1. Write a sentinel in `.kasmos/signals/`:
    - cleanup: `fixer-cleanup-<timestamp>.md`
    - triage: `fixer-triage-<timestamp>.md`
    - general: `fixer-done-<timestamp>.md`

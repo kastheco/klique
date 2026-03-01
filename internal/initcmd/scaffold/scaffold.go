@@ -444,8 +444,7 @@ func SymlinkHarnessSkills(dir, harnessName string) error {
 // runtimeDirs lists directories the app expects to exist at runtime.
 // Each path is relative to the project root.
 var runtimeDirs = []string{
-	"docs/plans",
-	filepath.Join("docs", "plans", ".signals"),
+	filepath.Join(".kasmos", "signals"),
 	".worktrees",
 }
 

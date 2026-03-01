@@ -177,15 +177,15 @@ git diff main..HEAD --name-only | xargs typos
 ### Approved
 
 ```bash
-mkdir -p docs/plans/.signals
+mkdir -p .kasmos/signals
 echo "Approved. <one-sentence summary of what was reviewed and confirmed>" \
-  > docs/plans/.signals/review-approved-<planfile>
+  > .kasmos/signals/review-approved-<planfile>
 ```
 
 Example:
 ```bash
 echo "Approved. all 4 tasks complete, tests pass, no issues found." \
-  > docs/plans/.signals/review-approved-2026-02-27-feature.md
+  > .kasmos/signals/review-approved-2026-02-27-feature.md
 ```
 
 ### Changes Needed
@@ -194,8 +194,8 @@ Write a structured heredoc signal. Include the round number, all findings groupe
 and file:line citations for every item.
 
 ```bash
-mkdir -p docs/plans/.signals
-cat > docs/plans/.signals/review-changes-<planfile> << 'EOF'
+mkdir -p .kasmos/signals
+cat > .kasmos/signals/review-changes-<planfile> << 'EOF'
 Round N — changes required.
 
 ## critical

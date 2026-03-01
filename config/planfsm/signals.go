@@ -30,10 +30,11 @@ var sentinelPrefixes = []struct {
 	{"review-changes-", ReviewChangesRequested},
 }
 
-// ScanSignals reads docs/plans/.signals/ and returns parsed signals.
+// ScanSignals reads the given signals directory and returns parsed signals.
 // Ignores invalid files and user-only events. Returns nil if directory missing.
-func ScanSignals(plansDir string) []Signal {
-	signalsDir := filepath.Join(plansDir, ".signals")
+// The caller is responsible for passing the full signals directory path
+// (e.g. filepath.Join(repoRoot, ".kasmos", "signals")).
+func ScanSignals(signalsDir string) []Signal {
 	entries, err := os.ReadDir(signalsDir)
 	if err != nil {
 		return nil
