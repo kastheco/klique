@@ -1809,7 +1809,7 @@ func (m *home) refreshAuditPane() {
 
 	filter := auditlog.QueryFilter{
 		Project: m.planStoreProject,
-		Limit:   50,
+		Limit:   200,
 	}
 
 	events, err := m.auditLogger.Query(filter)
@@ -1840,10 +1840,47 @@ func (m *home) refreshAuditPane() {
 		})
 	}
 
+	// Coalesce consecutive stopped+started pairs (newest-first order) with the
+	// same HH:MM timestamp into a single "kasmos restarted" event.
+	displays = coalesceRestarts(displays)
+
 	m.auditPane.SetEvents(displays)
 
 	// Push updated audit view into the nav panel.
 	if m.nav != nil && m.auditPane.Visible() {
 		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.Height())
 	}
+}
+
+// coalesceRestarts merges adjacent session_started + session_stopped pairs
+// (in newest-first order) that share the same HH:MM into a single "restarted"
+// event. The slice is newest-first, so started appears before stopped.
+func coalesceRestarts(displays []ui.AuditEventDisplay) []ui.AuditEventDisplay {
+	if len(displays) < 2 {
+		return displays
+	}
+	out := make([]ui.AuditEventDisplay, 0, len(displays))
+	i := 0
+	for i < len(displays) {
+		// Newest-first: started at [i], stopped at [i+1].
+		if i+1 < len(displays) &&
+			displays[i].Kind == "session_started" &&
+			displays[i+1].Kind == "session_stopped" &&
+			displays[i].Time == displays[i+1].Time {
+			icon, color := ui.EventKindIcon("session_started")
+			out = append(out, ui.AuditEventDisplay{
+				Time:    displays[i].Time,
+				Kind:    "session_restarted",
+				Icon:    icon,
+				Message: "kasmos restarted",
+				Color:   color,
+				Level:   "info",
+			})
+			i += 2
+			continue
+		}
+		out = append(out, displays[i])
+		i++
+	}
+	return out
 }
