@@ -97,8 +97,6 @@ const (
 	stateFocusAgent
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
-	// stateRepoSwitch is the state when the user is switching repos via picker.
-	stateRepoSwitch
 	// stateChangeTopic is the state when the user is changing a plan's topic via picker.
 	stateChangeTopic
 	// stateSetStatus is the state when the user is force-overriding a plan's status via picker.
@@ -239,9 +237,6 @@ type home struct {
 	// Also used for focus mode — entering focus just forwards keys to this terminal.
 	previewTerminal         *session.EmbeddedTerminal
 	previewTerminalInstance string // title of the instance the terminal is attached to
-
-	// repoPickerMap maps picker display text to full repo path
-	repoPickerMap map[string]string
 
 	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
 	planState *planstate.PlanState
@@ -422,7 +417,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 	h.permissionHandled = make(map[*session.Instance]string)
 
-	h.nav.SetRepoName(filepath.Base(activeRepoPath))
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
 	h.setFocusSlot(slotNav)
 	h.loadPlanState()
@@ -452,11 +446,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	// Reconstruct in-memory wave orchestrators for plans that were mid-wave
 	// when kasmos was last restarted. Must run after loadPlanState and instance load.
 	h.rebuildOrphanedOrchestrators()
-
-	// Persist the active repo so it appears in the picker even if it has no instances
-	if state, ok := h.appState.(*config.State); ok {
-		state.AddRecentRepo(activeRepoPath)
-	}
 
 	return h
 }
@@ -1548,21 +1537,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.instance.AutoYes = true
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
-	case folderPickedMsg:
-		m.state = stateDefault
-		m.pickerOverlay = nil
-		if msg.err != nil {
-			return m, m.handleError(msg.err)
-		}
-		if msg.path != "" {
-			m.activeRepoPath = msg.path
-			m.nav.SetRepoName(filepath.Base(msg.path))
-			if state, ok := m.appState.(*config.State); ok {
-				state.AddRecentRepo(msg.path)
-			}
-			m.rebuildInstanceList()
-		}
-		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -1664,14 +1638,6 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateSetStatus && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == stateRepoSwitch && m.pickerOverlay != nil:
-		// Position near the repo button at the bottom of the sidebar
-		pickerX := 1
-		pickerY := m.contentHeight - 10 // above the bottom menu, near the repo indicator
-		if pickerY < 2 {
-			pickerY = 2
-		}
-		result = overlay.PlaceOverlay(pickerX, pickerY, m.pickerOverlay.Render(), mainView, true, false)
 	case m.state == statePrompt:
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")

@@ -73,8 +73,7 @@ func TestComputeStatusBarData_Baseline(t *testing.T) {
 		activeRepoPath: "/home/user/repos/kasmos",
 	}
 	h.nav = ui.NewNavigationPanel(&h.spinner)
-	h.nav.SetRepoName("kasmos")
 
 	data := h.computeStatusBarData()
-	assert.Equal(t, "kasmos", data.RepoName)
+	assert.Equal(t, "main", data.Branch)
 }

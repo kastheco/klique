@@ -109,9 +109,6 @@ type NavigationPanel struct {
 	searchQuery     string
 	clickUpAvail    bool
 
-	repoName    string
-	repoHovered bool
-
 	// Audit section rendered by the AuditPane and displayed inside the border.
 	auditView   string
 	auditHeight int
@@ -556,8 +553,6 @@ func (n *NavigationPanel) SetAuditView(view string, h int) {
 
 func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }
 func (n *NavigationPanel) IsFocused() bool            { return n.focused }
-func (n *NavigationPanel) SetRepoName(name string)    { n.repoName = name }
-func (n *NavigationPanel) SetRepoHovered(h bool)      { n.repoHovered = h }
 func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.rebuildRows() }
 
 func (n *NavigationPanel) ActivateSearch()        { n.searchActive = true; n.searchQuery = "" }
@@ -1384,32 +1379,11 @@ func (n *NavigationPanel) String() string {
 		"  " + navCompletedIconStyle.Render("●") + navLegendLabelStyle.Render(" done")
 	legend := lipgloss.NewStyle().Width(innerWidth).Align(lipgloss.Center).Render(legendContent)
 
-	// Repo switcher
-	var repoSection string
-	if n.repoName != "" {
-		btnWidth := innerWidth - 4
-		if btnWidth < 4 {
-			btnWidth = 4
-		}
-		repoBtn := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(ColorOverlay).
-			Padding(0, 1).
-			Width(btnWidth).
-			Render(n.repoName + " ▾")
-		repoSection = zone.Mark(ZoneNavRepo, repoBtn)
-	}
-
 	// Assemble content: list on top, legend + log pinned to bottom.
 	topContent := searchBox + "\n" + body
 
 	// Legend sits between history and the log divider.
-	var legendSection string
-	if repoSection != "" {
-		legendSection = legend + "\n" + repoSection
-	} else {
-		legendSection = legend
-	}
+	legendSection := legend
 
 	topLines := strings.Count(topContent, "\n") + 1
 	legendLines := strings.Count(legendSection, "\n") + 1

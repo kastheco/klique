@@ -7,7 +7,6 @@ import "fmt"
 const (
 	ZoneNavPanel  = "zone-nav-panel"
 	ZoneNavSearch = "zone-nav-search"
-	ZoneNavRepo   = "zone-nav-repo"
 	ZoneTabAgent  = "zone-tab-agent"
 	ZoneTabDiff   = "zone-tab-diff"
 	ZoneTabInfo   = "zone-tab-info"

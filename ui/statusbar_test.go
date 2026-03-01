@@ -29,12 +29,10 @@ func TestStatusBar_Baseline(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(80)
 	sb.SetData(StatusBarData{
-		RepoName: "kasmos",
-		Branch:   "main",
+		Branch: "main",
 	})
 
 	result := sb.String()
-	assert.Contains(t, result, "kasmos")
 	assert.Contains(t, result, "main")
 	// Should be exactly 1 line (no newlines in output)
 	assert.Equal(t, 0, strings.Count(result, "\n"))
@@ -44,14 +42,14 @@ func TestStatusBar_PlanContext(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:   "kasmos",
 		Branch:     "plan/auth-refactor",
 		PlanName:   "auth-refactor",
 		PlanStatus: "implementing",
 	})
 
 	result := sb.String()
-	assert.Contains(t, result, "kasmos")
+	plain := stripANSI(result)
+	assert.Contains(t, plain, "kasmos")
 	assert.Contains(t, result, "plan/auth-refactor")
 	assert.Contains(t, result, "implementing")
 }
@@ -60,7 +58,6 @@ func TestStatusBar_StatusLeftAlignedAfterLogo(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:   "kasmos",
 		Branch:     "plan/auth-refactor",
 		PlanName:   "auth-refactor",
 		PlanStatus: "implementing",
@@ -70,31 +67,23 @@ func TestStatusBar_StatusLeftAlignedAfterLogo(t *testing.T) {
 	appIdx := strings.Index(plain, "kasmos")
 	branchIdx := strings.Index(plain, "plan/auth-refactor")
 	statusIdx := strings.Index(plain, "implementing")
-	repoIdx := strings.LastIndex(plain, "kasmos")
 
 	require.NotEqual(t, -1, appIdx)
 	require.NotEqual(t, -1, branchIdx)
 	require.NotEqual(t, -1, statusIdx)
-	require.NotEqual(t, -1, repoIdx)
 	assert.Greater(t, statusIdx, appIdx, "status must appear after app logo")
 	assert.Greater(t, branchIdx, statusIdx, "branch should no longer be grouped with status")
-	assert.Greater(t, repoIdx, statusIdx, "repo name should be positioned to the right")
 }
 
-func TestStatusBar_BranchGroupCenteredAndRepoRightAligned(t *testing.T) {
+func TestStatusBar_BranchGroupCentered(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)
 	sb.SetData(StatusBarData{
-		RepoName:   "my-repo",
 		Branch:     "main",
 		PlanStatus: "reviewing",
 	})
 
 	plain := stripANSI(sb.String())
-
-	trimmedRight := strings.TrimRight(plain, " ")
-	assert.True(t, strings.HasSuffix(trimmedRight, "my-repo"),
-		"repo name should be right-aligned at end of status bar")
 
 	branchIdx := strings.Index(plain, "main")
 	require.NotEqual(t, -1, branchIdx)
@@ -107,7 +96,6 @@ func TestStatusBar_WaveGlyphs(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:   "kasmos",
 		Branch:     "plan/auth-refactor",
 		PlanName:   "auth-refactor",
 		PlanStatus: "implementing",
@@ -134,7 +122,6 @@ func TestStatusBar_WaveGlyphsAreSpaced(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:  "kasmos",
 		Branch:    "plan/auth-refactor",
 		WaveLabel: "wave 1/4",
 		TaskGlyphs: []TaskGlyph{
@@ -153,7 +140,6 @@ func TestStatusBar_WaveGlyphsAppearBeforeWaveLabel(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:  "kasmos",
 		Branch:    "plan/auth-refactor",
 		WaveLabel: "wave 1/4",
 		TaskGlyphs: []TaskGlyph{
@@ -176,7 +162,6 @@ func TestStatusBar_WaveProgressLeftAlignedAfterLogo(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(120)
 	sb.SetData(StatusBarData{
-		RepoName:  "kasmos",
 		Branch:    "plan/auth-refactor",
 		WaveLabel: "wave 1/4",
 		TaskGlyphs: []TaskGlyph{
@@ -202,8 +187,7 @@ func TestStatusBar_Truncation(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(40) // narrow terminal
 	sb.SetData(StatusBarData{
-		RepoName: "very-long-repository-name-that-wont-fit",
-		Branch:   "feature/extremely-long-branch-name-here",
+		Branch: "feature/extremely-long-branch-name-here",
 	})
 
 	result := sb.String()
@@ -229,7 +213,6 @@ func TestStatusBar_TmuxSessionCountMovedToMenu(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)
 	sb.SetData(StatusBarData{
-		RepoName:         "kasmos",
 		Branch:           "main",
 		TmuxSessionCount: 3,
 	})
@@ -242,7 +225,6 @@ func TestStatusBar_FocusModeNoLongerShowsPill(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)
 	sb.SetData(StatusBarData{
-		RepoName:  "kasmos",
 		Branch:    "main",
 		FocusMode: true,
 	})
