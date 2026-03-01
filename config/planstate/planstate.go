@@ -1,8 +1,6 @@
 package planstate
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,8 +41,8 @@ type PlanState struct {
 	Dir          string
 	Plans        map[string]PlanEntry
 	TopicEntries map[string]TopicEntry
-	store        planstore.Store // non-nil when using remote backend
-	project      string          // project name used with the remote store
+	store        planstore.Store // always non-nil
+	project      string          // project name used with the store
 }
 
 type PlanInfo struct {
@@ -61,93 +59,10 @@ type TopicInfo struct {
 	CreatedAt time.Time
 }
 
-const stateFile = "plan-state.json"
-
-// wrappedFormat is the new on-disk format with "plans" and "topics" keys.
-type wrappedFormat struct {
-	Topics map[string]TopicEntry `json:"topics,omitempty"`
-	Plans  map[string]PlanEntry  `json:"plans"`
-}
-
-// Load reads plan-state.json from dir. Returns empty state if file missing.
-func Load(dir string) (*PlanState, error) {
-	path := filepath.Join(dir, stateFile)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &PlanState{Dir: dir, Plans: make(map[string]PlanEntry), TopicEntries: make(map[string]TopicEntry)}, nil
-		}
-		return nil, fmt.Errorf("read plan state: %w", err)
-	}
-
-	// Try new wrapped format first
-	var wrapped wrappedFormat
-	if err := json.Unmarshal(data, &wrapped); err != nil {
-		return nil, fmt.Errorf("parse plan state: %w", err)
-	}
-
-	// Detect legacy flat format: if "plans" key is absent, the top-level
-	// object IS the plan map. We detect this by checking if wrapped.Plans
-	// is nil/empty AND the raw JSON has keys ending in ".md".
-	if len(wrapped.Plans) == 0 {
-		var flat map[string]PlanEntry
-		if err := json.Unmarshal(data, &flat); err == nil && len(flat) > 0 {
-			// Check if any key looks like a plan filename
-			isLegacy := false
-			for k := range flat {
-				if strings.HasSuffix(k, ".md") {
-					isLegacy = true
-					break
-				}
-			}
-			if isLegacy {
-				wrapped.Plans = flat
-				wrapped.Topics = make(map[string]TopicEntry)
-			}
-		}
-	}
-
-	if wrapped.Plans == nil {
-		wrapped.Plans = make(map[string]PlanEntry)
-	}
-	if wrapped.Topics == nil {
-		wrapped.Topics = make(map[string]TopicEntry)
-	}
-
-	// Migrate legacy status values to canonical names.
-	for filename, entry := range wrapped.Plans {
-		switch entry.Status {
-		case "in_progress":
-			entry.Status = StatusImplementing
-			wrapped.Plans[filename] = entry
-		case "completed", "finished":
-			entry.Status = StatusDone
-			wrapped.Plans[filename] = entry
-		}
-	}
-
-	ps := &PlanState{Dir: dir, Plans: wrapped.Plans, TopicEntries: wrapped.Topics}
-
-	// Reconcile stale filenames: if a plan-state key doesn't match an actual
-	// file on disk (e.g. date changed between planning and follow-up), fuzzy-
-	// match by slug and rekey the entry. This is self-healing and persisted.
-	if renames := ps.reconcileFilenames(); len(renames) > 0 {
-		_ = ps.save()
-	}
-
-	return ps, nil
-}
-
-// LoadWithStore creates a PlanState backed by a remote store.
-// When store is non-nil, Plans and TopicEntries are populated from the remote
-// store and all subsequent mutations write through to it instead of JSON.
-// dir is retained for file operations (e.g. Rename moves the .md file on disk).
-// When store is nil, this is equivalent to calling Load(dir).
-func LoadWithStore(store planstore.Store, project, dir string) (*PlanState, error) {
-	if store == nil {
-		return Load(dir)
-	}
-
+// Load creates a PlanState backed by the given store. Plans and TopicEntries are
+// populated from the store. dir is retained for file operations (e.g. Rename moves
+// the .md file on disk). The store is always required — there is no JSON fallback.
+func Load(store planstore.Store, project, dir string) (*PlanState, error) {
 	plans, err := store.List(project)
 	if err != nil {
 		return nil, fmt.Errorf("plan store: %w", err)
@@ -180,11 +95,6 @@ func LoadWithStore(store planstore.Store, project, dir string) (*PlanState, erro
 	for _, t := range topics {
 		ps.TopicEntries[t.Name] = TopicEntry{CreatedAt: t.CreatedAt}
 	}
-
-	// Reconcile stale filenames: if a plan-state key doesn't match an actual
-	// file on disk (e.g. date changed between planning and follow-up), fuzzy-
-	// match by slug and rekey the entry. Persist renames back to the store.
-	ps.reconcileFilenamesWithStore()
 
 	return ps, nil
 }
@@ -378,13 +288,10 @@ func (ps *PlanState) ForceSetStatus(filename string, status Status) error {
 	entry := ps.Plans[filename]
 	entry.Status = status
 	ps.Plans[filename] = entry
-	if ps.store != nil {
-		if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		return nil
+	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
 	}
-	return ps.Save()
+	return nil
 }
 
 // isValidStatus returns true if s is a recognised lifecycle status.
@@ -396,7 +303,7 @@ func isValidStatus(s Status) bool {
 	return false
 }
 
-// setStatus updates a plan's status and persists to disk.
+// setStatus updates a plan's status and persists to the store.
 // Unexported: only for use within this package (tests). Production code must use planfsm.Transition.
 func (ps *PlanState) setStatus(filename string, status Status) error {
 	if ps.Plans == nil {
@@ -405,45 +312,32 @@ func (ps *PlanState) setStatus(filename string, status Status) error {
 	entry := ps.Plans[filename]
 	entry.Status = status
 	ps.Plans[filename] = entry
-	if ps.store != nil {
-		if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		return nil
+	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
 	}
-	return ps.save()
+	return nil
 }
 
 // CreateWithContent adds a new plan entry with markdown content stored in the backend.
 // The plan entry is created with StatusReady, and the content is persisted via store.SetContent.
-// Returns an error if the plan already exists or if the store is not configured.
+// Returns an error if the plan already exists.
 func (ps *PlanState) CreateWithContent(filename, description, branch, topic string, createdAt time.Time, content string) error {
 	if err := ps.Create(filename, description, branch, topic, createdAt); err != nil {
 		return err
 	}
-	if ps.store != nil {
-		if err := ps.store.SetContent(ps.project, filename, content); err != nil {
-			return fmt.Errorf("plan store set content: %w", err)
-		}
+	if err := ps.store.SetContent(ps.project, filename, content); err != nil {
+		return fmt.Errorf("plan store set content: %w", err)
 	}
 	return nil
 }
 
 // GetContent retrieves the markdown content for the given plan filename from the store.
-// Returns an error if the store is not configured or the plan is not found.
 func (ps *PlanState) GetContent(filename string) (string, error) {
-	if ps.store == nil {
-		return "", fmt.Errorf("no store configured")
-	}
 	return ps.store.GetContent(ps.project, filename)
 }
 
 // SetContent updates the markdown content for the given plan filename in the store.
-// Returns an error if the store is not configured or the plan is not found.
 func (ps *PlanState) SetContent(filename, content string) error {
-	if ps.store == nil {
-		return fmt.Errorf("no store configured")
-	}
 	return ps.store.SetContent(ps.project, filename, content)
 }
 
@@ -472,26 +366,23 @@ func (ps *PlanState) Create(filename, description, branch, topic string, created
 			ps.TopicEntries[topic] = TopicEntry{CreatedAt: createdAt.UTC()}
 		}
 	}
-	if ps.store != nil {
-		if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		// Auto-create topic in remote store if needed
-		if topic != "" {
-			topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: createdAt.UTC()}
-			if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
-				// Ignore "already exists" errors for topics
-				if !isAlreadyExistsError(err) {
-					return fmt.Errorf("plan store: %w", err)
-				}
+	if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
+	}
+	// Auto-create topic in store if needed
+	if topic != "" {
+		topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: createdAt.UTC()}
+		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
+			// Ignore "already exists" errors for topics
+			if !isAlreadyExistsError(err) {
+				return fmt.Errorf("plan store: %w", err)
 			}
 		}
-		return nil
 	}
-	return ps.save()
+	return nil
 }
 
-// Register adds a new plan entry with metadata and persists to disk.
+// Register adds a new plan entry with metadata and persists to the store.
 // Returns an error if the plan already exists.
 func (ps *PlanState) Register(filename, description, branch string, createdAt time.Time) error {
 	if ps.Plans == nil {
@@ -507,13 +398,10 @@ func (ps *PlanState) Register(filename, description, branch string, createdAt ti
 		CreatedAt:   createdAt.UTC(),
 	}
 	ps.Plans[filename] = entry
-	if ps.store != nil {
-		if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		return nil
+	if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
 	}
-	return ps.save()
+	return nil
 }
 
 // Entry returns the PlanEntry for the given filename, and whether it exists.
@@ -522,7 +410,7 @@ func (ps *PlanState) Entry(filename string) (PlanEntry, bool) {
 	return entry, ok
 }
 
-// SetTopic assigns a topic to an existing plan entry and persists to disk.
+// SetTopic assigns a topic to an existing plan entry and persists to the store.
 // If topic is non-empty and does not yet exist in TopicEntries, it is auto-created.
 // Pass an empty string to remove the plan from any topic.
 func (ps *PlanState) SetTopic(filename, topic string) error {
@@ -541,25 +429,22 @@ func (ps *PlanState) SetTopic(filename, topic string) error {
 			ps.TopicEntries[topic] = TopicEntry{CreatedAt: time.Now().UTC()}
 		}
 	}
-	if ps.store != nil {
-		if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		// Auto-create topic in remote store if needed
-		if topic != "" {
-			topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: ps.TopicEntries[topic].CreatedAt}
-			if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
-				if !isAlreadyExistsError(err) {
-					return fmt.Errorf("plan store: %w", err)
-				}
+	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
+	}
+	// Auto-create topic in store if needed
+	if topic != "" {
+		topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: ps.TopicEntries[topic].CreatedAt}
+		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
+			if !isAlreadyExistsError(err) {
+				return fmt.Errorf("plan store: %w", err)
 			}
 		}
-		return nil
 	}
-	return ps.save()
+	return nil
 }
 
-// SetBranch assigns a branch name to an existing plan entry and persists to disk.
+// SetBranch assigns a branch name to an existing plan entry and persists to the store.
 func (ps *PlanState) SetBranch(filename, branch string) error {
 	entry, ok := ps.Plans[filename]
 	if !ok {
@@ -567,18 +452,16 @@ func (ps *PlanState) SetBranch(filename, branch string) error {
 	}
 	entry.Branch = branch
 	ps.Plans[filename] = entry
-	if ps.store != nil {
-		if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
-			return fmt.Errorf("plan store: %w", err)
-		}
-		return nil
+	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+		return fmt.Errorf("plan store: %w", err)
 	}
-	return ps.save()
+	return nil
 }
 
-// Save persists the current state to disk.
+// Save is a no-op — all mutations write through to the store immediately.
+// Retained for API compatibility.
 func (ps *PlanState) Save() error {
-	return ps.save()
+	return nil
 }
 
 // DisplayName strips the date prefix and .md extension from a plan filename.
@@ -638,13 +521,10 @@ func (ps *PlanState) Rename(oldFilename, newName string) (string, error) {
 	ps.Plans[newFilename] = entry
 	delete(ps.Plans, oldFilename)
 
-	if ps.store != nil {
-		if err := ps.store.Rename(ps.project, oldFilename, newFilename); err != nil {
-			return "", fmt.Errorf("plan store: %w", err)
-		}
-		return newFilename, nil
+	if err := ps.store.Rename(ps.project, oldFilename, newFilename); err != nil {
+		return "", fmt.Errorf("plan store: %w", err)
 	}
-	return newFilename, ps.save()
+	return newFilename, nil
 }
 
 // slugify converts a human name to a lowercase, hyphen-separated slug.
@@ -670,67 +550,6 @@ func slugify(name string) string {
 	return string(result)
 }
 
-// reconcileFilenamesWithStore is like reconcileFilenames but also persists
-// renames to the remote store when one is configured.
-func (ps *PlanState) reconcileFilenamesWithStore() {
-	renames := ps.reconcileFilenames()
-	if len(renames) == 0 || ps.store == nil {
-		return
-	}
-	// Persist each rename to the remote store using Rename (not Update),
-	// since the DB still has the old filename as its key.
-	for _, rn := range renames {
-		_ = ps.store.Rename(ps.project, rn.OldFilename, rn.NewFilename)
-	}
-}
-
-// filenameRename records an old→new filename rekey performed by reconcileFilenames.
-type filenameRename struct {
-	OldFilename string
-	NewFilename string
-}
-
-// reconcileFilenames checks each plan key against the actual files on disk.
-// If the exact filename is missing but a file with the same slug (date-stripped
-// suffix) exists, the entry is rekeyed to the real filename. Returns the list
-// of renames performed so callers can persist them to the remote store.
-func (ps *PlanState) reconcileFilenames() []filenameRename {
-	var renames []filenameRename
-	for filename, entry := range ps.Plans {
-		path := filepath.Join(ps.Dir, filename)
-		if _, err := os.Stat(path); err == nil {
-			continue // file exists, nothing to do
-		}
-
-		slug := DisplayName(filename) // strip date + .md
-		if slug == "" {
-			continue
-		}
-
-		// Glob for *-<slug>.md in the plans directory.
-		matches, err := filepath.Glob(filepath.Join(ps.Dir, "*-"+slug+".md"))
-		if err != nil || len(matches) == 0 {
-			continue
-		}
-
-		// Use the most recent match (last alphabetically = latest date).
-		sort.Strings(matches)
-		newFilename := filepath.Base(matches[len(matches)-1])
-		if newFilename == filename {
-			continue
-		}
-		// Don't overwrite an existing entry.
-		if _, exists := ps.Plans[newFilename]; exists {
-			continue
-		}
-
-		ps.Plans[newFilename] = entry
-		delete(ps.Plans, filename)
-		renames = append(renames, filenameRename{OldFilename: filename, NewFilename: newFilename})
-	}
-	return renames
-}
-
 // isAlreadyExistsError returns true if the error indicates a duplicate resource.
 func isAlreadyExistsError(err error) bool {
 	if err == nil {
@@ -741,7 +560,7 @@ func isAlreadyExistsError(err error) bool {
 }
 
 // toPlanstoreEntry converts a local PlanEntry to a planstore.PlanEntry for
-// writing to the remote store.
+// writing to the store.
 func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.PlanEntry {
 	return planstore.PlanEntry{
 		Filename:    filename,
@@ -752,29 +571,4 @@ func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.Pl
 		CreatedAt:   e.CreatedAt,
 		Implemented: e.Implemented,
 	}
-}
-
-func (ps *PlanState) save() error {
-	if ps.store != nil {
-		// Remote store: no-op here — mutations write through individually.
-		// save() is called after each mutation; with a store backend the
-		// individual Create/Update/Rename calls already persisted the change.
-		return nil
-	}
-	wrapped := wrappedFormat{
-		Topics: ps.TopicEntries,
-		Plans:  ps.Plans,
-	}
-	data, err := json.MarshalIndent(wrapped, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal plan state: %w", err)
-	}
-	if err := os.MkdirAll(ps.Dir, 0o755); err != nil {
-		return fmt.Errorf("create plan state dir: %w", err)
-	}
-	path := filepath.Join(ps.Dir, stateFile)
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write plan state: %w", err)
-	}
-	return nil
 }

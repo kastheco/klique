@@ -74,7 +74,7 @@ func executePlanList(plansDir, statusFilter string, store planstore.Store) strin
 // (e.g. "http://athena:7433") and project is the project name to query.
 func executePlanListWithStore(storeURL, project string) string {
 	store := planstore.NewHTTPStore(storeURL, project)
-	ps, err := planstate.LoadWithStore(store, project, "")
+	ps, err := planstate.Load(store, project, "")
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -303,22 +303,58 @@ func projectFromPlansDir(plansDir string) string {
 	return filepath.Base(filepath.Dir(filepath.Dir(plansDir)))
 }
 
-// loadPlanState loads plan state. When store is non-nil, uses the remote
-// backend; otherwise falls back to local JSON.
-func loadPlanState(plansDir string, store planstore.Store) (*planstate.PlanState, error) {
-	if store != nil {
-		return planstate.LoadWithStore(store, projectFromPlansDir(plansDir), plansDir)
+// localSQLiteStore opens (or creates) the local SQLite plan store at the
+// default path ($HOME/.config/kasmos/plans.db). Used as a fallback when no
+// remote store is configured.
+func localSQLiteStore() (planstore.Store, error) {
+	dbPath := os.ExpandEnv("$HOME/.config/kasmos/plans.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create kasmos config dir: %w", err)
 	}
-	return planstate.Load(plansDir)
+	return planstore.NewSQLiteStore(dbPath)
 }
 
-// newFSM creates a PlanStateMachine. When store is non-nil, uses the remote backend.
-func newFSM(plansDir string, store planstore.Store) *planfsm.PlanStateMachine {
-	if store != nil {
-		project := projectFromPlansDir(plansDir)
-		return planfsm.NewWithStore(store, project, plansDir)
+// resolveOrLocalStore returns the remote store if configured and reachable,
+// otherwise opens the local SQLite store. Always returns a non-nil store.
+func resolveOrLocalStore(plansDir string) (planstore.Store, string, error) {
+	remoteStore, project := resolveStoreConfig(plansDir)
+	if remoteStore != nil && remoteStore.Ping() == nil {
+		return remoteStore, project, nil
 	}
-	return planfsm.New(plansDir)
+	local, err := localSQLiteStore()
+	if err != nil {
+		return nil, "", err
+	}
+	return local, projectFromPlansDir(plansDir), nil
+}
+
+// loadPlanState loads plan state using the store backend.
+// When store is nil, falls back to the local SQLite store.
+func loadPlanState(plansDir string, store planstore.Store) (*planstate.PlanState, error) {
+	if store == nil {
+		var err error
+		store, err = localSQLiteStore()
+		if err != nil {
+			return nil, fmt.Errorf("open local plan store: %w", err)
+		}
+	}
+	return planstate.Load(store, projectFromPlansDir(plansDir), plansDir)
+}
+
+// newFSM creates a PlanStateMachine backed by the given store.
+// When store is nil, falls back to the local SQLite store.
+func newFSM(plansDir string, store planstore.Store) *planfsm.PlanStateMachine {
+	if store == nil {
+		var err error
+		store, err = localSQLiteStore()
+		if err != nil {
+			// Panic is acceptable here — this is a CLI tool and the store
+			// is required for all operations.
+			panic("newFSM: open local plan store: " + err.Error())
+		}
+	}
+	project := projectFromPlansDir(plansDir)
+	return planfsm.New(store, project, plansDir)
 }
 
 // resolveStore returns the remote plan store from config, or nil if not

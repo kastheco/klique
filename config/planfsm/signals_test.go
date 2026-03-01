@@ -124,7 +124,7 @@ func TestSignals_WithStoreFSM(t *testing.T) {
 	assert.Equal(t, PlannerFinished, signals[0].Event)
 
 	// Apply via store-backed FSM
-	fsm := NewWithStore(store, "test-project", plansDir)
+	fsm := New(store, "test-project", plansDir)
 	require.NoError(t, fsm.Transition("test.md", signals[0].Event))
 
 	entry, err := store.Get("test-project", "test.md")

@@ -1,7 +1,6 @@
 package planstate
 
 import (
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,16 +11,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "docs", "plans", "plan-state.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{
-		"my-plan.md": {"status": "ready"},
-		"done-plan.md": {"status": "done", "implemented": "2026-02-20"}
-	}`), 0o644))
+// newTestPS creates a PlanState backed by an in-memory SQLite store for testing.
+func newTestPS(t *testing.T) *PlanState {
+	t.Helper()
+	store := planstore.NewTestSQLiteStore(t)
+	ps, err := Load(store, "test-proj", t.TempDir())
+	require.NoError(t, err)
+	return ps
+}
 
-	ps, err := Load(filepath.Dir(path))
+// newTestPSWithStore creates a PlanState and returns the store for direct inspection.
+func newTestPSWithStore(t *testing.T) (*PlanState, planstore.Store) {
+	t.Helper()
+	store := planstore.NewTestSQLiteStore(t)
+	ps, err := Load(store, "test-proj", t.TempDir())
+	require.NoError(t, err)
+	return ps, store
+}
+
+func TestLoad(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "my-plan.md", Status: planstore.StatusReady,
+	}))
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "done-plan.md", Status: planstore.StatusDone,
+	}))
+
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Len(t, ps.Plans, 2)
 	assert.Equal(t, StatusReady, ps.Plans["my-plan.md"].Status)
@@ -29,8 +46,8 @@ func TestLoad(t *testing.T) {
 }
 
 func TestLoadMissing(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
+	store := planstore.NewTestSQLiteStore(t)
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Empty(t, ps.Plans)
 }
@@ -78,11 +95,12 @@ func TestIsDone(t *testing.T) {
 }
 
 func TestPlanLifecycle(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"test-plan.md": {"status": "ready"}}`), 0o644))
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "test-plan.md", Status: planstore.StatusReady,
+	}))
 
-	ps, err := Load(dir)
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	// Coder picks it up
@@ -105,7 +123,7 @@ func TestPlanLifecycle(t *testing.T) {
 	assert.Empty(t, ps.Unfinished())
 
 	// Verify persistence: reload and check final state
-	ps2, err := Load(dir)
+	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Equal(t, StatusDone, ps2.Plans["test-plan.md"].Status)
 }
@@ -116,11 +134,12 @@ func TestPlanLifecycle(t *testing.T) {
 // The respawn loop is now prevented by the FSM: once a plan is `done`, the FSM
 // rejects any further ReviewApproved events, so a reviewer cannot be re-spawned.
 func TestFullLifecycleNoRespawnLoop(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"feature.md": {"status": "ready"}}`), 0o644))
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "feature.md", Status: planstore.StatusReady,
+	}))
 
-	ps, err := Load(dir)
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	// Step 1: ready → implementing
@@ -139,7 +158,7 @@ func TestFullLifecycleNoRespawnLoop(t *testing.T) {
 	assert.Empty(t, ps.Unfinished(), "done must not appear in sidebar unfinished list")
 
 	// Verify persistence
-	ps2, err := Load(dir)
+	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Equal(t, StatusDone, ps2.Plans["feature.md"].Status)
 	assert.True(t, ps2.IsDone("feature.md"))
@@ -147,40 +166,38 @@ func TestFullLifecycleNoRespawnLoop(t *testing.T) {
 }
 
 func TestSetStatus(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"a.md": {"status": "in_progress"}}`), 0o644))
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "a.md", Status: planstore.StatusImplementing,
+	}))
 
-	ps, err := Load(dir)
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	require.NoError(t, ps.setStatus("a.md", StatusReviewing))
 	assert.Equal(t, StatusReviewing, ps.Plans["a.md"].Status)
 
-	ps2, err := Load(dir)
+	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Equal(t, StatusReviewing, ps2.Plans["a.md"].Status)
 }
 
 func TestPlanEntryWithTopic(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{
-		"topics": {
-			"ui-refactor": {"created_at": "2026-02-21T14:30:00Z"}
-		},
-		"plans": {
-			"2026-02-21-sidebar.md": {
-				"status": "in_progress",
-				"description": "refactor sidebar",
-				"branch": "plan/sidebar",
-				"topic": "ui-refactor",
-				"created_at": "2026-02-21T14:30:00Z"
-			}
-		}
-	}`), 0o644))
+	store := planstore.NewTestSQLiteStore(t)
+	createdAt := time.Date(2026, 2, 21, 14, 30, 0, 0, time.UTC)
+	require.NoError(t, store.CreateTopic("proj", planstore.TopicEntry{
+		Name: "ui-refactor", CreatedAt: createdAt,
+	}))
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename:    "2026-02-21-sidebar.md",
+		Status:      planstore.StatusImplementing,
+		Description: "refactor sidebar",
+		Branch:      "plan/sidebar",
+		Topic:       "ui-refactor",
+		CreatedAt:   createdAt,
+	}))
 
-	ps, err := Load(dir)
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	entry := ps.Plans["2026-02-21-sidebar.md"]
@@ -216,9 +233,7 @@ func TestPlansByTopic(t *testing.T) {
 }
 
 func TestCreatePlanWithTopic(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	ps := newTestPS(t)
 
 	now := time.Now().UTC()
 	require.NoError(t, ps.Create("2026-02-21-feat.md", "a feature", "plan/feat", "my-topic", now))
@@ -234,9 +249,7 @@ func TestCreatePlanWithTopic(t *testing.T) {
 }
 
 func TestCreatePlanUngrouped(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	ps := newTestPS(t)
 
 	now := time.Now().UTC()
 	require.NoError(t, ps.Create("2026-02-21-fix.md", "a fix", "plan/fix", "", now))
@@ -269,15 +282,10 @@ func TestHasRunningCoderInTopic(t *testing.T) {
 }
 
 func TestRegisterPlan(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{}`), 0o644))
-
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	ps := newTestPS(t)
 
 	now := time.Date(2026, 2, 21, 15, 4, 5, 0, time.UTC)
-	err = ps.Register("2026-02-21-auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
+	err := ps.Register("2026-02-21-auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
 	require.NoError(t, err)
 
 	entry, ok := ps.Entry("2026-02-21-auth-refactor.md")
@@ -311,6 +319,7 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 }
 
 func TestRename(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
 	// Create old plan file on disk
@@ -320,13 +329,13 @@ func TestRename(t *testing.T) {
 	newPath := filepath.Join(dir, newFile)
 	require.NoError(t, os.WriteFile(oldPath, []byte("# old plan"), 0o644))
 
-	ps := &PlanState{
-		Dir: dir,
-		Plans: map[string]PlanEntry{
-			oldFile: {Status: StatusReady, Branch: "plan/my-feature"},
-		},
-		TopicEntries: make(map[string]TopicEntry),
-	}
+	// Seed the store
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: oldFile, Status: planstore.StatusReady, Branch: "plan/my-feature",
+	}))
+
+	ps, err := Load(store, "proj", dir)
+	require.NoError(t, err)
 
 	newFilename, err := ps.Rename(oldFile, "auth-refactor")
 	require.NoError(t, err)
@@ -344,20 +353,15 @@ func TestRename(t *testing.T) {
 	_, err = os.Stat(newPath)
 	assert.NoError(t, err, "new file should exist")
 
-	// Persisted to disk
-	ps2, err := Load(dir)
+	// Persisted to store
+	ps2, err := Load(store, "proj", dir)
 	require.NoError(t, err)
 	assert.Contains(t, ps2.Plans, newFile)
 	assert.NotContains(t, ps2.Plans, oldFile)
 }
 
 func TestRenameNonExistentPlan(t *testing.T) {
-	dir := t.TempDir()
-	ps := &PlanState{
-		Dir:          dir,
-		Plans:        map[string]PlanEntry{},
-		TopicEntries: make(map[string]TopicEntry),
-	}
+	ps := newTestPS(t)
 
 	_, err := ps.Rename("nonexistent.md", "new-name")
 	assert.Error(t, err)
@@ -365,17 +369,17 @@ func TestRenameNonExistentPlan(t *testing.T) {
 
 func TestRenameNoFileOnDisk(t *testing.T) {
 	// Rename should succeed even if the .md file doesn't exist on disk
+	store := planstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 	oldFile := "2026-02-20-my-feature.md"
 	newFile := "2026-02-20-new-name.md"
 
-	ps := &PlanState{
-		Dir: dir,
-		Plans: map[string]PlanEntry{
-			oldFile: {Status: StatusPlanning},
-		},
-		TopicEntries: make(map[string]TopicEntry),
-	}
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: oldFile, Status: planstore.StatusPlanning,
+	}))
+
+	ps, err := Load(store, "proj", dir)
+	require.NoError(t, err)
 
 	got, err := ps.Rename(oldFile, "new-name")
 	require.NoError(t, err)
@@ -384,57 +388,31 @@ func TestRenameNoFileOnDisk(t *testing.T) {
 	assert.NotContains(t, ps.Plans, oldFile)
 }
 
-func TestLoadLegacyFlatFormat(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "plan-state.json")
-	// Legacy format: flat map without "plans"/"topics" wrapper
-	require.NoError(t, os.WriteFile(path, []byte(`{
-		"2026-02-20-old.md": {"status": "done"},
-		"2026-02-21-active.md": {"status": "in_progress"}
-	}`), 0o644))
-
-	ps, err := Load(dir)
-	require.NoError(t, err)
-
-	assert.Len(t, ps.Plans, 2)
-	assert.Equal(t, StatusDone, ps.Plans["2026-02-20-old.md"].Status)
-	assert.Equal(t, StatusImplementing, ps.Plans["2026-02-21-active.md"].Status)
-}
-
-func TestPlanState_WithRemoteStore(t *testing.T) {
-	backend := planstore.NewTestSQLiteStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
-	defer srv.Close()
-
-	store := planstore.NewHTTPStore(srv.URL, "test-project")
+func TestPlanState_WithStore(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
 
 	// Create via store
 	require.NoError(t, store.Create("test-project", planstore.PlanEntry{
 		Filename: "test.md", Status: "ready", Description: "remote plan",
 	}))
 
-	// Load PlanState with remote store
-	ps, err := LoadWithStore(store, "test-project", "/tmp/unused")
+	// Load PlanState with store
+	ps, err := Load(store, "test-project", "/tmp/unused")
 	require.NoError(t, err)
 	assert.Len(t, ps.Plans, 1)
 	assert.Equal(t, StatusReady, ps.Plans["test.md"].Status)
 }
 
-func TestPlanState_FallbackToJSON(t *testing.T) {
-	// When store is nil, Load() works exactly as before (JSON file)
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
-	assert.NotNil(t, ps)
-}
+func TestSetTopic_WithStore(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
 
-func TestSetTopic_LocalJSON(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "2026-02-28-feat.md", Status: "ready", Topic: "old-topic",
+	}))
+	require.NoError(t, store.CreateTopic("proj", planstore.TopicEntry{Name: "old-topic", CreatedAt: time.Now().UTC()}))
 
-	now := time.Now().UTC()
-	require.NoError(t, ps.Create("2026-02-28-feat.md", "a feature", "plan/feat", "old-topic", now))
+	ps, err := Load(store, "proj", t.TempDir())
+	require.NoError(t, err)
 
 	// Change to a new topic (auto-creates topic entry)
 	require.NoError(t, ps.SetTopic("2026-02-28-feat.md", "new-topic"))
@@ -448,45 +426,41 @@ func TestSetTopic_LocalJSON(t *testing.T) {
 	}
 	assert.Contains(t, topicNames, "new-topic")
 
-	// Persisted to disk
-	ps2, err := Load(dir)
+	// Persisted to store
+	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Equal(t, "new-topic", ps2.Plans["2026-02-28-feat.md"].Topic)
 }
 
 func TestSetTopic_ClearTopic(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "2026-02-28-feat.md", Status: "ready", Topic: "some-topic",
+	}))
+	require.NoError(t, store.CreateTopic("proj", planstore.TopicEntry{Name: "some-topic", CreatedAt: time.Now().UTC()}))
 
-	now := time.Now().UTC()
-	require.NoError(t, ps.Create("2026-02-28-feat.md", "a feature", "plan/feat", "some-topic", now))
+	ps, err := Load(store, "proj", t.TempDir())
+	require.NoError(t, err)
 
 	// Clear topic (empty string)
 	require.NoError(t, ps.SetTopic("2026-02-28-feat.md", ""))
 	assert.Equal(t, "", ps.Plans["2026-02-28-feat.md"].Topic)
 
-	// Persisted to disk
-	ps2, err := Load(dir)
+	// Persisted to store
+	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Equal(t, "", ps2.Plans["2026-02-28-feat.md"].Topic)
 }
 
 func TestSetTopic_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	ps, err := Load(dir)
-	require.NoError(t, err)
+	ps := newTestPS(t)
 
-	err = ps.SetTopic("nonexistent.md", "some-topic")
+	err := ps.SetTopic("nonexistent.md", "some-topic")
 	assert.Error(t, err)
 }
 
 func TestSetTopic_RemoteStore(t *testing.T) {
-	backend := planstore.NewTestSQLiteStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
-	defer srv.Close()
-
-	store := planstore.NewHTTPStore(srv.URL, "test-project")
+	store := planstore.NewTestSQLiteStore(t)
 
 	// Create plan via store
 	require.NoError(t, store.Create("test-project", planstore.PlanEntry{
@@ -494,22 +468,22 @@ func TestSetTopic_RemoteStore(t *testing.T) {
 	}))
 	require.NoError(t, store.CreateTopic("test-project", planstore.TopicEntry{Name: "old-topic", CreatedAt: time.Now().UTC()}))
 
-	ps, err := LoadWithStore(store, "test-project", "/tmp/unused")
+	ps, err := Load(store, "test-project", "/tmp/unused")
 	require.NoError(t, err)
 
-	// Change topic via SetTopic — must write through to remote store
+	// Change topic via SetTopic — must write through to store
 	require.NoError(t, ps.SetTopic("test.md", "new-topic"))
 	assert.Equal(t, "new-topic", ps.Plans["test.md"].Topic)
 
-	// Verify persisted in remote store by reloading
-	ps2, err := LoadWithStore(store, "test-project", "/tmp/unused")
+	// Verify persisted in store by reloading
+	ps2, err := Load(store, "test-project", "/tmp/unused")
 	require.NoError(t, err)
 	assert.Equal(t, "new-topic", ps2.Plans["test.md"].Topic)
 }
 
 func TestPlanState_CreateWithContent(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
-	ps, err := LoadWithStore(store, "proj", t.TempDir())
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	content := "# Auth Refactor\n\n## Wave 1\n"
@@ -523,7 +497,7 @@ func TestPlanState_CreateWithContent(t *testing.T) {
 
 func TestPlanState_GetContent(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
-	ps, err := LoadWithStore(store, "proj", t.TempDir())
+	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	content := "# Plan Content"
@@ -532,4 +506,16 @@ func TestPlanState_GetContent(t *testing.T) {
 	got, err := ps.GetContent("test.md")
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
+}
+
+func TestPlanState_LoadRequiresStore(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "test.md", Status: planstore.StatusReady,
+	}))
+
+	// Load should work with a store and no plan-state.json on disk
+	ps, err := Load(store, "proj", t.TempDir())
+	require.NoError(t, err)
+	assert.Len(t, ps.Plans, 1)
 }

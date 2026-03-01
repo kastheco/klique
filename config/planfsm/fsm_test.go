@@ -1,9 +1,6 @@
 package planfsm
 
 import (
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newTestFSM creates a PlanStateMachine backed by an in-memory SQLite store.
+func newTestFSM(t *testing.T) (*PlanStateMachine, planstore.Store) {
+	t.Helper()
+	store := planstore.NewTestSQLiteStore(t)
+	fsm := New(store, "test-proj", t.TempDir())
+	return fsm, store
+}
 
 func TestTransition_ValidTransitions(t *testing.T) {
 	cases := []struct {
@@ -73,22 +78,21 @@ func TestIsUserOnly(t *testing.T) {
 	assert.False(t, ReviewApproved.IsUserOnly())
 }
 
-func TestPlanStateMachine_TransitionWritesToDisk(t *testing.T) {
+func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
 	// Seed with a ready plan
-	ps, err := planstate.Load(plansDir)
+	ps, err := planstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
 
-	fsm := New(plansDir)
+	fsm := New(store, "test-proj", dir)
 	err = fsm.Transition("test.md", PlanStart)
 	require.NoError(t, err)
 
-	// Re-read from disk to verify persistence
-	reloaded, err := planstate.Load(plansDir)
+	// Re-read from store to verify persistence
+	reloaded, err := planstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry("test.md")
 	require.True(t, ok)
@@ -96,20 +100,19 @@ func TestPlanStateMachine_TransitionWritesToDisk(t *testing.T) {
 }
 
 func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := planstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
 
-	fsm := New(plansDir)
+	fsm := New(store, "test-proj", dir)
 	err = fsm.Transition("test.md", ImplementFinished) // ready → implement_finished is invalid
 	assert.Error(t, err)
 
-	// Status must remain unchanged on disk
-	reloaded, err := planstate.Load(plansDir)
+	// Status must remain unchanged in store
+	reloaded, err := planstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry("test.md")
 	require.True(t, ok)
@@ -117,27 +120,19 @@ func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
 }
 
 func TestPlanStateMachine_MissingPlanReturnsError(t *testing.T) {
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
-	fsm := New(plansDir)
+	fsm, _ := newTestFSM(t)
 	err := fsm.Transition("nonexistent.md", PlanStart)
 	assert.Error(t, err)
 }
 
 func TestFSM_TransitionWithStore(t *testing.T) {
-	backend := planstore.NewTestSQLiteStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
-	defer srv.Close()
-
-	store := planstore.NewHTTPStore(srv.URL, "test-project")
+	store := planstore.NewTestSQLiteStore(t)
 	err := store.Create("test-project", planstore.PlanEntry{
 		Filename: "test.md", Status: "ready",
 	})
 	require.NoError(t, err)
 
-	fsm := NewWithStore(store, "test-project", t.TempDir())
+	fsm := New(store, "test-project", t.TempDir())
 	require.NoError(t, fsm.Transition("test.md", PlanStart))
 
 	// Verify the store was updated

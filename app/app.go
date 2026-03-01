@@ -723,8 +723,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Load plan state — moved here from the synchronous Update handler
 			// to avoid blocking the event loop every 500ms.
-			// When a remote store is configured, use LoadWithStore to keep
-			// in-memory state fresh from the server.
+			// Always reads from the store (embedded or remote) — no JSON fallback.
 			var ps *planstate.PlanState
 			if planStateDir != "" {
 				var loaded *planstate.PlanState
