@@ -42,7 +42,6 @@ const (
 	KeyFilterAll    // Key for showing all instances
 	KeyFilterActive // Key for showing only active instances
 	KeyCycleSort    // Key for cycling sort mode
-	KeyRepoSwitch   // Key for switching repos
 
 	KeyInfoTab // Key for jumping directly to info tab
 
@@ -95,7 +94,6 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"1":      KeyFilterAll,
 	"2":      KeyFilterActive,
 	"3":      KeyCycleSort,
-	"R":      KeyRepoSwitch,
 	"t":      KeyTmuxBrowser,
 	"s":      KeySpawnAgent,
 	"L":      KeyAuditToggle,
@@ -201,10 +199,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyCycleSort: key.NewBinding(
 		key.WithKeys("3"),
 		key.WithHelp("3", "sort"),
-	),
-	KeyRepoSwitch: key.NewBinding(
-		key.WithKeys("R"),
-		key.WithHelp("R", "switch repo"),
 	),
 	KeySpawnAgent: key.NewBinding(
 		key.WithKeys("s"),

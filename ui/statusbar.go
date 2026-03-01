@@ -18,7 +18,6 @@ const (
 
 // StatusBarData holds the contextual information displayed in the status bar.
 type StatusBarData struct {
-	RepoName         string
 	Branch           string
 	PlanName         string      // empty = no plan context
 	PlanStatus       string      // "ready", "planning", "implementing", "reviewing", "done"
@@ -64,10 +63,6 @@ var statusBarSepStyle = lipgloss.NewStyle().
 
 var statusBarBranchStyle = lipgloss.NewStyle().
 	Foreground(ColorFoam).
-	Background(ColorSurface)
-
-var statusBarPlanNameStyle = lipgloss.NewStyle().
-	Foreground(ColorText).
 	Background(ColorSurface)
 
 var statusBarWaveLabelStyle = lipgloss.NewStyle().
@@ -151,29 +146,19 @@ func (s *StatusBar) String() string {
 	if leftStatus := s.leftStatusGroup(); leftStatus != "" {
 		left = strings.Join([]string{left, statusBarSepStyle.Render(" · "), leftStatus}, "")
 	}
-	right := ""
-	if s.data.RepoName != "" {
-		right = statusBarPlanNameStyle.Render(s.data.RepoName)
-	}
 	center := s.centerBranchGroup()
 
 	leftWidth := lipgloss.Width(left)
-	rightWidth := lipgloss.Width(right)
 	centerWidth := lipgloss.Width(center)
-
-	rightStart := contentWidth - rightWidth
-	if rightStart < leftWidth+1 {
-		rightStart = leftWidth + 1
-	}
 
 	centerStart := (contentWidth - centerWidth) / 2
 	if centerStart < leftWidth+1 {
 		centerStart = leftWidth + 1
 	}
 
-	// Keep branch/status grouped. If it cannot fit between left+right, drop the
+	// Keep branch/status grouped. If it cannot fit after left, drop the
 	// whole center group instead of splitting branch and status apart.
-	if center != "" && centerStart+centerWidth > rightStart-1 {
+	if center != "" && centerStart+centerWidth > contentWidth {
 		center = ""
 		centerWidth = 0
 	}
@@ -196,7 +181,6 @@ func (s *StatusBar) String() string {
 
 	writeAt(0, leftWidth, left)
 	writeAt(centerStart, centerWidth, center)
-	writeAt(rightStart, rightWidth, right)
 
 	if cursor < contentWidth {
 		b.WriteString(strings.Repeat(" ", contentWidth-cursor))

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -59,7 +58,6 @@ func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool
 // computeStatusBarData builds the StatusBarData from the current app state.
 func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{
-		RepoName:         filepath.Base(m.activeRepoPath),
 		FocusMode:        m.state == stateFocusAgent,
 		TmuxSessionCount: m.tmuxSessionCount,
 	}
@@ -269,99 +267,6 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 
 	m.tabbedWindow.SetActiveTab(targetTab)
 	return m, nil
-}
-
-// rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
-func (m *home) rebuildInstanceList() {
-	m.nav.Clear()
-	for _, inst := range m.allInstances {
-		repoPath := inst.GetRepoPath()
-		if repoPath == "" || repoPath == m.activeRepoPath {
-			m.nav.AddInstance(inst)()
-		}
-	}
-	// Reload plan state for the new active repo.
-	m.planStateDir = filepath.Join(m.activeRepoPath, "docs", "plans")
-	m.loadPlanState()
-	m.updateSidebarPlans()
-}
-
-// getKnownRepos returns distinct repo paths from allInstances, recent repos, plus activeRepoPath.
-func (m *home) getKnownRepos() []string {
-	seen := make(map[string]bool)
-	seen[m.activeRepoPath] = true
-	for _, inst := range m.allInstances {
-		rp := inst.GetRepoPath()
-		if rp != "" {
-			seen[rp] = true
-		}
-	}
-	// Include recent repos from persisted state
-	if state, ok := m.appState.(*config.State); ok {
-		for _, rp := range state.GetRecentRepos() {
-			seen[rp] = true
-		}
-	}
-	repos := make([]string, 0, len(seen))
-	for rp := range seen {
-		repos = append(repos, rp)
-	}
-	sort.Strings(repos)
-	return repos
-}
-
-// buildRepoPickerItems returns display strings for the repo picker.
-func (m *home) buildRepoPickerItems() []string {
-	repos := m.getKnownRepos()
-	countByRepo := make(map[string]int)
-	for _, inst := range m.allInstances {
-		rp := inst.GetRepoPath()
-		if rp != "" {
-			countByRepo[rp]++
-		}
-	}
-
-	// Detect duplicate basenames to disambiguate
-	baseCount := make(map[string]int)
-	for _, rp := range repos {
-		baseCount[filepath.Base(rp)]++
-	}
-
-	m.repoPickerMap = make(map[string]string)
-	items := make([]string, 0, len(repos)+1)
-	for _, rp := range repos {
-		base := filepath.Base(rp)
-		name := base
-		if baseCount[base] > 1 {
-			// Disambiguate with parent directory
-			name = filepath.Base(filepath.Dir(rp)) + "/" + base
-		}
-		count := countByRepo[rp]
-		var label string
-		if rp == m.activeRepoPath {
-			label = fmt.Sprintf("%s (%d) ●", name, count)
-		} else {
-			label = fmt.Sprintf("%s (%d)", name, count)
-		}
-		items = append(items, label)
-		m.repoPickerMap[label] = rp
-	}
-	items = append(items, "Open folder...")
-	return items
-}
-
-// switchToRepo switches the active repo based on picker selection text.
-func (m *home) switchToRepo(selection string) {
-	rp, ok := m.repoPickerMap[selection]
-	if !ok {
-		return
-	}
-	m.activeRepoPath = rp
-	m.nav.SetRepoName(filepath.Base(rp))
-	if state, ok := m.appState.(*config.State); ok {
-		state.AddRecentRepo(rp)
-	}
-	m.rebuildInstanceList()
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
