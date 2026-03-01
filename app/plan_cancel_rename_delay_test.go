@@ -20,7 +20,9 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/planstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -29,7 +31,8 @@ import (
 )
 
 // newCancelDelayHome builds a minimal *home for the cancel/rename delay tests.
-func newCancelDelayHome(t *testing.T, ps *planstate.PlanState, plansDir, repoDir string) *home {
+// store must be the same store backing ps so that FSM transitions can find plans.
+func newCancelDelayHome(t *testing.T, store planstore.Store, ps *planstate.PlanState, plansDir, repoDir string) *home {
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	storage, err := session.NewStorage(config.DefaultState())
@@ -37,7 +40,7 @@ func newCancelDelayHome(t *testing.T, ps *planstate.PlanState, plansDir, repoDir
 	return &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            newFSMForTest(plansDir).PlanStateMachine,
+		fsm:            planfsm.New(store, "test", plansDir),
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
@@ -56,13 +59,12 @@ func TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
+	store, ps, _ := newSharedStoreForTest(t, plansDir)
 
 	planFile := "2026-02-27-cancel-delay.md"
 	require.NoError(t, ps.Register(planFile, "cancel delay test", "plan/cancel-delay", time.Now()))
 
-	h := newCancelDelayHome(t, ps, plansDir, dir)
+	h := newCancelDelayHome(t, store, ps, plansDir, dir)
 	h.updateSidebarPlans()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+planFile), "plan must be selectable in sidebar")
 
@@ -89,8 +91,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
+	store, ps, _ := newSharedStoreForTest(t, plansDir)
 
 	// "aardvark" sorts before "marmot" — so index 0 = aardvark, index 1 = marmot.
 	// After renaming aardvark → zebra: "marmot" sorts before "zebra",
@@ -101,7 +102,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	require.NoError(t, ps.Register(aardvarkFile, "aardvark", "plan/aardvark", time.Now()))
 	require.NoError(t, ps.Register(marmotFile, "marmot", "plan/marmot", time.Now()))
 
-	h := newCancelDelayHome(t, ps, plansDir, dir)
+	h := newCancelDelayHome(t, store, ps, plansDir, dir)
 	h.updateSidebarPlans()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+aardvarkFile), "aardvark must be selectable")
 

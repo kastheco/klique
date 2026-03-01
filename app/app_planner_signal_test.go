@@ -28,8 +28,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *planstate.PlanSta
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
+	store, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "test plan", "plan/test", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
 
@@ -57,7 +56,9 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *planstate.PlanSta
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
-		fsm:                   planfsm.New(plansDir),
+		planStore:             store,
+		planStoreProject:      "test",
+		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),

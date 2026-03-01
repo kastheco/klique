@@ -55,7 +55,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -84,7 +84,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 		toastManager: overlay.NewToastManager(&sp),
 		planState:    ps,
 		planStateDir: plansDir,
-		fsm:          planfsm.New(plansDir),
+		fsm:          newPlanFSMForTest(t, plansDir),
 	}
 
 	// Inject a metadataResultMsg with TmuxAlive=false for the coder instance.
@@ -123,7 +123,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -137,7 +137,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 	h := &home{
 		planState:    ps,
 		planStateDir: plansDir,
-		fsm:          planfsm.New(plansDir),
+		fsm:          newPlanFSMForTest(t, plansDir),
 		toastManager: overlay.NewToastManager(&sp),
 	}
 
@@ -166,7 +166,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -194,7 +194,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 		toastManager: overlay.NewToastManager(&sp),
 		planState:    ps,
 		planStateDir: plansDir,
-		fsm:          planfsm.New(plansDir),
+		fsm:          newPlanFSMForTest(t, plansDir),
 	}
 
 	msg := metadataResultMsg{
@@ -227,7 +227,7 @@ func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(`{}`), 0o644))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(
 		"2026-02-21-auth-refactor.md",
@@ -261,14 +261,14 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
 	const planFile = "2026-02-23-feature.md"
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	// Planner is running — status is "planning"
 	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
 
 	// Simulate the goroutine snapshot: loaded "planning" before sentinel was seen.
-	stalePlanState, err := planstate.Load(plansDir)
+	stalePlanState, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	assert.Equal(t, planstate.StatusPlanning, stalePlanState.Plans[planFile].Status)
 
@@ -277,7 +277,9 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	h := &home{
 		planState:             stalePlanState, // starts with stale state
 		planStateDir:          plansDir,
-		fsm:                   planfsm.New(plansDir),
+		planStore:             storeForDir(t, plansDir),
+		planStoreProject:      "test",
+		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
 		menu:                  ui.NewMenu(),
@@ -322,7 +324,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -351,7 +353,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
-		fsm:                   planfsm.New(plansDir),
+		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
 		activeRepoPath:        dir,
@@ -381,7 +383,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		"implement-finished signal must spawn a reviewer instance")
 
 	// Plan status must be "reviewing" on disk.
-	reloaded, _ := planstate.Load(plansDir)
+	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusReviewing, entry.Status)
@@ -401,7 +403,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	// Write a minimal plan file so spawnPlanAgent can read it.
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
@@ -431,7 +433,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
-		fsm:                   planfsm.New(plansDir),
+		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
 		activeRepoPath:        dir,
@@ -464,7 +466,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		"review-changes signal must spawn a coder instance")
 
 	// Plan status must be "implementing" on disk.
-	reloaded, _ := planstate.Load(plansDir)
+	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusImplementing, entry.Status)
@@ -484,7 +486,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
@@ -513,7 +515,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 		toastManager:          overlay.NewToastManager(&sp),
 		planState:             ps,
 		planStateDir:          plansDir,
-		fsm:                   planfsm.New(plansDir),
+		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
 	}
@@ -528,7 +530,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 	_, _ = h.Update(msg)
 
 	// Plan must remain in reviewing — tmux death is not an approval signal.
-	reloaded, _ := planstate.Load(plansDir)
+	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusReviewing, entry.Status,

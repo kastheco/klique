@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
@@ -26,8 +25,8 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
-	require.NoError(t, err)
+
+	_, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "solo test", "plan/solo-test", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
 
@@ -55,7 +54,7 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		toastManager:      overlay.NewToastManager(&sp),
 		planState:         ps,
 		planStateDir:      plansDir,
-		fsm:               planfsm.New(plansDir),
+		fsm:               fsm,
 		waveOrchestrators: make(map[string]*WaveOrchestrator),
 	}
 

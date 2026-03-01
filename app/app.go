@@ -400,7 +400,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	h.planStore = planstore.NewHTTPStore(planStoreURL, project)
-	h.fsm = planfsm.NewWithStore(h.planStore, project, h.planStateDir)
+	h.fsm = planfsm.New(h.planStore, project, h.planStateDir)
 
 	// Initialize audit logger. Always uses local SQLite regardless of plan
 	// store backend — audit events are purely local state.
@@ -729,11 +729,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if planStateDir != "" {
 				var loaded *planstate.PlanState
 				var err error
-				if store != nil {
-					loaded, err = planstate.LoadWithStore(store, project, planStateDir)
-				} else {
-					loaded, err = planstate.Load(planStateDir)
-				}
+				loaded, err = planstate.Load(store, project, planStateDir)
 				if err != nil {
 					log.WarningLog.Printf("could not load plan state: %v", err)
 				} else {
@@ -914,14 +910,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			// Read and parse the plan
-			plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
-			content, err := os.ReadFile(filepath.Join(plansDir, ws.PlanFile))
+			// Read and parse the plan from store
+			content, err := m.planStore.GetContent(m.planStoreProject, ws.PlanFile)
 			if err != nil {
 				log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.PlanFile, err)
 				continue
 			}
-			plan, err := planparser.Parse(string(content))
+			plan, err := planparser.Parse(content)
 			if err != nil {
 				m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", planstate.DisplayName(ws.PlanFile)))
 				continue

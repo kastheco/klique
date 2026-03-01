@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/planstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -117,7 +118,7 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 	if err := os.MkdirAll(plansDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 	if err := os.MkdirAll(plansDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +229,7 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := newFSMForTest(plansDir)
+	f := newFSMForTest(t, plansDir)
 
 	stages := []struct {
 		event      string
@@ -245,7 +246,7 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 		if err := f.TransitionByName(planFile, tc.event); err != nil {
 			t.Fatalf("TransitionByName(%q, %q) error: %v", planFile, tc.event, err)
 		}
-		reloaded, _ := planstate.Load(plansDir)
+		reloaded, _ := newTestPlanState(t, plansDir)
 		entry, ok := reloaded.Entry(planFile)
 		if !ok {
 			t.Fatalf("plan entry missing after %q", tc.event)
@@ -273,7 +274,7 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	planFile := "2026-02-25-test-solo.md"
 	require.NoError(t, ps.Register(planFile, "test solo", "plan/test-solo", time.Now()))
@@ -315,7 +316,7 @@ func TestSpawnPlanAgent_SoloTitlesArePlanScoped(t *testing.T) {
 
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
 	const firstPlan = "2026-03-01-wrong-timezone.md"
@@ -367,7 +368,7 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
 	const (
@@ -382,7 +383,7 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 	seedPlanStatus(t, ps, conflictPlan, planstate.StatusImplementing)
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.fsm = newFSMForTest(plansDir).PlanStateMachine
+	h.fsm = newFSMForTest(t, plansDir).PlanStateMachine
 	h.activeRepoPath = dir
 	h.program = "opencode"
 	return h, targetPlan
@@ -436,7 +437,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
 	planFile := "2026-02-28-test-set-status.md"
@@ -447,7 +448,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	h := &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            newFSMForTest(plansDir).PlanStateMachine,
+		fsm:            newFSMForTest(t, plansDir).PlanStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
@@ -480,12 +481,49 @@ func TestToggleAutoAdvanceWaves(t *testing.T) {
 	assert.False(t, m.appConfig.AutoAdvanceWaves)
 }
 
+func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
+	store := planstore.NewTestSQLiteStore(t)
+	planFile := "2026-02-28-test.md"
+	content := "# My Plan\n\n## Wave 1\n\n### Task 1: Do thing\n"
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: planFile,
+		Status:   planstore.StatusReady,
+		Content:  content,
+	}))
+
+	ps, err := planstate.Load(store, "proj", t.TempDir())
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	nav := ui.NewNavigationPanel(&sp)
+	nav.SetTopicsAndPlans(nil, []ui.PlanDisplay{{Filename: planFile, Status: string(planstate.StatusReady)}}, nil)
+	require.True(t, nav.SelectByID(ui.SidebarPlanPrefix+planFile))
+
+	h := &home{
+		planState:        ps,
+		planStore:        store,
+		planStoreProject: "proj",
+		planStateDir:     t.TempDir(),
+		nav:              nav,
+		tabbedWindow:     ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+	}
+
+	_, cmd := h.viewSelectedPlan()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	renderedMsg, ok := msg.(planRenderedMsg)
+	require.True(t, ok, "expected planRenderedMsg, got %T", msg)
+	require.NoError(t, renderedMsg.err)
+	assert.Equal(t, planFile, renderedMsg.planFile)
+}
+
 func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
 	planFile := "2026-02-26-review-approval-gate.md"
@@ -496,7 +534,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 	h := &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            newFSMForTest(plansDir).PlanStateMachine,
+		fsm:            newFSMForTest(t, plansDir).PlanStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
@@ -509,7 +547,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 
 	_, _ = h.executeContextAction("mark_plan_done")
 
-	reloaded, err := planstate.Load(plansDir)
+	reloaded, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)

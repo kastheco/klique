@@ -97,7 +97,7 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "paused task test", "plan/paused-task", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -154,7 +154,7 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "missing task test", "plan/missing-task", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -238,7 +238,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 	content := "# Plan\n\n**Goal:** Test\n\n### Task 1: Something\n\nDo it.\n"
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(content), 0o644))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "no waves test", "plan/no-waves", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
@@ -251,7 +251,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 		appConfig:         config.DefaultConfig(),
 		planState:         ps,
 		planStateDir:      plansDir,
-		fsm:               planfsm.New(plansDir),
+		fsm:               newPlanFSMForTest(t, plansDir),
 		activeRepoPath:    dir,
 		program:           "opencode",
 		nav:               list,
@@ -305,7 +305,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "all-complete test", "plan/all-complete", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -323,7 +323,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	inst.PromptDetected = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
@@ -355,19 +355,19 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "review transition test", "plan/review-trans", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 
 	model, _ := h.Update(waveAllCompleteMsg{planFile: planFile})
 	updated := model.(*home)
 
 	// Reload plan state from disk to verify FSM transition persisted.
-	reloaded, err := planstate.Load(plansDir)
+	reloaded, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
@@ -400,7 +400,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "multi wave test", "plan/multi-wave", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -418,7 +418,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	inst.PromptDetected = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
@@ -461,7 +461,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "retry cleanup test", "plan/retry-cleanup", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -656,7 +656,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus wave test", "plan/focus-wave", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -717,7 +717,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus failed test", "plan/focus-failed", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -769,7 +769,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus planner test", "plan/focus-planner", time.Now()))
 	// Plan is StatusPlanning — the PlannerFinished signal will transition it to StatusReady.
@@ -790,7 +790,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
 	h.plannerPrompted = make(map[string]bool)
 	h.pendingReviewFeedback = make(map[string]string)
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(plannerInst)
 	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
@@ -835,7 +835,7 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "deferred test", "plan/deferred", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -852,7 +852,7 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	inst.PromptDetected = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(inst)
 
 	// Simulate user being in an overlay (e.g. another confirmation dialog)
@@ -944,7 +944,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "auto-advance failure test", "plan/auto-advance-failure", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -1015,7 +1015,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "auto-advance success test", "plan/auto-advance-success", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
@@ -1062,7 +1062,7 @@ func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus coder test", "plan/focus-coder", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)

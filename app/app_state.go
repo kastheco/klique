@@ -543,22 +543,15 @@ func (m *home) updateInfoPane() {
 	m.tabbedWindow.SetInfoData(data)
 }
 
-// loadPlanState reads plan state from the active repo's docs/plans/ directory.
-// When a remote store is configured, uses LoadWithStore to fetch from the server.
+// loadPlanState reads plan state from the store for the active repo.
 // Called on user-triggered events (plan creation, repo switch, etc.). The periodic
 // metadata tick loads plan state in its goroutine instead.
-// Silently no-ops if the file is missing (project may not use plans).
+// Silently no-ops if the store is not configured.
 func (m *home) loadPlanState() {
-	if m.planStateDir == "" {
+	if m.planStateDir == "" || m.planStore == nil {
 		return
 	}
-	var ps *planstate.PlanState
-	var err error
-	if m.planStore != nil {
-		ps, err = planstate.LoadWithStore(m.planStore, m.planStoreProject, m.planStateDir)
-	} else {
-		ps, err = planstate.Load(m.planStateDir)
-	}
+	ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
 	if err != nil {
 		log.WarningLog.Printf("could not load plan state: %v", err)
 		if m.toastManager != nil {
@@ -757,6 +750,9 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: reviewerInst, err: err}
 		}
+		if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+			return instanceStartedMsg{instance: reviewerInst, err: err}
+		}
 		err := reviewerInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: reviewerInst, err: err}
 	}
@@ -940,9 +936,31 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: coderInst, err: err}
 		}
+		if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+			return instanceStartedMsg{instance: coderInst, err: err}
+		}
 		err := coderInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: coderInst, err: err}
 	}
+}
+
+func (m *home) materializePlanFile(planFile, repoPath string) error {
+	if m.planStore == nil {
+		return nil
+	}
+	content, err := m.planStore.GetContent(m.planStoreProject, planFile)
+	if err != nil {
+		return fmt.Errorf("get plan content %s: %w", planFile, err)
+	}
+	plansDir := filepath.Join(repoPath, "docs", "plans")
+	if err := os.MkdirAll(plansDir, 0o755); err != nil {
+		return fmt.Errorf("create plans dir: %w", err)
+	}
+	planPath := filepath.Join(plansDir, planFile)
+	if err := os.WriteFile(planPath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write plan file: %w", err)
+	}
+	return nil
 }
 
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.
@@ -962,7 +980,6 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 
 	// Cache miss — render async so the UI doesn't freeze.
-	planPath := filepath.Join(m.planStateDir, planFile)
 	previewWidth, _ := m.tabbedWindow.GetPreviewSize()
 	wordWrap := previewWidth - 4
 	if wordWrap < 40 {
@@ -970,7 +987,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 
 	return m, func() tea.Msg {
-		data, err := os.ReadFile(planPath)
+		data, err := m.planStore.GetContent(m.planStoreProject, planFile)
 		if err != nil {
 			return planRenderedMsg{err: fmt.Errorf("could not read plan %s: %w", planFile, err)}
 		}
@@ -983,7 +1000,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 			return planRenderedMsg{err: fmt.Errorf("could not create markdown renderer: %w", err)}
 		}
 
-		rendered, err := renderer.Render(string(data))
+		rendered, err := renderer.Render(data)
 		if err != nil {
 			return planRenderedMsg{err: fmt.Errorf("could not render markdown: %w", err)}
 		}
@@ -992,16 +1009,13 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 }
 
-// createPlanEntry creates a new plan entry in plan-state.json (or remote store).
+// createPlanEntry creates a new plan entry in the store.
 func (m *home) createPlanEntry(name, description, topic string) error {
 	if m.planState == nil {
-		var ps *planstate.PlanState
-		var err error
-		if m.planStore != nil {
-			ps, err = planstate.LoadWithStore(m.planStore, m.planStoreProject, m.planStateDir)
-		} else {
-			ps, err = planstate.Load(m.planStateDir)
+		if m.planStore == nil {
+			return fmt.Errorf("plan store not configured")
 		}
+		ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
 		if err != nil {
 			return err
 		}
@@ -1043,16 +1057,13 @@ func renderPlanStub(name, description, filename string) string {
 	return fmt.Sprintf("# %s\n\n## Context\n\n%s\n\n## Notes\n\n- Created by kas lifecycle flow\n- Plan file: %s\n", name, description, filename)
 }
 
-// createPlanRecord registers the plan in plan-state.json (or remote store).
+// createPlanRecord registers the plan in the store.
 func (m *home) createPlanRecord(planFile, description, branch string, now time.Time) error {
 	if m.planState == nil {
-		var ps *planstate.PlanState
-		var err error
-		if m.planStore != nil {
-			ps, err = planstate.LoadWithStore(m.planStore, m.planStoreProject, m.planStateDir)
-		} else {
-			ps, err = planstate.Load(m.planStateDir)
+		if m.planStore == nil {
+			return fmt.Errorf("plan store not configured")
 		}
+		ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
 		if err != nil {
 			return err
 		}
@@ -1067,25 +1078,17 @@ func (m *home) createPlanRecord(planFile, description, branch string, now time.T
 	return nil
 }
 
-// finalizePlanCreation writes the plan stub file, registers it in plan-state.json,
-// commits both to main, and creates the feature branch. Called at the end of the
-// plan creation wizard.
+// finalizePlanCreation writes the plan stub content to the store, registers it,
+// and creates the feature branch. Called at the end of the plan creation wizard.
 func (m *home) finalizePlanCreation(name, description string) error {
 	now := time.Now().UTC()
 	planFile := buildPlanFilename(name, now)
 	branch := gitpkg.PlanBranchFromFile(planFile)
-	planPath := filepath.Join(m.planStateDir, planFile)
-
-	if err := os.MkdirAll(m.planStateDir, 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(planPath, []byte(renderPlanStub(name, description, planFile)), 0o644); err != nil {
-		return err
-	}
+	content := renderPlanStub(name, description, planFile)
 	if err := m.createPlanRecord(planFile, description, branch, now); err != nil {
 		return err
 	}
-	if err := gitpkg.CommitPlanScaffoldOnMain(m.activeRepoPath, planFile); err != nil {
+	if err := m.planState.SetContent(planFile, content); err != nil {
 		return err
 	}
 	if err := gitpkg.EnsurePlanBranch(m.activeRepoPath, branch); err != nil {
@@ -1106,20 +1109,6 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 	date := time.Now().Format("2006-01-02")
 	filename := clickup.ScaffoldFilename(task.Name, date)
 
-	plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
-	if err := os.MkdirAll(plansDir, 0o755); err != nil {
-		m.toastManager.Error("failed to create plans dir: " + err.Error())
-		return m, m.toastTickCmd()
-	}
-	filename = dedupePlanFilename(plansDir, filename)
-	planPath := filepath.Join(plansDir, filename)
-
-	scaffold := clickup.ScaffoldPlan(*task)
-	if err := os.WriteFile(planPath, []byte(scaffold), 0o644); err != nil {
-		m.toastManager.Error("failed to write plan: " + err.Error())
-		return m, m.toastTickCmd()
-	}
-
 	if m.planState == nil {
 		m.loadPlanState()
 	}
@@ -1128,9 +1117,17 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	}
 
+	filename = dedupePlanFilenameInState(m.planState, filename)
+
+	scaffold := clickup.ScaffoldPlan(*task)
+
 	branch := gitpkg.PlanBranchFromFile(filename)
 	if err := m.planState.Register(filename, task.Name, branch, time.Now()); err != nil {
 		m.toastManager.Error("failed to register imported plan: " + err.Error())
+		return m, m.toastTickCmd()
+	}
+	if err := m.planState.SetContent(filename, scaffold); err != nil {
+		m.toastManager.Error("failed to save imported plan content: " + err.Error())
 		return m, m.toastTickCmd()
 	}
 
@@ -1165,6 +1162,25 @@ func dedupePlanFilename(plansDir, filename string) string {
 	for i := 2; i < 100; i++ {
 		candidate := fmt.Sprintf("%s-%d.md", base, i)
 		if _, err := os.Stat(filepath.Join(plansDir, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+
+	return filename
+}
+
+func dedupePlanFilenameInState(ps *planstate.PlanState, filename string) string {
+	if ps == nil {
+		return filename
+	}
+	if _, ok := ps.Entry(filename); !ok {
+		return filename
+	}
+
+	base := strings.TrimSuffix(filename, ".md")
+	for i := 2; i < 100; i++ {
+		candidate := fmt.Sprintf("%s-%d.md", base, i)
+		if _, ok := ps.Entry(candidate); !ok {
 			return candidate
 		}
 	}
@@ -1407,6 +1423,9 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	if action == "plan" || action == "solo" {
 		// Planner and solo agent run on main branch — no worktree created.
 		startCmd = func() tea.Msg {
+			if err := m.materializePlanFile(planFile, m.activeRepoPath); err != nil {
+				return instanceStartedMsg{instance: inst, err: err}
+			}
 			err := inst.StartOnMainBranch()
 			return instanceStartedMsg{instance: inst, err: err}
 		}
@@ -1425,6 +1444,9 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 			return m, m.handleError(err)
 		}
 		startCmd = func() tea.Msg {
+			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+				return instanceStartedMsg{instance: inst, err: err}
+			}
 			err := inst.StartInSharedWorktree(shared, entry.Branch)
 			return instanceStartedMsg{instance: inst, err: err}
 		}
@@ -1500,13 +1522,13 @@ func (m *home) rebuildOrphanedOrchestrators() {
 			continue
 		}
 
-		// Parse the plan file.
-		content, err := os.ReadFile(filepath.Join(m.planStateDir, planFile))
+		// Parse the plan content from store.
+		content, err := m.planStore.GetContent(m.planStoreProject, planFile)
 		if err != nil {
 			log.WarningLog.Printf("rebuildOrphanedOrchestrators: cannot read %s: %v", planFile, err)
 			continue
 		}
-		plan, err := planparser.Parse(string(content))
+		plan, err := planparser.Parse(content)
 		if err != nil {
 			log.WarningLog.Printf("rebuildOrphanedOrchestrators: cannot parse %s: %v", planFile, err)
 			continue
@@ -1599,6 +1621,9 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
+			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+				return instanceStartedMsg{instance: taskInst, err: err}
+			}
 			err := taskInst.StartInSharedWorktree(shared, entry.Branch)
 			return instanceStartedMsg{instance: taskInst, err: err}
 		}
@@ -1733,11 +1758,17 @@ func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd
 			if err := shared.Setup(); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
+			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+				return instanceStartedMsg{instance: inst, err: err}
+			}
 			err := inst.StartInSharedWorktree(shared, branch)
 			return instanceStartedMsg{instance: inst, err: err}
 		}
 	} else {
 		startCmd = func() tea.Msg {
+			if err := m.materializePlanFile(planFile, m.activeRepoPath); err != nil {
+				return instanceStartedMsg{instance: inst, err: err}
+			}
 			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
@@ -1371,7 +1370,7 @@ func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.St
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	name := planstate.DisplayName(planFile)
 	require.NoError(t, ps.Create(planFile, name, "plan/"+name, topic, time.Now()))
@@ -1382,7 +1381,7 @@ func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.St
 	require.NoError(t, ps.Save())
 	h.planState = ps
 	h.planStateDir = plansDir
-	h.fsm = planfsm.New(plansDir)
+	h.fsm = newPlanFSMForTest(t, plansDir)
 	h.activeRepoPath = dir
 	h.updateSidebarPlans()
 }

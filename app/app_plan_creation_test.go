@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/require"
@@ -40,7 +39,7 @@ func TestCreatePlanRecord(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(`{}`), 0o644))
 
-	ps, err := planstate.Load(plansDir)
+	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
 	h := &home{planStateDir: plansDir, planState: ps}
