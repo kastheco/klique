@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/config/planstore"
@@ -15,12 +16,12 @@ import (
 // executePlanRegister registers a plan file that exists on disk but isn't
 // tracked in plan state yet. It extracts a description from the first markdown
 // heading and uses the conventional branch name format.
-func executePlanRegister(plansDir, planFile, branch string) error {
+func executePlanRegister(plansDir, planFile, branch string, store planstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
 	if _, err := os.Stat(fullPath); err != nil {
 		return fmt.Errorf("plan file not found on disk: %s", fullPath)
 	}
-	ps, err := planstate.Load(plansDir)
+	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return err
 	}
@@ -52,8 +53,8 @@ func executePlanRegister(plansDir, planFile, branch string) error {
 
 // executePlanList returns a formatted string listing all plans, optionally
 // filtered by status. Exported for testing without cobra plumbing.
-func executePlanList(plansDir, statusFilter string) string {
-	ps, err := planstate.Load(plansDir)
+func executePlanList(plansDir, statusFilter string, store planstore.Store) string {
+	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -87,11 +88,11 @@ func executePlanListWithStore(storeURL, project string) string {
 
 // executePlanSetStatus force-overrides a plan's status, bypassing the FSM.
 // Requires force=true to prevent accidental misuse.
-func executePlanSetStatus(plansDir, planFile, status string, force bool) error {
+func executePlanSetStatus(plansDir, planFile, status string, force bool, store planstore.Store) error {
 	if !force {
 		return fmt.Errorf("--force required to override plan status (this bypasses the FSM)")
 	}
-	ps, err := planstate.Load(plansDir)
+	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return err
 	}
@@ -99,7 +100,7 @@ func executePlanSetStatus(plansDir, planFile, status string, force bool) error {
 }
 
 // executePlanTransition applies a named FSM event to a plan and returns the new status.
-func executePlanTransition(plansDir, planFile, event string) (string, error) {
+func executePlanTransition(plansDir, planFile, event string, store planstore.Store) (string, error) {
 	eventMap := map[string]planfsm.Event{
 		"plan_start":         planfsm.PlanStart,
 		"planner_finished":   planfsm.PlannerFinished,
@@ -121,11 +122,11 @@ func executePlanTransition(plansDir, planFile, event string) (string, error) {
 		}
 		return "", fmt.Errorf("unknown event %q; valid events: %s", event, strings.Join(names, ", "))
 	}
-	fsm := planfsm.New(plansDir)
+	fsm := newFSM(plansDir, store)
 	if err := fsm.Transition(planFile, fsmEvent); err != nil {
 		return "", err
 	}
-	ps, err := planstate.Load(plansDir)
+	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return "", err
 	}
@@ -135,12 +136,12 @@ func executePlanTransition(plansDir, planFile, event string) (string, error) {
 
 // executePlanImplement transitions a plan into implementing state and writes
 // a wave signal file so the TUI metadata tick can pick it up.
-func executePlanImplement(plansDir, planFile string, wave int) error {
+func executePlanImplement(plansDir, planFile string, wave int, store planstore.Store) error {
 	if wave < 1 {
 		return fmt.Errorf("wave number must be >= 1, got %d", wave)
 	}
-	fsm := planfsm.New(plansDir)
-	ps, err := planstate.Load(plansDir)
+	fsm := newFSM(plansDir, store)
+	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return err
 	}
@@ -188,7 +189,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Print(executePlanList(plansDir, statusFilter))
+			fmt.Print(executePlanList(plansDir, statusFilter, resolveStore(plansDir)))
 			return nil
 		},
 	}
@@ -206,7 +207,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanRegister(plansDir, args[0], branchFlag); err != nil {
+			if err := executePlanRegister(plansDir, args[0], branchFlag, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("registered: %s → ready\n", args[0])
@@ -227,7 +228,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanSetStatus(plansDir, args[0], args[1], forceFlag); err != nil {
+			if err := executePlanSetStatus(plansDir, args[0], args[1], forceFlag, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("%s → %s\n", args[0], args[1])
@@ -247,7 +248,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			newStatus, err := executePlanTransition(plansDir, args[0], args[1])
+			newStatus, err := executePlanTransition(plansDir, args[0], args[1], resolveStore(plansDir))
 			if err != nil {
 				return err
 			}
@@ -268,7 +269,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanImplement(plansDir, args[0], waveNum); err != nil {
+			if err := executePlanImplement(plansDir, args[0], waveNum, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("implementation triggered: %s wave %d\n", args[0], waveNum)
@@ -279,6 +280,55 @@ func NewPlanCmd() *cobra.Command {
 	planCmd.AddCommand(implementCmd)
 
 	return planCmd
+}
+
+// resolveStoreConfig returns the remote store and project name from config.
+// Returns (nil, "") when no remote store is configured.
+func resolveStoreConfig(plansDir string) (planstore.Store, string) {
+	cfg := config.LoadConfig()
+	if cfg.PlanStore == "" {
+		return nil, ""
+	}
+	project := projectFromPlansDir(plansDir)
+	store, err := planstore.NewStoreFromConfig(cfg.PlanStore, project)
+	if err != nil || store == nil {
+		return nil, ""
+	}
+	return store, project
+}
+
+// projectFromPlansDir extracts the repo/project name from a plansDir path.
+// plansDir is typically <repo>/docs/plans — go up two levels.
+func projectFromPlansDir(plansDir string) string {
+	return filepath.Base(filepath.Dir(filepath.Dir(plansDir)))
+}
+
+// loadPlanState loads plan state. When store is non-nil, uses the remote
+// backend; otherwise falls back to local JSON.
+func loadPlanState(plansDir string, store planstore.Store) (*planstate.PlanState, error) {
+	if store != nil {
+		return planstate.LoadWithStore(store, projectFromPlansDir(plansDir), plansDir)
+	}
+	return planstate.Load(plansDir)
+}
+
+// newFSM creates a PlanStateMachine. When store is non-nil, uses the remote backend.
+func newFSM(plansDir string, store planstore.Store) *planfsm.PlanStateMachine {
+	if store != nil {
+		project := projectFromPlansDir(plansDir)
+		return planfsm.NewWithStore(store, project, plansDir)
+	}
+	return planfsm.New(plansDir)
+}
+
+// resolveStore returns the remote plan store from config, or nil if not
+// configured or unreachable.
+func resolveStore(plansDir string) planstore.Store {
+	store, _ := resolveStoreConfig(plansDir)
+	if store != nil && store.Ping() == nil {
+		return store
+	}
+	return nil
 }
 
 // resolvePlansDir resolves docs/plans/ relative to cwd, returning an error if absent.

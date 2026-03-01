@@ -1040,6 +1040,13 @@ func navPlanStatusIcon(row navRow) string {
 	if row.HasRunning {
 		return navRunningIconStyle.Render("●")
 	}
+	// Reflect plan lifecycle status when no instances are active.
+	switch row.PlanStatus {
+	case "planning":
+		return navRunningIconStyle.Render("●")
+	case "reviewing":
+		return navNotifyIconStyle.Render("◉")
+	}
 	return navIdleIconStyle.Render("○")
 }
 

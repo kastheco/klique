@@ -83,10 +83,10 @@ func planStatusStyle(status string) string {
 	switch status {
 	case "implementing":
 		fg = ColorFoam
-	case "reviewing":
-		fg = ColorRose
-	case "done":
+	case "planning":
 		fg = ColorFoam
+	case "reviewing", "done":
+		fg = ColorRose
 	default:
 		fg = ColorMuted
 	}

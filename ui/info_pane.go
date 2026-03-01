@@ -119,11 +119,11 @@ func (p *InfoPane) String() string {
 
 func statusColor(status string) lipgloss.TerminalColor {
 	switch status {
-	case "implementing", "planning":
+	case "implementing":
 		return ColorIris
-	case "done", "running":
+	case "planning", "running":
 		return ColorFoam
-	case "reviewing":
+	case "reviewing", "done":
 		return ColorGold
 	case "ready", "cancelled", "paused":
 		return ColorMuted
