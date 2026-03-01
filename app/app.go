@@ -46,6 +46,7 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 
 	zone.NewGlobal()
 	h := newHome(ctx, program, autoYes)
+	defer h.embeddedServer.Stop()
 	defer h.auditLogger.Close()
 	if h.permissionStore != nil {
 		defer h.permissionStore.Close()
@@ -242,7 +243,11 @@ type home struct {
 	planState *planstate.PlanState
 	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
 	planStateDir string
-	// planStore is the remote plan store client. Nil when unconfigured or unreachable.
+	// embeddedServer is the in-process HTTP+SQLite plan store server started on boot.
+	// Always non-nil after newHome() returns.
+	embeddedServer *planstore.EmbeddedServer
+	// planStore is the plan store client. Always non-nil after newHome() returns —
+	// points at the embedded server URL unless appConfig.PlanStore overrides it.
 	planStore planstore.Store
 	// planStoreProject is the project name used with the remote store (derived from repo basename).
 	planStoreProject string
@@ -366,30 +371,39 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		pendingReviewFeedback: make(map[string]string),
 	}
 
-	// Initialize remote plan store if configured.
+	// Always start an embedded plan store server. This gives us a local SQLite
+	// DB as the single source of truth without requiring a separate process.
+	dbPath := planstore.ResolvedDBPath()
+	embSrv, err := planstore.StartEmbedded(dbPath, 0)
+	if err != nil {
+		fmt.Printf("Failed to start embedded plan store: %v\n", err)
+		os.Exit(1)
+	}
+	h.embeddedServer = embSrv
+
+	// Default: use the embedded server's URL for the plan store client.
+	planStoreURL := embSrv.URL()
+	remoteStoreUnreachable := false
+
+	// If a remote plan store is configured, use that URL instead (multi-machine
+	// access over tailscale, etc.). The embedded server still runs for audit log
+	// DB access via its SQLite store.
 	if appConfig.PlanStore != "" {
-		store, err := planstore.NewStoreFromConfig(appConfig.PlanStore, project)
-		if err != nil {
-			log.WarningLog.Printf("plan store config error: %v", err)
-		} else if store != nil {
-			if pingErr := store.Ping(); pingErr != nil {
-				log.WarningLog.Printf("plan store unreachable: %v", pingErr)
-				// store remains nil — will show toast after toastManager is initialized
-			} else {
-				h.planStore = store
-			}
+		remoteStore := planstore.NewHTTPStore(appConfig.PlanStore, project)
+		if pingErr := remoteStore.Ping(); pingErr != nil {
+			log.WarningLog.Printf("remote plan store unreachable: %v — falling back to embedded", pingErr)
+			remoteStoreUnreachable = true
+			// planStoreURL stays as the embedded server URL
+		} else {
+			planStoreURL = appConfig.PlanStore
 		}
 	}
 
-	if h.planStore != nil {
-		h.fsm = planfsm.NewWithStore(h.planStore, project, h.planStateDir)
-	} else {
-		h.fsm = planfsm.New(h.planStateDir)
-	}
+	h.planStore = planstore.NewHTTPStore(planStoreURL, project)
+	h.fsm = planfsm.NewWithStore(h.planStore, project, h.planStateDir)
 
 	// Initialize audit logger. Always uses local SQLite regardless of plan
 	// store backend — audit events are purely local state.
-	dbPath := planstore.ResolvedDBPath()
 	if al, err := auditlog.NewSQLiteLogger(dbPath); err != nil {
 		log.WarningLog.Printf("audit logger init failed: %v", err)
 		h.auditLogger = auditlog.NopLogger()
@@ -400,9 +414,10 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.nav = ui.NewNavigationPanel(&h.spinner)
 	h.toastManager = overlay.NewToastManager(&h.spinner)
 
-	// Show a warning toast if the plan store was configured but unreachable.
-	if appConfig.PlanStore != "" && h.planStore == nil {
-		h.toastManager.Error("plan store unreachable — changes won't persist")
+	// Show a warning toast if a remote plan store was configured but unreachable
+	// (we fell back to the embedded server).
+	if remoteStoreUnreachable {
+		h.toastManager.Error("remote plan store unreachable — using embedded store")
 	}
 
 	permCacheDir := filepath.Join(activeRepoPath, ".kasmos")
