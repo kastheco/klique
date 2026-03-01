@@ -181,6 +181,11 @@ func LoadWithStore(store planstore.Store, project, dir string) (*PlanState, erro
 		ps.TopicEntries[t.Name] = TopicEntry{CreatedAt: t.CreatedAt}
 	}
 
+	// Reconcile stale filenames: if a plan-state key doesn't match an actual
+	// file on disk (e.g. date changed between planning and follow-up), fuzzy-
+	// match by slug and rekey the entry. Persist renames back to the store.
+	ps.reconcileFilenamesWithStore()
+
 	return ps, nil
 }
 
@@ -630,6 +635,22 @@ func slugify(name string) string {
 		result = result[:len(result)-1]
 	}
 	return string(result)
+}
+
+// reconcileFilenamesWithStore is like reconcileFilenames but also persists
+// renames to the remote store when one is configured.
+func (ps *PlanState) reconcileFilenamesWithStore() {
+	renames := ps.reconcileFilenames()
+	if renames == 0 || ps.store == nil {
+		return
+	}
+	// The in-memory map has been rekeyed by reconcileFilenames.
+	// Persist each rename to the remote store. We can't easily track
+	// old→new pairs from reconcileFilenames, so re-sync the full state.
+	// This is a rare operation (only on date mismatches).
+	for filename, entry := range ps.Plans {
+		_ = ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry))
+	}
 }
 
 // reconcileFilenames checks each plan key against the actual files on disk.
