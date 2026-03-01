@@ -295,8 +295,16 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := gitpkg.MergePlanBranch(m.activeRepoPath, entry.Branch); err != nil {
 				return err
 			}
-			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
-				return err
+			// Walk through FSM to done if not already there.
+			if planfsm.Status(entry.Status) != planfsm.StatusDone {
+				if planfsm.Status(entry.Status) != planfsm.StatusReviewing {
+					if err := m.fsmSetReviewing(planFile); err != nil {
+						return err
+					}
+				}
+				if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
+					return err
+				}
 			}
 			m.audit(auditlog.EventPlanMerged, "plan merged to main: "+planName,
 				auditlog.WithPlan(planFile))

@@ -807,6 +807,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd := m.spawnReviewer(sig.PlanFile); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
+			case planfsm.ReviewApproved:
+				planName := planstate.DisplayName(sig.PlanFile)
+				m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
+					auditlog.WithPlan(sig.PlanFile))
+				m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
+				// Kill the reviewer instance — it's done.
+				for _, inst := range m.nav.GetInstances() {
+					if inst.PlanFile == sig.PlanFile && inst.IsReviewer {
+						_ = inst.Kill()
+						break
+					}
+				}
 			case planfsm.ReviewChangesRequested:
 				feedback := sig.Body
 				m.pendingReviewFeedback[sig.PlanFile] = feedback
