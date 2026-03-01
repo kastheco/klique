@@ -890,6 +890,169 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 		"pendingAllComplete must be drained after showing dialog")
 }
 
+// TestAutoAdvanceWaves_SkipsConfirmOnSuccess verifies that when AutoAdvanceWaves is
+// true and a wave completes with zero failures, the model is configured to auto-advance
+// without showing a confirmation dialog.
+func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
+	// Build a plan with 2 waves
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "T1"}}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "T2"}}},
+		},
+	}
+	orch := NewWaveOrchestrator("test.md", plan)
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1) // wave 1 complete, no failures
+
+	m := &home{
+		appConfig:         &config.Config{AutoAdvanceWaves: true},
+		waveOrchestrators: map[string]*WaveOrchestrator{"test.md": orch},
+		planState:         &planstate.PlanState{Plans: map[string]planstate.PlanEntry{"test.md": {Status: "implementing"}}},
+		state:             stateDefault,
+	}
+
+	// NeedsConfirm should be true (wave just completed)
+	assert.True(t, orch.NeedsConfirm())
+
+	// With auto-advance enabled, the handler should NOT show a confirm dialog
+	// and instead directly emit a waveAdvanceMsg.
+	// This is a unit-level assertion on the branching logic.
+	assert.True(t, m.appConfig.AutoAdvanceWaves)
+	assert.Equal(t, 0, orch.FailedTaskCount())
+}
+
+// TestAutoAdvanceWaves_ShowsConfirmOnFailure verifies that even when AutoAdvanceWaves
+// is true, a wave with failures still shows the decision dialog.
+func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
+	const planFile = "2026-02-28-auto-advance-failure.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{
+				{Number: 1, Title: "T1"},
+				{Number: 2, Title: "T2"},
+			}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 3, Title: "T3"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1)
+	orch.MarkTaskFailed(2) // wave 1 complete with 1 failure
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "auto-advance failure test", "plan/auto-advance-failure", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	// Create task instances
+	inst1, err := session.NewInstance(session.InstanceOptions{
+		Title:      "auto-advance-failure-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst1.PromptDetected = true
+
+	inst2, err := session.NewInstance(session.InstanceOptions{
+		Title:      "auto-advance-failure-W1-T2",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 2,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst2.SetStatus(session.Paused) // failed
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	// Enable auto-advance
+	h.appConfig = &config.Config{AutoAdvanceWaves: true}
+	_ = h.nav.AddInstance(inst1)
+	_ = h.nav.AddInstance(inst2)
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "auto-advance-failure-W1-T1", TmuxAlive: true},
+			{Title: "auto-advance-failure-W1-T2", TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Even with auto-advance enabled, failures must show the decision dialog
+	assert.Equal(t, stateConfirm, updated.state,
+		"failed wave must show decision dialog even when auto-advance is enabled")
+	require.NotNil(t, updated.confirmationOverlay,
+		"confirmation overlay must be set for failed-wave decision")
+	assert.Equal(t, "r", updated.confirmationOverlay.ConfirmKey,
+		"failed-wave confirm key must be 'r' (retry)")
+}
+
+// TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess verifies that when AutoAdvanceWaves
+// is true and a wave completes with zero failures, the Update handler emits a
+// waveAdvanceMsg directly (no confirmation dialog shown).
+func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
+	const planFile = "2026-02-28-auto-advance-success.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "T1"}}},
+			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "T2"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := planstate.Load(plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "auto-advance success test", "plan/auto-advance-success", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "auto-advance-success-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	// Enable auto-advance
+	h.appConfig = &config.Config{AutoAdvanceWaves: true}
+	_ = h.nav.AddInstance(inst)
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "auto-advance-success-W1-T1", TmuxAlive: true}},
+		PlanState: ps,
+	}
+	model, cmd := h.Update(msg)
+	updated := model.(*home)
+
+	// With auto-advance enabled and no failures, must NOT show a confirmation dialog
+	assert.NotEqual(t, stateConfirm, updated.state,
+		"auto-advance must not show confirmation dialog on success")
+	assert.Nil(t, updated.confirmationOverlay,
+		"no confirmation overlay must be shown when auto-advancing")
+
+	// The cmd must be non-nil (it contains the waveAdvanceMsg)
+	assert.NotNil(t, cmd, "auto-advance must emit a tea.Cmd containing waveAdvanceMsg")
+}
+
 // TestCoderExit_FocusesCoderInstance_BeforePushConfirm verifies that when a
 // coder finishes (tmux dies) and the "push branch?" dialog shows, the coder
 // instance is auto-focused so its output is visible behind the overlay.

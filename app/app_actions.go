@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
@@ -430,6 +431,20 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return planRefreshMsg{}
 		}
 		return m, m.confirmAction(fmt.Sprintf("start over plan '%s'? this resets the branch.", planName), startOverAction)
+
+	case "toggle_auto_advance":
+		if m.appConfig == nil {
+			return m, nil
+		}
+		m.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves
+		label := "off"
+		if m.appConfig.AutoAdvanceWaves {
+			label = "on"
+		}
+		m.toastManager.Success(fmt.Sprintf("auto-advance waves: %s", label))
+		// Persist to disk (best-effort)
+		_ = config.SaveConfig(m.appConfig)
+		return m, m.toastTickCmd()
 	}
 
 	return m, nil
@@ -646,11 +661,16 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 			overlay.ContextMenuItem{Label: "inspect plan", Action: "inspect_plan"},
 		)
 	}
+	autoAdvanceLabel := "auto-advance waves: off"
+	if m.appConfig != nil && m.appConfig.AutoAdvanceWaves {
+		autoAdvanceLabel = "auto-advance waves: on"
+	}
 	items = append(items,
 		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
 		overlay.ContextMenuItem{Label: "view plan", Action: "view_plan"},
 		overlay.ContextMenuItem{Label: "rename plan", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
+		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
 		overlay.ContextMenuItem{Label: "set status", Action: "set_status"},
 		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},
 		overlay.ContextMenuItem{Label: "mark done", Action: "mark_plan_done"},

@@ -1225,11 +1225,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					capturedPlanFile := planFile
 					capturedEntry := entry
 					planName := planstate.DisplayName(planFile)
-					// Focus a task instance so the user can see agent output behind the overlay.
-					if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
-						asyncCmds = append(asyncCmds, cmd)
-					}
+
 					if failed > 0 {
+						// Failed wave — always show the decision dialog (retry/next/abort)
+						if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
+							asyncCmds = append(asyncCmds, cmd)
+						}
 						m.audit(auditlog.EventWaveFailed,
 							fmt.Sprintf("wave %d: %d/%d tasks failed", waveNum, failed, total),
 							auditlog.WithPlan(capturedPlanFile),
@@ -1239,7 +1240,22 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								"[r] retry failed   [n] next wave   [a] abort",
 							planName, waveNum, completed, total, failed)
 						m.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)
+					} else if m.appConfig.AutoAdvanceWaves {
+						// Auto-advance: skip confirmation, directly advance to next wave
+						m.audit(auditlog.EventWaveCompleted,
+							fmt.Sprintf("wave %d complete: %d/%d tasks (auto-advancing)", waveNum, completed, total),
+							auditlog.WithPlan(capturedPlanFile),
+							auditlog.WithWave(waveNum, 0))
+						m.toastManager.Info(fmt.Sprintf("%s — wave %d complete, auto-advancing...", planName, waveNum))
+						asyncCmds = append(asyncCmds, func() tea.Msg {
+							return waveAdvanceMsg{planFile: capturedPlanFile, entry: capturedEntry}
+						})
+						asyncCmds = append(asyncCmds, m.toastTickCmd())
 					} else {
+						// Manual mode: focus instance and show confirmation dialog
+						if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
+							asyncCmds = append(asyncCmds, cmd)
+						}
 						m.audit(auditlog.EventWaveCompleted,
 							fmt.Sprintf("wave %d complete: %d/%d tasks", waveNum, completed, total),
 							auditlog.WithPlan(capturedPlanFile),

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
@@ -462,6 +463,21 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	assert.Equal(t, stateSetStatus, h.state, "set_status action should enter stateSetStatus")
 	assert.NotNil(t, h.pickerOverlay, "picker overlay should be created for status selection")
 	assert.Equal(t, planFile, h.pendingSetStatusPlan, "pending plan file should be stored")
+}
+
+func TestToggleAutoAdvanceWaves(t *testing.T) {
+	m := &home{
+		appConfig: &config.Config{AutoAdvanceWaves: false},
+	}
+	assert.False(t, m.appConfig.AutoAdvanceWaves)
+
+	// Simulate executing the toggle action
+	m.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves
+	assert.True(t, m.appConfig.AutoAdvanceWaves)
+
+	// Toggle back
+	m.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves
+	assert.False(t, m.appConfig.AutoAdvanceWaves)
 }
 
 func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.T) {

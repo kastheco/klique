@@ -34,7 +34,8 @@ func (a TOMLAgent) toProfile() AgentProfile {
 
 // TOMLUIConfig holds UI-specific settings from the [ui] TOML table.
 type TOMLUIConfig struct {
-	AnimateBanner bool `toml:"animate_banner"`
+	AnimateBanner    bool `toml:"animate_banner"`
+	AutoAdvanceWaves bool `toml:"auto_advance_waves"`
 }
 
 // TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.
@@ -56,6 +57,7 @@ type TOMLConfigResult struct {
 	Profiles         map[string]AgentProfile
 	PhaseRoles       map[string]string
 	AnimateBanner    bool
+	AutoAdvanceWaves bool
 	TelemetryEnabled *bool
 	PlanStore        string
 }
@@ -72,6 +74,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		Profiles:         make(map[string]AgentProfile),
 		PhaseRoles:       tc.Phases,
 		AnimateBanner:    tc.UI.AnimateBanner,
+		AutoAdvanceWaves: tc.UI.AutoAdvanceWaves,
 		TelemetryEnabled: tc.Telemetry.Enabled,
 		PlanStore:        tc.PlanStore,
 	}
