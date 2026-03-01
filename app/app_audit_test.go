@@ -1,9 +1,12 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -269,6 +272,65 @@ func TestAuditHomeEmit_AgentKilled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1, "kill_instance must emit EventAgentKilled")
 	assert.Equal(t, "my-agent", events[0].InstanceTitle)
+}
+
+func TestAuditHomeEmit_AgentKilled_KeybindK(t *testing.T) {
+	logger, err := auditlog.NewSQLiteLogger(":memory:")
+	require.NoError(t, err)
+	defer logger.Close()
+
+	h := newTestHome()
+	h.auditLogger = logger
+	h.planStoreProject = "myproject"
+	h.keySent = true
+
+	inst, err := newTestInstance("my-agent")
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	inst.SetStatus(session.Running)
+	_ = h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+
+	_, _ = h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+
+	events, err := logger.Query(auditlog.QueryFilter{
+		Project: "myproject",
+		Kinds:   []auditlog.EventKind{auditlog.EventAgentKilled},
+		Limit:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1, "k keybind must emit EventAgentKilled")
+	assert.Equal(t, "my-agent", events[0].InstanceTitle)
+	assert.Contains(t, events[0].Message, "killed instance")
+}
+
+func TestAuditHomeEmit_PlanCreated(t *testing.T) {
+	logger, err := auditlog.NewSQLiteLogger(":memory:")
+	require.NoError(t, err)
+	defer logger.Close()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(`{}`), 0o644))
+
+	h := newTestHome()
+	h.auditLogger = logger
+	h.planStoreProject = "myproject"
+	h.planStateDir = plansDir
+
+	err = h.createPlanEntry("my cool plan", "description", "")
+	require.NoError(t, err)
+
+	events, err := logger.Query(auditlog.QueryFilter{
+		Project: "myproject",
+		Kinds:   []auditlog.EventKind{auditlog.EventPlanCreated},
+		Limit:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1, "createPlanEntry must emit EventPlanCreated")
+	assert.Contains(t, events[0].Message, "created plan")
+	assert.NotEmpty(t, events[0].PlanFile)
 }
 
 // TestAuditHomeEmit_AgentPaused verifies that the audit helper correctly emits

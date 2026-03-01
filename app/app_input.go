@@ -1247,6 +1247,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
+		m.audit(auditlog.EventAgentKilled, "killed instance",
+			auditlog.WithInstance(selected.Title),
+			auditlog.WithAgent(selected.AgentType),
+			auditlog.WithPlan(selected.PlanFile),
+		)
 		inst := selected
 		return m, func() tea.Msg {
 			inst.StopTmux()
