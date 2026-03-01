@@ -1417,10 +1417,17 @@ func (n *NavigationPanel) String() string {
 		if actualAudit > maxAudit {
 			actualAudit = maxAudit
 		}
-		// Keep the last actualAudit lines (newest events are at the bottom).
+		// Keep the header (first line) + the last (actualAudit-1) body lines
+		// so the ── log ── divider is always visible and newest events show.
 		vlines := strings.Split(n.auditView, "\n")
 		if len(vlines) > actualAudit {
-			vlines = vlines[len(vlines)-actualAudit:]
+			header := vlines[0]
+			body := vlines[1:]
+			keep := actualAudit - 1 // lines available after header
+			if keep > len(body) {
+				keep = len(body)
+			}
+			vlines = append([]string{header}, body[len(body)-keep:]...)
 		}
 		auditSection = strings.Join(vlines, "\n")
 	}
