@@ -131,7 +131,7 @@ func Load(dir string) (*PlanState, error) {
 	// Reconcile stale filenames: if a plan-state key doesn't match an actual
 	// file on disk (e.g. date changed between planning and follow-up), fuzzy-
 	// match by slug and rekey the entry. This is self-healing and persisted.
-	if rekeyed := ps.reconcileFilenames(); rekeyed > 0 {
+	if renames := ps.reconcileFilenames(); len(renames) > 0 {
 		_ = ps.save()
 	}
 
@@ -641,24 +641,28 @@ func slugify(name string) string {
 // renames to the remote store when one is configured.
 func (ps *PlanState) reconcileFilenamesWithStore() {
 	renames := ps.reconcileFilenames()
-	if renames == 0 || ps.store == nil {
+	if len(renames) == 0 || ps.store == nil {
 		return
 	}
-	// The in-memory map has been rekeyed by reconcileFilenames.
-	// Persist each rename to the remote store. We can't easily track
-	// old→new pairs from reconcileFilenames, so re-sync the full state.
-	// This is a rare operation (only on date mismatches).
-	for filename, entry := range ps.Plans {
-		_ = ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry))
+	// Persist each rename to the remote store using Rename (not Update),
+	// since the DB still has the old filename as its key.
+	for _, rn := range renames {
+		_ = ps.store.Rename(ps.project, rn.OldFilename, rn.NewFilename)
 	}
+}
+
+// filenameRename records an old→new filename rekey performed by reconcileFilenames.
+type filenameRename struct {
+	OldFilename string
+	NewFilename string
 }
 
 // reconcileFilenames checks each plan key against the actual files on disk.
 // If the exact filename is missing but a file with the same slug (date-stripped
-// suffix) exists, the entry is rekeyed to the real filename. Returns the number
-// of entries rekeyed.
-func (ps *PlanState) reconcileFilenames() int {
-	rekeyed := 0
+// suffix) exists, the entry is rekeyed to the real filename. Returns the list
+// of renames performed so callers can persist them to the remote store.
+func (ps *PlanState) reconcileFilenames() []filenameRename {
+	var renames []filenameRename
 	for filename, entry := range ps.Plans {
 		path := filepath.Join(ps.Dir, filename)
 		if _, err := os.Stat(path); err == nil {
@@ -689,9 +693,9 @@ func (ps *PlanState) reconcileFilenames() int {
 
 		ps.Plans[newFilename] = entry
 		delete(ps.Plans, filename)
-		rekeyed++
+		renames = append(renames, filenameRename{OldFilename: filename, NewFilename: newFilename})
 	}
-	return rekeyed
+	return renames
 }
 
 // isAlreadyExistsError returns true if the error indicates a duplicate resource.
