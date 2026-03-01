@@ -1419,6 +1419,8 @@ func (n *NavigationPanel) String() string {
 		}
 		// Keep the header (first line) + the last (actualAudit-1) body lines
 		// so the ── log ── divider is always visible and newest events show.
+		// Drop any leading continuation lines (word-wrap fragments without a
+		// timestamp) so we never show an orphaned tail of a wrapped message.
 		vlines := strings.Split(n.auditView, "\n")
 		if len(vlines) > actualAudit {
 			header := vlines[0]
@@ -1427,7 +1429,13 @@ func (n *NavigationPanel) String() string {
 			if keep > len(body) {
 				keep = len(body)
 			}
-			vlines = append([]string{header}, body[len(body)-keep:]...)
+			tail := body[len(body)-keep:]
+			// Skip leading continuation lines — they lack a timestamp and are
+			// just wrapped fragments from a clipped event.
+			for len(tail) > 0 && isAuditContinuationLine(tail[0]) {
+				tail = tail[1:]
+			}
+			vlines = append([]string{header}, tail...)
 		}
 		auditSection = strings.Join(vlines, "\n")
 	}
@@ -1446,6 +1454,18 @@ func (n *NavigationPanel) String() string {
 	bordered := border.Width(innerWidth).Height(height).Render(innerContent)
 	placed := lipgloss.Place(n.width, n.height, lipgloss.Left, lipgloss.Top, bordered)
 	return zone.Mark(ZoneNavPanel, placed)
+}
+
+// isAuditContinuationLine returns true if the line is a word-wrap continuation
+// (indented text without a timestamp), not a primary event line.
+// Primary lines look like " HH:MM  ◆  message" — after stripping ANSI and
+// trimming whitespace, they start with a digit (the timestamp hour).
+func isAuditContinuationLine(line string) bool {
+	stripped := strings.TrimLeft(ansi.Strip(line), " ")
+	if stripped == "" {
+		return true
+	}
+	return stripped[0] < '0' || stripped[0] > '9'
 }
 
 // RowCount returns the number of rows in the navigation panel rows slice.
