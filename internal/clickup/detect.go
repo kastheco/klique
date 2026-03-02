@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -90,6 +91,9 @@ func scanOpencode(path string) (MCPServerConfig, bool) {
 	if err != nil {
 		return MCPServerConfig{}, false
 	}
+
+	// opencode configs are JSONC (trailing commas, // comments).
+	data = stripJSONC(data)
 
 	var file opencodeConfigFile
 	if err := json.Unmarshal(data, &file); err != nil {
@@ -189,4 +193,40 @@ func matchServers(servers map[string]json.RawMessage) (MCPServerConfig, bool) {
 	}
 
 	return MCPServerConfig{}, false
+}
+
+// trailingCommaRe matches a comma followed by optional whitespace then a closing bracket.
+var trailingCommaRe = regexp.MustCompile(`,\s*([}\]])`)
+
+// stripJSONC converts JSONC (JSON with comments and trailing commas) to valid JSON.
+// Handles // line comments and trailing commas before } or ].
+func stripJSONC(data []byte) []byte {
+	// Remove single-line // comments (but not inside strings).
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if idx := findLineComment(line); idx >= 0 {
+			lines[i] = line[:idx]
+		}
+	}
+	out := strings.Join(lines, "\n")
+
+	// Remove trailing commas before } or ].
+	out = trailingCommaRe.ReplaceAllString(out, "$1")
+
+	return []byte(out)
+}
+
+// findLineComment returns the index of a // comment outside of a JSON string,
+// or -1 if none found.
+func findLineComment(line string) int {
+	inString := false
+	for i := 0; i < len(line); i++ {
+		switch {
+		case line[i] == '"' && (i == 0 || line[i-1] != '\\'):
+			inString = !inString
+		case !inString && i+1 < len(line) && line[i] == '/' && line[i+1] == '/':
+			return i
+		}
+	}
+	return -1
 }

@@ -34,6 +34,7 @@ func TestDetect_StdioServer(t *testing.T) {
 }
 
 func TestDetect_NotFound(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate from real global config
 	dir := t.TempDir()
 	_, found := clickup.DetectMCP(dir, "")
 	assert.False(t, found)
@@ -104,6 +105,7 @@ func TestDetect_OpencodeLocalStdio(t *testing.T) {
 }
 
 func TestDetect_OpencodeDisabledServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate from real global config
 	dir := t.TempDir()
 	ocDir := filepath.Join(dir, ".opencode")
 	require.NoError(t, os.MkdirAll(ocDir, 0o755))
@@ -143,4 +145,30 @@ func TestDetect_ProjectMCPJSON_PriorityOverOpencode(t *testing.T) {
 	cfg, found := clickup.DetectMCP(dir, "")
 	assert.True(t, found)
 	assert.Equal(t, "https://from-mcp-json.com", cfg.URL)
+}
+
+func TestDetect_OpencodeJSONC(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	ocDir := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(ocDir, 0o755))
+
+	// JSONC with trailing commas and // comments — matches real opencode configs.
+	ocJSON := `{
+    // MCP server configuration
+    "mcp": {
+        "clickup": {
+            "type": "remote",
+            "url": "https://mcp.clickup.com/mcp",
+            "oauth": {},
+            "enabled": true,
+        },
+    },
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(ocDir, "opencode.json"), []byte(ocJSON), 0o644))
+
+	cfg, found := clickup.DetectMCP(dir, "")
+	assert.True(t, found)
+	assert.Equal(t, "http", cfg.Type)
+	assert.Equal(t, "https://mcp.clickup.com/mcp", cfg.URL)
 }
