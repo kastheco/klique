@@ -35,6 +35,50 @@ func TokenPath() string {
 	return filepath.Join(configDir, "kasmos", "clickup_oauth.json")
 }
 
+// OpencodeMCPAuthPath returns the default path for opencode's MCP auth store.
+func OpencodeMCPAuthPath() string {
+	dataDir := os.Getenv("XDG_DATA_HOME")
+	if dataDir == "" {
+		homeDir, _ := os.UserHomeDir()
+		dataDir = filepath.Join(homeDir, ".local", "share")
+	}
+	return filepath.Join(dataDir, "opencode", "mcp-auth.json")
+}
+
+// LoadOpencodeToken reads an MCP server token from opencode's mcp-auth.json.
+// serverName is the key in the JSON (e.g. "clickup", "sentry").
+func LoadOpencodeToken(path, serverName string) (*OAuthToken, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var store map[string]struct {
+		Tokens struct {
+			AccessToken  string  `json:"accessToken"`
+			RefreshToken string  `json:"refreshToken,omitempty"`
+			ExpiresAt    float64 `json:"expiresAt"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(data, &store); err != nil {
+		return nil, fmt.Errorf("parse opencode auth: %w", err)
+	}
+
+	entry, ok := store[serverName]
+	if !ok {
+		return nil, fmt.Errorf("no %q entry in opencode mcp-auth", serverName)
+	}
+	if entry.Tokens.AccessToken == "" {
+		return nil, fmt.Errorf("empty access token for %q in opencode mcp-auth", serverName)
+	}
+
+	return &OAuthToken{
+		AccessToken:  entry.Tokens.AccessToken,
+		RefreshToken: entry.Tokens.RefreshToken,
+		ExpiresAt:    time.Unix(int64(entry.Tokens.ExpiresAt), 0),
+	}, nil
+}
+
 // SaveToken writes a token to disk with restrictive permissions.
 func SaveToken(path string, tok *OAuthToken) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

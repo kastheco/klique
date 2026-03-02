@@ -2043,12 +2043,20 @@ func (m *home) createTransport(ctx context.Context, cfg clickup.MCPServerConfig)
 }
 
 func (m *home) getClickUpToken(ctx context.Context) (string, error) {
+	// 1. Check opencode's mcp-auth.json first (populated by `opencode mcp auth clickup`).
+	ocPath := mcpclient.OpencodeMCPAuthPath()
+	if tok, err := mcpclient.LoadOpencodeToken(ocPath, "clickup"); err == nil && !tok.IsExpired() {
+		return tok.AccessToken, nil
+	}
+
+	// 2. Fall back to kasmos's own cached token.
 	path := mcpclient.TokenPath()
 	tok, err := mcpclient.LoadToken(path)
 	if err == nil && !tok.IsExpired() {
 		return tok.AccessToken, nil
 	}
 
+	// 3. Last resort: run our own OAuth flow.
 	oauthCfg := mcpclient.OAuthConfig{
 		AuthURL:  "https://app.clickup.com/api",
 		TokenURL: "https://api.clickup.com/api/v2/oauth/token",

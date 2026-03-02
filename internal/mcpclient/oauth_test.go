@@ -136,6 +136,56 @@ func TestOAuthFlow_ExchangesCode(t *testing.T) {
 	assert.False(t, tok.IsExpired())
 }
 
+func TestLoadOpencodeToken_Valid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-auth.json")
+
+	data := `{
+		"clickup": {
+			"clientInfo": {"clientId": "test-client"},
+			"serverUrl": "https://mcp.clickup.com/mcp",
+			"tokens": {
+				"accessToken": "oc-access-tok",
+				"expiresAt": 9999999999.0,
+				"scope": "read write"
+			}
+		}
+	}`
+	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
+
+	tok, err := mcpclient.LoadOpencodeToken(path, "clickup")
+	require.NoError(t, err)
+	assert.Equal(t, "oc-access-tok", tok.AccessToken)
+	assert.False(t, tok.IsExpired())
+}
+
+func TestLoadOpencodeToken_Missing(t *testing.T) {
+	_, err := mcpclient.LoadOpencodeToken("/nonexistent/mcp-auth.json", "clickup")
+	assert.Error(t, err)
+}
+
+func TestLoadOpencodeToken_NoEntry(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-auth.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"sentry":{}}`), 0o600))
+
+	_, err := mcpclient.LoadOpencodeToken(path, "clickup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no \"clickup\" entry")
+}
+
+func TestLoadOpencodeToken_EmptyAccessToken(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-auth.json")
+
+	data := `{"clickup":{"tokens":{"accessToken":"","expiresAt":9999999999}}}`
+	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
+
+	_, err := mcpclient.LoadOpencodeToken(path, "clickup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty access token")
+}
+
 func TestOAuthFlow_Timeout(t *testing.T) {
 	cfg := mcpclient.OAuthConfig{
 		AuthURL:     "http://localhost/auth",
