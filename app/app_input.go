@@ -1012,15 +1012,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.pickerOverlay.IsSubmitted() {
 				selected := m.pickerOverlay.Value()
 				if selected != "" && m.clickUpImporter != nil {
-					m.clickUpImporter.SetWorkspaceID(selected)
+					// Resolve label ("name (id)") back to bare workspace ID.
+					wsID := selected
+					if id, ok := m.clickUpWorkspaceMap[selected]; ok {
+						wsID = id
+					}
+					m.clickUpImporter.SetWorkspaceID(wsID)
 					// Persist choice so user isn't prompted again for this project.
 					if err := clickup.SaveProjectConfig(m.activeRepoPath, &clickup.ProjectConfig{
-						WorkspaceID: selected,
+						WorkspaceID: wsID,
 					}); err != nil {
 						log.WarningLog.Printf("failed to save clickup workspace config: %v", err)
 					}
 					query := m.clickUpPendingQuery
 					m.clickUpPendingQuery = ""
+					m.clickUpWorkspaceMap = nil
 					m.pickerOverlay = nil
 					m.state = stateClickUpFetching
 					m.toastManager.Info("searching clickup...")
@@ -1030,6 +1036,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			m.pickerOverlay = nil
 			m.clickUpPendingQuery = ""
+			m.clickUpWorkspaceMap = nil
 		}
 		return m, nil
 	}

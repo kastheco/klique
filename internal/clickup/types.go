@@ -8,7 +8,8 @@ import (
 // MultipleWorkspacesError is returned when the ClickUp MCP detects multiple
 // workspaces and no workspace_id was provided.
 type MultipleWorkspacesError struct {
-	WorkspaceIDs []string
+	WorkspaceIDs   []string
+	WorkspaceNames map[string]string // id → name, populated by FetchWorkspaceNames
 }
 
 func (e *MultipleWorkspacesError) Error() string {

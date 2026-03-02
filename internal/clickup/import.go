@@ -32,6 +32,59 @@ func (im *Importer) SetWorkspaceID(id string) {
 	im.workspaceID = id
 }
 
+// FetchWorkspaceNames resolves workspace IDs to human-readable names by
+// calling clickup_get_workspace_hierarchy for each ID. Returns a map of
+// id → name. IDs that fail to resolve are omitted from the map.
+func (im *Importer) FetchWorkspaceNames(ids []string) map[string]string {
+	tool, found := im.client.FindTool("clickup_get_workspace_hierarchy")
+	if !found {
+		return nil
+	}
+	names := make(map[string]string, len(ids))
+	for _, id := range ids {
+		result, err := im.client.CallTool(tool.Name, map[string]interface{}{
+			"workspace_id": id,
+			"max_depth":    0, // spaces only — we just need the workspace name
+		})
+		if err != nil {
+			continue
+		}
+		text := extractText(result)
+		if text == "" {
+			continue
+		}
+		if name := parseWorkspaceName(text, id); name != "" {
+			names[id] = name
+		}
+	}
+	return names
+}
+
+// parseWorkspaceName extracts the workspace name from a clickup_get_workspace_hierarchy
+// response. The response typically contains a "workspace_name" field or a structured
+// header with the workspace name.
+func parseWorkspaceName(text, id string) string {
+	var resp map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &resp); err != nil {
+		return ""
+	}
+	// Try "workspace_name" (common in MCP responses)
+	if name := getString(resp, "workspace_name"); name != "" {
+		return name
+	}
+	// Try "name" directly
+	if name := getString(resp, "name"); name != "" {
+		return name
+	}
+	// Try nested workspace object
+	if ws, ok := resp["workspace"].(map[string]interface{}); ok {
+		if name := getString(ws, "name"); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
 // Search finds ClickUp tasks matching the query.
 func (im *Importer) Search(query string) ([]SearchResult, error) {
 	tool, found := im.client.FindTool("clickup_search")

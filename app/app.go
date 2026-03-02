@@ -225,6 +225,8 @@ type home struct {
 	clickUpResults []clickup.SearchResult
 	// clickUpPendingQuery stores the search query to retry after workspace selection
 	clickUpPendingQuery string
+	// clickUpWorkspaceMap maps picker labels ("name (id)") back to bare workspace IDs.
+	clickUpWorkspaceMap map[string]string
 
 	// Layout dimensions for mouse hit-testing
 	navWidth      int
@@ -692,7 +694,20 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if errors.As(msg.Err, &mwErr) && len(mwErr.WorkspaceIDs) > 0 {
 				m.clickUpPendingQuery = msg.Query
 				m.state = stateClickUpWorkspacePicker
-				m.pickerOverlay = overlay.NewPickerOverlay("select clickup workspace", mwErr.WorkspaceIDs)
+				// Build picker labels: "name (id)" when names are available, bare id otherwise.
+				items := make([]string, len(mwErr.WorkspaceIDs))
+				m.clickUpWorkspaceMap = make(map[string]string, len(mwErr.WorkspaceIDs))
+				for i, id := range mwErr.WorkspaceIDs {
+					if name, ok := mwErr.WorkspaceNames[id]; ok && name != "" {
+						label := name + " (" + id + ")"
+						items[i] = label
+						m.clickUpWorkspaceMap[label] = id
+					} else {
+						items[i] = id
+						m.clickUpWorkspaceMap[id] = id
+					}
+				}
+				m.pickerOverlay = overlay.NewPickerOverlay("select clickup workspace", items)
 				return m, nil
 			}
 			m.toastManager.Error("clickup search failed: " + msg.Err.Error())
@@ -1966,7 +1981,10 @@ func (m *home) searchClickUp(query string) tea.Cmd {
 				// Don't nil the importer for MultipleWorkspacesError — we need
 				// to call SetWorkspaceID on it after the user picks a workspace.
 				var mwErr *clickup.MultipleWorkspacesError
-				if !errors.As(msg.Err, &mwErr) {
+				if errors.As(msg.Err, &mwErr) {
+					// Resolve workspace IDs to names for a better picker UX.
+					mwErr.WorkspaceNames = importer.FetchWorkspaceNames(mwErr.WorkspaceIDs)
+				} else {
 					m.clickUpImporter = nil // force re-init on next attempt
 				}
 			}
