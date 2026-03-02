@@ -1208,8 +1208,12 @@ func dedupePlanFilenameInState(ps *planstate.PlanState, filename string) string 
 	return filename
 }
 
-// shouldPromptPushAfterCoderExit returns true when a coder session has exited
-// (tmuxAlive == false) and the plan is still in the implementing state.
+// shouldPromptPushAfterCoderExit returns true when a coder session has finished
+// and the plan is still in the implementing state. A coder is considered finished
+// when its tmux session has exited (tmuxAlive == false) OR when it has returned
+// to a prompt after completing its queued work (PromptDetected && !AwaitingWork).
+// The latter covers "applying fixes" coders spawned by spawnCoderWithFeedback,
+// which finish their work and return to prompt rather than exiting tmux.
 func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Instance, tmuxAlive bool) bool {
 	if inst == nil {
 		return false
@@ -1226,7 +1230,16 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 	if entry.Status != planstate.StatusImplementing {
 		return false
 	}
-	return !tmuxAlive
+	// Tmux exited — original single-coder completion path.
+	if !tmuxAlive {
+		return true
+	}
+	// Agent returned to prompt after finishing queued work — covers the
+	// review-feedback coder ("applying fixes") which stays alive in tmux.
+	if inst.PromptDetected && !inst.AwaitingWork {
+		return true
+	}
+	return false
 }
 
 // promptPushBranchThenAdvance shows a confirmation overlay asking the user to

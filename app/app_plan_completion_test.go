@@ -27,6 +27,36 @@ func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 	}
 }
 
+func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
+	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	inst := &session.Instance{
+		PlanFile:       "p.md",
+		AgentType:      session.AgentTypeCoder,
+		PromptDetected: true,
+		AwaitingWork:   false,
+	}
+
+	// Tmux is still alive but the coder returned to prompt after finishing
+	// its queued work — this is the "applying fixes" coder completion path.
+	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+		"expected push prompt for coder at prompt (PromptDetected && !AwaitingWork)")
+}
+
+func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
+	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	inst := &session.Instance{
+		PlanFile:       "p.md",
+		AgentType:      session.AgentTypeCoder,
+		PromptDetected: true,
+		AwaitingWork:   true,
+	}
+
+	// Coder is at prompt but still waiting for its queued prompt to be
+	// delivered — must NOT trigger push prompt yet.
+	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+		"must not trigger push prompt while AwaitingWork is true")
+}
+
 func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
 	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
@@ -108,6 +138,72 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 		"expected stateConfirm after coder exit with StatusImplementing")
 	assert.NotNil(t, updated.confirmationOverlay,
 		"expected confirmation overlay to be set for push-prompt")
+}
+
+// TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt verifies that when
+// a "fix coder" (spawned by spawnCoderWithFeedback) finishes its work and returns
+// to prompt (PromptDetected=true, AwaitingWork=false) while tmux is still alive,
+// the push-prompt confirmation overlay is shown. This is the key path that enables
+// the review→fix→re-review automation cycle.
+func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
+	const planFile = "2026-02-21-test-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	// Build a coder instance that has finished its queued work and returned to prompt.
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "test-feature-implement",
+		Path:      t.TempDir(),
+		Program:   "opencode",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+	inst.AwaitingWork = false
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          list,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		planState:    ps,
+		planStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	// Tmux is still alive — the coder is at its prompt, not exited.
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{
+				Title:     inst.Title,
+				TmuxAlive: true,
+			},
+		},
+		PlanState: ps,
+	}
+
+	model, _ := h.Update(msg)
+	updated, ok := model.(*home)
+	require.True(t, ok)
+
+	assert.Equal(t, stateConfirm, updated.state,
+		"expected stateConfirm when coder is at prompt (PromptDetected && !AwaitingWork)")
+	assert.NotNil(t, updated.confirmationOverlay,
+		"expected confirmation overlay for push-prompt on prompt-detected coder")
 }
 
 // TestPromptPushBranchThenAdvance_SetStatusErrorPropagates verifies that when
