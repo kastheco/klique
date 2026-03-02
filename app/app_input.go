@@ -5,6 +5,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
@@ -1012,6 +1013,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				selected := m.pickerOverlay.Value()
 				if selected != "" && m.clickUpImporter != nil {
 					m.clickUpImporter.SetWorkspaceID(selected)
+					// Persist choice so user isn't prompted again for this project.
+					_ = clickup.SaveProjectConfig(m.activeRepoPath, &clickup.ProjectConfig{
+						WorkspaceID: selected,
+					})
 					query := m.clickUpPendingQuery
 					m.clickUpPendingQuery = ""
 					m.pickerOverlay = nil

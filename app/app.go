@@ -2048,6 +2048,12 @@ func (m *home) getOrCreateImporter(ctx context.Context) (*clickup.Importer, erro
 	}
 
 	m.clickUpImporter = clickup.NewImporter(client)
+
+	// Restore saved workspace_id from per-project config.
+	if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
+		m.clickUpImporter.SetWorkspaceID(projCfg.WorkspaceID)
+	}
+
 	return m.clickUpImporter, nil
 }
 
