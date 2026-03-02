@@ -60,27 +60,52 @@ func (im *Importer) FetchWorkspaceNames(ids []string) map[string]string {
 	return names
 }
 
-// parseWorkspaceName extracts the workspace name from a clickup_get_workspace_hierarchy
-// response. The response typically contains a "workspace_name" field or a structured
-// header with the workspace name.
+// parseWorkspaceName extracts a meaningful label from a clickup_get_workspace_hierarchy
+// response. The response shape is:
+//
+//	{"hierarchy":{"root":{"id":"...","name":"Workspace","children":[{"name":"SpaceName","type":"space",...},...]}}}
+//
+// Since many ClickUp workspaces have the generic name "Workspace", we prefer to
+// list the top-level space names (e.g. "untapped, IQ") as a more useful label.
+// Falls back to hierarchy.root.name, then top-level "name" or "workspace_name".
 func parseWorkspaceName(text, id string) string {
 	var resp map[string]interface{}
 	if err := json.Unmarshal([]byte(text), &resp); err != nil {
 		return ""
 	}
-	// Try "workspace_name" (common in MCP responses)
+
+	// Primary path: hierarchy.root.children → collect space names
+	var rootName string
+	if hier, ok := resp["hierarchy"].(map[string]interface{}); ok {
+		if root, ok := hier["root"].(map[string]interface{}); ok {
+			rootName = getString(root, "name")
+			if children, ok := root["children"].([]interface{}); ok && len(children) > 0 {
+				var spaceNames []string
+				for _, c := range children {
+					if child, ok := c.(map[string]interface{}); ok {
+						if name := getString(child, "name"); name != "" {
+							spaceNames = append(spaceNames, name)
+						}
+					}
+				}
+				if len(spaceNames) > 0 {
+					return strings.Join(spaceNames, ", ")
+				}
+			}
+		}
+	}
+
+	// Fallback: root workspace name (often "Workspace" — better than nothing)
+	if rootName != "" {
+		return rootName
+	}
+
+	// Legacy fallback: try top-level fields
 	if name := getString(resp, "workspace_name"); name != "" {
 		return name
 	}
-	// Try "name" directly
 	if name := getString(resp, "name"); name != "" {
 		return name
-	}
-	// Try nested workspace object
-	if ws, ok := resp["workspace"].(map[string]interface{}); ok {
-		if name := getString(ws, "name"); name != "" {
-			return name
-		}
 	}
 	return ""
 }

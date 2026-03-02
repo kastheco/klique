@@ -346,7 +346,8 @@ func TestFetchTask_WorkspaceIDPassedToMCP(t *testing.T) {
 }
 
 func TestFetchWorkspaceNames(t *testing.T) {
-	// Simulate two workspace hierarchy responses with different names per workspace_id.
+	// Simulate two workspace hierarchy responses with the real MCP response shape.
+	// Space names are used as labels since workspace names are often generic ("Workspace").
 	stub := &stubMCPClient{
 		tools: []mcpclient.Tool{{Name: "clickup_get_workspace_hierarchy"}},
 		callResultsFn: func(name string, args map[string]interface{}) *mcpclient.ToolResult {
@@ -356,10 +357,29 @@ func TestFetchWorkspaceNames(t *testing.T) {
 			wsID, _ := args["workspace_id"].(string)
 			switch wsID {
 			case "9017630208":
-				resp, _ := json.Marshal(map[string]interface{}{"workspace_name": "Acme Corp"})
+				resp, _ := json.Marshal(map[string]interface{}{
+					"hierarchy": map[string]interface{}{
+						"root": map[string]interface{}{
+							"id": "9017630208", "name": "Workspace",
+							"children": []map[string]interface{}{
+								{"name": "untapped", "type": "space"},
+								{"name": "backend", "type": "space"},
+							},
+						},
+					},
+				})
 				return &mcpclient.ToolResult{Content: []mcpclient.ToolContent{{Type: "text", Text: string(resp)}}}
 			case "9017712636":
-				resp, _ := json.Marshal(map[string]interface{}{"workspace_name": "Personal"})
+				resp, _ := json.Marshal(map[string]interface{}{
+					"hierarchy": map[string]interface{}{
+						"root": map[string]interface{}{
+							"id": "9017712636", "name": "Workspace",
+							"children": []map[string]interface{}{
+								{"name": "IQ", "type": "space"},
+							},
+						},
+					},
+				})
 				return &mcpclient.ToolResult{Content: []mcpclient.ToolContent{{Type: "text", Text: string(resp)}}}
 			default:
 				return &mcpclient.ToolResult{Content: []mcpclient.ToolContent{{Type: "text", Text: "{}"}}}
@@ -369,8 +389,8 @@ func TestFetchWorkspaceNames(t *testing.T) {
 
 	importer := clickup.NewImporter(stub)
 	names := importer.FetchWorkspaceNames([]string{"9017630208", "9017712636"})
-	assert.Equal(t, "Acme Corp", names["9017630208"])
-	assert.Equal(t, "Personal", names["9017712636"])
+	assert.Equal(t, "untapped, backend", names["9017630208"])
+	assert.Equal(t, "IQ", names["9017712636"])
 }
 
 func TestFetchWorkspaceNames_NoTool(t *testing.T) {
@@ -383,17 +403,32 @@ func TestFetchWorkspaceNames_NoTool(t *testing.T) {
 	assert.Nil(t, names)
 }
 
-func TestFetchWorkspaceNames_NameField(t *testing.T) {
-	// Some MCP responses use "name" instead of "workspace_name".
+func TestFetchWorkspaceNames_FallbackRootName(t *testing.T) {
+	// When no space children exist, falls back to hierarchy.root.name.
 	stub := &stubMCPClient{
 		tools: []mcpclient.Tool{{Name: "clickup_get_workspace_hierarchy"}},
 		callResults: map[string]*mcpclient.ToolResult{
 			"clickup_get_workspace_hierarchy": {Content: []mcpclient.ToolContent{
-				{Type: "text", Text: `{"name": "Fallback Name"}`},
+				{Type: "text", Text: `{"hierarchy":{"root":{"id":"456","name":"My Company","children":[]}}}`},
 			}},
 		},
 	}
 	importer := clickup.NewImporter(stub)
 	names := importer.FetchWorkspaceNames([]string{"456"})
-	assert.Equal(t, "Fallback Name", names["456"])
+	assert.Equal(t, "My Company", names["456"])
+}
+
+func TestFetchWorkspaceNames_LegacyFormat(t *testing.T) {
+	// Legacy fallback: top-level "workspace_name" field.
+	stub := &stubMCPClient{
+		tools: []mcpclient.Tool{{Name: "clickup_get_workspace_hierarchy"}},
+		callResults: map[string]*mcpclient.ToolResult{
+			"clickup_get_workspace_hierarchy": {Content: []mcpclient.ToolContent{
+				{Type: "text", Text: `{"workspace_name": "Legacy Corp"}`},
+			}},
+		},
+	}
+	importer := clickup.NewImporter(stub)
+	names := importer.FetchWorkspaceNames([]string{"789"})
+	assert.Equal(t, "Legacy Corp", names["789"])
 }
