@@ -459,6 +459,9 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	require.Equal(t, WaveStateAllComplete, orch.State(), "single-wave plan should be AllComplete")
 
 	dir := t.TempDir()
+	// spawnWaveTasks → Setup() creates .worktrees/ inside dir before failing
+	// (no real git repo). Force-remove it so t.TempDir cleanup doesn't fail.
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(dir, ".worktrees")) })
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
