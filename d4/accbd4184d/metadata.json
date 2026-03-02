@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d4accbd4184d",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "internal/mcpclient/client.go",
+    "internal/mcpclient/client_test.go",
+    "internal/mcpclient/transport_http.go",
+    "internal/mcpclient/transport_http_test.go",
+    "main.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d4/accbd4184d/0/metadata.json",
+      "transcript": "/d4/accbd4184d/0/full.jsonl",
+      "context": "",
+      "content_hash": "/d4/accbd4184d/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
