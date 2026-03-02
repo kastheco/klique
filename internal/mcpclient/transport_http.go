@@ -37,6 +37,7 @@ func (t *HTTPTransport) Send(req JSONRPCRequest) (JSONRPCResponse, error) {
 		return JSONRPCResponse{}, fmt.Errorf("new request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json, text/event-stream")
 	if t.token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+t.token)
 	}

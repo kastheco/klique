@@ -15,6 +15,7 @@ func TestHTTPTransport_SendReceive(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "application/json, text/event-stream", r.Header.Get("Accept"))
 
 		var req mcpclient.JSONRPCRequest
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
