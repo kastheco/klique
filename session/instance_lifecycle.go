@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/kastheco/kasmos/internal/opencodesession"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -37,6 +40,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 	tmuxSession.SetAgentType(i.AgentType)
 	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
 	// Wire up tmux progress to instance loading progress
 	tmuxStageOffset := 3 // tmux stages start at 4 for first-time, 2 for reload
 	if !firstTimeSetup {
@@ -122,6 +126,7 @@ func (i *Instance) StartOnMainBranch() error {
 	i.tmuxSession = tmuxSession
 	tmuxSession.SetAgentType(i.AgentType)
 	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
 	tmuxSession.ProgressFunc = func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
 	}
@@ -169,6 +174,7 @@ func (i *Instance) StartOnBranch(branch string) error {
 	i.tmuxSession = tmuxSession
 	tmuxSession.SetAgentType(i.AgentType)
 	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
 	tmuxSession.ProgressFunc = func(stage int, desc string) {
 		i.setLoadingProgress(3+stage, desc)
 	}
@@ -235,6 +241,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	i.tmuxSession = tmuxSession
 	tmuxSession.SetAgentType(i.AgentType)
 	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
 	tmuxSession.ProgressFunc = func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
 	}
@@ -266,6 +273,50 @@ func (i *Instance) setTmuxTaskEnv() {
 	if i.TaskNumber > 0 && i.tmuxSession != nil {
 		i.tmuxSession.SetTaskEnv(i.TaskNumber, i.WaveNumber, i.PeerCount)
 	}
+}
+
+// planNameFromFile extracts the human-readable plan slug from a plan filename.
+// Example: "2026-03-02-automatic-session-naming.md" → "automatic-session-naming"
+func planNameFromFile(planFile string) string {
+	name := filepath.Base(planFile)
+	name = strings.TrimSuffix(name, ".md")
+	// Strip YYYY-MM-DD- date prefix (11 chars) if present.
+	if len(name) > 11 && name[4] == '-' && name[7] == '-' && name[10] == '-' {
+		name = name[11:]
+	}
+	return name
+}
+
+// buildTitleOpts maps an Instance's metadata to TitleOpts for BuildTitle.
+func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
+	planName := ""
+	if inst.PlanFile != "" {
+		planName = planNameFromFile(inst.PlanFile)
+	}
+	return opencodesession.TitleOpts{
+		PlanName:      planName,
+		AgentType:     inst.AgentType,
+		WaveNumber:    inst.WaveNumber,
+		TaskNumber:    inst.TaskNumber,
+		InstanceTitle: inst.Title,
+	}
+}
+
+// configureSessionTitle sets the desired opencode session title and the
+// callback that writes it to the DB after the session becomes ready.
+// It is a no-op for non-opencode programs.
+func (i *Instance) configureSessionTitle() {
+	if i.tmuxSession == nil || !strings.HasSuffix(i.Program, "opencode") {
+		return
+	}
+	opts := buildTitleOpts(i)
+	title := opencodesession.BuildTitle(opts)
+	i.tmuxSession.SetSessionTitle(title)
+	i.tmuxSession.SetTitleFunc(func(workDir string, beforeStart time.Time, t string) {
+		if err := opencodesession.SetTitleDirect(workDir, beforeStart, t); err != nil {
+			log.ErrorLog.Printf("opencodesession: set title: %v", err)
+		}
+	})
 }
 
 // Kill terminates the instance and cleans up all resources

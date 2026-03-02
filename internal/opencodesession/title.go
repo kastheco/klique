@@ -157,6 +157,21 @@ func resolveDBPath() string {
 	return filepath.Join(home, ".local", "share", "opencode", "opencode.db")
 }
 
+// SetTitleDirect opens the opencode SQLite DB and claims+sets the given
+// pre-built title on the matching session. Use this when the title has already
+// been constructed (e.g. via BuildTitle) and you only need the DB write.
+//
+// DB path resolution follows the same order as SetTitle.
+func SetTitleDirect(workDir string, beforeStart time.Time, title string) error {
+	dbPath := resolveDBPath()
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)")
+	if err != nil {
+		return fmt.Errorf("opencodesession: open db %s: %w", dbPath, err)
+	}
+	defer db.Close()
+	return ClaimAndSetTitle(db, workDir, beforeStart, title)
+}
+
 // kasPrefix is the prefix applied to all kasmos-managed session titles.
 // It distinguishes our titles from opencode's auto-generated ones.
 const kasPrefix = "kas: "
