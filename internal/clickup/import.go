@@ -25,13 +25,14 @@ func NewImporter(client MCPCaller) *Importer {
 
 // Search finds ClickUp tasks matching the query.
 func (im *Importer) Search(query string) ([]SearchResult, error) {
-	tool, found := im.client.FindTool("search")
+	tool, found := im.client.FindTool("clickup_search")
 	if !found {
 		return nil, fmt.Errorf("no search tool found in MCP server")
 	}
 
+	// ClickUp MCP search uses the "keywords" parameter.
 	result, err := im.client.CallTool(tool.Name, map[string]interface{}{
-		"query": query,
+		"keywords": query,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
@@ -42,16 +43,33 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 		return nil, nil
 	}
 
-	var results []SearchResult
-	if err := json.Unmarshal([]byte(text), &results); err != nil {
-		results = nil
-		var raw []map[string]interface{}
-		if err2 := json.Unmarshal([]byte(text), &raw); err2 != nil {
-			return nil, fmt.Errorf("parse search results: %w", err)
-		}
-		for _, item := range raw {
-			results = append(results, parseSearchResult(item))
-		}
+	// The ClickUp MCP may return:
+	//   1. A wrapper object {"overview":"...", "results":[...], "next_cursor":"..."}
+	//   2. A bare JSON array of tasks
+	// Extract the results array from whichever format we receive.
+	raw := []byte(text)
+
+	var wrapper struct {
+		Results json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(raw, &wrapper); err == nil && len(wrapper.Results) > 2 && wrapper.Results[0] == '[' {
+		raw = wrapper.Results
+	}
+
+	// If raw is still an object (not an array), the response is unrecognized.
+	if len(raw) > 0 && raw[0] == '{' {
+		return nil, fmt.Errorf("parse search results: unexpected object response (expected array): %.200s", string(raw))
+	}
+
+	// Always use the map-based parser to handle all field name variants
+	// (hierarchy.subcategory.name, status as string or object, etc.)
+	var items []map[string]interface{}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("parse search results: %w", err)
+	}
+	results := make([]SearchResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, parseSearchResult(item))
 	}
 
 	return results, nil
@@ -59,13 +77,14 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 
 // FetchTask gets full details for a ClickUp task by ID.
 func (im *Importer) FetchTask(taskID string) (*Task, error) {
-	tool, found := im.client.FindTool("get_task")
+	tool, found := im.client.FindTool("clickup_get_task")
 	if !found {
 		return nil, fmt.Errorf("no get_task tool found in MCP server")
 	}
 
 	result, err := im.client.CallTool(tool.Name, map[string]interface{}{
-		"task_id": taskID,
+		"task_id":  taskID,
+		"subtasks": true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch task: %w", err)
@@ -76,12 +95,15 @@ func (im *Importer) FetchTask(taskID string) (*Task, error) {
 		return nil, fmt.Errorf("empty response for task %s", taskID)
 	}
 
-	var task Task
-	if err := json.Unmarshal([]byte(text), &task); err != nil {
+	// Parse into a generic map first — the ClickUp MCP returns nested objects
+	// for status, priority, list, subtasks, and custom_fields that don't match
+	// flat string fields.
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
 		return nil, fmt.Errorf("parse task: %w", err)
 	}
 
-	return &task, nil
+	return parseTask(raw), nil
 }
 
 func extractText(result *mcpclient.ToolResult) string {
@@ -93,33 +115,131 @@ func extractText(result *mcpclient.ToolResult) string {
 	return ""
 }
 
+// parseTask extracts a Task from a generic map, handling nested ClickUp MCP
+// response objects (status, priority, list are objects, not flat strings).
+func parseTask(raw map[string]interface{}) *Task {
+	t := &Task{}
+
+	t.ID = getString(raw, "id")
+	t.Name = getString(raw, "name")
+	t.Description = getString(raw, "description")
+	t.URL = getString(raw, "url")
+
+	// status: {"status": "ready", ...} or flat string
+	t.Status = getNestedString(raw, "status", "status")
+
+	// priority: {"priority": "normal", ...} or flat string
+	t.Priority = getNestedString(raw, "priority", "priority")
+
+	// list: {"name": "features", ...}
+	t.ListName = getNestedString(raw, "list", "name")
+
+	// subtasks: array of task-like objects with nested status
+	if subs, ok := raw["subtasks"].([]interface{}); ok {
+		for _, s := range subs {
+			if sub, ok := s.(map[string]interface{}); ok {
+				t.Subtasks = append(t.Subtasks, Subtask{
+					Name:   getString(sub, "name"),
+					Status: getNestedString(sub, "status", "status"),
+				})
+			}
+		}
+	}
+
+	// custom_fields: array of {name, value, type, ...} where value can be any type
+	if fields, ok := raw["custom_fields"].([]interface{}); ok {
+		for _, f := range fields {
+			if field, ok := f.(map[string]interface{}); ok {
+				name := getString(field, "name")
+				value := stringifyValue(field["value"])
+				if name != "" {
+					t.CustomFields = append(t.CustomFields, CustomField{
+						Name:  name,
+						Value: value,
+					})
+				}
+			}
+		}
+	}
+
+	return t
+}
+
 func parseSearchResult(item map[string]interface{}) SearchResult {
 	r := SearchResult{}
 
-	if id, ok := item["id"].(string); ok {
-		r.ID = id
-	}
-	if name, ok := item["name"].(string); ok {
-		r.Name = name
-	}
+	r.ID = getString(item, "id")
+	r.Name = getString(item, "name")
+	r.URL = getString(item, "url")
 
-	if status, ok := item["status"].(map[string]interface{}); ok {
-		if s, ok := status["status"].(string); ok {
-			r.Status = s
+	// status: nested object {"status": "open"} or flat string
+	r.Status = getNestedString(item, "status", "status")
+
+	// list: nested object {"name": "Backend"}
+	r.ListName = getNestedString(item, "list", "name")
+
+	// ClickUp MCP search returns hierarchy.subcategory.name as the list name
+	if r.ListName == "" {
+		if hier, ok := item["hierarchy"].(map[string]interface{}); ok {
+			r.ListName = getNestedString(hier, "subcategory", "name")
 		}
-	} else if status, ok := item["status"].(string); ok {
-		r.Status = status
-	}
-
-	if list, ok := item["list"].(map[string]interface{}); ok {
-		if name, ok := list["name"].(string); ok {
-			r.ListName = name
-		}
-	}
-
-	if url, ok := item["url"].(string); ok {
-		r.URL = url
 	}
 
 	return r
+}
+
+// getString extracts a string value from a map, returning "" if missing or wrong type.
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// getNestedString handles fields that can be either a flat string or a nested
+// object with an inner key. e.g. status can be "open" or {"status": "open"}.
+func getNestedString(m map[string]interface{}, outerKey, innerKey string) string {
+	v, ok := m[outerKey]
+	if !ok {
+		return ""
+	}
+	// Try as nested object first (most common in MCP responses).
+	if obj, ok := v.(map[string]interface{}); ok {
+		if s, ok := obj[innerKey].(string); ok {
+			return s
+		}
+		return ""
+	}
+	// Fall back to flat string.
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// stringifyValue converts an arbitrary JSON value to a string representation.
+// Handles string, float64 (JSON numbers), bool, and nil.
+func stringifyValue(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		// Avoid trailing .0 for integers
+		if val == float64(int64(val)) {
+			return fmt.Sprintf("%d", int64(val))
+		}
+		return fmt.Sprintf("%g", val)
+	case bool:
+		return fmt.Sprintf("%t", val)
+	default:
+		// For complex types (arrays, objects), marshal to JSON string.
+		b, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(b)
+	}
 }
