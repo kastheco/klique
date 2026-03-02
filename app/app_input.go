@@ -1014,9 +1014,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				if selected != "" && m.clickUpImporter != nil {
 					m.clickUpImporter.SetWorkspaceID(selected)
 					// Persist choice so user isn't prompted again for this project.
-					_ = clickup.SaveProjectConfig(m.activeRepoPath, &clickup.ProjectConfig{
+					if err := clickup.SaveProjectConfig(m.activeRepoPath, &clickup.ProjectConfig{
 						WorkspaceID: selected,
-					})
+					}); err != nil {
+						log.WarningLog.Printf("failed to save clickup workspace config: %v", err)
+					}
 					query := m.clickUpPendingQuery
 					m.clickUpPendingQuery = ""
 					m.pickerOverlay = nil

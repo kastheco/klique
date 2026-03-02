@@ -18,7 +18,7 @@ type MCPCaller interface {
 // Importer searches and fetches ClickUp tasks via MCP.
 type Importer struct {
 	client      MCPCaller
-	WorkspaceID string
+	workspaceID string
 }
 
 // NewImporter creates an Importer with the given MCP client.
@@ -29,7 +29,7 @@ func NewImporter(client MCPCaller) *Importer {
 // SetWorkspaceID sets the workspace ID to include in MCP tool calls.
 // Required when the user has multiple ClickUp workspaces.
 func (im *Importer) SetWorkspaceID(id string) {
-	im.WorkspaceID = id
+	im.workspaceID = id
 }
 
 // Search finds ClickUp tasks matching the query.
@@ -43,8 +43,8 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 	args := map[string]interface{}{
 		"keywords": query,
 	}
-	if im.WorkspaceID != "" {
-		args["workspace_id"] = im.WorkspaceID
+	if im.workspaceID != "" {
+		args["workspace_id"] = im.workspaceID
 	}
 
 	result, err := im.client.CallTool(tool.Name, args)
@@ -105,8 +105,8 @@ func (im *Importer) FetchTask(taskID string) (*Task, error) {
 		"task_id":  taskID,
 		"subtasks": true,
 	}
-	if im.WorkspaceID != "" {
-		args["workspace_id"] = im.WorkspaceID
+	if im.workspaceID != "" {
+		args["workspace_id"] = im.workspaceID
 	}
 
 	result, err := im.client.CallTool(tool.Name, args)
@@ -241,9 +241,7 @@ func getNestedString(m map[string]interface{}, outerKey, innerKey string) string
 	return ""
 }
 
-// stringifyValue converts an arbitrary JSON value to a string representation.
-// Handles string, float64 (JSON numbers), bool, and nil.
-// multiWorkspaceRe matches "Available workspaces: ID1, ID2, ..." in the error message.
+// multiWorkspaceRe matches workspace IDs in the ClickUp MCP multiple-workspaces error.
 var multiWorkspaceRe = regexp.MustCompile(`Available workspaces:\s*([\d,\s]+)`)
 
 // checkMultipleWorkspacesError detects the ClickUp MCP "multiple workspaces"
@@ -276,6 +274,8 @@ func checkMultipleWorkspacesError(text string) *MultipleWorkspacesError {
 	return &MultipleWorkspacesError{WorkspaceIDs: ids}
 }
 
+// stringifyValue converts an arbitrary JSON value to a string representation.
+// Handles string, float64 (JSON numbers), bool, and nil.
 func stringifyValue(v interface{}) string {
 	if v == nil {
 		return ""
