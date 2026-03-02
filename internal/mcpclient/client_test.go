@@ -33,7 +33,8 @@ func (m *mockTransport) Close() error { m.closed = true; return nil }
 
 func TestClient_Initialize(t *testing.T) {
 	mt := &mockTransport{responses: map[string]mcpclient.JSONRPCResponse{
-		"initialize": {Result: json.RawMessage(`{"protocolVersion":"2024-11-05"}`)},
+		"initialize":                {Result: json.RawMessage(`{"protocolVersion":"2024-11-05"}`)},
+		"notifications/initialized": {JSONRPC: "2.0"},
 	}}
 	c, err := mcpclient.NewClient(mt)
 	require.NoError(t, err)
@@ -122,23 +123,21 @@ func TestClient_Close(t *testing.T) {
 }
 
 func TestClient_IDsIncrement(t *testing.T) {
-	calls := 0
 	mt := &mockTransport{responses: map[string]mcpclient.JSONRPCResponse{
-		"initialize": {Result: json.RawMessage(`{}`)},
-		"tools/list": {Result: json.RawMessage(`{"tools":[]}`)},
+		"initialize":                {Result: json.RawMessage(`{}`)},
+		"notifications/initialized": {JSONRPC: "2.0"},
+		"tools/list":                {Result: json.RawMessage(`{"tools":[]}`)},
 	}}
 	// Wrap to track IDs
 	var seenIDs []int
-	origSend := mt.Send
-	_ = origSend
 	wrapper := &idTrackingTransport{inner: mt, ids: &seenIDs}
-	_ = calls
 
 	c, _ := mcpclient.NewClient(wrapper)
 	_ = c.Initialize()
 	_, _ = c.ListTools()
 
-	assert.Equal(t, []int{1, 2}, seenIDs)
+	// initialize(1) + notifications/initialized(0, notification) + tools/list(2)
+	assert.Equal(t, []int{1, 0, 2}, seenIDs)
 }
 
 // idTrackingTransport wraps a transport to record request IDs.

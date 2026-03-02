@@ -23,7 +23,8 @@ func NewClient(t Transport) (*Client, error) {
 	return &Client{transport: t, nextID: 1}, nil
 }
 
-// Initialize sends the MCP initialize handshake.
+// Initialize sends the MCP initialize handshake and the required
+// notifications/initialized follow-up per the MCP specification.
 func (c *Client) Initialize() error {
 	resp, err := c.call("initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
@@ -36,7 +37,25 @@ func (c *Client) Initialize() error {
 	if resp.Error != nil {
 		return resp.Error
 	}
+
+	// Per the MCP spec, the client MUST send notifications/initialized
+	// after receiving the initialize response.
+	if err := c.SendNotification("notifications/initialized", nil); err != nil {
+		return fmt.Errorf("initialized notification: %w", err)
+	}
+
 	return nil
+}
+
+// SendNotification sends a JSON-RPC notification (no id, no response expected).
+func (c *Client) SendNotification(method string, params any) error {
+	_, err := c.transport.Send(JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      0,
+		Method:  method,
+		Params:  params,
+	})
+	return err
 }
 
 // ListTools returns available tools from the server.

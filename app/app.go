@@ -1947,8 +1947,12 @@ func (m *home) searchClickUp(query string) tea.Cmd {
 		select {
 		case msg := <-searchDone:
 			msg.Err = normalizeClickUpError(msg.Err)
+			if msg.Err != nil {
+				m.clickUpImporter = nil // force re-init on next attempt
+			}
 			return msg
 		case <-ctx.Done():
+			m.clickUpImporter = nil // force re-init on next attempt
 			return clickUpSearchResultMsg{Err: normalizeClickUpError(ctx.Err())}
 		}
 	}
@@ -1972,8 +1976,12 @@ func (m *home) fetchClickUpTaskWithTimeout(taskID string) tea.Cmd {
 		select {
 		case msg := <-fetchDone:
 			msg.Err = normalizeClickUpError(msg.Err)
+			if msg.Err != nil {
+				m.clickUpImporter = nil // force re-init on next attempt
+			}
 			return msg
 		case <-ctx.Done():
+			m.clickUpImporter = nil // force re-init on next attempt
 			return clickUpTaskFetchedMsg{Err: normalizeClickUpError(ctx.Err())}
 		}
 	}
