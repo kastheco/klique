@@ -1,5 +1,20 @@
 package clickup
 
+import (
+	"fmt"
+	"strings"
+)
+
+// MultipleWorkspacesError is returned when the ClickUp MCP detects multiple
+// workspaces and no workspace_id was provided.
+type MultipleWorkspacesError struct {
+	WorkspaceIDs []string
+}
+
+func (e *MultipleWorkspacesError) Error() string {
+	return fmt.Sprintf("multiple clickup workspaces available: %s", strings.Join(e.WorkspaceIDs, ", "))
+}
+
 // MCPServerConfig holds the detected ClickUp MCP server configuration.
 type MCPServerConfig struct {
 	Type    string            // "http" or "stdio"

@@ -3,6 +3,8 @@ package clickup
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/kastheco/kasmos/internal/mcpclient"
 )
@@ -15,12 +17,19 @@ type MCPCaller interface {
 
 // Importer searches and fetches ClickUp tasks via MCP.
 type Importer struct {
-	client MCPCaller
+	client      MCPCaller
+	WorkspaceID string
 }
 
 // NewImporter creates an Importer with the given MCP client.
 func NewImporter(client MCPCaller) *Importer {
 	return &Importer{client: client}
+}
+
+// SetWorkspaceID sets the workspace ID to include in MCP tool calls.
+// Required when the user has multiple ClickUp workspaces.
+func (im *Importer) SetWorkspaceID(id string) {
+	im.WorkspaceID = id
 }
 
 // Search finds ClickUp tasks matching the query.
@@ -31,9 +40,14 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 	}
 
 	// ClickUp MCP search uses the "keywords" parameter.
-	result, err := im.client.CallTool(tool.Name, map[string]interface{}{
+	args := map[string]interface{}{
 		"keywords": query,
-	})
+	}
+	if im.WorkspaceID != "" {
+		args["workspace_id"] = im.WorkspaceID
+	}
+
+	result, err := im.client.CallTool(tool.Name, args)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -41,6 +55,11 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 	text := extractText(result)
 	if text == "" {
 		return nil, nil
+	}
+
+	// Check for the multiple-workspaces error before parsing results.
+	if mwErr := checkMultipleWorkspacesError(text); mwErr != nil {
+		return nil, mwErr
 	}
 
 	// The ClickUp MCP may return:
@@ -52,7 +71,7 @@ func (im *Importer) Search(query string) ([]SearchResult, error) {
 	var wrapper struct {
 		Results json.RawMessage `json:"results"`
 	}
-	if err := json.Unmarshal(raw, &wrapper); err == nil && len(wrapper.Results) > 2 && wrapper.Results[0] == '[' {
+	if err := json.Unmarshal(raw, &wrapper); err == nil && len(wrapper.Results) >= 2 && wrapper.Results[0] == '[' {
 		raw = wrapper.Results
 	}
 
@@ -82,10 +101,15 @@ func (im *Importer) FetchTask(taskID string) (*Task, error) {
 		return nil, fmt.Errorf("no get_task tool found in MCP server")
 	}
 
-	result, err := im.client.CallTool(tool.Name, map[string]interface{}{
+	args := map[string]interface{}{
 		"task_id":  taskID,
 		"subtasks": true,
-	})
+	}
+	if im.WorkspaceID != "" {
+		args["workspace_id"] = im.WorkspaceID
+	}
+
+	result, err := im.client.CallTool(tool.Name, args)
 	if err != nil {
 		return nil, fmt.Errorf("fetch task: %w", err)
 	}
@@ -219,6 +243,39 @@ func getNestedString(m map[string]interface{}, outerKey, innerKey string) string
 
 // stringifyValue converts an arbitrary JSON value to a string representation.
 // Handles string, float64 (JSON numbers), bool, and nil.
+// multiWorkspaceRe matches "Available workspaces: ID1, ID2, ..." in the error message.
+var multiWorkspaceRe = regexp.MustCompile(`Available workspaces:\s*([\d,\s]+)`)
+
+// checkMultipleWorkspacesError detects the ClickUp MCP "multiple workspaces"
+// error and returns a typed error with the parsed workspace IDs.
+func checkMultipleWorkspacesError(text string) *MultipleWorkspacesError {
+	// The MCP returns a JSON object: {"error":"Multiple workspaces available..."}
+	var errObj struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(text), &errObj); err != nil || errObj.Error == "" {
+		return nil
+	}
+	if !strings.Contains(errObj.Error, "Multiple workspaces") {
+		return nil
+	}
+
+	m := multiWorkspaceRe.FindStringSubmatch(errObj.Error)
+	if m == nil {
+		return &MultipleWorkspacesError{}
+	}
+
+	parts := strings.Split(m[1], ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if id := strings.TrimSpace(p); id != "" {
+			ids = append(ids, id)
+		}
+	}
+
+	return &MultipleWorkspacesError{WorkspaceIDs: ids}
+}
+
 func stringifyValue(v interface{}) string {
 	if v == nil {
 		return ""

@@ -26,7 +26,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenamePlan || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutPlan {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenamePlan || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutPlan {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -997,6 +997,33 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	if m.state == stateClickUpFetching {
+		return m, nil
+	}
+
+	// Handle ClickUp workspace picker state
+	if m.state == stateClickUpWorkspacePicker {
+		if m.pickerOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		closed := m.pickerOverlay.HandleKeyPress(msg)
+		if closed {
+			if m.pickerOverlay.IsSubmitted() {
+				selected := m.pickerOverlay.Value()
+				if selected != "" && m.clickUpImporter != nil {
+					m.clickUpImporter.SetWorkspaceID(selected)
+					query := m.clickUpPendingQuery
+					m.clickUpPendingQuery = ""
+					m.pickerOverlay = nil
+					m.state = stateClickUpFetching
+					m.toastManager.Info("searching clickup...")
+					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
+				}
+			}
+			m.state = stateDefault
+			m.pickerOverlay = nil
+			m.clickUpPendingQuery = ""
+		}
 		return m, nil
 	}
 

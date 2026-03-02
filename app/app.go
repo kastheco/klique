@@ -108,6 +108,8 @@ const (
 	stateClickUpPicker
 	// stateClickUpFetching is when kasmos is fetching a full task from ClickUp.
 	stateClickUpFetching
+	// stateClickUpWorkspacePicker is when the user must pick a ClickUp workspace.
+	stateClickUpWorkspacePicker
 	// statePermission is when an opencode permission prompt is detected and the modal is shown.
 	statePermission
 	// stateTmuxBrowser is the state when the tmux session browser overlay is shown.
@@ -221,6 +223,8 @@ type home struct {
 	clickUpImporter *clickup.Importer
 	// clickUpResults stores the latest search results for the picker
 	clickUpResults []clickup.SearchResult
+	// clickUpPendingQuery stores the search query to retry after workspace selection
+	clickUpPendingQuery string
 
 	// Layout dimensions for mouse hit-testing
 	navWidth      int
@@ -683,6 +687,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case clickUpSearchResultMsg:
 		if msg.Err != nil {
+			// Check if the error is a multiple-workspaces error — show picker instead of failing.
+			var mwErr *clickup.MultipleWorkspacesError
+			if errors.As(msg.Err, &mwErr) && len(mwErr.WorkspaceIDs) > 0 {
+				m.clickUpPendingQuery = msg.Query
+				m.state = stateClickUpWorkspacePicker
+				m.pickerOverlay = overlay.NewPickerOverlay("select clickup workspace", mwErr.WorkspaceIDs)
+				return m, nil
+			}
 			m.toastManager.Error("clickup search failed: " + msg.Err.Error())
 			m.state = stateDefault
 			return m, m.toastTickCmd()
@@ -1684,6 +1696,8 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateClickUpPicker && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateClickUpWorkspacePicker && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateChangeTopic && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateSetStatus && m.pickerOverlay != nil:
@@ -1855,6 +1869,7 @@ type clickUpDetectedMsg struct {
 // clickUpSearchResultMsg is sent when ClickUp search completes.
 type clickUpSearchResultMsg struct {
 	Results []clickup.SearchResult
+	Query   string // original query, used to retry after workspace selection
 	Err     error
 }
 
@@ -1935,25 +1950,30 @@ func (m *home) searchClickUp(query string) tea.Cmd {
 
 		importer, err := m.getOrCreateImporter(ctx)
 		if err != nil {
-			return clickUpSearchResultMsg{Err: normalizeClickUpError(err)}
+			return clickUpSearchResultMsg{Query: query, Err: normalizeClickUpError(err)}
 		}
 
 		searchDone := make(chan clickUpSearchResultMsg, 1)
 		go func() {
 			results, searchErr := importer.Search(query)
-			searchDone <- clickUpSearchResultMsg{Results: results, Err: searchErr}
+			searchDone <- clickUpSearchResultMsg{Query: query, Results: results, Err: searchErr}
 		}()
 
 		select {
 		case msg := <-searchDone:
 			msg.Err = normalizeClickUpError(msg.Err)
 			if msg.Err != nil {
-				m.clickUpImporter = nil // force re-init on next attempt
+				// Don't nil the importer for MultipleWorkspacesError — we need
+				// to call SetWorkspaceID on it after the user picks a workspace.
+				var mwErr *clickup.MultipleWorkspacesError
+				if !errors.As(msg.Err, &mwErr) {
+					m.clickUpImporter = nil // force re-init on next attempt
+				}
 			}
 			return msg
 		case <-ctx.Done():
 			m.clickUpImporter = nil // force re-init on next attempt
-			return clickUpSearchResultMsg{Err: normalizeClickUpError(ctx.Err())}
+			return clickUpSearchResultMsg{Query: query, Err: normalizeClickUpError(ctx.Err())}
 		}
 	}
 }

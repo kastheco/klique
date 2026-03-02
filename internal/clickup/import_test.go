@@ -14,11 +14,13 @@ import (
 type stubMCPClient struct {
 	callResults map[string]*mcpclient.ToolResult
 	tools       []mcpclient.Tool
+	lastArgs    map[string]interface{} // captures last CallTool args
 }
 
 func (s *stubMCPClient) ListTools() ([]mcpclient.Tool, error) { return s.tools, nil }
 
 func (s *stubMCPClient) CallTool(name string, args map[string]interface{}) (*mcpclient.ToolResult, error) {
+	s.lastArgs = args
 	if r, ok := s.callResults[name]; ok {
 		return r, nil
 	}
@@ -270,4 +272,67 @@ func TestFetchTask_CustomFieldTypes(t *testing.T) {
 	assert.Equal(t, "true", task.CustomFields[2].Value)
 	assert.Equal(t, "Empty Field", task.CustomFields[3].Name)
 	assert.Equal(t, "", task.CustomFields[3].Value)
+}
+
+func TestSearch_MultipleWorkspacesError(t *testing.T) {
+	// The ClickUp MCP returns a JSON error object when multiple workspaces exist
+	// and no workspace_id is provided.
+	errJSON := `{"error":"Multiple workspaces available. Please specify which workspace to use by providing the 'workspace_id' parameter.\n\nAvailable workspaces: 9017630208, 9017712636\n\nExample: Use workspace_id parameter: 9017630208"}`
+	stub := &stubMCPClient{
+		tools: []mcpclient.Tool{{Name: "clickup_search"}},
+		callResults: map[string]*mcpclient.ToolResult{
+			"clickup_search": {Content: []mcpclient.ToolContent{{Type: "text", Text: errJSON}}},
+		},
+	}
+
+	importer := clickup.NewImporter(stub)
+	_, err := importer.Search("test")
+	require.Error(t, err)
+
+	// Should be detected as a MultipleWorkspacesError with parsed IDs
+	var mwErr *clickup.MultipleWorkspacesError
+	require.ErrorAs(t, err, &mwErr)
+	assert.Equal(t, []string{"9017630208", "9017712636"}, mwErr.WorkspaceIDs)
+}
+
+func TestSearch_WorkspaceIDPassedToMCP(t *testing.T) {
+	// When WorkspaceID is set, it should be included in the MCP tool call args.
+	wrapperJSON, _ := json.Marshal(map[string]interface{}{
+		"overview": "Found 0 results.",
+		"results":  []interface{}{},
+	})
+	stub := &stubMCPClient{
+		tools: []mcpclient.Tool{{Name: "clickup_search"}},
+		callResults: map[string]*mcpclient.ToolResult{
+			"clickup_search": {Content: []mcpclient.ToolContent{{Type: "text", Text: string(wrapperJSON)}}},
+		},
+	}
+
+	importer := clickup.NewImporter(stub)
+	importer.SetWorkspaceID("9017630208")
+	_, err := importer.Search("test")
+	require.NoError(t, err)
+
+	// Verify workspace_id was passed in the call args
+	assert.Equal(t, "9017630208", stub.lastArgs["workspace_id"])
+}
+
+func TestFetchTask_WorkspaceIDPassedToMCP(t *testing.T) {
+	taskJSON, _ := json.Marshal(map[string]interface{}{
+		"id": "abc", "name": "Test", "status": map[string]interface{}{"status": "open"},
+		"url": "https://app.clickup.com/t/abc",
+	})
+	stub := &stubMCPClient{
+		tools: []mcpclient.Tool{{Name: "clickup_get_task"}},
+		callResults: map[string]*mcpclient.ToolResult{
+			"clickup_get_task": {Content: []mcpclient.ToolContent{{Type: "text", Text: string(taskJSON)}}},
+		},
+	}
+
+	importer := clickup.NewImporter(stub)
+	importer.SetWorkspaceID("9017712636")
+	_, err := importer.FetchTask("abc")
+	require.NoError(t, err)
+
+	assert.Equal(t, "9017712636", stub.lastArgs["workspace_id"])
 }
