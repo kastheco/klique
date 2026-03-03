@@ -356,10 +356,10 @@ Create `cmd/serve.go`:
 
 - `NewServeCmd() *cobra.Command` — `kas serve` with flags:
   - `--port` (default 7433)
-  - `--db` (default `~/.config/kasmos/plans.db`)
+  - `--db` (default `~/.config/kasmos/planstore.db`)
   - `--bind` (default `0.0.0.0`)
 - `RunE` opens `SQLiteStore`, wraps in `NewHandler`, starts `http.Server` with graceful shutdown on SIGINT/SIGTERM.
-- Prints startup banner: `plan store listening on http://0.0.0.0:7433 (db: ~/.config/kasmos/plans.db)`.
+- Prints startup banner: `plan store listening on http://0.0.0.0:7433 (db: ~/.config/kasmos/planstore.db)`.
 - Register in `cmd.go`'s root command via `rootCmd.AddCommand(NewServeCmd())`.
 
 **Step 4: run test to verify it passes**

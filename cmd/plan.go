@@ -383,10 +383,10 @@ func projectFromPlansDir(plansDir string) string {
 }
 
 // localSQLiteStore opens (or creates) the local SQLite plan store at the
-// default path ($HOME/.config/kasmos/plans.db). Used as a fallback when no
-// remote store is configured.
+// canonical path returned by planstore.ResolvedDBPath(). Used as a fallback
+// when no remote store is configured.
 func localSQLiteStore() (planstore.Store, error) {
-	dbPath := os.ExpandEnv("$HOME/.config/kasmos/plans.db")
+	dbPath := planstore.ResolvedDBPath()
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("create kasmos config dir: %w", err)
 	}

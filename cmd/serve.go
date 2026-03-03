@@ -67,7 +67,7 @@ func NewServeCmd() *cobra.Command {
 		},
 	}
 
-	defaultDB := os.ExpandEnv("$HOME/.config/kasmos/plans.db")
+	defaultDB := planstore.ResolvedDBPath()
 
 	cmd.Flags().IntVar(&port, "port", 7433, "port to listen on")
 	cmd.Flags().StringVar(&db, "db", defaultDB, "path to the SQLite database file")

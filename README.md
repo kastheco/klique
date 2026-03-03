@@ -134,10 +134,10 @@ by default, plan state lives in a local `docs/plans/plan-state.json` file — gi
 kas serve
 ```
 
-defaults to `0.0.0.0:7433` with the database at `~/.config/kasmos/plans.db`. override with flags:
+defaults to `0.0.0.0:7433` with the database at `~/.config/kasmos/planstore.db`. override with flags:
 
 ```bash
-kas serve --port 8080 --db /path/to/plans.db --bind 127.0.0.1
+kas serve --port 8080 --db /path/to/planstore.db --bind 127.0.0.1
 ```
 
 #### connect kasmos to the store
