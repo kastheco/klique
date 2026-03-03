@@ -382,13 +382,11 @@ func (p *PreviewPane) buildFallbackText() string {
 	bannerWidth := lipgloss.Width(bannerLines[0])
 	blankLine := strings.Repeat(" ", bannerWidth)
 	bannerParts := make([]string, 0, totalRows)
-	for i := range startRow {
-		_ = i
+	for range startRow {
 		bannerParts = append(bannerParts, blankLine)
 	}
 	bannerParts = append(bannerParts, bannerLines[startRow:endRow]...)
-	for i := range totalRows - endRow {
-		_ = i
+	for range totalRows - endRow {
 		bannerParts = append(bannerParts, blankLine)
 	}
 	banner := strings.Join(bannerParts, "\n")

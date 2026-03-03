@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -236,15 +234,4 @@ func EventKindIcon(kind string) (icon string, color lipgloss.Color) {
 	default:
 		return "·", ColorMuted
 	}
-}
-
-// debugAudit appends a formatted line to /tmp/audit_debug.log.
-// Fire-and-forget; errors are intentionally ignored.
-func debugAudit(format string, args ...any) {
-	f, err := os.OpenFile("/tmp/audit_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, format+"\n", args...)
 }

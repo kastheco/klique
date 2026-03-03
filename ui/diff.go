@@ -33,10 +33,6 @@ var (
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(ColorOverlay)
 
-	filePanelBorderFocusedStyle = lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(ColorIris)
-
 	diffHeaderStyle = lipgloss.NewStyle().
 			Foreground(ColorIris).
 			Bold(true)
