@@ -25,12 +25,13 @@ const (
 )
 
 type PlanEntry struct {
-	Status      Status    `json:"status"`
-	Description string    `json:"description,omitempty"`
-	Branch      string    `json:"branch,omitempty"`
-	Topic       string    `json:"topic,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	Implemented string    `json:"implemented,omitempty"`
+	Status        Status    `json:"status"`
+	Description   string    `json:"description,omitempty"`
+	Branch        string    `json:"branch,omitempty"`
+	Topic         string    `json:"topic,omitempty"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	Implemented   string    `json:"implemented,omitempty"`
+	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
 }
 
 type TopicEntry struct {
@@ -83,12 +84,13 @@ func Load(store planstore.Store, project, dir string) (*PlanState, error) {
 
 	for _, e := range plans {
 		ps.Plans[e.Filename] = PlanEntry{
-			Status:      Status(e.Status),
-			Description: e.Description,
-			Branch:      e.Branch,
-			Topic:       e.Topic,
-			CreatedAt:   e.CreatedAt,
-			Implemented: e.Implemented,
+			Status:        Status(e.Status),
+			Description:   e.Description,
+			Branch:        e.Branch,
+			Topic:         e.Topic,
+			CreatedAt:     e.CreatedAt,
+			Implemented:   e.Implemented,
+			ClickUpTaskID: e.ClickUpTaskID,
 		}
 	}
 
@@ -563,12 +565,28 @@ func isAlreadyExistsError(err error) bool {
 // writing to the store.
 func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.PlanEntry {
 	return planstore.PlanEntry{
-		Filename:    filename,
-		Status:      planstore.Status(e.Status),
-		Description: e.Description,
-		Branch:      e.Branch,
-		Topic:       e.Topic,
-		CreatedAt:   e.CreatedAt,
-		Implemented: e.Implemented,
+		Filename:      filename,
+		Status:        planstore.Status(e.Status),
+		Description:   e.Description,
+		Branch:        e.Branch,
+		Topic:         e.Topic,
+		CreatedAt:     e.CreatedAt,
+		Implemented:   e.Implemented,
+		ClickUpTaskID: e.ClickUpTaskID,
 	}
+}
+
+// SetClickUpTaskID assigns a ClickUp task ID to an existing plan entry and
+// persists to the store.
+func (ps *PlanState) SetClickUpTaskID(filename, taskID string) error {
+	entry, ok := ps.Plans[filename]
+	if !ok {
+		return fmt.Errorf("plan not found: %s", filename)
+	}
+	entry.ClickUpTaskID = taskID
+	ps.Plans[filename] = entry
+	if err := ps.store.SetClickUpTaskID(ps.project, filename, taskID); err != nil {
+		return fmt.Errorf("plan store: %w", err)
+	}
+	return nil
 }

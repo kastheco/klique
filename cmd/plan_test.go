@@ -238,6 +238,45 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 	assert.Contains(t, topicNames, "brain phase 1")
 }
 
+func TestExecutePlanLinkClickUp(t *testing.T) {
+	store, err := planstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Create a plan with ClickUp source in content.
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename: "test.md",
+		Status:   planstore.StatusReady,
+	}))
+	require.NoError(t, store.SetContent("proj", "test.md", "# Test\n\n**Source:** ClickUp abc123 (https://app.clickup.com/t/abc123)\n"))
+
+	n, err := executePlanLinkClickUp("proj", store)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	got, err := store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "abc123", got.ClickUpTaskID)
+}
+
+func TestExecutePlanLinkClickUp_SkipsAlreadyLinked(t *testing.T) {
+	store, err := planstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Plan already has a ClickUp task ID — should be skipped.
+	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+		Filename:      "linked.md",
+		Status:        planstore.StatusReady,
+		ClickUpTaskID: "already-set",
+	}))
+	require.NoError(t, store.SetContent("proj", "linked.md", "# Test\n\n**Source:** ClickUp newid\n"))
+
+	n, err := executePlanLinkClickUp("proj", store)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "already linked plan should not be updated")
+}
+
 // TestPlanList_WithStore verifies that executePlanListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {

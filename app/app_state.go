@@ -1150,6 +1150,11 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		m.toastManager.Error("failed to save imported plan content: " + err.Error())
 		return m, m.toastTickCmd()
 	}
+	if task.ID != "" {
+		if err := m.planState.SetClickUpTaskID(filename, task.ID); err != nil {
+			log.WarningLog.Printf("importClickUpTask: failed to set clickup task id for %q: %v", filename, err)
+		}
+	}
 
 	if err := m.fsm.Transition(filename, planfsm.PlanStart); err != nil {
 		log.WarningLog.Printf("clickup import transition failed for %q: %v", filename, err)

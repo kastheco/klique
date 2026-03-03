@@ -10,6 +10,7 @@ import (
 	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/spf13/cobra"
 )
 
@@ -175,6 +176,43 @@ func executePlanImplement(plansDir, planFile string, wave int, store planstore.S
 	return os.WriteFile(filepath.Join(signalsDir, signalName), nil, 0o644)
 }
 
+// executePlanLinkClickUp iterates all plans in the given project, reads their
+// content, parses the ClickUp task ID from the "**Source:** ClickUp <ID>" line,
+// and stores it in the clickup_task_id field for any plan that has an ID in its
+// content but not yet in the store. Returns the count of plans updated.
+func executePlanLinkClickUp(project string, store planstore.Store) (int, error) {
+	plans, err := store.List(project)
+	if err != nil {
+		return 0, fmt.Errorf("list plans: %w", err)
+	}
+
+	updated := 0
+	for _, plan := range plans {
+		// Skip plans that already have a ClickUp task ID.
+		if plan.ClickUpTaskID != "" {
+			continue
+		}
+
+		content, err := store.GetContent(project, plan.Filename)
+		if err != nil {
+			// Non-fatal: skip plans whose content can't be read.
+			continue
+		}
+
+		taskID := clickup.ParseClickUpTaskID(content)
+		if taskID == "" {
+			continue
+		}
+
+		if err := store.SetClickUpTaskID(project, plan.Filename, taskID); err != nil {
+			return updated, fmt.Errorf("set clickup task id for %s: %w", plan.Filename, err)
+		}
+		updated++
+	}
+
+	return updated, nil
+}
+
 // NewPlanCmd builds the `kq plan` cobra command tree.
 func NewPlanCmd() *cobra.Command {
 	planCmd := &cobra.Command{
@@ -283,6 +321,42 @@ func NewPlanCmd() *cobra.Command {
 	}
 	implementCmd.Flags().IntVar(&waveNum, "wave", 1, "wave number to trigger (default: 1)")
 	planCmd.AddCommand(implementCmd)
+
+	// kq plan link-clickup
+	var linkProject string
+	linkClickUpCmd := &cobra.Command{
+		Use:   "link-clickup",
+		Short: "backfill ClickUp task IDs from plan content (parses **Source:** ClickUp <ID> lines)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, project := resolveStoreConfig("")
+			if store == nil {
+				var err error
+				store, err = localSQLiteStore()
+				if err != nil {
+					return fmt.Errorf("open local plan store: %w", err)
+				}
+				defer store.Close()
+			}
+			if linkProject != "" {
+				project = linkProject
+			}
+			if project == "" {
+				plansDir, err := resolvePlansDir()
+				if err != nil {
+					return err
+				}
+				project = projectFromPlansDir(plansDir)
+			}
+			n, err := executePlanLinkClickUp(project, store)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("linked %d plan(s) to ClickUp tasks\n", n)
+			return nil
+		},
+	}
+	linkClickUpCmd.Flags().StringVar(&linkProject, "project", "", "project name (default: derived from current directory)")
+	planCmd.AddCommand(linkClickUpCmd)
 
 	return planCmd
 }

@@ -367,6 +367,38 @@ func (s *HTTPStore) CreateTopic(project string, entry TopicEntry) error {
 	return nil
 }
 
+// SetClickUpTaskID sets the ClickUp task ID for an existing plan entry.
+func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
+	payload := struct {
+		ClickUpTaskID string `json:"clickup_task_id"`
+	}{ClickUpTaskID: taskID}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("plan store: marshal clickup task id: %w", err)
+	}
+	u := fmt.Sprintf("%s/clickup-task-id", s.planItemURL(project, filename))
+	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("plan store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("plan store: plan not found: %s", filename)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
 // Close is a no-op for HTTPStore — the HTTP client has no persistent connection
 // to release. It exists to satisfy the Store interface.
 func (s *HTTPStore) Close() error {
