@@ -6,56 +6,55 @@ import (
 	"strings"
 )
 
-// DiffStats holds statistics about the changes in a diff
+// DiffStats holds the result of a diff computation between the worktree and its base commit.
 type DiffStats struct {
-	// Content is the full diff content
+	// Content is the full raw diff output.
 	Content string
-	// Added is the number of added lines
+	// Added is the count of lines added (lines starting with "+" but not "+++").
 	Added int
-	// Removed is the number of removed lines
+	// Removed is the count of lines removed (lines starting with "-" but not "---").
 	Removed int
-	// Error holds any error that occurred during diff computation
-	// This allows propagating setup errors (like missing base commit) without breaking the flow
+	// Error captures any error encountered during diff computation so callers
+	// can inspect it without the method panicking or returning a nil pointer.
 	Error error
 }
 
+// IsEmpty reports whether the diff has no changes and no content.
 func (d *DiffStats) IsEmpty() bool {
 	return d.Added == 0 && d.Removed == 0 && d.Content == ""
 }
 
-// Diff returns the git diff between the worktree and the base branch along with statistics
+// Diff computes the diff between the worktree's current state and its base commit.
+// It returns a populated DiffStats in all cases; callers should check DiffStats.Error.
 func (g *GitWorktree) Diff() *DiffStats {
 	stats := &DiffStats{}
 
-	// Bail out early if the worktree directory no longer exists on disk
-	// (e.g. cleaned up externally or after pause). Avoids spamming git
-	// errors every tick.
 	if _, err := os.Stat(g.worktreePath); err != nil {
-		stats.Error = fmt.Errorf("worktree path gone: %w", err)
+		stats.Error = fmt.Errorf("worktree path unavailable: %w", err)
 		return stats
 	}
 
 	base := g.GetBaseCommitSHA()
 	if base == "" {
-		stats.Error = fmt.Errorf("no base commit SHA available")
+		stats.Error = fmt.Errorf("base commit SHA not available")
 		return stats
 	}
 
-	// Diff tracked changes (read-only, does not touch the index).
-	content, err := g.runGitCommand(g.worktreePath, "--no-pager", "diff", base)
+	output, err := g.runGitCommand(g.worktreePath, "--no-pager", "diff", base)
 	if err != nil {
 		stats.Error = err
 		return stats
 	}
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+
+	for _, line := range strings.Split(output, "\n") {
+		switch {
+		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
 			stats.Added++
-		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
 			stats.Removed++
 		}
 	}
-	stats.Content = content
+	stats.Content = output
 
 	return stats
 }
