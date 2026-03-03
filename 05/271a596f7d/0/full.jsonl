@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772562893854,
-      "updated": 1772563037457
+      "updated": 1772563055313
     }
   },
   "messages": [
@@ -1911,7 +1911,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772563037451
+          "created": 1772563037451,
+          "completed": 1772563055304
         },
         "parentID": "msg_cb4fb4c2d001iA4panOmz6lc3m",
         "modelID": "claude-sonnet-4-6",
@@ -1924,15 +1925,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 63430,
+          "input": 1,
+          "output": 358,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 62934,
+            "write": 137
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb4fd7d0b001SVoi3FSmotS63I",
         "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u"
       },
@@ -1949,22 +1952,118 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add ui/overlay/manager.go ui/overlay/manager_test.go && git commit -m \"fix(overlay): remove auto-sizing in Show/ShowAt/ShowPositioned — preserve overlay's own size\n\nManager.Show(), ShowAt(), and ShowPositioned() were calling o.SetSize(m.w, m.h),\nwhich clobbered every overlay's constructor-set width with the full viewport\ndimensions (ConfirmationOverlay: 50→viewport, PermissionOverlay: 50→viewport,\nTmuxBrowserOverlay: 56→viewport, PickerOverlay: 40→viewport, etc.).\n\nThe old code never auto-sized on show — it only resized on actual terminal resize\nevents via the SetSize method. Restore that invariant: viewport dimensions are\npropagated to overlays only by Manager.SetSize(), which is called from the\nwindow-size event handler on real terminal resize.\n\nCall sites that need explicit sizing (e.g. wave-failed confirmation at 60 chars)\nalready call overlay.SetSize() before or after Show(); those calls now take\neffect correctly.\n\nAdds four regression tests covering Show, ShowAt, ShowPositioned, and the\ncontinued correctness of SetSize propagation on terminal resize.\"\n",
               "description": "Commit the fix"
             },
+            "output": "[plan/02b-rewrite-overlay-ui ff3a58a] fix(overlay): remove auto-sizing in Show/ShowAt/ShowPositioned — preserve overlay's own size\n 2 files changed, 58 insertions(+), 9 deletions(-)\n",
+            "title": "Commit the fix",
             "metadata": {
-              "output": "",
-              "description": "Commit the fix"
+              "output": "[plan/02b-rewrite-overlay-ui ff3a58a] fix(overlay): remove auto-sizing in Show/ShowAt/ShowPositioned — preserve overlay's own size\n 2 files changed, 58 insertions(+), 9 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the fix",
+              "truncated": false
             },
             "time": {
-              "start": 1772563048585
+              "start": 1772563048584,
+              "end": 1772563055297
             }
           },
           "id": "prt_cb4fd880d002hVKCi4Bqg4aYzl",
           "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
           "messageID": "msg_cb4fd7d0b001SVoi3FSmotS63I"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "053e84a88f21409fb7a0454cc72c2599873ee3dd",
+          "cost": 0,
+          "tokens": {
+            "total": 63430,
+            "input": 1,
+            "output": 358,
+            "reasoning": 0,
+            "cache": {
+              "read": 62934,
+              "write": 137
+            }
+          },
+          "id": "prt_cb4fdc2c20011P9yeRrUGU5FUv",
+          "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
+          "messageID": "msg_cb4fd7d0b001SVoi3FSmotS63I"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772563055306,
+          "completed": 1772563063247
+        },
+        "parentID": "msg_cb4fb4c2d001iA4panOmz6lc3m",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02b-rewrite-overlay-ui",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02b-rewrite-overlay-ui"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63871,
+          "input": 1,
+          "output": 366,
+          "reasoning": 0,
+          "cache": {
+            "read": 63071,
+            "write": 433
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb4fdc2ca0015yq00s1jfeL18g",
+        "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "053e84a88f21409fb7a0454cc72c2599873ee3dd",
+          "id": "REDACTED",
+          "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
+          "messageID": "msg_cb4fdc2ca0015yq00s1jfeL18g"
+        },
+        {
+          "type": "text",
+          "text": "Done. Here's what was fixed:\n\n**Root cause:** `Manager.Show()`, `ShowAt()`, and `ShowPositioned()` all called `o.SetSize(m.w, m.h)` whenever the manager had stored viewport dimensions. This clobbered every overlay's constructor-set size with the full viewport dimensions — `ConfirmationOverlay` (50→viewport), `PermissionOverlay` (50→viewport), `TmuxBrowserOverlay` (56→viewport), `PickerOverlay` (40→viewport), and explicit sizes like `TextInputOverlay`'s 50×5 or 70×8 forms.\n\n**Fix:** Removed the `o.SetSize(m.w, m.h)` blocks from all three `Show*` methods. The `Manager.SetSize()` method (called from `updateHandleWindowSizeEvent` on actual terminal resize) remains the sole path for propagating viewport dimensions to active overlays — matching the original design intent.\n\n**Tests added:** 4 regression tests in `manager_test.go`:\n- `TestManager_Show_PreservesOverlaySize` — Show does not clobber overlay width/height\n- `TestManager_ShowAt_PreservesOverlaySize` — same for ShowAt  \n- `TestManager_ShowPositioned_PreservesOverlaySize` — same for ShowPositioned\n- `TestManager_SetSize_PropagatesAfterShow` — terminal resize still propagates correctly\n\nAll 4 tests were RED before the fix and GREEN after. Full test suite passes.",
+          "time": {
+            "start": 1772563063217,
+            "end": 1772563063217
+          },
+          "id": "prt_cb4fdcae60014O4E5P66I3kV9W",
+          "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
+          "messageID": "msg_cb4fdc2ca0015yq00s1jfeL18g"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "053e84a88f21409fb7a0454cc72c2599873ee3dd",
+          "cost": 0,
+          "tokens": {
+            "total": 63871,
+            "input": 1,
+            "output": 366,
+            "reasoning": 0,
+            "cache": {
+              "read": 63071,
+              "write": 433
+            }
+          },
+          "id": "prt_cb4fde1c70016d9xy6bH2jhUhV",
+          "sessionID": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
+          "messageID": "msg_cb4fdc2ca0015yq00s1jfeL18g"
         }
       ]
     }
