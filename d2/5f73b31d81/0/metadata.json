@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d25f73b31d81",
+  "session_id": "840b1904-87f8-4ed5-aa44-1685a9ff5b17",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T02:13:30.210129012Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "main.go",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/claude/agents/reviewer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/reviewer.md",
+    "internal/initcmd/scaffold/templates/skills/cli-tools/resources/rg.md",
+    ".opencode/agents/manager.md",
+    ".opencode/agents/release.md",
+    "internal/initcmd/scaffold/templates/claude/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6fc64c711e5a",
+  "checkpoint_transcript_start": 2,
+  "transcript_lines_at_start": 2,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T02:13:30.198754721Z",
+    "agent_lines": 188,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 189,
+    "agent_percentage": 99.47089947089947
+  }
+}
