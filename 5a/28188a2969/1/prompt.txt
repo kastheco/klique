@@ -1,0 +1,110 @@
+Implement Task 1: Add `--repo` Flag to `kas plan` and Thread Through `resolvePlansDir`
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add a persistent `--repo` flag to all `kas plan` subcommands so they can target any repo without relying on CWD, and fix stale date-prefix references in planner scaffold templates.
+**Architecture:** Add a `--repo` flag to the `plan` parent command that propagates to all subcommands. When set, `resolvePlansDir` uses it directly instead of CWD-based detection. Update the 4 planner agent templates (2 claude, 2 opencode) to remove stale `<date>-<name>` sentinel naming references, replacing them with the current dateless `<name>` convention.
+**Tech Stack:** Go 1.24+, cobra (CLI flags), `internal/initcmd/scaffold/templates/` (embedded templates), testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/plan.go`
+- Modify: `cmd/plan_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestResolvePlansDir_WithRepoOverride(t *testing.T) {
+	// Create a repo-like structure in a temp dir
+	repoDir := t.TempDir()
+	plansDir := filepath.Join(repoDir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	// resolvePlansDir with explicit repo should find docs/plans/ there
+	resolved, err := resolvePlansDirWithRepo(repoDir)
+	require.NoError(t, err)
+	assert.Equal(t, plansDir, resolved)
+}
+
+func TestResolvePlansDir_WithRepoOverride_NoPlansDirFails(t *testing.T) {
+	repoDir := t.TempDir()
+	// No docs/plans/ created
+
+	_, err := resolvePlansDirWithRepo(repoDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "plans directory not found")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./cmd/... -run TestResolvePlansDir_WithRepoOverride -v
+```
+
+expected: FAIL — `resolvePlansDirWithRepo` undefined
+
+**Step 3: write minimal implementation**
+
+Refactor `resolvePlansDir()` into `resolvePlansDirWithRepo(repoOverride string)`:
+- When `repoOverride != ""`, skip CWD detection entirely — just join `repoOverride/docs/plans` and stat it.
+- When `repoOverride == ""`, use the existing CWD-based logic (fast path + worktree fallback).
+- Make `resolvePlansDir()` a thin wrapper: `return resolvePlansDirWithRepo("")`.
+
+Add a `--repo` persistent flag to the `plan` parent command in `NewPlanCmd()`:
+```go
+var repoFlag string
+planCmd.PersistentFlags().StringVar(&repoFlag, "repo", "", "path to the repository root (default: auto-detect from CWD)")
+```
+
+Update every `RunE` closure that calls `resolvePlansDir()` to instead call `resolvePlansDirWithRepo(repoFlag)`. There are 6 call sites in `NewPlanCmd()` (list, register, set-status, transition, implement, link-clickup).
+
+Also add a cobra test that verifies the `--repo` flag is registered on the plan command and inherited by subcommands:
+
+```go
+func TestPlanCmd_RepoFlagRegistered(t *testing.T) {
+	root := NewRootCmd()
+	planCmd, _, err := root.Find([]string{"plan"})
+	require.NoError(t, err)
+
+	flag := planCmd.PersistentFlags().Lookup("repo")
+	require.NotNil(t, flag, "--repo flag should be registered on plan command")
+	assert.Equal(t, "", flag.DefValue)
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -run "TestResolvePlansDir_WithRepoOverride|TestPlanCmd_RepoFlagRegistered" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/plan.go cmd/plan_test.go
+git commit -m "feat: add --repo persistent flag to kas plan for explicit repo targeting"
+```

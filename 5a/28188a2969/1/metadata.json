@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "5a28188a2969",
+  "session_id": "ses_34de0ba48ffewM3I9uWN7HP6Rf",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T05:16:58.540322459Z",
+  "branch": "plan/plan-cli-repo-flag-and-templates",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/plan.go",
+    "cmd/plan_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "93197856be4b",
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 69079,
+    "cache_read_tokens": 418010,
+    "output_tokens": 5954,
+    "api_call_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T05:16:58.492173404Z",
+    "agent_lines": 35,
+    "human_added": 36,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 76,
+    "agent_percentage": 46.05263157894737
+  }
+}
