@@ -149,6 +149,13 @@
       "context": "",
       "content_hash": "/28/e552c6024a/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/28/e552c6024a/1/metadata.json",
+      "transcript": "/28/e552c6024a/1/full.jsonl",
+      "context": "",
+      "content_hash": "/28/e552c6024a/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
