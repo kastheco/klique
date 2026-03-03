@@ -1,0 +1,5 @@
+implement "docs/plants/2026-03-02-kas-plan-register-flags.md" plan
+
+---
+
+docs/plans*
