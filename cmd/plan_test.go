@@ -184,6 +184,60 @@ func TestPlanImplement(t *testing.T) {
 	assert.True(t, found, "signal file should exist")
 }
 
+func TestPlanRegister(t *testing.T) {
+	store, dir := setupTestPlanState(t)
+	project := projectFromPlansDir(dir)
+
+	planFile := "2026-03-02-new-feature.md"
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, planFile),
+		[]byte("# New Feature Plan\n\nSome content."),
+		0o644,
+	))
+
+	err := executePlanRegister(dir, planFile, "", "", "", store)
+	require.NoError(t, err)
+
+	ps, err := planstate.Load(store, project, dir)
+	require.NoError(t, err)
+	entry, ok := ps.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReady, entry.Status)
+	assert.Equal(t, "New Feature Plan", entry.Description)
+	assert.Equal(t, "plan/new-feature", entry.Branch)
+	assert.Equal(t, "", entry.Topic)
+}
+
+func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
+	store, dir := setupTestPlanState(t)
+	project := projectFromPlansDir(dir)
+
+	planFile := "2026-03-02-stub-plan.md"
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, planFile),
+		[]byte("# Stub Plan\n"),
+		0o644,
+	))
+
+	err := executePlanRegister(dir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
+	require.NoError(t, err)
+
+	ps, err := planstate.Load(store, project, dir)
+	require.NoError(t, err)
+	entry, ok := ps.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, planstate.StatusReady, entry.Status)
+	assert.Equal(t, "Implement circuit breaker", entry.Description)
+	assert.Equal(t, "brain phase 1", entry.Topic)
+
+	topics := ps.Topics()
+	topicNames := make([]string, len(topics))
+	for i, topicInfo := range topics {
+		topicNames[i] = topicInfo.Name
+	}
+	assert.Contains(t, topicNames, "brain phase 1")
+}
+
 // TestPlanList_WithStore verifies that executePlanListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {

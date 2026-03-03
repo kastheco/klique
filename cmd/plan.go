@@ -16,7 +16,7 @@ import (
 // executePlanRegister registers a plan file that exists on disk but isn't
 // tracked in plan state yet. It extracts a description from the first markdown
 // heading and uses the conventional branch name format.
-func executePlanRegister(plansDir, planFile, branch string, store planstore.Store) error {
+func executePlanRegister(plansDir, planFile, branch, topic, description string, store planstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
 	if _, err := os.Stat(fullPath); err != nil {
 		return fmt.Errorf("plan file not found on disk: %s", fullPath)
@@ -25,16 +25,17 @@ func executePlanRegister(plansDir, planFile, branch string, store planstore.Stor
 	if err != nil {
 		return err
 	}
-	// Extract description from first H1 line.
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return err
-	}
-	desc := strings.TrimSuffix(planFile, ".md")
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "# ") {
-			desc = strings.TrimPrefix(line, "# ")
-			break
+	if description == "" {
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return err
+		}
+		description = strings.TrimSuffix(planFile, ".md")
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "# ") {
+				description = strings.TrimPrefix(line, "# ")
+				break
+			}
 		}
 	}
 	// Default branch: plan/<slug> where slug strips the date prefix.
@@ -48,7 +49,7 @@ func executePlanRegister(plansDir, planFile, branch string, store planstore.Stor
 	}
 	info, _ := os.Stat(fullPath)
 	createdAt := info.ModTime()
-	return ps.Register(planFile, desc, branch, createdAt)
+	return ps.Create(planFile, description, branch, topic, createdAt)
 }
 
 // executePlanList returns a formatted string listing all plans, optionally
@@ -199,7 +200,7 @@ func NewPlanCmd() *cobra.Command {
 	planCmd.AddCommand(listCmd)
 
 	// kq plan register
-	var branchFlag string
+	var branchFlag, topicFlag, descriptionFlag string
 	registerCmd := &cobra.Command{
 		Use:   "register <plan-file>",
 		Short: "register an untracked plan file (sets status to ready)",
@@ -209,7 +210,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanRegister(plansDir, args[0], branchFlag, resolveStore(plansDir)); err != nil {
+			if err := executePlanRegister(plansDir, args[0], branchFlag, topicFlag, descriptionFlag, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("registered: %s → ready\n", args[0])
@@ -217,6 +218,8 @@ func NewPlanCmd() *cobra.Command {
 		},
 	}
 	registerCmd.Flags().StringVar(&branchFlag, "branch", "", "override branch name (default: plan/<slug>)")
+	registerCmd.Flags().StringVar(&topicFlag, "topic", "", "assign plan to a topic group (auto-creates topic if needed)")
+	registerCmd.Flags().StringVar(&descriptionFlag, "description", "", "override description (default: extracted from first # heading)")
 	planCmd.AddCommand(registerCmd)
 
 	// kq plan set-status
