@@ -1,0 +1,78 @@
+Implement Task 4: Rewrite storage.go — Instance Persistence
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all files in `session/` (excluding the already-rewritten `session/tmux/` and `session/git/` subdirectories) to remove AGPL-tainted lines. The rewrite preserves the identical public API so all callers (`app/`, `ui/`, `daemon/`, `main.go`) compile without changes, while replacing every line of implementation.
+**Architecture:** Eight files rewritten in-place across the session core: `instance.go` (struct, constructors, accessors, serialization), `instance_lifecycle.go` (Start variants, Kill, Pause, Resume, Restart, Adopt), `instance_session.go` (pane I/O, metadata collection, resource monitoring, diff stats), `storage.go` (JSON persistence via `config.StateManager`), `activity.go` (agent activity parsing from pane content), `permission_prompt.go` (opencode permission dialog detection), `cli_prompt.go` (program CLI prompt support detection), and `notify.go` (desktop notifications). The `terminal.go` file (EmbeddedTerminal) is 100% original code (written post-fork for the live-preview feature) and is untouched. All existing test files are preserved as the regression suite — they must pass after each task. The public API (exported types, method signatures, constants) stays identical.
+**Tech Stack:** Go 1.24, testify, `session/tmux` (rewritten), `session/git` (rewritten), `config.StateManager`, `charmbracelet/x/ansi`, `charmbracelet/x/vt`, `creack/pty`, `atotto/clipboard`
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 4 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/storage.go`
+- Test: `session/instance_taskfile_test.go` (existing — exercises `ToInstanceData`/`FromInstanceData` round-trips)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing tests exercise `InstanceData` JSON marshaling/unmarshaling (including the `plan_file` → `task_file` migration), `ToInstanceData`/`FromInstanceData` round-trips for TaskFile, AgentType, ImplementationComplete, SoloAgent, and wave fields. The `Storage` type's `SaveInstances`/`LoadInstances`/`DeleteInstance`/`UpdateInstance`/`DeleteAllInstances` methods are integration-tested through the app layer.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./session/... -run "TestInstanceData|TestNewInstance_Sets" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `session/storage.go` and rewrite from scratch:
+
+- **`InstanceData` struct** — JSON-serializable mirror of `Instance` fields: Title, Path, Branch, Status, Height, Width, CreatedAt, UpdatedAt, AutoYes, SkipPermissions, TaskFile, AgentType, TaskNumber, WaveNumber, PeerCount, IsReviewer, ImplementationComplete, SoloAgent, QueuedPrompt, ReviewCycle, Program, Worktree (`GitWorktreeData`), DiffStats (`DiffStatsData`). JSON tags must match exactly (including `omitempty` on optional fields).
+- **`InstanceData.UnmarshalJSON(data []byte) error`** — custom unmarshaler for backward compatibility: defines an alias type to avoid recursion, adds a `PlanFile string` field with `json:"plan_file,omitempty"` tag. If `TaskFile` is empty after unmarshal but `PlanFile` is set, copies `PlanFile` to `TaskFile`.
+- **`GitWorktreeData` struct** — five string fields: RepoPath, WorktreePath, SessionName, BranchName, BaseCommitSHA. All with JSON tags.
+- **`DiffStatsData` struct** — three fields: Added (int), Removed (int), Content (string). All with JSON tags.
+- **`Storage` struct** — holds a `config.StateManager` reference.
+- **`NewStorage(state config.StateManager) (*Storage, error)`** — constructor, returns `&Storage{state: state}, nil`.
+- **`SaveInstances(instances []*Instance) error`** — iterates instances, calls `ToInstanceData()` on each started instance, marshals the slice to JSON, calls `state.SaveInstances()`.
+- **`LoadInstances() ([]*Instance, error)`** — calls `state.GetInstances()`, unmarshals JSON into `[]InstanceData`. For each entry: skips non-paused instances whose worktree path no longer exists on disk (logs warning). Calls `FromInstanceData()` on each — logs and skips entries that fail to restore (instead of hard-failing all instances).
+- **`DeleteInstance(title string) error`** — loads all instances, filters out the one matching `title`, saves the rest. Returns error if not found.
+- **`UpdateInstance(instance *Instance) error`** — loads all instances, replaces the one matching by title, saves. Returns error if not found.
+- **`DeleteAllInstances() error`** — delegates to `state.DeleteAllInstances()`.
+
+Imports: `encoding/json`, `fmt`, `os`, `time`, `github.com/kastheco/kasmos/config`, `github.com/kastheco/kasmos/log`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/... -run "TestInstanceData|TestNewInstance_Sets" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/storage.go
+git commit -m "feat(clean-room): rewrite session/storage.go from scratch"
+```
