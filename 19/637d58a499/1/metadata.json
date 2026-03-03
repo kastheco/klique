@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "19637d58a499",
+  "session_id": "ses_34db7c68dffezDWbmgeQd2nzVD",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T06:11:14.508477857Z",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_plan_completion_test.go",
+    "app/app_planner_signal_test.go",
+    "app/clickup_progress_test.go",
+    "config/taskfsm/fsm.go",
+    "config/taskfsm/wave_signal.go",
+    "config/taskfsm/wave_signal_test.go",
+    "app/app.go",
+    "app/app_plan_actions_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "config/taskfsm/fsm_test.go",
+    "config/taskfsm/signals.go",
+    "config/taskfsm/signals_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "6540e64f52aa",
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 53086,
+    "cache_read_tokens": 491520,
+    "output_tokens": 2757,
+    "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T06:11:14.149090713Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}

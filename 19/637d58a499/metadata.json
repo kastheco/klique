@@ -5,7 +5,18 @@
   "branch": "plan/rename-plan-to-task",
   "checkpoints_count": 0,
   "files_touched": [
-    "app/app_wave_orchestration_flow_test.go"
+    "app/app.go",
+    "app/app_plan_actions_test.go",
+    "app/app_plan_completion_test.go",
+    "app/app_planner_signal_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/clickup_progress_test.go",
+    "config/taskfsm/fsm.go",
+    "config/taskfsm/fsm_test.go",
+    "config/taskfsm/signals.go",
+    "config/taskfsm/signals_test.go",
+    "config/taskfsm/wave_signal.go",
+    "config/taskfsm/wave_signal_test.go"
   ],
   "sessions": [
     {
@@ -14,13 +25,20 @@
       "context": "/19/637d58a499/0/context.md",
       "content_hash": "/19/637d58a499/0/content_hash.txt",
       "prompt": "/19/637d58a499/0/prompt.txt"
+    },
+    {
+      "metadata": "/19/637d58a499/1/metadata.json",
+      "transcript": "/19/637d58a499/1/full.jsonl",
+      "context": "/19/637d58a499/1/context.md",
+      "content_hash": "/19/637d58a499/1/content_hash.txt",
+      "prompt": "/19/637d58a499/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 54,
-    "cache_creation_tokens": 44494,
-    "cache_read_tokens": 4124959,
-    "output_tokens": 21280,
-    "api_call_count": 55
+    "input_tokens": 66,
+    "cache_creation_tokens": 97580,
+    "cache_read_tokens": 4616479,
+    "output_tokens": 24037,
+    "api_call_count": 66
   }
 }
