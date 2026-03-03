@@ -1,0 +1,113 @@
+Implement Task 1: Rename config/planstore to config/taskstore
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rename the "plan" lifecycle entity to "task" throughout the codebase to eliminate the terminology collision between "plan" (the lifecycle entity) and "planning" (the FSM status). Instances belong to tasks which optionally belong to topics — "a task awaiting planning" is clearer than "a plan awaiting planning."
+**Architecture:** Four-phase mechanical rename: (1) rename Go package directories and update import paths, (2) rename exported types and struct fields, (3) rename CLI commands, user-facing strings, and internal variables, (4) update HTTP API paths, SQL schema, and JSON serialization with backwards compatibility. Each phase uses `sd`/`comby` for batch replacements. The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.
+**Tech Stack:** Go 1.24, cobra CLI, SQLite, HTTP API, `sd` for batch string replacement, `mv` for file/directory renames
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 1 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `config/taskstore/` (entire directory — copy from `config/planstore/`)
+- Remove: `config/planstore/`
+- Modify: all files importing `config/planstore` (18 files)
+
+**Step 1: write the failing test**
+
+No new tests — this is a package rename. Existing tests validate correctness.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./config/planstore/... -count=1
+```
+
+expected: PASS (baseline)
+
+**Step 3: rename the package and update imports**
+
+```bash
+# 1. Copy directory
+cp -r config/planstore config/taskstore
+
+# 2. Rename package declaration in all files
+sd 'package planstore' 'package taskstore' config/taskstore/*.go
+
+# 3. Update import paths across entire codebase
+sd '"github.com/kastheco/kasmos/config/planstore"' '"github.com/kastheco/kasmos/config/taskstore"' $(fd -e go)
+
+# 4. Update import aliases (some files use named imports)
+sd 'planstore "github.com/kastheco/kasmos/config/taskstore"' 'taskstore "github.com/kastheco/kasmos/config/taskstore"' $(fd -e go)
+
+# 5. Update all qualified references: planstore.X → taskstore.X
+sd 'planstore\.' 'taskstore.' $(fd -e go)
+
+# 6. Rename PlanEntry → TaskEntry in the taskstore package
+sd 'PlanEntry' 'TaskEntry' config/taskstore/*.go
+
+# 7. Update PlanEntry references across the codebase (qualified)
+sd 'taskstore\.TaskEntry' 'taskstore.TaskEntry' $(fd -e go)
+# (this is a no-op but ensures consistency — the real rename is the sd above)
+
+# 8. Rename internal functions: scanPlanEntry → scanTaskEntry, scanPlanEntries → scanTaskEntries
+sd 'scanPlanEntry' 'scanTaskEntry' config/taskstore/sqlite.go
+sd 'scanPlanEntries' 'scanTaskEntries' config/taskstore/sqlite.go
+
+# 9. Rename jsonPlanEntry → jsonTaskEntry, jsonPlanState → jsonTaskState in migrate.go
+sd 'jsonPlanEntry' 'jsonTaskEntry' config/taskstore/migrate.go
+sd 'jsonPlanState' 'jsonTaskState' config/taskstore/migrate.go
+
+# 10. Update factory.go function names and comments
+sd 'planStoreURL' 'storeURL' config/taskstore/factory.go
+sd 'planstore\.db' 'kasmos.db' config/taskstore/factory.go
+sd 'NewStoreFromConfig' 'NewStoreFromConfig' config/taskstore/factory.go  # name stays generic
+
+# 11. Update http.go URL builder method names
+sd 'func (s \*HTTPStore) planURL' 'func (s *HTTPStore) taskURL' config/taskstore/http.go
+sd 'func (s \*HTTPStore) planItemURL' 'func (s *HTTPStore) taskItemURL' config/taskstore/http.go
+sd 'func (s \*HTTPStore) planContentURL' 'func (s *HTTPStore) taskContentURL' config/taskstore/http.go
+sd 's\.planURL' 's.taskURL' config/taskstore/http.go
+sd 's\.planItemURL' 's.taskItemURL' config/taskstore/http.go
+sd 's\.planContentURL' 's.taskContentURL' config/taskstore/http.go
+
+# 12. Remove old directory
+rm -rf config/planstore
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./...
+go test ./config/taskstore/... -count=1
+go test ./... -count=1 2>&1 | tail -30
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "refactor: rename config/planstore package to config/taskstore"
+```

@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f4a487ef738f",
+  "session_id": "ses_34db7c718ffe0lhTY1HScon0pt",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T06:24:52.401866926Z",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/taskstore/http.go",
+    "config/taskstore/server.go",
+    "config/taskstore/server_test.go",
+    "config/taskstore/sqlite.go",
+    "config/taskstore/sqlite_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c59e28aea4cb",
+  "checkpoint_transcript_start": 38,
+  "transcript_lines_at_start": 38,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T06:24:52.018747811Z",
+    "agent_lines": 84,
+    "human_added": 3939,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 4023,
+    "agent_percentage": 2.087994034302759
+  }
+}
