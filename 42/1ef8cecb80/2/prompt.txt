@@ -1,0 +1,102 @@
+Implement Task 5: Rewrite info_pane.go and audit_pane.go — Metadata and Activity Panes
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 5 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/info_pane.go`
+- Modify: `ui/audit_pane.go`
+- Test: `ui/info_pane_test.go` (existing — 152 LOC, covers data rendering, plan summary, wave progress, empty state)
+- Test: `ui/audit_pane_test.go` (existing — 158 LOC, covers event rendering, scroll, toggle, empty state)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `info_pane_test.go` covers: `NewInfoPane` defaults, `SetData` with instance data, plan header selection, plan summary with instance counts and line changes, wave progress rendering, status color mapping, empty state "no instance selected" message, and `SetSize` viewport refresh. Existing `audit_pane_test.go` covers: `NewAuditPane` defaults, `SetEvents` with event list, `Events()` accessor, minute header rendering, word-wrap continuation lines, scroll up/down, toggle visibility, empty state "no events" message, `EventKindIcon` mapping for all event kinds, and `Height()` accessor.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestInfoPane|TestAuditPane|TestEventKindIcon" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/info_pane.go` and rewrite from scratch:
+
+- **Styles** — `infoSectionStyle` (fg=`ColorFoam`, bold), `infoDividerStyle` (fg=`ColorOverlay`), `infoLabelStyle` (fg=`ColorMuted`, width 20), `infoValueStyle` (fg=`ColorText`).
+- **`InfoData` struct** — all fields as currently defined: instance fields (Title, Program, Branch, Path, Created, Status), plan fields (PlanName, PlanDescription, PlanStatus, PlanTopic, PlanBranch, PlanCreated), plan summary fields (PlanInstanceCount, PlanRunningCount, PlanReadyCount, PlanPausedCount, PlanAddedLines, PlanRemovedLines), resource fields (CPUPercent, MemMB), wave fields (AgentType, WaveNumber, TotalWaves, TaskNumber, TotalTasks, WaveTasks), flags (HasPlan, HasInstance, IsPlanHeaderSelected).
+- **`WaveTaskInfo` struct** — `Number int`, `State string` ("complete"/"running"/"failed"/"pending").
+- **`InfoPane` struct** — `width`, `height int`, `data InfoData`, `viewport viewport.Model`.
+- **`NewInfoPane() *InfoPane`** — fresh viewport.
+- **`SetSize(width, height int)`** — stores dimensions, updates viewport, re-renders content.
+- **`SetData(data InfoData)`** — stores data, re-renders, goes to top.
+- **`ScrollUp()`/`ScrollDown()`** — viewport line up/down by 1.
+- **`String() string`** — returns "no instance selected" if no instance and no plan header. Otherwise returns viewport view.
+- **`statusColor(status string) lipgloss.TerminalColor`** — maps status strings to theme colors.
+- **Helper renderers** — `renderRow(label, value)`, `renderStatusRow(label, value)` (with color), `renderDivider()` (dashes).
+- **Section renderers** — `renderPlanSection()` (plan metadata rows), `renderInstanceSection()` (instance metadata + wave/task + CPU/mem), `renderPlanSummary()` (plan header view with instance counts, line changes, "view plan doc" button via `zone.Mark(ZoneViewPlan, ...)`), `renderWaveSection()` (task glyphs with state icons).
+- **`render() string`** — dispatches: plan header selected → plan summary + optional wave section; instance selected → optional plan section + instance section + optional wave section. Joins with double newline.
+
+Imports: `fmt`, `math`, `strings`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/lipgloss`, `github.com/lrstanley/bubblezone`.
+
+Delete the contents of `ui/audit_pane.go` and rewrite from scratch:
+
+- **`AuditEventDisplay` struct** — `Time string` (HH:MM), `Kind string`, `Icon string`, `Message string`, `Color lipgloss.Color`, `Level string` ("info"/"warn"/"error").
+- **`AuditPane` struct** — `events []AuditEventDisplay`, `viewport viewport.Model`, `width int`, `height int`, `visible bool`.
+- **`NewAuditPane() *AuditPane`** — visible by default, fresh viewport.
+- **`SetSize(w, h int)`** — stores dimensions, viewport body height = h-1 (header), re-renders body, goes to bottom.
+- **`SetEvents(events []AuditEventDisplay)`** — stores events, re-renders, goes to bottom.
+- **`Events() []AuditEventDisplay`** — accessor for tests.
+- **`ScrollDown(n int)`/`ScrollUp(n int)`** — viewport line down/up.
+- **`Visible() bool`**, **`Height() int`**, **`ToggleVisible()`**.
+- **Styles** — `auditDividerStyle` (fg=`ColorMuted`), `auditMinuteStyle` (fg=`ColorMuted`), `auditMsgStyle` (fg=`ColorSubtle`), `auditWarnMsgStyle` (fg=`ColorGold`), `auditErrMsgStyle` (fg=`ColorLove`), `auditEmptyStyle` (fg=`ColorMuted`), `auditRowPad` (padding-left 1).
+- **`String() string`** — joins header + viewport view vertically.
+- **`renderHeader() string`** — centered divider `────── log ──────` spanning width.
+- **`renderMinuteHeader(minute string) string`** — same pattern with minute string.
+- **`renderBody() string`** — if no events: "· no events". Otherwise iterates events oldest-first (reverse order), emits minute header on boundary changes, word-wraps messages at available width (width - 4 overhead), renders with level-based styling (error/warn/info), continuation lines indented to align under message text.
+- **`EventKindIcon(kind string) (string, lipgloss.Color)`** — maps event kind strings to (icon, color) pairs for all known event types (agent_spawned→◆/Foam, agent_finished→✓/Gold, agent_killed→✕/Love, etc.). Default: `·`/`ColorMuted`.
+- **`debugAudit(format string, args ...any)`** — writes to `/tmp/audit_debug.log` (append mode). Fire-and-forget, ignores errors.
+
+Imports: `fmt`, `os`, `strings`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/lipgloss`, `github.com/muesli/reflow/wordwrap`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "TestInfoPane|TestAuditPane|TestEventKindIcon" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/info_pane.go ui/audit_pane.go
+git commit -m "feat(clean-room): rewrite info_pane.go and audit_pane.go from scratch"
+```
