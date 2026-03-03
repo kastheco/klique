@@ -1,0 +1,134 @@
+Implement Task 5: Implement Discovery Functions — CleanupSessions, DiscoverOrphans, DiscoverAll, CountKasSessions
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 5 of 4 in Wave 2. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/tmux/tmux_session.go` (or create `session/tmux/discovery.go`)
+- Test: `session/tmux/tmux_session_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestCleanupSessions_KillsKasAndLegacy(t *testing.T) {
+    var killed []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            args := cmd.Args
+            if len(args) >= 2 && args[1] == "kill-session" {
+                for i, arg := range args {
+                    if arg == "-t" && i+1 < len(args) {
+                        killed = append(killed, args[i+1])
+                    }
+                }
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            return []byte(
+                "kas_session1: 1 windows\n" +
+                "klique_legacy: 1 windows\n" +
+                "hivemind_old: 1 windows\n" +
+                "unrelated: 1 windows\n",
+            ), nil
+        },
+    }
+    err := CleanupSessions(cmdExec)
+    require.NoError(t, err)
+    assert.Len(t, killed, 3)
+    assert.NotContains(t, killed, "unrelated")
+}
+
+func TestDiscoverOrphans_FindsUntracked(t *testing.T) {
+    cmdExec := cmd_test.NewMockExecutor()
+    cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+        return []byte("kas_foo|1740000000|1|0|80|24\nkas_orphan|1740000000|1|0|80|24\n"), nil
+    }
+    orphans, err := DiscoverOrphans(cmdExec, []string{"kas_foo"})
+    require.NoError(t, err)
+    assert.Len(t, orphans, 1)
+    assert.Equal(t, "kas_orphan", orphans[0].Name)
+}
+
+func TestDiscoverAll_MarksManaged(t *testing.T) {
+    cmdExec := cmd_test.NewMockExecutor()
+    cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+        return []byte("kas_foo|1740000000|1|0|80|24\nkas_bar|1740000000|1|0|80|24\n"), nil
+    }
+    sessions, err := DiscoverAll(cmdExec, []string{"kas_foo"})
+    require.NoError(t, err)
+    assert.Len(t, sessions, 2)
+    managed := 0
+    for _, s := range sessions {
+        if s.Managed { managed++ }
+    }
+    assert.Equal(t, 1, managed)
+}
+
+func TestCountKasSessions(t *testing.T) {
+    cmdExec := cmd_test.NewMockExecutor()
+    cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+        return []byte("kas_foo:1 windows\nkas_bar:1 windows\nother:1 windows\n"), nil
+    }
+    assert.Equal(t, 2, CountKasSessions(cmdExec))
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestCleanupSessions|TestDiscoverOrphans|TestDiscoverAll|TestCountKasSessions" -v
+```
+
+expected: FAIL
+
+**Step 3: write minimal implementation**
+
+Create `session/tmux/discovery.go` with:
+
+- `CleanupSessions(cmdExec)` — list sessions via `tmux ls`, match kas_/klique_/hivemind_ prefixes, kill each.
+- `OrphanSession` struct — Name, Title, Created, Windows, Attached, Width, Height.
+- `DiscoverOrphans(cmdExec, knownNames)` — list sessions with format string, filter to kas_ prefix, exclude known names.
+- `SessionInfo` struct — same as OrphanSession + Managed bool.
+- `DiscoverAll(cmdExec, knownNames)` — list all kas_ sessions, mark managed.
+- `CountKasSessions(cmdExec)` — count kas_ prefixed lines from `tmux ls`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -run "TestCleanupSessions|TestDiscoverOrphans|TestDiscoverAll|TestCountKasSessions" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/discovery.go session/tmux/tmux_session_test.go
+git commit -m "feat(clean-room): implement session discovery and cleanup functions"
+```
