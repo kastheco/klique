@@ -19,11 +19,11 @@ func TestServer_CreateAndGetPlan(t *testing.T) {
 	defer srv.Close()
 
 	body := `{"filename":"test.md","status":"ready","description":"test"}`
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/plans", "application/json", strings.NewReader(body))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/plans/test.md")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/test.md")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -45,7 +45,7 @@ func TestServer_ListByStatus(t *testing.T) {
 		store.Create("kasmos", p)
 	}
 
-	resp, err := http.Get(srv.URL + "/v1/projects/kasmos/plans?status=ready")
+	resp, err := http.Get(srv.URL + "/v1/projects/kasmos/tasks?status=ready")
 	require.NoError(t, err)
 	var plans []taskstore.TaskEntry
 	json.NewDecoder(resp.Body).Decode(&plans)
@@ -69,14 +69,14 @@ func TestServer_SetClickUpTaskID(t *testing.T) {
 
 	// Create a plan first
 	body := `{"filename":"plan.md","status":"ready"}`
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/plans", "application/json", strings.NewReader(body))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
 	// PUT clickup-task-id
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/plans/plan.md/clickup-task-id",
+		srv.URL+"/v1/projects/kasmos/tasks/plan.md/clickup-task-id",
 		strings.NewReader(`{"clickup_task_id":"CU-abc123"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -97,7 +97,7 @@ func TestServer_SetClickUpTaskID_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/plans/nonexistent.md/clickup-task-id",
+		srv.URL+"/v1/projects/kasmos/tasks/nonexistent.md/clickup-task-id",
 		strings.NewReader(`{"clickup_task_id":"CU-xyz"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -114,13 +114,13 @@ func TestServer_ContentEndpoints(t *testing.T) {
 
 	// Create a plan first
 	body := `{"filename":"plan.md","status":"ready","content":"# Initial"}`
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/plans", "application/json", strings.NewReader(body))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
 	// GET content
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/plans/plan.md/content")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/content")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "text/markdown", resp.Header.Get("Content-Type"))
@@ -130,7 +130,7 @@ func TestServer_ContentEndpoints(t *testing.T) {
 	assert.Equal(t, "# Initial", string(gotBody))
 
 	// PUT content
-	req, err := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/plans/plan.md/content", strings.NewReader("# Updated"))
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/tasks/plan.md/content", strings.NewReader("# Updated"))
 	require.NoError(t, err)
 	resp, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestServer_ContentEndpoints(t *testing.T) {
 	resp.Body.Close()
 
 	// GET content again to verify update
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/plans/plan.md/content")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/content")
 	require.NoError(t, err)
 	gotBody, err = io.ReadAll(resp.Body)
 	resp.Body.Close()

@@ -10,7 +10,7 @@ import (
 )
 
 const schema = `
-CREATE TABLE IF NOT EXISTS plans (
+CREATE TABLE IF NOT EXISTS tasks (
 	id          INTEGER PRIMARY KEY,
 	project     TEXT    NOT NULL,
 	filename    TEXT    NOT NULL,
@@ -33,13 +33,13 @@ CREATE TABLE IF NOT EXISTS topics (
 `
 
 // contentMigration adds the content column to existing databases that predate it.
-const contentMigration = `ALTER TABLE plans ADD COLUMN content TEXT NOT NULL DEFAULT ''`
+const contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`
 
 // clickupTaskIDMigration adds the clickup_task_id column to existing databases.
-const clickupTaskIDMigration = `ALTER TABLE plans ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`
+const clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`
 
 // reviewCycleMigration adds the review_cycle column to existing databases.
-const reviewCycleMigration = `ALTER TABLE plans ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`
+const reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`
 
 // SQLiteStore is a Store implementation backed by a SQLite database.
 type SQLiteStore struct {
@@ -73,6 +73,9 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("run schema migrations: %w", err)
 	}
 
+	// Migrate: rename plans → tasks (if old table exists).
+	migrateRenameTable(db, "plans", "tasks")
+
 	// Add content column if it doesn't exist (upgrade existing databases).
 	if err := migrateAddContentColumn(db); err != nil {
 		db.Close()
@@ -104,7 +107,7 @@ func migrateAddContentColumn(db *sql.DB) error {
 // migrateAddColumn adds a column to the plans table if it doesn't already
 // exist, running the provided ALTER TABLE statement when needed.
 func migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {
-	rows, err := db.Query("PRAGMA table_info(plans)")
+	rows, err := db.Query("PRAGMA table_info(tasks)")
 	if err != nil {
 		return fmt.Errorf("query table info: %w", err)
 	}
@@ -134,6 +137,23 @@ func migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {
 	return nil
 }
 
+// migrateRenameTable renames oldName to newName if the old table exists and
+// the new table does not. This is idempotent: subsequent runs are no-ops.
+func migrateRenameTable(db *sql.DB, oldName, newName string) {
+	// Check if old table exists.
+	var count int
+	err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", oldName).Scan(&count)
+	if err != nil || count == 0 {
+		return // old table doesn't exist, nothing to migrate
+	}
+	// Check if new table already exists.
+	err = db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", newName).Scan(&count)
+	if err != nil || count > 0 {
+		return // new table already exists
+	}
+	_, _ = db.Exec(fmt.Sprintf("ALTER TABLE %s RENAME TO %s", oldName, newName))
+}
+
 // Close releases the database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
@@ -148,7 +168,7 @@ func (s *SQLiteStore) Ping() error {
 // Returns an error if a plan with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	const q = `
-		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
+		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(q,
@@ -178,7 +198,7 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
-		FROM plans
+		FROM tasks
 		WHERE project = ? AND filename = ?
 	`
 	row := s.db.QueryRow(q, project, filename)
@@ -189,7 +209,7 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	const q = `
-		UPDATE plans
+		UPDATE tasks
 		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?, review_cycle = ?
 		WHERE project = ? AND filename = ?
 	`
@@ -223,7 +243,7 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 // Returns an error if the old filename is not found or the new filename already exists.
 func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 	const q = `
-		UPDATE plans
+		UPDATE tasks
 		SET filename = ?
 		WHERE project = ? AND filename = ?
 	`
@@ -248,13 +268,13 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
-		FROM plans
+		FROM tasks
 		WHERE project = ?
 		ORDER BY filename ASC
 	`
 	rows, err := s.db.Query(q, project)
 	if err != nil {
-		return nil, fmt.Errorf("list plans: %w", err)
+		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 	defer rows.Close()
 	return scanTaskEntries(rows)
@@ -277,14 +297,14 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 
 	q := fmt.Sprintf(`
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
-		FROM plans
+		FROM tasks
 		WHERE project = ? AND status IN (%s)
 		ORDER BY filename ASC
 	`, strings.Join(placeholders, ", "))
 
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list plans by status: %w", err)
+		return nil, fmt.Errorf("list tasks by status: %w", err)
 	}
 	defer rows.Close()
 	return scanTaskEntries(rows)
@@ -295,13 +315,13 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
-		FROM plans
+		FROM tasks
 		WHERE project = ? AND topic = ?
 		ORDER BY filename ASC
 	`
 	rows, err := s.db.Query(q, project, topic)
 	if err != nil {
-		return nil, fmt.Errorf("list plans by topic: %w", err)
+		return nil, fmt.Errorf("list tasks by topic: %w", err)
 	}
 	defer rows.Close()
 	return scanTaskEntries(rows)
@@ -358,7 +378,7 @@ func (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {
 // GetContent retrieves only the content field for a plan entry.
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) GetContent(project, filename string) (string, error) {
-	const q = `SELECT content FROM plans WHERE project = ? AND filename = ?`
+	const q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`
 	var content string
 	err := s.db.QueryRow(q, project, filename).Scan(&content)
 	if err != nil {
@@ -373,7 +393,7 @@ func (s *SQLiteStore) GetContent(project, filename string) (string, error) {
 // SetContent updates only the content field for an existing plan entry.
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) SetContent(project, filename, content string) error {
-	const q = `UPDATE plans SET content = ? WHERE project = ? AND filename = ?`
+	const q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, content, project, filename)
 	if err != nil {
 		return fmt.Errorf("set content: %w", err)
@@ -391,7 +411,7 @@ func (s *SQLiteStore) SetContent(project, filename, content string) error {
 // SetClickUpTaskID sets the ClickUp task ID for an existing plan entry.
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
-	const q = `UPDATE plans SET clickup_task_id = ? WHERE project = ? AND filename = ?`
+	const q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, taskID, project, filename)
 	if err != nil {
 		return fmt.Errorf("set clickup_task_id: %w", err)
@@ -409,7 +429,7 @@ func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
 // IncrementReviewCycle atomically increments the review_cycle counter for an existing plan entry.
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {
-	const q = `UPDATE plans SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`
+	const q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, project, filename)
 	if err != nil {
 		return fmt.Errorf("increment review_cycle: %w", err)
@@ -471,7 +491,7 @@ func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plans: %w", err)
+		return nil, fmt.Errorf("iterate tasks: %w", err)
 	}
 	return entries, nil
 }

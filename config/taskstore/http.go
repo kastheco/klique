@@ -33,17 +33,17 @@ func NewHTTPStore(baseURL, project string) *HTTPStore {
 
 // planURL builds the base URL for a project's plans endpoint.
 func (s *HTTPStore) taskURL(project string) string {
-	return fmt.Sprintf("%s/v1/projects/%s/plans", s.baseURL, url.PathEscape(project))
+	return fmt.Sprintf("%s/v1/projects/%s/tasks", s.baseURL, url.PathEscape(project))
 }
 
 // planItemURL builds the URL for a specific plan entry.
 func (s *HTTPStore) taskItemURL(project, filename string) string {
-	return fmt.Sprintf("%s/v1/projects/%s/plans/%s", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
 // planContentURL builds the URL for a specific plan's content endpoint.
 func (s *HTTPStore) taskContentURL(project, filename string) string {
-	return fmt.Sprintf("%s/v1/projects/%s/plans/%s/content", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/content", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
 // topicURL builds the base URL for a project's topics endpoint.
