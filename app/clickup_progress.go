@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/log"
 
@@ -12,7 +12,7 @@ import (
 // It checks the ClickUpTaskID field first (DB-stored), then falls back to
 // parsing the plan content for a "**Source:** ClickUp <ID>" line.
 // Returns "" when no task ID can be found.
-func resolveClickUpTaskID(entry planstate.PlanEntry, content string) string {
+func resolveClickUpTaskID(entry taskstate.TaskEntry, content string) string {
 	if entry.ClickUpTaskID != "" {
 		return entry.ClickUpTaskID
 	}

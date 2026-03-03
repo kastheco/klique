@@ -9,7 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
@@ -23,7 +23,7 @@ import (
 // returns "" when the plan has no ClickUp task ID field and no Source line in
 // content — postClickUpProgress then returns nil (no-op).
 func TestPostClickUpProgressSkipsWithoutTaskID(t *testing.T) {
-	entry := taskstate.PlanEntry{} // no ClickUpTaskID field
+	entry := taskstate.TaskEntry{} // no ClickUpTaskID field
 	taskID := resolveClickUpTaskID(entry, "# Plan without a source line\n\nNo clickup here.")
 	assert.Equal(t, "", taskID)
 
@@ -35,7 +35,7 @@ func TestPostClickUpProgressSkipsWithoutTaskID(t *testing.T) {
 // TestPostClickUpProgressUsesFieldFirst verifies that the ClickUpTaskID field
 // takes priority over the **Source:** ClickUp <ID> line in content.
 func TestPostClickUpProgressUsesFieldFirst(t *testing.T) {
-	entry := taskstate.PlanEntry{ClickUpTaskID: "field123"}
+	entry := taskstate.TaskEntry{ClickUpTaskID: "field123"}
 	content := "**Source:** ClickUp content456 (https://app.clickup.com/t/content456)"
 
 	taskID := resolveClickUpTaskID(entry, content)
@@ -46,7 +46,7 @@ func TestPostClickUpProgressUsesFieldFirst(t *testing.T) {
 // TestPostClickUpProgressFallsBackToContentParse verifies that when the
 // ClickUpTaskID field is empty, the task ID is parsed from plan content.
 func TestPostClickUpProgressFallsBackToContentParse(t *testing.T) {
-	entry := taskstate.PlanEntry{} // field empty
+	entry := taskstate.TaskEntry{} // field empty
 	content := "**Source:** ClickUp content789 (https://app.clickup.com/t/content789)"
 
 	taskID := resolveClickUpTaskID(entry, content)
@@ -139,8 +139,8 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 	// Fire an ImplementFinished signal with pendingReviewFeedback set.
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals: []planfsm.Signal{
-			{Event: planfsm.ImplementFinished, PlanFile: planFile},
+		Signals: []taskfsm.Signal{
+			{Event: taskfsm.ImplementFinished, PlanFile: planFile},
 		},
 	}
 	model, _ := h.Update(msg)
@@ -203,8 +203,8 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 	// Fire ImplementFinished without any pending feedback.
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals: []planfsm.Signal{
-			{Event: planfsm.ImplementFinished, PlanFile: planFile},
+		Signals: []taskfsm.Signal{
+			{Event: taskfsm.ImplementFinished, PlanFile: planFile},
 		},
 	}
 	model, _ := h.Update(msg)

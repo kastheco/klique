@@ -18,14 +18,14 @@ func NewStoreFromConfig(planStoreURL, project string) (Store, error) {
 }
 
 // ResolvedDBPath returns the filesystem path that the factory would use for a
-// local SQLite planstore. It reads the XDG-compliant config directory
-// (~/.config/kasmos/) and appends "planstore.db". This path is shared with
+// local SQLite taskstore. It reads the XDG-compliant config directory
+// (~/.config/kasmos/) and appends "taskstore.db". This path is shared with
 // the auditlog SQLiteLogger so both can coexist in the same database file
 // (each using a separate table).
 func ResolvedDBPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(".", "planstore.db")
+		return filepath.Join(".", "taskstore.db")
 	}
-	return filepath.Join(homeDir, ".config", "kasmos", "planstore.db")
+	return filepath.Join(homeDir, ".config", "kasmos", "taskstore.db")
 }

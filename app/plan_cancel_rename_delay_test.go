@@ -20,9 +20,9 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -32,7 +32,7 @@ import (
 
 // newCancelDelayHome builds a minimal *home for the cancel/rename delay tests.
 // store must be the same store backing ps so that FSM transitions can find plans.
-func newCancelDelayHome(t *testing.T, store planstore.Store, ps *planstate.PlanState, plansDir, repoDir string) *home {
+func newCancelDelayHome(t *testing.T, store taskstore.Store, ps *taskstate.TaskState, plansDir, repoDir string) *home {
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	storage, err := session.NewStorage(config.DefaultState())
@@ -40,7 +40,7 @@ func newCancelDelayHome(t *testing.T, store planstore.Store, ps *planstate.PlanS
 	return &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            planfsm.New(store, "test", plansDir),
+		fsm:            taskfsm.New(store, "test", plansDir),
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
@@ -118,7 +118,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 
 	// The handler renamed aardvark → zebra and must have called SelectByID so
 	// the cursor now points at the zebra plan, not marmot.
-	// Derive the expected new filename the same way planstate.Rename does.
+	// Derive the expected new filename the same way taskstate.Rename does.
 	expectedID := ui.SidebarPlanPrefix + "zebra.md"
 	assert.Equal(t, expectedID, h.nav.GetSelectedID(),
 		"selection must follow the renamed plan; without the fix it jumps to marmot")

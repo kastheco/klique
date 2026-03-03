@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/assert"
@@ -306,7 +306,7 @@ func TestAuditHomeEmit_AgentKilled_KeybindK(t *testing.T) {
 	assert.Contains(t, events[0].Message, "killed instance")
 }
 
-// TestAuditHomeEmit_PlanCreated verifies that createPlanEntry emits
+// TestAuditHomeEmit_PlanCreated verifies that createTaskEntry emits
 // EventPlanCreated after successfully creating a plan in the store.
 func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 	logger, err := auditlog.NewSQLiteLogger(":memory:")
@@ -317,7 +317,7 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 
 	h := newTestHome()
 	h.auditLogger = logger
@@ -325,7 +325,7 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 	h.planStateDir = plansDir
 	h.planStore = store
 
-	err = h.createPlanEntry("my cool plan", "description", "")
+	err = h.createTaskEntry("my cool plan", "description", "")
 	require.NoError(t, err)
 
 	events, err := logger.Query(auditlog.QueryFilter{
@@ -334,7 +334,7 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 		Limit:   10,
 	})
 	require.NoError(t, err)
-	require.Len(t, events, 1, "createPlanEntry must emit EventPlanCreated")
+	require.Len(t, events, 1, "createTaskEntry must emit EventPlanCreated")
 	assert.Contains(t, events[0].Message, "created plan")
 	assert.NotEmpty(t, events[0].PlanFile)
 }

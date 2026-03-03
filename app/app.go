@@ -9,10 +9,10 @@ import (
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/mcpclient"
 	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
@@ -250,7 +250,7 @@ type home struct {
 	previewTerminalInstance string // title of the instance the terminal is attached to
 
 	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
-	planState *taskstate.PlanState
+	planState *taskstate.TaskState
 	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
 	planStateDir string
 	// signalsDir is the directory where agent sentinel files are written.
@@ -258,10 +258,10 @@ type home struct {
 	signalsDir string
 	// embeddedServer is the in-process HTTP+SQLite plan store server started on boot.
 	// Always non-nil after newHome() returns.
-	embeddedServer *planstore.EmbeddedServer
+	embeddedServer *taskstore.EmbeddedServer
 	// planStore is the plan store client. Always non-nil after newHome() returns —
 	// points at the embedded server URL unless appConfig.PlanStore overrides it.
-	planStore planstore.Store
+	planStore taskstore.Store
 	// planStoreProject is the project name used with the remote store (derived from repo basename).
 	planStoreProject string
 	// auditLogger records structured audit events to the planstore SQLite database.
@@ -327,7 +327,7 @@ type home struct {
 
 	// fsm is the sole writer of plan-state.json. All plan status mutations flow
 	// through fsm.Transition — direct SetStatus calls are not allowed.
-	fsm *planfsm.PlanStateMachine
+	fsm *taskfsm.TaskStateMachine
 
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
@@ -395,8 +395,8 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 
 	// Always start an embedded plan store server. This gives us a local SQLite
 	// DB as the single source of truth without requiring a separate process.
-	dbPath := planstore.ResolvedDBPath()
-	embSrv, err := planstore.StartEmbedded(dbPath, 0)
+	dbPath := taskstore.ResolvedDBPath()
+	embSrv, err := taskstore.StartEmbedded(dbPath, 0)
 	if err != nil {
 		fmt.Printf("Failed to start embedded plan store: %v\n", err)
 		os.Exit(1)
@@ -411,7 +411,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	// access over tailscale, etc.). The embedded server still runs for audit log
 	// DB access via its SQLite store.
 	if appConfig.PlanStore != "" {
-		remoteStore := planstore.NewHTTPStore(appConfig.PlanStore, project)
+		remoteStore := taskstore.NewHTTPStore(appConfig.PlanStore, project)
 		if pingErr := remoteStore.Ping(); pingErr != nil {
 			log.WarningLog.Printf("remote plan store unreachable: %v — falling back to embedded", pingErr)
 			remoteStoreUnreachable = true
@@ -421,15 +421,15 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		}
 	}
 
-	h.planStore = planstore.NewHTTPStore(planStoreURL, project)
-	h.fsm = planfsm.New(h.planStore, project, h.planStateDir)
+	h.planStore = taskstore.NewHTTPStore(planStoreURL, project)
+	h.fsm = taskfsm.New(h.planStore, project, h.planStateDir)
 
 	// One-time migration: import plan-state.json into the DB if it exists.
 	// Use the embedded store directly (bypasses HTTP round-trip).
 	// Only runs when plan-state.json is present; subsequent boots skip this.
 	planStateJSON := filepath.Join(h.planStateDir, "plan-state.json")
 	if _, statErr := os.Stat(planStateJSON); statErr == nil {
-		migrated, migrateErr := planstore.MigrateFromJSON(embSrv.Store(), project, h.planStateDir)
+		migrated, migrateErr := taskstore.MigrateFromJSON(embSrv.Store(), project, h.planStateDir)
 		if migrateErr != nil {
 			log.WarningLog.Printf("plan-state.json migration failed: %v", migrateErr)
 		} else {
@@ -784,9 +784,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Load plan state — moved here from the synchronous Update handler
 			// to avoid blocking the event loop every 500ms.
 			// Always reads from the store (embedded or remote) — no JSON fallback.
-			var ps *taskstate.PlanState
+			var ps *taskstate.TaskState
 			if planStateDir != "" {
-				var loaded *taskstate.PlanState
+				var loaded *taskstate.TaskState
 				var err error
 				loaded, err = taskstate.Load(store, project, planStateDir)
 				if err != nil {
@@ -797,9 +797,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Scan signals from the project-local signals directory (.kasmos/signals/).
-			var signals []planfsm.Signal
+			var signals []taskfsm.Signal
 			if signalsDir != "" {
-				signals = planfsm.ScanSignals(signalsDir)
+				signals = taskfsm.ScanSignals(signalsDir)
 			}
 
 			// Also scan signals from active worktrees — agents write
@@ -815,7 +815,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				wtSignalsDir := filepath.Join(wt, ".kasmos", "signals")
-				for _, sig := range planfsm.ScanSignals(wtSignalsDir) {
+				for _, sig := range taskfsm.ScanSignals(wtSignalsDir) {
 					if !seen[sig.Key()] {
 						seen[sig.Key()] = true
 						signals = append(signals, sig)
@@ -823,9 +823,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			var waveSignals []planfsm.WaveSignal
+			var waveSignals []taskfsm.WaveSignal
 			if signalsDir != "" {
-				waveSignals = planfsm.ScanWaveSignals(signalsDir)
+				waveSignals = taskfsm.ScanWaveSignals(signalsDir)
 			}
 
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
@@ -845,24 +845,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the first task to finish prematurely triggers review and pauses
 			// sibling tasks, spawning a "applying fixes" coder alongside the
 			// reviewer.
-			if sig.Event == planfsm.ImplementFinished {
+			if sig.Event == taskfsm.ImplementFinished {
 				if _, hasOrch := m.waveOrchestrators[sig.PlanFile]; hasOrch {
 					log.WarningLog.Printf("ignoring implement-finished signal for %q — wave orchestrator active", sig.PlanFile)
-					planfsm.ConsumeSignal(sig)
+					taskfsm.ConsumeSignal(sig)
 					continue
 				}
 			}
 
 			if err := m.fsm.Transition(sig.PlanFile, sig.Event); err != nil {
 				log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.PlanFile, err)
-				planfsm.ConsumeSignal(sig)
+				taskfsm.ConsumeSignal(sig)
 				continue
 			}
-			planfsm.ConsumeSignal(sig)
+			taskfsm.ConsumeSignal(sig)
 
 			// Side effects: spawn agents in response to successful transitions.
 			switch sig.Event {
-			case planfsm.ImplementFinished:
+			case taskfsm.ImplementFinished:
 				// Pause the coder that wrote this signal.
 				for _, inst := range m.nav.GetInstances() {
 					if inst.PlanFile == sig.PlanFile && inst.AgentType == session.AgentTypeCoder {
@@ -883,7 +883,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd := m.spawnReviewer(sig.PlanFile); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
-			case planfsm.ReviewApproved:
+			case taskfsm.ReviewApproved:
 				planName := taskstate.DisplayName(sig.PlanFile)
 				m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
 					auditlog.WithPlan(sig.PlanFile))
@@ -899,7 +899,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-			case planfsm.ReviewChangesRequested:
+			case taskfsm.ReviewChangesRequested:
 				feedback := sig.Body
 				m.pendingReviewFeedback[sig.PlanFile] = feedback
 				// Post progress comment to ClickUp (truncate feedback to avoid huge comments).
@@ -927,7 +927,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd := m.spawnCoderWithFeedback(sig.PlanFile, feedback); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
-			case planfsm.PlannerFinished:
+			case taskfsm.PlannerFinished:
 				capturedPlanFile := sig.PlanFile
 				// Ingest the plan content from the agent's worktree into the DB.
 				// Planners run on the main branch, so the plan file is in activeRepoPath.
@@ -1011,7 +1011,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Process wave signals — trigger implementation for specific waves.
 		for _, ws := range msg.WaveSignals {
-			planfsm.ConsumeWaveSignal(ws)
+			taskfsm.ConsumeWaveSignal(ws)
 
 			// Check if orchestrator already exists
 			if _, exists := m.waveOrchestrators[ws.PlanFile]; exists {
@@ -1545,7 +1545,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Transition FSM implementing → reviewing.
-		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 			log.WarningLog.Printf("wave all-complete: could not transition %q to reviewing: %v", planFile, err)
 		}
 		m.loadPlanState()
@@ -1564,7 +1564,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		planFile := msg.planFile
 		planName := taskstate.DisplayName(planFile)
 
-		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 			log.WarningLog.Printf("coder-complete: could not transition %q to reviewing: %v", planFile, err)
 		}
 
@@ -1923,13 +1923,13 @@ type planRefreshMsg struct{}
 // waveAdvanceMsg is sent when the user confirms advancing to the next wave.
 type waveAdvanceMsg struct {
 	planFile string
-	entry    taskstate.PlanEntry
+	entry    taskstate.TaskEntry
 }
 
 // waveRetryMsg is sent when the user chooses "retry" on the failed-wave decision prompt.
 type waveRetryMsg struct {
 	planFile string
-	entry    taskstate.PlanEntry
+	entry    taskstate.TaskEntry
 }
 
 // waveAbortMsg is sent when the user chooses "abort" on the failed-wave decision prompt.
@@ -2031,9 +2031,9 @@ type instanceMetadata struct {
 // metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
 	Results          []instanceMetadata
-	PlanState        *taskstate.PlanState // pre-loaded plan state (nil if dir not set)
-	Signals          []planfsm.Signal     // agent sentinel files found this tick
-	WaveSignals      []planfsm.WaveSignal // implement-wave-N signal files found this tick
+	PlanState        *taskstate.TaskState // pre-loaded plan state (nil if dir not set)
+	Signals          []taskfsm.Signal     // agent sentinel files found this tick
+	WaveSignals      []taskfsm.WaveSignal // implement-wave-N signal files found this tick
 	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions
 }
 

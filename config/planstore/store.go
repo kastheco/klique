@@ -6,7 +6,7 @@ package planstore
 import "time"
 
 // Status represents the lifecycle state of a plan.
-// These constants mirror planstate.Status to keep planstore self-contained
+// These constants mirror taskstate.Status to keep planstore self-contained
 // and avoid circular imports.
 type Status string
 
@@ -19,8 +19,8 @@ const (
 	StatusImplementing Status = "implementing"
 )
 
-// PlanEntry holds the persisted metadata for a single plan.
-type PlanEntry struct {
+// TaskEntry holds the persisted metadata for a single plan.
+type TaskEntry struct {
 	Filename      string    `json:"filename"`
 	Status        Status    `json:"status"`
 	Description   string    `json:"description,omitempty"`
@@ -44,9 +44,9 @@ type TopicEntry struct {
 // that talks to the server over HTTP).
 type Store interface {
 	// Plan CRUD
-	Create(project string, entry PlanEntry) error
-	Get(project, filename string) (PlanEntry, error)
-	Update(project, filename string, entry PlanEntry) error
+	Create(project string, entry TaskEntry) error
+	Get(project, filename string) (TaskEntry, error)
+	Update(project, filename string, entry TaskEntry) error
 	Rename(project, oldFilename, newFilename string) error
 
 	// Content access
@@ -60,9 +60,9 @@ type Store interface {
 	IncrementReviewCycle(project, filename string) error
 
 	// Queries
-	List(project string) ([]PlanEntry, error)
-	ListByStatus(project string, statuses ...Status) ([]PlanEntry, error)
-	ListByTopic(project, topic string) ([]PlanEntry, error)
+	List(project string) ([]TaskEntry, error)
+	ListByStatus(project string, statuses ...Status) ([]TaskEntry, error)
+	ListByTopic(project, topic string) ([]TaskEntry, error)
 
 	// Topics
 	ListTopics(project string) ([]TopicEntry, error)

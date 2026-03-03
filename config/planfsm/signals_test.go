@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -113,12 +113,12 @@ func TestScanSignals_KasmosSignalsDir(t *testing.T) {
 // TestSignals_WithStoreFSM verifies that signals still trigger store-backed FSM transitions.
 // The sentinel file system is decoupled from storage — it just triggers FSM events.
 func TestSignals_WithStoreFSM(t *testing.T) {
-	backend := planstore.NewTestSQLiteStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
+	backend := taskstore.NewTestSQLiteStore(t)
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
 	defer srv.Close()
 
-	store := planstore.NewHTTPStore(srv.URL, "test-project")
-	err := store.Create("test-project", planstore.PlanEntry{
+	store := taskstore.NewHTTPStore(srv.URL, "test-project")
+	err := store.Create("test-project", taskstore.TaskEntry{
 		Filename: "test.md", Status: "planning",
 	})
 	require.NoError(t, err)

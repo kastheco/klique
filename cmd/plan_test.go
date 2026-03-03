@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,9 +18,9 @@ import (
 // test plans and returns the store and a temp plans directory.
 // The plans directory is structured as <root>/docs/plans so that
 // projectFromPlansDir returns a stable project name derived from <root>.
-func setupTestPlanState(t *testing.T) (planstore.Store, string) {
+func setupTestPlanState(t *testing.T) (taskstore.Store, string) {
 	t.Helper()
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 
 	// Build a plans dir with the expected structure so projectFromPlansDir
 	// returns a known project name.
@@ -30,16 +30,16 @@ func setupTestPlanState(t *testing.T) (planstore.Store, string) {
 
 	project := projectFromPlansDir(plansDir)
 
-	require.NoError(t, store.Create(project, planstore.PlanEntry{
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename:    "test-plan.md",
-		Status:      planstore.StatusReady,
+		Status:      taskstore.StatusReady,
 		Description: "test plan",
 		Branch:      "plan/test-plan",
 		CreatedAt:   time.Now(),
 	}))
-	require.NoError(t, store.Create(project, planstore.PlanEntry{
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename:    "implementing-plan.md",
-		Status:      planstore.Status("implementing"),
+		Status:      taskstore.Status("implementing"),
 		Description: "implementing plan",
 		Branch:      "plan/implementing-plan",
 		CreatedAt:   time.Now(),
@@ -93,11 +93,11 @@ func TestPlanSetStatus(t *testing.T) {
 	err = executePlanSetStatus(dir, "test-plan.md", "done", true, store)
 	require.NoError(t, err)
 
-	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
 	entry, ok := ps.Entry("test-plan.md")
 	require.True(t, ok)
-	assert.Equal(t, planstate.Status("done"), entry.Status)
+	assert.Equal(t, taskstate.Status("done"), entry.Status)
 
 	// Invalid status
 	err = executePlanSetStatus(dir, "test-plan.md", "bogus", true, store)
@@ -151,10 +151,10 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	assert.Contains(t, names, "implement-wave-2-test-plan.md")
 
 	// Verify final status
-	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
 	entry, _ := ps.Entry("test-plan.md")
-	assert.Equal(t, planstate.Status("implementing"), entry.Status)
+	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
 }
 
 func TestPlanImplement(t *testing.T) {
@@ -168,10 +168,10 @@ func TestPlanImplement(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify plan transitioned to implementing
-	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
 	entry, _ := ps.Entry("test-plan.md")
-	assert.Equal(t, planstate.Status("implementing"), entry.Status)
+	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
 
 	// Verify signal file created
 	entries, err := os.ReadDir(signalsDir)
@@ -199,11 +199,11 @@ func TestPlanRegister(t *testing.T) {
 	err := executePlanRegister(dir, planFile, "", "", "", store)
 	require.NoError(t, err)
 
-	ps, err := planstate.Load(store, project, dir)
+	ps, err := taskstate.Load(store, project, dir)
 	require.NoError(t, err)
 	entry, ok := ps.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReady, entry.Status)
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "New Feature Plan", entry.Description)
 	assert.Equal(t, "plan/new-feature", entry.Branch)
 	assert.Equal(t, "", entry.Topic)
@@ -223,11 +223,11 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 	err := executePlanRegister(dir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
 	require.NoError(t, err)
 
-	ps, err := planstate.Load(store, project, dir)
+	ps, err := taskstate.Load(store, project, dir)
 	require.NoError(t, err)
 	entry, ok := ps.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReady, entry.Status)
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "Implement circuit breaker", entry.Description)
 	assert.Equal(t, "brain phase 1", entry.Topic)
 
@@ -240,14 +240,14 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 }
 
 func TestExecutePlanLinkClickUp(t *testing.T) {
-	store, err := planstore.NewSQLiteStore(":memory:")
+	store, err := taskstore.NewSQLiteStore(":memory:")
 	require.NoError(t, err)
 	defer store.Close()
 
 	// Create a plan with ClickUp source in content.
-	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
 		Filename: "test.md",
-		Status:   planstore.StatusReady,
+		Status:   taskstore.StatusReady,
 	}))
 	require.NoError(t, store.SetContent("proj", "test.md", "# Test\n\n**Source:** ClickUp abc123 (https://app.clickup.com/t/abc123)\n"))
 
@@ -261,14 +261,14 @@ func TestExecutePlanLinkClickUp(t *testing.T) {
 }
 
 func TestExecutePlanLinkClickUp_SkipsAlreadyLinked(t *testing.T) {
-	store, err := planstore.NewSQLiteStore(":memory:")
+	store, err := taskstore.NewSQLiteStore(":memory:")
 	require.NoError(t, err)
 	defer store.Close()
 
 	// Plan already has a ClickUp task ID — should be skipped.
-	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
 		Filename:      "linked.md",
-		Status:        planstore.StatusReady,
+		Status:        taskstore.StatusReady,
 		ClickUpTaskID: "already-set",
 	}))
 	require.NoError(t, store.SetContent("proj", "linked.md", "# Test\n\n**Source:** ClickUp newid\n"))
@@ -334,11 +334,11 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 	assert.Equal(t, plansDir, resolvedPlansDir)
 
 	// Populate the store and verify plan operations succeed
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 	project := projectFromPlansDir(resolvedPlansDir)
-	require.NoError(t, store.Create(project, planstore.PlanEntry{
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename:    "worktree-plan.md",
-		Status:      planstore.StatusReady,
+		Status:      taskstore.StatusReady,
 		Description: "worktree plan",
 		Branch:      "plan/worktree-plan",
 		CreatedAt:   time.Now(),
@@ -363,11 +363,11 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 // TestPlanList_WithStore verifies that executePlanListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
-	backend := planstore.NewTestSQLiteStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
+	backend := taskstore.NewTestSQLiteStore(t)
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
 	defer srv.Close()
 
-	err := backend.Create("test-project", planstore.PlanEntry{
+	err := backend.Create("test-project", taskstore.TaskEntry{
 		Filename: "test.md", Status: "ready", Description: "test plan",
 	})
 	require.NoError(t, err)

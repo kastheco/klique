@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 )
 
 // PlanBranchFromFile derives the git branch name from a plan filename.
 // "auth-refactor.md" → "plan/auth-refactor"
 func PlanBranchFromFile(planFile string) string {
-	name := planstate.DisplayName(planFile)
+	name := taskstate.DisplayName(planFile)
 	name = sanitizeBranchName(name)
 	if name == "" {
 		name = "plan"
@@ -47,7 +47,7 @@ func CommitPlanScaffoldOnMain(repoPath, planFile string) error {
 	if _, err := gt.runGitCommand(repoPath, "add", planPath, statePath); err != nil {
 		return fmt.Errorf("stage plan scaffold: %w", err)
 	}
-	if _, err := gt.runGitCommand(repoPath, "commit", "-m", "feat(plan): add "+planstate.DisplayName(planFile)+" scaffold"); err != nil {
+	if _, err := gt.runGitCommand(repoPath, "commit", "-m", "feat(plan): add "+taskstate.DisplayName(planFile)+" scaffold"); err != nil {
 		if strings.Contains(err.Error(), "nothing to commit") {
 			return nil
 		}

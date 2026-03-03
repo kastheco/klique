@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -21,7 +21,7 @@ import (
 
 // plannerSignalHome builds a minimal home with a planner instance registered
 // in StatusPlanning (so the FSM transition PlannerFinished → StatusReady succeeds).
-func plannerSignalHome(t *testing.T, planFile string) (*home, *planstate.PlanState, string, *session.Instance) {
+func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskState, string, *session.Instance) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -30,7 +30,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *planstate.PlanSta
 
 	store, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "test plan", "plan/test", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusPlanning)
 
 	plannerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "test-plan-planner",
@@ -78,13 +78,13 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 	const planFile = "feature.md"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	model, _ := h.Update(msg)
@@ -115,7 +115,7 @@ func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testin
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
 
 	// Advance the FSM to StatusReady so triggerPlanStage can proceed to "implement".
-	require.NoError(t, h.fsm.Transition(planFile, planfsm.PlannerFinished))
+	require.NoError(t, h.fsm.Transition(planFile, taskfsm.PlannerFinished))
 	h.loadPlanState()
 
 	// Send the confirm message.
@@ -147,7 +147,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 	h, _, _, plannerInst := plannerSignalHome(t, planFile)
 
 	// Advance FSM to StatusReady (as the signal handler would do).
-	require.NoError(t, h.fsm.Transition(planFile, planfsm.PlannerFinished))
+	require.NoError(t, h.fsm.Transition(planFile, taskfsm.PlannerFinished))
 	h.loadPlanState()
 
 	// Set up state as if the confirm dialog was shown.
@@ -180,7 +180,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 	// Plan must still be at StatusReady (not advanced to implementing).
 	entry, ok := updated.planState.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReady, entry.Status,
+	assert.Equal(t, taskstate.StatusReady, entry.Status,
 		"plan must remain at StatusReady after cancel — user declined implementation")
 }
 
@@ -193,13 +193,13 @@ func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
 	// Mark already prompted.
 	h.plannerPrompted[planFile] = true
 
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	model, _ := h.Update(msg)
@@ -241,7 +241,7 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 	// Plan must remain in StatusPlanning (not advanced).
 	entry, ok := updated.planState.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusPlanning, entry.Status,
+	assert.Equal(t, taskstate.StatusPlanning, entry.Status,
 		"plan must remain StatusPlanning when planner pane dies without a sentinel")
 }
 
@@ -257,13 +257,13 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 	h.state = stateConfirm
 	h.confirmationOverlay = existingOverlay
 
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	model, _ := h.Update(msg)
@@ -307,13 +307,13 @@ func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
 	h.state = stateConfirm
 	h.confirmationOverlay = existingOverlay
 
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	model, _ := h.Update(msg)

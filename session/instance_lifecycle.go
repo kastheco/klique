@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/opencodesession"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session/git"
@@ -279,7 +279,7 @@ func (i *Instance) setTmuxTaskEnv() {
 func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 	planName := ""
 	if inst.PlanFile != "" {
-		planName = planstate.DisplayName(inst.PlanFile)
+		planName = taskstate.DisplayName(inst.PlanFile)
 	}
 	return opencodesession.TitleOpts{
 		PlanName:      planName,

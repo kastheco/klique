@@ -146,7 +146,7 @@ func (s *SQLiteStore) Ping() error {
 
 // Create inserts a new plan entry for the given project.
 // Returns an error if a plan with the same filename already exists in the project.
-func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
+func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	const q = `
 		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -175,19 +175,19 @@ func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 
 // Get retrieves a plan entry by project and filename.
 // Returns an error if the plan is not found.
-func (s *SQLiteStore) Get(project, filename string) (PlanEntry, error) {
+func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
 		WHERE project = ? AND filename = ?
 	`
 	row := s.db.QueryRow(q, project, filename)
-	return scanPlanEntry(row)
+	return scanTaskEntry(row)
 }
 
 // Update replaces all fields of an existing plan entry.
 // Returns an error if the plan is not found.
-func (s *SQLiteStore) Update(project, filename string, entry PlanEntry) error {
+func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	const q = `
 		UPDATE plans
 		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?, review_cycle = ?
@@ -245,7 +245,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 }
 
 // List returns all plan entries for the given project, sorted by filename.
-func (s *SQLiteStore) List(project string) ([]PlanEntry, error) {
+func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
@@ -262,7 +262,7 @@ func (s *SQLiteStore) List(project string) ([]PlanEntry, error) {
 
 // ListByStatus returns all plan entries for the given project matching any of
 // the provided statuses, sorted by filename.
-func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEntry, error) {
+func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
 	if len(statuses) == 0 {
 		return nil, nil
 	}
@@ -292,7 +292,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEn
 
 // ListByTopic returns all plan entries for the given project and topic,
 // sorted by filename.
-func (s *SQLiteStore) ListByTopic(project, topic string) ([]PlanEntry, error) {
+func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
@@ -424,17 +424,17 @@ func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {
 	return nil
 }
 
-// scanPlanEntry scans a single row into a PlanEntry.
-func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
+// scanTaskEntry scans a single row into a TaskEntry.
+func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 	var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
 	var reviewCycle int
 	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
 		if err == sql.ErrNoRows {
-			return PlanEntry{}, fmt.Errorf("plan not found")
+			return TaskEntry{}, fmt.Errorf("plan not found")
 		}
-		return PlanEntry{}, fmt.Errorf("scan plan: %w", err)
+		return TaskEntry{}, fmt.Errorf("scan plan: %w", err)
 	}
-	return PlanEntry{
+	return TaskEntry{
 		Filename:      filename,
 		Status:        Status(status),
 		Description:   description,
@@ -448,16 +448,16 @@ func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
 	}, nil
 }
 
-// scanPlanEntries scans multiple rows into a slice of PlanEntry.
-func scanPlanEntries(rows *sql.Rows) ([]PlanEntry, error) {
-	var entries []PlanEntry
+// scanPlanEntries scans multiple rows into a slice of TaskEntry.
+func scanPlanEntries(rows *sql.Rows) ([]TaskEntry, error) {
+	var entries []TaskEntry
 	for rows.Next() {
 		var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
 		var reviewCycle int
 		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
-		entries = append(entries, PlanEntry{
+		entries = append(entries, TaskEntry{
 			Filename:      filename,
 			Status:        Status(status),
 			Description:   description,

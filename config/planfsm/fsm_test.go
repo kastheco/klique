@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // newTestFSM creates a PlanStateMachine backed by an in-memory SQLite store.
-func newTestFSM(t *testing.T) (*PlanStateMachine, planstore.Store) {
+func newTestFSM(t *testing.T) (*TaskStateMachine, taskstore.Store) {
 	t.Helper()
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 	fsm := New(store, "test-proj", t.TempDir())
 	return fsm, store
 }
@@ -79,11 +79,11 @@ func TestIsUserOnly(t *testing.T) {
 }
 
 func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
 	// Seed with a ready plan
-	ps, err := planstate.Load(store, "test-proj", dir)
+	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
 
@@ -92,7 +92,7 @@ func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
 	require.NoError(t, err)
 
 	// Re-read from store to verify persistence
-	reloaded, err := planstate.Load(store, "test-proj", dir)
+	reloaded, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry("test.md")
 	require.True(t, ok)
@@ -100,10 +100,10 @@ func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
 }
 
 func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
-	ps, err := planstate.Load(store, "test-proj", dir)
+	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
 
@@ -112,7 +112,7 @@ func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
 	assert.Error(t, err)
 
 	// Status must remain unchanged in store
-	reloaded, err := planstate.Load(store, "test-proj", dir)
+	reloaded, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry("test.md")
 	require.True(t, ok)
@@ -126,8 +126,8 @@ func TestPlanStateMachine_MissingPlanReturnsError(t *testing.T) {
 }
 
 func TestFSM_TransitionWithStore(t *testing.T) {
-	store := planstore.NewTestSQLiteStore(t)
-	err := store.Create("test-project", planstore.PlanEntry{
+	store := taskstore.NewTestSQLiteStore(t)
+	err := store.Create("test-project", taskstore.TaskEntry{
 		Filename: "test.md", Status: "ready",
 	})
 	require.NoError(t, err)

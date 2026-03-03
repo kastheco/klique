@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
@@ -826,7 +826,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					topic = picked
 				}
 			}
-			if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
+			if err := m.createTaskEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
 				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
 				m.pickerOverlay = nil
@@ -919,7 +919,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.pickerOverlay.IsSubmitted() && m.planState != nil && m.pendingSetStatusPlan != "" {
 				picked := m.pickerOverlay.Value()
 				if picked != "" {
-					if err := m.planState.ForceSetStatus(m.pendingSetStatusPlan, planstate.Status(picked)); err != nil {
+					if err := m.planState.ForceSetStatus(m.pendingSetStatusPlan, taskstate.Status(picked)); err != nil {
 						m.state = stateDefault
 						m.pickerOverlay = nil
 						m.pendingSetStatusPlan = ""
@@ -1580,7 +1580,7 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 
 // waveStandardConfirmAction shows the wave-advance confirmation for a wave with no failures.
 // Stores the plan file so the cancel path can reset the orchestrator confirm latch.
-func (m *home) waveStandardConfirmAction(message, planFile string, entry planstate.PlanEntry) {
+func (m *home) waveStandardConfirmAction(message, planFile string, entry taskstate.TaskEntry) {
 	m.pendingWaveConfirmPlanFile = planFile
 	capturedPlanFile := planFile
 	capturedEntry := entry
@@ -1592,7 +1592,7 @@ func (m *home) waveStandardConfirmAction(message, planFile string, entry plansta
 // waveFailedConfirmAction shows a three-choice dialog for a wave that has failed tasks.
 // Keys: r=retry, n=next wave/advance, a=abort. The abort action is stored separately so the
 // stateConfirm key handler can dispatch it on 'a'.
-func (m *home) waveFailedConfirmAction(message, planFile string, entry planstate.PlanEntry) {
+func (m *home) waveFailedConfirmAction(message, planFile string, entry taskstate.TaskEntry) {
 	m.pendingWaveConfirmPlanFile = planFile
 	capturedPlanFile := planFile
 	capturedEntry := entry

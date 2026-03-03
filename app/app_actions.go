@@ -8,7 +8,7 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
@@ -297,13 +297,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 				return err
 			}
 			// Walk through FSM to done if not already there.
-			if planfsm.Status(entry.Status) != planfsm.StatusDone {
-				if planfsm.Status(entry.Status) != planfsm.StatusReviewing {
+			if taskfsm.Status(entry.Status) != taskfsm.StatusDone {
+				if taskfsm.Status(entry.Status) != taskfsm.StatusReviewing {
 					if err := m.fsmSetReviewing(planFile); err != nil {
 						return err
 					}
 				}
-				if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
+				if err := m.fsm.Transition(planFile, taskfsm.ReviewApproved); err != nil {
 					return err
 				}
 			}
@@ -333,7 +333,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 					return m, m.handleError(err)
 				}
 			}
-			if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
+			if err := m.fsm.Transition(planFile, taskfsm.ReviewApproved); err != nil {
 				return m, m.handleError(err)
 			}
 			m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → done (manual)",
@@ -348,7 +348,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
-		if err := m.fsm.Transition(planFile, planfsm.RequestReview); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.RequestReview); err != nil {
 			return m, m.handleError(err)
 		}
 		m.loadPlanState()
@@ -363,7 +363,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
-		if err := m.fsm.Transition(planFile, planfsm.Reimplement); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.Reimplement); err != nil {
 			return m, m.handleError(err)
 		}
 		m.loadPlanState()
@@ -377,7 +377,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		planName := taskstate.DisplayName(planFile)
 		cancelAction := func() tea.Msg {
-			if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
+			if err := m.fsm.Transition(planFile, taskfsm.Cancel); err != nil {
 				return err
 			}
 			m.audit(auditlog.EventPlanCancelled, "plan cancelled by user: "+planName,
@@ -391,7 +391,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" {
 			return m, nil
 		}
-		if err := m.fsm.Transition(planFile, planfsm.PlanStart); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.PlanStart); err != nil {
 			return m, m.handleError(err)
 		}
 		m.loadPlanState()
@@ -482,19 +482,19 @@ func (m *home) fsmSetImplementing(planFile string) error {
 	if !ok {
 		return fmt.Errorf("plan not found: %s", planFile)
 	}
-	current := planfsm.Status(entry.Status)
-	if current == planfsm.StatusImplementing {
+	current := taskfsm.Status(entry.Status)
+	if current == taskfsm.StatusImplementing {
 		return nil // already implementing (re-spawning coder), no status change
 	}
-	if current == planfsm.StatusPlanning {
+	if current == taskfsm.StatusPlanning {
 		// Planner finished without writing a sentinel — transition through ready.
-		if err := m.fsm.Transition(planFile, planfsm.PlannerFinished); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.PlannerFinished); err != nil {
 			return err
 		}
 		m.audit(auditlog.EventPlanTransition, "planning → ready",
 			auditlog.WithPlan(planFile))
 	}
-	if err := m.fsm.Transition(planFile, planfsm.ImplementStart); err != nil {
+	if err := m.fsm.Transition(planFile, taskfsm.ImplementStart); err != nil {
 		return err
 	}
 	m.audit(auditlog.EventPlanTransition, string(current)+" → implementing",
@@ -512,17 +512,17 @@ func (m *home) fsmSetReviewing(planFile string) error {
 	if !ok {
 		return fmt.Errorf("plan not found: %s", planFile)
 	}
-	current := planfsm.Status(entry.Status)
-	if current == planfsm.StatusReviewing {
+	current := taskfsm.Status(entry.Status)
+	if current == taskfsm.StatusReviewing {
 		return nil // already reviewing, no-op
 	}
 	// Walk through intermediate states to reach implementing first.
-	if current != planfsm.StatusImplementing {
+	if current != taskfsm.StatusImplementing {
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return err
 		}
 	}
-	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+	if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 		return err
 	}
 	m.audit(auditlog.EventPlanTransition, string(current)+" → reviewing",
@@ -540,13 +540,13 @@ func (m *home) fsmRevertToPlanning(planFile string) error {
 	if !ok {
 		return fmt.Errorf("plan not found: %s", planFile)
 	}
-	if planfsm.Status(entry.Status) == planfsm.StatusPlanning {
+	if taskfsm.Status(entry.Status) == taskfsm.StatusPlanning {
 		return nil // already there
 	}
-	if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
+	if err := m.fsm.Transition(planFile, taskfsm.Cancel); err != nil {
 		return err
 	}
-	return m.fsm.Transition(planFile, planfsm.Reopen)
+	return m.fsm.Transition(planFile, taskfsm.Reopen)
 }
 
 // fsmForceToPlanning moves the plan to planning from any current state.
@@ -559,19 +559,19 @@ func (m *home) fsmForceToPlanning(planFile string) error {
 	if !ok {
 		return fmt.Errorf("plan not found: %s", planFile)
 	}
-	switch planfsm.Status(entry.Status) {
-	case planfsm.StatusPlanning:
+	switch taskfsm.Status(entry.Status) {
+	case taskfsm.StatusPlanning:
 		return nil
-	case planfsm.StatusCancelled:
-		return m.fsm.Transition(planFile, planfsm.Reopen)
-	case planfsm.StatusDone:
-		return m.fsm.Transition(planFile, planfsm.StartOver)
+	case taskfsm.StatusCancelled:
+		return m.fsm.Transition(planFile, taskfsm.Reopen)
+	case taskfsm.StatusDone:
+		return m.fsm.Transition(planFile, taskfsm.StartOver)
 	default:
 		// ready, planning, implementing, reviewing → Cancel then Reopen
-		if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.Cancel); err != nil {
 			return err
 		}
-		return m.fsm.Transition(planFile, planfsm.Reopen)
+		return m.fsm.Transition(planFile, taskfsm.Reopen)
 	}
 }
 
@@ -803,7 +803,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 
 	switch stage {
 	case "plan":
-		if err := m.fsm.Transition(planFile, planfsm.PlanStart); err != nil {
+		if err := m.fsm.Transition(planFile, taskfsm.PlanStart); err != nil {
 			return m, m.handleError(err)
 		}
 		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → planning",
@@ -872,7 +872,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	}
 
 	// Non-agent stages (finished): mark plan done via FSM.
-	if err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {
+	if err := m.fsm.Transition(planFile, taskfsm.ReviewApproved); err != nil {
 		return m, m.handleError(err)
 	}
 	m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → done",

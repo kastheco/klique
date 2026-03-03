@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
@@ -22,7 +22,7 @@ import (
 )
 
 // waveFlowHome builds a minimal home struct suitable for wave-orchestration flow tests.
-func waveFlowHome(t *testing.T, ps *taskstate.PlanState, plansDir string, orchMap map[string]*WaveOrchestrator) *home {
+func waveFlowHome(t *testing.T, ps *taskstate.TaskState, plansDir string, orchMap map[string]*WaveOrchestrator) *home {
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
@@ -571,8 +571,8 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
 
 	// Register plan as implementing
-	ps := &taskstate.PlanState{Dir: plansDir, Plans: make(map[string]taskstate.PlanEntry), TopicEntries: make(map[string]taskstate.TopicEntry)}
-	ps.Plans[planFile] = taskstate.PlanEntry{
+	ps := &taskstate.TaskState{Dir: plansDir, Plans: make(map[string]taskstate.TaskEntry), TopicEntries: make(map[string]taskstate.TopicEntry)}
+	ps.Plans[planFile] = taskstate.TaskEntry{
 		Status: "implementing",
 		Branch: "plan/wave-signal-test",
 	}
@@ -583,7 +583,7 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, signalFile), nil, 0o644))
 
 	// Verify signal is scannable using the new .kasmos/signals/ convention
-	waveSignals := planfsm.ScanWaveSignals(signalsDir)
+	waveSignals := taskfsm.ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 1, waveSignals[0].WaveNumber)
 	assert.Equal(t, planFile, waveSignals[0].PlanFile)
@@ -809,8 +809,8 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 
 	// Use the signal-driven path: PlannerFinished signal triggers the dialog.
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
@@ -819,7 +819,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 			{Title: "focus-planner-plan", TmuxAlive: true},
 		},
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
@@ -920,7 +920,7 @@ func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 	m := &home{
 		appConfig:         &config.Config{AutoAdvanceWaves: true},
 		waveOrchestrators: map[string]*WaveOrchestrator{"test.md": orch},
-		planState:         &taskstate.PlanState{Plans: map[string]taskstate.PlanEntry{"test.md": {Status: "implementing"}}},
+		planState:         &taskstate.TaskState{Plans: map[string]taskstate.TaskEntry{"test.md": {Status: "implementing"}}},
 		state:             stateDefault,
 	}
 

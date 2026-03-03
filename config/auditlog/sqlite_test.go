@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +85,7 @@ func TestSQLiteLogger_SharedDB(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "store.db")
 
-	store, err := planstore.NewSQLiteStore(dbPath)
+	store, err := taskstore.NewSQLiteStore(dbPath)
 	require.NoError(t, err)
 	defer store.Close()
 

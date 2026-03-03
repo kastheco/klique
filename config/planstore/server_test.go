@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestServer_CreateAndGetPlan(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	body := `{"filename":"test.md","status":"ready","description":"test"}`
@@ -27,34 +27,34 @@ func TestServer_CreateAndGetPlan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var got planstore.PlanEntry
+	var got taskstore.TaskEntry
 	json.NewDecoder(resp.Body).Decode(&got)
-	assert.Equal(t, planstore.StatusReady, got.Status)
+	assert.Equal(t, taskstore.StatusReady, got.Status)
 }
 
 func TestServer_ListByStatus(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	// Create plans with different statuses
-	for _, p := range []planstore.PlanEntry{
-		{Filename: "a.md", Status: planstore.StatusReady},
-		{Filename: "b.md", Status: planstore.StatusDone},
+	for _, p := range []taskstore.TaskEntry{
+		{Filename: "a.md", Status: taskstore.StatusReady},
+		{Filename: "b.md", Status: taskstore.StatusDone},
 	} {
 		store.Create("kasmos", p)
 	}
 
 	resp, err := http.Get(srv.URL + "/v1/projects/kasmos/plans?status=ready")
 	require.NoError(t, err)
-	var plans []planstore.PlanEntry
+	var plans []taskstore.TaskEntry
 	json.NewDecoder(resp.Body).Decode(&plans)
 	assert.Len(t, plans, 1)
 }
 
 func TestServer_Ping(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/v1/ping")
@@ -64,7 +64,7 @@ func TestServer_Ping(t *testing.T) {
 
 func TestServer_SetClickUpTaskID(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	// Create a plan first
@@ -93,7 +93,7 @@ func TestServer_SetClickUpTaskID(t *testing.T) {
 
 func TestServer_SetClickUpTaskID_NotFound(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodPut,
@@ -109,7 +109,7 @@ func TestServer_SetClickUpTaskID_NotFound(t *testing.T) {
 
 func TestServer_ContentEndpoints(t *testing.T) {
 	store := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(store))
+	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
 	// Create a plan first

@@ -1,4 +1,4 @@
-package planstate
+package taskstate
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 )
 
 type Status string
@@ -24,7 +24,7 @@ const (
 	StatusImplementing Status = "implementing"
 )
 
-type PlanEntry struct {
+type TaskEntry struct {
 	Status        Status    `json:"status"`
 	Description   string    `json:"description,omitempty"`
 	Branch        string    `json:"branch,omitempty"`
@@ -39,15 +39,15 @@ type TopicEntry struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type PlanState struct {
+type TaskState struct {
 	Dir          string
-	Plans        map[string]PlanEntry
+	Plans        map[string]TaskEntry
 	TopicEntries map[string]TopicEntry
-	store        planstore.Store // always non-nil
+	store        taskstore.Store // always non-nil
 	project      string          // project name used with the store
 }
 
-type PlanInfo struct {
+type TaskInfo struct {
 	Filename    string
 	Status      Status
 	Description string
@@ -61,10 +61,10 @@ type TopicInfo struct {
 	CreatedAt time.Time
 }
 
-// Load creates a PlanState backed by the given store. Plans and TopicEntries are
+// Load creates a TaskState backed by the given store. Plans and TopicEntries are
 // populated from the store. dir is retained for file operations (e.g. Rename moves
 // the .md file on disk). The store is always required — there is no JSON fallback.
-func Load(store planstore.Store, project, dir string) (*PlanState, error) {
+func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 	plans, err := store.List(project)
 	if err != nil {
 		return nil, fmt.Errorf("plan store: %w", err)
@@ -75,16 +75,16 @@ func Load(store planstore.Store, project, dir string) (*PlanState, error) {
 		return nil, fmt.Errorf("plan store: %w", err)
 	}
 
-	ps := &PlanState{
+	ps := &TaskState{
 		Dir:          dir,
-		Plans:        make(map[string]PlanEntry, len(plans)),
+		Plans:        make(map[string]TaskEntry, len(plans)),
 		TopicEntries: make(map[string]TopicEntry, len(topics)),
 		store:        store,
 		project:      project,
 	}
 
 	for _, e := range plans {
-		ps.Plans[e.Filename] = PlanEntry{
+		ps.Plans[e.Filename] = TaskEntry{
 			Status:        Status(e.Status),
 			Description:   e.Description,
 			Branch:        e.Branch,
@@ -104,7 +104,7 @@ func Load(store planstore.Store, project, dir string) (*PlanState, error) {
 }
 
 // Topics returns all topic entries sorted by name.
-func (ps *PlanState) Topics() []TopicInfo {
+func (ps *TaskState) Topics() []TopicInfo {
 	// Discover topics from both TopicEntries and plan topic fields.
 	seen := make(map[string]TopicInfo)
 	for name, entry := range ps.TopicEntries {
@@ -127,12 +127,12 @@ func (ps *PlanState) Topics() []TopicInfo {
 	return result
 }
 
-// PlansByTopic returns all plans in the given topic, sorted by filename.
-func (ps *PlanState) PlansByTopic(topic string) []PlanInfo {
-	result := make([]PlanInfo, 0)
+// TasksByTopic returns all plans in the given topic, sorted by filename.
+func (ps *TaskState) TasksByTopic(topic string) []TaskInfo {
+	result := make([]TaskInfo, 0)
 	for filename, entry := range ps.Plans {
 		if entry.Topic == topic {
-			result = append(result, PlanInfo{
+			result = append(result, TaskInfo{
 				Filename: filename, Status: entry.Status,
 				Description: entry.Description, Branch: entry.Branch,
 				Topic: entry.Topic, CreatedAt: entry.CreatedAt,
@@ -145,15 +145,15 @@ func (ps *PlanState) PlansByTopic(topic string) []PlanInfo {
 	return result
 }
 
-// UngroupedPlans returns all active plans with no topic, sorted by filename.
-func (ps *PlanState) UngroupedPlans() []PlanInfo {
-	result := make([]PlanInfo, 0)
+// UngroupedTasks returns all active plans with no topic, sorted by filename.
+func (ps *TaskState) UngroupedTasks() []TaskInfo {
+	result := make([]TaskInfo, 0)
 	for filename, entry := range ps.Plans {
 		if entry.Status == StatusDone || entry.Status == StatusCancelled {
 			continue
 		}
 		if entry.Topic == "" {
-			result = append(result, PlanInfo{
+			result = append(result, TaskInfo{
 				Filename: filename, Status: entry.Status,
 				Description: entry.Description, Branch: entry.Branch,
 				CreatedAt: entry.CreatedAt,
@@ -167,7 +167,7 @@ func (ps *PlanState) UngroupedPlans() []PlanInfo {
 }
 
 // hasTopicEntry returns true if the given topic name exists in TopicEntries.
-func (ps *PlanState) hasTopicEntry(topic string) bool {
+func (ps *TaskState) hasTopicEntry(topic string) bool {
 	if ps.TopicEntries == nil {
 		return false
 	}
@@ -177,7 +177,7 @@ func (ps *PlanState) hasTopicEntry(topic string) bool {
 
 // HasRunningCoderInTopic checks if any plan in the given topic (other than
 // excludePlan) has status StatusImplementing. Returns the conflicting plan filename.
-func (ps *PlanState) HasRunningCoderInTopic(topic, excludePlan string) (bool, string) {
+func (ps *TaskState) HasRunningCoderInTopic(topic, excludePlan string) (bool, string) {
 	if topic == "" {
 		return false, ""
 	}
@@ -193,13 +193,13 @@ func (ps *PlanState) HasRunningCoderInTopic(topic, excludePlan string) (bool, st
 }
 
 // Unfinished returns plans that are not done or cancelled, sorted by filename.
-func (ps *PlanState) Unfinished() []PlanInfo {
-	result := make([]PlanInfo, 0, len(ps.Plans))
+func (ps *TaskState) Unfinished() []TaskInfo {
+	result := make([]TaskInfo, 0, len(ps.Plans))
 	for filename, entry := range ps.Plans {
 		if entry.Status == StatusDone || entry.Status == StatusCancelled {
 			continue
 		}
-		result = append(result, PlanInfo{
+		result = append(result, TaskInfo{
 			Filename: filename, Status: entry.Status,
 			Description: entry.Description, Branch: entry.Branch,
 			Topic: entry.Topic, CreatedAt: entry.CreatedAt,
@@ -212,13 +212,13 @@ func (ps *PlanState) Unfinished() []PlanInfo {
 }
 
 // Finished returns plans that are done, sorted by creation time (newest first).
-func (ps *PlanState) Finished() []PlanInfo {
-	result := make([]PlanInfo, 0)
+func (ps *TaskState) Finished() []TaskInfo {
+	result := make([]TaskInfo, 0)
 	for filename, entry := range ps.Plans {
 		if entry.Status != StatusDone {
 			continue
 		}
-		result = append(result, PlanInfo{
+		result = append(result, TaskInfo{
 			Filename: filename, Status: entry.Status,
 			Description: entry.Description, Branch: entry.Branch,
 			Topic: entry.Topic, CreatedAt: entry.CreatedAt,
@@ -234,13 +234,13 @@ func (ps *PlanState) Finished() []PlanInfo {
 }
 
 // Cancelled returns all cancelled plans, sorted by filename.
-func (ps *PlanState) Cancelled() []PlanInfo {
-	result := make([]PlanInfo, 0)
+func (ps *TaskState) Cancelled() []TaskInfo {
+	result := make([]TaskInfo, 0)
 	for filename, entry := range ps.Plans {
 		if entry.Status != StatusCancelled {
 			continue
 		}
-		result = append(result, PlanInfo{
+		result = append(result, TaskInfo{
 			Filename: filename, Status: entry.Status,
 			Description: entry.Description, Branch: entry.Branch,
 			Topic: entry.Topic, CreatedAt: entry.CreatedAt,
@@ -253,10 +253,10 @@ func (ps *PlanState) Cancelled() []PlanInfo {
 }
 
 // List returns all plans (including done and cancelled), sorted by filename.
-func (ps *PlanState) List() []PlanInfo {
-	result := make([]PlanInfo, 0, len(ps.Plans))
+func (ps *TaskState) List() []TaskInfo {
+	result := make([]TaskInfo, 0, len(ps.Plans))
 	for filename, entry := range ps.Plans {
-		result = append(result, PlanInfo{
+		result = append(result, TaskInfo{
 			Filename:    filename,
 			Status:      entry.Status,
 			Description: entry.Description,
@@ -272,7 +272,7 @@ func (ps *PlanState) List() []PlanInfo {
 }
 
 // IsDone returns true only if the given plan has status StatusDone.
-func (ps *PlanState) IsDone(filename string) bool {
+func (ps *TaskState) IsDone(filename string) bool {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return false
@@ -282,7 +282,7 @@ func (ps *PlanState) IsDone(filename string) bool {
 
 // ForceSetStatus overrides a plan's status regardless of FSM rules.
 // Validates the status is a known value. Use only for manual overrides (e.g. kq plan set-status --force).
-func (ps *PlanState) ForceSetStatus(filename string, status Status) error {
+func (ps *TaskState) ForceSetStatus(filename string, status Status) error {
 	if !isValidStatus(status) {
 		return fmt.Errorf("invalid status %q: must be one of ready, planning, implementing, reviewing, done, cancelled", status)
 	}
@@ -292,7 +292,7 @@ func (ps *PlanState) ForceSetStatus(filename string, status Status) error {
 	entry := ps.Plans[filename]
 	entry.Status = status
 	ps.Plans[filename] = entry
-	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	return nil
@@ -308,15 +308,15 @@ func isValidStatus(s Status) bool {
 }
 
 // setStatus updates a plan's status and persists to the store.
-// Unexported: only for use within this package (tests). Production code must use planfsm.Transition.
-func (ps *PlanState) setStatus(filename string, status Status) error {
+// Unexported: only for use within this package (tests). Production code must use taskfsm.Transition.
+func (ps *TaskState) setStatus(filename string, status Status) error {
 	if ps.Plans == nil {
-		ps.Plans = make(map[string]PlanEntry)
+		ps.Plans = make(map[string]TaskEntry)
 	}
 	entry := ps.Plans[filename]
 	entry.Status = status
 	ps.Plans[filename] = entry
-	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	return nil
@@ -325,7 +325,7 @@ func (ps *PlanState) setStatus(filename string, status Status) error {
 // CreateWithContent adds a new plan entry with markdown content stored in the backend.
 // The plan entry is created with StatusReady, and the content is persisted via store.SetContent.
 // Returns an error if the plan already exists.
-func (ps *PlanState) CreateWithContent(filename, description, branch, topic string, createdAt time.Time, content string) error {
+func (ps *TaskState) CreateWithContent(filename, description, branch, topic string, createdAt time.Time, content string) error {
 	if err := ps.Create(filename, description, branch, topic, createdAt); err != nil {
 		return err
 	}
@@ -336,24 +336,24 @@ func (ps *PlanState) CreateWithContent(filename, description, branch, topic stri
 }
 
 // GetContent retrieves the markdown content for the given plan filename from the store.
-func (ps *PlanState) GetContent(filename string) (string, error) {
+func (ps *TaskState) GetContent(filename string) (string, error) {
 	return ps.store.GetContent(ps.project, filename)
 }
 
 // SetContent updates the markdown content for the given plan filename in the store.
-func (ps *PlanState) SetContent(filename, content string) error {
+func (ps *TaskState) SetContent(filename, content string) error {
 	return ps.store.SetContent(ps.project, filename, content)
 }
 
 // Create adds a new plan entry to the state and auto-creates the topic if needed.
-func (ps *PlanState) Create(filename, description, branch, topic string, createdAt time.Time) error {
+func (ps *TaskState) Create(filename, description, branch, topic string, createdAt time.Time) error {
 	if ps.Plans == nil {
-		ps.Plans = make(map[string]PlanEntry)
+		ps.Plans = make(map[string]TaskEntry)
 	}
 	if _, exists := ps.Plans[filename]; exists {
 		return fmt.Errorf("plan already exists: %s", filename)
 	}
-	entry := PlanEntry{
+	entry := TaskEntry{
 		Status:      StatusReady,
 		Description: description,
 		Branch:      branch,
@@ -370,12 +370,12 @@ func (ps *PlanState) Create(filename, description, branch, topic string, created
 			ps.TopicEntries[topic] = TopicEntry{CreatedAt: createdAt.UTC()}
 		}
 	}
-	if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Create(ps.project, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	// Auto-create topic in store if needed
 	if topic != "" {
-		topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: createdAt.UTC()}
+		topicEntry := taskstore.TopicEntry{Name: topic, CreatedAt: createdAt.UTC()}
 		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
 			// Ignore "already exists" errors for topics
 			if !isAlreadyExistsError(err) {
@@ -388,28 +388,28 @@ func (ps *PlanState) Create(filename, description, branch, topic string, created
 
 // Register adds a new plan entry with metadata and persists to the store.
 // Returns an error if the plan already exists.
-func (ps *PlanState) Register(filename, description, branch string, createdAt time.Time) error {
+func (ps *TaskState) Register(filename, description, branch string, createdAt time.Time) error {
 	if ps.Plans == nil {
-		ps.Plans = make(map[string]PlanEntry)
+		ps.Plans = make(map[string]TaskEntry)
 	}
 	if _, exists := ps.Plans[filename]; exists {
 		return fmt.Errorf("plan already exists: %s", filename)
 	}
-	entry := PlanEntry{
+	entry := TaskEntry{
 		Status:      StatusReady,
 		Description: description,
 		Branch:      branch,
 		CreatedAt:   createdAt.UTC(),
 	}
 	ps.Plans[filename] = entry
-	if err := ps.store.Create(ps.project, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Create(ps.project, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	return nil
 }
 
-// Entry returns the PlanEntry for the given filename, and whether it exists.
-func (ps *PlanState) Entry(filename string) (PlanEntry, bool) {
+// Entry returns the TaskEntry for the given filename, and whether it exists.
+func (ps *TaskState) Entry(filename string) (TaskEntry, bool) {
 	entry, ok := ps.Plans[filename]
 	return entry, ok
 }
@@ -417,7 +417,7 @@ func (ps *PlanState) Entry(filename string) (PlanEntry, bool) {
 // SetTopic assigns a topic to an existing plan entry and persists to the store.
 // If topic is non-empty and does not yet exist in TopicEntries, it is auto-created.
 // Pass an empty string to remove the plan from any topic.
-func (ps *PlanState) SetTopic(filename, topic string) error {
+func (ps *TaskState) SetTopic(filename, topic string) error {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return fmt.Errorf("plan not found: %s", filename)
@@ -433,12 +433,12 @@ func (ps *PlanState) SetTopic(filename, topic string) error {
 			ps.TopicEntries[topic] = TopicEntry{CreatedAt: time.Now().UTC()}
 		}
 	}
-	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	// Auto-create topic in store if needed
 	if topic != "" {
-		topicEntry := planstore.TopicEntry{Name: topic, CreatedAt: ps.TopicEntries[topic].CreatedAt}
+		topicEntry := taskstore.TopicEntry{Name: topic, CreatedAt: ps.TopicEntries[topic].CreatedAt}
 		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
 			if !isAlreadyExistsError(err) {
 				return fmt.Errorf("plan store: %w", err)
@@ -449,14 +449,14 @@ func (ps *PlanState) SetTopic(filename, topic string) error {
 }
 
 // SetBranch assigns a branch name to an existing plan entry and persists to the store.
-func (ps *PlanState) SetBranch(filename, branch string) error {
+func (ps *TaskState) SetBranch(filename, branch string) error {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return fmt.Errorf("plan not found: %s", filename)
 	}
 	entry.Branch = branch
 	ps.Plans[filename] = entry
-	if err := ps.store.Update(ps.project, filename, ps.toPlanstoreEntry(filename, entry)); err != nil {
+	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
 	return nil
@@ -464,7 +464,7 @@ func (ps *PlanState) SetBranch(filename, branch string) error {
 
 // Save is a no-op — all mutations write through to the store immediately.
 // Retained for API compatibility.
-func (ps *PlanState) Save() error {
+func (ps *TaskState) Save() error {
 	return nil
 }
 
@@ -479,7 +479,7 @@ func DisplayName(filename string) string {
 // and persists the updated state.
 // newName should be a human-readable name (e.g., "auth refactor") which will be
 // slugified automatically. Returns the new filename on success.
-func (ps *PlanState) Rename(oldFilename, newName string) (string, error) {
+func (ps *TaskState) Rename(oldFilename, newName string) (string, error) {
 	entry, ok := ps.Plans[oldFilename]
 	if !ok {
 		return "", fmt.Errorf("plan not found: %s", oldFilename)
@@ -553,12 +553,12 @@ func isAlreadyExistsError(err error) bool {
 	return strings.Contains(msg, "already exists")
 }
 
-// toPlanstoreEntry converts a local PlanEntry to a planstore.PlanEntry for
+// toTaskstoreEntry converts a local TaskEntry to a taskstore.TaskEntry for
 // writing to the store.
-func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.PlanEntry {
-	return planstore.PlanEntry{
+func (ps *TaskState) toTaskstoreEntry(filename string, e TaskEntry) taskstore.TaskEntry {
+	return taskstore.TaskEntry{
 		Filename:      filename,
-		Status:        planstore.Status(e.Status),
+		Status:        taskstore.Status(e.Status),
 		Description:   e.Description,
 		Branch:        e.Branch,
 		Topic:         e.Topic,
@@ -571,7 +571,7 @@ func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.Pl
 
 // SetClickUpTaskID assigns a ClickUp task ID to an existing plan entry and
 // persists to the store.
-func (ps *PlanState) SetClickUpTaskID(filename, taskID string) error {
+func (ps *TaskState) SetClickUpTaskID(filename, taskID string) error {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return fmt.Errorf("plan not found: %s", filename)
@@ -586,7 +586,7 @@ func (ps *PlanState) SetClickUpTaskID(filename, taskID string) error {
 
 // ReviewCycle returns the current review cycle counter for the given plan.
 // Returns an error if the plan is not found.
-func (ps *PlanState) ReviewCycle(filename string) (int, error) {
+func (ps *TaskState) ReviewCycle(filename string) (int, error) {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return 0, fmt.Errorf("plan not found: %s", filename)
@@ -597,7 +597,7 @@ func (ps *PlanState) ReviewCycle(filename string) (int, error) {
 // IncrementReviewCycle increments the review cycle counter for the given plan
 // and persists to the store. Updates the in-memory state to reflect the new value.
 // Returns an error if the plan is not found.
-func (ps *PlanState) IncrementReviewCycle(filename string) error {
+func (ps *TaskState) IncrementReviewCycle(filename string) error {
 	entry, ok := ps.Plans[filename]
 	if !ok {
 		return fmt.Errorf("plan not found: %s", filename)

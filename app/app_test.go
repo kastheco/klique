@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -1365,14 +1365,14 @@ func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
 // setupPlanState sets up an in-memory plan state on h for test use.
 // It creates a temp directory, registers the plan, seeds the status, and
 // refreshes the nav panel so SelectByID works immediately afterward.
-func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.Status, topic string) {
+func (h *home) setupPlanState(t *testing.T, planFile string, status taskstate.Status, topic string) {
 	t.Helper()
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	name := planstate.DisplayName(planFile)
+	name := taskstate.DisplayName(planFile)
 	require.NoError(t, ps.Create(planFile, name, "plan/"+name, topic, time.Now()))
 	// Seed the status directly (bypass FSM).
 	entry := ps.Plans[planFile]
@@ -1388,7 +1388,7 @@ func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.St
 
 func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "test topic")
+	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "test topic")
 
 	// Select the plan in the nav panel
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
@@ -1403,7 +1403,7 @@ func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 
 func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "")
+	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "")
 
 	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")

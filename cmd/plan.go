@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +18,7 @@ import (
 // executePlanRegister registers a plan file that exists on disk but isn't
 // tracked in plan state yet. It extracts a description from the first markdown
 // heading and uses the conventional branch name format.
-func executePlanRegister(plansDir, planFile, branch, topic, description string, store planstore.Store) error {
+func executePlanRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
 	if _, err := os.Stat(fullPath); err != nil {
 		return fmt.Errorf("plan file not found on disk: %s", fullPath)
@@ -52,7 +52,7 @@ func executePlanRegister(plansDir, planFile, branch, topic, description string, 
 
 // executePlanList returns a formatted string listing all plans, optionally
 // filtered by status. Exported for testing without cobra plumbing.
-func executePlanList(plansDir, statusFilter string, store planstore.Store) string {
+func executePlanList(plansDir, statusFilter string, store taskstore.Store) string {
 	ps, err := loadPlanState(plansDir, store)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
@@ -72,8 +72,8 @@ func executePlanList(plansDir, statusFilter string, store planstore.Store) strin
 // remote store backend. storeURL is the base URL of the plan store server
 // (e.g. "http://athena:7433") and project is the project name to query.
 func executePlanListWithStore(storeURL, project string) string {
-	store := planstore.NewHTTPStore(storeURL, project)
-	ps, err := planstate.Load(store, project, "")
+	store := taskstore.NewHTTPStore(storeURL, project)
+	ps, err := taskstate.Load(store, project, "")
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -87,7 +87,7 @@ func executePlanListWithStore(storeURL, project string) string {
 
 // executePlanSetStatus force-overrides a plan's status, bypassing the FSM.
 // Requires force=true to prevent accidental misuse.
-func executePlanSetStatus(plansDir, planFile, status string, force bool, store planstore.Store) error {
+func executePlanSetStatus(plansDir, planFile, status string, force bool, store taskstore.Store) error {
 	if !force {
 		return fmt.Errorf("--force required to override plan status (this bypasses the FSM)")
 	}
@@ -95,23 +95,23 @@ func executePlanSetStatus(plansDir, planFile, status string, force bool, store p
 	if err != nil {
 		return err
 	}
-	return ps.ForceSetStatus(planFile, planstate.Status(status))
+	return ps.ForceSetStatus(planFile, taskstate.Status(status))
 }
 
 // executePlanTransition applies a named FSM event to a plan and returns the new status.
-func executePlanTransition(plansDir, planFile, event string, store planstore.Store) (string, error) {
-	eventMap := map[string]planfsm.Event{
-		"plan_start":         planfsm.PlanStart,
-		"planner_finished":   planfsm.PlannerFinished,
-		"implement_start":    planfsm.ImplementStart,
-		"implement_finished": planfsm.ImplementFinished,
-		"review_approved":    planfsm.ReviewApproved,
-		"review_changes":     planfsm.ReviewChangesRequested,
-		"request_review":     planfsm.RequestReview,
-		"start_over":         planfsm.StartOver,
-		"reimplement":        planfsm.Reimplement,
-		"cancel":             planfsm.Cancel,
-		"reopen":             planfsm.Reopen,
+func executePlanTransition(plansDir, planFile, event string, store taskstore.Store) (string, error) {
+	eventMap := map[string]taskfsm.Event{
+		"plan_start":         taskfsm.PlanStart,
+		"planner_finished":   taskfsm.PlannerFinished,
+		"implement_start":    taskfsm.ImplementStart,
+		"implement_finished": taskfsm.ImplementFinished,
+		"review_approved":    taskfsm.ReviewApproved,
+		"review_changes":     taskfsm.ReviewChangesRequested,
+		"request_review":     taskfsm.RequestReview,
+		"start_over":         taskfsm.StartOver,
+		"reimplement":        taskfsm.Reimplement,
+		"cancel":             taskfsm.Cancel,
+		"reopen":             taskfsm.Reopen,
 	}
 	fsmEvent, ok := eventMap[event]
 	if !ok {
@@ -135,7 +135,7 @@ func executePlanTransition(plansDir, planFile, event string, store planstore.Sto
 
 // executePlanImplement transitions a plan into implementing state and writes
 // a wave signal file so the TUI metadata tick can pick it up.
-func executePlanImplement(plansDir, planFile string, wave int, store planstore.Store) error {
+func executePlanImplement(plansDir, planFile string, wave int, store taskstore.Store) error {
 	if wave < 1 {
 		return fmt.Errorf("wave number must be >= 1, got %d", wave)
 	}
@@ -148,17 +148,17 @@ func executePlanImplement(plansDir, planFile string, wave int, store planstore.S
 	if !ok {
 		return fmt.Errorf("plan not found: %s", planFile)
 	}
-	current := planfsm.Status(entry.Status)
+	current := taskfsm.Status(entry.Status)
 	// If still in planning, finish that phase first (→ ready).
-	if current == planfsm.StatusPlanning {
-		if err := fsm.Transition(planFile, planfsm.PlannerFinished); err != nil {
+	if current == taskfsm.StatusPlanning {
+		if err := fsm.Transition(planFile, taskfsm.PlannerFinished); err != nil {
 			return err
 		}
-		current = planfsm.StatusReady
+		current = taskfsm.StatusReady
 	}
 	// Advance to implementing unless already there.
-	if current != planfsm.StatusImplementing {
-		if err := fsm.Transition(planFile, planfsm.ImplementStart); err != nil {
+	if current != taskfsm.StatusImplementing {
+		if err := fsm.Transition(planFile, taskfsm.ImplementStart); err != nil {
 			return err
 		}
 	}
@@ -178,7 +178,7 @@ func executePlanImplement(plansDir, planFile string, wave int, store planstore.S
 // content, parses the ClickUp task ID from the "**Source:** ClickUp <ID>" line,
 // and stores it in the clickup_task_id field for any plan that has an ID in its
 // content but not yet in the store. Returns the count of plans updated.
-func executePlanLinkClickUp(project string, store planstore.Store) (int, error) {
+func executePlanLinkClickUp(project string, store taskstore.Store) (int, error) {
 	plans, err := store.List(project)
 	if err != nil {
 		return 0, fmt.Errorf("list plans: %w", err)
@@ -361,13 +361,13 @@ func NewPlanCmd() *cobra.Command {
 
 // resolveStoreConfig returns the remote store and project name from config.
 // Returns (nil, "") when no remote store is configured.
-func resolveStoreConfig(plansDir string) (planstore.Store, string) {
+func resolveStoreConfig(plansDir string) (taskstore.Store, string) {
 	cfg := config.LoadConfig()
 	if cfg.PlanStore == "" {
 		return nil, ""
 	}
 	project := projectFromPlansDir(plansDir)
-	store, err := planstore.NewStoreFromConfig(cfg.PlanStore, project)
+	store, err := taskstore.NewStoreFromConfig(cfg.PlanStore, project)
 	if err != nil || store == nil {
 		return nil, ""
 	}
@@ -381,19 +381,19 @@ func projectFromPlansDir(plansDir string) string {
 }
 
 // localSQLiteStore opens (or creates) the local SQLite plan store at the
-// canonical path returned by planstore.ResolvedDBPath(). Used as a fallback
+// canonical path returned by taskstore.ResolvedDBPath(). Used as a fallback
 // when no remote store is configured.
-func localSQLiteStore() (planstore.Store, error) {
-	dbPath := planstore.ResolvedDBPath()
+func localSQLiteStore() (taskstore.Store, error) {
+	dbPath := taskstore.ResolvedDBPath()
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("create kasmos config dir: %w", err)
 	}
-	return planstore.NewSQLiteStore(dbPath)
+	return taskstore.NewSQLiteStore(dbPath)
 }
 
 // loadPlanState loads plan state using the store backend.
 // When store is nil, falls back to the local SQLite store.
-func loadPlanState(plansDir string, store planstore.Store) (*planstate.PlanState, error) {
+func loadPlanState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()
@@ -401,12 +401,12 @@ func loadPlanState(plansDir string, store planstore.Store) (*planstate.PlanState
 			return nil, fmt.Errorf("open local plan store: %w", err)
 		}
 	}
-	return planstate.Load(store, projectFromPlansDir(plansDir), plansDir)
+	return taskstate.Load(store, projectFromPlansDir(plansDir), plansDir)
 }
 
 // newFSM creates a PlanStateMachine backed by the given store.
 // When store is nil, falls back to the local SQLite store.
-func newFSM(plansDir string, store planstore.Store) *planfsm.PlanStateMachine {
+func newFSM(plansDir string, store taskstore.Store) *taskfsm.TaskStateMachine {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()
@@ -417,12 +417,12 @@ func newFSM(plansDir string, store planstore.Store) *planfsm.PlanStateMachine {
 		}
 	}
 	project := projectFromPlansDir(plansDir)
-	return planfsm.New(store, project, plansDir)
+	return taskfsm.New(store, project, plansDir)
 }
 
 // resolveStore returns the remote plan store from config, or nil if not
 // configured or unreachable.
-func resolveStore(plansDir string) planstore.Store {
+func resolveStore(plansDir string) taskstore.Store {
 	store, _ := resolveStoreConfig(plansDir)
 	if store != nil && store.Ping() == nil {
 		return store

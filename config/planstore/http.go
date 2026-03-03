@@ -75,7 +75,7 @@ func decodeError(resp *http.Response) error {
 }
 
 // Create adds a new plan entry to the remote store.
-func (s *HTTPStore) Create(project string, entry PlanEntry) error {
+func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("plan store: marshal entry: %w", err)
@@ -99,34 +99,34 @@ func (s *HTTPStore) Create(project string, entry PlanEntry) error {
 }
 
 // Get retrieves a single plan entry by filename.
-func (s *HTTPStore) Get(project, filename string) (PlanEntry, error) {
+func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.planItemURL(project, filename), nil)
 	if err != nil {
-		return PlanEntry{}, fmt.Errorf("plan store: build request: %w", err)
+		return TaskEntry{}, fmt.Errorf("plan store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
 	if err != nil {
-		return PlanEntry{}, err
+		return TaskEntry{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return PlanEntry{}, fmt.Errorf("plan store: plan not found: %s", filename)
+		return TaskEntry{}, fmt.Errorf("plan store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return PlanEntry{}, decodeError(resp)
+		return TaskEntry{}, decodeError(resp)
 	}
 
-	var entry PlanEntry
+	var entry TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entry); err != nil {
-		return PlanEntry{}, fmt.Errorf("plan store: decode response: %w", err)
+		return TaskEntry{}, fmt.Errorf("plan store: decode response: %w", err)
 	}
 	return entry, nil
 }
 
 // Update replaces an existing plan entry.
-func (s *HTTPStore) Update(project, filename string, entry PlanEntry) error {
+func (s *HTTPStore) Update(project, filename string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("plan store: marshal entry: %w", err)
@@ -228,7 +228,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 }
 
 // List returns all plan entries for the given project.
-func (s *HTTPStore) List(project string) ([]PlanEntry, error) {
+func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.planURL(project), nil)
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build request: %w", err)
@@ -244,7 +244,7 @@ func (s *HTTPStore) List(project string) ([]PlanEntry, error) {
 		return nil, decodeError(resp)
 	}
 
-	var plans []PlanEntry
+	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
 		return nil, fmt.Errorf("plan store: decode response: %w", err)
 	}
@@ -252,7 +252,7 @@ func (s *HTTPStore) List(project string) ([]PlanEntry, error) {
 }
 
 // ListByStatus returns plan entries filtered by one or more statuses.
-func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]PlanEntry, error) {
+func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
 	u, err := url.Parse(s.planURL(project))
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build URL: %w", err)
@@ -279,7 +279,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]PlanEntr
 		return nil, decodeError(resp)
 	}
 
-	var plans []PlanEntry
+	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
 		return nil, fmt.Errorf("plan store: decode response: %w", err)
 	}
@@ -287,7 +287,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]PlanEntr
 }
 
 // ListByTopic returns plan entries for a specific topic.
-func (s *HTTPStore) ListByTopic(project, topic string) ([]PlanEntry, error) {
+func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	u, err := url.Parse(s.planURL(project))
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build URL: %w", err)
@@ -312,7 +312,7 @@ func (s *HTTPStore) ListByTopic(project, topic string) ([]PlanEntry, error) {
 		return nil, decodeError(resp)
 	}
 
-	var plans []PlanEntry
+	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
 		return nil, fmt.Errorf("plan store: decode response: %w", err)
 	}
