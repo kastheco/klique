@@ -1,0 +1,29 @@
+[Image 1] running instances shouldn't be in dead they should be in a active section above dead
+
+---
+
+yes
+
+---
+
+commit, retag this new commit as v1.1.1 then push
+
+---
+
+i started planning sessions for at least 2 plans then quit the app, reran scaffolding for updated agents then when i relaunched they aren't showing as planning but the tmux sessions still exist
+
+---
+
+[Image 1]
+
+---
+
+DONT FUCKING DELETE THINGS WITHOUT TELLING ME FIRST WTF
+
+---
+
+commit this fix
+
+---
+
+commit the fix for instances running but showing in dead section or have you already?
