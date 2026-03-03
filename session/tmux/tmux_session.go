@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -76,7 +75,7 @@ type TmuxSession struct {
 	// This should never be nil after a successful Start or Restore.
 	ptmx *os.File
 	// monitor monitors the tmux pane content and sends signals to the UI when its status changes.
-	monitor *statusMonitor
+	monitor *StatusMonitor
 
 	// Initialized by Attach; deinitialized by Detach.
 	//
@@ -224,35 +223,6 @@ func isGeminiProgram(program string) bool {
 // isOpenCodeProgram returns true if the program string refers to OpenCode.
 func isOpenCodeProgram(program string) bool {
 	return strings.HasSuffix(program, ProgramOpenCode)
-}
-
-// statusMonitor tracks changes to tmux pane content using hash-based comparison.
-// It is used by HasUpdated to detect when the agent is active vs idle.
-type statusMonitor struct {
-	// Store hashes to save memory.
-	prevOutputHash []byte
-	// captureFailures counts consecutive capture-pane failures.
-	// After a threshold we stop logging every tick to avoid spam.
-	captureFailures int
-	// unchangedTicks counts consecutive ticks where the pane content hash is identical.
-	// HasUpdated only reports !updated after the count exceeds the debounce threshold,
-	// preventing false Running→Ready transitions during brief pauses (API waits, thinking).
-	unchangedTicks int
-}
-
-func newStatusMonitor() *statusMonitor {
-	return &statusMonitor{}
-}
-
-// hash hashes the string after stripping ANSI escape sequences.
-// Stripping ANSI ensures that cursor blink, color resets, and other
-// terminal control codes don't cause false "content changed" detections
-// when the semantic content is actually stable.
-func (m *statusMonitor) hash(s string) []byte {
-	h := sha256.New()
-	stripped := ansiRe.ReplaceAllString(s, "")
-	h.Write([]byte(stripped))
-	return h.Sum(nil)
 }
 
 // Start creates and starts a new tmux session, then attaches to it.
@@ -434,7 +404,7 @@ func (t *TmuxSession) Restore() error {
 		return fmt.Errorf("error opening PTY: %w", err)
 	}
 	t.ptmx = ptmx
-	t.monitor = newStatusMonitor()
+	t.monitor = NewStatusMonitor()
 	// Idempotently hide the status bar — also covers sessions restored from crash
 	// that were created before this option was set.
 	statusCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "status", "off")
