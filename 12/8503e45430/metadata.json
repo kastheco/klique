@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "128503e45430",
+  "strategy": "manual-commit",
+  "branch": "plan/restart-agent",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_plan_completion_test.go",
+    "app/app_planner_signal_test.go",
+    "app/app_restart_test.go",
+    "app/app_state.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "session/instance_lifecycle.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/12/8503e45430/0/metadata.json",
+      "transcript": "/12/8503e45430/0/full.jsonl",
+      "context": "",
+      "content_hash": "/12/8503e45430/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
