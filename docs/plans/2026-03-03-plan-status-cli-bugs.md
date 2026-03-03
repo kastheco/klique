@@ -1,0 +1,99 @@
+# Fix `kas plan` CLI Worktree Resolution
+
+**Goal:** Make `kas plan` CLI commands work correctly when run from git worktrees, so coder/fixer agents can manage plan state without being on the main branch.
+
+**Architecture:** The root cause is `resolvePlansDir()` in `cmd/plan.go` which uses `os.Getwd()` to find `docs/plans/`. When agents run in worktrees (e.g. `.worktrees/plan-foo/`), that directory doesn't exist. The fix adds a `resolveRepoRoot()` helper that reads the `.git` file (which in worktrees points to the main repo's `.git/worktrees/<name>`) and follows `commondir` back to the main repo root. `resolvePlansDir()` then uses this root instead of CWD as a fallback.
+
+**Tech Stack:** Go, `os/exec` (git CLI), `cmd/plan.go`, `cmd/plan_test.go`
+
+**Size:** Small (estimated ~45 min, 1 task, 1 wave)
+
+---
+
+## Wave 1: Worktree-Aware Plan Resolution
+
+### Task 1: Add `resolveRepoRoot()`, fix `resolvePlansDir()`, and test
+
+**Files:**
+- Modify: `cmd/plan.go`
+- Modify: `cmd/plan_test.go`
+
+**Step 1: write the failing tests**
+
+Add a unit test that creates a fake worktree-like directory structure (a directory with a `.git` file pointing to a parent repo's `.git/worktrees/<name>`) and verifies `resolveRepoRoot()` returns the main repo path:
+
+```go
+func TestResolveRepoRoot_Worktree(t *testing.T) {
+    mainRepo := t.TempDir()
+    require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, "docs", "plans"), 0o755))
+    require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "test-wt"), 0o755))
+
+    worktree := t.TempDir()
+    gitFile := fmt.Sprintf("gitdir: %s/.git/worktrees/test-wt\n", mainRepo)
+    require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte(gitFile), 0o644))
+    require.NoError(t, os.WriteFile(
+        filepath.Join(mainRepo, ".git", "worktrees", "test-wt", "commondir"),
+        []byte("../..\n"), 0o644,
+    ))
+
+    root, err := resolveRepoRoot(worktree)
+    require.NoError(t, err)
+    assert.Equal(t, mainRepo, root)
+}
+
+func TestResolveRepoRoot_MainRepo(t *testing.T) {
+    mainRepo := t.TempDir()
+    require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git"), 0o755))
+
+    root, err := resolveRepoRoot(mainRepo)
+    require.NoError(t, err)
+    assert.Equal(t, mainRepo, root)
+}
+```
+
+Add an integration test that verifies the full CLI flow works from a worktree-resolved plansDir:
+
+```go
+func TestPlanCLI_FromWorktreeContext(t *testing.T) {
+    // Create main repo + worktree structure, resolve root, use plansDir
+    // Verify executePlanList/executePlanSetStatus/executePlanTransition succeed
+}
+```
+
+**Step 2: run tests to verify they fail**
+
+```bash
+go test ./cmd/... -run TestResolveRepoRoot -v
+```
+
+expected: FAIL — `resolveRepoRoot` undefined
+
+**Step 3: write minimal implementation**
+
+Add `resolveRepoRoot(dir string) (string, error)` to `cmd/plan.go`:
+
+1. Check if `<dir>/.git` is a file (worktree) or directory (main repo).
+2. If directory: return `dir` directly.
+3. If file: read the `gitdir:` line, resolve the path, read `commondir` from the worktree entry, resolve back to the main `.git` dir, return its parent as the repo root.
+4. Fallback: shell out to `git -C <dir> rev-parse --show-toplevel`.
+
+Update `resolvePlansDir()`:
+1. Try CWD + `docs/plans/` first (fast path for main repo).
+2. On failure, call `resolveRepoRoot(cwd)` and check `<root>/docs/plans/`.
+
+**Step 4: run tests to verify they pass**
+
+```bash
+go test ./cmd/... -run TestResolveRepoRoot -v
+go test ./cmd/... -run TestPlanCLI_FromWorktree -v
+go test ./cmd/... -v
+```
+
+expected: PASS — all existing and new tests pass
+
+**Step 5: commit**
+
+```bash
+git add cmd/plan.go cmd/plan_test.go
+git commit -m "fix: make kas plan CLI worktree-aware via resolveRepoRoot"
+```
