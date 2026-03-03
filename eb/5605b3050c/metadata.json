@@ -64,6 +64,13 @@
       "context": "/eb/5605b3050c/7/context.md",
       "content_hash": "/eb/5605b3050c/7/content_hash.txt",
       "prompt": "/eb/5605b3050c/7/prompt.txt"
+    },
+    {
+      "metadata": "/eb/5605b3050c/8/metadata.json",
+      "transcript": "/eb/5605b3050c/8/full.jsonl",
+      "context": "/eb/5605b3050c/8/context.md",
+      "content_hash": "/eb/5605b3050c/8/content_hash.txt",
+      "prompt": "/eb/5605b3050c/8/prompt.txt"
     }
   ],
   "token_usage": {
