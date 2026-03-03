@@ -19,13 +19,13 @@ Optional: specific status to triage (e.g., `ready`, `implementing`).
 
 1. List all active plans:
    ```bash
-   kq plan list
+   kas plan list
    ```
 2. For each non-terminal plan (not done/cancelled), gather context:
    - Branch existence: `git branch --list '<branch>'`
-   - Worktree existence: `git worktree list | grep '<branch>'`
+   - Worktree existence: `git worktree list | rg '<branch>'`
    - Last commit on branch: `git log <branch> -1 --format='%ar - %s' 2>/dev/null`
-   - Plan file exists on disk: `ls docs/plans/<filename>`
+   - Plan registered in store: `kas plan list | rg '<filename>'`
 3. Present grouped by status:
    ```
    ## ready (N plans)
@@ -39,4 +39,4 @@ Optional: specific status to triage (e.g., `ready`, `implementing`).
    - ready plans: "implement, cancel, or skip?"
    - implementing plans: "the branch may be stale. cancel, reset to ready, or skip?"
    - reviewing plans: "mark done, reset to implementing, or skip?"
-5. Execute chosen actions via `kq plan set-status --force` or `kq plan transition`.
+5. Execute chosen actions via `kas plan set-status --force` or `kas plan transition`.

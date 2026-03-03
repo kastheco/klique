@@ -30,7 +30,7 @@ Cross-reference: any worktree on a `plan/*` branch where the plan status is `don
 
 ### Pass 2: Orphan branches
 
-Find local `plan/*` branches with no matching entry in plan-state.json:
+Find local `plan/*` branches with no matching entry in the plan store:
 
 ```bash
 git branch --list 'plan/*'
@@ -39,11 +39,11 @@ kas plan list
 
 ### Pass 3: Ghost plan entries
 
-Find plan entries in plan-state.json that have no corresponding .md file on disk:
+Find entries in the plan store with no corresponding branch or worktree:
 
 ```bash
 kas plan list
-ls docs/plans/*.md
+git branch --list 'plan/*'
 ```
 
 ### Output

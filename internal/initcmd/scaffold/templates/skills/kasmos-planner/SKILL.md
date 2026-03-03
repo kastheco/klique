@@ -133,7 +133,10 @@ approach, update your recommendation and confirm before proceeding.
 
 ## plan document format
 
-**save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
+**plan naming convention:** `YYYY-MM-DD-<feature-name>.md`
+
+Plans are stored in the **plan store** (SQLite database or HTTP API), not as files on disk.
+Use `kas plan register` to register plans after writing content.
 
 ### required header
 
@@ -260,13 +263,13 @@ git commit -m "feat: [what this task delivers]"
 
 ## after writing the plan
 
-do all of these immediately after saving the plan file. do not skip any.
+do all of these immediately after writing the plan. do not skip any.
 
 ## plan review
 
-after writing the plan file, review it against this checklist before committing.
+after writing the plan, review it against this checklist before registering.
 this is mandatory — do not skip it, even for trivial plans. fix every failure
-inline (edit the plan file directly) before proceeding to commit + signal.
+inline before proceeding to register + signal.
 
 ### structural checks
 
@@ -309,9 +312,9 @@ inline (edit the plan file directly) before proceeding to commit + signal.
 
 ### review outcome
 
-if all checks pass: proceed to commit + signal.
+if all checks pass: proceed to register + signal.
 
-if any check fails: fix the plan file inline, then re-run the failed checks. do not
+if any check fails: fix the plan inline, then re-run the failed checks. do not
 proceed until all checks pass. common fixes:
 - missing wave headers → wrap all tasks under `## Wave 1`
 - missing TDD steps → add the 5-step structure to each task
@@ -331,12 +334,13 @@ TodoWrite([
 ])
 ```
 
-### 2. commit the plan
+### 2. register and commit the plan
 
-```bash
-git add docs/plans/YYYY-MM-DD-<feature-name>.md
-git commit -m "plan: <feature name>"
-```
+**managed mode:** the plan content is passed to kasmos via sentinel — kasmos registers it
+in the plan store. you don't need to commit a separate file.
+
+**manual mode:** use the `kas plan register` CLI command to register the plan in the store,
+then commit any supporting files (design docs, etc.) if needed.
 
 do NOT commit sentinel files — kasmos consumes and deletes them automatically.
 
@@ -361,32 +365,29 @@ touch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md
 
 the filename must match the plan filename exactly (with `planner-finished-` prefix).
 
-**do NOT edit `plan-state.json` directly** — kasmos manages that file.
+**do NOT modify plan state directly** — kasmos manages the plan store.
 
 announce completion and stop:
 
-> "plan complete. saved to `docs/plans/YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation."
+> "plan complete: `YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation."
 
 **stop here. do not offer execution choices. do not implement.**
 
 ### manual mode (`KASMOS_MANAGED` unset)
 
-register the plan in `plan-state.json`. read the file first, then add:
-
-```json
-"YYYY-MM-DD-<feature-name>.md": { "status": "ready" }
-```
-
-commit:
+register the plan in the plan store using the CLI:
 
 ```bash
-git add docs/plans/YYYY-MM-DD-<feature-name>.md docs/plans/plan-state.json
-git commit -m "plan: <feature name>"
+kas plan register YYYY-MM-DD-<feature-name>.md
 ```
+
+this creates an entry in the plan store with status `ready`. the plan content should be
+written to the store via `kas plan` or committed as a `.md` file in `docs/plans/` for
+`kas plan register` to pick up.
 
 then offer execution choices:
 
-> "plan complete and saved to `docs/plans/YYYY-MM-DD-<feature-name>.md`. two execution options:
+> "plan complete: `YYYY-MM-DD-<feature-name>.md` (registered in plan store). two execution options:
 >
 > **1. this session** — i dispatch a fresh subagent per task, self-review between waves.
 >

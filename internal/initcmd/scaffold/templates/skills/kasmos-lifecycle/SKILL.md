@@ -21,7 +21,7 @@ Plans move through a fixed set of states. Only the transitions listed below are 
 | `reviewing` | `done` | reviewer writes sentinel `reviewer-approved-<planfile>` |
 | `done` | — | terminal state, no further transitions |
 
-State is persisted in `docs/plans/plan-state.json`. Agents never write directly to this file — kasmos owns it. Agents only write sentinel files.
+State is persisted in the **plan store** — a SQLite database (`~/.config/kasmos/plans.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas plan` CLI commands (manual mode).
 
 ## Signal File Mechanics
 
@@ -43,11 +43,11 @@ Examples:
 
 **Writing a sentinel (agent side):**
 ```bash
-# Signal that planning is complete for a plan file
+# Signal that planning is complete for a plan
 touch .kasmos/signals/planner-finished-2026-02-27-feature.md
 ```
 
-Keep sentinel writes as the **last action** before yielding control. Do not write a sentinel and then continue modifying plan files — kasmos may begin the next phase immediately.
+Keep sentinel writes as the **last action** before yielding control. Do not write a sentinel and then continue modifying plans — kasmos may begin the next phase immediately.
 
 ## Mode Detection
 
@@ -56,17 +56,17 @@ Check `KASMOS_MANAGED` to determine how transitions are handled.
 | Mode | `KASMOS_MANAGED` value | Transition mechanism |
 |------|------------------------|---------------------|
 | managed | `1` (or any non-empty) | write sentinel → kasmos handles the rest |
-| manual | unset or empty | update `docs/plans/plan-state.json` directly AND write sentinel for audit trail |
+| manual | unset or empty | use `kas plan` CLI commands (e.g. `kas plan register`, `kas plan transition`) |
 
 ```bash
 if [ -n "$KASMOS_MANAGED" ]; then
   echo "managed mode: write sentinel and stop"
 else
-  echo "manual mode: update plan-state.json, then optionally write sentinel"
+  echo "manual mode: use kas plan CLI commands to register and transition plans"
 fi
 ```
 
-In managed mode: **never** edit `plan-state.json` yourself. In manual mode: you must update it — kasmos is not watching.
+In managed mode: **never** mutate plan state yourself. In manual mode: use `kas plan` CLI commands — the store backend handles persistence.
 
 ## Agent Roles (brief)
 

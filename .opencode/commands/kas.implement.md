@@ -21,16 +21,16 @@ Default wave: 1
 1. Parse arguments for plan filename and optional wave number
 2. If no arguments, show available plans:
    ```bash
-   kq plan list --status ready
-   kq plan list --status implementing
+   kas plan list --status ready
+   kas plan list --status implementing
    ```
-3. Verify plan exists and has wave headers:
+3. Verify plan exists in the plan store:
    ```bash
-   head -50 docs/plans/<plan-file>
+   kas plan list | rg '<plan-file>'
    ```
 4. Execute:
    ```bash
-   kq plan implement <plan-file> --wave <N>
+   kas plan implement <plan-file> --wave <N>
    ```
 5. Confirm:
    ```

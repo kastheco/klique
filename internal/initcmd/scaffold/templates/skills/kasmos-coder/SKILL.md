@@ -64,7 +64,7 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 kasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:
 
-1. Read the plan file from `docs/plans/`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
+1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
 2. Implement that single task following TDD discipline below.
 3. Commit your work with task number in the commit message.
 4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
@@ -331,7 +331,7 @@ agent returns to its input prompt. The wave orchestrator handles all lifecycle t
 After implementing and committing your task: **stop.** Do not implement other tasks, do not
 write signal files, do not invoke branch finishing — kasmos handles orchestration.
 
-**Do not edit `plan-state.json` directly.**
+**Do not modify plan state directly.**
 
 ### Manual (KASMOS_MANAGED unset)
 
@@ -343,8 +343,8 @@ Execute waves sequentially:
 4. After all waves complete and all tests pass:
 
 ```bash
-# Update plan-state.json — set the plan to "reviewing"
-# Read the file first, then edit the status field for this plan entry
+# Transition the plan to "reviewing" via CLI
+kas plan transition <plan-file> request_review
 ```
 
 Then handle branch finishing — present these options to the user:
@@ -404,7 +404,10 @@ git worktree remove <worktree-path>
 git branch -D <feature-branch>
 ```
 
-Update `plan-state.json` to `"done"` after options 1, 2, or 4.
+Update plan status to `done` after options 1, 2, or 4:
+```bash
+kas plan set-status <plan-file> done --force
+```
 
 ---
 
@@ -419,5 +422,5 @@ Update `plan-state.json` to `"done"` after options 1, 2, or 4.
 | Performative agreement with reviewer | Technical verification, then act |
 | Implementing unclear review feedback | Ask for clarification on ALL unclear items first |
 | Running project-wide formatters | Scope formatters to your changed files only |
-| Editing `plan-state.json` when `KASMOS_MANAGED=1` | Write sentinel file instead |
+| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |
 | Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |

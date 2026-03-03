@@ -16,11 +16,11 @@ Use `scc` for codebase metrics when scoping work.
 Load the `kasmos-planner` skill.
 
 ## Plan State (CRITICAL)
-Plans live in `docs/plans/`. State tracked in `docs/plans/plan-state.json`.
-Never modify plan files for state tracking. **You MUST register every plan** by adding
-an entry to `plan-state.json` with `"status": "ready"` immediately after writing the `.md` file.
+Plan state is stored in the **plan store** (SQLite database or HTTP API), not in files on disk.
+Never modify plan state directly — use `kas plan` CLI commands or sentinel files.
+**You MUST register every plan** via `kas plan register <plan>.md` immediately after writing it.
 Unregistered plans are invisible in the kasmos sidebar.
-Valid statuses: `ready` → `in_progress` → `done`. Only kasmos transitions beyond `done`.
+Valid statuses: `ready` → `planning` → `implementing` → `reviewing` → `done`. Use `kas plan` CLI for transitions.
 
 ## CLI Tools
 

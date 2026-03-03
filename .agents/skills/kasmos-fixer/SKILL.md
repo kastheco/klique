@@ -156,7 +156,6 @@ edge cases:
 
 ```bash
 rg 'TODO|FIXME|HACK|XXX|PLACEHOLDER' --type go
-rg 'TODO|FIXME' --type md docs/plans/
 ```
 
 ### Step 2 — Cross-reference Plan vs Implementation
@@ -252,30 +251,31 @@ Cross-reference. For each stale worktree:
 
 ### Pass 2 — Orphan Branches
 
-Find local `plan/*` branches with no corresponding entry in `docs/plans/plan-state.json`:
+Find local `plan/*` branches with no corresponding entry in the plan store:
 
 ```bash
 git branch --list 'plan/*'
+kas plan list
 ```
 
-For each branch not in plan-state.json:
+For each branch not tracked in the plan store:
 1. Show: branch name, last commit, commits-ahead-of-main count
 2. Confirm: "delete orphan branch `<branch>`?"
 3. `git branch -d <branch>` (use `-D` only if user confirms)
 
 ### Pass 3 — Ghost Plan Entries
 
-Find entries in `docs/plans/plan-state.json` with no corresponding `.md` file:
+Find entries in the plan store with no corresponding branch or worktree:
 
 ```bash
-# read plan-state.json, cross-reference with fd output
-fd -e md . docs/plans/
+kas plan list
+git branch --list 'plan/*'
 ```
 
 For each ghost entry:
-1. Show: plan key, status, branch
-2. Confirm: "remove ghost entry `<key>` from plan-state.json?"
-3. Edit plan-state.json to remove the entry (use `jq` or direct edit, preserve formatting)
+1. Show: plan name, status, branch
+2. Confirm: "force-set ghost plan `<name>` to cancelled?"
+3. `kas plan set-status <name> cancelled --force`
 
 ---
 
@@ -299,7 +299,7 @@ Force-override a plan's status, bypassing the FSM transition table. Requires `--
 Valid statuses: `ready`, `planning`, `implementing`, `reviewing`, `done`, `cancelled`.
 
 ```bash
-kas plan set-status docs/plans/2026-02-27-my-plan.md done --force
+kas plan set-status 2026-02-27-my-plan.md done --force
 ```
 
 Use only when FSM transitions are blocked (e.g., a plan stuck with no valid event).
@@ -314,7 +314,7 @@ Valid events: `plan_start`, `implement_start`, `review_start`, `review_approved`
 `review_changes`, `cancel`, `reopen`
 
 ```bash
-kas plan transition docs/plans/2026-02-27-my-plan.md review_approved
+kas plan transition 2026-02-27-my-plan.md review_approved
 ```
 
 Prints resulting status on success. On failure, prints current status + valid events.
@@ -325,8 +325,8 @@ Transition plan to `implementing` and write a wave signal file so the TUI spawns
 wave orchestrator. Default wave is 1.
 
 ```bash
-kas plan implement docs/plans/2026-02-27-my-plan.md          # wave 1
-kas plan implement docs/plans/2026-02-27-my-plan.md --wave 3  # specific wave
+kas plan implement 2026-02-27-my-plan.md          # wave 1
+kas plan implement 2026-02-27-my-plan.md --wave 3  # specific wave
 ```
 
 ---
@@ -395,12 +395,12 @@ will reject the build if they diverge.
 1. **`--force` required for status overrides** — `kas plan set-status` without `--force` is an error.
    Never add `--force` without user confirmation.
 
-2. **Confirm before destructive ops** — worktree removal, branch deletion, and plan-state edits
+2. **Confirm before destructive ops** — worktree removal, branch deletion, and plan state changes
    are irreversible. Always show what will change and get explicit confirmation.
 
-3. **Never modify plan file content** — plan `.md` files are the source of truth authored by the
-   planner. You update status in `plan-state.json` via `kas` commands only. Never edit plan `.md`
-   content.
+3. **Never modify plan content** — plan content is authored by the planner and stored in the plan
+   store (SQLite/HTTP API). You update status via `kas plan` CLI commands only. Never edit plan
+   content directly.
 
 4. **FSM transitions validate state** — prefer `kas plan transition` over `set-status`. The FSM
    ensures consistent state. Use `set-status --force` only when a plan is genuinely stuck with no
