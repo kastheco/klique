@@ -1024,6 +1024,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if md.Updated {
 					inst.SetStatus(session.Running)
 					inst.PromptDetected = false
+					// Mark that the agent has produced real work. Wave task
+					// completion requires this to avoid permission prompts or
+					// early prompt returns from prematurely finishing a wave.
+					if inst.TaskNumber > 0 && !inst.AwaitingWork {
+						inst.HasWorked = true
+					}
 					if md.Content != "" {
 						inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
 					}
@@ -1229,7 +1235,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if !collected {
 							continue
 						}
-						if inst.PromptDetected && !inst.AwaitingWork {
+						if inst.PromptDetected && !inst.AwaitingWork && inst.HasWorked {
 							orch.MarkTaskComplete(task.Number)
 							inst.SetStatus(session.Ready)
 						} else if !alive {
