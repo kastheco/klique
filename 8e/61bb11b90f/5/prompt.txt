@@ -1,0 +1,29 @@
+is 01a-rewrite-tmux-layer merged into release/2.0?
+
+---
+
+02a-rewrite-session-core was just approved, bring it into release/2.0
+
+---
+
+yes
+
+---
+
+now 02b-rewrite-overlay-ui
+
+---
+
+The following tool was executed by the user
+
+---
+
+now 03-rewrite-ui-panels
+
+---
+
+and now finally 04-rewrite-plumbing. then build me a handoff prompt (dont actually start the new session) to get a reviewer agent to analyze the entire branch to ensure no remaining APGL code survived as well as make sure edits were all correct
+
+---
+
+save it to a file for me, handoff isn't working
