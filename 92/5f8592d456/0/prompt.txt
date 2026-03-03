@@ -1,0 +1,26 @@
+Implement docs/plans/fix-kas-task-usage.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+## review round 1
+
+### critical
+
+- `config/taskstore/http.go:15,59,72,74,81,...` (38 occurrences) — all `"plan store"` error prefixes and the doc comment on line 15 were not updated to `"task store"`. the commit message claims "update stale plan store/state strings to task store/state in Go source" but this entire file was missed. use `sd 'plan store' 'task store' config/taskstore/http.go` to fix.
+
+- `config/taskstate/taskstate.go:70,75,296,320,333,...` (14 occurrences) — all `"plan store"` error prefixes were not updated. same issue as http.go. use `sd 'plan store' 'task store' config/taskstate/taskstate.go`.
+
+- `config/taskstore/http_test.go:73` — test asserts `"plan store unreachable"` which matches the stale string in http.go. when http.go is fixed, this test assertion must update too.
+
+- `app/app_actions.go:485,515,543,562` — four `"plan state is not loaded"` error messages not updated to `"task state is not loaded"`.
+
+### important
+
+- `app/app.go:774,783,1031,1176,1464,1859,1973` — seven remaining `plan state` references in comments and log messages that were NOT updated by this branch, even though the same file was modified for other occurrences. inconsistent — some strings in app.go were changed, others were not.
+
+- `app/app_state.go:565,567,575,684,1172` — five remaining `plan state` references in comments, log messages, and a toast error string. same inconsistency: file was partially updated.
+
+- `README.md:90,119,127,129,215` — user-facing documentation still references `plan store` and `plan state`. the README describes the `serve` command as "start the plan store http server" and has a whole section titled "plan store (remote state)".
+
+### self-fixed (no action needed)
+
+- `contracts/planner_prompt_contract_test.go:18,24` — contract test assertions updated from `"plan files"`/`"plan state"` to `"task files"`/`"task state"` to match the renamed planner docs (committed as reviewer self-fix).

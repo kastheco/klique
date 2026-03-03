@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "925f8592d456",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_actions.go",
+    "config/taskstate/taskstate.go",
+    "config/taskstore/http.go",
+    "config/taskstore/http_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/92/5f8592d456/0/metadata.json",
+      "transcript": "/92/5f8592d456/0/full.jsonl",
+      "context": "/92/5f8592d456/0/context.md",
+      "content_hash": "/92/5f8592d456/0/content_hash.txt",
+      "prompt": "/92/5f8592d456/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 57389,
+    "cache_read_tokens": 780165,
+    "output_tokens": 5468,
+    "api_call_count": 17
+  }
+}
