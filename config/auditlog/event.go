@@ -12,11 +12,12 @@ func (k EventKind) String() string {
 
 // Lifecycle events.
 const (
-	EventAgentSpawned  EventKind = "agent_spawned"
-	EventAgentFinished EventKind = "agent_finished"
-	EventAgentKilled   EventKind = "agent_killed"
-	EventAgentPaused   EventKind = "agent_paused"
-	EventAgentResumed  EventKind = "agent_resumed"
+	EventAgentSpawned   EventKind = "agent_spawned"
+	EventAgentFinished  EventKind = "agent_finished"
+	EventAgentKilled    EventKind = "agent_killed"
+	EventAgentPaused    EventKind = "agent_paused"
+	EventAgentResumed   EventKind = "agent_resumed"
+	EventAgentRestarted EventKind = "agent_restarted"
 )
 
 // Plan events.
