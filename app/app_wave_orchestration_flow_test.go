@@ -12,8 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planparser"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -22,7 +22,7 @@ import (
 )
 
 // waveFlowHome builds a minimal home struct suitable for wave-orchestration flow tests.
-func waveFlowHome(t *testing.T, ps *planstate.PlanState, plansDir string, orchMap map[string]*WaveOrchestrator) *home {
+func waveFlowHome(t *testing.T, ps *taskstate.PlanState, plansDir string, orchMap map[string]*WaveOrchestrator) *home {
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
@@ -45,10 +45,10 @@ func waveFlowHome(t *testing.T, ps *planstate.PlanState, plansDir string, orchMa
 // confirmation resets the orchestrator confirm latch so the next metadata tick
 // can display the prompt again (fixes deadlock).
 func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "First", Body: "do first"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Second", Body: "do second"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "First", Body: "do first"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Second", Body: "do second"}}},
 		},
 	}
 	orch := NewWaveOrchestrator("test.md", plan)
@@ -85,10 +85,10 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 	const planFile = "paused-task.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -100,7 +100,7 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "paused task test", "plan/paused-task", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Create the task instance but mark it as Paused
 	inst, err := session.NewInstance(session.InstanceOptions{
@@ -142,10 +142,10 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 	const planFile = "missing-task.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -157,7 +157,7 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "missing task test", "plan/missing-task", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// No instance added to the list — the task is "missing"
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
@@ -182,10 +182,10 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 	const planFile = "abort-test.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -241,7 +241,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "no waves test", "plan/no-waves", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusPlanning)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
@@ -266,7 +266,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 	// Plan status must have reverted to planning (parse failed, no StatusImplementing set)
 	entry, ok := ps.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusPlanning, entry.Status,
+	assert.Equal(t, taskstate.StatusPlanning, entry.Status,
 		"plan status must revert to planning when wave headers are missing")
 
 	// A new planner instance must have been added to the list
@@ -294,9 +294,9 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	const planFile = "all-complete.md"
 
 	// Single wave plan — completing its tasks triggers WaveStateAllComplete directly.
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Only task", Body: "do it"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Only task", Body: "do it"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -308,7 +308,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "all-complete test", "plan/all-complete", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Create task instance with PromptDetected (agent finished)
 	inst, err := session.NewInstance(session.InstanceOptions{
@@ -359,7 +359,7 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "review transition test", "plan/review-trans", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -372,7 +372,7 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReviewing, entry.Status,
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status,
 		"plan must transition to reviewing after waveAllCompleteMsg")
 
 	// Toast must confirm the transition
@@ -384,10 +384,10 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	const planFile = "multi-wave.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "W1 task", Body: "first"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "W2 task", Body: "second"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "W1 task", Body: "first"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "W2 task", Body: "second"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -404,7 +404,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "multi wave test", "plan/multi-wave", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Wave 2 task instance — agent finished
 	inst, err := session.NewInstance(session.InstanceOptions{
@@ -445,9 +445,9 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	const planFile = "retry-cleanup.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "Task 1", Body: "do first"},
 				{Number: 6, Title: "Task 6", Body: "the flaky one"},
 			}},
@@ -470,9 +470,9 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "retry cleanup test", "plan/retry-cleanup", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 
 	// Create the completed task 1 instance
 	inst1, err := session.NewInstance(session.InstanceOptions{
@@ -571,8 +571,8 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
 
 	// Register plan as implementing
-	ps := &planstate.PlanState{Dir: plansDir, Plans: make(map[string]planstate.PlanEntry), TopicEntries: make(map[string]planstate.TopicEntry)}
-	ps.Plans[planFile] = planstate.PlanEntry{
+	ps := &taskstate.PlanState{Dir: plansDir, Plans: make(map[string]taskstate.PlanEntry), TopicEntries: make(map[string]taskstate.TopicEntry)}
+	ps.Plans[planFile] = taskstate.PlanEntry{
 		Status: "implementing",
 		Branch: "plan/wave-signal-test",
 	}
@@ -653,10 +653,10 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	const planFile = "focus-wave.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -668,9 +668,9 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus wave test", "plan/focus-wave", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 
 	// Add an "other" instance first (so it's selected by default), then the task instance.
 	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
@@ -715,10 +715,10 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 	const planFile = "focus-failed.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2", Body: "follow up"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -730,9 +730,9 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus failed test", "plan/focus-failed", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 
 	// "other" instance selected by default.
 	otherInst := &session.Instance{Title: "other-agent", Program: "opencode"}
@@ -783,7 +783,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus planner test", "plan/focus-planner", time.Now()))
 	// Plan is StatusPlanning — the PlannerFinished signal will transition it to StatusReady.
-	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusPlanning)
 
 	plannerInst := &session.Instance{
 		Title:     "focus-planner-plan",
@@ -835,9 +835,9 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	const planFile = "deferred-complete.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Only task", Body: "do it"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Only task", Body: "do it"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -849,7 +849,7 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "deferred test", "plan/deferred", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:      "deferred-complete-W1-T1",
@@ -907,10 +907,10 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 // without showing a confirmation dialog.
 func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 	// Build a plan with 2 waves
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "T1"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "T2"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "T1"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "T2"}}},
 		},
 	}
 	orch := NewWaveOrchestrator("test.md", plan)
@@ -920,7 +920,7 @@ func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 	m := &home{
 		appConfig:         &config.Config{AutoAdvanceWaves: true},
 		waveOrchestrators: map[string]*WaveOrchestrator{"test.md": orch},
-		planState:         &planstate.PlanState{Plans: map[string]planstate.PlanEntry{"test.md": {Status: "implementing"}}},
+		planState:         &taskstate.PlanState{Plans: map[string]taskstate.PlanEntry{"test.md": {Status: "implementing"}}},
 		state:             stateDefault,
 	}
 
@@ -939,13 +939,13 @@ func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 	const planFile = "auto-advance-failure.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "T1"},
 				{Number: 2, Title: "T2"},
 			}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 3, Title: "T3"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 3, Title: "T3"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -959,7 +959,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "auto-advance failure test", "plan/auto-advance-failure", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Create task instances
 	inst1, err := session.NewInstance(session.InstanceOptions{
@@ -1016,10 +1016,10 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	const planFile = "auto-advance-success.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "T1"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "T2"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "T1"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "T2"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -1031,7 +1031,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "auto-advance success test", "plan/auto-advance-success", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:      "auto-advance-success-W1-T1",
@@ -1074,9 +1074,9 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	const planFile = "has-worked-guard.md"
 
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "do work"}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "do work"}}},
 		},
 	}
 	orch := NewWaveOrchestrator(planFile, plan)
@@ -1088,7 +1088,7 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "has-worked guard test", "plan/has-worked-guard", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:      "has-worked-guard-W1-T1",
@@ -1142,7 +1142,7 @@ func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "focus coder test", "plan/focus-coder", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	coderInst := &session.Instance{
 		Title:     "focus-coder-implement",

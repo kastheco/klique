@@ -3,17 +3,17 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/kasmos/config/planparser"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildTaskPrompt(t *testing.T) {
-	plan := &planparser.Plan{
+	plan := &taskparser.Plan{
 		Goal:         "Build a feature",
 		Architecture: "Modular approach",
 		TechStack:    "Go, bubbletea",
 	}
-	task := planparser.Task{
+	task := taskparser.Task{
 		Number: 2,
 		Title:  "Update Tests",
 		Body:   "**Step 1:** Write the test\n\n**Step 2:** Run it",
@@ -45,8 +45,8 @@ func TestBuildTaskPrompt(t *testing.T) {
 }
 
 func TestBuildTaskPrompt_SingleTask(t *testing.T) {
-	plan := &planparser.Plan{Goal: "Simple"}
-	task := planparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
+	plan := &taskparser.Plan{Goal: "Simple"}
+	task := taskparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
 
 	prompt := buildTaskPrompt(plan, task, 1, 1, 1)
 

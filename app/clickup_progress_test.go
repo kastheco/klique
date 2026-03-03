@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planparser"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -23,7 +23,7 @@ import (
 // returns "" when the plan has no ClickUp task ID field and no Source line in
 // content — postClickUpProgress then returns nil (no-op).
 func TestPostClickUpProgressSkipsWithoutTaskID(t *testing.T) {
-	entry := planstate.PlanEntry{} // no ClickUpTaskID field
+	entry := taskstate.PlanEntry{} // no ClickUpTaskID field
 	taskID := resolveClickUpTaskID(entry, "# Plan without a source line\n\nNo clickup here.")
 	assert.Equal(t, "", taskID)
 
@@ -35,7 +35,7 @@ func TestPostClickUpProgressSkipsWithoutTaskID(t *testing.T) {
 // TestPostClickUpProgressUsesFieldFirst verifies that the ClickUpTaskID field
 // takes priority over the **Source:** ClickUp <ID> line in content.
 func TestPostClickUpProgressUsesFieldFirst(t *testing.T) {
-	entry := planstate.PlanEntry{ClickUpTaskID: "field123"}
+	entry := taskstate.PlanEntry{ClickUpTaskID: "field123"}
 	content := "**Source:** ClickUp content456 (https://app.clickup.com/t/content456)"
 
 	taskID := resolveClickUpTaskID(entry, content)
@@ -46,7 +46,7 @@ func TestPostClickUpProgressUsesFieldFirst(t *testing.T) {
 // TestPostClickUpProgressFallsBackToContentParse verifies that when the
 // ClickUpTaskID field is empty, the task ID is parsed from plan content.
 func TestPostClickUpProgressFallsBackToContentParse(t *testing.T) {
-	entry := planstate.PlanEntry{} // field empty
+	entry := taskstate.PlanEntry{} // field empty
 	content := "**Source:** ClickUp content789 (https://app.clickup.com/t/content789)"
 
 	taskID := resolveClickUpTaskID(entry, content)
@@ -57,9 +57,9 @@ func TestPostClickUpProgressFallsBackToContentParse(t *testing.T) {
 // NOT posted for single-wave plans. Only multi-wave plans emit intermediate
 // wave-complete comments; single-wave plans use the all-waves-complete event.
 func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
-	singleWavePlan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Only task"}}},
+	singleWavePlan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Only task"}}},
 		},
 	}
 	singleOrch := NewWaveOrchestrator("single-wave-plan.md", singleWavePlan)
@@ -67,10 +67,10 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 	assert.False(t, shouldPostWaveCompleteComment(singleOrch),
 		"single-wave plans must not emit intermediate wave_complete comments")
 
-	multiWavePlan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "Task 1"}}},
-			{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: "Task 2"}}},
+	multiWavePlan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1"}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2"}}},
 		},
 	}
 	multiOrch := NewWaveOrchestrator("multi-wave-plan.md", multiWavePlan)
@@ -99,7 +99,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	store, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "fixer hook test", "plan/fixer-hook", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	coderInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "fixer-hook-implement",
@@ -163,7 +163,7 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	store, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "no feedback test", "plan/no-feedback", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	coderInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "no-feedback-implement",

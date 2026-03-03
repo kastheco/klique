@@ -1,5 +1,5 @@
 // Package planparser extracts wave/task structure from plan markdown files.
-package planparser
+package taskparser
 
 import (
 	"fmt"

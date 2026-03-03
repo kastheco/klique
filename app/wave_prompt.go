@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kastheco/kasmos/config/planparser"
+	"github.com/kastheco/kasmos/config/taskparser"
 )
 
 // buildTaskPrompt constructs the prompt for a single task instance.
-func buildTaskPrompt(plan *planparser.Plan, task planparser.Task, waveNumber, totalWaves, peerCount int) string {
+func buildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Implement Task %d: %s\n\n", task.Number, task.Title))

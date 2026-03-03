@@ -10,8 +10,8 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planparser"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/planstore"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/mcpclient"
@@ -250,7 +250,7 @@ type home struct {
 	previewTerminalInstance string // title of the instance the terminal is attached to
 
 	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
-	planState *planstate.PlanState
+	planState *taskstate.PlanState
 	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
 	planStateDir string
 	// signalsDir is the directory where agent sentinel files are written.
@@ -784,11 +784,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Load plan state — moved here from the synchronous Update handler
 			// to avoid blocking the event loop every 500ms.
 			// Always reads from the store (embedded or remote) — no JSON fallback.
-			var ps *planstate.PlanState
+			var ps *taskstate.PlanState
 			if planStateDir != "" {
-				var loaded *planstate.PlanState
+				var loaded *taskstate.PlanState
 				var err error
-				loaded, err = planstate.Load(store, project, planStateDir)
+				loaded, err = taskstate.Load(store, project, planStateDir)
 				if err != nil {
 					log.WarningLog.Printf("could not load plan state: %v", err)
 				} else {
@@ -884,7 +884,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					signalCmds = append(signalCmds, cmd)
 				}
 			case planfsm.ReviewApproved:
-				planName := planstate.DisplayName(sig.PlanFile)
+				planName := taskstate.DisplayName(sig.PlanFile)
 				m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
 					auditlog.WithPlan(sig.PlanFile))
 				m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
@@ -937,7 +937,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					summary := ""
 					if m.planStore != nil {
 						if content, err := m.planStore.GetContent(m.planStoreProject, capturedPlanFile); err == nil {
-							if plan, err := planparser.Parse(content); err == nil {
+							if plan, err := taskparser.Parse(content); err == nil {
 								totalTasks := 0
 								for _, w := range plan.Waves {
 									totalTasks += len(w.Tasks)
@@ -973,7 +973,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPlannerPlanFile = capturedPlanFile
 				m.confirmAction(
-					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(capturedPlanFile)),
+					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
 					func() tea.Msg {
 						return plannerCompleteMsg{planFile: capturedPlanFile}
 					},
@@ -1001,7 +1001,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPlannerPlanFile = planFile
 				m.confirmAction(
-					fmt.Sprintf("plan '%s' is ready. start implementation?", planstate.DisplayName(planFile)),
+					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
 					func() tea.Msg {
 						return plannerCompleteMsg{planFile: planFile}
 					},
@@ -1015,7 +1015,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Check if orchestrator already exists
 			if _, exists := m.waveOrchestrators[ws.PlanFile]; exists {
-				m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", planstate.DisplayName(ws.PlanFile)))
+				m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", taskstate.DisplayName(ws.PlanFile)))
 				continue
 			}
 
@@ -1025,9 +1025,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.PlanFile, err)
 				continue
 			}
-			plan, err := planparser.Parse(content)
+			plan, err := taskparser.Parse(content)
 			if err != nil {
-				m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", planstate.DisplayName(ws.PlanFile)))
+				m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", taskstate.DisplayName(ws.PlanFile)))
 				continue
 			}
 
@@ -1262,7 +1262,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.isUserInOverlay() && len(m.pendingAllComplete) > 0 {
 				planFile := m.pendingAllComplete[0]
 				m.pendingAllComplete = m.pendingAllComplete[1:]
-				planName := planstate.DisplayName(planFile)
+				planName := taskstate.DisplayName(planFile)
 				if cmd := m.focusPlanInstanceForOverlay(planFile); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
 				}
@@ -1283,7 +1283,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if orchState == WaveStateRunning {
 					// Check task status updates only while the wave is actively running.
-					planName := planstate.DisplayName(planFile)
+					planName := taskstate.DisplayName(planFile)
 					for _, task := range orch.CurrentWaveTasks() {
 						taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
 						inst, exists := instanceMap[taskTitle]
@@ -1314,7 +1314,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// All waves complete — pause the last wave's tasks, prompt for review.
 				if orchState == WaveStateAllComplete {
 					capturedPlanFile := planFile
-					planName := planstate.DisplayName(planFile)
+					planName := taskstate.DisplayName(planFile)
 					totalWaves := orch.TotalWaves()
 					waveNumFinal := orch.CurrentWaveNumber()
 					completedFinal := orch.CompletedTaskCount()
@@ -1368,7 +1368,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					capturedPlanFile := planFile
 					capturedEntry := entry
-					planName := planstate.DisplayName(planFile)
+					planName := taskstate.DisplayName(planFile)
 
 					// Post intermediate wave complete comment to ClickUp for
 					// multi-wave plans with no failures.
@@ -1487,7 +1487,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Pause completed wave's instances before starting the next.
-		planName := planstate.DisplayName(msg.planFile)
+		planName := taskstate.DisplayName(msg.planFile)
 		for _, task := range orch.CurrentWaveTasks() {
 			taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
 			for _, inst := range m.nav.GetInstances() {
@@ -1526,12 +1526,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.saveAllInstances()
 		m.updateNavPanelStatus()
 		m.toastManager.Info(fmt.Sprintf("wave orchestration aborted for %s",
-			planstate.DisplayName(msg.planFile)))
+			taskstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.toastTickCmd())
 	case waveAllCompleteMsg:
 		// All waves finished and user confirmed — push branch and advance to review.
 		planFile := msg.planFile
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 
 		// Push the implementation branch (best-effort, non-blocking).
 		for _, inst := range m.nav.GetInstances() {
@@ -1562,7 +1562,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Single-coder (non-wave) implementation finished and user confirmed push.
 		// Transition FSM and spawn reviewer — mirrors waveAllCompleteMsg flow.
 		planFile := msg.planFile
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 
 		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
 			log.WarningLog.Printf("coder-complete: could not transition %q to reviewing: %v", planFile, err)
@@ -1923,13 +1923,13 @@ type planRefreshMsg struct{}
 // waveAdvanceMsg is sent when the user confirms advancing to the next wave.
 type waveAdvanceMsg struct {
 	planFile string
-	entry    planstate.PlanEntry
+	entry    taskstate.PlanEntry
 }
 
 // waveRetryMsg is sent when the user chooses "retry" on the failed-wave decision prompt.
 type waveRetryMsg struct {
 	planFile string
-	entry    planstate.PlanEntry
+	entry    taskstate.PlanEntry
 }
 
 // waveAbortMsg is sent when the user chooses "abort" on the failed-wave decision prompt.
@@ -2031,7 +2031,7 @@ type instanceMetadata struct {
 // metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
 	Results          []instanceMetadata
-	PlanState        *planstate.PlanState // pre-loaded plan state (nil if dir not set)
+	PlanState        *taskstate.PlanState // pre-loaded plan state (nil if dir not set)
 	Signals          []planfsm.Signal     // agent sentinel files found this tick
 	WaveSignals      []planfsm.WaveSignal // implement-wave-N signal files found this tick
 	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions

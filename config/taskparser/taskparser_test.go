@@ -1,4 +1,4 @@
-package planparser
+package taskparser
 
 import (
 	"testing"

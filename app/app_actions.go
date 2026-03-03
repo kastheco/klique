@@ -9,8 +9,8 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planparser"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
@@ -218,7 +218,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" {
 			return m, nil
 		}
-		currentName := planstate.DisplayName(planFile)
+		currentName := taskstate.DisplayName(planFile)
 		m.state = stateRenamePlan
 		m.textInputOverlay = overlay.NewTextInputOverlay("rename plan", currentName)
 		m.textInputOverlay.SetSize(60, 3)
@@ -284,7 +284,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if entry.Branch == "" {
 			return m, m.handleError(fmt.Errorf("plan has no branch to merge"))
 		}
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 		mergeAction := func() tea.Msg {
 			// Kill all instances bound to this plan.
 			for i := len(m.allInstances) - 1; i >= 0; i-- {
@@ -325,10 +325,10 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
 		}
-		if entry.Status != planstate.StatusDone {
+		if entry.Status != taskstate.StatusDone {
 			// Walk through any missing lifecycle stages before approval so mark-done
 			// works from ready/implementing/reviewing states.
-			if entry.Status != planstate.StatusReviewing {
+			if entry.Status != taskstate.StatusReviewing {
 				if err := m.fsmSetReviewing(planFile); err != nil {
 					return m, m.handleError(err)
 				}
@@ -375,7 +375,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile == "" || m.planState == nil {
 			return m, nil
 		}
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 		cancelAction := func() tea.Msg {
 			if err := m.fsm.Transition(planFile, planfsm.Cancel); err != nil {
 				return err
@@ -407,7 +407,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
 		}
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 		startOverAction := func() tea.Msg {
 			// Kill all instances bound to this plan
 			for i := len(m.allInstances) - 1; i >= 0; i-- {
@@ -652,25 +652,25 @@ func (m *home) openPlanContextMenu() (tea.Model, tea.Cmd) {
 			// Offer every forward lifecycle stage from the current state so the
 			// user can manually advance through plan → implement → review → done.
 			switch entry.Status {
-			case planstate.StatusReady, planstate.StatusPlanning:
+			case taskstate.StatusReady, taskstate.StatusPlanning:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start plan", Action: "start_plan"},
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
-			case planstate.StatusImplementing:
+			case taskstate.StatusImplementing:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
-			case planstate.StatusReviewing:
+			case taskstate.StatusReviewing:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 					overlay.ContextMenuItem{Label: "mark finished", Action: "mark_plan_done"},
 				)
-			case planstate.StatusDone:
+			case taskstate.StatusDone:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "request review", Action: "request_review"},
 					overlay.ContextMenuItem{Label: "resume implement", Action: "resume_implement"},
@@ -768,7 +768,7 @@ func (m *home) triggerPlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	// Concurrency gate for coder stages
 	if (stage == "implement" || stage == "solo") && entry.Topic != "" {
 		if hasConflict, conflictPlan := m.planState.HasRunningCoderInTopic(entry.Topic, planFile); hasConflict {
-			conflictName := planstate.DisplayName(conflictPlan)
+			conflictName := taskstate.DisplayName(conflictPlan)
 			message := fmt.Sprintf("⚠ %s is already running in topic \"%s\"\n\nrunning both plans may cause issues.\ncontinue anyway?", conflictName, entry.Topic)
 			proceedAction := func() tea.Msg {
 				return planStageConfirmedMsg{planFile: planFile, stage: stage}
@@ -810,7 +810,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(planstate.DisplayName(planFile), entry.Description))
+		return m.spawnPlanAgent(planFile, "plan", buildPlanPrompt(taskstate.DisplayName(planFile), entry.Description))
 	case "solo":
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return m, m.handleError(err)
@@ -820,7 +820,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		// Check if plan .md file exists on disk to decide prompt content.
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 		planPath := filepath.Join(m.activeRepoPath, "docs", "plans", planFile)
 		refFile := ""
 		if _, err := os.Stat(planPath); err == nil {
@@ -835,7 +835,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m, m.handleError(err)
 		}
-		plan, err := planparser.Parse(string(content))
+		plan, err := taskparser.Parse(string(content))
 		if err != nil {
 			// No wave headers — revert to planning and respawn the planner with a
 			// wave-annotation prompt so the agent adds the required ## Wave sections.
@@ -866,7 +866,7 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
-		planName := planstate.DisplayName(planFile)
+		planName := taskstate.DisplayName(planFile)
 		reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
 		return m.spawnPlanAgent(planFile, "review", reviewPrompt)
 	}
@@ -889,7 +889,7 @@ func validatePlanHasWaves(plansDir, planFile string) error {
 	if err != nil {
 		return fmt.Errorf("read plan: %w", err)
 	}
-	_, err = planparser.Parse(string(content))
+	_, err = taskparser.Parse(string(content))
 	return err
 }
 
@@ -959,14 +959,14 @@ func (m *home) handleTmuxBrowserAction(action overlay.BrowserAction) (tea.Model,
 // isLocked returns true if the given stage cannot be triggered given the current plan status.
 // The context menu already gates which forward stages are offered, so this only
 // guards against truly nonsensical transitions (e.g. marking "finished" when already done).
-func isLocked(status planstate.Status, stage string) bool {
+func isLocked(status taskstate.Status, stage string) bool {
 	switch stage {
 	case "plan", "implement", "solo", "review":
 		// Forward progression is always allowed — the FSM helpers
 		// (fsmSetImplementing, fsmSetReviewing) walk through intermediate states.
 		return false
 	case "finished":
-		return status != planstate.StatusReviewing
+		return status != taskstate.StatusReviewing
 	default:
 		return true
 	}
