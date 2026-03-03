@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "538d92cefdd3",
+  "strategy": "manual-commit",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/overlay/contextMenu.go",
+    "ui/overlay/pickerOverlay.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/53/8d92cefdd3/0/metadata.json",
+      "transcript": "/53/8d92cefdd3/0/full.jsonl",
+      "context": "/53/8d92cefdd3/0/context.md",
+      "content_hash": "/53/8d92cefdd3/0/content_hash.txt",
+      "prompt": "/53/8d92cefdd3/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 44,
+    "cache_creation_tokens": 132259,
+    "cache_read_tokens": 4683640,
+    "output_tokens": 8553,
+    "api_call_count": 44
+  }
+}
