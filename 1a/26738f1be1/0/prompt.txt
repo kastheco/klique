@@ -1,0 +1,86 @@
+Implement Task 6: Rewrite preview.go — Agent Session Preview Pane
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 6 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/preview.go`
+- Test: `ui/preview_test.go` (existing — 459 LOC, covers scrolling, content modes, viewport, fallback, raw terminal, document mode)
+- Test: `ui/preview_fallback_test.go` (existing — covers fallback centering in short heights)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `preview_test.go` covers: scroll mode entry/exit, content truncation with ellipsis, `SetSize` viewport width reservation for scrollbar, `ViewportUpdate` in document/scroll/normal modes, `ViewportHandlesKey` delegation, `String` scrollbar rendering (only when scrollable), fallback content centering, raw terminal content (no ellipsis), document mode (`SetDocumentContent`/`ClearDocumentMode`/`IsDocumentMode`), and `SetRawContent`. Existing `preview_fallback_test.go` covers banner centering in short pane heights.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestPreview" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/preview.go` and rewrite from scratch:
+
+- **Styles** — `previewPaneStyle` (fg=`ColorText`), `scrollbarTrackStyle` (fg=`ColorOverlay`), `scrollbarThumbStyle` (fg=`ColorIris`).
+- **`previewState` struct** — `fallback bool`, `fallbackMsg string`, `text string`.
+- **`PreviewPane` struct** — `width int`, `height int`, `previewState previewState`, `isScrolling bool`, `viewport viewport.Model`, `bannerFrame int`, `animateBanner bool`, `isDocument bool`, `isRawTerminal bool`, `springAnim *SpringAnim`.
+- **`NewPreviewPane() *PreviewPane`** — fresh viewport, spring anim (6.0 target, 15 tick delay), initial fallback state with "create [n]ew plan or select existing" message.
+- **`TickSpring()`** — advances spring animation if non-nil.
+- **`SetRawContent(content string)`** — sets text directly, clears scroll/document/fallback flags, sets `isRawTerminal = true`.
+- **`SetSize(width, maxHeight int)`** — stores dimensions, viewport width = `max(0, width-1)` (reserve 1 col for scrollbar), viewport height = maxHeight.
+- **`setFallbackState(message string)`** — sets fallback mode with message, clears `isRawTerminal`.
+- **`SetDocumentContent(content string)`** — sets viewport content, clears fallback, sets `isDocument = true`, goes to top.
+- **`IsDocumentMode() bool`**, **`ClearDocumentMode()`**.
+- **`ViewportUpdate(msg tea.Msg) tea.Cmd`** — forwards to viewport only in document or scroll mode. Returns nil otherwise.
+- **`ViewportHandlesKey(msg tea.KeyMsg) bool`** — checks viewport keymap matches only in document or scroll mode.
+- **`setFallbackContent(content string)`** — sets fallback with arbitrary centered content (no banner).
+- **`SetAnimateBanner(enabled bool)`**, **`TickBanner()`** — animation control.
+- **`UpdateContent(instance *session.Instance) error`** — no-op if `isDocument`. Handles nil (fallback CTA), Loading (progress bar via `GradientBar`), Paused (paused message with branch), Exited (exited message with remove hint). In scroll mode with empty viewport: captures full history. In normal mode: live content arrives via `SetRawContent`.
+- **`renderScrollbar(height int) string`** — vertical scrollbar using viewport scroll percent. Thumb size = max(1, height/5). Track char `│`, thumb char `▐`. Returns empty when all content fits.
+- **`String() string`** — returns blank lines if zero dimensions. Fallback mode: builds animated banner with spring load-in (center unfold, CTA delay + horizontal character reveal), centers vertically and horizontally. Document/scroll mode: viewport view + optional scrollbar joined horizontally. Normal mode: splits text into lines, truncates at available height (height-1 for ellipsis, unless `isRawTerminal`), pads with empty lines, renders with `previewPaneStyle.Width(width)`.
+- **Scroll methods** — `ScrollUp(instance)`, `ScrollDown(instance)`, `HalfPageUp(instance)`, `HalfPageDown(instance)`: each enters scroll mode on first call (captures full history, sets viewport content with "ESC to exit scroll mode" footer, goes to bottom), then scrolls viewport. Document mode variants just scroll directly. `ResetToNormalMode(instance)`: exits scroll mode, clears viewport, fetches fresh preview.
+
+Imports: `fmt`, `strings`, `github.com/charmbracelet/bubbles/key`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`, `github.com/kastheco/kasmos/session`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "TestPreview" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/preview.go
+git commit -m "feat(clean-room): rewrite preview.go from scratch"
+```
