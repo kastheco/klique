@@ -119,6 +119,13 @@
       "context": "/ec/fb236011f4/15/context.md",
       "content_hash": "/ec/fb236011f4/15/content_hash.txt",
       "prompt": "/ec/fb236011f4/15/prompt.txt"
+    },
+    {
+      "metadata": "/ec/fb236011f4/16/metadata.json",
+      "transcript": "/ec/fb236011f4/16/full.jsonl",
+      "context": "/ec/fb236011f4/16/context.md",
+      "content_hash": "/ec/fb236011f4/16/content_hash.txt",
+      "prompt": "/ec/fb236011f4/16/prompt.txt"
     }
   ],
   "token_usage": {
