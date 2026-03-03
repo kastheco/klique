@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "c419bbb4a863",
+  "session_id": "ses_34b9b73d3ffebX4O2BjHRqO1ld",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T15:50:20.111221545Z",
+  "branch": "plan/01a-rewrite-tmux-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/tmux/pane_io.go",
+    "session/tmux/pane_io_test.go",
+    "session/tmux/tmux_session.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "8d8c14f43353",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T15:50:20.091743386Z",
+    "agent_lines": 0,
+    "human_added": 344,
+    "human_modified": 32,
+    "human_removed": 0,
+    "total_committed": 344,
+    "agent_percentage": 0
+  }
+}
