@@ -16,251 +16,18 @@ import (
 	"github.com/atotto/clipboard"
 )
 
-// firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
-func (i *Instance) Start(firstTimeSetup bool) error {
-	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
-	}
-
-	if firstTimeSetup {
-		i.LoadingTotal = 8
-	} else {
-		i.LoadingTotal = 6
-	}
-	i.LoadingStage = 0
-	i.LoadingMessage = "Initializing..."
-
-	i.setLoadingProgress(1, "Preparing session...")
-	var tmuxSession *tmux.TmuxSession
+// prepareTmuxSession returns the existing tmux session if already wired, otherwise
+// allocates a fresh one from the instance configuration.
+func (i *Instance) prepareTmuxSession() *tmux.TmuxSession {
 	if i.tmuxSession != nil {
-		tmuxSession = i.tmuxSession
-	} else {
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+		return i.tmuxSession
 	}
-	i.tmuxSession = tmuxSession
-	tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
-	i.configureSessionTitle()
-	// Wire up tmux progress to instance loading progress
-	tmuxStageOffset := 3 // tmux stages start at 4 for first-time, 2 for reload
-	if !firstTimeSetup {
-		tmuxStageOffset = 1
-	}
-	tmuxSession.ProgressFunc = func(stage int, desc string) {
-		i.setLoadingProgress(tmuxStageOffset+stage, desc)
-	}
-	i.transferPromptToCli()
-
-	if firstTimeSetup {
-		i.setLoadingProgress(2, "Creating git worktree...")
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
-		if err != nil {
-			return fmt.Errorf("failed to create git worktree: %w", err)
-		}
-		i.gitWorktree = gitWorktree
-		i.Branch = branchName
-	}
-
-	// Setup error handler to cleanup resources on any error
-	var setupErr error
-	defer func() {
-		if setupErr != nil {
-			if cleanupErr := i.Kill(); cleanupErr != nil {
-				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
-			}
-		} else {
-			i.started = true
-		}
-	}()
-
-	if !firstTimeSetup {
-		i.setLoadingProgress(2, "Restoring session...")
-		// Reuse existing session
-		if err := tmuxSession.Restore(); err != nil {
-			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
-			return setupErr
-		}
-	} else {
-		i.setLoadingProgress(3, "Setting up git worktree...")
-		// Setup git worktree first
-		if err := i.gitWorktree.Setup(); err != nil {
-			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
-			return setupErr
-		}
-
-		i.setLoadingProgress(4, "Starting tmux session...")
-		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-			// Cleanup git worktree if tmux session creation fails
-			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
-			}
-			setupErr = fmt.Errorf("failed to start new session: %w", err)
-			return setupErr
-		}
-	}
-
-	i.SetStatus(Running)
-
-	return nil
-}
-
-// StartOnMainBranch starts the instance in the repo root without creating a git worktree.
-// Used for planner agents that commit directly to main.
-func (i *Instance) StartOnMainBranch() error {
-	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
-	}
-
-	i.LoadingTotal = 5
-	i.LoadingStage = 0
-	i.LoadingMessage = "Initializing..."
-
-	i.setLoadingProgress(1, "Preparing session...")
-	var tmuxSession *tmux.TmuxSession
-	if i.tmuxSession != nil {
-		tmuxSession = i.tmuxSession
-	} else {
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
-	}
-	i.tmuxSession = tmuxSession
-	tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
-	i.configureSessionTitle()
-	tmuxSession.ProgressFunc = func(stage int, desc string) {
-		i.setLoadingProgress(1+stage, desc)
-	}
-	i.transferPromptToCli()
-
-	var setupErr error
-	defer func() {
-		if setupErr != nil {
-			if cleanupErr := i.Kill(); cleanupErr != nil {
-				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
-			}
-		} else {
-			i.started = true
-		}
-	}()
-
-	if err := i.tmuxSession.Start(i.Path); err != nil {
-		setupErr = fmt.Errorf("failed to start session on main branch: %w", err)
-		return setupErr
-	}
-
-	i.SetStatus(Running)
-	return nil
-}
-
-// StartOnBranch starts the instance in a worktree checked out to the specified branch.
-// If the branch exists, it reuses it. If not, it creates a new branch from HEAD.
-// Used for ad-hoc agent sessions with a branch override.
-func (i *Instance) StartOnBranch(branch string) error {
-	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
-	}
-
-	i.LoadingTotal = 8
-	i.LoadingStage = 0
-	i.LoadingMessage = "Initializing..."
-
-	i.setLoadingProgress(1, "Preparing session...")
-	var tmuxSession *tmux.TmuxSession
-	if i.tmuxSession != nil {
-		tmuxSession = i.tmuxSession
-	} else {
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
-	}
-	i.tmuxSession = tmuxSession
-	tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
-	i.configureSessionTitle()
-	tmuxSession.ProgressFunc = func(stage int, desc string) {
-		i.setLoadingProgress(3+stage, desc)
-	}
-	i.transferPromptToCli()
-
-	i.setLoadingProgress(2, "Creating git worktree...")
-	worktree, branchName, err := git.NewGitWorktreeOnBranch(i.Path, i.Title, branch)
-	if err != nil {
-		return fmt.Errorf("failed to create git worktree on branch %s: %w", branch, err)
-	}
-	i.gitWorktree = worktree
-	i.Branch = branchName
-
-	var setupErr error
-	defer func() {
-		if setupErr != nil {
-			if cleanupErr := i.Kill(); cleanupErr != nil {
-				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
-			}
-		} else {
-			i.started = true
-		}
-	}()
-
-	i.setLoadingProgress(3, "Setting up git worktree...")
-	if err := i.gitWorktree.Setup(); err != nil {
-		setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
-		return setupErr
-	}
-
-	i.setLoadingProgress(4, "Starting tmux session...")
-	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-			err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
-		}
-		setupErr = fmt.Errorf("failed to start new session: %w", err)
-		return setupErr
-	}
-
-	i.SetStatus(Running)
-	return nil
-}
-
-// StartInSharedWorktree starts the instance using a topic's shared worktree.
-// Unlike Start(), this does NOT create a new git worktree — it uses the one provided.
-func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch string) error {
-	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
-	}
-
-	i.LoadingTotal = 6
-	i.setLoadingProgress(1, "Connecting to shared worktree...")
-
-	i.gitWorktree = worktree
-	i.Branch = branch
-	i.sharedWorktree = true
-
-	var tmuxSession *tmux.TmuxSession
-	if i.tmuxSession != nil {
-		tmuxSession = i.tmuxSession
-	} else {
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
-	}
-	i.tmuxSession = tmuxSession
-	tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
-	i.configureSessionTitle()
-	tmuxSession.ProgressFunc = func(stage int, desc string) {
-		i.setLoadingProgress(1+stage, desc)
-	}
-	i.transferPromptToCli()
-
-	i.setLoadingProgress(2, "Starting tmux session...")
-
-	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
-		return fmt.Errorf("failed to start session in shared worktree: %w", err)
-	}
-
-	i.started = true
-	i.SetStatus(Running)
-	return nil
+	return tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 }
 
 // transferPromptToCli moves QueuedPrompt into the tmux session's initialPrompt
-// for programs that support CLI prompt injection. For unsupported programs,
-// QueuedPrompt stays set so the send-keys fallback fires.
+// when the program supports CLI prompt injection. Programs that do not support it
+// leave QueuedPrompt intact so a send-keys fallback can deliver it later.
 func (i *Instance) transferPromptToCli() {
 	if i.QueuedPrompt != "" && programSupportsCliPrompt(i.Program) {
 		i.tmuxSession.SetInitialPrompt(i.QueuedPrompt)
@@ -268,21 +35,23 @@ func (i *Instance) transferPromptToCli() {
 	}
 }
 
-// setTmuxTaskEnv wires task/wave/peer identity to the tmux session for env var injection.
+// setTmuxTaskEnv pushes wave/task/peer identity into the tmux session environment
+// so that agents spawned inside the session inherit the orchestration context.
 func (i *Instance) setTmuxTaskEnv() {
 	if i.TaskNumber > 0 && i.tmuxSession != nil {
 		i.tmuxSession.SetTaskEnv(i.TaskNumber, i.WaveNumber, i.PeerCount)
 	}
 }
 
-// buildTitleOpts maps an Instance's metadata to TitleOpts for BuildTitle.
+// buildTitleOpts converts an Instance's metadata fields into the TitleOpts
+// structure consumed by the opencodesession title builder.
 func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
-	planName := ""
+	displayName := ""
 	if inst.TaskFile != "" {
-		planName = taskstate.DisplayName(inst.TaskFile)
+		displayName = taskstate.DisplayName(inst.TaskFile)
 	}
 	return opencodesession.TitleOpts{
-		PlanName:      planName,
+		PlanName:      displayName,
 		AgentType:     inst.AgentType,
 		WaveNumber:    inst.WaveNumber,
 		TaskNumber:    inst.TaskNumber,
@@ -291,9 +60,9 @@ func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 	}
 }
 
-// configureSessionTitle sets the desired opencode session title and the
-// callback that writes it to the DB after the session becomes ready.
-// It is a no-op for non-opencode programs.
+// configureSessionTitle derives a session title from the instance metadata and
+// registers a callback that writes it to the opencode database when the session
+// becomes ready. It is a no-op for non-opencode programs.
 func (i *Instance) configureSessionTitle() {
 	if i.tmuxSession == nil || !strings.HasSuffix(i.Program, "opencode") {
 		return
@@ -308,31 +77,241 @@ func (i *Instance) configureSessionTitle() {
 	})
 }
 
-// Kill terminates the instance and cleans up all resources
+// Start launches the instance. When firstTimeSetup is true a fresh git worktree is
+// created and the tmux session starts inside it. When false the instance was loaded
+// from storage and the existing tmux session is restored instead.
+func (i *Instance) Start(firstTimeSetup bool) error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	if firstTimeSetup {
+		i.LoadingTotal = 8
+	} else {
+		i.LoadingTotal = 6
+	}
+	i.LoadingStage = 0
+	i.LoadingMessage = "Initializing..."
+
+	i.setLoadingProgress(1, "Preparing session...")
+	i.tmuxSession = i.prepareTmuxSession()
+	i.tmuxSession.SetAgentType(i.AgentType)
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+
+	// Offset tmux-internal progress stages so they map to the overall loading bar.
+	stageBase := 3
+	if !firstTimeSetup {
+		stageBase = 1
+	}
+	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(stageBase+stage, desc)
+	}
+	i.transferPromptToCli()
+
+	if firstTimeSetup {
+		i.setLoadingProgress(2, "Creating git worktree...")
+		worktree, branch, err := git.NewGitWorktree(i.Path, i.Title)
+		if err != nil {
+			return fmt.Errorf("failed to create git worktree: %w", err)
+		}
+		i.gitWorktree = worktree
+		i.Branch = branch
+	}
+
+	// Clean up on any failure after this point.
+	var startErr error
+	defer func() {
+		if startErr != nil {
+			if killErr := i.Kill(); killErr != nil {
+				startErr = fmt.Errorf("%v (cleanup: %v)", startErr, killErr)
+			}
+		} else {
+			i.started = true
+		}
+	}()
+
+	if firstTimeSetup {
+		i.setLoadingProgress(3, "Setting up git worktree...")
+		if err := i.gitWorktree.Setup(); err != nil {
+			startErr = fmt.Errorf("failed to setup git worktree: %w", err)
+			return startErr
+		}
+		i.setLoadingProgress(4, "Starting tmux session...")
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+				err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
+			}
+			startErr = fmt.Errorf("failed to start tmux session: %w", err)
+			return startErr
+		}
+	} else {
+		i.setLoadingProgress(2, "Restoring session...")
+		if err := i.tmuxSession.Restore(); err != nil {
+			startErr = fmt.Errorf("failed to restore existing session: %w", err)
+			return startErr
+		}
+	}
+
+	i.SetStatus(Running)
+	return nil
+}
+
+// StartOnMainBranch launches the instance directly in the repository root without
+// creating a git worktree. Intended for planner agents that operate on main.
+func (i *Instance) StartOnMainBranch() error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	i.LoadingTotal = 5
+	i.LoadingStage = 0
+	i.LoadingMessage = "Initializing..."
+
+	i.setLoadingProgress(1, "Preparing session...")
+	i.tmuxSession = i.prepareTmuxSession()
+	i.tmuxSession.SetAgentType(i.AgentType)
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(1+stage, desc)
+	}
+	i.transferPromptToCli()
+
+	var startErr error
+	defer func() {
+		if startErr != nil {
+			if killErr := i.Kill(); killErr != nil {
+				startErr = fmt.Errorf("%v (cleanup: %v)", startErr, killErr)
+			}
+		} else {
+			i.started = true
+		}
+	}()
+
+	if err := i.tmuxSession.Start(i.Path); err != nil {
+		startErr = fmt.Errorf("failed to start session on main branch: %w", err)
+		return startErr
+	}
+
+	i.SetStatus(Running)
+	return nil
+}
+
+// StartOnBranch creates a worktree on the specified branch (reusing an existing
+// branch when it already exists) and starts the tmux session inside it.
+func (i *Instance) StartOnBranch(branch string) error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	i.LoadingTotal = 8
+	i.LoadingStage = 0
+	i.LoadingMessage = "Initializing..."
+
+	i.setLoadingProgress(1, "Preparing session...")
+	i.tmuxSession = i.prepareTmuxSession()
+	i.tmuxSession.SetAgentType(i.AgentType)
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(3+stage, desc)
+	}
+	i.transferPromptToCli()
+
+	i.setLoadingProgress(2, "Creating git worktree...")
+	worktree, branchName, err := git.NewGitWorktreeOnBranch(i.Path, i.Title, branch)
+	if err != nil {
+		return fmt.Errorf("failed to create git worktree on branch %s: %w", branch, err)
+	}
+	i.gitWorktree = worktree
+	i.Branch = branchName
+
+	var startErr error
+	defer func() {
+		if startErr != nil {
+			if killErr := i.Kill(); killErr != nil {
+				startErr = fmt.Errorf("%v (cleanup: %v)", startErr, killErr)
+			}
+		} else {
+			i.started = true
+		}
+	}()
+
+	i.setLoadingProgress(3, "Setting up git worktree...")
+	if err := i.gitWorktree.Setup(); err != nil {
+		startErr = fmt.Errorf("failed to setup git worktree: %w", err)
+		return startErr
+	}
+
+	i.setLoadingProgress(4, "Starting tmux session...")
+	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+			err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
+		}
+		startErr = fmt.Errorf("failed to start tmux session: %w", err)
+		return startErr
+	}
+
+	i.SetStatus(Running)
+	return nil
+}
+
+// StartInSharedWorktree connects the instance to a topic-owned worktree. No new
+// worktree is created; the instance borrows the one passed by the caller.
+func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch string) error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	i.LoadingTotal = 6
+	i.setLoadingProgress(1, "Connecting to shared worktree...")
+
+	i.gitWorktree = worktree
+	i.Branch = branch
+	i.sharedWorktree = true
+
+	i.tmuxSession = i.prepareTmuxSession()
+	i.tmuxSession.SetAgentType(i.AgentType)
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(1+stage, desc)
+	}
+	i.transferPromptToCli()
+
+	i.setLoadingProgress(2, "Starting tmux session...")
+	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
+		return fmt.Errorf("failed to start session in shared worktree: %w", err)
+	}
+
+	i.started = true
+	i.SetStatus(Running)
+	return nil
+}
+
+// Kill terminates the tmux session and removes the git worktree. If the worktree
+// has uncommitted changes they are committed first to prevent data loss.
+// Returns nil for instances that were never started.
 func (i *Instance) Kill() error {
 	if !i.started {
-		// If instance was never started, just return success
 		return nil
 	}
 
 	var errs []error
 
-	// Always try to cleanup both resources, even if one fails
-	// Clean up tmux session first since it's using the git worktree
+	// Close tmux first — it holds an open handle to the worktree directory.
 	if i.tmuxSession != nil {
 		if err := i.tmuxSession.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
 		}
 	}
 
-	// Then clean up git worktree (skip if shared — topic owns the worktree)
+	// Shared worktrees are owned by the topic, not the instance.
 	if i.gitWorktree != nil && !i.sharedWorktree {
-		// Safety net: commit any uncommitted work before removing the worktree.
-		// Agents should commit their own work, but if they don't, this prevents
-		// data loss when Kill() destroys the worktree.
 		if dirty, err := i.gitWorktree.IsDirty(); err == nil && dirty {
-			commitMsg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)", i.Title, time.Now().Format(time.RFC822))
-			if commitErr := i.gitWorktree.CommitChanges(commitMsg); commitErr != nil {
+			msg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)", i.Title, time.Now().Format(time.RFC822))
+			if commitErr := i.gitWorktree.CommitChanges(msg); commitErr != nil {
 				errs = append(errs, fmt.Errorf("failed to auto-commit before kill: %w", commitErr))
 			}
 		}
@@ -344,15 +323,16 @@ func (i *Instance) Kill() error {
 	return errors.Join(errs...)
 }
 
-// StopTmux terminates the tmux session only. Does not touch the worktree,
-// persistence, or plan state. The instance stays in the list as stopped.
+// StopTmux closes the underlying tmux session without touching the worktree or
+// any other instance state. The instance remains in the list as stopped.
 func (i *Instance) StopTmux() {
 	if i.tmuxSession != nil {
 		_ = i.tmuxSession.Close()
 	}
 }
 
-// Pause stops the tmux session and removes the worktree, preserving the branch
+// Pause detaches from the tmux session and removes the git worktree, preserving
+// the branch for a later Resume. Any dirty changes are committed before removal.
 func (i *Instance) Pause() error {
 	if !i.started {
 		return fmt.Errorf("cannot pause instance that has not been started")
@@ -364,51 +344,44 @@ func (i *Instance) Pause() error {
 	var errs []error
 
 	if !i.sharedWorktree && i.gitWorktree != nil {
-		// Check if there are any changes to commit
-		if dirty, err := i.gitWorktree.IsDirty(); err != nil {
+		dirty, err := i.gitWorktree.IsDirty()
+		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
 			log.ErrorLog.Print(err)
 		} else if dirty {
-			// Commit changes locally (without pushing to GitHub)
-			commitMsg := fmt.Sprintf("[kas] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
-			if err := i.gitWorktree.CommitChanges(commitMsg); err != nil {
-				errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
-				log.ErrorLog.Print(err)
-				// Return early if we can't commit changes to avoid corrupted state
+			msg := fmt.Sprintf("[kas] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
+			if commitErr := i.gitWorktree.CommitChanges(msg); commitErr != nil {
+				errs = append(errs, fmt.Errorf("failed to commit changes: %w", commitErr))
+				log.ErrorLog.Print(commitErr)
 				return errors.Join(errs...)
 			}
 		}
 	}
 
-	// Detach from tmux session instead of closing to preserve session output
 	if err := i.tmuxSession.DetachSafely(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
 		log.ErrorLog.Print(err)
-		// Continue with pause process even if detach fails
 	}
 
 	if !i.sharedWorktree && i.gitWorktree != nil {
-		// Check if worktree exists before trying to remove it
-		if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
-			// Remove worktree but keep branch
-			if err := i.gitWorktree.Remove(); err != nil {
-				errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
-				log.ErrorLog.Print(err)
+		worktreePath := i.gitWorktree.GetWorktreePath()
+		if _, statErr := os.Stat(worktreePath); statErr == nil {
+			if removeErr := i.gitWorktree.Remove(); removeErr != nil {
+				errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", removeErr))
+				log.ErrorLog.Print(removeErr)
 				return errors.Join(errs...)
 			}
-
-			// Only prune if remove was successful
-			if err := i.gitWorktree.Prune(); err != nil {
-				errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
-				log.ErrorLog.Print(err)
+			if pruneErr := i.gitWorktree.Prune(); pruneErr != nil {
+				errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", pruneErr))
+				log.ErrorLog.Print(pruneErr)
 				return errors.Join(errs...)
 			}
 		}
 	}
 
-	if err := errors.Join(errs...); err != nil {
-		log.ErrorLog.Print(err)
-		return err
+	if joined := errors.Join(errs...); joined != nil {
+		log.ErrorLog.Print(joined)
+		return joined
 	}
 
 	i.SetStatus(Paused)
@@ -418,9 +391,8 @@ func (i *Instance) Pause() error {
 	return nil
 }
 
-// AdoptOrphanTmuxSession connects this instance to an existing orphaned tmux session
-// identified by its raw tmux name. No worktree is created — the session keeps its
-// existing working directory.
+// AdoptOrphanTmuxSession wires the instance to an existing tmux session that was
+// not created through the normal lifecycle. No worktree is involved.
 func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
 	ts := tmux.NewTmuxSessionFromExisting(tmuxName, i.Program, i.SkipPermissions)
 	i.tmuxSession = ts
@@ -432,8 +404,9 @@ func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
 	return nil
 }
 
-// Restart kills the tmux session (if alive) and starts a fresh one with the
-// same configuration. The worktree, branch, and instance identity are preserved.
+// Restart closes the current tmux session (best-effort) and launches a fresh one
+// with the same configuration. The worktree and branch are preserved. Ephemeral
+// per-run flags are reset so the instance appears freshly started.
 func (i *Instance) Restart() error {
 	if !i.started {
 		return fmt.Errorf("cannot restart instance that has not been started")
@@ -442,19 +415,18 @@ func (i *Instance) Restart() error {
 		return fmt.Errorf("cannot restart paused instance; resume it first")
 	}
 
-	// Best-effort kill of existing tmux session (may already be dead).
+	// Best-effort: session may already be dead.
 	if i.tmuxSession != nil {
 		_ = i.tmuxSession.Close()
 	}
 
-	// Create fresh tmux session preserving injected deps (pty/cmd factories).
+	// Allocate a new session object, carrying over injected test dependencies.
 	ts := i.tmuxSession.NewReset(i.Title, i.Program, i.SkipPermissions)
-	ts.SetAgentType(i.AgentType)
 	i.tmuxSession = ts
+	ts.SetAgentType(i.AgentType)
 	i.setTmuxTaskEnv()
 	i.configureSessionTitle()
 
-	// Determine working directory.
 	workDir := i.Path
 	if i.gitWorktree != nil {
 		workDir = i.gitWorktree.GetWorktreePath()
@@ -464,7 +436,7 @@ func (i *Instance) Restart() error {
 		return fmt.Errorf("failed to restart tmux session: %w", err)
 	}
 
-	// Reset ephemeral state.
+	// Reset ephemeral per-run state.
 	i.Exited = false
 	i.PromptDetected = false
 	i.HasWorked = false
@@ -472,12 +444,13 @@ func (i *Instance) Restart() error {
 	i.Notified = false
 	i.CachedContentSet = false
 	i.CachedContent = ""
-	i.SetStatus(Running)
 
+	i.SetStatus(Running)
 	return nil
 }
 
-// Resume recreates the worktree and restarts the tmux session
+// Resume recreates the worktree for a paused instance and reconnects or starts
+// a fresh tmux session inside it.
 func (i *Instance) Resume() error {
 	if !i.started {
 		return fmt.Errorf("cannot resume instance that has not been started")
@@ -486,43 +459,40 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("can only resume paused instances")
 	}
 
-	// Check if branch is checked out
-	if checked, err := i.gitWorktree.IsBranchCheckedOut(); err != nil {
+	checked, err := i.gitWorktree.IsBranchCheckedOut()
+	if err != nil {
 		log.ErrorLog.Print(err)
 		return fmt.Errorf("failed to check if branch is checked out: %w", err)
-	} else if checked {
+	}
+	if checked {
 		return fmt.Errorf("cannot resume: branch is checked out, please switch to a different branch")
 	}
 
-	// Setup git worktree
 	if err := i.gitWorktree.Setup(); err != nil {
 		log.ErrorLog.Print(err)
 		return fmt.Errorf("failed to setup git worktree: %w", err)
 	}
 
-	// Check if tmux session still exists from pause, otherwise create new one
+	worktreePath := i.gitWorktree.GetWorktreePath()
+
 	if i.tmuxSession.DoesSessionExist() {
-		// Session exists, just restore PTY connection to it
-		if err := i.tmuxSession.Restore(); err != nil {
-			log.ErrorLog.Print(err)
-			// If restore fails, fall back to creating new session
-			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-				log.ErrorLog.Print(err)
-				// Cleanup git worktree if tmux session creation fails
+		if restoreErr := i.tmuxSession.Restore(); restoreErr != nil {
+			log.ErrorLog.Print(restoreErr)
+			// Fall back to a fresh session start.
+			if startErr := i.tmuxSession.Start(worktreePath); startErr != nil {
+				log.ErrorLog.Print(startErr)
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
-					log.ErrorLog.Print(err)
+					startErr = fmt.Errorf("%v (cleanup: %v)", startErr, cleanupErr)
+					log.ErrorLog.Print(startErr)
 				}
-				return fmt.Errorf("failed to start new session: %w", err)
+				return fmt.Errorf("failed to start new session: %w", startErr)
 			}
 		}
 	} else {
-		// Create new tmux session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(worktreePath); err != nil {
 			log.ErrorLog.Print(err)
-			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
 				log.ErrorLog.Print(err)
 			}
 			return fmt.Errorf("failed to start new session: %w", err)
