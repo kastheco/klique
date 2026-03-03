@@ -71,7 +71,7 @@ func TestPlanList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := executePlanList(dir, tt.statusFilter, store)
+			output := executeTaskList(dir, tt.statusFilter, store)
 			for _, want := range tt.wantContains {
 				assert.Contains(t, output, want)
 			}
@@ -86,11 +86,11 @@ func TestPlanSetStatus(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 
 	// Requires --force
-	err := executePlanSetStatus(dir, "test-plan.md", "done", false, store)
+	err := executeTaskSetStatus(dir, "test-plan.md", "done", false, store)
 	assert.Error(t, err, "should require --force flag")
 
 	// Valid override
-	err = executePlanSetStatus(dir, "test-plan.md", "done", true, store)
+	err = executeTaskSetStatus(dir, "test-plan.md", "done", true, store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
@@ -100,7 +100,7 @@ func TestPlanSetStatus(t *testing.T) {
 	assert.Equal(t, taskstate.Status("done"), entry.Status)
 
 	// Invalid status
-	err = executePlanSetStatus(dir, "test-plan.md", "bogus", true, store)
+	err = executeTaskSetStatus(dir, "test-plan.md", "bogus", true, store)
 	assert.Error(t, err, "should reject invalid status")
 }
 
@@ -108,12 +108,12 @@ func TestPlanTransition(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 
 	// Valid transition: ready → planning via plan_start
-	newStatus, err := executePlanTransition(dir, "test-plan.md", "plan_start", store)
+	newStatus, err := executeTaskTransition(dir, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 
 	// Invalid transition (plan is now in "planning" state)
-	_, err = executePlanTransition(dir, "test-plan.md", "review_approved", store)
+	_, err = executeTaskTransition(dir, "test-plan.md", "review_approved", store)
 	assert.Error(t, err)
 }
 
@@ -125,21 +125,21 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// List all
-	output := executePlanList(dir, "", store)
+	output := executeTaskList(dir, "", store)
 	assert.Contains(t, output, "ready")
 	assert.Contains(t, output, "implementing")
 
 	// Transition ready → planning
-	status, err := executePlanTransition(dir, "test-plan.md", "plan_start", store)
+	status, err := executeTaskTransition(dir, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", status)
 
 	// Force set back to ready
-	err = executePlanSetStatus(dir, "test-plan.md", "ready", true, store)
+	err = executeTaskSetStatus(dir, "test-plan.md", "ready", true, store)
 	require.NoError(t, err)
 
 	// Implement with wave signal
-	err = executePlanImplement(dir, "test-plan.md", 2, store)
+	err = executeTaskImplement(dir, "test-plan.md", 2, store)
 	require.NoError(t, err)
 
 	// Verify signal file
@@ -164,7 +164,7 @@ func TestPlanImplement(t *testing.T) {
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	err := executePlanImplement(dir, "test-plan.md", 1, store)
+	err := executeTaskImplement(dir, "test-plan.md", 1, store)
 	require.NoError(t, err)
 
 	// Verify plan transitioned to implementing
@@ -196,7 +196,7 @@ func TestPlanRegister(t *testing.T) {
 		0o644,
 	))
 
-	err := executePlanRegister(dir, planFile, "", "", "", store)
+	err := executeTaskRegister(dir, planFile, "", "", "", store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, project, dir)
@@ -220,7 +220,7 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 		0o644,
 	))
 
-	err := executePlanRegister(dir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
+	err := executeTaskRegister(dir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, project, dir)
@@ -251,7 +251,7 @@ func TestExecutePlanLinkClickUp(t *testing.T) {
 	}))
 	require.NoError(t, store.SetContent("proj", "test.md", "# Test\n\n**Source:** ClickUp abc123 (https://app.clickup.com/t/abc123)\n"))
 
-	n, err := executePlanLinkClickUp("proj", store)
+	n, err := executeTaskLinkClickUp("proj", store)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
@@ -273,7 +273,7 @@ func TestExecutePlanLinkClickUp_SkipsAlreadyLinked(t *testing.T) {
 	}))
 	require.NoError(t, store.SetContent("proj", "linked.md", "# Test\n\n**Source:** ClickUp newid\n"))
 
-	n, err := executePlanLinkClickUp("proj", store)
+	n, err := executeTaskLinkClickUp("proj", store)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n, "already linked plan should not be updated")
 }
@@ -344,23 +344,23 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 		CreatedAt:   time.Now(),
 	}))
 
-	// executePlanList should succeed from the resolved plansDir
-	output := executePlanList(resolvedPlansDir, "", store)
+	// executeTaskList should succeed from the resolved plansDir
+	output := executeTaskList(resolvedPlansDir, "", store)
 	assert.Contains(t, output, "worktree-plan.md")
 
-	// executePlanSetStatus should succeed
-	err = executePlanSetStatus(resolvedPlansDir, "worktree-plan.md", "done", true, store)
+	// executeTaskSetStatus should succeed
+	err = executeTaskSetStatus(resolvedPlansDir, "worktree-plan.md", "done", true, store)
 	require.NoError(t, err)
 
-	// executePlanTransition: reset then transition
-	err = executePlanSetStatus(resolvedPlansDir, "worktree-plan.md", "ready", true, store)
+	// executeTaskTransition: reset then transition
+	err = executeTaskSetStatus(resolvedPlansDir, "worktree-plan.md", "ready", true, store)
 	require.NoError(t, err)
-	newStatus, err := executePlanTransition(resolvedPlansDir, "worktree-plan.md", "plan_start", store)
+	newStatus, err := executeTaskTransition(resolvedPlansDir, "worktree-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 }
 
-// TestPlanList_WithStore verifies that executePlanListWithStore works with a
+// TestPlanList_WithStore verifies that executeTaskListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
 	backend := taskstore.NewTestSQLiteStore(t)
@@ -372,7 +372,7 @@ func TestPlanList_WithStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	output := executePlanListWithStore(srv.URL, "test-project")
+	output := executeTaskListWithStore(srv.URL, "test-project")
 	assert.Contains(t, output, "test.md")
 	assert.Contains(t, output, "ready")
 }

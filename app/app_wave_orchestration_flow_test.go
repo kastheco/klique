@@ -34,8 +34,8 @@ func waveFlowHome(t *testing.T, ps *taskstate.TaskState, plansDir string, orchMa
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
-		planState:         ps,
-		planStateDir:      plansDir,
+		taskState:         ps,
+		taskStateDir:      plansDir,
 		waveOrchestrators: orchMap,
 	}
 	return h
@@ -67,7 +67,7 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
 		waveOrchestrators:          map[string]*WaveOrchestrator{"test.md": orch},
-		pendingWaveConfirmPlanFile: "test.md",
+		pendingWaveConfirmTaskFile: "test.md",
 		confirmationOverlay:        overlay.NewConfirmationOverlay("Wave 1 complete. Start Wave 2?"),
 	}
 
@@ -107,7 +107,7 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 		Title:      "paused-task-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -203,7 +203,7 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
 		waveOrchestrators:          map[string]*WaveOrchestrator{planFile: orch},
-		pendingWaveConfirmPlanFile: planFile,
+		pendingWaveConfirmTaskFile: planFile,
 		confirmationOverlay:        overlay.NewConfirmationOverlay("Wave 1 failed. r=retry n=next wave a=abort"),
 		pendingWaveAbortAction: func() tea.Msg {
 			return waveAbortMsg{planFile: planFile}
@@ -249,8 +249,8 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 		ctx:               context.Background(),
 		state:             stateDefault,
 		appConfig:         config.DefaultConfig(),
-		planState:         ps,
-		planStateDir:      plansDir,
+		taskState:         ps,
+		taskStateDir:      plansDir,
 		fsm:               newPlanFSMForTest(t, plansDir),
 		activeRepoPath:    dir,
 		program:           "opencode",
@@ -261,7 +261,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 		waveOrchestrators: make(map[string]*WaveOrchestrator),
 	}
 
-	_, _ = h.triggerPlanStage(planFile, "implement")
+	_, _ = h.triggerTaskStage(planFile, "implement")
 
 	// Plan status must have reverted to planning (parse failed, no StatusImplementing set)
 	entry, ok := ps.Entry(planFile)
@@ -315,7 +315,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 		Title:      "all-complete-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -411,7 +411,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 		Title:      "multi-wave-W2-T2",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 2,
 		WaveNumber: 2,
 	})
@@ -479,7 +479,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 		Title:      planName + "-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -491,7 +491,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 		Title:      planName + "-W1-T6",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 6,
 		WaveNumber: 1,
 	})
@@ -517,7 +517,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	countTask6 := func() int {
 		count := 0
 		for _, inst := range h.nav.GetInstances() {
-			if inst.TaskNumber == 6 && inst.PlanFile == planFile {
+			if inst.TaskNumber == 6 && inst.TaskFile == planFile {
 				count++
 			}
 		}
@@ -548,7 +548,7 @@ func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
 	// Task 1 instance must still be there (it wasn't retried)
 	foundTask1 := false
 	for _, inst := range h.nav.GetInstances() {
-		if inst.TaskNumber == 1 && inst.PlanFile == planFile {
+		if inst.TaskNumber == 1 && inst.TaskFile == planFile {
 			foundTask1 = true
 		}
 	}
@@ -601,7 +601,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.AgentType = session.AgentTypePlanner
-	inst.PlanFile = planFile
+	inst.TaskFile = planFile
 
 	// Create storage so saveAllInstances doesn't panic
 	state := config.DefaultState()
@@ -622,7 +622,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		plannerPrompted:             make(map[string]bool),
 		coderPushPrompted:           make(map[string]bool),
 		pendingPlannerInstanceTitle: "planner-cancel-inst",
-		pendingPlannerPlanFile:      planFile,
+		pendingPlannerTaskFile:      planFile,
 		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'cancel-kill' is ready. Start implementation?"),
 		allInstances:                []*session.Instance{inst},
 	}
@@ -639,8 +639,8 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		"planner instance must be removed from allInstances after cancel")
 	assert.Empty(t, updated.pendingPlannerInstanceTitle,
 		"pendingPlannerInstanceTitle must be cleared after cancel")
-	assert.Empty(t, updated.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must be cleared after cancel")
+	assert.Empty(t, updated.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must be cleared after cancel")
 }
 
 // --- Focus-before-overlay tests ---
@@ -679,7 +679,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	taskInst := &session.Instance{
 		Title:      taskTitle,
 		Program:    "opencode",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	}
@@ -690,7 +690,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(taskInst)
-	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.updateSidebarTasks() // register plans so rebuildRows emits plan-grouped instances
 	h.nav.SetSelectedInstance(0)
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 
@@ -741,7 +741,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 	taskInst := &session.Instance{
 		Title:      taskTitle,
 		Program:    "opencode",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	}
@@ -751,7 +751,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(taskInst)
-	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.updateSidebarTasks() // register plans so rebuildRows emits plan-grouped instances
 	h.nav.SetSelectedInstance(0)
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 
@@ -788,7 +788,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	plannerInst := &session.Instance{
 		Title:     "focus-planner-plan",
 		Program:   "opencode",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypePlanner,
 	}
 	plannerInst.MarkStartedForTest()
@@ -804,7 +804,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(plannerInst)
-	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.updateSidebarTasks() // register plans so rebuildRows emits plan-grouped instances
 	h.nav.SetSelectedInstance(0)
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 
@@ -855,7 +855,7 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 		Title:      "deferred-complete-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -920,7 +920,7 @@ func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 	m := &home{
 		appConfig:         &config.Config{AutoAdvanceWaves: true},
 		waveOrchestrators: map[string]*WaveOrchestrator{"test.md": orch},
-		planState:         &taskstate.TaskState{Plans: map[string]taskstate.TaskEntry{"test.md": {Status: "implementing"}}},
+		taskState:         &taskstate.TaskState{Plans: map[string]taskstate.TaskEntry{"test.md": {Status: "implementing"}}},
 		state:             stateDefault,
 	}
 
@@ -966,7 +966,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 		Title:      "auto-advance-failure-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -978,7 +978,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 		Title:      "auto-advance-failure-W1-T2",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 2,
 		WaveNumber: 1,
 	})
@@ -1037,7 +1037,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 		Title:      "auto-advance-success-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -1094,7 +1094,7 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 		Title:      "has-worked-guard-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
-		PlanFile:   planFile,
+		TaskFile:   planFile,
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -1147,7 +1147,7 @@ func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
 	coderInst := &session.Instance{
 		Title:     "focus-coder-implement",
 		Program:   "opencode",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	}
 	coderInst.MarkStartedForTest()
@@ -1162,7 +1162,7 @@ func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
 	h.pendingReviewFeedback = make(map[string]string)
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(coderInst)
-	h.updateSidebarPlans() // register plans so rebuildRows emits plan-grouped instances
+	h.updateSidebarTasks() // register plans so rebuildRows emits plan-grouped instances
 	h.nav.SetSelectedInstance(0)
 	require.Equal(t, otherInst, h.nav.GetSelectedInstance(), "precondition: other-agent selected")
 

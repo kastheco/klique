@@ -26,7 +26,7 @@ const (
 
 // WaveOrchestrator manages wave-based parallel task execution for a single plan.
 type WaveOrchestrator struct {
-	planFile          string
+	taskFile          string
 	plan              *taskparser.Plan
 	state             WaveState
 	currentWave       int                // 0-indexed into plan.Waves
@@ -37,7 +37,7 @@ type WaveOrchestrator struct {
 // NewWaveOrchestrator creates an orchestrator for the given plan.
 func NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator {
 	return &WaveOrchestrator{
-		planFile:   planFile,
+		taskFile:   planFile,
 		plan:       plan,
 		state:      WaveStateIdle,
 		taskStates: make(map[int]taskStatus),
@@ -49,9 +49,9 @@ func (o *WaveOrchestrator) State() WaveState {
 	return o.state
 }
 
-// PlanFile returns the plan filename this orchestrator manages.
-func (o *WaveOrchestrator) PlanFile() string {
-	return o.planFile
+// TaskFile returns the plan filename this orchestrator manages.
+func (o *WaveOrchestrator) TaskFile() string {
+	return o.taskFile
 }
 
 // TotalWaves returns the number of waves in the plan.

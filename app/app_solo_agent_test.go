@@ -34,7 +34,7 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		Title:     "solo-test-solo",
 		Path:      t.TempDir(),
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -52,8 +52,8 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
-		planState:         ps,
-		planStateDir:      plansDir,
+		taskState:         ps,
+		taskStateDir:      plansDir,
 		fsm:               fsm,
 		waveOrchestrators: make(map[string]*WaveOrchestrator),
 	}

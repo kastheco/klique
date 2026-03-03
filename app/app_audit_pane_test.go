@@ -57,7 +57,7 @@ func TestRefreshAuditPane_TimestampInLocalTime(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "test"
+	h.taskStoreProject = "test"
 	h.refreshAuditPane()
 
 	// The displayed time must match local time, not UTC.

@@ -9,7 +9,7 @@ func TestNewInstance_SetsWaveAndTaskNumber(t *testing.T) {
 		Title:      "test-T1",
 		Path:       "/tmp",
 		Program:    "echo",
-		PlanFile:   "plan.md",
+		TaskFile:   "plan.md",
 		TaskNumber: 1,
 		WaveNumber: 1,
 	})
@@ -29,7 +29,7 @@ func TestInstanceData_RoundTripWaveFields(t *testing.T) {
 		Title:      "test-T2",
 		Path:       "/tmp",
 		Program:    "echo",
-		PlanFile:   "plan.md",
+		TaskFile:   "plan.md",
 		TaskNumber: 3,
 		WaveNumber: 2,
 	})

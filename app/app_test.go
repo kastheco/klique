@@ -135,7 +135,7 @@ func TestSpawnAgent_SubmitCreatesInstance(t *testing.T) {
 	require.NotEmpty(t, instances)
 	last := instances[len(instances)-1]
 	assert.Equal(t, "test-agent", last.Title)
-	assert.Equal(t, "", last.PlanFile, "ad-hoc instance must have no PlanFile")
+	assert.Equal(t, "", last.TaskFile, "ad-hoc instance must have no PlanFile")
 	assert.Equal(t, session.AgentTypeFixer, last.AgentType, "spawned instance must be fixer")
 	assert.Equal(t, session.Loading, last.Status)
 }
@@ -1222,7 +1222,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 			Path:    "/tmp",
 			Program: "claude",
 		})
-		inst.PlanFile = "auth.md"
+		inst.TaskFile = "auth.md"
 		inst.AgentType = session.AgentTypeCoder
 		inst.MarkStartedForTest()
 		inst.SetTmuxSession(tmux.NewTmuxSession("auth-impl", "claude", false))
@@ -1239,7 +1239,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 		item := hm.tmuxBrowser.SelectedItem()
 		assert.True(t, item.Managed)
 		assert.Equal(t, "coder", item.AgentType)
-		assert.Equal(t, "auth.md", item.PlanFile)
+		assert.Equal(t, "auth.md", item.TaskFile)
 	})
 
 	t.Run("dismiss returns to default state", func(t *testing.T) {
@@ -1379,11 +1379,11 @@ func (h *home) setupPlanState(t *testing.T, planFile string, status taskstate.St
 	entry.Status = status
 	ps.Plans[planFile] = entry
 	require.NoError(t, ps.Save())
-	h.planState = ps
-	h.planStateDir = plansDir
+	h.taskState = ps
+	h.taskStateDir = plansDir
 	h.fsm = newPlanFSMForTest(t, plansDir)
 	h.activeRepoPath = dir
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 }
 
 func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
@@ -1397,7 +1397,7 @@ func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	model, _ := h.executeContextAction("chat_about_plan")
 	updated := model.(*home)
 
-	require.Equal(t, stateChatAboutPlan, updated.state)
+	require.Equal(t, stateChatAboutTask, updated.state)
 	require.NotNil(t, updated.textInputOverlay, "text input overlay must be set for question")
 }
 
@@ -1408,7 +1408,7 @@ func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
 
-	model, _ := h.openPlanContextMenu()
+	model, _ := h.openTaskContextMenu()
 	updated := model.(*home)
 
 	require.Equal(t, stateContextMenu, updated.state)

@@ -5,7 +5,7 @@ import "time"
 // QueryFilter specifies criteria for querying audit events.
 type QueryFilter struct {
 	Project       string
-	PlanFile      string
+	TaskFile      string
 	InstanceTitle string
 	Kinds         []EventKind
 	Limit         int
@@ -23,9 +23,9 @@ type Logger interface {
 // EventOption is a functional option for configuring optional Event fields.
 type EventOption func(*Event)
 
-// WithPlan sets the PlanFile field on the event.
+// WithPlan sets the TaskFile field on the event.
 func WithPlan(planFile string) EventOption {
-	return func(e *Event) { e.PlanFile = planFile }
+	return func(e *Event) { e.TaskFile = planFile }
 }
 
 // WithInstance sets the InstanceTitle field on the event.

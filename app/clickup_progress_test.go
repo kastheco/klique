@@ -105,7 +105,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 		Title:     "fixer-hook-implement",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -123,10 +123,10 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
-		planStore:             store,
-		planStoreProject:      "test",
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		taskStore:             store,
+		taskStoreProject:      "test",
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: map[string]string{planFile: "fix the auth logic"},
@@ -169,7 +169,7 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 		Title:     "no-feedback-implement",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -187,10 +187,10 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
-		planStore:             store,
-		planStoreProject:      "test",
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		taskStore:             store,
+		taskStoreProject:      "test",
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string), // no feedback for this plan

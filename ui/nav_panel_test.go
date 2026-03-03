@@ -17,7 +17,7 @@ func newTestPanel() *NavigationPanel {
 func makeInst(title, planFile string, status session.Status) *session.Instance {
 	return &session.Instance{
 		Title:    title,
-		PlanFile: planFile,
+		TaskFile: planFile,
 		Status:   status,
 	}
 }
@@ -154,7 +154,7 @@ func TestRebuildRows_DeadSection_Collapsible(t *testing.T) {
 	assert.True(t, n.deadExpanded)
 	require.True(t, len(n.rows) >= 2)
 	assert.Equal(t, navRowPlanHeader, n.rows[1].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[1].PlanFile)
+	assert.Equal(t, "done-plan.md", n.rows[1].TaskFile)
 	// Plan header is auto-collapsed (no running instances), so instance row is hidden.
 
 	// Collapse the dead section.
@@ -180,7 +180,7 @@ func TestRebuildRows_DonePlanWithRunningInstances_AppearsInActiveSection(t *test
 	// Should have plan header + instance in the active area.
 	require.True(t, len(n.rows) >= 2, "expected at least plan header + instance, got %d rows", len(n.rows))
 	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[0].PlanFile)
+	assert.Equal(t, "done-plan.md", n.rows[0].TaskFile)
 	assert.Equal(t, navRowInstance, n.rows[1].Kind)
 	assert.Equal(t, "worker", n.rows[1].Label)
 }
@@ -216,7 +216,7 @@ func TestRebuildRows_DonePlanMixedInstances_RunningPromotesToActive(t *testing.T
 			"plan with running instances should not be in dead section")
 	}
 	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[0].PlanFile)
+	assert.Equal(t, "done-plan.md", n.rows[0].TaskFile)
 }
 
 func TestRebuildRows_DeadSection_DonePlanWithoutInstances_GoesToHistory(t *testing.T) {
@@ -288,7 +288,7 @@ func TestSortOrder_NotificationsFirst(t *testing.T) {
 
 	// Notified plan should sort before running-only plan.
 	require.True(t, len(n.rows) >= 2)
-	assert.Contains(t, n.rows[0].PlanFile, "notified.md")
+	assert.Contains(t, n.rows[0].TaskFile, "notified.md")
 }
 
 func TestSortOrder_InstancesWithinPlan(t *testing.T) {
@@ -297,7 +297,7 @@ func TestSortOrder_InstancesWithinPlan(t *testing.T) {
 	instances := []*session.Instance{
 		makeInst("paused", "plan.md", session.Paused),
 		makeInst("running", "plan.md", session.Running),
-		{Title: "notified", PlanFile: "plan.md", Status: session.Running, Notified: true},
+		{Title: "notified", TaskFile: "plan.md", Status: session.Running, Notified: true},
 	}
 	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true, HasNotification: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
@@ -815,7 +815,7 @@ func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {
 	n.SelectInstance(instA)
 	// Find B's plan header and collapse it
 	for i, row := range n.rows {
-		if row.Kind == navRowPlanHeader && row.PlanFile == "b.md" {
+		if row.Kind == navRowPlanHeader && row.TaskFile == "b.md" {
 			n.selectedIdx = i
 			n.ToggleSelectedExpand()
 			break
@@ -833,8 +833,8 @@ func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {
 
 func TestFindPlanInstance_ReturnsRunning(t *testing.T) {
 	n := newTestPanel()
-	ready := &session.Instance{Title: "ready", PlanFile: "p.md", Status: session.Ready}
-	running := &session.Instance{Title: "running", PlanFile: "p.md", Status: session.Running}
+	ready := &session.Instance{Title: "ready", TaskFile: "p.md", Status: session.Ready}
+	running := &session.Instance{Title: "running", TaskFile: "p.md", Status: session.Running}
 	n.SetData(nil, []*session.Instance{ready, running}, nil, nil, nil)
 
 	result := n.FindPlanInstance("p.md")
@@ -877,7 +877,7 @@ func TestString_InstanceDisplayTitle(t *testing.T) {
 	plans := []PlanDisplay{{Filename: "p.md"}}
 	inst := &session.Instance{
 		Title:      "p-W2-T5",
-		PlanFile:   "p.md",
+		TaskFile:   "p.md",
 		Status:     session.Running,
 		WaveNumber: 2,
 		TaskNumber: 5,

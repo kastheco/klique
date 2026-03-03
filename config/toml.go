@@ -45,11 +45,11 @@ type TOMLTelemetryConfig struct {
 
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
-	Phases    map[string]string    `toml:"phases"`
-	Agents    map[string]TOMLAgent `toml:"agents"`
-	UI        TOMLUIConfig         `toml:"ui"`
-	Telemetry TOMLTelemetryConfig  `toml:"telemetry"`
-	PlanStore string               `toml:"plan_store,omitempty"`
+	Phases      map[string]string    `toml:"phases"`
+	Agents      map[string]TOMLAgent `toml:"agents"`
+	UI          TOMLUIConfig         `toml:"ui"`
+	Telemetry   TOMLTelemetryConfig  `toml:"telemetry"`
+	DatabaseURL string               `toml:"database_url,omitempty"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
@@ -59,7 +59,7 @@ type TOMLConfigResult struct {
 	AnimateBanner    bool
 	AutoAdvanceWaves bool
 	TelemetryEnabled *bool
-	PlanStore        string
+	DatabaseURL      string
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -76,7 +76,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		AnimateBanner:    tc.UI.AnimateBanner,
 		AutoAdvanceWaves: tc.UI.AutoAdvanceWaves,
 		TelemetryEnabled: tc.Telemetry.Enabled,
-		PlanStore:        tc.PlanStore,
+		DatabaseURL:      tc.DatabaseURL,
 	}
 
 	for name, agent := range tc.Agents {

@@ -58,7 +58,7 @@ type Event struct {
 	Kind          EventKind
 	Timestamp     time.Time
 	Project       string
-	PlanFile      string
+	TaskFile      string
 	InstanceTitle string
 	AgentType     string
 	WaveNumber    int
