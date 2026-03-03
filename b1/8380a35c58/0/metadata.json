@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "b18380a35c58",
+  "session_id": "ses_34a80e0c5ffeuBaAOiHiDkS7Lx",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T21:00:04.235338278Z",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".agents/skills/kasmos-coder/SKILL.md",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/codex/AGENTS.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/claude/agents/fixer.md",
+    ".agents/skills/kasmos-planner/SKILL.md",
+    ".claude/agents/coder.md",
+    ".opencode/agents/custodian.md",
+    ".opencode/agents/fixer.md",
+    ".opencode/agents/planner.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md",
+    ".agents/skills/kasmos-fixer/SKILL.md",
+    ".claude/agents/planner.md",
+    ".opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "1d915730ce32",
+  "checkpoint_transcript_start": 8,
+  "transcript_lines_at_start": 8,
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 3450,
+    "cache_read_tokens": 436738,
+    "output_tokens": 2285,
+    "api_call_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T21:00:04.033536065Z",
+    "agent_lines": 210,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 210,
+    "agent_percentage": 100
+  }
+}

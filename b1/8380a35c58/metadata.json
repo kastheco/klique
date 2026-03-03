@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "b18380a35c58",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".agents/skills/kasmos-coder/SKILL.md",
+    ".agents/skills/kasmos-fixer/SKILL.md",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    ".agents/skills/kasmos-planner/SKILL.md",
+    ".claude/agents/coder.md",
+    ".claude/agents/planner.md",
+    ".opencode/agents/coder.md",
+    ".opencode/agents/custodian.md",
+    ".opencode/agents/fixer.md",
+    ".opencode/agents/planner.md",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
+    "internal/initcmd/scaffold/templates/claude/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/codex/AGENTS.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b1/8380a35c58/0/metadata.json",
+      "transcript": "/b1/8380a35c58/0/full.jsonl",
+      "context": "/b1/8380a35c58/0/context.md",
+      "content_hash": "/b1/8380a35c58/0/content_hash.txt",
+      "prompt": "/b1/8380a35c58/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 3450,
+    "cache_read_tokens": 436738,
+    "output_tokens": 2285,
+    "api_call_count": 9
+  }
+}
