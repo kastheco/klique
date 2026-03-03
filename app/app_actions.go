@@ -39,36 +39,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
-	case "restart_instance":
-		selected := m.nav.GetSelectedInstance()
-		if selected == nil {
-			return m, nil
-		}
-		title := selected.Title
-		capturedInst := selected
-		restartCmd := func() tea.Msg {
-			// Reconstruct the prompt for plan agents so the fresh session
-			// picks up where it left off with the correct instructions.
-			switch capturedInst.AgentType {
-			case session.AgentTypeCoder:
-				capturedInst.QueuedPrompt = buildImplementPrompt(capturedInst.PlanFile)
-			case session.AgentTypePlanner:
-				if m.planState != nil {
-					if entry, ok := m.planState.Plans[capturedInst.PlanFile]; ok {
-						capturedInst.QueuedPrompt = buildPlanPrompt(planstate.DisplayName(capturedInst.PlanFile), entry.Description)
-					}
-				}
-			case session.AgentTypeReviewer:
-				planPath := "docs/plans/" + capturedInst.PlanFile
-				capturedInst.QueuedPrompt = scaffold.LoadReviewPrompt(planPath, planstate.DisplayName(capturedInst.PlanFile))
-			}
-			if err := capturedInst.RestartTmux(); err != nil {
-				return err
-			}
-			return instanceChangedMsg{}
-		}
-		return m, m.confirmAction(fmt.Sprintf("restart '%s'?", title), restartCmd)
-
 	case "open_instance":
 		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {

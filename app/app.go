@@ -299,6 +299,13 @@ type home struct {
 	// NOT set on esc — allows re-prompt.
 	plannerPrompted map[string]bool
 
+	// coderPushPrompted tracks plan files whose coder-exit push dialog has
+	// been answered (yes or no) or dismissed (esc). Prevents the dialog from
+	// re-firing on every metadata tick while the coder instance is still in
+	// the list. Cleared when a new coder is spawned for the same plan
+	// (e.g. via spawnCoderWithFeedback) so the next round can prompt again.
+	coderPushPrompted map[string]bool
+
 	// deferredPlannerDialogs holds plan files whose PlannerFinished dialog
 	// could not be shown because an overlay was active at signal-processing time.
 	// On each metadata tick, any queued plans are shown once the overlay clears.
@@ -378,6 +385,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
 	}
 
@@ -1162,6 +1170,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if inst.TaskNumber > 0 {
 					continue
 				}
+				// Skip if the push prompt was already shown and dismissed for this plan.
+				// Cleared when a new coder is spawned (spawnCoderWithFeedback).
+				if m.coderPushPrompted[inst.PlanFile] {
+					continue
+				}
 				// Focus the coder instance so the user can see its output behind the overlay.
 				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
@@ -1484,6 +1497,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
 			log.WarningLog.Printf("coder-complete: could not transition %q to reviewing: %v", planFile, err)
 		}
+
+		// Clear the push-prompt dedup flag — the plan is now in reviewing, so
+		// if a review round sends it back to implementing the next coder can
+		// trigger the push prompt cleanly.
+		delete(m.coderPushPrompted, planFile)
 
 		// Mark the coder instance as implementation-complete and pause it.
 		for _, inst := range m.nav.GetInstances() {

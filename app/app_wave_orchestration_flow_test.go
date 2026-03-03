@@ -620,6 +620,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		storage:                     storage,
 		waveOrchestrators:           make(map[string]*WaveOrchestrator),
 		plannerPrompted:             make(map[string]bool),
+		coderPushPrompted:           make(map[string]bool),
 		pendingPlannerInstanceTitle: "planner-cancel-inst",
 		pendingPlannerPlanFile:      planFile,
 		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'cancel-kill' is ready. Start implementation?"),
@@ -798,6 +799,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	h := waveFlowHome(t, ps, plansDir, nil)
 	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
 	h.plannerPrompted = make(map[string]bool)
+	h.coderPushPrompted = make(map[string]bool)
 	h.pendingReviewFeedback = make(map[string]string)
 	h.fsm = newPlanFSMForTest(t, plansDir)
 	_ = h.nav.AddInstance(otherInst)
@@ -1156,6 +1158,7 @@ func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
 	h := waveFlowHome(t, ps, plansDir, nil)
 	h.waveOrchestrators = make(map[string]*WaveOrchestrator)
 	h.plannerPrompted = make(map[string]bool)
+	h.coderPushPrompted = make(map[string]bool)
 	h.pendingReviewFeedback = make(map[string]string)
 	_ = h.nav.AddInstance(otherInst)
 	_ = h.nav.AddInstance(coderInst)
