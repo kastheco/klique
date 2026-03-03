@@ -2,57 +2,56 @@ package git
 
 import (
 	"fmt"
-	"github.com/kastheco/kasmos/log"
 	"os/exec"
 	"strings"
+
+	"github.com/kastheco/kasmos/log"
 )
 
-// runGitCommand executes a git command and returns any error
+// runGitCommand executes a git command with the given path as the working directory.
+// It builds the invocation as: git -C <path> <args...>, captures combined stdout+stderr,
+// and wraps any error with the captured output for context.
 func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {
-	baseArgs := []string{"-C", path}
-	cmd := exec.Command("git", append(baseArgs, args...)...)
-
-	output, err := cmd.CombinedOutput()
+	cmdArgs := append([]string{"-C", path}, args...)
+	cmd := exec.Command("git", cmdArgs...)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git command failed: %s (%w)", output, err)
+		return "", fmt.Errorf("git command failed: %s (%w)", out, err)
 	}
-
-	return string(output), nil
+	return string(out), nil
 }
 
-// PushChanges commits and pushes changes in the worktree to the remote branch.
-// Used by user-triggered push actions where dirty state should be committed first.
+// PushChanges stages, commits, and pushes the worktree's current state to the remote.
+// It requires the GitHub CLI (gh) to be present and authenticated.
+// When open is true the branch URL is opened in the browser after a successful push.
 func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	if err := checkGHCLI(); err != nil {
 		return err
 	}
-
 	if err := g.CommitChanges(commitMessage); err != nil {
 		return err
 	}
-
 	return g.Push(open)
 }
 
-// Push pushes the current branch to the remote without committing.
-// Used by automated flows (plan completion, wave orchestration) where the
-// agent has already committed its work.
+// Push pushes the current branch to origin without committing first.
+// If open is true it attempts to open the remote branch URL; any error from
+// that step is logged but not returned.
 func (g *GitWorktree) Push(open bool) error {
 	if _, err := g.runGitCommand(g.worktreePath, "push", "-u", "origin", g.branchName); err != nil {
 		return fmt.Errorf("failed to push branch %s: %w", g.branchName, err)
 	}
-
 	if open {
 		if err := g.OpenBranchURL(); err != nil {
 			log.ErrorLog.Printf("failed to open branch URL: %v", err)
 		}
 	}
-
 	return nil
 }
 
-// GeneratePRBody assembles a markdown PR description from the branch's
-// changed files, commit history, and diff stats.
+// GeneratePRBody builds a markdown pull-request description that summarises
+// the files changed, the commit history, and diff statistics since baseCommitSHA.
+// It returns an error if no base commit SHA is available.
 func (g *GitWorktree) GeneratePRBody() (string, error) {
 	base := g.GetBaseCommitSHA()
 	if base == "" {
@@ -61,110 +60,105 @@ func (g *GitWorktree) GeneratePRBody() (string, error) {
 
 	var sections []string
 
-	// Changed files
-	files, err := g.runGitCommand(g.worktreePath, "diff", "--name-only", base)
-	if err == nil && strings.TrimSpace(files) != "" {
-		sections = append(sections, "## Changes\n\n"+strings.TrimSpace(files))
+	// List of files that changed relative to the base commit.
+	if files, err := g.runGitCommand(g.worktreePath, "diff", "--name-only", base); err == nil {
+		if trimmed := strings.TrimSpace(files); trimmed != "" {
+			sections = append(sections, "## Changes\n\n"+trimmed)
+		}
 	}
 
-	// Commit messages on the branch
-	commits, err := g.runGitCommand(g.worktreePath, "log", "--oneline", base+"..HEAD")
-	if err == nil && strings.TrimSpace(commits) != "" {
-		sections = append(sections, "## Commits\n\n"+strings.TrimSpace(commits))
+	// One-line commit log from base to HEAD.
+	if commits, err := g.runGitCommand(g.worktreePath, "log", "--oneline", base+"..HEAD"); err == nil {
+		if trimmed := strings.TrimSpace(commits); trimmed != "" {
+			sections = append(sections, "## Commits\n\n"+trimmed)
+		}
 	}
 
-	// Diff stats summary
-	stats, err := g.runGitCommand(g.worktreePath, "diff", "--stat", base)
-	if err == nil && strings.TrimSpace(stats) != "" {
-		sections = append(sections, "## Stats\n\n"+strings.TrimSpace(stats))
+	// Summary statistics of insertions/deletions.
+	if stats, err := g.runGitCommand(g.worktreePath, "diff", "--stat", base); err == nil {
+		if trimmed := strings.TrimSpace(stats); trimmed != "" {
+			sections = append(sections, "## Stats\n\n"+trimmed)
+		}
 	}
 
 	if len(sections) == 0 {
 		return "", nil
 	}
-
 	return strings.Join(sections, "\n\n"), nil
 }
 
-// CreatePR pushes changes and creates a pull request on GitHub.
+// CreatePR pushes the current branch and opens a pull request on GitHub.
+// If the PR already exists it opens the existing one in the browser instead.
 func (g *GitWorktree) CreatePR(title, body, commitMsg string) error {
-	// Push changes first (without opening browser)
 	if err := g.PushChanges(commitMsg, false); err != nil {
 		return fmt.Errorf("failed to push changes: %w", err)
 	}
 
-	// Create the pull request
 	prCmd := exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", g.branchName)
 	prCmd.Dir = g.worktreePath
-	if output, err := prCmd.CombinedOutput(); err != nil {
-		// If PR already exists, just open it
-		if strings.Contains(string(output), "already exists") {
+	out, err := prCmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "already exists") {
 			viewCmd := exec.Command("gh", "pr", "view", "--web", g.branchName)
 			viewCmd.Dir = g.worktreePath
 			_ = viewCmd.Run()
 			return nil
 		}
-		return fmt.Errorf("failed to create PR: %s (%w)", output, err)
+		return fmt.Errorf("failed to create PR: %s (%w)", out, err)
 	}
 
-	// Open the PR in browser
 	viewCmd := exec.Command("gh", "pr", "view", "--web", g.branchName)
 	viewCmd.Dir = g.worktreePath
 	_ = viewCmd.Run()
-
 	return nil
 }
 
-// CommitChanges commits changes locally without pushing to remote
+// CommitChanges stages all changes and creates a commit with the given message.
+// It is a no-op when the worktree is clean.
 func (g *GitWorktree) CommitChanges(commitMessage string) error {
-	// Check if there are any changes to commit
-	isDirty, err := g.IsDirty()
+	dirty, err := g.IsDirty()
 	if err != nil {
 		return fmt.Errorf("failed to check for changes: %w", err)
 	}
-
-	if isDirty {
-		// Stage all changes
-		if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
-			log.ErrorLog.Print(err)
-			return fmt.Errorf("failed to stage changes: %w", err)
-		}
-
-		// Create commit (local only)
-		if _, err := g.runGitCommand(g.worktreePath, "commit", "-m", commitMessage, "--no-verify"); err != nil {
-			log.ErrorLog.Print(err)
-			return fmt.Errorf("failed to commit changes: %w", err)
-		}
+	if !dirty {
+		return nil
 	}
-
+	if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
+		log.ErrorLog.Print(err)
+		return fmt.Errorf("failed to stage changes: %w", err)
+	}
+	if _, err := g.runGitCommand(g.worktreePath, "commit", "-m", commitMessage, "--no-verify"); err != nil {
+		log.ErrorLog.Print(err)
+		return fmt.Errorf("failed to commit changes: %w", err)
+	}
 	return nil
 }
 
-// IsDirty checks if the worktree has uncommitted changes
+// IsDirty reports whether the worktree contains uncommitted changes.
 func (g *GitWorktree) IsDirty() (bool, error) {
-	output, err := g.runGitCommand(g.worktreePath, "status", "--porcelain")
+	out, err := g.runGitCommand(g.worktreePath, "status", "--porcelain")
 	if err != nil {
 		return false, fmt.Errorf("failed to check worktree status: %w", err)
 	}
-	return len(output) > 0, nil
+	return len(out) > 0, nil
 }
 
-// IsBranchCheckedOut checks if the instance branch is currently checked out
+// IsBranchCheckedOut reports whether the configured branch is the currently
+// checked-out branch in the repository (not in the worktree).
 func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
-	output, err := g.runGitCommand(g.repoPath, "branch", "--show-current")
+	out, err := g.runGitCommand(g.repoPath, "branch", "--show-current")
 	if err != nil {
 		return false, fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return strings.TrimSpace(output) == g.branchName, nil
+	return strings.TrimSpace(out) == g.branchName, nil
 }
 
-// OpenBranchURL opens the branch URL in the default browser
+// OpenBranchURL opens the remote branch page in the default browser using the
+// GitHub CLI. It requires gh to be present and authenticated.
 func (g *GitWorktree) OpenBranchURL() error {
-	// Check if GitHub CLI is available
 	if err := checkGHCLI(); err != nil {
 		return err
 	}
-
 	cmd := exec.Command("gh", "browse", "--branch", g.branchName)
 	cmd.Dir = g.worktreePath
 	if err := cmd.Run(); err != nil {
