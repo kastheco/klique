@@ -642,7 +642,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 // signal the spawned coder gets title "feature-fix-1"; after the subsequent
 // ImplementFinished the spawned reviewer gets "feature-review-2".
 func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 	const feedback = "Fix the error handling in auth.go"
 
 	dir := t.TempDir()
@@ -740,7 +740,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 // With review_cycle=0 in planstate (initial), the first reviewer gets ReviewCycle=1
 // (1-indexed for humans: display value = stored cycle + 1).
 func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

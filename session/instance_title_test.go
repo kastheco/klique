@@ -60,7 +60,7 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 		{
 			name: "reviewer with review cycle",
 			inst: &Instance{
-				PlanFile:    "2026-03-02-my-feature.md",
+				PlanFile:    "my-feature.md",
 				AgentType:   AgentTypeReviewer,
 				Title:       "my-feature-review-2",
 				ReviewCycle: 2,
