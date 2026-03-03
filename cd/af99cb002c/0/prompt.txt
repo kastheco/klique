@@ -1,0 +1,94 @@
+Implement Task 7: Rewrite navigation_panel.go — Sidebar Plan/Instance Tree
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 7 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/navigation_panel.go`
+- Test: `ui/nav_panel_test.go` (existing — 1004 LOC, 40+ test functions covering row building, sorting, navigation, expand/collapse, search, rendering, cycle, selection persistence)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `nav_panel_test.go` is the most comprehensive test file in the package, covering: empty panel, plans with instances, solo instances, mixed plan+solo, history/cancelled sections, dead section partitioning (done plans with running/non-running/mixed instances), history expansion, dead section collapsibility, ClickUp import action, sort ordering (notifications first, instance sort within plan), navigation (up/down/left/right with solo header skipping), expand/collapse (plan header, instance returns false, auto-collapse, user override persistence), selection API (GetSelectedInstance, GetSelectedPlanFile, IsSelectedPlanHeader, SelectByID, SelectInstance, GetSelectedID), selection persistence across rebuild, Kill/Remove, search (activate/deactivate, filter visible rows), rendering (section headers, instance display titles with wave/task, legend, review cycle numbers, implementing/reviewing plans in active section), CycleNextActive/CyclePrevActive (skips paused, auto-expands collapsed plans), FindPlanInstance (prefers running), and misc (SetSize, SetFocused, SelectedSpaceAction, AddInstance, Clear, SelectFirst, ClickItem).
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "Test" -v -count=1 2>&1 | tail -5
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/navigation_panel.go` and rewrite from scratch:
+
+- **Constants** — `SidebarPlanPrefix = "__plan__"`, `SidebarTopicPrefix = "__topic__"`, `SidebarPlanHistoryToggle = "__plan_history_toggle__"`, `SidebarImportClickUp = "__import_clickup__"`.
+- **`PlanDisplay` struct** — `Filename`, `Status`, `Description`, `Branch`, `Topic string`.
+- **`TopicStatus` struct** — `HasRunning`, `HasNotification bool`.
+- **`TopicDisplay` struct** — `Name string`, `Plans []PlanDisplay`.
+- **`navRowKind` type** — `int` enum: `navRowPlanHeader`, `navRowInstance`, `navRowSoloHeader`, `navRowTopicHeader`, `navRowImportAction`, `navRowDeadToggle`, `navRowDeadPlan`, `navRowHistoryToggle`, `navRowHistoryPlan`, `navRowCancelled`.
+- **`navRow` struct** — `Kind navRowKind`, `ID string`, `Label string`, `TaskFile string`, `PlanStatus string`, `Instance *session.Instance`, `Collapsed bool`, `HasRunning bool`, `HasNotification bool`, `Indent int`.
+- **Styles** — 15+ package-level `lipgloss.Style` vars for nav items, selection, sections, icons, search box (matching current visual output exactly).
+- **`NavigationPanel` struct** — fields: `spinner *spinner.Model`, `rows []navRow`, `selectedIdx int`, `scrollOffset int`, `plans []PlanDisplay`, `topics []TopicDisplay`, `instances []*session.Instance`, `deadPlans []PlanDisplay`, `historyPlans []PlanDisplay`, `promotedPlans []PlanDisplay`, `cancelled []PlanDisplay`, `planStatuses map[string]TopicStatus`, `collapsed map[string]bool`, `userOverrides map[string]bool`, `inspectedPlans map[string]bool`, `deadExpanded bool`, `historyExpanded bool`, `searchActive bool`, `searchQuery string`, `clickUpAvail bool`, `auditView string`, `auditHeight int`, `width int`, `height int`, `focused bool`.
+- **`NewNavigationPanel(sp *spinner.Model) *NavigationPanel`** — initializes maps, `deadExpanded: true`, `focused: true`.
+- **Data setters** — `SetData(plans, instances, history, cancelled, planStatuses)`, `SetPlans(plans)`, `SetTopicsAndPlans(topics, ungrouped, history, cancelled...)`, `SetPlanStatuses(statuses)`, `SetItems(...)` (legacy compat).
+- **`splitDeadFromHistory(finished []PlanDisplay)`** — partitions finished plans into three buckets based on instance state: promoted (has running instances → appended to active plans), dead (has non-running instances or manually inspected), history (no instances). Removes previously promoted plans before re-partitioning.
+- **`resplitDead()`** — recombines all finished plans and re-partitions.
+- **`InspectPlan(planFile string)`** — marks plan as inspected, re-partitions, expands dead section, rebuilds rows.
+- **`rebuildRows()`** — core row-building logic: preserves selected ID across rebuild. Groups instances by plan file, sorts instances within each plan (running < notified < paused < completed, alphabetical tiebreak). Sorts plans by sort key (notification=0, running/implementing/reviewing=1, idle=2, alphabetical tiebreak). Builds row list: optional ClickUp import action, dead section (toggle + plans if expanded), active plans (sort key < 2), solo instances with divider header, idle plans grouped by topic (with topic headers, collapsible), ungrouped idle plans, history section (toggle + plans if expanded), cancelled plans. Restores selection by ID or clamps to previous numeric position (skipping non-selectable dividers).
+- **Sort helpers** — `navInstanceSortKey(inst)` (implementation-complete=3, running/loading=0, paused=2, notified=1, default=3), `navPlanSortKey(p, insts, st)` (notification=0, running=1, implementing/reviewing=1, idle=2), `aggregateNavPlanStatus(insts, st)`.
+- **`isPlanCollapsed(planFile, hasRunning, hasNotification) bool`** — user override wins; default: collapsed unless running or notified.
+- **Layout** — `SetSize(width, height)`, `SetAuditView(view, h)`, `SetFocused(focused)`, `IsFocused()`, `SetClickUpAvailable(a)`, `availRows()` (height - 8, min 1), `clampScroll()`.
+- **Search** — `ActivateSearch()`, `DeactivateSearch()`, `IsSearchActive()`, `GetSearchQuery()`, `SetSearchQuery(q)` (snaps selection to first matching row), `rowMatchesSearch(idx)` (case-insensitive label/taskfile match).
+- **Navigation** — `Up()`/`Down()` (skip solo headers and search-hidden rows), `Left()` (collapse or jump to parent), `Right()` (expand or descend), `ToggleSelectedExpand()`.
+- **Selection API** — `GetSelectedInstance()`, `GetSelectedPlanFile()`, `IsSelectedPlanHeader()`, `IsSelectedHistoryPlan()`, `GetSelectedID()`, `GetSelectedIdx()`, `GetScrollOffset()`, `ClickItem(row)`, `SelectByID(id)`, `SelectInstance(inst)` (auto-expands collapsed plan), `SetSelectedInstance(idx)`, `SelectedIndex()`, `SelectFirst()` (skips solo header), `SelectedSpaceAction()`.
+- **Cycle** — `CycleNextActive()`/`CyclePrevActive()` via `cycleActive(step)`: builds ordered list of non-paused instances in visual order (including hidden instances under collapsed plan headers at their header position), wraps around, auto-expands via `SelectInstance`.
+- **Instance management** — `GetInstances()`, `TotalInstances()`, `NumInstances()`, `AddInstance(inst)`, `RemoveByTitle(title)`, `Remove()`, `Kill()`, `Attach()`, `Clear()`, `SetSessionPreviewSize(width, height)`, `FindPlanInstance(planFile)` (prefers running over ready, skips paused).
+- **Display helpers** — `navInstanceTitle(inst)` (wave/task format, review cycle, planner, solo agent, coder fix labels), `navInstanceStatusIcon(inst)` (spinner for running, colored glyphs for ready/notified/paused/exited/completed), `navPlanStatusIcon(row)`, `navSectionLabel(key)`, `navDividerLine(label, w)`.
+- **`renderNavRow(row, contentWidth) string`** — per-kind rendering: plan header (indent + chevron + label + gap + status icon), instance (indent + title + gap + status icon, solo vs plan-child styling, dead instance strikethrough), solo header divider, topic header (chevron + label), dead/history toggles, history plan (label + done icon), cancelled (strikethrough + ✕), import action (right-aligned).
+- **`String() string`** — builds bordered panel: border style (double+iris when focused, rounded+overlay otherwise). Inner content: search bar (active/inactive styling), visible items with section dividers between plan sort-key groups (active vs plans), scroll window centered on selected item, legend (icon key centered), optional audit view (bottom-pinned with gap splitting). Wraps in `zone.Mark(ZoneNavPanel, ...)`. Each row wrapped in `zone.Mark(NavRowZoneID(idx), ...)`.
+- **`isAuditContinuationLine(line string) bool`** — strips ANSI + leading spaces, returns true if first char is not a digit (not a timestamp line).
+- **`RowCount() int`** — returns `len(rows)`.
+
+Imports: `fmt`, `sort`, `strings`, `github.com/charmbracelet/bubbles/spinner`, `github.com/charmbracelet/lipgloss`, `github.com/charmbracelet/x/ansi`, `github.com/kastheco/kasmos/config/taskstate`, `github.com/kastheco/kasmos/session`, `github.com/lrstanley/bubblezone`, `github.com/mattn/go-runewidth`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "Test" -v -count=1 2>&1 | tail -5
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/navigation_panel.go
+git commit -m "feat(clean-room): rewrite navigation_panel.go from scratch"
+```
