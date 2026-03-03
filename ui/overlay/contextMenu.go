@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-runewidth"
 )
 
 // ContextMenuItem represents a single menu option.
@@ -44,15 +45,15 @@ func (c *ContextMenu) calculateWidth() {
 	maxWidth := 0
 	for i, item := range c.items {
 		label := fmt.Sprintf("%d %s", i+1, item.Label)
-		if len(label) > maxWidth {
-			maxWidth = len(label)
+		if w := runewidth.StringWidth(label); w > maxWidth {
+			maxWidth = w
 		}
 	}
 	placeholder := "\uf002 Type to filter..."
-	if len(placeholder) > maxWidth {
-		maxWidth = len(placeholder)
+	if w := runewidth.StringWidth(placeholder); w > maxWidth {
+		maxWidth = w
 	}
-	c.width = maxWidth + 4 // padding
+	c.width = maxWidth + 4 // padding for item decorations
 }
 
 func (c *ContextMenu) applyFilter() {
@@ -163,19 +164,28 @@ func (c *ContextMenu) View() string {
 	st := DefaultStyles()
 	var b strings.Builder
 
-	innerWidth := c.width
-	if innerWidth < 10 {
-		innerWidth = 10
+	// Width() sets content width — subtract each component's own
+	// horizontal decorations so the rendered output fits in c.width.
+	// SearchBar: border(2) + padding(2) = 4
+	// Items: padding(2) = 2
+	searchW := c.width - 4
+	if searchW < 6 {
+		searchW = 6
 	}
+	itemW := c.width - 2
+	if itemW < 6 {
+		itemW = 6
+	}
+
 	searchText := c.searchQuery
 	if searchText == "" {
 		searchText = st.Muted.Render("\uf002 Type to filter...")
 	}
-	b.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
+	b.WriteString(st.SearchBar.Width(searchW).Render(searchText))
 	b.WriteString("\n")
 
 	if len(c.filtered) == 0 {
-		b.WriteString(st.DisabledItem.Width(c.width).Render("No matches"))
+		b.WriteString(st.DisabledItem.Width(itemW).Render("No matches"))
 	} else {
 		for i, fi := range c.filtered {
 			numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
@@ -183,13 +193,13 @@ func (c *ContextMenu) View() string {
 
 			var line string
 			if fi.item.Disabled {
-				line = st.DisabledItem.Width(c.width).Render(
+				line = st.DisabledItem.Width(itemW).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else if i == c.selectedIdx {
-				line = st.SelectedItem.Width(c.width).Render(
+				line = st.SelectedItem.Width(itemW).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else {
-				line = st.Item.Render(numPrefix + label)
+				line = st.Item.Width(itemW).Render(numPrefix + label)
 			}
 			b.WriteString(line)
 			if i < len(c.filtered)-1 {
