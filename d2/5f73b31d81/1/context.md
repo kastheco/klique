@@ -1,0 +1,16 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+review all open code and quad code skills to ensure that all of the casmo skills and agents are up to date with the latest changes in regards to the planstore, the http api, and sqlite database backing it. I just noticed a planner tried to access plan-state.json in the docs / plans directory.
+
+### Prompt 2
+
+1. cool with that; 2. delete them; 3. good idea; 4. good idea
+
+### Prompt 3
+
+yes then push bugfix release. do i need to rerun scaffolding or is my local project here and in ~/dev/freyja/backend both up to date?
+
