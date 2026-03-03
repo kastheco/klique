@@ -83,7 +83,7 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 // is treated as a failure in the wave monitor, causing the wave to complete (with
 // failure) and a failed-wave decision prompt to appear.
 func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
-	const planFile = "2026-02-21-paused-task.md"
+	const planFile = "paused-task.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -140,7 +140,7 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 // TestWaveMonitor_MissingTaskCountsAsFailed verifies that a task with no matching
 // instance in the list is counted as failed, triggering the failed-wave decision prompt.
 func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
-	const planFile = "2026-02-21-missing-task.md"
+	const planFile = "missing-task.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -180,7 +180,7 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 // TestWaveMonitor_AbortKeyDeletesOrchestrator verifies that pressing 'a' on the
 // failed-wave decision prompt removes the orchestrator and returns to default state.
 func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
-	const planFile = "2026-02-21-abort-test.md"
+	const planFile = "abort-test.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -233,7 +233,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	const planFile = "2026-02-21-no-waves.md"
+	const planFile = "no-waves.md"
 	// Plan content without ## Wave headers (has tasks but no waves)
 	content := "# Plan\n\n**Goal:** Test\n\n### Task 1: Something\n\nDo it.\n"
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(content), 0o644))
@@ -291,7 +291,7 @@ func TestTriggerPlanStage_ImplementNoWaves_RespawnsPlanner(t *testing.T) {
 // final wave complete, the orchestrator is deleted and a confirmation dialog appears
 // asking the user to push and start review.
 func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
-	const planFile = "2026-02-24-all-complete.md"
+	const planFile = "all-complete.md"
 
 	// Single wave plan — completing its tasks triggers WaveStateAllComplete directly.
 	plan := &planparser.Plan{
@@ -351,7 +351,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 // TestWaveAllCompleteMsg_TransitionsToReviewing verifies that the waveAllCompleteMsg
 // handler transitions the plan FSM from implementing to reviewing.
 func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
-	const planFile = "2026-02-24-review-transition.md"
+	const planFile = "review-transition.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -382,7 +382,7 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 // TestWaveMonitor_AllComplete_MultiWave verifies the flow with a multi-wave plan
 // where all waves complete sequentially (wave 1 done → advance → wave 2 done → review prompt).
 func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
-	const planFile = "2026-02-24-multi-wave.md"
+	const planFile = "multi-wave.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -443,7 +443,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 // spawned. Without this cleanup, each retry leaves behind ghost instances that all get
 // marked ImplementationComplete when waves finish — producing duplicate entries.
 func TestRetryFailedWaveTasks_RemovesOldInstances(t *testing.T) {
-	const planFile = "2026-02-25-retry-cleanup.md"
+	const planFile = "retry-cleanup.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -565,7 +565,7 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 
 	// Create a plan with wave headers
 	planContent := "# Test\n\n**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\nDo the thing.\n"
-	planFile := "2026-02-20-wave-signal-test.md"
+	planFile := "wave-signal-test.md"
 	plansDir := filepath.Join(repoRoot, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
@@ -592,7 +592,7 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 // TestPlannerExit_CancelKillsInstanceAndMarksPrompted verifies that pressing "n"
 // on the planner-exit dialog kills the planner instance and marks plannerPrompted.
 func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
-	const planFile = "2026-02-22-cancel-kill.md"
+	const planFile = "cancel-kill.md"
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   "planner-cancel-inst",
@@ -651,7 +651,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 // showing the wave-complete confirmation auto-selects a task instance for
 // that plan so the agent output is visible behind the overlay.
 func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
-	const planFile = "2026-02-21-focus-wave.md"
+	const planFile = "focus-wave.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -713,7 +713,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 // TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown verifies that the
 // failed-wave decision dialog auto-focuses a task instance for the plan.
 func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
-	const planFile = "2026-02-21-focus-failed.md"
+	const planFile = "focus-failed.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -774,7 +774,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenFailedWaveShown(t *testing.T) {
 // PlannerFinished signal is processed, the planner instance is auto-focused
 // so its output is visible behind the overlay.
 func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
-	const planFile = "2026-02-21-focus-planner.md"
+	const planFile = "focus-planner.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -833,7 +833,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 // waves complete while the user is in an overlay (e.g. confirmation dialog),
 // the review prompt is deferred and shown on the next tick when the overlay clears.
 func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
-	const planFile = "2026-02-28-deferred-complete.md"
+	const planFile = "deferred-complete.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -937,7 +937,7 @@ func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {
 // TestAutoAdvanceWaves_ShowsConfirmOnFailure verifies that even when AutoAdvanceWaves
 // is true, a wave with failures still shows the decision dialog.
 func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
-	const planFile = "2026-02-28-auto-advance-failure.md"
+	const planFile = "auto-advance-failure.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -1014,7 +1014,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 // is true and a wave completes with zero failures, the Update handler emits a
 // waveAdvanceMsg directly (no confirmation dialog shown).
 func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
-	const planFile = "2026-02-28-auto-advance-success.md"
+	const planFile = "auto-advance-success.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -1072,7 +1072,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 // prevents permission prompts and early prompt returns from prematurely
 // completing a wave (especially dangerous with auto-advance enabled).
 func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
-	const planFile = "2026-03-02-has-worked-guard.md"
+	const planFile = "has-worked-guard.md"
 
 	plan := &planparser.Plan{
 		Waves: []planparser.Wave{
@@ -1134,7 +1134,7 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 // coder finishes (tmux dies) and the "push branch?" dialog shows, the coder
 // instance is auto-focused so its output is visible behind the overlay.
 func TestCoderExit_FocusesCoderInstance_BeforePushConfirm(t *testing.T) {
-	const planFile = "2026-02-21-focus-coder.md"
+	const planFile = "focus-coder.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

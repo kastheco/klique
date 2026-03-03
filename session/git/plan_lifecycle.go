@@ -9,7 +9,7 @@ import (
 )
 
 // PlanBranchFromFile derives the git branch name from a plan filename.
-// "2026-02-21-auth-refactor.md" → "plan/auth-refactor"
+// "auth-refactor.md" → "plan/auth-refactor"
 func PlanBranchFromFile(planFile string) string {
 	name := planstate.DisplayName(planFile)
 	name = sanitizeBranchName(name)

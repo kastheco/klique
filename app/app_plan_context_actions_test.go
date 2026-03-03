@@ -23,7 +23,7 @@ func TestFSMPlanStart_TransitionsReadyToPlanning(t *testing.T) {
 	store, ps, fsm := newSharedStoreForTest(t, plansDir)
 	_ = store
 
-	planFile := "2026-02-21-auth-refactor.md"
+	planFile := "auth-refactor.md"
 	if err := ps.Register(planFile, "auth refactor", "plan/auth-refactor", time.Now()); err != nil {
 		t.Fatal(err)
 	}

@@ -1222,7 +1222,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 			Path:    "/tmp",
 			Program: "claude",
 		})
-		inst.PlanFile = "2026-02-27-auth.md"
+		inst.PlanFile = "auth.md"
 		inst.AgentType = session.AgentTypeCoder
 		inst.MarkStartedForTest()
 		inst.SetTmuxSession(tmux.NewTmuxSession("auth-impl", "claude", false))
@@ -1239,7 +1239,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 		item := hm.tmuxBrowser.SelectedItem()
 		assert.True(t, item.Managed)
 		assert.Equal(t, "coder", item.AgentType)
-		assert.Equal(t, "2026-02-27-auth.md", item.PlanFile)
+		assert.Equal(t, "auth.md", item.PlanFile)
 	})
 
 	t.Run("dismiss returns to default state", func(t *testing.T) {

@@ -34,31 +34,31 @@ func TestBuildPlanPrompt(t *testing.T) {
 }
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
-	prompt := buildWaveAnnotationPrompt("2026-02-27-my-feature.md")
-	assert.Contains(t, prompt, "2026-02-27-my-feature.md", "prompt must reference the plan file")
+	prompt := buildWaveAnnotationPrompt("my-feature.md")
+	assert.Contains(t, prompt, "my-feature.md", "prompt must reference the plan file")
 	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
 	assert.Contains(t, prompt, "commit", "prompt must instruct the planner to commit after annotation")
 	assert.Contains(t, prompt, "planner-finished-", "prompt must include the signal file instruction")
 }
 
 func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
-	prompt := buildWaveAnnotationPrompt("2026-02-27-trivial.md")
+	prompt := buildWaveAnnotationPrompt("trivial.md")
 	// Even trivial plans must be wrapped in at least ## Wave 1
 	assert.Contains(t, prompt, "## Wave 1", "prompt must specify ## Wave 1 as the minimum structure")
 }
 
 func TestBuildImplementPrompt(t *testing.T) {
-	prompt := buildImplementPrompt("2026-02-21-auth-refactor.md")
-	if !strings.Contains(prompt, "Implement docs/plans/2026-02-21-auth-refactor.md") {
+	prompt := buildImplementPrompt("auth-refactor.md")
+	if !strings.Contains(prompt, "Implement docs/plans/auth-refactor.md") {
 		t.Fatalf("prompt missing plan path")
 	}
 }
 
 func TestBuildSoloPrompt_WithDescription(t *testing.T) {
-	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "2026-02-21-auth-refactor.md")
+	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
 	assert.Contains(t, prompt, "Implement auth-refactor")
 	assert.Contains(t, prompt, "Goal: Refactor JWT auth")
-	assert.Contains(t, prompt, "docs/plans/2026-02-21-auth-refactor.md")
+	assert.Contains(t, prompt, "docs/plans/auth-refactor.md")
 }
 
 func TestBuildSoloPrompt_StubOnly(t *testing.T) {
@@ -122,7 +122,7 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	planFile := "2026-02-21-test.md"
+	planFile := "test.md"
 	if err := ps.Register(planFile, "test plan", "plan/test", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	planFile := "2026-02-23-test-planner.md"
+	planFile := "test-planner.md"
 	if err := ps.Register(planFile, "test plan", "plan/test-planner", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	planFile := "2026-02-21-test.md"
+	planFile := "test.md"
 	if err := ps.Register(planFile, "test plan", "plan/test", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	planFile := "2026-02-25-test-solo.md"
+	planFile := "test-solo.md"
 	require.NoError(t, ps.Register(planFile, "test solo", "plan/test-solo", time.Now()))
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
@@ -319,8 +319,8 @@ func TestSpawnPlanAgent_SoloTitlesArePlanScoped(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
-	const firstPlan = "2026-03-01-wrong-timezone.md"
-	const secondPlan = "2026-03-01-rename-solo-agent-label.md"
+	const firstPlan = "wrong-timezone.md"
+	const secondPlan = "rename-solo-agent-label.md"
 	require.NoError(t, ps.Register(firstPlan, "wrong timezone", "plan/wrong-timezone", time.Now()))
 	require.NoError(t, ps.Register(secondPlan, "rename solo agent label", "plan/rename-solo-agent-label", time.Now()))
 
@@ -372,8 +372,8 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 	require.NoError(t, err)
 
 	const (
-		targetPlan   = "2026-02-25-solo-target.md"
-		conflictPlan = "2026-02-25-conflict.md"
+		targetPlan   = "solo-target.md"
+		conflictPlan = "conflict.md"
 		topic        = "shared-topic"
 	)
 
@@ -440,7 +440,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
-	planFile := "2026-02-28-test-set-status.md"
+	planFile := "test-set-status.md"
 	require.NoError(t, ps.Register(planFile, "test set status", "plan/test-set-status", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
 
@@ -483,7 +483,7 @@ func TestToggleAutoAdvanceWaves(t *testing.T) {
 
 func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
-	planFile := "2026-02-28-test.md"
+	planFile := "test.md"
 	content := "# My Plan\n\n## Wave 1\n\n### Task 1: Do thing\n"
 	require.NoError(t, store.Create("proj", planstore.PlanEntry{
 		Filename: planFile,
@@ -526,7 +526,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
-	planFile := "2026-02-26-review-approval-gate.md"
+	planFile := "review-approval-gate.md"
 	require.NoError(t, ps.Register(planFile, "review approval gate", "plan/review-approval-gate", time.Now()))
 	seedPlanStatus(t, ps, planFile, planstate.StatusReady)
 

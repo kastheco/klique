@@ -40,13 +40,9 @@ func executePlanRegister(plansDir, planFile, branch, topic, description string, 
 			}
 		}
 	}
-	// Default branch: plan/<slug> where slug strips the date prefix.
+	// Default branch: plan/<slug> derived from the plan filename.
 	if branch == "" {
-		slug := planFile
-		if len(slug) > 11 && slug[4] == '-' && slug[7] == '-' && slug[10] == '-' {
-			slug = slug[11:]
-		}
-		slug = strings.TrimSuffix(slug, ".md")
+		slug := strings.TrimSuffix(planFile, ".md")
 		branch = "plan/" + slug
 	}
 	info, _ := os.Stat(fullPath)

@@ -61,7 +61,7 @@ func TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg(t *testing.T) {
 
 	store, ps, _ := newSharedStoreForTest(t, plansDir)
 
-	planFile := "2026-02-27-cancel-delay.md"
+	planFile := "cancel-delay.md"
 	require.NoError(t, ps.Register(planFile, "cancel delay test", "plan/cancel-delay", time.Now()))
 
 	h := newCancelDelayHome(t, store, ps, plansDir, dir)
@@ -97,8 +97,8 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	// After renaming aardvark → zebra: "marmot" sorts before "zebra",
 	// so index 0 = marmot, index 1 = zebra.
 	// Without the fix, selectedIdx stays 0 → cursor lands on marmot, not zebra.
-	aardvarkFile := "2026-02-27-aardvark.md"
-	marmotFile := "2026-02-27-marmot.md"
+	aardvarkFile := "aardvark.md"
+	marmotFile := "marmot.md"
 	require.NoError(t, ps.Register(aardvarkFile, "aardvark", "plan/aardvark", time.Now()))
 	require.NoError(t, ps.Register(marmotFile, "marmot", "plan/marmot", time.Now()))
 
@@ -119,7 +119,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	// The handler renamed aardvark → zebra and must have called SelectByID so
 	// the cursor now points at the zebra plan, not marmot.
 	// Derive the expected new filename the same way planstate.Rename does.
-	expectedID := ui.SidebarPlanPrefix + "2026-02-27-zebra.md"
+	expectedID := ui.SidebarPlanPrefix + "zebra.md"
 	assert.Equal(t, expectedID, h.nav.GetSelectedID(),
 		"selection must follow the renamed plan; without the fix it jumps to marmot")
 }

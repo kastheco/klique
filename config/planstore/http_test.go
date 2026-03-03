@@ -22,18 +22,18 @@ func newTestHTTPStore(t *testing.T) *planstore.HTTPStore {
 func TestHTTPStore_ContentRoundTrip(t *testing.T) {
 	store := newTestHTTPStore(t)
 	entry := planstore.PlanEntry{
-		Filename: "2026-02-28-test.md",
+		Filename: "test.md",
 		Status:   planstore.StatusReady,
 		Content:  "# My Plan\n\nDetails here.",
 	}
 	require.NoError(t, store.Create("proj", entry))
 
-	content, err := store.GetContent("proj", "2026-02-28-test.md")
+	content, err := store.GetContent("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "# My Plan\n\nDetails here.", content)
 
-	require.NoError(t, store.SetContent("proj", "2026-02-28-test.md", "# Updated Plan"))
-	content, err = store.GetContent("proj", "2026-02-28-test.md")
+	require.NoError(t, store.SetContent("proj", "test.md", "# Updated Plan"))
+	content, err = store.GetContent("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "# Updated Plan", content)
 }

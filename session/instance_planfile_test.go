@@ -9,13 +9,13 @@ func TestNewInstance_SetsPlanFile(t *testing.T) {
 		Title:    "plan-worker",
 		Path:     ".",
 		Program:  "claude",
-		PlanFile: "2026-02-20-plan-orchestration.md",
+		PlanFile: "plan-orchestration.md",
 	})
 	if err != nil {
 		t.Fatalf("NewInstance() error = %v", err)
 	}
-	if inst.PlanFile != "2026-02-20-plan-orchestration.md" {
-		t.Fatalf("PlanFile = %q, want %q", inst.PlanFile, "2026-02-20-plan-orchestration.md")
+	if inst.PlanFile != "plan-orchestration.md" {
+		t.Fatalf("PlanFile = %q, want %q", inst.PlanFile, "plan-orchestration.md")
 	}
 }
 
@@ -87,7 +87,7 @@ func TestNewInstance_SetsAgentType(t *testing.T) {
 		Title:     "planner-worker",
 		Path:      ".",
 		Program:   "opencode",
-		PlanFile:  "2026-02-21-auth-refactor.md",
+		PlanFile:  "auth-refactor.md",
 		AgentType: AgentTypePlanner,
 	})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestInstanceData_RoundTripAgentType(t *testing.T) {
 		Branch:    "plan/auth-refactor",
 		Status:    Paused,
 		Program:   "opencode",
-		PlanFile:  "2026-02-21-auth-refactor.md",
+		PlanFile:  "auth-refactor.md",
 		AgentType: AgentTypeReviewer,
 		Worktree: GitWorktreeData{
 			RepoPath:      "/tmp/repo",

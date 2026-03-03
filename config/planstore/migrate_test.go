@@ -15,7 +15,7 @@ func TestMigrateFromJSON(t *testing.T) {
 
 	stateJSON := `{
         "plans": {
-            "2026-02-28-test.md": {
+            "test.md": {
                 "status": "ready",
                 "description": "test plan",
                 "branch": "plan/test"
@@ -26,18 +26,18 @@ func TestMigrateFromJSON(t *testing.T) {
         }
     }`
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(stateJSON), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "2026-02-28-test.md"), []byte("# Test Plan"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "test.md"), []byte("# Test Plan"), 0o644))
 
 	migrated, err := MigrateFromJSON(store, "proj", plansDir)
 	require.NoError(t, err)
 	assert.Equal(t, 1, migrated)
 
-	entry, err := store.Get("proj", "2026-02-28-test.md")
+	entry, err := store.Get("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, StatusReady, entry.Status)
 	assert.Equal(t, "test plan", entry.Description)
 
-	content, err := store.GetContent("proj", "2026-02-28-test.md")
+	content, err := store.GetContent("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "# Test Plan", content)
 

@@ -31,14 +31,14 @@ func setupTestPlanState(t *testing.T) (planstore.Store, string) {
 	project := projectFromPlansDir(plansDir)
 
 	require.NoError(t, store.Create(project, planstore.PlanEntry{
-		Filename:    "2026-02-20-test-plan.md",
+		Filename:    "test-plan.md",
 		Status:      planstore.StatusReady,
 		Description: "test plan",
 		Branch:      "plan/test-plan",
 		CreatedAt:   time.Now(),
 	}))
 	require.NoError(t, store.Create(project, planstore.PlanEntry{
-		Filename:    "2026-02-20-implementing-plan.md",
+		Filename:    "implementing-plan.md",
 		Status:      planstore.Status("implementing"),
 		Description: "implementing plan",
 		Branch:      "plan/implementing-plan",
@@ -59,13 +59,13 @@ func TestPlanList(t *testing.T) {
 	}{
 		{
 			name:         "all plans",
-			wantContains: []string{"2026-02-20-test-plan.md", "2026-02-20-implementing-plan.md"},
+			wantContains: []string{"test-plan.md", "implementing-plan.md"},
 		},
 		{
 			name:           "filter by ready",
 			statusFilter:   "ready",
-			wantContains:   []string{"2026-02-20-test-plan.md"},
-			wantNotContain: []string{"2026-02-20-implementing-plan.md"},
+			wantContains:   []string{"test-plan.md"},
+			wantNotContain: []string{"implementing-plan.md"},
 		},
 	}
 
@@ -86,21 +86,21 @@ func TestPlanSetStatus(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 
 	// Requires --force
-	err := executePlanSetStatus(dir, "2026-02-20-test-plan.md", "done", false, store)
+	err := executePlanSetStatus(dir, "test-plan.md", "done", false, store)
 	assert.Error(t, err, "should require --force flag")
 
 	// Valid override
-	err = executePlanSetStatus(dir, "2026-02-20-test-plan.md", "done", true, store)
+	err = executePlanSetStatus(dir, "test-plan.md", "done", true, store)
 	require.NoError(t, err)
 
 	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
-	entry, ok := ps.Entry("2026-02-20-test-plan.md")
+	entry, ok := ps.Entry("test-plan.md")
 	require.True(t, ok)
 	assert.Equal(t, planstate.Status("done"), entry.Status)
 
 	// Invalid status
-	err = executePlanSetStatus(dir, "2026-02-20-test-plan.md", "bogus", true, store)
+	err = executePlanSetStatus(dir, "test-plan.md", "bogus", true, store)
 	assert.Error(t, err, "should reject invalid status")
 }
 
@@ -108,12 +108,12 @@ func TestPlanTransition(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 
 	// Valid transition: ready → planning via plan_start
-	newStatus, err := executePlanTransition(dir, "2026-02-20-test-plan.md", "plan_start", store)
+	newStatus, err := executePlanTransition(dir, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 
 	// Invalid transition (plan is now in "planning" state)
-	_, err = executePlanTransition(dir, "2026-02-20-test-plan.md", "review_approved", store)
+	_, err = executePlanTransition(dir, "test-plan.md", "review_approved", store)
 	assert.Error(t, err)
 }
 
@@ -130,16 +130,16 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	assert.Contains(t, output, "implementing")
 
 	// Transition ready → planning
-	status, err := executePlanTransition(dir, "2026-02-20-test-plan.md", "plan_start", store)
+	status, err := executePlanTransition(dir, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", status)
 
 	// Force set back to ready
-	err = executePlanSetStatus(dir, "2026-02-20-test-plan.md", "ready", true, store)
+	err = executePlanSetStatus(dir, "test-plan.md", "ready", true, store)
 	require.NoError(t, err)
 
 	// Implement with wave signal
-	err = executePlanImplement(dir, "2026-02-20-test-plan.md", 2, store)
+	err = executePlanImplement(dir, "test-plan.md", 2, store)
 	require.NoError(t, err)
 
 	// Verify signal file
@@ -148,12 +148,12 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Contains(t, names, "implement-wave-2-2026-02-20-test-plan.md")
+	assert.Contains(t, names, "implement-wave-2-test-plan.md")
 
 	// Verify final status
 	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
-	entry, _ := ps.Entry("2026-02-20-test-plan.md")
+	entry, _ := ps.Entry("test-plan.md")
 	assert.Equal(t, planstate.Status("implementing"), entry.Status)
 }
 
@@ -164,13 +164,13 @@ func TestPlanImplement(t *testing.T) {
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	err := executePlanImplement(dir, "2026-02-20-test-plan.md", 1, store)
+	err := executePlanImplement(dir, "test-plan.md", 1, store)
 	require.NoError(t, err)
 
 	// Verify plan transitioned to implementing
 	ps, err := planstate.Load(store, projectFromPlansDir(dir), dir)
 	require.NoError(t, err)
-	entry, _ := ps.Entry("2026-02-20-test-plan.md")
+	entry, _ := ps.Entry("test-plan.md")
 	assert.Equal(t, planstate.Status("implementing"), entry.Status)
 
 	// Verify signal file created
@@ -178,7 +178,7 @@ func TestPlanImplement(t *testing.T) {
 	require.NoError(t, err)
 	var found bool
 	for _, e := range entries {
-		if e.Name() == "implement-wave-1-2026-02-20-test-plan.md" {
+		if e.Name() == "implement-wave-1-test-plan.md" {
 			found = true
 		}
 	}
@@ -189,7 +189,7 @@ func TestPlanRegister(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 	project := projectFromPlansDir(dir)
 
-	planFile := "2026-03-02-new-feature.md"
+	planFile := "new-feature.md"
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, planFile),
 		[]byte("# New Feature Plan\n\nSome content."),
@@ -213,7 +213,7 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 	store, dir := setupTestPlanState(t)
 	project := projectFromPlansDir(dir)
 
-	planFile := "2026-03-02-stub-plan.md"
+	planFile := "stub-plan.md"
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, planFile),
 		[]byte("# Stub Plan\n"),
@@ -337,7 +337,7 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
 	project := projectFromPlansDir(resolvedPlansDir)
 	require.NoError(t, store.Create(project, planstore.PlanEntry{
-		Filename:    "2026-03-01-worktree-plan.md",
+		Filename:    "worktree-plan.md",
 		Status:      planstore.StatusReady,
 		Description: "worktree plan",
 		Branch:      "plan/worktree-plan",
@@ -346,16 +346,16 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 
 	// executePlanList should succeed from the resolved plansDir
 	output := executePlanList(resolvedPlansDir, "", store)
-	assert.Contains(t, output, "2026-03-01-worktree-plan.md")
+	assert.Contains(t, output, "worktree-plan.md")
 
 	// executePlanSetStatus should succeed
-	err = executePlanSetStatus(resolvedPlansDir, "2026-03-01-worktree-plan.md", "done", true, store)
+	err = executePlanSetStatus(resolvedPlansDir, "worktree-plan.md", "done", true, store)
 	require.NoError(t, err)
 
 	// executePlanTransition: reset then transition
-	err = executePlanSetStatus(resolvedPlansDir, "2026-03-01-worktree-plan.md", "ready", true, store)
+	err = executePlanSetStatus(resolvedPlansDir, "worktree-plan.md", "ready", true, store)
 	require.NoError(t, err)
-	newStatus, err := executePlanTransition(resolvedPlansDir, "2026-03-01-worktree-plan.md", "plan_start", store)
+	newStatus, err := executePlanTransition(resolvedPlansDir, "worktree-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 }

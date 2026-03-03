@@ -16,10 +16,10 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-2026-02-22-foo.md"),
+		filepath.Join(signalsDir, "planner-finished-foo.md"),
 		nil, 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "review-changes-2026-02-22-bar.md"),
+		filepath.Join(signalsDir, "review-changes-bar.md"),
 		[]byte("fix the tests"), 0o644))
 
 	signals := ScanSignals(signalsDir)
@@ -31,11 +31,11 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 	}
 
 	assert.Equal(t, PlannerFinished, signals[1].Event)
-	assert.Equal(t, "2026-02-22-foo.md", signals[1].PlanFile)
+	assert.Equal(t, "foo.md", signals[1].PlanFile)
 	assert.Empty(t, signals[1].Body)
 
 	assert.Equal(t, ReviewChangesRequested, signals[0].Event)
-	assert.Equal(t, "2026-02-22-bar.md", signals[0].PlanFile)
+	assert.Equal(t, "bar.md", signals[0].PlanFile)
 	assert.Equal(t, "fix the tests", signals[0].Body)
 }
 
@@ -66,7 +66,7 @@ func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
 
 	// An agent trying to drop a cancel sentinel — should be ignored
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "cancel-2026-02-22-foo.md"),
+		filepath.Join(signalsDir, "cancel-foo.md"),
 		nil, 0o644))
 
 	signals := ScanSignals(signalsDir)
