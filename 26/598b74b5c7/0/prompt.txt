@@ -1,0 +1,82 @@
+Implement Task 5: Rewrite instance.go — Struct, Constructors, Accessors, and Serialization
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all files in `session/` (excluding the already-rewritten `session/tmux/` and `session/git/` subdirectories) to remove AGPL-tainted lines. The rewrite preserves the identical public API so all callers (`app/`, `ui/`, `daemon/`, `main.go`) compile without changes, while replacing every line of implementation.
+**Architecture:** Eight files rewritten in-place across the session core: `instance.go` (struct, constructors, accessors, serialization), `instance_lifecycle.go` (Start variants, Kill, Pause, Resume, Restart, Adopt), `instance_session.go` (pane I/O, metadata collection, resource monitoring, diff stats), `storage.go` (JSON persistence via `config.StateManager`), `activity.go` (agent activity parsing from pane content), `permission_prompt.go` (opencode permission dialog detection), `cli_prompt.go` (program CLI prompt support detection), and `notify.go` (desktop notifications). The `terminal.go` file (EmbeddedTerminal) is 100% original code (written post-fork for the live-preview feature) and is untouched. All existing test files are preserved as the regression suite — they must pass after each task. The public API (exported types, method signatures, constants) stays identical.
+**Tech Stack:** Go 1.24, testify, `session/tmux` (rewritten), `session/git` (rewritten), `config.StateManager`, `charmbracelet/x/ansi`, `charmbracelet/x/vt`, `creack/pty`, `atotto/clipboard`
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 5 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/instance.go`
+- Test: `session/instance_test.go` (existing), `session/instance_taskfile_test.go` (existing), `session/instance_wave_test.go` (existing), `session/instance_title_test.go` (existing)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing tests cover: `NewInstance` defaults (SoloAgent=false), `NewInstance` field propagation (TaskFile, AgentType, WaveNumber, TaskNumber), `ToInstanceData`/`FromInstanceData` round-trips (TaskFile, AgentType, ImplementationComplete, SoloAgent, wave fields), `buildTitleOpts` mapping for all agent types, and `FromInstanceData` paused-instance restoration.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./session/... -run "TestNewInstance|TestInstanceData|TestBuildTitleOpts" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `session/instance.go` and rewrite from scratch:
+
+- **`Status` type** — `type Status int` with four constants: `Running` (0), `Ready` (1), `Loading` (2), `Paused` (3). Must use `iota` starting from `Running`.
+- **Agent type constants** — `AgentTypePlanner = "planner"`, `AgentTypeCoder = "coder"`, `AgentTypeReviewer = "reviewer"`, `AgentTypeFixer = "fixer"`.
+- **`Instance` struct** — all fields must match the current struct exactly (same names, types, export status, and ordering). The struct has ~40 fields organized in groups:
+  - Identity: Title, Path, Branch, Status, Program, Height, Width, CreatedAt, UpdatedAt
+  - Config: AutoYes, SkipPermissions
+  - Plan/task metadata: TaskFile, Topic, AgentType, TaskNumber, WaveNumber, PeerCount, IsReviewer (deprecated), ImplementationComplete, SoloAgent, Exited, QueuedPrompt
+  - Orchestration state: sharedWorktree (unexported), LoadingStage, LoadingTotal, LoadingMessage, Notified, LastActiveAt, PromptDetected, AwaitingWork, ReviewCycle, HasWorked
+  - Resource monitoring: CPUPercent, MemMB, LastActivity (*Activity)
+  - Cache: CachedContent, CachedContentSet
+  - Internal: diffStats (*git.DiffStats), started (bool), tmuxSession (*tmux.TmuxSession), gitWorktree (*git.GitWorktree)
+- **`ToInstanceData() InstanceData`** — converts Instance to its serializable form. Copies all persisted fields. Sets `UpdatedAt` to `time.Now()`. Conditionally includes worktree data (if `gitWorktree != nil`) and diff stats (if `diffStats != nil`).
+- **`FromInstanceData(data InstanceData) (*Instance, error)`** — creates Instance from serialized data. Copies all fields. Creates `gitWorktree` via `git.NewGitWorktreeFromStorage()`. Creates `diffStats` from `DiffStatsData`. For paused instances: sets `started = true`, creates `tmux.NewTmuxSession()`. For non-paused: creates `TmuxSession`, sets agent type, checks `DoesSessionExist()` — if dead, marks `started = true`, `Exited = true`, `Status = Ready`; if alive, calls `Start(false)` to restore.
+- **`InstanceOptions` struct** — Title, Path, Program, AutoYes, SkipPermissions, TaskFile, AgentType, TaskNumber, WaveNumber, PeerCount, ReviewCycle.
+- **`NewInstance(opts InstanceOptions) (*Instance, error)`** — converts path to absolute via `filepath.Abs`, initializes Instance with defaults (Status=Ready, CreatedAt/UpdatedAt=now).
+- **Accessors:** `RepoName() (string, error)`, `GetRepoPath() string`, `GetWorktreePath() string`, `SetStatus(status Status)` (handles notification logic, LastActiveAt, PromptDetected, AwaitingWork transitions), `setLoadingProgress(stage int, message string)`, `Started() bool`, `SetTitle(title string) error` (errors if started), `Paused() bool`, `TmuxAlive() bool`.
+
+Imports: `fmt`, `path/filepath`, `time`, `github.com/kastheco/kasmos/session/git`, `github.com/kastheco/kasmos/session/tmux`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/... -run "TestNewInstance|TestInstanceData|TestBuildTitleOpts" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/instance.go
+git commit -m "feat(clean-room): rewrite session/instance.go from scratch"
+```
