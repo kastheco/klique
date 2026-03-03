@@ -732,6 +732,7 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		log.WarningLog.Printf("could not create reviewer instance for %q: %v", planFile, err)
 		return nil
 	}
+	reviewerInst.ReviewCycle = cycle + 1
 	reviewerInst.IsReviewer = true
 	reviewerInst.QueuedPrompt = prompt
 	reviewerInst.SetStatus(session.Loading)
@@ -925,6 +926,7 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 		log.WarningLog.Printf("could not create coder instance for %q: %v", planFile, err)
 		return nil
 	}
+	coderInst.ReviewCycle = cycle
 	coderInst.QueuedPrompt = prompt
 	coderInst.SetStatus(session.Loading)
 
@@ -1476,6 +1478,9 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	// sidebar-spawned reviewers as well as auto-spawned ones.
 	if agentType == session.AgentTypeReviewer {
 		inst.IsReviewer = true
+		// Set ReviewCycle so the instance carries the same cycle number used in the title.
+		cycle, _ := m.planState.ReviewCycle(planFile)
+		inst.ReviewCycle = cycle + 1
 	}
 	if action == "solo" {
 		inst.SoloAgent = true

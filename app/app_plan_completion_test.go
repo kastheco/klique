@@ -734,6 +734,67 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		"reviewer spawned after ImplementFinished with ReviewCycle=1 must have title 'feature-review-2'")
 }
 
+// TestReviewCycle_InstanceStructHasCycleSet verifies that the spawned reviewer
+// instance has ReviewCycle set from planstate so the field is available for
+// display in instance titles and opencode session labels.
+// With review_cycle=0 in planstate (initial), the first reviewer gets ReviewCycle=1
+// (1-indexed for humans: display value = stored cycle + 1).
+func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	// review_cycle starts at 0 for a new plan — no IncrementReviewCycle call needed.
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// Transition to reviewing so spawnReviewer can run.
+	require.NoError(t, h.fsm.Transition(planFile, planfsm.ImplementFinished))
+
+	// Call spawnReviewer directly to obtain the created instance.
+	_ = h.spawnReviewer(planFile)
+
+	// Find the reviewer instance.
+	var reviewerInst *session.Instance
+	for _, inst := range h.nav.GetInstances() {
+		if inst.PlanFile == planFile && inst.IsReviewer {
+			reviewerInst = inst
+			break
+		}
+	}
+	require.NotNil(t, reviewerInst, "spawnReviewer must create a reviewer instance")
+
+	// ReviewCycle must be set to cycle+1 (1-indexed display value).
+	// With review_cycle=0 in planstate, the first reviewer gets ReviewCycle=1.
+	assert.Equal(t, 1, reviewerInst.ReviewCycle,
+		"reviewer instance must have ReviewCycle=1 for first review cycle (cycle=0 → display=1)")
+}
+
 // TestIsLocked_FinishedLockedWhenDone verifies that the "finished" stage is
 // locked when the plan is already done, preventing a spurious FSM error.
 func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
