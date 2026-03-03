@@ -1,0 +1,20 @@
+Implement docs/plans/02b-rewrite-overlay-ui.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `ui/overlay/tmuxBrowserOverlay.go:226` — tmux browser "kill" action returns `Result{Dismissed: true}`, which causes the OverlayManager to clear the active overlay. In the old code, killing a session kept the browser open so the user could kill multiple sessions in sequence (it only closed when empty). This is a behavioral regression. The fix requires either: (a) returning `Dismissed: false` for "kill" and having the app layer check `result.Action != ""` even when not dismissed, or (b) having the app layer re-show the browser after processing the kill if it's not empty. Option (a) is cleaner but requires updating the app_input.go tmux browser handler to also dispatch on non-dismissed results with actions.
+
+## important
+
+- `ui/overlay/tmuxBrowserOverlay.go:27-57` — package-level `var` style declarations (`browserBorderStyle`, `browserTitleStyle`, `browserSearchStyle`, etc.) were not migrated to use `DefaultStyles()` as the plan requires in Task 7 step 3: "Remove package-level `var` style declarations ... now served by `DefaultStyles()`". The picker and context menu overlays correctly use `DefaultStyles()` in their `View()` methods, but the tmux browser still uses package-level vars. Migrate to `DefaultStyles()` for consistency.
+
+- `ui/overlay/formOverlay.go:183-200` — `View()` creates inline `lipgloss.NewStyle()` calls instead of using `DefaultStyles()`. The plan says all overlays should use the shared styles. The permission overlay (`permissionOverlay.go:67-94`) has the same issue. Both should use `DefaultStyles()` fields (e.g. `st.ModalBorder`, `st.Title`, `st.Hint`) instead of recreating identical styles inline.
+
+- `app/app_input.go:938,944,964,972,1007,1014` and `app/app_actions.go:910,925` — redundant `m.overlays.Dismiss()` calls after `HandleKey` already returned `Dismissed: true`. The manager clears the active overlay internally when HandleKey returns Dismissed, so these are no-ops. They're confusing because they suggest the overlay might not be dismissed yet. Remove them. (Some of these will be addressed naturally when fixing the tmux browser kill regression above.)
+
+## self-fixed
+
+- `app/app_planner_signal_test.go:97,240` — stale assertion messages still referencing "confirmationOverlay" field name instead of the new overlay manager API. Updated to "show confirmation overlay".
