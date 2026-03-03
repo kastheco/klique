@@ -1,4 +1,4 @@
-package planstore
+package taskstore
 
 import (
 	"database/sql"
@@ -257,7 +257,7 @@ func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 		return nil, fmt.Errorf("list plans: %w", err)
 	}
 	defer rows.Close()
-	return scanPlanEntries(rows)
+	return scanTaskEntries(rows)
 }
 
 // ListByStatus returns all plan entries for the given project matching any of
@@ -287,7 +287,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 		return nil, fmt.Errorf("list plans by status: %w", err)
 	}
 	defer rows.Close()
-	return scanPlanEntries(rows)
+	return scanTaskEntries(rows)
 }
 
 // ListByTopic returns all plan entries for the given project and topic,
@@ -304,7 +304,7 @@ func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 		return nil, fmt.Errorf("list plans by topic: %w", err)
 	}
 	defer rows.Close()
-	return scanPlanEntries(rows)
+	return scanTaskEntries(rows)
 }
 
 // ListTopics returns all topic entries for the given project, sorted by name.
@@ -448,8 +448,8 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 	}, nil
 }
 
-// scanPlanEntries scans multiple rows into a slice of TaskEntry.
-func scanPlanEntries(rows *sql.Rows) ([]TaskEntry, error) {
+// scanTaskEntries scans multiple rows into a slice of TaskEntry.
+func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {
 	var entries []TaskEntry
 	for rows.Next() {
 		var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string

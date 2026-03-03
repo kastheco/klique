@@ -1,4 +1,4 @@
-package planstore
+package taskstore
 
 import (
 	"encoding/json"
@@ -25,8 +25,8 @@ type jsonTopicEntry struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// jsonPlanState is the top-level structure of plan-state.json.
-type jsonPlanState struct {
+// jsonTaskState is the top-level structure of plan-state.json.
+type jsonTaskState struct {
 	Plans  map[string]jsonTaskEntry  `json:"plans"`
 	Topics map[string]jsonTopicEntry `json:"topics"`
 }
@@ -50,7 +50,7 @@ func MigrateFromJSON(store Store, project, plansDir string) (int, error) {
 		return 0, fmt.Errorf("read plan-state.json: %w", err)
 	}
 
-	var state jsonPlanState
+	var state jsonTaskState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return 0, fmt.Errorf("parse plan-state.json: %w", err)
 	}

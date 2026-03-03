@@ -1,4 +1,4 @@
-package planstore
+package taskstore
 
 import "testing"
 
