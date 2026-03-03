@@ -1538,23 +1538,17 @@ func (n *NavigationPanel) String() string {
 		}
 	}
 
-	// Distribute gap evenly above and below the legend.
-	gap := height - topLines - legendLines - auditLines + 1
-	if gap < 1 {
-		gap = 1
-	}
-	gapAbove := gap / 2
-	gapBelow := gap - gapAbove
+	// Fixed 1-line gaps around the legend; all leftover space goes above
+	// (between nav items and legend) to keep legend pinned near the bottom.
+	const legendGapBelow = 1
+	gapAbove := height - topLines - legendLines - auditLines - legendGapBelow + 1
 	if gapAbove < 1 {
 		gapAbove = 1
-	}
-	if gapBelow < 1 {
-		gapBelow = 1
 	}
 
 	innerContent := topContent + strings.Repeat("\n", gapAbove) + legend
 	if auditSection != "" {
-		innerContent += strings.Repeat("\n", gapBelow) + auditSection
+		innerContent += strings.Repeat("\n", legendGapBelow) + auditSection
 	}
 
 	bordered := border.Width(innerWidth).Height(height).Render(innerContent)
