@@ -194,3 +194,25 @@ func TestFormOverlay_Render(t *testing.T) {
 	assert.NotEmpty(t, output)
 	assert.Contains(t, output, "new plan")
 }
+
+func TestFormOverlay_ImplementsOverlay(t *testing.T) {
+	var _ Overlay = NewFormOverlay("title", 60)
+}
+
+func TestFormOverlay_HandleKey_Submit(t *testing.T) {
+	f := NewFormOverlay("new plan", 60)
+	for _, r := range "test-name" {
+		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.True(t, result.Submitted)
+	assert.Equal(t, "test-name", result.Value)
+}
+
+func TestFormOverlay_HandleKey_Cancel(t *testing.T) {
+	f := NewFormOverlay("new plan", 60)
+	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.True(t, result.Dismissed)
+	assert.False(t, result.Submitted)
+}

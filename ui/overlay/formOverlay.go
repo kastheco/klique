@@ -206,3 +206,25 @@ func (f *FormOverlay) WorkPath() string {
 func (f *FormOverlay) IsSubmitted() bool {
 	return f.submitted
 }
+
+// HandleKey implements Overlay. Processes a key event and returns a Result.
+func (f *FormOverlay) HandleKey(msg tea.KeyMsg) Result {
+	closed := f.HandleKeyPress(msg)
+	if !closed {
+		return Result{}
+	}
+	if f.submitted {
+		return Result{Dismissed: true, Submitted: true, Value: f.Name()}
+	}
+	return Result{Dismissed: true}
+}
+
+// View implements Overlay. Returns the rendered overlay string.
+func (f *FormOverlay) View() string {
+	return f.Render()
+}
+
+// SetSize implements Overlay. Updates the available width for the overlay.
+func (f *FormOverlay) SetSize(w, h int) {
+	f.width = w
+}

@@ -147,3 +147,39 @@ func (p *PermissionOverlay) Render() string {
 func (p *PermissionOverlay) SetWidth(w int) {
 	p.width = w
 }
+
+// permissionActionLabels maps selectedIdx to the action string returned by HandleKey.
+var permissionActionLabels = []string{"allow_once", "allow_always", "reject"}
+
+// HandleKey implements Overlay. Processes a key event and returns a Result.
+func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
+	switch msg.Type {
+	case tea.KeyLeft:
+		if p.selectedIdx > 0 {
+			p.selectedIdx--
+		}
+		return Result{}
+	case tea.KeyRight:
+		if p.selectedIdx < len(permissionChoiceLabels)-1 {
+			p.selectedIdx++
+		}
+		return Result{}
+	case tea.KeyEnter:
+		p.confirmed = true
+		action := permissionActionLabels[p.selectedIdx]
+		return Result{Dismissed: true, Submitted: true, Action: action}
+	case tea.KeyEsc:
+		return Result{Dismissed: true}
+	}
+	return Result{}
+}
+
+// View implements Overlay. Returns the rendered overlay string.
+func (p *PermissionOverlay) View() string {
+	return p.Render()
+}
+
+// SetSize implements Overlay. Updates the available dimensions for the overlay.
+func (p *PermissionOverlay) SetSize(w, h int) {
+	p.width = w
+}

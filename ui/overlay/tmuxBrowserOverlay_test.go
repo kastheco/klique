@@ -177,3 +177,22 @@ func TestTmuxBrowserOverlay_MixedItems(t *testing.T) {
 	assert.Contains(t, rendered, "orphan")
 	assert.Contains(t, rendered, "planner")
 }
+
+func TestTmuxBrowserOverlay_ImplementsOverlay(t *testing.T) {
+	var _ Overlay = NewTmuxBrowserOverlay(nil)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
+	b := NewTmuxBrowserOverlay(nil)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.True(t, result.Dismissed)
+	assert.Empty(t, result.Action)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Attach(t *testing.T) {
+	items := []TmuxBrowserItem{{Name: "sess", Title: "my-session"}}
+	b := NewTmuxBrowserOverlay(items)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "attach", result.Action)
+}

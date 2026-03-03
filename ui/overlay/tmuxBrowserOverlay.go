@@ -257,6 +257,27 @@ func (b *TmuxBrowserOverlay) SetSize(width, height int) {
 	b.width = width
 }
 
+// HandleKey implements Overlay. Processes a key event and returns a Result.
+func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
+	action := b.HandleKeyPress(msg)
+	switch action {
+	case BrowserDismiss:
+		return Result{Dismissed: true}
+	case BrowserAttach:
+		return Result{Dismissed: true, Action: "attach"}
+	case BrowserKill:
+		return Result{Dismissed: true, Action: "kill"}
+	case BrowserAdopt:
+		return Result{Dismissed: true, Action: "adopt"}
+	}
+	return Result{}
+}
+
+// View implements Overlay. Returns the rendered overlay string.
+func (b *TmuxBrowserOverlay) View() string {
+	return b.Render()
+}
+
 // truncateStr truncates s to maxLen runes, appending "…" if truncated.
 func truncateStr(s string, maxLen int) string {
 	runes := []rune(s)
