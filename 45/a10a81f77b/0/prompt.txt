@@ -1,0 +1,74 @@
+Implement Task 3: Final sweep — clean up stale date references in comments and docs
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop prepending `YYYY-MM-DD-` to plan filenames so that working on a plan across multiple days doesn't cause slug mismatches; the slug alone is a sufficient unique identifier.
+**Architecture:** The date prefix is generated in 4 places: `buildPlanFilename()`, `createPlanEntry()`, `importClickUpTask()`, and `ScaffoldFilename()`. `DisplayName()` strips it for display, and `Rename()` preserves it. All of these must be updated to produce dateless slugs (e.g. `auth-refactor.md` instead of `2026-02-21-auth-refactor.md`). `DisplayName()` becomes a simple `.md` strip. `Rename()` drops the date-preservation logic. The planner skill template, planner agent prompt, and ~20 test files need their hardcoded `2026-XX-XX-` prefixed filenames updated. The `dedupePlanFilename` functions already work on the base slug so they need no logic changes, only test expectation updates.
+**Tech Stack:** Go, bubbletea (TUI), planstate/planstore packages, kasmos-planner skill (Markdown)
+
+## Wave 2 of 2
+
+## Parallel Execution
+
+You are Task 3 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `app/app_state.go` (doc comments referencing date format)
+- Modify: `cmd/plan.go` (comment about date prefix)
+
+**Step 1: write the failing test**
+
+No new test — this is a doc-comment-only cleanup. Verify no regressions:
+```bash
+go test ./... -count=1
+```
+
+**Step 2: run test to verify it fails**
+
+expected: tests already pass — this task is purely cosmetic cleanup of stale comments.
+
+**Step 3: write minimal implementation**
+
+1. Use `rg '2026-\d{2}-\d{2}|YYYY-MM-DD|date prefix|date.*prefix|strips the date' --type go -g '!*_test.go' -n` to find all remaining stale references in non-test Go files.
+
+2. Clean up each one:
+   - `cmd/plan.go` line 43: `// Default branch: plan/<slug> where slug strips the date prefix.` → `// Default branch: plan/<slug> derived from the plan filename.`
+   - `config/planstate/planstate.go` line 482 comment about date prefix in Rename → remove
+   - `config/planstate/planstate.go` line 494 comment about preserving date prefix → remove
+   - `app/app_state.go` line 1082 comment `"Auth Refactor" → "2026-02-21-auth-refactor.md"` → already updated in Task 1
+
+3. Verify no `YYYY-MM-DD` or `date prefix` references remain in production Go files:
+```bash
+rg 'YYYY-MM-DD|date.prefix' --type go -g '!*_test.go'
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./... -count=1
+```
+
+expected: PASS — full test suite green
+
+**Step 5: commit**
+
+```bash
+git add cmd/plan.go config/planstate/planstate.go app/app_state.go
+git commit -m "chore: clean up stale date-prefix references in doc comments"
+```

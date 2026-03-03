@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "45a10a81f77b",
+  "strategy": "manual-commit",
+  "branch": "plan/remove-date-from-plan-slugs",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".opencode/agents/planner.md",
+    "contracts/planner_prompt_contract_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/45/a10a81f77b/0/metadata.json",
+      "transcript": "/45/a10a81f77b/0/full.jsonl",
+      "context": "/45/a10a81f77b/0/context.md",
+      "content_hash": "/45/a10a81f77b/0/content_hash.txt",
+      "prompt": "/45/a10a81f77b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 17,
+    "cache_creation_tokens": 56906,
+    "cache_read_tokens": 768798,
+    "output_tokens": 3312,
+    "api_call_count": 16
+  }
+}
