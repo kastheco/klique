@@ -15,8 +15,8 @@ func ParseClickUpTaskID(content string) string {
 	if m == nil {
 		return ""
 	}
-	// Strip a trailing parenthesised URL if present, e.g. "abc123 (https://...)"
-	// The regex above captures up to whitespace, so the ID is already clean.
+	// The regex captures up to the first whitespace, so the ID is already
+	// clean even when followed by a parenthesised URL like "abc123 (https://...)".
 	return m[1]
 }
 
