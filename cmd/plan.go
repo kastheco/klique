@@ -218,13 +218,16 @@ func NewPlanCmd() *cobra.Command {
 		Short: "manage plan lifecycle (list, set-status, transition, implement)",
 	}
 
+	var repoFlag string
+	planCmd.PersistentFlags().StringVar(&repoFlag, "repo", "", "path to the repository root (default: auto-detect from CWD)")
+
 	// kq plan list
 	var statusFilter string
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "list all plans with status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			plansDir, err := resolvePlansDirWithRepo(repoFlag)
 			if err != nil {
 				return err
 			}
@@ -242,7 +245,7 @@ func NewPlanCmd() *cobra.Command {
 		Short: "register an untracked plan file (sets status to ready)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			plansDir, err := resolvePlansDirWithRepo(repoFlag)
 			if err != nil {
 				return err
 			}
@@ -265,7 +268,7 @@ func NewPlanCmd() *cobra.Command {
 		Short: "force-override a plan's status (bypasses FSM)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			plansDir, err := resolvePlansDirWithRepo(repoFlag)
 			if err != nil {
 				return err
 			}
@@ -285,7 +288,7 @@ func NewPlanCmd() *cobra.Command {
 		Short: "apply an FSM event to a plan",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			plansDir, err := resolvePlansDirWithRepo(repoFlag)
 			if err != nil {
 				return err
 			}
@@ -306,7 +309,7 @@ func NewPlanCmd() *cobra.Command {
 		Short: "trigger implementation of a specific wave",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			plansDir, err := resolvePlansDirWithRepo(repoFlag)
 			if err != nil {
 				return err
 			}
@@ -339,7 +342,7 @@ func NewPlanCmd() *cobra.Command {
 				project = linkProject
 			}
 			if project == "" {
-				plansDir, err := resolvePlansDir()
+				plansDir, err := resolvePlansDirWithRepo(repoFlag)
 				if err != nil {
 					return err
 				}
@@ -430,11 +433,19 @@ func resolveStore(plansDir string) planstore.Store {
 	return nil
 }
 
-// resolvePlansDir resolves docs/plans/ relative to cwd. When the cwd doesn't
-// contain docs/plans/ (e.g. when running from a git worktree), it falls back
-// to resolving the main repo root via resolveRepoRoot and looks for docs/plans/
-// there.
-func resolvePlansDir() (string, error) {
+// resolvePlansDirWithRepo resolves the docs/plans/ directory. When repoOverride
+// is non-empty, it skips CWD detection entirely and stat's
+// <repoOverride>/docs/plans directly. When repoOverride is empty, it uses the
+// existing CWD-based logic (fast path + worktree fallback).
+func resolvePlansDirWithRepo(repoOverride string) (string, error) {
+	if repoOverride != "" {
+		dir := filepath.Join(repoOverride, "docs", "plans")
+		if _, err := os.Stat(dir); err != nil {
+			return "", fmt.Errorf("plans directory not found: %s", dir)
+		}
+		return dir, nil
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get cwd: %w", err)
@@ -456,6 +467,14 @@ func resolvePlansDir() (string, error) {
 		return "", fmt.Errorf("plans directory not found: %s", dir)
 	}
 	return dir, nil
+}
+
+// resolvePlansDir resolves docs/plans/ relative to cwd. When the cwd doesn't
+// contain docs/plans/ (e.g. when running from a git worktree), it falls back
+// to resolving the main repo root via resolveRepoRoot and looks for docs/plans/
+// there.
+func resolvePlansDir() (string, error) {
+	return resolvePlansDirWithRepo("")
 }
 
 // resolveRepoRoot returns the root directory of the git repository that owns

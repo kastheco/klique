@@ -360,6 +360,37 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 	assert.Equal(t, "planning", newStatus)
 }
 
+func TestResolvePlansDir_WithRepoOverride(t *testing.T) {
+	// Create a repo-like structure in a temp dir
+	repoDir := t.TempDir()
+	plansDir := filepath.Join(repoDir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	// resolvePlansDir with explicit repo should find docs/plans/ there
+	resolved, err := resolvePlansDirWithRepo(repoDir)
+	require.NoError(t, err)
+	assert.Equal(t, plansDir, resolved)
+}
+
+func TestResolvePlansDir_WithRepoOverride_NoPlansDirFails(t *testing.T) {
+	repoDir := t.TempDir()
+	// No docs/plans/ created
+
+	_, err := resolvePlansDirWithRepo(repoDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "plans directory not found")
+}
+
+func TestPlanCmd_RepoFlagRegistered(t *testing.T) {
+	root := NewRootCmd()
+	planCmd, _, err := root.Find([]string{"plan"})
+	require.NoError(t, err)
+
+	flag := planCmd.PersistentFlags().Lookup("repo")
+	require.NotNil(t, flag, "--repo flag should be registered on plan command")
+	assert.Equal(t, "", flag.DefValue)
+}
+
 // TestPlanList_WithStore verifies that executePlanListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
