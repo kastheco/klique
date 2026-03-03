@@ -3,7 +3,7 @@
   "checkpoint_id": "862092dba257",
   "strategy": "manual-commit",
   "branch": "plan/01b-rewrite-git-layer",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "session/git/worktree.go"
   ],
@@ -28,13 +28,20 @@
       "context": "/86/2092dba257/2/context.md",
       "content_hash": "/86/2092dba257/2/content_hash.txt",
       "prompt": "/86/2092dba257/2/prompt.txt"
+    },
+    {
+      "metadata": "/86/2092dba257/3/metadata.json",
+      "transcript": "/86/2092dba257/3/full.jsonl",
+      "context": "/86/2092dba257/3/context.md",
+      "content_hash": "/86/2092dba257/3/content_hash.txt",
+      "prompt": "/86/2092dba257/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1,
-    "cache_creation_tokens": 1984,
-    "cache_read_tokens": 53913,
-    "output_tokens": 125,
-    "api_call_count": 3
+    "input_tokens": 2,
+    "cache_creation_tokens": 2175,
+    "cache_read_tokens": 106752,
+    "output_tokens": 282,
+    "api_call_count": 4
   }
 }
