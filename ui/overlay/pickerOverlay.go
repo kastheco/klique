@@ -204,3 +204,55 @@ func (p *PickerOverlay) Render() string {
 func (p *PickerOverlay) SetSize(width, height int) {
 	p.width = width
 }
+
+// HandleKey implements Overlay. It processes a key event and returns a Result
+// indicating whether the overlay should close and what was selected.
+func (p *PickerOverlay) HandleKey(msg tea.KeyMsg) Result {
+	closed := p.HandleKeyPress(msg)
+	if !closed {
+		return Result{}
+	}
+	return Result{
+		Dismissed: true,
+		Submitted: p.submitted,
+		Value:     p.Value(),
+	}
+}
+
+// View implements Overlay using DefaultStyles for rendering.
+func (p *PickerOverlay) View() string {
+	st := DefaultStyles()
+	var b strings.Builder
+
+	b.WriteString(st.Title.Render(p.title))
+	b.WriteString("\n")
+
+	innerWidth := p.width - 8
+	if innerWidth < 10 {
+		innerWidth = 10
+	}
+	searchText := p.searchQuery
+	if searchText == "" {
+		searchText = "\uf002 Type to filter..."
+	}
+	b.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
+	b.WriteString("\n")
+
+	if len(p.filtered) == 0 {
+		b.WriteString(st.Hint.Render("  No matches"))
+		b.WriteString("\n")
+	} else {
+		for i, item := range p.filtered {
+			if i == p.selectedIdx {
+				b.WriteString(st.SelectedItem.Width(innerWidth).Render("▸ " + item))
+			} else {
+				b.WriteString(st.Item.Width(innerWidth).Render("  " + item))
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString(st.Hint.Render("↑↓ navigate • enter select • esc cancel"))
+
+	return st.FloatingBorder.Width(p.width).Render(b.String())
+}

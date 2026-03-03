@@ -242,9 +242,73 @@ func (c *ContextMenu) Render() string {
 	return contextMenuStyle.Render(b.String())
 }
 
+// HandleKey implements Overlay. It processes a key event and returns a Result
+// indicating whether the menu should close and which action was selected.
+func (c *ContextMenu) HandleKey(msg tea.KeyMsg) Result {
+	action, closed := c.HandleKeyPress(msg)
+	if !closed {
+		return Result{}
+	}
+	return Result{
+		Dismissed: true,
+		Action:    action,
+	}
+}
+
+// View implements Overlay using DefaultStyles for rendering.
+func (c *ContextMenu) View() string {
+	st := DefaultStyles()
+	var b strings.Builder
+
+	innerWidth := c.width
+	if innerWidth < 10 {
+		innerWidth = 10
+	}
+	searchText := c.searchQuery
+	if searchText == "" {
+		searchText = st.Muted.Render("\uf002 Type to filter...")
+	}
+	b.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
+	b.WriteString("\n")
+
+	if len(c.filtered) == 0 {
+		b.WriteString(st.DisabledItem.Width(c.width).Render("No matches"))
+	} else {
+		for i, fi := range c.filtered {
+			numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
+			label := fmt.Sprintf(" %s", fi.item.Label)
+
+			var line string
+			if fi.item.Disabled {
+				line = st.DisabledItem.Width(c.width).Render(
+					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
+			} else if i == c.selectedIdx {
+				line = st.SelectedItem.Width(c.width).Render(
+					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
+			} else {
+				line = st.Item.Render(numPrefix + label)
+			}
+			b.WriteString(line)
+			if i < len(c.filtered)-1 {
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(st.Hint.Render("↑↓ nav • space select • esc close"))
+
+	return st.FloatingBorder.Width(c.width).Render(b.String())
+}
+
 // GetPosition returns the screen coordinates for overlay placement.
 func (c *ContextMenu) GetPosition() (int, int) {
 	return c.x, c.y
+}
+
+// SetSize implements Overlay. Updates available dimensions; width is used for menu layout.
+func (c *ContextMenu) SetSize(width, height int) {
+	c.width = width
 }
 
 // Items returns all menu items (including disabled ones), in original order.
