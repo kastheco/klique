@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "3b8f931a47ca",
+  "session_id": "ses_34acae78fffex3xwskRq2cujlP",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T19:39:35.49750064Z",
+  "branch": "plan/04-rewrite-plumbing",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "config/config.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "735529cee040",
+  "checkpoint_transcript_start": 13,
+  "transcript_lines_at_start": 13,
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 199,
+    "cache_read_tokens": 57330,
+    "output_tokens": 317,
+    "api_call_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T19:39:35.450590278Z",
+    "agent_lines": 143,
+    "human_added": 45,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 188,
+    "agent_percentage": 76.06382978723404
+  }
+}
