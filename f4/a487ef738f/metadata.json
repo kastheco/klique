@@ -5,6 +5,9 @@
   "branch": "plan/rename-plan-to-task",
   "checkpoints_count": 0,
   "files_touched": [
+    "config/taskstore/http.go",
+    "config/taskstore/server.go",
+    "config/taskstore/server_test.go",
     "config/taskstore/sqlite.go",
     "config/taskstore/sqlite_test.go"
   ],
@@ -15,13 +18,20 @@
       "context": "/f4/a487ef738f/0/context.md",
       "content_hash": "/f4/a487ef738f/0/content_hash.txt",
       "prompt": "/f4/a487ef738f/0/prompt.txt"
+    },
+    {
+      "metadata": "/f4/a487ef738f/1/metadata.json",
+      "transcript": "/f4/a487ef738f/1/full.jsonl",
+      "context": "/f4/a487ef738f/1/context.md",
+      "content_hash": "/f4/a487ef738f/1/content_hash.txt",
+      "prompt": "/f4/a487ef738f/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 20,
-    "cache_creation_tokens": 82363,
-    "cache_read_tokens": 1304190,
-    "output_tokens": 5434,
-    "api_call_count": 20
+    "input_tokens": 33,
+    "cache_creation_tokens": 167851,
+    "cache_read_tokens": 2086802,
+    "output_tokens": 10809,
+    "api_call_count": 33
   }
 }
