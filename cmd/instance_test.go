@@ -77,3 +77,73 @@ func TestInstanceList_StatusFilter(t *testing.T) {
 	assert.Contains(t, output, "paused-1")
 	assert.NotContains(t, output, "running-1")
 }
+
+func TestFindInstanceData_Found(t *testing.T) {
+	records := []instanceRecord{
+		{Title: "alpha", Status: instanceRunning},
+		{Title: "beta", Status: instancePaused},
+	}
+	found, err := findInstanceData(records, "beta")
+	require.NoError(t, err)
+	assert.Equal(t, "beta", found.Title)
+	assert.Equal(t, instancePaused, found.Status)
+}
+
+func TestFindInstanceData_NotFound(t *testing.T) {
+	records := []instanceRecord{
+		{Title: "alpha", Status: instanceRunning},
+	}
+	_, err := findInstanceData(records, "missing")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFindInstanceData_FuzzyMatch(t *testing.T) {
+	records := []instanceRecord{
+		{Title: "planner-my-feature", Status: instanceRunning},
+		{Title: "coder-my-feature-task-1", Status: instanceRunning},
+	}
+	// Exact match should work
+	found, err := findInstanceData(records, "planner-my-feature")
+	require.NoError(t, err)
+	assert.Equal(t, "planner-my-feature", found.Title)
+
+	// Substring match when no exact match
+	found, err = findInstanceData(records, "task-1")
+	require.NoError(t, err)
+	assert.Equal(t, "coder-my-feature-task-1", found.Title)
+}
+
+func TestFindInstanceData_AmbiguousSubstring(t *testing.T) {
+	records := []instanceRecord{
+		{Title: "planner-foo", Status: instanceRunning},
+		{Title: "coder-foo", Status: instanceRunning},
+	}
+	_, err := findInstanceData(records, "foo")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ambiguous")
+}
+
+func TestValidateInstanceStatus_Kill(t *testing.T) {
+	// Kill should work on any status
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceRunning}, "kill"))
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceReady}, "kill"))
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instancePaused}, "kill"))
+}
+
+func TestValidateInstanceStatus_Pause(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceRunning}, "pause"))
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceReady}, "pause"))
+	assert.Error(t, validateStatusForAction(instanceRecord{Status: instancePaused}, "pause"))
+}
+
+func TestValidateInstanceStatus_Resume(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instancePaused}, "resume"))
+	assert.Error(t, validateStatusForAction(instanceRecord{Status: instanceRunning}, "resume"))
+}
+
+func TestValidateInstanceStatus_Send(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceRunning}, "send"))
+	assert.NoError(t, validateStatusForAction(instanceRecord{Status: instanceReady}, "send"))
+	assert.Error(t, validateStatusForAction(instanceRecord{Status: instancePaused}, "send"))
+}
