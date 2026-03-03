@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "bc2a8dfdb7bf",
+  "session_id": "ses_34e000f11ffepzaUc8tdbuhB8x",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T04:46:54.906265896Z",
+  "branch": "plan/remove-date-from-plan-slugs",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_plan_creation_test.go",
+    "internal/clickup/scaffold_test.go",
+    "config/planstate/planstate.go",
+    "internal/clickup/scaffold.go",
+    "app/app_state.go",
+    "cmd/plan.go",
+    "session/git/plan_lifecycle.go",
+    "app/clickup_import_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "a1d1bc541cb9",
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 137482,
+    "cache_read_tokens": 5509216,
+    "output_tokens": 20681,
+    "api_call_count": 48
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T04:46:54.422966617Z",
+    "agent_lines": 29,
+    "human_added": 168,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 197,
+    "agent_percentage": 14.720812182741117
+  }
+}

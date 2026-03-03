@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "bc2a8dfdb7bf",
+  "strategy": "manual-commit",
+  "branch": "plan/remove-date-from-plan-slugs",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_plan_creation_test.go",
+    "app/app_state.go",
+    "app/clickup_import_test.go",
+    "cmd/plan.go",
+    "config/planstate/planstate.go",
+    "internal/clickup/scaffold.go",
+    "internal/clickup/scaffold_test.go",
+    "session/git/plan_lifecycle.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bc/2a8dfdb7bf/0/metadata.json",
+      "transcript": "/bc/2a8dfdb7bf/0/full.jsonl",
+      "context": "/bc/2a8dfdb7bf/0/context.md",
+      "content_hash": "/bc/2a8dfdb7bf/0/content_hash.txt",
+      "prompt": "/bc/2a8dfdb7bf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 137482,
+    "cache_read_tokens": 5509216,
+    "output_tokens": 20681,
+    "api_call_count": 48
+  }
+}

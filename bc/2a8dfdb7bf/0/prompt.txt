@@ -1,0 +1,169 @@
+Implement Task 1: Remove date prefix from filename generation, DisplayName, Rename, and all tests
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop prepending `YYYY-MM-DD-` to plan filenames so that working on a plan across multiple days doesn't cause slug mismatches; the slug alone is a sufficient unique identifier.
+**Architecture:** The date prefix is generated in 4 places: `buildPlanFilename()`, `createPlanEntry()`, `importClickUpTask()`, and `ScaffoldFilename()`. `DisplayName()` strips it for display, and `Rename()` preserves it. All of these must be updated to produce dateless slugs (e.g. `auth-refactor.md` instead of `2026-02-21-auth-refactor.md`). `DisplayName()` becomes a simple `.md` strip. `Rename()` drops the date-preservation logic. The planner skill template, planner agent prompt, and ~20 test files need their hardcoded `2026-XX-XX-` prefixed filenames updated. The `dedupePlanFilename` functions already work on the base slug so they need no logic changes, only test expectation updates.
+**Tech Stack:** Go, bubbletea (TUI), planstate/planstore packages, kasmos-planner skill (Markdown)
+
+## Wave 1 of 2
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/planstate/planstate.go`
+- Modify: `internal/clickup/scaffold.go`
+- Modify: `app/app_state.go`
+- Modify: `cmd/plan.go`
+- Modify: `session/git/plan_lifecycle.go`
+- Test: `config/planstate/planstate_test.go`
+- Test: `internal/clickup/scaffold_test.go`
+- Test: `app/app_plan_creation_test.go`
+- Test: `app/clickup_import_test.go`
+- Test: `app/app_test.go`
+- Test: `app/app_plan_actions_test.go`
+- Test: `app/app_plan_completion_test.go`
+- Test: `app/app_plan_context_actions_test.go`
+- Test: `app/app_planner_signal_test.go`
+- Test: `app/app_solo_agent_test.go`
+- Test: `app/app_wave_orchestration_flow_test.go`
+- Test: `app/clickup_progress_test.go`
+- Test: `app/plan_cancel_rename_delay_test.go`
+- Test: `cmd/plan_test.go`
+- Test: `config/planfsm/signals_test.go`
+- Test: `config/planfsm/wave_signal_test.go`
+- Test: `config/planstore/http_test.go`
+- Test: `config/planstore/migrate_test.go`
+- Test: `config/planstore/sqlite_test.go`
+- Test: `session/git/plan_lifecycle_test.go`
+- Test: `session/instance_planfile_test.go`
+- Test: `session/instance_title_test.go`
+
+**Step 1: write the failing test**
+
+Update `TestBuildPlanFilename` in `app/app_plan_creation_test.go`:
+```go
+func TestBuildPlanFilename(t *testing.T) {
+	got := buildPlanFilename("Auth Refactor", time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
+	want := "auth-refactor.md"
+	if got != want {
+		t.Fatalf("buildPlanFilename() = %q, want %q", got, want)
+	}
+}
+```
+
+Update `TestScaffoldFilename` in `internal/clickup/scaffold_test.go` — remove date arg and update expectations:
+```go
+func TestScaffoldFilename(t *testing.T) {
+	tests := map[string]string{
+		"Design Auth Flow":       "design-auth-flow.md",
+		"API v2 — New Endpoints": "api-v2-new-endpoints.md",
+		"  spaces & symbols!!! ": "spaces-symbols.md",
+	}
+	for input, want := range tests {
+		got := clickup.ScaffoldFilename(input)
+		assert.Equal(t, want, got, "input: %q", input)
+	}
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./app/... -run TestBuildPlanFilename -v
+go test ./internal/clickup/... -run TestScaffoldFilename -v
+```
+
+expected: FAIL — signature mismatch (`ScaffoldFilename` now takes 1 arg) and wrong output
+
+**Step 3: write minimal implementation**
+
+**Production code changes:**
+
+1. **`config/planstate/planstate.go`** — simplify `DisplayName` to just strip `.md`:
+```go
+// DisplayName strips the .md extension from a plan filename.
+// "auth-refactor.md" → "auth-refactor"
+func DisplayName(filename string) string {
+	return strings.TrimSuffix(filename, ".md")
+}
+```
+
+2. **`config/planstate/planstate.go`** — simplify `Rename` to drop date-prefix preservation. Remove the `if len(oldFilename) > 11 && ...` block and always use `newSlug + ".md"`:
+```go
+var newFilename string
+newFilename = newSlug + ".md"
+```
+
+3. **`app/app_state.go`** — update `buildPlanFilename` to drop date:
+```go
+// buildPlanFilename derives the plan filename from a human name.
+// "Auth Refactor" → "auth-refactor.md"
+func buildPlanFilename(name string, _ time.Time) string {
+	slug := slugifyPlanName(name)
+	if slug == "" {
+		slug = "plan"
+	}
+	return slug + ".md"
+}
+```
+
+4. **`app/app_state.go`** — update `createPlanEntry` to drop date from filename:
+```go
+slug := slugifyPlanName(name)
+filename := slug + ".md"
+```
+
+5. **`app/app_state.go`** — update `importClickUpTask` to call `ScaffoldFilename` without date. Remove the `date := time.Now().Format("2006-01-02")` line and change the call to `clickup.ScaffoldFilename(task.Name)`.
+
+6. **`internal/clickup/scaffold.go`** — remove date parameter from `ScaffoldFilename`:
+```go
+// ScaffoldFilename generates a plan filename from a task name.
+func ScaffoldFilename(name string) string {
+	slug := strings.ToLower(strings.TrimSpace(name))
+	slug = nonAlphanumeric.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	return slug + ".md"
+}
+```
+
+7. **`cmd/plan.go`** — update `executePlanRegister` branch derivation to drop date-stripping:
+```go
+if branch == "" {
+	slug := strings.TrimSuffix(planFile, ".md")
+	branch = "plan/" + slug
+}
+```
+
+8. **`session/git/plan_lifecycle.go`** — update doc comment:
+```go
+// PlanBranchFromFile derives the git branch name from a plan filename.
+// "auth-refactor.md" → "plan/auth-refactor"
+```
+
+**Test fixture updates (use `sd` for batch replacements):**
+
+Use `rg` to find all `"2026-\d{2}-\d{2}-` prefixed plan filenames in test files, then use `sd` to strip the date prefix. Key patterns:
+
+- `sd '"2026-\d{2}-\d{2}-([^"]+)"' '"$1"'` across all `_test.go` files — strips date prefix from string literals
+- Update `ScaffoldFilename` call sites in tests to remove the date argument
+- Update `dedupePlanFilename` test expectations (e.g. `"test-task-2.md"` not `"2026-02-24-test-task-2.md"`)
+- Update `Rename` test expectations (no longer preserves date prefix)
+- Update `DisplayName` test expectations (now just strips `.md`)
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./... -count=1
+```
+
+expected: PASS — all tests compile and pass with dateless slugs
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "feat: remove date prefix from plan slug generation, display, and all tests"
+```
