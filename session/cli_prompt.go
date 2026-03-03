@@ -2,10 +2,23 @@ package session
 
 import "strings"
 
-// programSupportsCliPrompt returns true if the program supports an initial
-// prompt via CLI flag (opencode --prompt) or positional arg (claude).
-// NOTE: These match session/tmux.ProgramOpenCode and session/tmux.ProgramClaude.
-// Keep in sync if program names change (can't import tmux — circular dep).
+// cliPromptPrograms lists programs that accept an initial user prompt via a
+// CLI flag (opencode --prompt) or positional argument (claude).
+//
+// NOTE: Values correspond to session/tmux.ProgramOpenCode and
+// session/tmux.ProgramClaude. Keep in sync if those constants change;
+// importing tmux from here would create a circular dependency.
+var cliPromptPrograms = []string{"opencode", "claude"}
+
+// programSupportsCliPrompt reports whether program accepts a startup prompt
+// passed directly on the command line. It checks that program ends with one
+// of the known program names, so both bare names ("claude") and absolute
+// paths ("/usr/local/bin/claude") are matched correctly.
 func programSupportsCliPrompt(program string) bool {
-	return strings.HasSuffix(program, "opencode") || strings.HasSuffix(program, "claude")
+	for _, name := range cliPromptPrograms {
+		if strings.HasSuffix(program, name) {
+			return true
+		}
+	}
+	return false
 }

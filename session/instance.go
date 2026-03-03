@@ -9,16 +9,17 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 )
 
+// Status represents the current state of an instance.
 type Status int
 
 const (
-	// Running is the status when the instance is running and claude is working.
+	// Running indicates the instance is active and the agent is working.
 	Running Status = iota
-	// Ready is if the claude instance is ready to be interacted with (waiting for user input).
+	// Ready indicates the instance is idle and waiting for user input.
 	Ready
-	// Loading is if the instance is loading (if we are starting it up or something).
+	// Loading indicates the instance is starting up or initialising.
 	Loading
-	// Paused is if the instance is paused (worktree removed but branch preserved).
+	// Paused indicates the instance is paused — the worktree has been removed but the branch is preserved.
 	Paused
 )
 
@@ -30,121 +31,110 @@ const (
 	AgentTypeFixer    = "fixer"
 )
 
-// Instance is a running instance of claude code.
+// Instance represents a managed agent session with its associated tmux and git state.
 type Instance struct {
-	// Title is the title of the instance.
+	// Title is the display name and tmux session identifier for this instance.
 	Title string
-	// Path is the path to the workspace.
+	// Path is the workspace directory for the instance.
 	Path string
-	// Branch is the branch of the instance.
+	// Branch is the git branch associated with this instance.
 	Branch string
-	// Status is the status of the instance.
+	// Status is the current lifecycle state of the instance.
 	Status Status
-	// Program is the program to run in the instance.
+	// Program is the agent command to execute within the tmux session.
 	Program string
-	// Height is the height of the instance.
+	// Height is the terminal height in rows.
 	Height int
-	// Width is the width of the instance.
+	// Width is the terminal width in columns.
 	Width int
-	// CreatedAt is the time the instance was created.
+	// CreatedAt records when the instance was first created.
 	CreatedAt time.Time
-	// UpdatedAt is the time the instance was last updated.
+	// UpdatedAt records the most recent update timestamp.
 	UpdatedAt time.Time
-	// AutoYes is true if the instance should automatically press enter when prompted.
+	// AutoYes causes the instance to auto-confirm prompts.
 	AutoYes bool
-	// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.
+	// SkipPermissions enables the --dangerously-skip-permissions flag for Claude.
 	SkipPermissions bool
-	// PlanFile is the plan filename this instance is implementing (empty = no plan).
+	// TaskFile is the plan file this instance is implementing (empty for ad-hoc sessions).
 	TaskFile string
-	// Topic is the topic/group this instance belongs to (from plan-state).
+	// Topic is the plan-state group this instance belongs to.
 	Topic string
-	// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.
+	// AgentType identifies the role within a plan lifecycle: planner, coder, reviewer, fixer, or empty.
 	AgentType string
-	// TaskNumber is the task number within a plan (1-indexed). 0 = not a wave task.
+	// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).
 	TaskNumber int
-	// WaveNumber is the wave number this task belongs to (1-indexed). 0 = not a wave task.
+	// WaveNumber is the 1-indexed wave number this task belongs to (0 = not a wave task).
 	WaveNumber int
-	// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).
+	// PeerCount is the number of concurrent sibling tasks in the same wave (0 = not a wave task).
 	PeerCount int
-	// IsReviewer is true when this instance is a reviewer session for a plan.
-	// Deprecated: use AgentType == AgentTypeReviewer instead.
+	// IsReviewer indicates a reviewer session.
+	// Deprecated: check AgentType == AgentTypeReviewer instead.
 	IsReviewer bool
-	// ImplementationComplete is true when the coder finished and the plan transitioned to review.
-	// The instance is auto-paused and rendered with a dim/completed visual style.
+	// ImplementationComplete is set when the coder finishes and the plan transitions to review.
 	ImplementationComplete bool
-	// SoloAgent is true when this instance was spawned via "start solo agent" — no
-	// automatic lifecycle transitions (push prompt, review spawning) apply.
+	// SoloAgent is true for instances launched as standalone agents outside the orchestration lifecycle.
 	SoloAgent bool
-	// Exited is true when the instance's tmux session has died. Used by the UI
-	// to render dead instances with greyed-out strikethrough styling.
+	// Exited is true when the instance's tmux session has terminated unexpectedly.
 	Exited bool
-	// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.
+	// QueuedPrompt is delivered to the session on first transition to Ready. Cleared after delivery.
 	QueuedPrompt string
 
-	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
+	// sharedWorktree indicates the instance shares a topic worktree and should not clean it up.
 	sharedWorktree bool
-	// LoadingStage tracks the current startup progress. Exported so the UI can read it.
+	// LoadingStage tracks the current startup progress step for the UI.
 	LoadingStage int
-	// LoadingTotal is the total number of startup stages.
+	// LoadingTotal is the total count of startup stages.
 	LoadingTotal int
-	// LoadingMessage describes the current loading step.
+	// LoadingMessage describes the current startup step shown in the UI.
 	LoadingMessage string
 
-	// Notified is true when the instance finished (Running→Ready) and the user
-	// hasn't selected it yet. Cleared when the user selects this instance.
+	// Notified is true after the instance completes (Running→Ready) until the user selects it.
 	Notified bool
 
-	// LastActiveAt is set whenever the instance is marked as Running.
+	// LastActiveAt records the most recent time the instance entered Running or Loading state.
 	LastActiveAt time.Time
 
-	// PromptDetected is true when the instance's program is waiting for user input.
-	// Reset to false when the instance resumes running. Used by the sidebar to
-	// persistently show a running indicator without flickering.
+	// PromptDetected is true when the agent program is waiting for user input.
+	// Persists across status transitions to prevent UI flicker.
 	PromptDetected bool
 
-	// AwaitingWork is set when a QueuedPrompt is delivered to the agent, and
-	// cleared when the agent transitions to Running. The wave orchestrator uses
-	// this to avoid treating the initial idle prompt as task completion.
+	// AwaitingWork is set when a QueuedPrompt is dispatched and cleared when the agent goes Running.
+	// The wave orchestrator uses this to avoid treating early idle prompts as task completion.
 	AwaitingWork bool
 
-	// ReviewCycle is the 1-indexed review/fix cycle counter for this instance.
-	// 0 means not a review cycle instance. Incremented on each ReviewChangesRequested transition.
+	// ReviewCycle is the 1-indexed count of review/fix cycles for this instance (0 = not a cycle instance).
 	ReviewCycle int
 
-	// HasWorked is set to true when the agent produces at least one content
-	// update (md.Updated) after receiving its task prompt. The wave orchestrator
-	// requires this before treating PromptDetected as task completion — prevents
-	// permission prompts or early returns from prematurely completing a wave.
+	// HasWorked is true once the agent produces at least one content update after receiving its task.
+	// Prevents permission prompts or early returns from prematurely completing a wave.
 	HasWorked bool
 
-	// CPUPercent is the current CPU usage of the instance's process.
+	// CPUPercent is the last sampled CPU utilisation of the agent process.
 	CPUPercent float64
-	// MemMB is the current memory usage in megabytes.
+	// MemMB is the last sampled memory usage of the agent process in megabytes.
 	MemMB float64
 
-	// LastActivity is the most recently detected agent activity (ephemeral, not persisted).
+	// LastActivity is the most recently detected agent activity event (ephemeral, not persisted).
 	LastActivity *Activity
 
-	// CachedContent is the last tmux capture-pane output, set in app.Update from metadata results.
-	// Used by the preview tick to avoid redundant subprocess calls.
+	// CachedContent is the last tmux pane capture, kept to avoid redundant subprocess calls.
 	CachedContent string
-	// CachedContentSet tracks whether CachedContent has been initialized.
-	// This distinguishes "no cache yet" from a valid empty pane capture.
+	// CachedContentSet is true once CachedContent has been populated for the first time.
 	CachedContentSet bool
 
-	// DiffStats stores the current git diff statistics
+	// diffStats holds the current git diff statistics for this instance.
 	diffStats *git.DiffStats
 
-	// The below fields are initialized upon calling Start().
-
+	// started is true once Start() has been called successfully.
 	started bool
-	// tmuxSession is the tmux session for the instance.
+	// tmuxSession manages the underlying tmux session for this instance.
 	tmuxSession *tmux.TmuxSession
-	// gitWorktree is the git worktree for the instance.
+	// gitWorktree manages the git worktree associated with this instance.
 	gitWorktree *git.GitWorktree
 }
 
-// ToInstanceData converts an Instance to its serializable form
+// ToInstanceData converts an Instance to its JSON-serialisable form for persistence.
+// UpdatedAt is always refreshed to the current time.
 func (i *Instance) ToInstanceData() InstanceData {
 	data := InstanceData{
 		Title:                  i.Title,
@@ -170,7 +160,6 @@ func (i *Instance) ToInstanceData() InstanceData {
 		ReviewCycle:            i.ReviewCycle,
 	}
 
-	// Only include worktree data if gitWorktree is initialized
 	if i.gitWorktree != nil {
 		data.Worktree = GitWorktreeData{
 			RepoPath:      i.gitWorktree.GetRepoPath(),
@@ -181,7 +170,6 @@ func (i *Instance) ToInstanceData() InstanceData {
 		}
 	}
 
-	// Only include diff stats if they exist
 	if i.diffStats != nil {
 		data.DiffStats = DiffStatsData{
 			Added:   i.diffStats.Added,
@@ -193,7 +181,9 @@ func (i *Instance) ToInstanceData() InstanceData {
 	return data
 }
 
-// FromInstanceData creates a new Instance from serialized data
+// FromInstanceData reconstructs an Instance from its serialised form.
+// For paused instances the tmux session is prepared but not started.
+// For live instances the tmux session is reattached; dead sessions are marked Exited.
 func FromInstanceData(data InstanceData) (*Instance, error) {
 	instance := &Instance{
 		Title:                  data.Title,
@@ -231,65 +221,64 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	}
 
 	if instance.Paused() {
+		// Paused instances keep the session struct ready but do not reattach.
 		instance.started = true
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
-	} else {
-		// Non-destructive restore: check if the tmux session still exists
-		// before attempting to attach. Start(false) calls Kill() on failure
-		// which would destroy a live tmux session — use a gentler path instead.
-		ts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
-		ts.SetAgentType(instance.AgentType)
-		instance.tmuxSession = ts
+		return instance, nil
+	}
 
-		if !ts.DoesSessionExist() {
-			// Tmux session is gone — mark as exited so the UI can render it
-			// as dead and allow cleanup, rather than silently dropping it.
-			instance.started = true
-			instance.Exited = true
-			instance.SetStatus(Ready)
-		} else {
-			// Session exists — do the full restore via Start(false) which
-			// attaches the PTY. The tmuxSession is already set so Start()
-			// will reuse it.
-			if err := instance.Start(false); err != nil {
-				return nil, err
-			}
-		}
+	// Build the tmux session handle and check liveness before attempting a full restore.
+	ts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
+	ts.SetAgentType(instance.AgentType)
+	instance.tmuxSession = ts
+
+	if !ts.DoesSessionExist() {
+		// The tmux session is gone — mark as exited so the UI can display it as dead.
+		instance.started = true
+		instance.Exited = true
+		instance.SetStatus(Ready)
+		return instance, nil
+	}
+
+	// Session is alive — restore the full attachment via Start(false).
+	if err := instance.Start(false); err != nil {
+		return nil, err
 	}
 
 	return instance, nil
 }
 
-// Options for creating a new instance
+// InstanceOptions holds the configuration values for creating a new Instance.
 type InstanceOptions struct {
-	// Title is the title of the instance.
+	// Title is the display name and tmux session identifier.
 	Title string
-	// Path is the path to the workspace.
+	// Path is the workspace directory.
 	Path string
-	// Program is the program to run in the instance (e.g. "claude", "aider --model ollama_chat/gemma3:1b")
+	// Program is the agent command to run (e.g. "claude", "opencode").
 	Program string
-	// If AutoYes is true, then
+	// AutoYes enables automatic confirmation of agent prompts.
 	AutoYes bool
-	// SkipPermissions enables --dangerously-skip-permissions for Claude instances.
+	// SkipPermissions enables --dangerously-skip-permissions for Claude.
 	SkipPermissions bool
-	// PlanFile binds this instance to a plan from plan-state.json.
+	// TaskFile binds this instance to a plan from plan-state.
 	TaskFile string
-	// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.
+	// AgentType is the role of this instance within a plan: planner, coder, reviewer, fixer, or empty.
 	AgentType string
-	// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).
+	// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).
 	TaskNumber int
-	// WaveNumber is the wave this task belongs to (1-indexed, 0 = not a wave task).
+	// WaveNumber is the 1-indexed wave this task belongs to (0 = not a wave task).
 	WaveNumber int
-	// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).
+	// PeerCount is the number of concurrent sibling tasks in the same wave.
 	PeerCount int
-	// ReviewCycle is the 1-indexed review cycle number (0 = not a review cycle instance).
+	// ReviewCycle is the 1-indexed review/fix cycle number (0 = not a cycle instance).
 	ReviewCycle int
 }
 
+// NewInstance constructs a new unstarted Instance from the given options.
+// The workspace path is resolved to an absolute path before storage.
 func NewInstance(opts InstanceOptions) (*Instance, error) {
-	t := time.Now()
+	now := time.Now()
 
-	// Convert path to absolute
 	absPath, err := filepath.Abs(opts.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
@@ -302,8 +291,8 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Program:         opts.Program,
 		Height:          0,
 		Width:           0,
-		CreatedAt:       t,
-		UpdatedAt:       t,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
 		TaskFile:        opts.TaskFile,
@@ -315,19 +304,21 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}, nil
 }
 
+// RepoName returns the repository name for this instance.
+// For instances without a git worktree (e.g. planner sessions on the main branch),
+// the repo name is derived from the workspace path.
 func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
 	if i.gitWorktree == nil {
-		// Planner instances run on the main branch without a worktree —
-		// derive the repo name from the instance path instead.
 		return filepath.Base(i.Path), nil
 	}
 	return i.gitWorktree.GetRepoName(), nil
 }
 
-// GetRepoPath returns the repo path for this instance, or empty string if not started.
+// GetRepoPath returns the repository root path, or empty string if the instance is not started
+// or has no git worktree.
 func (i *Instance) GetRepoPath() string {
 	if !i.started || i.gitWorktree == nil {
 		return ""
@@ -335,7 +326,7 @@ func (i *Instance) GetRepoPath() string {
 	return i.gitWorktree.GetRepoPath()
 }
 
-// GetWorktreePath returns the worktree path for this instance, or empty string if unavailable.
+// GetWorktreePath returns the worktree directory path, or empty string if unavailable.
 func (i *Instance) GetWorktreePath() string {
 	if i.gitWorktree == nil {
 		return ""
@@ -343,38 +334,45 @@ func (i *Instance) GetWorktreePath() string {
 	return i.gitWorktree.GetWorktreePath()
 }
 
+// SetStatus transitions the instance to the given status and triggers associated side-effects:
+// desktop notification on Running→Ready, timestamp refresh on Running/Loading, and
+// AwaitingWork clear on Running.
 func (i *Instance) SetStatus(status Status) {
 	if i.Status == Running && status == Ready {
 		i.Notified = true
-		// Wave task instances are managed by the orchestrator — suppress
-		// per-task desktop notifications; the user gets a toast when the
-		// wave completes instead.
+		// Wave task instances are managed collectively by the orchestrator.
+		// Only send per-instance notifications for standalone (non-wave) sessions.
 		if i.TaskNumber == 0 {
 			SendNotification("kas", fmt.Sprintf("'%s' has finished", i.Title))
 		}
 	}
+
 	if status == Running || status == Loading {
 		i.LastActiveAt = time.Now()
 		i.PromptDetected = false
 		i.Notified = false
 	}
+
 	if status == Running {
 		i.AwaitingWork = false
 	}
+
 	i.Status = status
 }
 
+// setLoadingProgress updates the loading stage and message shown during startup.
 func (i *Instance) setLoadingProgress(stage int, message string) {
 	i.LoadingStage = stage
 	i.LoadingMessage = message
 }
 
+// Started reports whether the instance has been started via Start().
 func (i *Instance) Started() bool {
 	return i.started
 }
 
-// SetTitle sets the title of the instance. Returns an error if the instance has started.
-// We cant change the title once it's been used for a tmux session etc.
+// SetTitle updates the instance title. Returns an error if the instance has already started,
+// since the title is used as the tmux session name and cannot be changed after creation.
 func (i *Instance) SetTitle(title string) error {
 	if i.started {
 		return fmt.Errorf("cannot change title of a started instance")
@@ -383,11 +381,12 @@ func (i *Instance) SetTitle(title string) error {
 	return nil
 }
 
+// Paused reports whether the instance is in the Paused state.
 func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
-// TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
+// TmuxAlive reports whether the underlying tmux session is still running.
 func (i *Instance) TmuxAlive() bool {
 	if i.tmuxSession == nil {
 		return false
