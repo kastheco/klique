@@ -919,6 +919,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
+				// Increment the review cycle counter before spawning the fix coder so
+				// that spawnCoderWithFeedback reads the updated (post-increment) value.
+				if err := m.planState.IncrementReviewCycle(sig.PlanFile); err != nil {
+					log.WarningLog.Printf("could not increment review cycle for %q: %v", sig.PlanFile, err)
+				}
 				if cmd := m.spawnCoderWithFeedback(sig.PlanFile, feedback); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}

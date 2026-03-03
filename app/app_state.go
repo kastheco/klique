@@ -720,8 +720,9 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		return nil
 	}
 
+	cycle, _ := m.planState.ReviewCycle(planFile)
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
-		Title:     planName + "-review",
+		Title:     fmt.Sprintf("%s-review-%d", planName, cycle+1),
 		Path:      m.activeRepoPath,
 		Program:   m.programForAgent(session.AgentTypeReviewer),
 		PlanFile:  planFile,
@@ -912,8 +913,9 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 		return nil
 	}
 
+	cycle, _ := m.planState.ReviewCycle(planFile)
 	coderInst, err := session.NewInstance(session.InstanceOptions{
-		Title:     planName + "-implement",
+		Title:     fmt.Sprintf("%s-fix-%d", planName, cycle),
 		Path:      m.activeRepoPath,
 		Program:   m.programForAgent(session.AgentTypeCoder),
 		PlanFile:  planFile,
@@ -1448,11 +1450,16 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 		m.killExistingPlanAgent(planFile, agentType)
 	}
 
-	title := planstate.DisplayName(planFile) + "-" + action
+	planName := planstate.DisplayName(planFile)
+	title := planName + "-" + action
 	if action == "solo" {
 		// Solo sessions run on main branch, so their tmux session names must stay
 		// unique to avoid accidentally reattaching to another solo session.
-		title = planstate.DisplayName(planFile) + "-solo"
+		title = planName + "-solo"
+	} else if action == "review" {
+		// Use cycle-suffixed title so each review round gets a unique tmux session name.
+		cycle, _ := m.planState.ReviewCycle(planFile)
+		title = fmt.Sprintf("%s-review-%d", planName, cycle+1)
 	}
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     title,

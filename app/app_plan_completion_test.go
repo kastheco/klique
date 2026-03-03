@@ -637,6 +637,103 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 		"reviewer tmux death must not auto-approve — plan must stay reviewing")
 }
 
+// TestReviewCycle_InstanceTitlesIncludeCycleNumber verifies that review cycle
+// numbers are embedded in instance titles. After the first ReviewChangesRequested
+// signal the spawned coder gets title "feature-fix-1"; after the subsequent
+// ImplementFinished the spawned reviewer gets "feature-review-2".
+func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
+	const planFile = "2026-02-23-feature.md"
+	const feedback = "Fix the error handling in auth.go"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	// Write a minimal plan file so spawnPlanAgent helpers can read it.
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+
+	// Create a reviewer instance — title uses the old format (no cycle suffix).
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// === Part 1: ReviewChangesRequested → coder with cycle suffix ===
+	signal1 := planfsm.Signal{
+		Event:    planfsm.ReviewChangesRequested,
+		PlanFile: planFile,
+		Body:     feedback,
+	}
+	_, _ = h.Update(metadataResultMsg{
+		PlanState: ps,
+		Signals:   []planfsm.Signal{signal1},
+	})
+
+	var coderTitle string
+	for _, inst := range h.nav.GetInstances() {
+		if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
+			coderTitle = inst.Title
+			break
+		}
+	}
+	assert.Equal(t, "feature-fix-1", coderTitle,
+		"coder spawned after first ReviewChangesRequested must have title 'feature-fix-1'")
+
+	// === Part 2: ImplementFinished → reviewer with next cycle suffix ===
+	// At this point m.planState has ReviewCycle=1 in-memory (incremented by part 1).
+	// The FSM store has status=implementing (transitioned by part 1).
+	signal2 := planfsm.Signal{
+		Event:    planfsm.ImplementFinished,
+		PlanFile: planFile,
+	}
+	_, _ = h.Update(metadataResultMsg{
+		PlanState: h.planState,
+		Signals:   []planfsm.Signal{signal2},
+	})
+
+	// Find the newly spawned reviewer (the old one was killed and removed).
+	var reviewerTitle string
+	for _, inst := range h.nav.GetInstances() {
+		if inst.PlanFile == planFile && inst.IsReviewer {
+			reviewerTitle = inst.Title
+		}
+	}
+	assert.Equal(t, "feature-review-2", reviewerTitle,
+		"reviewer spawned after ImplementFinished with ReviewCycle=1 must have title 'feature-review-2'")
+}
+
 // TestIsLocked_FinishedLockedWhenDone verifies that the "finished" stage is
 // locked when the plan is already done, preventing a spurious FSM error.
 func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
