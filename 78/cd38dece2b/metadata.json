@@ -3,7 +3,7 @@
   "checkpoint_id": "78cd38dece2b",
   "strategy": "manual-commit",
   "branch": "plan/02a-rewrite-session-core",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "session/permission_prompt.go"
   ],
@@ -21,13 +21,20 @@
       "context": "/78/cd38dece2b/1/context.md",
       "content_hash": "/78/cd38dece2b/1/content_hash.txt",
       "prompt": "/78/cd38dece2b/1/prompt.txt"
+    },
+    {
+      "metadata": "/78/cd38dece2b/2/metadata.json",
+      "transcript": "/78/cd38dece2b/2/full.jsonl",
+      "context": "/78/cd38dece2b/2/context.md",
+      "content_hash": "/78/cd38dece2b/2/content_hash.txt",
+      "prompt": "/78/cd38dece2b/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 10,
-    "cache_creation_tokens": 108535,
-    "cache_read_tokens": 286180,
-    "output_tokens": 2438,
-    "api_call_count": 10
+    "input_tokens": 18,
+    "cache_creation_tokens": 160688,
+    "cache_read_tokens": 582519,
+    "output_tokens": 3692,
+    "api_call_count": 17
   }
 }

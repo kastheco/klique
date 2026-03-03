@@ -1,0 +1,77 @@
+Implement Task 3: Rewrite cli_prompt.go and notify.go — Small Utilities
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all files in `session/` (excluding the already-rewritten `session/tmux/` and `session/git/` subdirectories) to remove AGPL-tainted lines. The rewrite preserves the identical public API so all callers (`app/`, `ui/`, `daemon/`, `main.go`) compile without changes, while replacing every line of implementation.
+**Architecture:** Eight files rewritten in-place across the session core: `instance.go` (struct, constructors, accessors, serialization), `instance_lifecycle.go` (Start variants, Kill, Pause, Resume, Restart, Adopt), `instance_session.go` (pane I/O, metadata collection, resource monitoring, diff stats), `storage.go` (JSON persistence via `config.StateManager`), `activity.go` (agent activity parsing from pane content), `permission_prompt.go` (opencode permission dialog detection), `cli_prompt.go` (program CLI prompt support detection), and `notify.go` (desktop notifications). The `terminal.go` file (EmbeddedTerminal) is 100% original code (written post-fork for the live-preview feature) and is untouched. All existing test files are preserved as the regression suite — they must pass after each task. The public API (exported types, method signatures, constants) stays identical.
+**Tech Stack:** Go 1.24, testify, `session/tmux` (rewritten), `session/git` (rewritten), `config.StateManager`, `charmbracelet/x/ansi`, `charmbracelet/x/vt`, `creack/pty`, `atotto/clipboard`
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 3 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/cli_prompt.go`
+- Modify: `session/notify.go`
+- Test: `session/cli_prompt_test.go` (existing — 27 LOC, 1 table-driven test)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `cli_prompt_test.go` covers `programSupportsCliPrompt` with 6 cases (opencode, claude, full paths, aider, gemini, empty string). `notify.go` has no tests — it's fire-and-forget OS notification.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./session/... -run "TestProgramSupportsCliPrompt" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+**cli_prompt.go** — Delete contents and rewrite:
+
+- **`programSupportsCliPrompt(program string) bool`** — returns true if `program` ends with `"opencode"` or `"claude"` (checked via `strings.HasSuffix`). These programs accept an initial prompt via CLI flag or positional arg. Returns false for all other programs (aider, gemini, etc.).
+
+Imports: `strings`.
+
+**notify.go** — Delete contents and rewrite:
+
+- **`NotificationsEnabled`** — package-level `bool` variable, defaults to `true`. Set from config at startup.
+- **`escapeAppleScript(s string) string`** — escapes backslashes then double quotes for AppleScript string literals.
+- **`SendNotification(title, body string)`** — returns immediately if `NotificationsEnabled` is false. On `darwin`: fires `osascript -e 'display notification "..." with title "..."'` via `exec.Command` + `Start()` (fire-and-forget). On `linux`: checks for `notify-send` via `exec.LookPath`, fires `notify-send <title> <body>` via `Start()`. No-op on other platforms.
+
+Imports: `os/exec`, `runtime`, `strings`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/... -run "TestProgramSupportsCliPrompt" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/cli_prompt.go session/notify.go
+git commit -m "feat(clean-room): rewrite session/cli_prompt.go and session/notify.go from scratch"
+```
