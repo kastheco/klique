@@ -221,6 +221,10 @@ type home struct {
 	clickUpConfig *clickup.MCPServerConfig
 	// clickUpImporter handles search/fetch via MCP (nil until first use)
 	clickUpImporter *clickup.Importer
+	// clickUpCommenter handles posting progress comments to ClickUp tasks (nil until first use)
+	clickUpCommenter *clickup.Commenter
+	// clickUpMCPClient is the raw MCP caller shared by importer and commenter
+	clickUpMCPClient clickup.MCPCaller
 	// clickUpResults stores the latest search results for the picker
 	clickUpResults []clickup.SearchResult
 	// clickUpPendingQuery stores the search query to retry after workspace selection
@@ -875,6 +879,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
 					auditlog.WithPlan(sig.PlanFile))
 				m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
+				// Post progress comment to ClickUp.
+				if cmd := m.postClickUpProgress(sig.PlanFile, "review_approved", ""); cmd != nil {
+					signalCmds = append(signalCmds, cmd)
+				}
 				// Kill the reviewer instance — it's done.
 				for _, inst := range m.nav.GetInstances() {
 					if inst.PlanFile == sig.PlanFile && inst.IsReviewer {
@@ -885,6 +893,16 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case planfsm.ReviewChangesRequested:
 				feedback := sig.Body
 				m.pendingReviewFeedback[sig.PlanFile] = feedback
+				// Post progress comment to ClickUp (truncate feedback to avoid huge comments).
+				{
+					truncated := feedback
+					if len(truncated) > 200 {
+						truncated = truncated[:200] + "..."
+					}
+					if cmd := m.postClickUpProgress(sig.PlanFile, "review_changes_requested", truncated); cmd != nil {
+						signalCmds = append(signalCmds, cmd)
+					}
+				}
 				// Pause the reviewer that wrote this signal.
 				for _, inst := range m.nav.GetInstances() {
 					if inst.PlanFile == sig.PlanFile && inst.IsReviewer {
@@ -900,6 +918,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Ingest the plan content from the agent's worktree into the DB.
 				// Planners run on the main branch, so the plan file is in activeRepoPath.
 				m.ingestPlanContent(capturedPlanFile, m.activeRepoPath)
+				// Post progress comment to ClickUp (fire-and-forget; nil-safe if no task ID).
+				{
+					summary := ""
+					if m.planStore != nil {
+						if content, err := m.planStore.GetContent(m.planStoreProject, capturedPlanFile); err == nil {
+							if plan, err := planparser.Parse(content); err == nil {
+								totalTasks := 0
+								for _, w := range plan.Waves {
+									totalTasks += len(w.Tasks)
+								}
+								summary = fmt.Sprintf("%d tasks, %d waves", totalTasks, len(plan.Waves))
+							}
+						}
+					}
+					if cmd := m.postClickUpProgress(capturedPlanFile, "plan_ready", summary); cmd != nil {
+						signalCmds = append(signalCmds, cmd)
+					}
+				}
 				if m.plannerPrompted[capturedPlanFile] {
 					break
 				}
@@ -1262,6 +1298,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if orchState == WaveStateAllComplete {
 					capturedPlanFile := planFile
 					planName := planstate.DisplayName(planFile)
+					totalWaves := orch.TotalWaves()
+					waveNumFinal := orch.CurrentWaveNumber()
+					completedFinal := orch.CompletedTaskCount()
+					totalFinal := completedFinal + orch.FailedTaskCount()
 
 					// Pause all task instances (they're done, free up resources).
 					for _, inst := range m.nav.GetInstances() {
@@ -1273,6 +1313,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.waveOrchestrators, planFile)
 					m.audit(auditlog.EventWaveCompleted, "all waves complete: "+planName,
 						auditlog.WithPlan(capturedPlanFile))
+					// Post wave complete comment to ClickUp for multi-wave plans.
+					if totalWaves > 1 {
+						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNumFinal, totalWaves, completedFinal, totalFinal)
+						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
+							asyncCmds = append(asyncCmds, cmd)
+						}
+					}
 
 					if !m.isUserInOverlay() {
 						// Focus a task instance so the user can see agent output behind the overlay.
@@ -1305,6 +1352,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					capturedPlanFile := planFile
 					capturedEntry := entry
 					planName := planstate.DisplayName(planFile)
+
+					// Post intermediate wave complete comment to ClickUp for
+					// multi-wave plans with no failures.
+					if failed == 0 && orch.TotalWaves() > 1 {
+						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNum, orch.TotalWaves(), completed, total)
+						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
+							asyncCmds = append(asyncCmds, cmd)
+						}
+					}
 
 					if failed > 0 {
 						// Failed wave — always show the decision dialog (retry/next/abort)
@@ -2089,6 +2145,7 @@ func (m *home) getOrCreateImporter(ctx context.Context) (*clickup.Importer, erro
 		return nil, fmt.Errorf("MCP list tools: %w", err)
 	}
 
+	m.clickUpMCPClient = client
 	m.clickUpImporter = clickup.NewImporter(client)
 
 	// Restore saved workspace_id from per-project config.
