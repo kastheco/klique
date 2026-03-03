@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/spf13/cobra"
 )
 
@@ -27,13 +27,13 @@ func NewServeCmd() *cobra.Command {
 		Short: "start the plan store HTTP server",
 		Long:  "Start an HTTP server that exposes plan state over a REST API backed by SQLite.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := planstore.NewSQLiteStore(db)
+			store, err := taskstore.NewSQLiteStore(db)
 			if err != nil {
 				return fmt.Errorf("open plan store: %w", err)
 			}
 			defer store.Close()
 
-			handler := planstore.NewHandler(store)
+			handler := taskstore.NewHandler(store)
 			addr := fmt.Sprintf("%s:%d", bind, port)
 
 			srv := &http.Server{
@@ -67,7 +67,7 @@ func NewServeCmd() *cobra.Command {
 		},
 	}
 
-	defaultDB := planstore.ResolvedDBPath()
+	defaultDB := taskstore.ResolvedDBPath()
 
 	cmd.Flags().IntVar(&port, "port", 7433, "port to listen on")
 	cmd.Flags().StringVar(&db, "db", defaultDB, "path to the SQLite database file")

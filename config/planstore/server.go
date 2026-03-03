@@ -28,7 +28,7 @@ func NewHandler(store Store) http.Handler {
 		topicFilter := r.URL.Query().Get("topic")
 
 		var (
-			plans []PlanEntry
+			plans []TaskEntry
 			err   error
 		)
 		switch {
@@ -53,7 +53,7 @@ func NewHandler(store Store) http.Handler {
 	// Create plan
 	mux.HandleFunc("POST /v1/projects/{project}/plans", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
-		var entry PlanEntry
+		var entry TaskEntry
 		if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 			return
@@ -85,7 +85,7 @@ func NewHandler(store Store) http.Handler {
 	mux.HandleFunc("PUT /v1/projects/{project}/plans/{filename}", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
-		var entry PlanEntry
+		var entry TaskEntry
 		if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 			return

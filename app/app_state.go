@@ -13,7 +13,7 @@ import (
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planfsm"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/clickup"
@@ -574,7 +574,7 @@ func (m *home) updateSidebarPlans() {
 	topicInfos := m.planState.Topics()
 	topics := make([]ui.TopicDisplay, 0, len(topicInfos))
 	for _, t := range topicInfos {
-		plans := m.planState.PlansByTopic(t.Name)
+		plans := m.planState.TasksByTopic(t.Name)
 		planDisplays := make([]ui.PlanDisplay, 0, len(plans))
 		for _, p := range plans {
 			if p.Status == taskstate.StatusDone || p.Status == taskstate.StatusCancelled {
@@ -594,7 +594,7 @@ func (m *home) updateSidebarPlans() {
 	}
 
 	// Build ungrouped plans
-	ungroupedInfos := m.planState.UngroupedPlans()
+	ungroupedInfos := m.planState.UngroupedTasks()
 	ungrouped := make([]ui.PlanDisplay, 0, len(ungroupedInfos))
 	for _, p := range ungroupedInfos {
 		ungrouped = append(ungrouped, ui.PlanDisplay{
@@ -678,7 +678,7 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	// Guard: transition via FSM before next tick re-reads disk, preventing double-spawn.
 	planFile := coderInst.PlanFile
-	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+	if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 		log.WarningLog.Printf("could not set plan %q to reviewing: %v", planFile, err)
 		// Mark complete to break the retry loop — checkPlanCompletion fires
 		// every tick and would re-attempt this transition indefinitely.
@@ -1047,8 +1047,8 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 }
 
-// createPlanEntry creates a new plan entry in the store.
-func (m *home) createPlanEntry(name, description, topic string) error {
+// createTaskEntry creates a new plan entry in the store.
+func (m *home) createTaskEntry(name, description, topic string) error {
 	if m.planState == nil {
 		if m.planStore == nil {
 			return fmt.Errorf("plan store not configured")
@@ -1174,7 +1174,7 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if err := m.fsm.Transition(filename, planfsm.PlanStart); err != nil {
+	if err := m.fsm.Transition(filename, taskfsm.PlanStart); err != nil {
 		log.WarningLog.Printf("clickup import transition failed for %q: %v", filename, err)
 	}
 
@@ -1212,7 +1212,7 @@ func dedupePlanFilename(plansDir, filename string) string {
 	return filename
 }
 
-func dedupePlanFilenameInState(ps *taskstate.PlanState, filename string) string {
+func dedupePlanFilenameInState(ps *taskstate.TaskState, filename string) string {
 	if ps == nil {
 		return filename
 	}
@@ -1237,7 +1237,7 @@ func dedupePlanFilenameInState(ps *taskstate.PlanState, filename string) string 
 // to a prompt after completing its queued work (PromptDetected && !AwaitingWork).
 // The latter covers "applying fixes" coders spawned by spawnCoderWithFeedback,
 // which finish their work and return to prompt rather than exiting tmux.
-func shouldPromptPushAfterCoderExit(entry taskstate.PlanEntry, inst *session.Instance, tmuxAlive bool) bool {
+func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Instance, tmuxAlive bool) bool {
 	if inst == nil {
 		return false
 	}
@@ -1646,7 +1646,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 
 // spawnWaveTasks creates and starts instances for the given task list within an orchestrator.
 // Used by both startNextWave (initial spawn) and retryFailedWaveTasks (re-spawn failed tasks).
-func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, entry taskstate.PlanEntry) (tea.Model, tea.Cmd) {
+func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	planFile := orch.PlanFile()
 	planName := taskstate.DisplayName(planFile)
 
@@ -1705,7 +1705,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, e
 }
 
 // startNextWave advances the orchestrator to the next wave and spawns its task instances.
-func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.PlanEntry) (tea.Model, tea.Cmd) {
+func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.StartNextWave()
 	if tasks == nil {
 		return m, nil
@@ -1723,7 +1723,7 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.PlanEntry) 
 // retryFailedWaveTasks retries all failed tasks in the current wave by re-spawning them.
 // Old failed instances are removed first to prevent ghost duplicates that accumulate
 // across retries and all get marked ImplementationComplete when waves finish.
-func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry taskstate.PlanEntry) (tea.Model, tea.Cmd) {
+func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.RetryFailedTasks()
 	if len(tasks) == 0 {
 		return m, nil
@@ -1769,7 +1769,7 @@ func (m *home) discoverTmuxSessions() tea.Cmd {
 }
 
 // buildChatAboutPlanPrompt builds the custodian prompt for a chat-about-plan session.
-func buildChatAboutPlanPrompt(planFile string, entry taskstate.PlanEntry, question string) string {
+func buildChatAboutPlanPrompt(planFile string, entry taskstate.TaskEntry, question string) string {
 	name := taskstate.DisplayName(planFile)
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("You are answering a question about the plan '%s'.\n\n", name))

@@ -3,8 +3,8 @@ package planfsm
 import (
 	"fmt"
 
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 )
 
 // Status represents the lifecycle state of a plan.
@@ -97,20 +97,20 @@ func ApplyTransition(current Status, event Event) (Status, error) {
 // must flow through Transition(). The store handles concurrency via SQLite.
 type PlanStateMachine struct {
 	dir     string          // docs/plans/ directory (for file operations)
-	store   planstore.Store // always non-nil
+	store   taskstore.Store // always non-nil
 	project string          // project name used with the store
 }
 
 // New creates a PlanStateMachine backed by the given store.
-func New(store planstore.Store, project, dir string) *PlanStateMachine {
+func New(store taskstore.Store, project, dir string) *TaskStateMachine {
 	return &PlanStateMachine{dir: dir, store: store, project: project}
 }
 
 // Transition applies an event to a plan's current status. It reads the current
 // state from the store, validates the transition, writes the new state, and returns.
 // Concurrency is handled server-side via SQLite's own locking.
-func (m *PlanStateMachine) Transition(planFile string, event Event) error {
-	ps, err := planstate.Load(m.store, m.project, m.dir)
+func (m *TaskStateMachine) Transition(planFile string, event Event) error {
+	ps, err := taskstate.Load(m.store, m.project, m.dir)
 	if err != nil {
 		return fmt.Errorf("load plan state: %w", err)
 	}
@@ -124,12 +124,12 @@ func (m *PlanStateMachine) Transition(planFile string, event Event) error {
 		return err
 	}
 	// ForceSetStatus writes through to the store.
-	return ps.ForceSetStatus(planFile, planstate.Status(newStatus))
+	return ps.ForceSetStatus(planFile, taskstate.Status(newStatus))
 }
 
 // mapLegacyStatus converts old planstate statuses to FSM statuses.
 // Handles the consolidated aliases (in_progress → implementing, completed/finished → done).
-func mapLegacyStatus(s planstate.Status) Status {
+func mapLegacyStatus(s taskstate.Status) Status {
 	switch s {
 	case "in_progress":
 		return StatusImplementing

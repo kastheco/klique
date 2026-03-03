@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mattn/go-runewidth"
@@ -296,7 +296,7 @@ func (n *NavigationPanel) rebuildRows() {
 		if ki != kj {
 			return ki < kj
 		}
-		return strings.ToLower(planstate.DisplayName(pi.Filename)) < strings.ToLower(planstate.DisplayName(pj.Filename))
+		return strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))
 	})
 
 	rows := make([]navRow, 0, len(plans)+len(n.instances)+len(n.deadPlans)+len(n.historyPlans)+len(n.cancelled)+6)
@@ -310,7 +310,7 @@ func (n *NavigationPanel) rebuildRows() {
 		rows = append(rows, navRow{
 			Kind:            navRowPlanHeader,
 			ID:              SidebarPlanPrefix + p.Filename,
-			Label:           planstate.DisplayName(p.Filename),
+			Label:           taskstate.DisplayName(p.Filename),
 			PlanFile:        p.Filename,
 			PlanStatus:      p.Status,
 			Collapsed:       collapsed,
@@ -422,13 +422,13 @@ func (n *NavigationPanel) rebuildRows() {
 		rows = append(rows, navRow{Kind: navRowHistoryToggle, ID: SidebarPlanHistoryToggle, Label: "history", Collapsed: !n.historyExpanded})
 		if n.historyExpanded {
 			for _, p := range n.historyPlans {
-				rows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: planstate.DisplayName(p.Filename), PlanFile: p.Filename})
+				rows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), PlanFile: p.Filename})
 			}
 		}
 	}
 
 	for _, p := range n.cancelled {
-		rows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: planstate.DisplayName(p.Filename), PlanFile: p.Filename})
+		rows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), PlanFile: p.Filename})
 	}
 
 	n.rows = rows
@@ -993,7 +993,7 @@ func navInstanceTitle(inst *session.Instance) string {
 	case inst.AgentType == session.AgentTypePlanner && inst.PlanFile != "":
 		return "planning"
 	case inst.SoloAgent && inst.PlanFile != "":
-		return planstate.DisplayName(inst.PlanFile)
+		return taskstate.DisplayName(inst.PlanFile)
 	case inst.AgentType == session.AgentTypeCoder && inst.PlanFile != "" && inst.WaveNumber == 0:
 		return "applying fixes"
 	default:

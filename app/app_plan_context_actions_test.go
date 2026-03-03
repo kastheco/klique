@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
 )
 
 // TestFSMPlanStart_TransitionsReadyToPlanning verifies that the FSM correctly
@@ -28,7 +28,7 @@ func TestFSMPlanStart_TransitionsReadyToPlanning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := fsm.Transition(planFile, planfsm.PlanStart); err != nil {
+	if err := fsm.Transition(planFile, taskfsm.PlanStart); err != nil {
 		t.Fatalf("Transition(PlanStart) error: %v", err)
 	}
 
@@ -37,7 +37,7 @@ func TestFSMPlanStart_TransitionsReadyToPlanning(t *testing.T) {
 	if !ok {
 		t.Fatal("plan entry missing after PlanStart transition")
 	}
-	if entry.Status != planstate.StatusPlanning {
-		t.Fatalf("status = %q, want %q", entry.Status, planstate.StatusPlanning)
+	if entry.Status != taskstate.StatusPlanning {
+		t.Fatalf("status = %q, want %q", entry.Status, taskstate.StatusPlanning)
 	}
 }

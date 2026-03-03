@@ -4,26 +4,26 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // newTestHTTPStore creates an HTTPStore backed by an in-memory SQLiteStore
 // served over a local httptest.Server. The server is closed when the test ends.
-func newTestHTTPStore(t *testing.T) *planstore.HTTPStore {
+func newTestHTTPStore(t *testing.T) *taskstore.HTTPStore {
 	t.Helper()
 	backend := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
 	t.Cleanup(srv.Close)
-	return planstore.NewHTTPStore(srv.URL, "kasmos")
+	return taskstore.NewHTTPStore(srv.URL, "kasmos")
 }
 
 func TestHTTPStore_ContentRoundTrip(t *testing.T) {
 	store := newTestHTTPStore(t)
-	entry := planstore.PlanEntry{
+	entry := taskstore.TaskEntry{
 		Filename: "test.md",
-		Status:   planstore.StatusReady,
+		Status:   taskstore.StatusReady,
 		Content:  "# My Plan\n\nDetails here.",
 	}
 	require.NoError(t, store.Create("proj", entry))
@@ -40,13 +40,13 @@ func TestHTTPStore_ContentRoundTrip(t *testing.T) {
 
 func TestHTTPStore_RoundTrip(t *testing.T) {
 	backend := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
 	defer srv.Close()
 
-	client := planstore.NewHTTPStore(srv.URL, "kasmos")
+	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 
 	// Create
-	entry := planstore.PlanEntry{Filename: "test.md", Status: planstore.StatusReady, Description: "test"}
+	entry := taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady, Description: "test"}
 	require.NoError(t, client.Create("kasmos", entry))
 
 	// Get
@@ -55,18 +55,18 @@ func TestHTTPStore_RoundTrip(t *testing.T) {
 	assert.Equal(t, "test", got.Description)
 
 	// Update
-	got.Status = planstore.StatusImplementing
+	got.Status = taskstore.StatusImplementing
 	require.NoError(t, client.Update("kasmos", "test.md", got))
 
 	// List
 	plans, err := client.List("kasmos")
 	require.NoError(t, err)
 	assert.Len(t, plans, 1)
-	assert.Equal(t, planstore.StatusImplementing, plans[0].Status)
+	assert.Equal(t, taskstore.StatusImplementing, plans[0].Status)
 }
 
 func TestHTTPStore_ServerUnreachable(t *testing.T) {
-	client := planstore.NewHTTPStore("http://127.0.0.1:1", "kasmos")
+	client := taskstore.NewHTTPStore("http://127.0.0.1:1", "kasmos")
 	_, err := client.List("kasmos")
 	require.Error(t, err)
 	// Error should be recognizable as a connectivity issue
@@ -75,9 +75,9 @@ func TestHTTPStore_ServerUnreachable(t *testing.T) {
 
 func TestHTTPStore_Ping(t *testing.T) {
 	backend := newTestStore(t)
-	srv := httptest.NewServer(planstore.NewHandler(backend))
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
 	defer srv.Close()
 
-	client := planstore.NewHTTPStore(srv.URL, "kasmos")
+	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 	require.NoError(t, client.Ping())
 }

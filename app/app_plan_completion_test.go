@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -19,7 +19,7 @@ import (
 )
 
 func TestShouldPromptPushAfterCoderExit(t *testing.T) {
-	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeCoder}
 
 	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
@@ -28,7 +28,7 @@ func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 }
 
 func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
-	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
 		PlanFile:       "p.md",
 		AgentType:      session.AgentTypeCoder,
@@ -43,7 +43,7 @@ func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 }
 
 func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
-	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
 		PlanFile:       "p.md",
 		AgentType:      session.AgentTypeCoder,
@@ -58,7 +58,7 @@ func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 }
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
-	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
 
 	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, false),
@@ -66,7 +66,7 @@ func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 }
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
-	entry := planstate.PlanEntry{Status: planstate.StatusImplementing}
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeReviewer}
 
 	if shouldPromptPushAfterCoderExit(entry, inst, false) {
@@ -88,7 +88,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Build a coder instance (not started — we inject metadata directly).
 	inst, err := session.NewInstance(session.InstanceOptions{
@@ -154,7 +154,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Build a coder instance that has finished its queued work and returned to prompt.
 	inst, err := session.NewInstance(session.InstanceOptions{
@@ -222,7 +222,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst := &session.Instance{
 		PlanFile:  planFile,
@@ -265,7 +265,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "test-feature-implement",
@@ -332,14 +332,14 @@ func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
 		time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC),
 	))
 
-	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusPlanning)
-	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusImplementing)
-	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusReviewing)
-	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusDone)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusPlanning)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusImplementing)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusReviewing)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusDone)
 
 	entry, ok := ps.Entry("auth-refactor.md")
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusDone, entry.Status)
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
 	assert.Equal(t, "plan/auth-refactor", entry.Branch)
 }
 
@@ -361,12 +361,12 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	// Planner is running — status is "planning"
-	seedPlanStatus(t, ps, planFile, planstate.StatusPlanning)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusPlanning)
 
 	// Simulate the goroutine snapshot: loaded "planning" before sentinel was seen.
 	stalePlanState, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	assert.Equal(t, planstate.StatusPlanning, stalePlanState.Plans[planFile].Status)
+	assert.Equal(t, taskstate.StatusPlanning, stalePlanState.Plans[planFile].Status)
 
 	// Build a minimal home with FSM wired up.
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
@@ -387,8 +387,8 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 
 	// Construct a metadataResultMsg as the goroutine would: stale PlanState +
 	// a PlannerFinished signal (sentinel written after the goroutine loaded state).
-	signal := planfsm.Signal{
-		Event:    planfsm.PlannerFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
 		PlanFile: planFile,
 	}
 	// We can't set the private filePath, so we pre-delete the sentinel file
@@ -396,7 +396,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 
 	msg := metadataResultMsg{
 		PlanState: stalePlanState, // goroutine's stale snapshot
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	// Feed the message through Update.
@@ -407,7 +407,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	require.NotNil(t, h.planState)
 	entry, ok := h.planState.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReady, entry.Status,
+	assert.Equal(t, taskstate.StatusReady, entry.Status,
 		"planState must show 'ready' after PlannerFinished signal — stale msg.PlanState must not overwrite it")
 }
 
@@ -424,7 +424,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	// Create a coder instance bound to this plan.
 	coderInst, err := session.NewInstance(session.InstanceOptions{
@@ -458,13 +458,13 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		program:               "claude",
 	}
 
-	signal := planfsm.Signal{
-		Event:    planfsm.ImplementFinished,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.ImplementFinished,
 		PlanFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	_, _ = h.Update(msg)
@@ -484,7 +484,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReviewing, entry.Status)
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status)
 }
 
 // TestReviewChangesSignal_RespawnsCoder verifies that when a review-changes
@@ -504,7 +504,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
 
 	// Create a reviewer instance bound to this plan.
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
@@ -539,14 +539,14 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		program:               "claude",
 	}
 
-	signal := planfsm.Signal{
-		Event:    planfsm.ReviewChangesRequested,
+	signal := taskfsm.Signal{
+		Event:    taskfsm.ReviewChangesRequested,
 		PlanFile: planFile,
 		Body:     feedback,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal},
+		Signals:   []taskfsm.Signal{signal},
 	}
 
 	_, _ = h.Update(msg)
@@ -568,7 +568,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusImplementing, entry.Status)
+	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 }
 
 // TestReviewerTmuxDeath_DoesNotAutoApprove verifies that when a reviewer's tmux
@@ -588,7 +588,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
 
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "feature-review",
@@ -633,7 +633,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 	reloaded, _ := newTestPlanState(t, plansDir)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusReviewing, entry.Status,
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status,
 		"reviewer tmux death must not auto-approve — plan must stay reviewing")
 }
 
@@ -655,7 +655,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusReviewing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
 
 	// Create a reviewer instance — title uses the old format (no cycle suffix).
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
@@ -691,14 +691,14 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	}
 
 	// === Part 1: ReviewChangesRequested → coder with cycle suffix ===
-	signal1 := planfsm.Signal{
-		Event:    planfsm.ReviewChangesRequested,
+	signal1 := taskfsm.Signal{
+		Event:    taskfsm.ReviewChangesRequested,
 		PlanFile: planFile,
 		Body:     feedback,
 	}
 	_, _ = h.Update(metadataResultMsg{
 		PlanState: ps,
-		Signals:   []planfsm.Signal{signal1},
+		Signals:   []taskfsm.Signal{signal1},
 	})
 
 	var coderTitle string
@@ -714,13 +714,13 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	// === Part 2: ImplementFinished → reviewer with next cycle suffix ===
 	// At this point m.planState has ReviewCycle=1 in-memory (incremented by part 1).
 	// The FSM store has status=implementing (transitioned by part 1).
-	signal2 := planfsm.Signal{
-		Event:    planfsm.ImplementFinished,
+	signal2 := taskfsm.Signal{
+		Event:    taskfsm.ImplementFinished,
 		PlanFile: planFile,
 	}
 	_, _ = h.Update(metadataResultMsg{
 		PlanState: h.planState,
-		Signals:   []planfsm.Signal{signal2},
+		Signals:   []taskfsm.Signal{signal2},
 	})
 
 	// Find the newly spawned reviewer (the old one was killed and removed).
@@ -750,7 +750,7 @@ func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
 	// review_cycle starts at 0 for a new plan — no IncrementReviewCycle call needed.
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
@@ -774,7 +774,7 @@ func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
 	}
 
 	// Transition to reviewing so spawnReviewer can run.
-	require.NoError(t, h.fsm.Transition(planFile, planfsm.ImplementFinished))
+	require.NoError(t, h.fsm.Transition(planFile, taskfsm.ImplementFinished))
 
 	// Call spawnReviewer directly to obtain the created instance.
 	_ = h.spawnReviewer(planFile)
@@ -798,9 +798,9 @@ func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
 // TestIsLocked_FinishedLockedWhenDone verifies that the "finished" stage is
 // locked when the plan is already done, preventing a spurious FSM error.
 func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
-	assert.True(t, isLocked(planstate.StatusDone, "finished"),
+	assert.True(t, isLocked(taskstate.StatusDone, "finished"),
 		"finished stage must be locked when plan is already done")
 	// Still unlocked for reviewing (the valid trigger).
-	assert.False(t, isLocked(planstate.StatusReviewing, "finished"),
+	assert.False(t, isLocked(taskstate.StatusReviewing, "finished"),
 		"finished stage must be unlocked when plan is reviewing")
 }

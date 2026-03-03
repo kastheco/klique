@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// jsonPlanEntry is the on-disk format for a single plan in plan-state.json.
-type jsonPlanEntry struct {
+// jsonTaskEntry is the on-disk format for a single plan in plan-state.json.
+type jsonTaskEntry struct {
 	Status      string `json:"status"`
 	Description string `json:"description,omitempty"`
 	Branch      string `json:"branch,omitempty"`
@@ -27,7 +27,7 @@ type jsonTopicEntry struct {
 
 // jsonPlanState is the top-level structure of plan-state.json.
 type jsonPlanState struct {
-	Plans  map[string]jsonPlanEntry  `json:"plans"`
+	Plans  map[string]jsonTaskEntry  `json:"plans"`
 	Topics map[string]jsonTopicEntry `json:"topics"`
 }
 
@@ -59,7 +59,7 @@ func MigrateFromJSON(store Store, project, plansDir string) (int, error) {
 
 	// Migrate plans.
 	for filename, jp := range state.Plans {
-		entry := PlanEntry{
+		entry := TaskEntry{
 			Filename:    filename,
 			Status:      Status(jp.Status),
 			Description: jp.Description,

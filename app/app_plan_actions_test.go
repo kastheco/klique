@@ -10,8 +10,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planstate"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -87,7 +87,7 @@ func TestAgentTypeForSubItem(t *testing.T) {
 }
 
 func TestIsLocked_AllowsSoloStage(t *testing.T) {
-	assert.False(t, isLocked(planstate.StatusReady, "solo"),
+	assert.False(t, isLocked(taskstate.StatusReady, "solo"),
 		"solo stage should be triggerable like implement/review")
 }
 
@@ -233,13 +233,13 @@ func TestFSM_PlanLifecycleStages(t *testing.T) {
 
 	stages := []struct {
 		event      string
-		wantStatus planstate.Status
+		wantStatus taskstate.Status
 	}{
-		{"plan_start", planstate.StatusPlanning},
-		{"planner_finished", planstate.StatusReady},
-		{"implement_start", planstate.StatusImplementing},
-		{"implement_finished", planstate.StatusReviewing},
-		{"review_approved", planstate.StatusDone},
+		{"plan_start", taskstate.StatusPlanning},
+		{"planner_finished", taskstate.StatusReady},
+		{"implement_start", taskstate.StatusImplementing},
+		{"implement_finished", taskstate.StatusReviewing},
+		{"review_approved", taskstate.StatusDone},
 	}
 
 	for _, tc := range stages {
@@ -379,8 +379,8 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 
 	require.NoError(t, ps.Create(targetPlan, "target", "plan/solo-target", topic, time.Now()))
 	require.NoError(t, ps.Create(conflictPlan, "conflict", "plan/conflict", topic, time.Now()))
-	seedPlanStatus(t, ps, targetPlan, planstate.StatusReady)
-	seedPlanStatus(t, ps, conflictPlan, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, targetPlan, taskstate.StatusReady)
+	seedPlanStatus(t, ps, conflictPlan, taskstate.StatusImplementing)
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
 	h.fsm = newFSMForTest(t, plansDir).PlanStateMachine
@@ -442,7 +442,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 
 	planFile := "test-set-status.md"
 	require.NoError(t, ps.Register(planFile, "test set status", "plan/test-set-status", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
@@ -482,21 +482,21 @@ func TestToggleAutoAdvanceWaves(t *testing.T) {
 }
 
 func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 	planFile := "test.md"
 	content := "# My Plan\n\n## Wave 1\n\n### Task 1: Do thing\n"
-	require.NoError(t, store.Create("proj", planstore.PlanEntry{
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
 		Filename: planFile,
-		Status:   planstore.StatusReady,
+		Status:   taskstore.StatusReady,
 		Content:  content,
 	}))
 
-	ps, err := planstate.Load(store, "proj", t.TempDir())
+	ps, err := taskstate.Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	nav := ui.NewNavigationPanel(&sp)
-	nav.SetTopicsAndPlans(nil, []ui.PlanDisplay{{Filename: planFile, Status: string(planstate.StatusReady)}}, nil)
+	nav.SetTopicsAndPlans(nil, []ui.PlanDisplay{{Filename: planFile, Status: string(taskstate.StatusReady)}}, nil)
 	require.True(t, nav.SelectByID(ui.SidebarPlanPrefix+planFile))
 
 	h := &home{
@@ -528,7 +528,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 
 	planFile := "review-approval-gate.md"
 	require.NoError(t, ps.Register(planFile, "review approval gate", "plan/review-approval-gate", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusReady)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReady)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
@@ -551,6 +551,6 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 	require.NoError(t, err)
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
-	assert.Equal(t, planstate.StatusDone, entry.Status,
+	assert.Equal(t, taskstate.StatusDone, entry.Status,
 		"mark_plan_done should walk ready->implementing->reviewing->done")
 }
