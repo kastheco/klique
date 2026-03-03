@@ -1242,6 +1242,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				alive, collected := tmuxAliveMap[inst.Title]
 				if collected && !alive {
 					inst.Exited = true
+					if inst.Status == session.Running {
+						inst.SetStatus(session.Ready)
+					}
 					m.audit(auditlog.EventAgentFinished, fmt.Sprintf("agent finished: %s", inst.Title),
 						auditlog.WithInstance(inst.Title),
 						auditlog.WithAgent(inst.AgentType),

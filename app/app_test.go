@@ -1488,3 +1488,60 @@ func TestExecuteContextAction_RestartInstance(t *testing.T) {
 	// The action returns an async command (the restart runs in a goroutine).
 	assert.NotNil(t, cmd, "restart action should return a tea.Cmd")
 }
+
+func TestDeleteKey_AllowsRemovalOfExitedRunningInstance(t *testing.T) {
+	h := newTestHome()
+	inst, err := newTestInstance("exited-reviewer")
+	require.NoError(t, err)
+	inst.Status = session.Running
+	inst.Exited = true
+	_ = h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.allInstances = append(h.allInstances, inst)
+
+	msg := tea.KeyMsg{Type: tea.KeyDelete}
+	_, _ = h.handleKeyPress(msg)
+
+	assert.Equal(t, 0, h.nav.TotalInstances(),
+		"delete should remove exited instance even if status is Running")
+}
+
+func TestKillKey_NoopsOnExitedInstance(t *testing.T) {
+	h := newTestHome()
+	inst, err := newTestInstance("exited-reviewer")
+	require.NoError(t, err)
+	inst.Status = session.Running
+	inst.Exited = true
+	inst.MarkStartedForTest()
+	_ = h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+
+	h.keySent = true
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	_, cmd := h.handleKeyPress(msg)
+
+	assert.Nil(t, cmd, "k should no-op on an already-exited instance")
+}
+
+func TestMetadataTick_ExitedInstanceTransitionsToReady(t *testing.T) {
+	h := newTestHomeWithToast()
+	inst, err := newTestInstance("reviewer-done")
+	require.NoError(t, err)
+	inst.Status = session.Running
+	_ = h.nav.AddInstance(inst)
+	h.allInstances = append(h.allInstances, inst)
+
+	ps, err := newTestPlanState(t, t.TempDir())
+	require.NoError(t, err)
+
+	// Simulate metadata tick with dead tmux
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "reviewer-done", TmuxAlive: false}},
+		PlanState: ps,
+	}
+	h.Update(msg)
+
+	assert.True(t, inst.Exited, "instance should be marked exited")
+	assert.Equal(t, session.Ready, inst.Status,
+		"exited instance status should transition to Ready")
+}

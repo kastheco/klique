@@ -1157,7 +1157,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Delete key: dismiss a finished (non-running) instance from the list.
 	if msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace {
 		selected := m.nav.GetSelectedInstance()
-		if selected != nil && selected.Status != session.Running && selected.Status != session.Loading {
+		if selected != nil && (selected.Exited || (selected.Status != session.Running && selected.Status != session.Loading)) {
 			title := selected.Title
 			m.nav.Remove()
 			m.removeFromAllInstances(title)
@@ -1285,7 +1285,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyKill:
 		// Soft kill: terminate tmux session only, keep instance in list.
 		selected := m.nav.GetSelectedInstance()
-		if selected == nil || !selected.Started() || selected.Paused() {
+		if selected == nil || !selected.Started() || selected.Paused() || selected.Exited {
 			return m, nil
 		}
 		m.audit(auditlog.EventAgentKilled, "killed instance",
