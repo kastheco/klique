@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kastheco/kasmos/log"
 )
 
 // GetSanitizedName returns the kas_-prefixed tmux session name.
@@ -123,8 +125,7 @@ func (t *TmuxSession) HasUpdatedWithContent() (updated bool, hasPrompt bool, con
 	c, err := t.CapturePaneContent()
 	if err != nil {
 		if t.monitor != nil && t.monitor.RecordFailure() {
-			// RecordFailure returns true when the failure should be logged.
-			// Logging is best-effort; callers decide what to do with updated=false.
+			log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
 		}
 		return false, false, "", false
 	}

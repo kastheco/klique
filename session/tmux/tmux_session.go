@@ -29,8 +29,7 @@ const ProgramOpenCode = "opencode"
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 // TmuxSession represents a managed tmux session.
-// It implements the Session interface (defined in session.go, created in Wave 1 Task 1).
-// The adapter field will hold the ProgramAdapter once that interface is defined.
+// It implements the Session interface defined in session.go.
 type TmuxSession struct {
 	// Initialized by NewTmuxSession
 	//
@@ -88,11 +87,6 @@ type TmuxSession struct {
 	// outerMouseWasEnabled is set when Attach() disables mouse on the outer tmux
 	// session so Detach() can restore it.
 	outerMouseWasEnabled bool
-
-	// adapter holds the program-specific behavior implementation (ProgramAdapter).
-	// Defined as any until the ProgramAdapter interface is committed by Task 1.
-	// Will be typed as ProgramAdapter once session.go is available.
-	adapter any
 }
 
 // TmuxPrefix is the prefix added to all kas-managed tmux session names.
