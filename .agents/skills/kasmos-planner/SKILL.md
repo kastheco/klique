@@ -133,7 +133,7 @@ approach, update your recommendation and confirm before proceeding.
 
 ## plan document format
 
-**plan naming convention:** `YYYY-MM-DD-<feature-name>.md`
+**plan naming convention:** `<feature-name>.md`
 
 Plans are stored in the **plan store** (SQLite database or HTTP API), not as files on disk.
 Use `kas plan register` to register plans after writing content.
@@ -360,7 +360,7 @@ kasmos is orchestrating this session. write a sentinel file and stop.
 
 ```bash
 mkdir -p .kasmos/signals
-touch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md
+touch .kasmos/signals/planner-finished-<feature-name>.md
 ```
 
 the filename must match the plan filename exactly (with `planner-finished-` prefix).
@@ -369,7 +369,7 @@ the filename must match the plan filename exactly (with `planner-finished-` pref
 
 announce completion and stop:
 
-> "plan complete: `YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation."
+> "plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation."
 
 **stop here. do not offer execution choices. do not implement.**
 
@@ -378,7 +378,7 @@ announce completion and stop:
 register the plan in the plan store using the CLI:
 
 ```bash
-kas plan register YYYY-MM-DD-<feature-name>.md
+kas plan register <feature-name>.md
 ```
 
 this creates an entry in the plan store with status `ready`. the plan content should be
@@ -387,7 +387,7 @@ written to the store via `kas plan` or committed as a `.md` file in `docs/plans/
 
 then offer execution choices:
 
-> "plan complete: `YYYY-MM-DD-<feature-name>.md` (registered in plan store). two execution options:
+> "plan complete: `<feature-name>.md` (registered in plan store). two execution options:
 >
 > **1. this session** — i dispatch a fresh subagent per task, self-review between waves.
 >
