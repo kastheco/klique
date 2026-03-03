@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f67df16c28bd",
+  "session_id": "ses_34eff496bffe5NDcdgdJkxTC9m",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T00:18:18.309973307Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/2026-02-28-auto-advance-waves.md",
+    "docs/plans/plan-state.json"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c34dd5e57520",
+  "token_usage": {
+    "input_tokens": 31,
+    "cache_creation_tokens": 101768,
+    "cache_read_tokens": 2150511,
+    "output_tokens": 5495,
+    "api_call_count": 29
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T00:18:18.254166782Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 612,
+    "human_removed": 479,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
