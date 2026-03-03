@@ -1,0 +1,309 @@
+package orchestration
+
+import (
+	"testing"
+
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewWaveOrchestrator(t *testing.T) {
+	plan := &taskparser.Plan{
+		Goal: "test",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+			{Number: 2, Tasks: []taskparser.Task{
+				{Number: 3, Title: "Third", Body: "do third"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	assert.Equal(t, WaveStateIdle, orch.State())
+	assert.Equal(t, 2, orch.TotalWaves())
+	assert.Equal(t, 3, orch.TotalTasks())
+}
+
+func TestWaveOrchestrator_StartWave(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	tasks := orch.StartNextWave()
+
+	assert.Equal(t, WaveStateRunning, orch.State())
+	assert.Equal(t, 1, orch.CurrentWaveNumber())
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "First", tasks[0].Title)
+}
+
+func TestWaveOrchestrator_TaskCompleted(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+
+	assert.False(t, orch.IsCurrentWaveComplete())
+
+	orch.MarkTaskComplete(1)
+	assert.False(t, orch.IsCurrentWaveComplete())
+
+	orch.MarkTaskComplete(2)
+	assert.True(t, orch.IsCurrentWaveComplete())
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+}
+
+func TestWaveOrchestrator_TaskFailed(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+
+	orch.MarkTaskFailed(1)
+	orch.MarkTaskComplete(2)
+
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+	assert.Equal(t, 1, orch.FailedTaskCount())
+	assert.Equal(t, 1, orch.CompletedTaskCount())
+}
+
+func TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+			{Number: 2, Tasks: []taskparser.Task{
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+
+	// Wave 1
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1)
+	assert.Equal(t, WaveStateWaveComplete, orch.State())
+
+	// Advance to wave 2
+	tasks := orch.StartNextWave()
+	assert.Equal(t, WaveStateRunning, orch.State())
+	assert.Equal(t, 2, orch.CurrentWaveNumber())
+	require.Len(t, tasks, 1)
+
+	// Complete wave 2
+	orch.MarkTaskComplete(2)
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+}
+
+func TestWaveOrchestrator_AllComplete(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "Only", Body: "do it"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1)
+
+	// No more waves — should be AllComplete
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+}
+
+func TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+			{Number: 2, Tasks: []taskparser.Task{
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+	orch.MarkTaskComplete(1) // wave 1 complete
+
+	// First call consumes the one-shot latch
+	assert.True(t, orch.NeedsConfirm(), "first call must return true")
+	assert.False(t, orch.NeedsConfirm(), "second call must return false (latch consumed)")
+
+	// After reset, NeedsConfirm should fire again
+	orch.ResetConfirm()
+	assert.True(t, orch.NeedsConfirm(), "after ResetConfirm, must return true again")
+}
+
+func TestIsTaskRunning(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
+		},
+	}
+	orch := NewWaveOrchestrator("test.md", plan)
+	orch.StartNextWave()
+
+	assert.True(t, orch.IsTaskRunning(1), "task 1 should be running after StartNextWave")
+	assert.True(t, orch.IsTaskRunning(2), "task 2 should be running after StartNextWave")
+
+	orch.MarkTaskComplete(1)
+	assert.False(t, orch.IsTaskRunning(1), "task 1 should not be running after MarkTaskComplete")
+	assert.True(t, orch.IsTaskRunning(2), "task 2 should still be running")
+
+	assert.False(t, orch.IsTaskRunning(99), "unknown task should return false")
+}
+
+func TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "Task 1"},
+				{Number: 2, Title: "Task 2"},
+				{Number: 3, Title: "Task 3"},
+			}},
+		},
+	}
+	orch := NewWaveOrchestrator("test.md", plan)
+	orch.StartNextWave()
+
+	// All should be running initially.
+	assert.True(t, orch.IsTaskRunning(1))
+	assert.False(t, orch.IsTaskComplete(1))
+	assert.False(t, orch.IsTaskFailed(1))
+
+	orch.MarkTaskComplete(1)
+	assert.True(t, orch.IsTaskComplete(1))
+	assert.False(t, orch.IsTaskRunning(1))
+
+	orch.MarkTaskFailed(2)
+	assert.True(t, orch.IsTaskFailed(2))
+	assert.False(t, orch.IsTaskRunning(2))
+
+	// Task 3 still running.
+	assert.True(t, orch.IsTaskRunning(3))
+}
+
+func TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+			{Number: 2, Tasks: []taskparser.Task{
+				{Number: 3, Title: "Third", Body: "do third"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+
+	// T1 fails, T2 completes — wave done with failure
+	orch.MarkTaskFailed(1)
+	orch.MarkTaskComplete(2)
+	require.Equal(t, WaveStateWaveComplete, orch.State(), "wave must be WaveComplete with failure")
+	assert.Equal(t, 1, orch.FailedTaskCount())
+
+	// Retry the failed task
+	retried := orch.RetryFailedTasks()
+
+	assert.Equal(t, WaveStateRunning, orch.State(), "state must be Running after retry")
+	require.Len(t, retried, 1, "must return only the failed task")
+	assert.Equal(t, 1, retried[0].Number, "retried task must be T1")
+
+	// After the retried task completes, wave is done again (with more waves pending)
+	orch.MarkTaskComplete(1)
+	assert.Equal(t, WaveStateWaveComplete, orch.State(), "wave must be WaveComplete after retry+complete")
+	assert.Equal(t, 0, orch.FailedTaskCount(), "no more failures after retry completes")
+}
+
+func TestRestoreToWave(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.RestoreToWave(2, []int{3})
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+	assert.Equal(t, 2, orch.CurrentWaveNumber())
+}
+
+func TestRestoreToWave_PartialCompletion(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.RestoreToWave(2, []int{2}) // task 3 still running
+	assert.Equal(t, WaveStateRunning, orch.State())
+	assert.True(t, orch.IsTaskComplete(2))
+	assert.True(t, orch.IsTaskRunning(3))
+}
+
+func TestShouldPostWaveCompleteComment(t *testing.T) {
+	single := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+	}}
+	multi := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+		{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},
+	}}
+	assert.False(t, NewWaveOrchestrator("s.md", single).ShouldPostWaveCompleteComment())
+	assert.True(t, NewWaveOrchestrator("m.md", multi).ShouldPostWaveCompleteComment())
+
+	// nil receiver safety
+	var nilOrch *WaveOrchestrator
+	assert.False(t, nilOrch.ShouldPostWaveCompleteComment())
+}
+
+func TestBuildTaskPrompt_Method(t *testing.T) {
+	plan := &taskparser.Plan{
+		Goal: "Test goal",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+	prompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)
+	assert.Contains(t, prompt, "Task 1")
+	assert.Contains(t, prompt, "Test goal")
+	assert.Contains(t, prompt, "Wave 1 of 1")
+	assert.Contains(t, prompt, "parallel") // peerCount > 1
+}
