@@ -12,6 +12,8 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 )
 
+// Preview returns the current pane content as a string.
+// Returns an empty string if the instance has not been started or is paused.
 func (i *Instance) Preview() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
@@ -19,6 +21,8 @@ func (i *Instance) Preview() (string, error) {
 	return i.tmuxSession.CapturePaneContent()
 }
 
+// HasUpdated reports whether the pane content has changed since the last check.
+// Returns (false, false) if the instance has not been started.
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	if !i.started {
 		return false, false
@@ -36,7 +40,8 @@ func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerm
 	return NewEmbeddedTerminal(sessionName, cols, rows)
 }
 
-// TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
+// TapEnter sends an enter keypress to the pane when AutoYes is enabled.
+// No-op if the instance is not started or AutoYes is false.
 func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {
 		return
@@ -46,6 +51,8 @@ func (i *Instance) TapEnter() {
 	}
 }
 
+// Attach connects the caller to the instance's tmux session.
+// Returns an error if the instance has not been started.
 func (i *Instance) Attach() (chan struct{}, error) {
 	if !i.started {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
@@ -53,6 +60,8 @@ func (i *Instance) Attach() (chan struct{}, error) {
 	return i.tmuxSession.Attach()
 }
 
+// SetPreviewSize resizes the detached pane to the given dimensions.
+// Returns an error if the instance is not started or is paused.
 func (i *Instance) SetPreviewSize(width, height int) error {
 	if !i.started || i.Status == Paused {
 		return fmt.Errorf("cannot set preview size for instance that has not been started or " +
@@ -61,7 +70,8 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 	return i.tmuxSession.SetDetachedSize(width, height)
 }
 
-// GetGitWorktree returns the git worktree for the instance
+// GetGitWorktree returns the git worktree associated with this instance.
+// Returns an error if the instance has not been started.
 func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 	if !i.started {
 		return nil, fmt.Errorf("cannot get git worktree for instance that has not been started")
@@ -69,7 +79,8 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 	return i.gitWorktree, nil
 }
 
-// SendPrompt sends a prompt to the tmux session
+// SendPrompt sends a text prompt followed by an enter keypress to the agent pane.
+// Returns an error if the instance is not started or the tmux session is nil.
 func (i *Instance) SendPrompt(prompt string) error {
 	if !i.started {
 		return fmt.Errorf("instance not started")
@@ -80,17 +91,16 @@ func (i *Instance) SendPrompt(prompt string) error {
 	if err := i.tmuxSession.SendKeys(prompt); err != nil {
 		return fmt.Errorf("error sending keys to tmux session: %w", err)
 	}
-
-	// Brief pause to prevent carriage return from being interpreted as newline
+	// Brief pause to prevent the carriage return from being misinterpreted.
 	time.Sleep(100 * time.Millisecond)
 	if err := i.tmuxSession.TapEnter(); err != nil {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
-
 	return nil
 }
 
-// PreviewFullHistory captures the entire tmux pane output including full scrollback history
+// PreviewFullHistory captures the complete tmux pane output including the full scrollback buffer.
+// Returns an empty string if the instance is not started or is paused.
 func (i *Instance) PreviewFullHistory() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
@@ -98,7 +108,7 @@ func (i *Instance) PreviewFullHistory() (string, error) {
 	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
 }
 
-// SetTmuxSession sets the tmux session for testing purposes
+// SetTmuxSession replaces the tmux session handle. Intended for use in tests only.
 func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
 	i.tmuxSession = session
 }
@@ -109,7 +119,8 @@ func (i *Instance) MarkStartedForTest() {
 	i.started = true
 }
 
-// SendKeys sends keys to the tmux session
+// SendKeys sends raw key sequences to the pane.
+// Returns an error if the instance is not started or is paused.
 func (i *Instance) SendKeys(keys string) error {
 	if !i.started || i.Status == Paused {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
@@ -117,25 +128,26 @@ func (i *Instance) SendKeys(keys string) error {
 	return i.tmuxSession.SendKeys(keys)
 }
 
-// InstanceMetadata holds the results of polling a single instance.
-// Collected in a goroutine — all fields are values, no pointers into the model.
+// InstanceMetadata holds the results of a single per-tick poll for one instance.
+// All fields are value types — safe to pass between goroutines without synchronization.
 type InstanceMetadata struct {
-	Content            string // raw tmux capture-pane output
-	ContentCaptured    bool
-	Updated            bool
-	HasPrompt          bool
-	DiffStats          *git.DiffStats
-	CPUPercent         float64
-	MemMB              float64
+	// Content is the raw tmux capture-pane output.
+	Content         string
+	ContentCaptured bool
+	Updated         bool
+	HasPrompt       bool
+	DiffStats       *git.DiffStats
+	CPUPercent      float64
+	MemMB           float64
+	// ResourceUsageValid is true when CPU/memory data was successfully collected.
 	ResourceUsageValid bool
-	TmuxAlive          bool              // tmux has-session result (for reviewer completion check)
-	PermissionPrompt   *PermissionPrompt // non-nil when opencode shows a permission dialog
+	// TmuxAlive reflects the result of tmux has-session (used by the reviewer completion check).
+	TmuxAlive        bool
+	PermissionPrompt *PermissionPrompt
 }
 
 // CollectMetadata gathers all per-tick data for this instance via subprocess calls.
-// Safe to call from a goroutine — reads only, no model mutations.
-// Combines HasUpdated + UpdateDiffStats + UpdateResourceUsage data collection
-// into a single method, eliminating redundant capture-pane calls.
+// Safe to call from a goroutine — does not mutate the instance's cached preview fields.
 func (i *Instance) CollectMetadata() InstanceMetadata {
 	var m InstanceMetadata
 
@@ -143,64 +155,61 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 		return m
 	}
 
-	// Single capture-pane call — reused for hash check, activity parsing, and preview.
+	// Single capture-pane call shared by hash check, activity parsing, and preview.
 	m.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()
 
-	// Git diff stats
+	// Git diff statistics.
 	if i.gitWorktree != nil {
 		stats := i.gitWorktree.Diff()
 		if stats.Error != nil {
-			if !strings.Contains(stats.Error.Error(), "base commit SHA not set") &&
-				!strings.Contains(stats.Error.Error(), "worktree path gone") {
+			errMsg := stats.Error.Error()
+			if !strings.Contains(errMsg, "base commit SHA not set") &&
+				!strings.Contains(errMsg, "worktree path gone") {
 				log.WarningLog.Printf("diff stats error: %v", stats.Error)
 			}
-			// On error, return nil stats (caller keeps previous)
+			// On error leave m.DiffStats nil so the caller preserves its previous value.
 		} else {
 			m.DiffStats = stats
 		}
 	}
 
-	// Permission prompt detection
+	// Permission prompt detection — only meaningful when content was actually captured.
 	if m.ContentCaptured && m.Content != "" {
 		m.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)
 	}
 
-	// Resource usage (pgrep + ps)
+	// Resource usage via pgrep + ps.
 	m.CPUPercent, m.MemMB, m.ResourceUsageValid = i.collectResourceUsage()
 
-	// Session liveness (tmux has-session) — used by reviewer completion check.
+	// Session liveness check for the reviewer completion logic.
 	m.TmuxAlive = i.TmuxAlive()
 
 	return m
 }
 
-// SetDiffStats sets the diff stats from externally collected data.
+// SetDiffStats stores externally collected diff statistics on the instance.
 func (i *Instance) SetDiffStats(stats *git.DiffStats) {
 	i.diffStats = stats
 }
 
-// UpdateDiffStats updates the git diff statistics for this instance
+// UpdateDiffStats refreshes the cached git diff statistics.
+// Clears stats when not started; preserves existing stats when paused.
 func (i *Instance) UpdateDiffStats() error {
 	if !i.started {
 		i.diffStats = nil
 		return nil
 	}
-
 	if i.Status == Paused {
-		// Keep the previous diff stats if the instance is paused
 		return nil
 	}
 
 	stats := i.gitWorktree.Diff()
 	if stats.Error != nil {
 		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
-			// Worktree is not fully set up yet, not an error
 			i.diffStats = nil
 			return nil
 		}
 		if strings.Contains(stats.Error.Error(), "worktree path gone") {
-			// Worktree was cleaned up (pause, merge, external deletion).
-			// Clear stats silently — don't spam logs every tick.
 			i.diffStats = nil
 			return nil
 		}
@@ -211,7 +220,7 @@ func (i *Instance) UpdateDiffStats() error {
 	return nil
 }
 
-// collectResourceUsage queries CPU and memory usage via subprocess calls.
+// collectResourceUsage samples CPU and RSS memory for the agent process via pgrep and ps.
 // Returns (cpu%, memMB, ok). Safe to call from a goroutine.
 func (i *Instance) collectResourceUsage() (float64, float64, bool) {
 	if !i.started || i.tmuxSession == nil {
@@ -223,21 +232,21 @@ func (i *Instance) collectResourceUsage() (float64, float64, bool) {
 		return 0, 0, false
 	}
 
+	// Prefer the first child process of the pane's shell so we measure the agent binary, not the shell.
 	targetPid := strconv.Itoa(pid)
-	childCmd := exec.Command("pgrep", "-P", strconv.Itoa(pid))
-	if childOutput, err := childCmd.Output(); err == nil {
-		if children := strings.Fields(strings.TrimSpace(string(childOutput))); len(children) > 0 {
+	childOut, err := exec.Command("pgrep", "-P", strconv.Itoa(pid)).Output()
+	if err == nil {
+		if children := strings.Fields(strings.TrimSpace(string(childOut))); len(children) > 0 {
 			targetPid = children[0]
 		}
 	}
 
-	psCmd := exec.Command("ps", "-o", "%cpu=,rss=", "-p", targetPid)
-	output, err := psCmd.Output()
+	psOut, err := exec.Command("ps", "-o", "%cpu=,rss=", "-p", targetPid).Output()
 	if err != nil {
 		return 0, 0, false
 	}
 
-	fields := strings.Fields(strings.TrimSpace(string(output)))
+	fields := strings.Fields(strings.TrimSpace(string(psOut)))
 	if len(fields) < 2 {
 		return 0, 0, false
 	}
@@ -253,20 +262,20 @@ func (i *Instance) collectResourceUsage() (float64, float64, bool) {
 	return cpu, rssKB / 1024, true
 }
 
-// UpdateResourceUsage queries the process tree for CPU and memory usage.
-// Kept for backward compat but now delegates to collectResourceUsage.
+// UpdateResourceUsage refreshes the instance's CPU and memory fields.
 func (i *Instance) UpdateResourceUsage() {
 	if cpu, mem, ok := i.collectResourceUsage(); ok {
 		i.CPUPercent, i.MemMB = cpu, mem
 	}
 }
 
-// GetDiffStats returns the current git diff statistics
+// GetDiffStats returns the cached git diff statistics, or nil if unavailable.
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
 }
 
-// SendPermissionResponse sends the key sequence for the given permission choice to the agent pane.
+// SendPermissionResponse forwards a permission dialog choice to the agent pane.
+// No-op if the instance is not started or the tmux session is nil.
 func (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {
 	if !i.started || i.tmuxSession == nil {
 		return
