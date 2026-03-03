@@ -42,6 +42,13 @@
       "context": "/78/d7c9591ad4/4/context.md",
       "content_hash": "/78/d7c9591ad4/4/content_hash.txt",
       "prompt": "/78/d7c9591ad4/4/prompt.txt"
+    },
+    {
+      "metadata": "/78/d7c9591ad4/5/metadata.json",
+      "transcript": "/78/d7c9591ad4/5/full.jsonl",
+      "context": "/78/d7c9591ad4/5/context.md",
+      "content_hash": "/78/d7c9591ad4/5/content_hash.txt",
+      "prompt": "/78/d7c9591ad4/5/prompt.txt"
     }
   ],
   "token_usage": {
