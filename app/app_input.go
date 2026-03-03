@@ -935,13 +935,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				query := strings.TrimSpace(result.Value)
 				if query != "" {
 					m.state = stateClickUpFetching
-					m.overlays.Dismiss()
 					m.toastManager.Info("searching clickup...")
 					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
-			m.overlays.Dismiss()
 		}
 		return m, nil
 	}
@@ -961,7 +959,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						label := r.ID + " · " + r.Name
 						if strings.HasPrefix(selected, label) {
 							m.state = stateClickUpFetching
-							m.overlays.Dismiss()
 							m.toastManager.Info("fetching task details...")
 							return m, tea.Batch(m.fetchClickUpTaskWithTimeout(r.ID), m.toastTickCmd())
 						}
@@ -969,7 +966,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 			}
 			m.state = stateDefault
-			m.overlays.Dismiss()
 		}
 		return m, nil
 	}
@@ -1004,14 +1000,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					query := m.clickUpPendingQuery
 					m.clickUpPendingQuery = ""
 					m.clickUpWorkspaceMap = nil
-					m.overlays.Dismiss()
 					m.state = stateClickUpFetching
 					m.toastManager.Info("searching clickup...")
 					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
-			m.overlays.Dismiss()
 			m.clickUpPendingQuery = ""
 			m.clickUpWorkspaceMap = nil
 		}

@@ -19,7 +19,6 @@ type ContextMenu struct {
 	items       []ContextMenuItem
 	filtered    []filteredItem
 	selectedIdx int
-	x, y        int // screen position
 	width       int
 	searchQuery string
 }
@@ -31,11 +30,11 @@ type filteredItem struct {
 }
 
 // NewContextMenu creates a context menu at the given screen position.
-func NewContextMenu(x, y int, items []ContextMenuItem) *ContextMenu {
+// NewContextMenu creates a context menu with the given items.
+// Position is managed by the OverlayManager via ShowPositioned.
+func NewContextMenu(items []ContextMenuItem) *ContextMenu {
 	c := &ContextMenu{
 		items: items,
-		x:     x,
-		y:     y,
 	}
 	c.applyFilter()
 	c.calculateWidth()
