@@ -1,0 +1,153 @@
+Implement Task 4: Implement Pane I/O — SendKeys, CapturePaneContent, HasUpdated, Permissions
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 4 of 4 in Wave 2. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `session/tmux/pane_io.go`
+- Test: `session/tmux/pane_io_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestSendKeys(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd2.ToString(cmd))
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-keys", "opencode", false, ptyFactory, cmdExec)
+    err := s.SendKeys("hello world")
+    require.NoError(t, err)
+    require.Len(t, ranCmds, 1)
+    assert.Equal(t, "tmux send-keys -l -t kas_test-keys hello world", ranCmds[0])
+}
+
+func TestTapEnter(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd2.ToString(cmd))
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-enter", "opencode", false, ptyFactory, cmdExec)
+    err := s.TapEnter()
+    require.NoError(t, err)
+    assert.Contains(t, ranCmds[0], "send-keys")
+    assert.Contains(t, ranCmds[0], "Enter")
+}
+
+func TestSendPermissionResponse_AllowOnce(t *testing.T) {
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd.String())
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-perm", "opencode", false, &MockPtyFactory{}, cmdExec)
+    err := s.SendPermissionResponse(PermissionAllowOnce)
+    require.NoError(t, err)
+    assert.Len(t, ranCmds, 2) // Enter + confirmation Enter
+}
+
+func TestSendPermissionResponse_AllowAlways(t *testing.T) {
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd.String())
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-perm", "opencode", false, &MockPtyFactory{}, cmdExec)
+    err := s.SendPermissionResponse(PermissionAllowAlways)
+    require.NoError(t, err)
+    assert.Len(t, ranCmds, 3) // Right + Enter + confirmation Enter
+}
+
+func TestSendPermissionResponse_Reject(t *testing.T) {
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd.String())
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-perm", "opencode", false, &MockPtyFactory{}, cmdExec)
+    err := s.SendPermissionResponse(PermissionReject)
+    require.NoError(t, err)
+    assert.Len(t, ranCmds, 4) // Right + Right + Enter + confirmation Enter
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestSendKeys|TestTapEnter|TestSendPermission" -v
+```
+
+expected: FAIL
+
+**Step 3: write minimal implementation**
+
+Implement in `pane_io.go` (methods on `*TmuxSession`):
+
+- `SendKeys(keys)` — `tmux send-keys -l -t <name> <keys>`
+- `TapEnter()` — `tmux send-keys -t <name> Enter`
+- `TapRight()` — `tmux send-keys -t <name> Right`
+- `SendPermissionResponse(choice)` — two-step flow: select (arrow keys + Enter), 300ms delay, confirm (Enter)
+- `CapturePaneContent()` — `tmux capture-pane -p -e -J -t <name>`
+- `CapturePaneContentWithOptions(start, end)` — same with `-S start -E end`
+- `HasUpdated()` — capture pane, detect prompt via adapter, delegate to monitor
+- `HasUpdatedWithContent()` — same but returns raw content
+- `GetPanePID()` — `tmux display-message -p -t <name> #{pane_pid}`
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -run "TestSendKeys|TestTapEnter|TestSendPermission" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/pane_io.go session/tmux/pane_io_test.go
+git commit -m "feat(clean-room): implement pane I/O, permission responses, and status detection"
+```
