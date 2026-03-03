@@ -217,11 +217,11 @@ func EventKindIcon(kind string) (icon string, color lipgloss.Color) {
 	case "plan_cancelled":
 		return "✕", ColorLove
 	case "wave_started":
-		return "⚡", ColorGold
+		return "↯", ColorGold
 	case "wave_completed":
-		return "⚡", ColorFoam
+		return "↯", ColorFoam
 	case "wave_failed":
-		return "⚡", ColorLove
+		return "↯", ColorLove
 	case "prompt_sent":
 		return "→", ColorFoam
 	case "git_push":
