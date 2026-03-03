@@ -278,8 +278,8 @@ func (i *Instance) setTmuxTaskEnv() {
 // buildTitleOpts maps an Instance's metadata to TitleOpts for BuildTitle.
 func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 	planName := ""
-	if inst.PlanFile != "" {
-		planName = taskstate.DisplayName(inst.PlanFile)
+	if inst.TaskFile != "" {
+		planName = taskstate.DisplayName(inst.TaskFile)
 	}
 	return opencodesession.TitleOpts{
 		PlanName:      planName,

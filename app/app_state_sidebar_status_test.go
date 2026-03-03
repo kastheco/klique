@@ -15,7 +15,7 @@ func newSidebarStatusTestInstance(t *testing.T, planFile string) *session.Instan
 		Title:    "status-test",
 		Path:     ".",
 		Program:  "claude",
-		PlanFile: planFile,
+		TaskFile: planFile,
 	})
 	require.NoError(t, err)
 	return inst

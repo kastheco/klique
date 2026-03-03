@@ -10,28 +10,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPlanBranchFromFile(t *testing.T) {
-	got := PlanBranchFromFile("auth-refactor.md")
+func TestTaskBranchFromFile(t *testing.T) {
+	got := TaskBranchFromFile("auth-refactor.md")
 	want := "plan/auth-refactor"
 	if got != want {
-		t.Fatalf("PlanBranchFromFile() = %q, want %q", got, want)
+		t.Fatalf("TaskBranchFromFile() = %q, want %q", got, want)
 	}
 }
 
-func TestPlanWorktreePath(t *testing.T) {
+func TestTaskWorktreePath(t *testing.T) {
 	repo := "/tmp/repo"
 	branch := "plan/auth-refactor"
-	got := PlanWorktreePath(repo, branch)
+	got := TaskWorktreePath(repo, branch)
 	want := filepath.Join(repo, ".worktrees", "plan-auth-refactor")
 	if got != want {
-		t.Fatalf("PlanWorktreePath() = %q, want %q", got, want)
+		t.Fatalf("TaskWorktreePath() = %q, want %q", got, want)
 	}
 }
 
-func TestNewSharedPlanWorktree(t *testing.T) {
+func TestNewSharedTaskWorktree(t *testing.T) {
 	repo := "/tmp/repo"
 	branch := "plan/auth-refactor"
-	gt := NewSharedPlanWorktree(repo, branch)
+	gt := NewSharedTaskWorktree(repo, branch)
 
 	if gt.GetRepoPath() != repo {
 		t.Fatalf("repo = %q, want %q", gt.GetRepoPath(), repo)
@@ -50,7 +50,7 @@ func TestSetupFromExistingBranch_SetsBaseCommitSHA(t *testing.T) {
 	cmd := exec.Command("git", "-C", repo, "branch", "plan/test-base")
 	require.NoError(t, cmd.Run())
 
-	gt := NewSharedPlanWorktree(repo, "plan/test-base")
+	gt := NewSharedTaskWorktree(repo, "plan/test-base")
 	require.NoError(t, gt.Setup())
 	t.Cleanup(func() { _ = gt.Cleanup() })
 

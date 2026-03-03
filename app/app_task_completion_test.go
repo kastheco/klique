@@ -20,7 +20,7 @@ import (
 
 func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeCoder}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder}
 
 	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
 		t.Fatal("expected push prompt for exited coder")
@@ -30,7 +30,7 @@ func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
-		PlanFile:       "p.md",
+		TaskFile:       "p.md",
 		AgentType:      session.AgentTypeCoder,
 		PromptDetected: true,
 		AwaitingWork:   false,
@@ -45,7 +45,7 @@ func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
-		PlanFile:       "p.md",
+		TaskFile:       "p.md",
 		AgentType:      session.AgentTypeCoder,
 		PromptDetected: true,
 		AwaitingWork:   true,
@@ -59,7 +59,7 @@ func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
 
 	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, false),
 		"solo agents must not trigger automatic push prompt")
@@ -67,7 +67,7 @@ func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{PlanFile: "p.md", AgentType: session.AgentTypeReviewer}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeReviewer}
 
 	if shouldPromptPushAfterCoderExit(entry, inst, false) {
 		t.Fatal("did not expect push prompt for reviewer")
@@ -95,7 +95,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 		Title:     "test-feature-implement",
 		Path:      t.TempDir(),
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -112,8 +112,8 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
-		planState:    ps,
-		planStateDir: plansDir,
+		taskState:    ps,
+		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
 	}
 
@@ -161,7 +161,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 		Title:     "test-feature-implement",
 		Path:      t.TempDir(),
 		Program:   "opencode",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -180,8 +180,8 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
-		planState:    ps,
-		planStateDir: plansDir,
+		taskState:    ps,
+		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
 	}
 
@@ -225,14 +225,14 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst := &session.Instance{
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	}
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		planState:    ps,
-		planStateDir: plansDir,
+		taskState:    ps,
+		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
 		toastManager: overlay.NewToastManager(&sp),
 	}
@@ -271,7 +271,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 		Title:     "test-feature-implement",
 		Path:      t.TempDir(),
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -288,8 +288,8 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
-		planState:    ps,
-		planStateDir: plansDir,
+		taskState:    ps,
+		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
 	}
 
@@ -346,10 +346,10 @@ func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
 // TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState verifies that when
 // signals are present in a metadataResultMsg, the stale msg.PlanState (loaded
 // by the goroutine before signals were scanned) does not overwrite the fresh
-// planState that loadPlanState() sets after FSM transitions are applied.
+// planState that loadTaskState() sets after FSM transitions are applied.
 //
-// Regression test for: sentinel processed → disk updated → loadPlanState() →
-// m.planState="ready", then m.planState=msg.PlanState → m.planState="planning"
+// Regression test for: sentinel processed → disk updated → loadTaskState() →
+// m.taskState="ready", then m.taskState=msg.PlanState → m.taskState="planning"
 // (stale), causing the sidebar to show the wrong status for ~500ms.
 func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	dir := t.TempDir()
@@ -371,10 +371,10 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	// Build a minimal home with FSM wired up.
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		planState:             stalePlanState, // starts with stale state
-		planStateDir:          plansDir,
-		planStore:             storeForDir(t, plansDir),
-		planStoreProject:      "test",
+		taskState:             stalePlanState, // starts with stale state
+		taskStateDir:          plansDir,
+		taskStore:             storeForDir(t, plansDir),
+		taskStoreProject:      "test",
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -402,10 +402,10 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	// Feed the message through Update.
 	_, _ = h.Update(msg)
 
-	// After Update, h.planState must reflect the FSM transition (planning→ready),
+	// After Update, h.taskState must reflect the FSM transition (planning→ready),
 	// NOT the stale msg.PlanState snapshot.
-	require.NotNil(t, h.planState)
-	entry, ok := h.planState.Entry(planFile)
+	require.NotNil(t, h.taskState)
+	entry, ok := h.taskState.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status,
 		"planState must show 'ready' after PlannerFinished signal — stale msg.PlanState must not overwrite it")
@@ -431,7 +431,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		Title:     "feature-implement",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -448,8 +448,8 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
+		taskState:             ps,
+		taskStateDir:          plansDir,
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -472,7 +472,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	// A reviewer instance must have been added to the list.
 	var foundReviewer bool
 	for _, inst := range h.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.IsReviewer {
+		if inst.TaskFile == planFile && inst.IsReviewer {
 			foundReviewer = true
 			break
 		}
@@ -498,7 +498,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	// Write a minimal plan file so spawnPlanAgent can read it.
+	// Write a minimal plan file so spawnTaskAgent can read it.
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
 
 	ps, err := newTestPlanState(t, plansDir)
@@ -511,7 +511,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		Title:     "feature-review",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeReviewer,
 	})
 	require.NoError(t, err)
@@ -529,8 +529,8 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
+		taskState:             ps,
+		taskStateDir:          plansDir,
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -554,7 +554,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 	// A coder instance must have been added with feedback in its prompt.
 	var foundCoder bool
 	for _, inst := range h.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
 			foundCoder = true
 			assert.Contains(t, inst.QueuedPrompt, feedback,
 				"coder prompt must contain reviewer feedback")
@@ -594,7 +594,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 		Title:     "feature-review",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeReviewer,
 	})
 	require.NoError(t, err)
@@ -612,8 +612,8 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
+		taskState:             ps,
+		taskStateDir:          plansDir,
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -649,7 +649,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	// Write a minimal plan file so spawnPlanAgent helpers can read it.
+	// Write a minimal plan file so spawnTaskAgent helpers can read it.
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
 
 	ps, err := newTestPlanState(t, plansDir)
@@ -662,7 +662,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		Title:     "feature-review",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeReviewer,
 	})
 	require.NoError(t, err)
@@ -680,8 +680,8 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
+		taskState:             ps,
+		taskStateDir:          plansDir,
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -703,7 +703,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 
 	var coderTitle string
 	for _, inst := range h.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
 			coderTitle = inst.Title
 			break
 		}
@@ -712,21 +712,21 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		"coder spawned after first ReviewChangesRequested must have title 'feature-fix-1'")
 
 	// === Part 2: ImplementFinished → reviewer with next cycle suffix ===
-	// At this point m.planState has ReviewCycle=1 in-memory (incremented by part 1).
+	// At this point m.taskState has ReviewCycle=1 in-memory (incremented by part 1).
 	// The FSM store has status=implementing (transitioned by part 1).
 	signal2 := taskfsm.Signal{
 		Event:    taskfsm.ImplementFinished,
 		TaskFile: planFile,
 	}
 	_, _ = h.Update(metadataResultMsg{
-		PlanState: h.planState,
+		PlanState: h.taskState,
 		Signals:   []taskfsm.Signal{signal2},
 	})
 
 	// Find the newly spawned reviewer (the old one was killed and removed).
 	var reviewerTitle string
 	for _, inst := range h.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.IsReviewer {
+		if inst.TaskFile == planFile && inst.IsReviewer {
 			reviewerTitle = inst.Title
 		}
 	}
@@ -763,8 +763,8 @@ func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
+		taskState:             ps,
+		taskStateDir:          plansDir,
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
@@ -782,7 +782,7 @@ func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
 	// Find the reviewer instance.
 	var reviewerInst *session.Instance
 	for _, inst := range h.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.IsReviewer {
+		if inst.TaskFile == planFile && inst.IsReviewer {
 			reviewerInst = inst
 			break
 		}

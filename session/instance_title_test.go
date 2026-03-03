@@ -16,7 +16,7 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 		{
 			name: "planner with plan file",
 			inst: &Instance{
-				PlanFile:  "automatic-session-naming.md",
+				TaskFile:  "automatic-session-naming.md",
 				AgentType: AgentTypePlanner,
 				Title:     "automatic-session-naming-plan",
 			},
@@ -25,7 +25,7 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 		{
 			name: "coder wave task",
 			inst: &Instance{
-				PlanFile:   "automatic-session-naming.md",
+				TaskFile:   "automatic-session-naming.md",
 				AgentType:  AgentTypeCoder,
 				WaveNumber: 2,
 				TaskNumber: 3,
@@ -36,7 +36,7 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 		{
 			name: "reviewer",
 			inst: &Instance{
-				PlanFile:  "automatic-session-naming.md",
+				TaskFile:  "automatic-session-naming.md",
 				AgentType: AgentTypeReviewer,
 				Title:     "automatic-session-naming-review",
 			},
@@ -60,7 +60,7 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 		{
 			name: "reviewer with review cycle",
 			inst: &Instance{
-				PlanFile:    "my-feature.md",
+				TaskFile:    "my-feature.md",
 				AgentType:   AgentTypeReviewer,
 				Title:       "my-feature-review-2",
 				ReviewCycle: 2,

@@ -20,7 +20,7 @@ import (
 )
 
 func TestBuildPlanPrompt(t *testing.T) {
-	prompt := buildPlanPrompt("Auth Refactor", "Refactor JWT auth")
+	prompt := buildPlanningPrompt("Auth Refactor", "Refactor JWT auth")
 	if !strings.Contains(prompt, "Plan Auth Refactor") {
 		t.Fatalf("prompt missing title")
 	}
@@ -91,12 +91,12 @@ func TestIsLocked_AllowsSoloStage(t *testing.T) {
 		"solo stage should be triggerable like implement/review")
 }
 
-// TestSpawnPlanAgent_ReviewerSetsIsReviewer verifies that spawnPlanAgent sets
+// TestSpawnPlanAgent_ReviewerSetsIsReviewer verifies that spawnTaskAgent sets
 // IsReviewer=true on the created instance when the action is "review", so that
 // the reviewer completion check in the metadata tick handler (which gates on
 // inst.IsReviewer) can detect when the reviewer session exits.
 //
-// This is a regression test for the bug where spawnPlanAgent set AgentType but
+// This is a regression test for the bug where spawnTaskAgent set AgentType but
 // not IsReviewer, causing sidebar-spawned reviewers to never trigger plan completion.
 func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 	dir := t.TempDir()
@@ -130,7 +130,7 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
 	h := &home{
-		planState:          ps,
+		taskState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
 		nav:                list,
@@ -138,22 +138,22 @@ func TestSpawnPlanAgent_ReviewerSetsIsReviewer(t *testing.T) {
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
-	h.spawnPlanAgent(planFile, "review", "review prompt")
+	h.spawnTaskAgent(planFile, "review", "review prompt")
 
 	instances := list.GetInstances()
 	if len(instances) == 0 {
-		t.Fatal("expected instance to be added to list after spawnPlanAgent(review)")
+		t.Fatal("expected instance to be added to list after spawnTaskAgent(review)")
 	}
 	inst := instances[len(instances)-1]
 	if inst.AgentType != session.AgentTypeReviewer {
 		t.Fatalf("AgentType = %q, want %q", inst.AgentType, session.AgentTypeReviewer)
 	}
 	if !inst.IsReviewer {
-		t.Fatal("spawnPlanAgent(review) must set IsReviewer=true on the created instance")
+		t.Fatal("spawnTaskAgent(review) must set IsReviewer=true on the created instance")
 	}
 }
 
-// TestSpawnPlanAgent_PlannerUsesMainBranch verifies that spawnPlanAgent for the
+// TestSpawnPlanAgent_PlannerUsesMainBranch verifies that spawnTaskAgent for the
 // "plan" action does NOT create a git worktree — the planner runs on main and
 // commits plan files there directly.
 func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
@@ -187,7 +187,7 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
 	h := &home{
-		planState:          ps,
+		taskState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
 		nav:                list,
@@ -195,11 +195,11 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
-	h.spawnPlanAgent(planFile, "plan", "plan prompt")
+	h.spawnTaskAgent(planFile, "plan", "plan prompt")
 
 	instances := list.GetInstances()
 	if len(instances) == 0 {
-		t.Fatal("expected instance to be added to list after spawnPlanAgent(plan)")
+		t.Fatal("expected instance to be added to list after spawnTaskAgent(plan)")
 	}
 	inst := instances[len(instances)-1]
 	if inst.AgentType != session.AgentTypePlanner {
@@ -282,7 +282,7 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
 	h := &home{
-		planState:          ps,
+		taskState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
 		nav:                list,
@@ -290,10 +290,10 @@ func TestSpawnPlanAgent_SoloSetsSoloAgentFlag(t *testing.T) {
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
-	h.spawnPlanAgent(planFile, "solo", "solo prompt")
+	h.spawnTaskAgent(planFile, "solo", "solo prompt")
 
 	instances := list.GetInstances()
-	require.NotEmpty(t, instances, "expected instance after spawnPlanAgent(solo)")
+	require.NotEmpty(t, instances, "expected instance after spawnTaskAgent(solo)")
 	inst := instances[len(instances)-1]
 	assert.True(t, inst.SoloAgent, "solo agent must have SoloAgent=true")
 	assert.Equal(t, session.AgentTypeCoder, inst.AgentType)
@@ -327,7 +327,7 @@ func TestSpawnPlanAgent_SoloTitlesArePlanScoped(t *testing.T) {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
 	h := &home{
-		planState:          ps,
+		taskState:          ps,
 		activeRepoPath:     dir,
 		program:            "opencode",
 		nav:                list,
@@ -335,8 +335,8 @@ func TestSpawnPlanAgent_SoloTitlesArePlanScoped(t *testing.T) {
 		instanceFinalizers: make(map[*session.Instance]func()),
 	}
 
-	h.spawnPlanAgent(firstPlan, "solo", "first solo prompt")
-	h.spawnPlanAgent(secondPlan, "solo", "second solo prompt")
+	h.spawnTaskAgent(firstPlan, "solo", "first solo prompt")
+	h.spawnTaskAgent(secondPlan, "solo", "second solo prompt")
 
 	instances := list.GetInstances()
 	require.Len(t, instances, 2, "expected two solo instances")
@@ -392,7 +392,7 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 func TestTriggerPlanStage_SoloRespectsTopicConcurrencyGate(t *testing.T) {
 	h, targetPlan := setupTopicConflictHome(t)
 
-	model, _ := h.triggerPlanStage(targetPlan, "solo")
+	model, _ := h.triggerTaskStage(targetPlan, "solo")
 	updated := model.(*home)
 
 	assert.Equal(t, stateConfirm, updated.state,
@@ -404,14 +404,14 @@ func TestTriggerPlanStage_SoloRespectsTopicConcurrencyGate(t *testing.T) {
 }
 
 // TestTopicConcurrencyConfirm_ReturnsPlanStageConfirmedMsg verifies that
-// confirming the topic-concurrency dialog returns a planStageConfirmedMsg
-// (not just a planRefreshMsg), so the actual stage execution is triggered.
+// confirming the topic-concurrency dialog returns a taskStageConfirmedMsg
+// (not just a taskRefreshMsg), so the actual stage execution is triggered.
 func TestTopicConcurrencyConfirm_ReturnsPlanStageConfirmedMsg(t *testing.T) {
 	for _, stage := range []string{"solo", "implement"} {
 		t.Run(stage, func(t *testing.T) {
 			h, targetPlan := setupTopicConflictHome(t)
 
-			model, _ := h.triggerPlanStage(targetPlan, stage)
+			model, _ := h.triggerTaskStage(targetPlan, stage)
 			updated := model.(*home)
 
 			require.Equal(t, stateConfirm, updated.state,
@@ -421,13 +421,13 @@ func TestTopicConcurrencyConfirm_ReturnsPlanStageConfirmedMsg(t *testing.T) {
 
 			// Execute the pending confirm action and check the returned message.
 			msg := updated.pendingConfirmAction()
-			stageMsg, ok := msg.(planStageConfirmedMsg)
+			stageMsg, ok := msg.(taskStageConfirmedMsg)
 			require.True(t, ok,
-				"confirm action must return planStageConfirmedMsg, got %T", msg)
+				"confirm action must return taskStageConfirmedMsg, got %T", msg)
 			assert.Equal(t, targetPlan, stageMsg.planFile,
-				"planStageConfirmedMsg must carry the correct plan file")
+				"taskStageConfirmedMsg must carry the correct plan file")
 			assert.Equal(t, stage, stageMsg.stage,
-				"planStageConfirmedMsg must carry the correct stage")
+				"taskStageConfirmedMsg must carry the correct stage")
 		})
 	}
 }
@@ -446,8 +446,8 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		planState:      ps,
-		planStateDir:   plansDir,
+		taskState:      ps,
+		taskStateDir:   plansDir,
 		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
@@ -456,14 +456,14 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 		activeRepoPath: dir,
 	}
 
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+planFile))
 
 	// Simulate: context menu selected "set_status", which sets up the picker
 	_, _ = h.executeContextAction("set_status")
 	assert.Equal(t, stateSetStatus, h.state, "set_status action should enter stateSetStatus")
 	assert.NotNil(t, h.pickerOverlay, "picker overlay should be created for status selection")
-	assert.Equal(t, planFile, h.pendingSetStatusPlan, "pending plan file should be stored")
+	assert.Equal(t, planFile, h.pendingSetStatusTask, "pending plan file should be stored")
 }
 
 func TestToggleAutoAdvanceWaves(t *testing.T) {
@@ -500,10 +500,10 @@ func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 	require.True(t, nav.SelectByID(ui.SidebarPlanPrefix+planFile))
 
 	h := &home{
-		planState:        ps,
-		planStore:        store,
-		planStoreProject: "proj",
-		planStateDir:     t.TempDir(),
+		taskState:        ps,
+		taskStore:        store,
+		taskStoreProject: "proj",
+		taskStateDir:     t.TempDir(),
 		nav:              nav,
 		tabbedWindow:     ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 	}
@@ -532,8 +532,8 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		planState:      ps,
-		planStateDir:   plansDir,
+		taskState:      ps,
+		taskStateDir:   plansDir,
 		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
@@ -542,7 +542,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 		activeRepoPath: dir,
 	}
 
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+planFile), "plan should be selectable in sidebar")
 
 	_, _ = h.executeContextAction("mark_plan_done")

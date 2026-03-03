@@ -30,7 +30,7 @@ type TmuxBrowserItem struct {
 	Width     int
 	Height    int
 	Managed   bool   // true = tracked by a kasmos instance
-	PlanFile  string // plan filename (managed only)
+	TaskFile  string // task filename (managed only)
 	AgentType string // "planner"/"coder"/"reviewer" (managed only)
 	Status    string // "running"/"ready"/"loading"/"paused" (managed only)
 }

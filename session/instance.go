@@ -55,7 +55,7 @@ type Instance struct {
 	// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.
 	SkipPermissions bool
 	// PlanFile is the plan filename this instance is implementing (empty = no plan).
-	PlanFile string
+	TaskFile string
 	// Topic is the topic/group this instance belongs to (from plan-state).
 	Topic string
 	// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.
@@ -158,7 +158,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		Program:                i.Program,
 		AutoYes:                i.AutoYes,
 		SkipPermissions:        i.SkipPermissions,
-		PlanFile:               i.PlanFile,
+		TaskFile:               i.TaskFile,
 		AgentType:              i.AgentType,
 		TaskNumber:             i.TaskNumber,
 		WaveNumber:             i.WaveNumber,
@@ -206,7 +206,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		UpdatedAt:              data.UpdatedAt,
 		Program:                data.Program,
 		SkipPermissions:        data.SkipPermissions,
-		PlanFile:               data.PlanFile,
+		TaskFile:               data.TaskFile,
 		AgentType:              data.AgentType,
 		TaskNumber:             data.TaskNumber,
 		WaveNumber:             data.WaveNumber,
@@ -273,7 +273,7 @@ type InstanceOptions struct {
 	// SkipPermissions enables --dangerously-skip-permissions for Claude instances.
 	SkipPermissions bool
 	// PlanFile binds this instance to a plan from plan-state.json.
-	PlanFile string
+	TaskFile string
 	// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.
 	AgentType string
 	// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).
@@ -306,7 +306,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:       t,
 		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
-		PlanFile:        opts.PlanFile,
+		TaskFile:        opts.TaskFile,
 		AgentType:       opts.AgentType,
 		TaskNumber:      opts.TaskNumber,
 		WaveNumber:      opts.WaveNumber,

@@ -40,7 +40,7 @@ func NewRootCmd() *cobra.Command {
 		Use:   "kas",
 		Short: "kas - Manage multiple AI agents",
 	}
-	root.AddCommand(NewPlanCmd())
+	root.AddCommand(NewTaskCmd())
 	root.AddCommand(NewServeCmd())
 	return root
 }

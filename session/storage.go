@@ -22,7 +22,7 @@ type InstanceData struct {
 	UpdatedAt              time.Time `json:"updated_at"`
 	AutoYes                bool      `json:"auto_yes"`
 	SkipPermissions        bool      `json:"skip_permissions"`
-	PlanFile               string    `json:"plan_file,omitempty"`
+	TaskFile               string    `json:"task_file,omitempty"`
 	AgentType              string    `json:"agent_type,omitempty"`
 	TaskNumber             int       `json:"task_number,omitempty"`
 	WaveNumber             int       `json:"wave_number,omitempty"`
@@ -36,6 +36,23 @@ type InstanceData struct {
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`
 	DiffStats DiffStatsData   `json:"diff_stats"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling to handle the rename from
+// plan_file to task_file. Existing state.json files may use the old field name.
+func (d *InstanceData) UnmarshalJSON(data []byte) error {
+	type Alias InstanceData
+	aux := &struct {
+		*Alias
+		PlanFile string `json:"plan_file,omitempty"`
+	}{Alias: (*Alias)(d)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if d.TaskFile == "" && aux.PlanFile != "" {
+		d.TaskFile = aux.PlanFile
+	}
+	return nil
 }
 
 // GitWorktreeData represents the serializable data of a GitWorktree

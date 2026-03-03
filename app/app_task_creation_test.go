@@ -42,14 +42,14 @@ func TestCreatePlanRecord(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
-	h := &home{planStateDir: plansDir, planState: ps}
+	h := &home{taskStateDir: plansDir, taskState: ps}
 
 	planFile := "auth-refactor.md"
 	branch := "plan/auth-refactor"
 	err = h.createPlanRecord(planFile, "Refactor JWT auth", branch, time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
-	entry, ok := h.planState.Entry(planFile)
+	entry, ok := h.taskState.Entry(planFile)
 	require.True(t, ok)
 	if entry.Branch != branch {
 		t.Fatalf("entry.Branch = %q, want %q", entry.Branch, branch)

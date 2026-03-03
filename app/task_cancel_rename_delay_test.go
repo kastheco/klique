@@ -3,12 +3,12 @@ package app
 // Tests for the "canceled/renamed plans delay removal" bug:
 //
 //  1. cancel_plan: the confirm action goroutine was returning nil instead of
-//     planRefreshMsg{}, so no Update() was triggered after the FSM transition.
+//     taskRefreshMsg{}, so no Update() was triggered after the FSM transition.
 //     The plan stayed visible in the sidebar until the next metadata tick (~2s).
 //
 //  2. rename_plan: after Rename() the nav selection was not updated to point at
 //     the renamed plan, so the cursor silently jumped to an unrelated row.
-//     Also, loadPlanState() was called redundantly — Rename() already updates
+//     Also, loadTaskState() was called redundantly — Rename() already updates
 //     the in-memory PlanState, so the extra disk read was unnecessary.
 
 import (
@@ -38,8 +38,8 @@ func newCancelDelayHome(t *testing.T, store taskstore.Store, ps *taskstate.TaskS
 	storage, err := session.NewStorage(config.DefaultState())
 	require.NoError(t, err)
 	return &home{
-		planState:      ps,
-		planStateDir:   plansDir,
+		taskState:      ps,
+		taskStateDir:   plansDir,
 		fsm:            taskfsm.New(store, "test", plansDir),
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
@@ -51,7 +51,7 @@ func newCancelDelayHome(t *testing.T, store taskstore.Store, ps *taskstate.TaskS
 }
 
 // TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg verifies that the cancel_plan
-// confirm action returns planRefreshMsg (not nil) so that bubbletea triggers an
+// confirm action returns taskRefreshMsg (not nil) so that bubbletea triggers an
 // Update() that removes the plan from the sidebar immediately — without waiting
 // for the next metadata tick.
 func TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "cancel delay test", "plan/cancel-delay", time.Now()))
 
 	h := newCancelDelayHome(t, store, ps, plansDir, dir)
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+planFile), "plan must be selectable in sidebar")
 
 	_, _ = h.executeContextAction("cancel_plan")
@@ -73,16 +73,16 @@ func TestCancelPlan_ConfirmActionReturnsPlanRefreshMsg(t *testing.T) {
 	require.NotNil(t, h.pendingConfirmAction, "cancel_plan must set pendingConfirmAction")
 
 	msg := h.pendingConfirmAction()
-	_, ok := msg.(planRefreshMsg)
+	_, ok := msg.(taskRefreshMsg)
 	assert.True(t, ok,
-		"cancel_plan confirm action must return planRefreshMsg so Update() fires immediately; got %T (nil means no re-render until next tick)", msg)
+		"cancel_plan confirm action must return taskRefreshMsg so Update() fires immediately; got %T (nil means no re-render until next tick)", msg)
 }
 
 // TestRenamePlan_SelectionFollowsRenamedPlan verifies that after the rename
-// handler runs (stateRenamePlan path in handleKeyPress), the nav panel selection
+// handler runs (stateRenameTask path in handleKeyPress), the nav panel selection
 // points to the newly-named plan rather than an unrelated row.
 //
-// This is the core fix: without SelectByID after updateSidebarPlans, rebuildRows()
+// This is the core fix: without SelectByID after updateSidebarTasks, rebuildRows()
 // cannot restore the selection (the old plan ID no longer exists in the rows) and
 // the cursor silently jumps to whatever row is now at the same numeric index.
 // Two plans are used so the cursor can actually land on the wrong one.
@@ -103,15 +103,15 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	require.NoError(t, ps.Register(marmotFile, "marmot", "plan/marmot", time.Now()))
 
 	h := newCancelDelayHome(t, store, ps, plansDir, dir)
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 	require.True(t, h.nav.SelectByID(ui.SidebarPlanPrefix+aardvarkFile), "aardvark must be selectable")
 
-	// Drive the actual stateRenamePlan handler via handleKeyPress with a
+	// Drive the actual stateRenameTask handler via handleKeyPress with a
 	// pre-submitted TextInputOverlay (value = "zebra", Submitted = true).
 	// Pressing Enter on a submitted overlay triggers the rename code path.
 	tio := overlay.NewTextInputOverlay("rename plan", "zebra")
 	h.textInputOverlay = tio
-	h.state = stateRenamePlan
+	h.state = stateRenameTask
 
 	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
 	_, _ = h.handleKeyPress(enterKey)

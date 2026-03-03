@@ -88,8 +88,8 @@ const (
 	statePRBody
 	// stateRenameInstance is the state when the user is renaming an instance.
 	stateRenameInstance
-	// stateRenamePlan is the state when the user is renaming a plan.
-	stateRenamePlan
+	// stateRenameTask is the state when the user is renaming a plan.
+	stateRenameTask
 	// stateRenameTopic is the state when the user is renaming a topic.
 	stateRenameTopic
 	// stateSendPrompt is the state when the user is sending a prompt via text overlay.
@@ -114,8 +114,8 @@ const (
 	statePermission
 	// stateTmuxBrowser is the state when the tmux session browser overlay is shown.
 	stateTmuxBrowser
-	// stateChatAboutPlan is the state when the user is typing a question about a plan.
-	stateChatAboutPlan
+	// stateChatAboutTask is the state when the user is typing a question about a plan.
+	stateChatAboutTask
 )
 
 type home struct {
@@ -200,12 +200,12 @@ type home struct {
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
-	// pendingChangeTopicPlan stores the plan filename during the change-topic flow
-	pendingChangeTopicPlan string
-	// pendingSetStatusPlan stores the plan filename during the set-status flow
-	pendingSetStatusPlan string
-	// pendingChatAboutPlan stores the plan filename during the chat-about-plan flow
-	pendingChatAboutPlan string
+	// pendingChangeTopicTask stores the plan filename during the change-topic flow
+	pendingChangeTopicTask string
+	// pendingSetStatusTask stores the plan filename during the set-status flow
+	pendingSetStatusTask string
+	// pendingChatAboutTask stores the plan filename during the chat-about-plan flow
+	pendingChatAboutTask string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
 
@@ -249,21 +249,21 @@ type home struct {
 	previewTerminal         *session.EmbeddedTerminal
 	previewTerminalInstance string // title of the instance the terminal is attached to
 
-	// planState holds the parsed plan-state.json for the active repo. Nil when missing.
-	planState *taskstate.TaskState
-	// planStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
-	planStateDir string
+	// taskState holds the parsed plan-state.json for the active repo. Nil when missing.
+	taskState *taskstate.TaskState
+	// taskStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
+	taskStateDir string
 	// signalsDir is the directory where agent sentinel files are written.
 	// Defaults to <repoRoot>/.kasmos/signals/ (project-local, gitignored).
 	signalsDir string
 	// embeddedServer is the in-process HTTP+SQLite plan store server started on boot.
 	// Always non-nil after newHome() returns.
 	embeddedServer *taskstore.EmbeddedServer
-	// planStore is the plan store client. Always non-nil after newHome() returns —
-	// points at the embedded server URL unless appConfig.PlanStore overrides it.
-	planStore taskstore.Store
-	// planStoreProject is the project name used with the remote store (derived from repo basename).
-	planStoreProject string
+	// taskStore is the plan store client. Always non-nil after newHome() returns —
+	// points at the embedded server URL unless appConfig.DatabaseURL overrides it.
+	taskStore taskstore.Store
+	// taskStoreProject is the project name used with the remote store (derived from repo basename).
+	taskStoreProject string
 	// auditLogger records structured audit events to the planstore SQLite database.
 	// Falls back to NopLogger when planstore is HTTP-backed or unconfigured.
 	auditLogger auditlog.Logger
@@ -284,9 +284,9 @@ type home struct {
 	// Drained on each metadata tick once the overlay clears.
 	pendingAllComplete []string
 
-	// pendingWaveConfirmPlanFile is set while a wave-advance (or failed-wave decision)
+	// pendingWaveConfirmTaskFile is set while a wave-advance (or failed-wave decision)
 	// confirmation overlay is showing, so cancel can reset the orchestrator latch.
-	pendingWaveConfirmPlanFile string
+	pendingWaveConfirmTaskFile string
 	// waveConfirmDismissedAt is the time the wave confirm dialog was last dismissed
 	// via Esc. Used to impose a cooldown before re-showing the dialog.
 	waveConfirmDismissedAt time.Time
@@ -319,11 +319,11 @@ type home struct {
 	// triggered the current planner-exit confirmation dialog.
 	pendingPlannerInstanceTitle string
 
-	// pendingPlannerPlanFile is the plan file associated with the planner instance
+	// pendingPlannerTaskFile is the plan file associated with the planner instance
 	// that triggered the current planner-exit confirmation dialog. Set by the
 	// PlannerFinished signal handler so cancel/esc handlers can mark plannerPrompted
 	// without needing to look up the (possibly already removed) instance by title.
-	pendingPlannerPlanFile string
+	pendingPlannerTaskFile string
 
 	// fsm is the sole writer of plan-state.json. All plan status mutations flow
 	// through fsm.Transition — direct SetStatus calls are not allowed.
@@ -383,9 +383,9 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		state:                 stateDefault,
 		appState:              appState,
 		activeRepoPath:        activeRepoPath,
-		planStateDir:          filepath.Join(activeRepoPath, "docs", "plans"),
+		taskStateDir:          filepath.Join(activeRepoPath, "docs", "plans"),
 		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
-		planStoreProject:      project,
+		taskStoreProject:      project,
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
@@ -404,32 +404,32 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.embeddedServer = embSrv
 
 	// Default: use the embedded server's URL for the plan store client.
-	planStoreURL := embSrv.URL()
+	storeURL := embSrv.URL()
 	remoteStoreUnreachable := false
 
 	// If a remote plan store is configured, use that URL instead (multi-machine
 	// access over tailscale, etc.). The embedded server still runs for audit log
 	// DB access via its SQLite store.
-	if appConfig.PlanStore != "" {
-		remoteStore := taskstore.NewHTTPStore(appConfig.PlanStore, project)
+	if appConfig.DatabaseURL != "" {
+		remoteStore := taskstore.NewHTTPStore(appConfig.DatabaseURL, project)
 		if pingErr := remoteStore.Ping(); pingErr != nil {
 			log.WarningLog.Printf("remote plan store unreachable: %v — falling back to embedded", pingErr)
 			remoteStoreUnreachable = true
-			// planStoreURL stays as the embedded server URL
+			// storeURL stays as the embedded server URL
 		} else {
-			planStoreURL = appConfig.PlanStore
+			storeURL = appConfig.DatabaseURL
 		}
 	}
 
-	h.planStore = taskstore.NewHTTPStore(planStoreURL, project)
-	h.fsm = taskfsm.New(h.planStore, project, h.planStateDir)
+	h.taskStore = taskstore.NewHTTPStore(storeURL, project)
+	h.fsm = taskfsm.New(h.taskStore, project, h.taskStateDir)
 
 	// One-time migration: import plan-state.json into the DB if it exists.
 	// Use the embedded store directly (bypasses HTTP round-trip).
 	// Only runs when plan-state.json is present; subsequent boots skip this.
-	planStateJSON := filepath.Join(h.planStateDir, "plan-state.json")
+	planStateJSON := filepath.Join(h.taskStateDir, "plan-state.json")
 	if _, statErr := os.Stat(planStateJSON); statErr == nil {
-		migrated, migrateErr := taskstore.MigrateFromJSON(embSrv.Store(), project, h.planStateDir)
+		migrated, migrateErr := taskstore.MigrateFromJSON(embSrv.Store(), project, h.taskStateDir)
 		if migrateErr != nil {
 			log.WarningLog.Printf("plan-state.json migration failed: %v", migrateErr)
 		} else {
@@ -472,7 +472,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 
 	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
 	h.setFocusSlot(slotNav)
-	h.loadPlanState()
+	h.loadTaskState()
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -494,10 +494,10 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		}
 	}
 
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 
 	// Reconstruct in-memory wave orchestrators for plans that were mid-wave
-	// when kasmos was last restarted. Must run after loadPlanState and instance load.
+	// when kasmos was last restarted. Must run after loadTaskState and instance load.
 	h.rebuildOrphanedOrchestrators()
 
 	return h
@@ -754,10 +754,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		instances := m.nav.GetInstances()
 		snapshots := make([]*session.Instance, len(instances))
 		copy(snapshots, instances)
-		planStateDir := m.planStateDir // snapshot for goroutine
+		taskStateDir := m.taskStateDir // snapshot for goroutine
 		signalsDir := m.signalsDir     // snapshot for goroutine
-		store := m.planStore           // snapshot for goroutine
-		project := m.planStoreProject  // snapshot for goroutine
+		store := m.taskStore           // snapshot for goroutine
+		project := m.taskStoreProject  // snapshot for goroutine
 
 		return m, func() tea.Msg {
 			results := make([]instanceMetadata, 0, len(snapshots))
@@ -785,10 +785,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// to avoid blocking the event loop every 500ms.
 			// Always reads from the store (embedded or remote) — no JSON fallback.
 			var ps *taskstate.TaskState
-			if planStateDir != "" {
+			if taskStateDir != "" {
 				var loaded *taskstate.TaskState
 				var err error
-				loaded, err = taskstate.Load(store, project, planStateDir)
+				loaded, err = taskstate.Load(store, project, taskStateDir)
 				if err != nil {
 					log.WarningLog.Printf("could not load plan state: %v", err)
 				} else {
@@ -865,7 +865,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case taskfsm.ImplementFinished:
 				// Pause the coder that wrote this signal.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.PlanFile == sig.TaskFile && inst.AgentType == session.AgentTypeCoder {
+					if inst.TaskFile == sig.TaskFile && inst.AgentType == session.AgentTypeCoder {
 						inst.ImplementationComplete = true
 						_ = inst.Pause()
 						break
@@ -894,7 +894,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Kill the reviewer instance — it's done.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.PlanFile == sig.TaskFile && inst.IsReviewer {
+					if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
 						_ = inst.Kill()
 						break
 					}
@@ -914,14 +914,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Pause the reviewer that wrote this signal.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.PlanFile == sig.TaskFile && inst.IsReviewer {
+					if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
 						_ = inst.Pause()
 						break
 					}
 				}
 				// Increment the review cycle counter before spawning the fix coder so
 				// that spawnCoderWithFeedback reads the updated (post-increment) value.
-				if err := m.planState.IncrementReviewCycle(sig.TaskFile); err != nil {
+				if err := m.taskState.IncrementReviewCycle(sig.TaskFile); err != nil {
 					log.WarningLog.Printf("could not increment review cycle for %q: %v", sig.TaskFile, err)
 				}
 				if cmd := m.spawnCoderWithFeedback(sig.TaskFile, feedback); cmd != nil {
@@ -931,12 +931,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				capturedPlanFile := sig.TaskFile
 				// Ingest the plan content from the agent's worktree into the DB.
 				// Planners run on the main branch, so the plan file is in activeRepoPath.
-				m.ingestPlanContent(capturedPlanFile, m.activeRepoPath)
+				m.ingestTaskContent(capturedPlanFile, m.activeRepoPath)
 				// Post progress comment to ClickUp (fire-and-forget; nil-safe if no task ID).
 				{
 					summary := ""
-					if m.planStore != nil {
-						if content, err := m.planStore.GetContent(m.planStoreProject, capturedPlanFile); err == nil {
+					if m.taskStore != nil {
+						if content, err := m.taskStore.GetContent(m.taskStoreProject, capturedPlanFile); err == nil {
 							if plan, err := taskparser.Parse(content); err == nil {
 								totalTasks := 0
 								for _, w := range plan.Waves {
@@ -963,7 +963,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Focus the planner instance so the user sees its output behind the overlay.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.PlanFile == sig.TaskFile && inst.AgentType == session.AgentTypePlanner {
+					if inst.TaskFile == sig.TaskFile && inst.AgentType == session.AgentTypePlanner {
 						if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 							signalCmds = append(signalCmds, cmd)
 						}
@@ -971,7 +971,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-				m.pendingPlannerPlanFile = capturedPlanFile
+				m.pendingPlannerTaskFile = capturedPlanFile
 				m.confirmAction(
 					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
 					func() tea.Msg {
@@ -981,7 +981,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if len(msg.Signals) > 0 {
-			m.loadPlanState() // refresh after signal processing
+			m.loadTaskState() // refresh after signal processing
 		}
 
 		// Retry deferred PlannerFinished dialogs — show the first queued plan
@@ -991,7 +991,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
 			if !m.plannerPrompted[planFile] {
 				for _, inst := range m.nav.GetInstances() {
-					if inst.PlanFile == planFile && inst.AgentType == session.AgentTypePlanner {
+					if inst.TaskFile == planFile && inst.AgentType == session.AgentTypePlanner {
 						if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 							signalCmds = append(signalCmds, cmd)
 						}
@@ -999,7 +999,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-				m.pendingPlannerPlanFile = planFile
+				m.pendingPlannerTaskFile = planFile
 				m.confirmAction(
 					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
 					func() tea.Msg {
@@ -1020,7 +1020,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Read and parse the plan from store
-			content, err := m.planStore.GetContent(m.planStoreProject, ws.TaskFile)
+			content, err := m.taskStore.GetContent(m.taskStoreProject, ws.TaskFile)
 			if err != nil {
 				log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.TaskFile, err)
 				continue
@@ -1036,7 +1036,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			entry, ok := m.planState.Entry(ws.TaskFile)
+			entry, ok := m.taskState.Entry(ws.TaskFile)
 			if !ok {
 				log.WarningLog.Printf("wave signal: plan %s not found in plan state", ws.TaskFile)
 				continue
@@ -1181,18 +1181,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Apply plan state loaded in the goroutine (replaces synchronous loadPlanState call).
-		// Skip when signals were processed: loadPlanState() above already gave us fresh state.
+		// Apply plan state loaded in the goroutine (replaces synchronous loadTaskState call).
+		// Skip when signals were processed: loadTaskState() above already gave us fresh state.
 		// msg.PlanState was loaded before signals were scanned, so it would be stale.
 		if msg.PlanState != nil && len(msg.Signals) == 0 {
-			m.planState = msg.PlanState
+			m.taskState = msg.PlanState
 		}
 
 		// Store the latest tmux session count for the bottom bar.
 		m.tmuxSessionCount = msg.TmuxSessionCount
 		m.menu.SetTmuxSessionCount(m.tmuxSessionCount)
 
-		if m.planState != nil {
+		if m.taskState != nil {
 			tmuxAliveMap := make(map[string]bool, len(msg.Results))
 			for _, md := range msg.Results {
 				tmuxAliveMap[md.Title] = md.TmuxAlive
@@ -1211,7 +1211,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !collected {
 					continue
 				}
-				entry := m.planState.Plans[inst.PlanFile]
+				entry := m.taskState.Plans[inst.TaskFile]
 				if !shouldPromptPushAfterCoderExit(entry, inst, alive) {
 					continue
 				}
@@ -1222,7 +1222,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Skip if the push prompt was already shown and dismissed for this plan.
 				// Cleared when a new coder is spawned (spawnCoderWithFeedback).
-				if m.coderPushPrompted[inst.PlanFile] {
+				if m.coderPushPrompted[inst.TaskFile] {
 					continue
 				}
 				// Focus the coder instance so the user can see its output behind the overlay.
@@ -1253,7 +1253,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.audit(auditlog.EventAgentFinished, fmt.Sprintf("agent finished: %s", inst.Title),
 						auditlog.WithInstance(inst.Title),
 						auditlog.WithAgent(inst.AgentType),
-						auditlog.WithPlan(inst.PlanFile),
+						auditlog.WithPlan(inst.TaskFile),
 					)
 				}
 			}
@@ -1322,7 +1322,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Pause all task instances (they're done, free up resources).
 					for _, inst := range m.nav.GetInstances() {
-						if inst.PlanFile == capturedPlanFile && inst.TaskNumber > 0 {
+						if inst.TaskFile == capturedPlanFile && inst.TaskNumber > 0 {
 							inst.ImplementationComplete = true
 							_ = inst.Pause()
 						}
@@ -1364,7 +1364,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					completed := orch.CompletedTaskCount()
 					failed := orch.FailedTaskCount()
 					total := completed + failed
-					entry, _ := m.planState.Entry(planFile)
+					entry, _ := m.taskState.Entry(planFile)
 
 					capturedPlanFile := planFile
 					capturedEntry := entry
@@ -1421,7 +1421,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.updateSidebarPlans()
+		m.updateSidebarTasks()
 		m.updateInfoPane()
 		completionCmd := m.checkPlanCompletion()
 		asyncCmds = append(asyncCmds, signalCmds...)
@@ -1465,13 +1465,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.saveAllInstances()
 		m.updateNavPanelStatus()
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
-	case planStageConfirmedMsg:
+	case taskStageConfirmedMsg:
 		// User confirmed past the topic-concurrency gate — execute the stage.
-		return m.executePlanStage(msg.planFile, msg.stage)
-	case planRefreshMsg:
+		return m.executeTaskStage(msg.planFile, msg.stage)
+	case taskRefreshMsg:
 		// Reload plan state and refresh sidebar after async plan mutation.
-		m.loadPlanState()
-		m.updateSidebarPlans()
+		m.loadTaskState()
+		m.updateSidebarTasks()
 		return m, tea.WindowSize()
 	case clickUpTaskFetchedMsg:
 		if msg.Err != nil {
@@ -1513,7 +1513,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Collect first to avoid mutating m.allInstances while iterating it.
 		var taskInsts []*session.Instance
 		for _, inst := range m.allInstances {
-			if inst.PlanFile == msg.planFile && inst.TaskNumber > 0 {
+			if inst.TaskFile == msg.planFile && inst.TaskNumber > 0 {
 				taskInsts = append(taskInsts, inst)
 			}
 		}
@@ -1535,7 +1535,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Push the implementation branch (best-effort, non-blocking).
 		for _, inst := range m.nav.GetInstances() {
-			if inst.PlanFile == planFile && inst.TaskNumber > 0 {
+			if inst.TaskFile == planFile && inst.TaskNumber > 0 {
 				worktree, err := inst.GetGitWorktree()
 				if err == nil {
 					_ = worktree.Push(false)
@@ -1548,8 +1548,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 			log.WarningLog.Printf("wave all-complete: could not transition %q to reviewing: %v", planFile, err)
 		}
-		m.loadPlanState()
-		m.updateSidebarPlans()
+		m.loadTaskState()
+		m.updateSidebarTasks()
 
 		// Spawn reviewer agent for the completed plan.
 		var reviewerCmd tea.Cmd
@@ -1575,15 +1575,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Mark the coder instance as implementation-complete and pause it.
 		for _, inst := range m.nav.GetInstances() {
-			if inst.PlanFile == planFile && inst.AgentType == session.AgentTypeCoder {
+			if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
 				inst.ImplementationComplete = true
 				_ = inst.Pause()
 				break
 			}
 		}
 
-		m.loadPlanState()
-		m.updateSidebarPlans()
+		m.loadTaskState()
+		m.updateSidebarTasks()
 
 		var reviewerCmd tea.Cmd
 		if cmd := m.spawnReviewer(planFile); cmd != nil {
@@ -1622,7 +1622,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Managed:  s.Managed,
 			}
 			if inst, ok := instMap[s.Name]; ok {
-				items[i].PlanFile = inst.PlanFile
+				items[i].TaskFile = inst.TaskFile
 				items[i].AgentType = inst.AgentType
 				items[i].Status = statusString(inst.Status)
 			}
@@ -1682,9 +1682,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.killExistingPlanAgent(msg.planFile, session.AgentTypePlanner)
 		_ = m.saveAllInstances()
 		m.pendingPlannerInstanceTitle = ""
-		m.pendingPlannerPlanFile = ""
+		m.pendingPlannerTaskFile = ""
 		m.updateNavPanelStatus()
-		return m.triggerPlanStage(msg.planFile, "implement")
+		return m.triggerTaskStage(msg.planFile, "implement")
 	case instanceStartedMsg:
 		if msg.err != nil {
 			// Remove the specific instance that failed — not the currently selected one.
@@ -1793,7 +1793,7 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateRenameInstance && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateRenamePlan && m.textInputOverlay != nil:
+	case m.state == stateRenameTask && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateNewPlan && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
@@ -1831,7 +1831,7 @@ func (m *home) View() string {
 	case m.state == stateContextMenu && m.contextMenu != nil:
 		cx, cy := m.contextMenu.GetPosition()
 		result = overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
-	case m.state == stateChatAboutPlan && m.textInputOverlay != nil:
+	case m.state == stateChatAboutTask && m.textInputOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateTmuxBrowser && m.tmuxBrowser != nil:
 		result = overlay.PlaceOverlay(0, 0, m.tmuxBrowser.Render(), mainView, true, true)
@@ -1909,16 +1909,16 @@ type killInstanceMsg struct {
 	title string
 }
 
-// planStageConfirmedMsg is sent when the user confirms proceeding past the
+// taskStageConfirmedMsg is sent when the user confirms proceeding past the
 // topic-concurrency gate. Re-enters plan stage execution skipping the
 // concurrency check that was already acknowledged.
-type planStageConfirmedMsg struct {
+type taskStageConfirmedMsg struct {
 	planFile string
 	stage    string
 }
 
-// planRefreshMsg triggers a plan state reload and sidebar refresh in Update.
-type planRefreshMsg struct{}
+// taskRefreshMsg triggers a plan state reload and sidebar refresh in Update.
+type taskRefreshMsg struct{}
 
 // waveAdvanceMsg is sent when the user confirms advancing to the next wave.
 type waveAdvanceMsg struct {

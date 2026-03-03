@@ -15,15 +15,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// executePlanRegister registers a plan file that exists on disk but isn't
+// executeTaskRegister registers a plan file that exists on disk but isn't
 // tracked in plan state yet. It extracts a description from the first markdown
 // heading and uses the conventional branch name format.
-func executePlanRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
+func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
 	if _, err := os.Stat(fullPath); err != nil {
 		return fmt.Errorf("plan file not found on disk: %s", fullPath)
 	}
-	ps, err := loadPlanState(plansDir, store)
+	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
 		return err
 	}
@@ -50,10 +50,10 @@ func executePlanRegister(plansDir, planFile, branch, topic, description string, 
 	return ps.Create(planFile, description, branch, topic, createdAt)
 }
 
-// executePlanList returns a formatted string listing all plans, optionally
+// executeTaskList returns a formatted string listing all plans, optionally
 // filtered by status. Exported for testing without cobra plumbing.
-func executePlanList(plansDir, statusFilter string, store taskstore.Store) string {
-	ps, err := loadPlanState(plansDir, store)
+func executeTaskList(plansDir, statusFilter string, store taskstore.Store) string {
+	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -68,10 +68,10 @@ func executePlanList(plansDir, statusFilter string, store taskstore.Store) strin
 	return sb.String()
 }
 
-// executePlanListWithStore returns a formatted string listing all plans from a
+// executeTaskListWithStore returns a formatted string listing all plans from a
 // remote store backend. storeURL is the base URL of the plan store server
 // (e.g. "http://athena:7433") and project is the project name to query.
-func executePlanListWithStore(storeURL, project string) string {
+func executeTaskListWithStore(storeURL, project string) string {
 	store := taskstore.NewHTTPStore(storeURL, project)
 	ps, err := taskstate.Load(store, project, "")
 	if err != nil {
@@ -85,21 +85,21 @@ func executePlanListWithStore(storeURL, project string) string {
 	return sb.String()
 }
 
-// executePlanSetStatus force-overrides a plan's status, bypassing the FSM.
+// executeTaskSetStatus force-overrides a plan's status, bypassing the FSM.
 // Requires force=true to prevent accidental misuse.
-func executePlanSetStatus(plansDir, planFile, status string, force bool, store taskstore.Store) error {
+func executeTaskSetStatus(plansDir, planFile, status string, force bool, store taskstore.Store) error {
 	if !force {
 		return fmt.Errorf("--force required to override plan status (this bypasses the FSM)")
 	}
-	ps, err := loadPlanState(plansDir, store)
+	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
 		return err
 	}
 	return ps.ForceSetStatus(planFile, taskstate.Status(status))
 }
 
-// executePlanTransition applies a named FSM event to a plan and returns the new status.
-func executePlanTransition(plansDir, planFile, event string, store taskstore.Store) (string, error) {
+// executeTaskTransition applies a named FSM event to a plan and returns the new status.
+func executeTaskTransition(plansDir, planFile, event string, store taskstore.Store) (string, error) {
 	eventMap := map[string]taskfsm.Event{
 		"plan_start":         taskfsm.PlanStart,
 		"planner_finished":   taskfsm.PlannerFinished,
@@ -125,7 +125,7 @@ func executePlanTransition(plansDir, planFile, event string, store taskstore.Sto
 	if err := fsm.Transition(planFile, fsmEvent); err != nil {
 		return "", err
 	}
-	ps, err := loadPlanState(plansDir, store)
+	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
 		return "", err
 	}
@@ -133,14 +133,14 @@ func executePlanTransition(plansDir, planFile, event string, store taskstore.Sto
 	return string(entry.Status), nil
 }
 
-// executePlanImplement transitions a plan into implementing state and writes
+// executeTaskImplement transitions a plan into implementing state and writes
 // a wave signal file so the TUI metadata tick can pick it up.
-func executePlanImplement(plansDir, planFile string, wave int, store taskstore.Store) error {
+func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.Store) error {
 	if wave < 1 {
 		return fmt.Errorf("wave number must be >= 1, got %d", wave)
 	}
 	fsm := newFSM(plansDir, store)
-	ps, err := loadPlanState(plansDir, store)
+	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
 		return err
 	}
@@ -174,11 +174,11 @@ func executePlanImplement(plansDir, planFile string, wave int, store taskstore.S
 	return os.WriteFile(filepath.Join(signalsDir, signalName), nil, 0o644)
 }
 
-// executePlanLinkClickUp iterates all plans in the given project, reads their
+// executeTaskLinkClickUp iterates all plans in the given project, reads their
 // content, parses the ClickUp task ID from the "**Source:** ClickUp <ID>" line,
 // and stores it in the clickup_task_id field for any plan that has an ID in its
 // content but not yet in the store. Returns the count of plans updated.
-func executePlanLinkClickUp(project string, store taskstore.Store) (int, error) {
+func executeTaskLinkClickUp(project string, store taskstore.Store) (int, error) {
 	plans, err := store.List(project)
 	if err != nil {
 		return 0, fmt.Errorf("list plans: %w", err)
@@ -211,8 +211,8 @@ func executePlanLinkClickUp(project string, store taskstore.Store) (int, error) 
 	return updated, nil
 }
 
-// NewPlanCmd builds the `kq plan` cobra command tree.
-func NewPlanCmd() *cobra.Command {
+// NewTaskCmd builds the `kq plan` cobra command tree.
+func NewTaskCmd() *cobra.Command {
 	planCmd := &cobra.Command{
 		Use:   "plan",
 		Short: "manage plan lifecycle (list, set-status, transition, implement)",
@@ -228,7 +228,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Print(executePlanList(plansDir, statusFilter, resolveStore(plansDir)))
+			fmt.Print(executeTaskList(plansDir, statusFilter, resolveStore(plansDir)))
 			return nil
 		},
 	}
@@ -246,7 +246,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanRegister(plansDir, args[0], branchFlag, topicFlag, descriptionFlag, resolveStore(plansDir)); err != nil {
+			if err := executeTaskRegister(plansDir, args[0], branchFlag, topicFlag, descriptionFlag, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("registered: %s → ready\n", args[0])
@@ -269,7 +269,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanSetStatus(plansDir, args[0], args[1], forceFlag, resolveStore(plansDir)); err != nil {
+			if err := executeTaskSetStatus(plansDir, args[0], args[1], forceFlag, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("%s → %s\n", args[0], args[1])
@@ -289,7 +289,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			newStatus, err := executePlanTransition(plansDir, args[0], args[1], resolveStore(plansDir))
+			newStatus, err := executeTaskTransition(plansDir, args[0], args[1], resolveStore(plansDir))
 			if err != nil {
 				return err
 			}
@@ -310,7 +310,7 @@ func NewPlanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executePlanImplement(plansDir, args[0], waveNum, resolveStore(plansDir)); err != nil {
+			if err := executeTaskImplement(plansDir, args[0], waveNum, resolveStore(plansDir)); err != nil {
 				return err
 			}
 			fmt.Printf("implementation triggered: %s wave %d\n", args[0], waveNum)
@@ -345,7 +345,7 @@ func NewPlanCmd() *cobra.Command {
 				}
 				project = projectFromPlansDir(plansDir)
 			}
-			n, err := executePlanLinkClickUp(project, store)
+			n, err := executeTaskLinkClickUp(project, store)
 			if err != nil {
 				return err
 			}
@@ -363,11 +363,11 @@ func NewPlanCmd() *cobra.Command {
 // Returns (nil, "") when no remote store is configured.
 func resolveStoreConfig(plansDir string) (taskstore.Store, string) {
 	cfg := config.LoadConfig()
-	if cfg.PlanStore == "" {
+	if cfg.DatabaseURL == "" {
 		return nil, ""
 	}
 	project := projectFromPlansDir(plansDir)
-	store, err := taskstore.NewStoreFromConfig(cfg.PlanStore, project)
+	store, err := taskstore.NewStoreFromConfig(cfg.DatabaseURL, project)
 	if err != nil || store == nil {
 		return nil, ""
 	}
@@ -391,9 +391,9 @@ func localSQLiteStore() (taskstore.Store, error) {
 	return taskstore.NewSQLiteStore(dbPath)
 }
 
-// loadPlanState loads plan state using the store backend.
+// loadTaskState loads plan state using the store backend.
 // When store is nil, falls back to the local SQLite store.
-func loadPlanState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
+func loadTaskState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()

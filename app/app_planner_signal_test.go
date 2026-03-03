@@ -36,7 +36,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 		Title:     "test-plan-planner",
 		Path:      dir,
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypePlanner,
 	})
 	require.NoError(t, err)
@@ -54,10 +54,10 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
-		planState:             ps,
-		planStateDir:          plansDir,
-		planStore:             store,
-		planStoreProject:      "test",
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		taskStore:             store,
+		taskStoreProject:      "test",
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		coderPushPrompted:     make(map[string]bool),
@@ -73,7 +73,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 
 // TestPlannerFinishedSignal_ShowsConfirmDialog verifies that when a PlannerFinished
 // signal is processed, the app enters stateConfirm with a confirmation overlay
-// and pendingPlannerPlanFile is set.
+// and pendingPlannerTaskFile is set.
 func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 	const planFile = "feature.md"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
@@ -94,13 +94,13 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 		"PlannerFinished signal must set stateConfirm")
 	assert.NotNil(t, updated.confirmationOverlay,
 		"PlannerFinished signal must set confirmationOverlay")
-	assert.Equal(t, planFile, updated.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must be set to the plan file from the signal")
+	assert.Equal(t, planFile, updated.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must be set to the plan file from the signal")
 }
 
 // TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement verifies that
 // after the user confirms (plannerCompleteMsg), the planner instance is removed,
-// plannerPrompted is set, and triggerPlanStage("implement") is called.
+// plannerPrompted is set, and triggerTaskStage("implement") is called.
 func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testing.T) {
 	const planFile = "feature.md"
 	h, _, plansDir, plannerInst := plannerSignalHome(t, planFile)
@@ -108,15 +108,15 @@ func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testin
 	// Set up the state as if the confirm dialog was shown after a PlannerFinished signal.
 	h.state = stateConfirm
 	h.pendingPlannerInstanceTitle = plannerInst.Title
-	h.pendingPlannerPlanFile = planFile
+	h.pendingPlannerTaskFile = planFile
 
-	// Write a minimal plan file so triggerPlanStage can read it.
+	// Write a minimal plan file so triggerTaskStage can read it.
 	planContent := "# Plan\n\n## Wave 1\n\n### Task 1: Something\n\nDo it.\n"
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
 
-	// Advance the FSM to StatusReady so triggerPlanStage can proceed to "implement".
+	// Advance the FSM to StatusReady so triggerTaskStage can proceed to "implement".
 	require.NoError(t, h.fsm.Transition(planFile, taskfsm.PlannerFinished))
-	h.loadPlanState()
+	h.loadTaskState()
 
 	// Send the confirm message.
 	_, _ = h.Update(plannerCompleteMsg{planFile: planFile})
@@ -125,8 +125,8 @@ func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testin
 		"plannerPrompted must be true after confirm")
 	assert.Empty(t, h.pendingPlannerInstanceTitle,
 		"pendingPlannerInstanceTitle must be cleared after confirm")
-	assert.Empty(t, h.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must be cleared after confirm")
+	assert.Empty(t, h.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must be cleared after confirm")
 
 	// Planner instance must be removed from nav and allInstances.
 	for _, inst := range h.nav.GetInstances() {
@@ -148,12 +148,12 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 
 	// Advance FSM to StatusReady (as the signal handler would do).
 	require.NoError(t, h.fsm.Transition(planFile, taskfsm.PlannerFinished))
-	h.loadPlanState()
+	h.loadTaskState()
 
 	// Set up state as if the confirm dialog was shown.
 	h.state = stateConfirm
 	h.pendingPlannerInstanceTitle = plannerInst.Title
-	h.pendingPlannerPlanFile = planFile
+	h.pendingPlannerTaskFile = planFile
 	h.confirmationOverlay = overlay.NewConfirmationOverlay("plan is ready. start implementation?")
 	h.pendingConfirmAction = func() tea.Msg {
 		return plannerCompleteMsg{planFile: planFile}
@@ -168,8 +168,8 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 		"plannerPrompted must be true after cancel")
 	assert.Empty(t, updated.pendingPlannerInstanceTitle,
 		"pendingPlannerInstanceTitle must be cleared after cancel")
-	assert.Empty(t, updated.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must be cleared after cancel")
+	assert.Empty(t, updated.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must be cleared after cancel")
 
 	// Planner instance must be removed.
 	for _, inst := range updated.nav.GetInstances() {
@@ -178,7 +178,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 	}
 
 	// Plan must still be at StatusReady (not advanced to implementing).
-	entry, ok := updated.planState.Entry(planFile)
+	entry, ok := updated.taskState.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status,
 		"plan must remain at StatusReady after cancel — user declined implementation")
@@ -239,7 +239,7 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 		"tmux death without sentinel must NOT set confirmationOverlay")
 
 	// Plan must remain in StatusPlanning (not advanced).
-	entry, ok := updated.planState.Entry(planFile)
+	entry, ok := updated.taskState.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusPlanning, entry.Status,
 		"plan must remain StatusPlanning when planner pane dies without a sentinel")
@@ -292,8 +292,8 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 		"confirmation overlay must be set for deferred dialog")
 	assert.Empty(t, updated2.deferredPlannerDialogs,
 		"deferredPlannerDialogs must be cleared after showing the dialog")
-	assert.Equal(t, planFile, updated2.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must be set for the deferred plan")
+	assert.Equal(t, planFile, updated2.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must be set for the deferred plan")
 }
 
 // TestPlannerFinishedSignal_SkipsWhenConfirmActive verifies that when
@@ -323,6 +323,6 @@ func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
 		"state must remain stateConfirm")
 	assert.Same(t, existingOverlay, updated.confirmationOverlay,
 		"existing overlay must not be replaced when confirm is already active")
-	assert.Empty(t, updated.pendingPlannerPlanFile,
-		"pendingPlannerPlanFile must not be set when confirm is already active")
+	assert.Empty(t, updated.pendingPlannerTaskFile,
+		"pendingPlannerTaskFile must not be set when confirm is already active")
 }

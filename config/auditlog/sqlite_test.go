@@ -19,7 +19,7 @@ func TestSQLiteLogger_EmitAndQuery(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:          auditlog.EventAgentSpawned,
 		Project:       "testproj",
-		PlanFile:      "plan.md",
+		TaskFile:      "plan.md",
 		InstanceTitle: "plan-coder",
 		AgentType:     "coder",
 		Message:       "spawned coder agent",
@@ -38,10 +38,10 @@ func TestSQLiteLogger_QueryFilterByPlan(t *testing.T) {
 	require.NoError(t, err)
 	defer logger.Close()
 
-	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", PlanFile: "a.md"})
-	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", PlanFile: "b.md"})
+	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", TaskFile: "a.md"})
+	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", TaskFile: "b.md"})
 
-	events, err := logger.Query(auditlog.QueryFilter{Project: "p", PlanFile: "a.md", Limit: 10})
+	events, err := logger.Query(auditlog.QueryFilter{Project: "p", TaskFile: "a.md", Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 }
