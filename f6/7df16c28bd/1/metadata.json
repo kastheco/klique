@@ -1,57 +1,56 @@
 {
   "cli_version": "0.4.8",
   "checkpoint_id": "f67df16c28bd",
+  "session_id": "ses_34efa7aedffe6zluHTcKq5jtyi",
   "strategy": "manual-commit",
+  "created_at": "2026-03-03T00:18:17.525724528Z",
   "branch": "main",
   "checkpoints_count": 0,
   "files_touched": [
-    ".agents/skills/kasmos-coder/SKILL.md",
-    ".agents/skills/kasmos-fixer/SKILL.md",
-    ".agents/skills/kasmos-lifecycle/SKILL.md",
-    ".agents/skills/kasmos-planner/SKILL.md",
-    ".claude/agents/coder.md",
     ".claude/agents/planner.md",
+    ".opencode/commands/kas.reset-plan.md",
+    "docs/plans/plan-state.json",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
     ".opencode/agents/coder.md",
     ".opencode/agents/planner.md",
-    ".opencode/commands/kas.cleanup.md",
     ".opencode/commands/kas.implement.md",
-    ".opencode/commands/kas.reset-plan.md",
     ".opencode/commands/kas.triage.md",
     "docs/plans/2026-02-28-auto-advance-waves.md",
-    "docs/plans/plan-state.json",
-    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
-    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
     "internal/initcmd/scaffold/templates/codex/AGENTS.md",
     "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
-    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    ".agents/skills/kasmos-coder/SKILL.md",
+    ".claude/agents/coder.md",
+    ".opencode/commands/kas.cleanup.md",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
     "internal/initcmd/scaffold/templates/shared/review-prompt.md",
     "internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md",
     "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
     "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md",
     "internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md",
-    "main.go"
+    "main.go",
+    ".agents/skills/kasmos-fixer/SKILL.md",
+    ".agents/skills/kasmos-planner/SKILL.md"
   ],
-  "sessions": [
-    {
-      "metadata": "/f6/7df16c28bd/0/metadata.json",
-      "transcript": "/f6/7df16c28bd/0/full.jsonl",
-      "context": "",
-      "content_hash": "/f6/7df16c28bd/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f6/7df16c28bd/1/metadata.json",
-      "transcript": "/f6/7df16c28bd/1/full.jsonl",
-      "context": "/f6/7df16c28bd/1/context.md",
-      "content_hash": "/f6/7df16c28bd/1/content_hash.txt",
-      "prompt": "/f6/7df16c28bd/1/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "47286cedeb5a",
+  "checkpoint_transcript_start": 74,
+  "transcript_lines_at_start": 74,
   "token_usage": {
     "input_tokens": 7,
     "cache_creation_tokens": 3037,
     "cache_read_tokens": 679873,
     "output_tokens": 815,
     "api_call_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T00:18:17.180220393Z",
+    "agent_lines": 182,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 182,
+    "agent_percentage": 100
   }
 }
