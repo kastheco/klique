@@ -2,10 +2,22 @@
   "cli_version": "0.4.8",
   "checkpoint_id": "9f4e7ab2a6f4",
   "strategy": "manual-commit",
-  "branch": "main",
+  "branch": "plan/restart-agent",
   "checkpoints_count": 0,
   "files_touched": [
-    "contracts/planner_prompt_contract_test.go"
+    ".claude/settings.json",
+    ".entire/.gitignore",
+    ".entire/settings.json",
+    ".opencode/plugins/entire.ts",
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_plan_completion_test.go",
+    "app/app_planner_signal_test.go",
+    "app/app_restart_test.go",
+    "app/app_state.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "contracts/planner_prompt_contract_test.go",
+    "session/instance_lifecycle.go"
   ],
   "sessions": [
     {
