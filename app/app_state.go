@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -65,7 +66,7 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 
 	if m.nav == nil {
 		if data.Branch == "" {
-			data.Branch = "main"
+			data.Branch = currentBranch(m.activeRepoPath)
 		}
 		return data
 	}
@@ -115,10 +116,26 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 	}
 
 	if data.Branch == "" {
-		data.Branch = "main"
+		data.Branch = currentBranch(m.activeRepoPath)
 	}
 
 	return data
+}
+
+// currentBranch returns the name of the currently checked-out branch in repoPath.
+// Falls back to "main" if the branch cannot be determined (e.g. detached HEAD).
+func currentBranch(repoPath string) string {
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return "main"
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" {
+		return "main" // detached HEAD
+	}
+	return branch
 }
 
 // computePlanStatuses builds per-plan instance status flags (running/notification)

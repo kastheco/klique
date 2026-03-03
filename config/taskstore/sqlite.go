@@ -79,6 +79,16 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("run schema migrations: %w", err)
 	}
 
+	// Migrate data from legacy planstore.db if it exists in the same directory
+	// and the new tasks table is empty. This handles the rename-plan-to-task
+	// transition where the DB filename changed from planstore.db to taskstore.db.
+	if dbPath != ":memory:" {
+		if err := migrateFromPlanstoreDB(db, dbPath); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate from planstore.db: %w", err)
+		}
+	}
+
 	// Add content column if it doesn't exist (upgrade existing databases).
 	if err := migrateAddContentColumn(db); err != nil {
 		db.Close()
