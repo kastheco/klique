@@ -79,7 +79,7 @@ func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
 // StatusImplementing, it wires through to promptPushBranchThenAdvance and sets
 // the confirmation overlay (proving the push-prompt lifecycle path is connected).
 func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
-	const planFile = "2026-02-21-test-feature.md"
+	const planFile = "test-feature.md"
 
 	// Build a planState with the plan in StatusImplementing.
 	dir := t.TempDir()
@@ -146,7 +146,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 // the push-prompt confirmation overlay is shown. This is the key path that enables
 // the review→fix→re-review automation cycle.
 func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
-	const planFile = "2026-02-21-test-feature.md"
+	const planFile = "test-feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -214,7 +214,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 // confirm action returns a coderCompleteMsg so the Update handler can perform
 // the FSM transition and spawn a reviewer.
 func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
-	const planFile = "2026-02-21-test-feature.md"
+	const planFile = "test-feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -257,7 +257,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 // metadata tick does NOT re-trigger promptPushBranchThenAdvance and overwrite
 // the existing overlay. Without this guard the modal re-appears every tick.
 func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
-	const planFile = "2026-02-21-test-feature.md"
+	const planFile = "test-feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -326,18 +326,18 @@ func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(
-		"2026-02-21-auth-refactor.md",
+		"auth-refactor.md",
 		"Refactor JWT auth",
 		"plan/auth-refactor",
 		time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC),
 	))
 
-	seedPlanStatus(t, ps, "2026-02-21-auth-refactor.md", planstate.StatusPlanning)
-	seedPlanStatus(t, ps, "2026-02-21-auth-refactor.md", planstate.StatusImplementing)
-	seedPlanStatus(t, ps, "2026-02-21-auth-refactor.md", planstate.StatusReviewing)
-	seedPlanStatus(t, ps, "2026-02-21-auth-refactor.md", planstate.StatusDone)
+	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusPlanning)
+	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusImplementing)
+	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusReviewing)
+	seedPlanStatus(t, ps, "auth-refactor.md", planstate.StatusDone)
 
-	entry, ok := ps.Entry("2026-02-21-auth-refactor.md")
+	entry, ok := ps.Entry("auth-refactor.md")
 	require.True(t, ok)
 	assert.Equal(t, planstate.StatusDone, entry.Status)
 	assert.Equal(t, "plan/auth-refactor", entry.Branch)
@@ -356,7 +356,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
@@ -416,7 +416,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 // list and a start cmd is returned. This is the sentinel-driven equivalent of
 // the old checkPlanCompletion → transitionToReview path.
 func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -491,7 +491,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 // sentinel is processed, the plan transitions back to implementing and a new
 // coder instance is added with the reviewer's feedback in its prompt.
 func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 	const feedback = "Fix the error handling in auth.go"
 
 	dir := t.TempDir()
@@ -580,7 +580,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 // reimplementation that drops the started check — a started instance would require
 // an integration test. The behavioral contract is: no auto-approve on reviewer death.
 func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
-	const planFile = "2026-02-23-feature.md"
+	const planFile = "feature.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

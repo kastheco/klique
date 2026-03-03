@@ -20,7 +20,7 @@ func newTestStore(t *testing.T) planstore.Store {
 func TestSQLiteStore_CreateAndGet(t *testing.T) {
 	store := newTestStore(t)
 	entry := planstore.PlanEntry{
-		Filename:    "2026-02-28-test-plan.md",
+		Filename:    "test-plan.md",
 		Status:      planstore.StatusReady,
 		Description: "test plan",
 		Branch:      "plan/test-plan",
@@ -28,7 +28,7 @@ func TestSQLiteStore_CreateAndGet(t *testing.T) {
 	}
 	require.NoError(t, store.Create("kasmos", entry))
 
-	got, err := store.Get("kasmos", "2026-02-28-test-plan.md")
+	got, err := store.Get("kasmos", "test-plan.md")
 	require.NoError(t, err)
 	assert.Equal(t, planstore.StatusReady, got.Status)
 	assert.Equal(t, "test plan", got.Description)
@@ -59,7 +59,7 @@ func TestSQLiteStore_ProjectIsolation(t *testing.T) {
 func TestSQLiteStore_Update(t *testing.T) {
 	store := newTestStore(t)
 	entry := planstore.PlanEntry{
-		Filename:    "2026-02-28-update-test.md",
+		Filename:    "update-test.md",
 		Status:      planstore.StatusReady,
 		Description: "original description",
 		Branch:      "plan/update-test",
@@ -69,9 +69,9 @@ func TestSQLiteStore_Update(t *testing.T) {
 
 	entry.Status = planstore.StatusImplementing
 	entry.Description = "updated description"
-	require.NoError(t, store.Update("kasmos", "2026-02-28-update-test.md", entry))
+	require.NoError(t, store.Update("kasmos", "update-test.md", entry))
 
-	got, err := store.Get("kasmos", "2026-02-28-update-test.md")
+	got, err := store.Get("kasmos", "update-test.md")
 	require.NoError(t, err)
 	assert.Equal(t, planstore.StatusImplementing, got.Status)
 	assert.Equal(t, "updated description", got.Description)
@@ -80,18 +80,18 @@ func TestSQLiteStore_Update(t *testing.T) {
 func TestSQLiteStore_Rename(t *testing.T) {
 	store := newTestStore(t)
 	entry := planstore.PlanEntry{
-		Filename:  "2026-02-28-old-name.md",
+		Filename:  "old-name.md",
 		Status:    planstore.StatusReady,
 		CreatedAt: time.Now().UTC(),
 	}
 	require.NoError(t, store.Create("kasmos", entry))
 
-	require.NoError(t, store.Rename("kasmos", "2026-02-28-old-name.md", "2026-02-28-new-name.md"))
+	require.NoError(t, store.Rename("kasmos", "old-name.md", "new-name.md"))
 
-	_, err := store.Get("kasmos", "2026-02-28-old-name.md")
+	_, err := store.Get("kasmos", "old-name.md")
 	assert.Error(t, err)
 
-	got, err := store.Get("kasmos", "2026-02-28-new-name.md")
+	got, err := store.Get("kasmos", "new-name.md")
 	require.NoError(t, err)
 	assert.Equal(t, planstore.StatusReady, got.Status)
 }
@@ -157,12 +157,12 @@ func TestSQLiteStore_ListSortedByFilename(t *testing.T) {
 func TestSQLiteStore_CreateWithContent(t *testing.T) {
 	store := newTestStore(t)
 	entry := planstore.PlanEntry{
-		Filename: "2026-02-28-test.md",
+		Filename: "test.md",
 		Status:   planstore.StatusReady,
 		Content:  "# Test Plan\n\n## Wave 1\n\n### Task 1: Do thing\n",
 	}
 	require.NoError(t, store.Create("proj", entry))
-	got, err := store.Get("proj", "2026-02-28-test.md")
+	got, err := store.Get("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, entry.Content, got.Content)
 }
@@ -170,41 +170,41 @@ func TestSQLiteStore_CreateWithContent(t *testing.T) {
 func TestSQLiteStore_GetContent(t *testing.T) {
 	store := newTestStore(t)
 	entry := planstore.PlanEntry{
-		Filename: "2026-02-28-test.md",
+		Filename: "test.md",
 		Status:   planstore.StatusReady,
 		Content:  "# Full Plan Content",
 	}
 	require.NoError(t, store.Create("proj", entry))
-	content, err := store.GetContent("proj", "2026-02-28-test.md")
+	content, err := store.GetContent("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "# Full Plan Content", content)
 }
 
 func TestSQLiteStore_SetContent(t *testing.T) {
 	store := newTestStore(t)
-	entry := planstore.PlanEntry{Filename: "2026-02-28-test.md", Status: planstore.StatusReady}
+	entry := planstore.PlanEntry{Filename: "test.md", Status: planstore.StatusReady}
 	require.NoError(t, store.Create("proj", entry))
-	require.NoError(t, store.SetContent("proj", "2026-02-28-test.md", "# Updated"))
-	content, err := store.GetContent("proj", "2026-02-28-test.md")
+	require.NoError(t, store.SetContent("proj", "test.md", "# Updated"))
+	content, err := store.GetContent("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "# Updated", content)
 }
 
 func TestClickUpTaskIDRoundTrip(t *testing.T) {
 	store := newTestStore(t)
-	entry := planstore.PlanEntry{Filename: "2026-02-28-clickup-test.md", Status: planstore.StatusReady}
+	entry := planstore.PlanEntry{Filename: "clickup-test.md", Status: planstore.StatusReady}
 	require.NoError(t, store.Create("proj", entry))
 
 	// Initially no task ID
-	got, err := store.Get("proj", "2026-02-28-clickup-test.md")
+	got, err := store.Get("proj", "clickup-test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "", got.ClickUpTaskID, "task ID must be empty before set")
 
 	// Set the task ID
-	require.NoError(t, store.SetClickUpTaskID("proj", "2026-02-28-clickup-test.md", "CU-abc123"))
+	require.NoError(t, store.SetClickUpTaskID("proj", "clickup-test.md", "CU-abc123"))
 
 	// Verify it round-trips through Get
-	got, err = store.Get("proj", "2026-02-28-clickup-test.md")
+	got, err = store.Get("proj", "clickup-test.md")
 	require.NoError(t, err)
 	assert.Equal(t, "CU-abc123", got.ClickUpTaskID, "task ID must be persisted after SetClickUpTaskID")
 

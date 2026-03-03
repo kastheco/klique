@@ -28,7 +28,7 @@ func TestImportClickUpTask_WritesScaffold(t *testing.T) {
 	}
 
 	scaffold := clickup.ScaffoldPlan(*task)
-	filename := clickup.ScaffoldFilename(task.Name, "2026-02-24")
+	filename := clickup.ScaffoldFilename(task.Name)
 	planPath := filepath.Join(plansDir, filename)
 	require.NoError(t, os.WriteFile(planPath, []byte(scaffold), 0o644))
 
@@ -44,7 +44,7 @@ func TestImportClickUpTask_WritesScaffold(t *testing.T) {
 
 func TestScaffoldFilename_Dedup(t *testing.T) {
 	dir := t.TempDir()
-	base := clickup.ScaffoldFilename("Test Task", "2026-02-24")
+	base := clickup.ScaffoldFilename("Test Task")
 
 	// No collision keeps original filename.
 	assert.Equal(t, base, dedupePlanFilename(dir, base))
@@ -52,9 +52,9 @@ func TestScaffoldFilename_Dedup(t *testing.T) {
 	// First collision returns -2 suffix.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, base), []byte("x"), 0o644))
 	name2 := dedupePlanFilename(dir, base)
-	assert.Equal(t, "2026-02-24-test-task-2.md", name2)
+	assert.Equal(t, "test-task-2.md", name2)
 
 	// Second collision returns -3 suffix.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name2), []byte("x"), 0o644))
-	assert.Equal(t, "2026-02-24-test-task-3.md", dedupePlanFilename(dir, base))
+	assert.Equal(t, "test-task-3.md", dedupePlanFilename(dir, base))
 }

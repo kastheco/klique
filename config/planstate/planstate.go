@@ -466,20 +466,15 @@ func (ps *PlanState) Save() error {
 	return nil
 }
 
-// DisplayName strips the date prefix and .md extension from a plan filename.
-// "2026-02-20-my-feature.md" → "my-feature"
-// "plain-plan.md" → "plain-plan"
+// DisplayName strips the .md extension from a plan filename.
+// "auth-refactor.md" → "auth-refactor"
 func DisplayName(filename string) string {
-	name := strings.TrimSuffix(filename, ".md")
-	if len(name) > 11 && name[4] == '-' && name[7] == '-' && name[10] == '-' {
-		name = name[11:]
-	}
-	return name
+	return strings.TrimSuffix(filename, ".md")
 }
 
 // Rename renames a plan by giving it a new display name slug.
 // It renames the .md file on disk (if it exists), rekeys the planstate entry,
-// and persists the updated state. The date prefix of the old filename is preserved.
+// and persists the updated state.
 // newName should be a human-readable name (e.g., "auth refactor") which will be
 // slugified automatically. Returns the new filename on success.
 func (ps *PlanState) Rename(oldFilename, newName string) (string, error) {
@@ -491,17 +486,12 @@ func (ps *PlanState) Rename(oldFilename, newName string) (string, error) {
 		return "", fmt.Errorf("new name cannot be empty")
 	}
 
-	// Build new filename preserving the date prefix (YYYY-MM-DD-) if present.
+	// Build new filename from the slug alone.
 	newSlug := slugify(newName)
 	if newSlug == "" {
 		return "", fmt.Errorf("new name produced an empty slug")
 	}
-	var newFilename string
-	if len(oldFilename) > 11 && oldFilename[4] == '-' && oldFilename[7] == '-' && oldFilename[10] == '-' {
-		newFilename = oldFilename[:11] + newSlug + ".md"
-	} else {
-		newFilename = newSlug + ".md"
-	}
+	newFilename := newSlug + ".md"
 
 	if newFilename == oldFilename {
 		return oldFilename, nil // nothing to do

@@ -92,7 +92,7 @@ func TestShouldPostWaveCompleteCommentNilOrch(t *testing.T) {
 // when there is no commenter (click-up not configured), we verify the
 // observable side-effect: pendingReviewFeedback is always cleared.
 func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
-	const planFile = "2026-03-02-fixer-hook.md"
+	const planFile = "fixer-hook.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -156,7 +156,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 // hook does NOT fire when ImplementFinished is for an original coder (no
 // pending feedback). pendingReviewFeedback must remain empty/unchanged.
 func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
-	const planFile = "2026-03-02-no-feedback-hook.md"
+	const planFile = "no-feedback-hook.md"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

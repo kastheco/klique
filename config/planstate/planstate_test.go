@@ -189,7 +189,7 @@ func TestPlanEntryWithTopic(t *testing.T) {
 		Name: "ui-refactor", CreatedAt: createdAt,
 	}))
 	require.NoError(t, store.Create("proj", planstore.PlanEntry{
-		Filename:    "2026-02-21-sidebar.md",
+		Filename:    "sidebar.md",
 		Status:      planstore.StatusImplementing,
 		Description: "refactor sidebar",
 		Branch:      "plan/sidebar",
@@ -200,7 +200,7 @@ func TestPlanEntryWithTopic(t *testing.T) {
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
-	entry := ps.Plans["2026-02-21-sidebar.md"]
+	entry := ps.Plans["sidebar.md"]
 	assert.Equal(t, StatusImplementing, entry.Status)
 	assert.Equal(t, "refactor sidebar", entry.Description)
 	assert.Equal(t, "plan/sidebar", entry.Branch)
@@ -236,14 +236,14 @@ func TestCreatePlanWithTopic(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Now().UTC()
-	require.NoError(t, ps.Create("2026-02-21-feat.md", "a feature", "plan/feat", "my-topic", now))
+	require.NoError(t, ps.Create("feat.md", "a feature", "plan/feat", "my-topic", now))
 
 	// Topic should be auto-created
 	topics := ps.Topics()
 	require.Len(t, topics, 1)
 	assert.Equal(t, "my-topic", topics[0].Name)
 
-	entry := ps.Plans["2026-02-21-feat.md"]
+	entry := ps.Plans["feat.md"]
 	assert.Equal(t, "my-topic", entry.Topic)
 	assert.Equal(t, StatusReady, entry.Status)
 }
@@ -252,12 +252,12 @@ func TestCreatePlanUngrouped(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Now().UTC()
-	require.NoError(t, ps.Create("2026-02-21-fix.md", "a fix", "plan/fix", "", now))
+	require.NoError(t, ps.Create("fix.md", "a fix", "plan/fix", "", now))
 
 	topics := ps.Topics()
 	assert.Len(t, topics, 0)
 
-	entry := ps.Plans["2026-02-21-fix.md"]
+	entry := ps.Plans["fix.md"]
 	assert.Equal(t, "", entry.Topic)
 }
 
@@ -285,10 +285,10 @@ func TestRegisterPlan(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Date(2026, 2, 21, 15, 4, 5, 0, time.UTC)
-	err := ps.Register("2026-02-21-auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
+	err := ps.Register("auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
 	require.NoError(t, err)
 
-	entry, ok := ps.Entry("2026-02-21-auth-refactor.md")
+	entry, ok := ps.Entry("auth-refactor.md")
 	require.True(t, ok)
 	assert.Equal(t, StatusReady, entry.Status)
 	assert.Equal(t, "refactor auth flow", entry.Description)
@@ -300,7 +300,7 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	ps := &PlanState{
 		Dir: "/tmp",
 		Plans: map[string]PlanEntry{
-			"2026-02-21-auth-refactor.md": {
+			"auth-refactor.md": {
 				Status:      StatusReady,
 				Description: "existing",
 				Branch:      "plan/auth-refactor",
@@ -310,7 +310,7 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	}
 
 	err := ps.Register(
-		"2026-02-21-auth-refactor.md",
+		"auth-refactor.md",
 		"new description",
 		"plan/auth-refactor",
 		time.Now().UTC(),
@@ -323,8 +323,8 @@ func TestRename(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create old plan file on disk
-	oldFile := "2026-02-20-my-feature.md"
-	newFile := "2026-02-20-auth-refactor.md"
+	oldFile := "my-feature.md"
+	newFile := "auth-refactor.md"
 	oldPath := filepath.Join(dir, oldFile)
 	newPath := filepath.Join(dir, newFile)
 	require.NoError(t, os.WriteFile(oldPath, []byte("# old plan"), 0o644))
@@ -371,8 +371,8 @@ func TestRenameNoFileOnDisk(t *testing.T) {
 	// Rename should succeed even if the .md file doesn't exist on disk
 	store := planstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
-	oldFile := "2026-02-20-my-feature.md"
-	newFile := "2026-02-20-new-name.md"
+	oldFile := "my-feature.md"
+	newFile := "new-name.md"
 
 	require.NoError(t, store.Create("proj", planstore.PlanEntry{
 		Filename: oldFile, Status: planstore.StatusPlanning,
@@ -407,7 +407,7 @@ func TestSetTopic_WithStore(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
 
 	require.NoError(t, store.Create("proj", planstore.PlanEntry{
-		Filename: "2026-02-28-feat.md", Status: "ready", Topic: "old-topic",
+		Filename: "feat.md", Status: "ready", Topic: "old-topic",
 	}))
 	require.NoError(t, store.CreateTopic("proj", planstore.TopicEntry{Name: "old-topic", CreatedAt: time.Now().UTC()}))
 
@@ -415,8 +415,8 @@ func TestSetTopic_WithStore(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to a new topic (auto-creates topic entry)
-	require.NoError(t, ps.SetTopic("2026-02-28-feat.md", "new-topic"))
-	assert.Equal(t, "new-topic", ps.Plans["2026-02-28-feat.md"].Topic)
+	require.NoError(t, ps.SetTopic("feat.md", "new-topic"))
+	assert.Equal(t, "new-topic", ps.Plans["feat.md"].Topic)
 
 	// Topic entry should be auto-created
 	topics := ps.Topics()
@@ -429,13 +429,13 @@ func TestSetTopic_WithStore(t *testing.T) {
 	// Persisted to store
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, "new-topic", ps2.Plans["2026-02-28-feat.md"].Topic)
+	assert.Equal(t, "new-topic", ps2.Plans["feat.md"].Topic)
 }
 
 func TestSetTopic_ClearTopic(t *testing.T) {
 	store := planstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", planstore.PlanEntry{
-		Filename: "2026-02-28-feat.md", Status: "ready", Topic: "some-topic",
+		Filename: "feat.md", Status: "ready", Topic: "some-topic",
 	}))
 	require.NoError(t, store.CreateTopic("proj", planstore.TopicEntry{Name: "some-topic", CreatedAt: time.Now().UTC()}))
 
@@ -443,13 +443,13 @@ func TestSetTopic_ClearTopic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Clear topic (empty string)
-	require.NoError(t, ps.SetTopic("2026-02-28-feat.md", ""))
-	assert.Equal(t, "", ps.Plans["2026-02-28-feat.md"].Topic)
+	require.NoError(t, ps.SetTopic("feat.md", ""))
+	assert.Equal(t, "", ps.Plans["feat.md"].Topic)
 
 	// Persisted to store
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, "", ps2.Plans["2026-02-28-feat.md"].Topic)
+	assert.Equal(t, "", ps2.Plans["feat.md"].Topic)
 }
 
 func TestSetTopic_NotFound(t *testing.T) {
@@ -487,10 +487,10 @@ func TestPlanState_CreateWithContent(t *testing.T) {
 	require.NoError(t, err)
 
 	content := "# Auth Refactor\n\n## Wave 1\n"
-	err = ps.CreateWithContent("2026-02-28-auth.md", "auth refactor", "plan/auth", "", time.Now(), content)
+	err = ps.CreateWithContent("auth.md", "auth refactor", "plan/auth", "", time.Now(), content)
 	require.NoError(t, err)
 
-	got, err := store.GetContent("proj", "2026-02-28-auth.md")
+	got, err := store.GetContent("proj", "auth.md")
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
 }

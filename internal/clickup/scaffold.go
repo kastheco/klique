@@ -61,12 +61,12 @@ func ScaffoldPlan(task Task) string {
 	return b.String()
 }
 
-// ScaffoldFilename generates a plan filename from a task name and date.
-func ScaffoldFilename(name, date string) string {
+// ScaffoldFilename generates a plan filename from a task name.
+func ScaffoldFilename(name string) string {
 	slug := strings.ToLower(strings.TrimSpace(name))
 	slug = nonAlphanumeric.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
-	return fmt.Sprintf("%s-%s.md", date, slug)
+	return slug + ".md"
 }
 
 func isDone(status string) bool {

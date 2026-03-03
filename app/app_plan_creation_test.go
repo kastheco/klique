@@ -17,14 +17,14 @@ import (
 
 func TestBuildPlanFilename(t *testing.T) {
 	got := buildPlanFilename("Auth Refactor", time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
-	want := "2026-02-21-auth-refactor.md"
+	want := "auth-refactor.md"
 	if got != want {
 		t.Fatalf("buildPlanFilename() = %q, want %q", got, want)
 	}
 }
 
 func TestRenderPlanStub(t *testing.T) {
-	stub := renderPlanStub("Auth Refactor", "Refactor JWT auth", "2026-02-21-auth-refactor.md")
+	stub := renderPlanStub("Auth Refactor", "Refactor JWT auth", "auth-refactor.md")
 	if !strings.Contains(stub, "# Auth Refactor") {
 		t.Fatalf("stub missing title: %s", stub)
 	}
@@ -44,7 +44,7 @@ func TestCreatePlanRecord(t *testing.T) {
 
 	h := &home{planStateDir: plansDir, planState: ps}
 
-	planFile := "2026-02-21-auth-refactor.md"
+	planFile := "auth-refactor.md"
 	branch := "plan/auth-refactor"
 	err = h.createPlanRecord(planFile, "Refactor JWT auth", branch, time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)

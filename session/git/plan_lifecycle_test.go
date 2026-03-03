@@ -11,7 +11,7 @@ import (
 )
 
 func TestPlanBranchFromFile(t *testing.T) {
-	got := PlanBranchFromFile("2026-02-21-auth-refactor.md")
+	got := PlanBranchFromFile("auth-refactor.md")
 	want := "plan/auth-refactor"
 	if got != want {
 		t.Fatalf("PlanBranchFromFile() = %q, want %q", got, want)

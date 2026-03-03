@@ -1057,7 +1057,7 @@ func (m *home) createPlanEntry(name, description, topic string) error {
 	}
 
 	slug := slugifyPlanName(name)
-	filename := fmt.Sprintf("%s-%s.md", time.Now().UTC().Format("2006-01-02"), slug)
+	filename := slug + ".md"
 	branch := "plan/" + slug
 	if err := m.planState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
 		if m.toastManager != nil {
@@ -1077,14 +1077,14 @@ func slugifyPlanName(name string) string {
 	return strings.Trim(name, "-")
 }
 
-// buildPlanFilename derives the plan filename from a human name and creation time.
-// "Auth Refactor" → "2026-02-21-auth-refactor.md"
-func buildPlanFilename(name string, now time.Time) string {
+// buildPlanFilename derives the plan filename from a human name.
+// "Auth Refactor" → "auth-refactor.md"
+func buildPlanFilename(name string, _ time.Time) string {
 	slug := slugifyPlanName(name)
 	if slug == "" {
 		slug = "plan"
 	}
-	return now.UTC().Format("2006-01-02") + "-" + slug + ".md"
+	return slug + ".md"
 }
 
 // renderPlanStub returns the initial markdown content for a new plan file.
@@ -1141,8 +1141,7 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	}
 
-	date := time.Now().Format("2006-01-02")
-	filename := clickup.ScaffoldFilename(task.Name, date)
+	filename := clickup.ScaffoldFilename(task.Name)
 
 	if m.planState == nil {
 		m.loadPlanState()

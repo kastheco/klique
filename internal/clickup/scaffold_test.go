@@ -59,13 +59,13 @@ func TestScaffoldPlan_WithCustomFields(t *testing.T) {
 
 func TestScaffoldFilename(t *testing.T) {
 	tests := map[string]string{
-		"Design Auth Flow":       "2026-02-24-design-auth-flow.md",
-		"API v2 — New Endpoints": "2026-02-24-api-v2-new-endpoints.md",
-		"  spaces & symbols!!! ": "2026-02-24-spaces-symbols.md",
+		"Design Auth Flow":       "design-auth-flow.md",
+		"API v2 — New Endpoints": "api-v2-new-endpoints.md",
+		"  spaces & symbols!!! ": "spaces-symbols.md",
 	}
 
 	for input, want := range tests {
-		got := clickup.ScaffoldFilename(input, "2026-02-24")
+		got := clickup.ScaffoldFilename(input)
 		assert.Equal(t, want, got, "input: %q", input)
 	}
 }
