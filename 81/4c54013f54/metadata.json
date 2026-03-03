@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "814c54013f54",
+  "strategy": "manual-commit",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_planner_signal_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/81/4c54013f54/0/metadata.json",
+      "transcript": "/81/4c54013f54/0/full.jsonl",
+      "context": "/81/4c54013f54/0/context.md",
+      "content_hash": "/81/4c54013f54/0/content_hash.txt",
+      "prompt": "/81/4c54013f54/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 58,
+    "cache_creation_tokens": 150362,
+    "cache_read_tokens": 6533788,
+    "output_tokens": 11627,
+    "api_call_count": 58
+  }
+}
