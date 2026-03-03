@@ -5,10 +5,48 @@
   "branch": "plan/rename-plan-to-task",
   "checkpoints_count": 0,
   "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_audit_pane_test.go",
+    "app/app_audit_test.go",
+    "app/app_input.go",
+    "app/app_planner_signal_test.go",
+    "app/app_solo_agent_test.go",
+    "app/app_state.go",
+    "app/app_state_sidebar_status_test.go",
+    "app/app_task_actions_test.go",
+    "app/app_task_completion_test.go",
+    "app/app_task_context_actions_test.go",
+    "app/app_task_creation_test.go",
+    "app/app_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/clickup_progress_test.go",
+    "app/task_cancel_rename_delay_test.go",
+    "app/task_title.go",
+    "app/task_title_test.go",
     "app/wave_orchestrator.go",
+    "cmd/cmd.go",
+    "cmd/task.go",
+    "cmd/task_test.go",
+    "config/auditlog/event.go",
+    "config/auditlog/logger.go",
+    "config/auditlog/sqlite.go",
+    "config/auditlog/sqlite_test.go",
+    "config/config.go",
     "config/toml.go",
+    "main.go",
+    "session/git/task_lifecycle.go",
+    "session/git/task_lifecycle_test.go",
+    "session/instance.go",
+    "session/instance_lifecycle.go",
+    "session/instance_taskfile_test.go",
+    "session/instance_title_test.go",
+    "session/instance_wave_test.go",
     "session/storage.go",
-    "ui/overlay/tmuxBrowserOverlay.go"
+    "ui/nav_panel_test.go",
+    "ui/navigation_panel.go",
+    "ui/overlay/tmuxBrowserOverlay.go",
+    "ui/overlay/tmuxBrowserOverlay_test.go"
   ],
   "sessions": [
     {
@@ -17,6 +55,13 @@
       "context": "/1f/85695b464a/0/context.md",
       "content_hash": "/1f/85695b464a/0/content_hash.txt",
       "prompt": "/1f/85695b464a/0/prompt.txt"
+    },
+    {
+      "metadata": "/1f/85695b464a/1/metadata.json",
+      "transcript": "/1f/85695b464a/1/full.jsonl",
+      "context": "/1f/85695b464a/1/context.md",
+      "content_hash": "/1f/85695b464a/1/content_hash.txt",
+      "prompt": "/1f/85695b464a/1/prompt.txt"
     }
   ],
   "token_usage": {
