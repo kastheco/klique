@@ -84,6 +84,53 @@ func TestStartKeepsQueuedPromptForAider(t *testing.T) {
 	assert.Equal(t, "Fix the bug.", inst.QueuedPrompt)
 }
 
+func TestRestart_KillsTmuxAndRestartsSession(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+	}
+
+	inst := &Instance{
+		Title:   "test-restart",
+		Path:    t.TempDir(),
+		Program: "opencode",
+		started: true,
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+
+	err := inst.Restart()
+	assert.NoError(t, err)
+	assert.Equal(t, Running, inst.Status)
+	assert.True(t, inst.started)
+}
+
+func TestRestart_WorksWhenTmuxAlreadyDead(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+	}
+
+	inst := &Instance{
+		Title:   "test-restart-dead",
+		Path:    t.TempDir(),
+		Program: "opencode",
+		started: true,
+		Exited:  true,
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+
+	err := inst.Restart()
+	assert.NoError(t, err)
+	assert.False(t, inst.Exited, "Exited flag should be cleared after restart")
+	assert.Equal(t, Running, inst.Status)
+}
+
+func TestRestart_NotStarted_ReturnsError(t *testing.T) {
+	inst := &Instance{Title: "never-started", started: false}
+	err := inst.Restart()
+	assert.Error(t, err)
+}
+
 func TestStartOnBranch_SetsFields(t *testing.T) {
 	repoPath := setupGitRepo(t)
 
