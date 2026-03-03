@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/kastheco/kasmos/config/planparser"
+	"github.com/kastheco/kasmos/config/taskparser"
 )
 
 // WaveState represents the current state of wave orchestration for a plan.
@@ -27,7 +27,7 @@ const (
 // WaveOrchestrator manages wave-based parallel task execution for a single plan.
 type WaveOrchestrator struct {
 	planFile          string
-	plan              *planparser.Plan
+	plan              *taskparser.Plan
 	state             WaveState
 	currentWave       int                // 0-indexed into plan.Waves
 	taskStates        map[int]taskStatus // task number → status
@@ -35,7 +35,7 @@ type WaveOrchestrator struct {
 }
 
 // NewWaveOrchestrator creates an orchestrator for the given plan.
-func NewWaveOrchestrator(planFile string, plan *planparser.Plan) *WaveOrchestrator {
+func NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator {
 	return &WaveOrchestrator{
 		planFile:   planFile,
 		plan:       plan,
@@ -77,7 +77,7 @@ func (o *WaveOrchestrator) CurrentWaveNumber() int {
 }
 
 // CurrentWaveTasks returns the tasks in the current wave.
-func (o *WaveOrchestrator) CurrentWaveTasks() []planparser.Task {
+func (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {
 	if o.currentWave >= len(o.plan.Waves) {
 		return nil
 	}
@@ -86,7 +86,7 @@ func (o *WaveOrchestrator) CurrentWaveTasks() []planparser.Task {
 
 // StartNextWave advances to the next wave and returns its tasks.
 // Returns nil if all waves are complete.
-func (o *WaveOrchestrator) StartNextWave() []planparser.Task {
+func (o *WaveOrchestrator) StartNextWave() []taskparser.Task {
 	if o.state == WaveStateAllComplete {
 		return nil
 	}
@@ -149,11 +149,11 @@ func (o *WaveOrchestrator) ResetConfirm() {
 // RetryFailedTasks transitions all failed tasks in the current wave back to running
 // and sets the orchestrator state to WaveStateRunning. Returns the tasks that were
 // retried (previously failed). Returns nil if there are no failed tasks to retry.
-func (o *WaveOrchestrator) RetryFailedTasks() []planparser.Task {
+func (o *WaveOrchestrator) RetryFailedTasks() []taskparser.Task {
 	if o.currentWave >= len(o.plan.Waves) {
 		return nil
 	}
-	var tasks []planparser.Task
+	var tasks []taskparser.Task
 	for _, t := range o.plan.Waves[o.currentWave].Tasks {
 		if o.taskStates[t.Number] == taskFailed {
 			o.taskStates[t.Number] = taskRunning
