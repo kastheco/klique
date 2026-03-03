@@ -1,0 +1,71 @@
+Implement Task 8: Rewrite tabbed_window.go — Tab Container
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 3 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/tabbed_window.go`
+- Test: `ui/tabbed_window_test.go` (existing — covers tab switching, size propagation, preview delegation, focus mode, welcome banner)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `tabbed_window_test.go` covers: `NewTabbedWindow` defaults (info tab active, welcome banner on), `SetSize` propagation to child panes, `Toggle` cycling through tabs, `SetActiveTab` with welcome banner clearing, `GetActiveTab`, `IsInDiffTab`/`IsInInfoTab`, `SetFocusMode`/`IsFocusMode`, `SetFocused`, `UpdatePreview` delegation (no-op in focus mode or non-preview tab), `SetDocumentContent`/`ClearDocumentMode`/`IsDocumentMode`, `ScrollUp`/`ScrollDown` dispatch to active tab's pane, `HalfPageUp`/`HalfPageDown` always targeting preview, `ContentScrollUp`/`ContentScrollDown` (mouse wheel), `IsPreviewInScrollMode`, `String` output with tab labels and border styling.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestTabbedWindow" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/tabbed_window.go` and rewrite from scratch:
+
+- **Tab border helpers** — `tabBorderWithBottom(left, middle, right string) lipgloss.Border`: creates rounded border with custom bottom chars.
+- **Styles** — `inactiveTabBorder` (bottom: `┴─┴`), `activeTabBorder` (bottom: `┘ └`), `inactiveTabStyle` (inactive border, fg=`ColorIris`, center-aligned), `activeTabStyle` (active border, center-aligned), `windowBorder` (rounded), `windowStyle` (iris border, right+bottom+left sides only).
+- **Tab index constants** — `InfoTab=0`, `PreviewTab=1`, `DiffTab=2`.
+- **`Tab` struct** — `Name string`, `Render func(width, height int) string`.
+- **`TabbedWindow` struct** — `tabs []string` (icon+label for each tab), `activeTab int`, `focusedTab int` (-1=none), `height int`, `width int`, `preview *PreviewPane`, `diff *DiffPane`, `info *InfoPane`, `instance *session.Instance`, `focused bool`, `focusMode bool`, `showWelcome bool`.
+- **`NewTabbedWindow(preview, diff, info) *TabbedWindow`** — tab labels: `"\uea74 info"`, `"\uea85 agent"`, `"\ueae1 diff"`. `focusedTab: -1`, `showWelcome: true`.
+- **`SetFocusMode(enabled bool)`**, **`IsFocusMode() bool`**, **`SetFocused(focused bool)`**, **`SetInstance(instance)`**.
+- **`AdjustPreviewWidth(width int) int`** — returns `width - 2`.
+- **`SetSize(width, height int)`** — stores adjusted width/height, computes content dimensions (subtracting tab row height and window border frame), propagates to all three child panes.
+- **`GetPreviewSize() (int, int)`** — returns preview dimensions.
+- **`Toggle()`** — cycles `activeTab` mod 3. **`ToggleWithReset(instance)`** — resets preview to normal mode first, then toggles.
+- **Preview delegation** — `UpdatePreview(instance)` (no-op if not preview tab or focus mode), `SetPreviewContent(content)`, `SetConnectingState()`, `SetDocumentContent(content)`, `ClearDocumentMode()`, `IsDocumentMode()`, `ViewportUpdate(msg)`, `ViewportHandlesKey(msg)`.
+- **Diff delegation** — `UpdateDiff(instance)` (no-op if not diff tab).
+- **Info delegation** — `SetInfoData(data InfoData)`.
+- **`ResetPreviewToNormalMode(instance)`**.
+- **Scroll methods** — `ScrollUp()`/`ScrollDown()`: dispatches to active tab's pane (preview: scroll, diff: file navigation if files exist else scroll, info: scroll). `HalfPageUp()`/`HalfPageDown()`: always targets preview pane. `ContentScrollUp()`/`ContentScrollDown()`: dispatches without file navigation (for mouse wheel).
+- **Tab state queries** — `IsInDiffTab()`, `IsInInfoTab()`, `SetActiveTab(tab)` (clears welcome banner), `GetActiveTab()`.
+- **Animation** — `TickBanner()`, `TickSpring()`, `SetAnimateBanner(enabled)`.
+- **`IsPreviewInScrollMode() bool`**.
+- **`String() string`** — returns empty if zero dimensions. Renders tab row: each tab gets proportional width (last tab absorbs remainder), active tab uses `activeTabStyle`, inactive uses `inactiveTabStyle`. Border color varies: `ColorFoam` in focus mode, `ColorIris` if focused, `ColorOverlay` otherwise. First/last tab get special bottom-corner chars (`│`/`├`/`┤`). Active+ring-focused tab gets gradient text, active-only gets normal text, inactive gets muted text. Each tab wrapped in `zone.Mark(TabZoneIDs[i], ...)`. Content: dispatches to active tab's pane (info tab shows preview banner while `showWelcome` is true). Window border wraps content with `lipgloss.Place` for top-left alignment. Preview tab content wrapped in `zone.Mark(ZoneAgentPane, ...)`. Joins tab row + window vertically.
+
+Imports: `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`, `github.com/kastheco/kasmos/log`, `github.com/kastheco/kasmos/session`, `github.com/lrstanley/bubblezone`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -count=1
+```
+
+expected: PASS — full suite green
+
+**Step 5: commit**
+
+```bash
+git add ui/tabbed_window.go
+git commit -m "feat(clean-room): rewrite tabbed_window.go from scratch"
+```
