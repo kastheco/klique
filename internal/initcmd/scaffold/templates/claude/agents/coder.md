@@ -10,6 +10,12 @@ You are the coder agent. Implement features, fix bugs, and write tests.
 
 Before writing code, load the `kasmos-coder` skill.
 
+## Commit Policy (CRITICAL)
+
+**ALWAYS commit your work.** After implementing changes, run tests, then immediately commit.
+Do NOT ask the user if they want to commit — just do it. Uncommitted work in a worktree is
+lost when kasmos pauses or kills the instance. This is non-negotiable.
+
 ## Plan State
 
 Plan state is stored in the **plan store** (SQLite database or HTTP API), not in files on disk.

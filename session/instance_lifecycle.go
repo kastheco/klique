@@ -326,6 +326,15 @@ func (i *Instance) Kill() error {
 
 	// Then clean up git worktree (skip if shared — topic owns the worktree)
 	if i.gitWorktree != nil && !i.sharedWorktree {
+		// Safety net: commit any uncommitted work before removing the worktree.
+		// Agents should commit their own work, but if they don't, this prevents
+		// data loss when Kill() destroys the worktree.
+		if dirty, err := i.gitWorktree.IsDirty(); err == nil && dirty {
+			commitMsg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)", i.Title, time.Now().Format(time.RFC822))
+			if commitErr := i.gitWorktree.CommitChanges(commitMsg); commitErr != nil {
+				errs = append(errs, fmt.Errorf("failed to auto-commit before kill: %w", commitErr))
+			}
+		}
 		if err := i.gitWorktree.Cleanup(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to cleanup git worktree: %w", err))
 		}
