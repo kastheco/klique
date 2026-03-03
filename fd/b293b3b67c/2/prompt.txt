@@ -1,0 +1,110 @@
+Implement Task 2: Rename config/planstate to config/taskstate
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rename the "plan" lifecycle entity to "task" throughout the codebase to eliminate the terminology collision between "plan" (the lifecycle entity) and "planning" (the FSM status). Instances belong to tasks which optionally belong to topics — "a task awaiting planning" is clearer than "a plan awaiting planning."
+**Architecture:** Four-phase mechanical rename: (1) rename Go package directories and update import paths, (2) rename exported types and struct fields, (3) rename CLI commands, user-facing strings, and internal variables, (4) update HTTP API paths, SQL schema, and JSON serialization with backwards compatibility. Each phase uses `sd`/`comby` for batch replacements. The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.
+**Tech Stack:** Go 1.24, cobra CLI, SQLite, HTTP API, `sd` for batch string replacement, `mv` for file/directory renames
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 2 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `config/taskstate/` (copy from `config/planstate/`)
+- Remove: `config/planstate/`
+- Modify: all files importing `config/planstate` (22 files)
+
+**Step 1: write the failing test**
+
+No new tests — package rename only.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./config/planstate/... -count=1
+```
+
+expected: PASS (baseline)
+
+**Step 3: rename the package and update imports**
+
+```bash
+# 1. Copy directory
+cp -r config/planstate config/taskstate
+
+# 2. Rename package declaration
+sd 'package planstate' 'package taskstate' config/taskstate/*.go
+
+# 3. Update import paths across codebase
+sd '"github.com/kastheco/kasmos/config/planstate"' '"github.com/kastheco/kasmos/config/taskstate"' $(fd -e go)
+
+# 4. Update all qualified references: planstate.X → taskstate.X
+sd 'planstate\.' 'taskstate.' $(fd -e go)
+
+# 5. Rename types: PlanState → TaskState, PlanEntry → TaskEntry, PlanInfo → TaskInfo
+sd 'PlanState' 'TaskState' config/taskstate/*.go
+sd 'PlanEntry' 'TaskEntry' config/taskstate/*.go
+sd 'PlanInfo' 'TaskInfo' config/taskstate/*.go
+
+# 6. Update these type references across the codebase
+sd 'taskstate\.PlanState' 'taskstate.TaskState' $(fd -e go)
+sd 'taskstate\.PlanEntry' 'taskstate.TaskEntry' $(fd -e go)
+sd 'taskstate\.PlanInfo' 'taskstate.TaskInfo' $(fd -e go)
+sd '\*PlanState' '*TaskState' config/taskstate/*.go
+sd 'PlanInfo' 'TaskInfo' $(fd -e go -p 'app/|cmd/|ui/')
+
+# 7. Rename internal method: toPlanstoreEntry → toTaskstoreEntry
+sd 'toPlanstoreEntry' 'toTaskstoreEntry' config/taskstate/planstate.go
+
+# 8. Rename methods that reference "Plan" in their name
+sd 'PlansByTopic' 'TasksByTopic' config/taskstate/planstate.go
+sd 'UngroupedPlans' 'UngroupedTasks' config/taskstate/planstate.go
+sd 'HasRunningCoderInTopic' 'HasRunningCoderInTopic' config/taskstate/planstate.go  # name is fine as-is
+
+# 9. Update references to renamed methods across codebase
+sd '\.PlansByTopic' '.TasksByTopic' $(fd -e go)
+sd '\.UngroupedPlans' '.UngroupedTasks' $(fd -e go)
+
+# 10. Rename the source file
+mv config/taskstate/planstate.go config/taskstate/taskstate.go
+mv config/taskstate/planstate_test.go config/taskstate/taskstate_test.go
+
+# 11. Remove old directory
+rm -rf config/planstate
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./...
+go test ./config/taskstate/... -count=1
+go test ./... -count=1 2>&1 | tail -30
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "refactor: rename config/planstate package to config/taskstate"
+```
