@@ -96,8 +96,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", selected.Title)
-		m.textInputOverlay.SetSize(60, 3)
+		tio := overlay.NewTextInputOverlay("pr title", selected.Title)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "send_prompt_instance":
@@ -133,8 +134,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = stateRenameInstance
-		m.textInputOverlay = overlay.NewTextInputOverlay("rename instance", selected.Title)
-		m.textInputOverlay.SetSize(60, 3)
+		tio := overlay.NewTextInputOverlay("rename instance", selected.Title)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "mark_task_complete":
@@ -159,8 +161,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.pendingChangeTopicTask = planFile
 		topicNames := m.getTopicNames()
 		topicNames = append([]string{"(No topic)"}, topicNames...)
-		m.pickerOverlay = overlay.NewPickerOverlay("Move to topic", topicNames)
-		m.pickerOverlay.SetAllowCustom(true)
+		po := overlay.NewPickerOverlay("Move to topic", topicNames)
+		po.SetAllowCustom(true)
+		m.overlays.Show(po)
 		m.state = stateChangeTopic
 		return m, nil
 
@@ -171,7 +174,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.pendingSetStatusTask = planFile
 		statuses := []string{"ready", "planning", "implementing", "reviewing", "done", "cancelled"}
-		m.pickerOverlay = overlay.NewPickerOverlay("set status", statuses)
+		m.overlays.Show(overlay.NewPickerOverlay("set status", statuses))
 		m.state = stateSetStatus
 		return m, nil
 
@@ -220,8 +223,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		currentName := taskstate.DisplayName(planFile)
 		m.state = stateRenameTask
-		m.textInputOverlay = overlay.NewTextInputOverlay("rename task", currentName)
-		m.textInputOverlay.SetSize(60, 3)
+		tio := overlay.NewTextInputOverlay("rename task", currentName)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "chat_about_plan":
@@ -231,10 +235,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.pendingChatAboutTask = planFile
 		m.state = stateChatAboutTask
-		m.textInputOverlay = overlay.NewTextInputOverlay("ask about this task", "")
-		m.textInputOverlay.SetSize(60, 5)
-		m.textInputOverlay.SetMultiline(true)
-		m.textInputOverlay.SetPlaceholder("what would you like to know?")
+		tio := overlay.NewTextInputOverlay("ask about this task", "")
+		tio.SetSize(60, 5)
+		tio.SetMultiline(true)
+		tio.SetPlaceholder("what would you like to know?")
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "push_plan_branch":
@@ -268,8 +273,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
 		m.nav.SelectInstance(planInst)
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", planInst.Title)
-		m.textInputOverlay.SetSize(60, 3)
+		tio := overlay.NewTextInputOverlay("pr title", planInst.Title)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "merge_plan":
@@ -635,7 +641,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	// Position at the left edge of the instance list (middle column)
 	x := m.navWidth
 	y := 1 + 4 + m.nav.GetSelectedIdx()*4 // PaddingTop(1) + header rows + item offset
-	m.contextMenu = overlay.NewContextMenu(x, y, items)
+	m.overlays.ShowPositioned(overlay.NewContextMenu(x, y, items), x, y, false)
 	m.state = stateContextMenu
 	return m, nil
 }
@@ -703,7 +709,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 
 	x := m.navWidth
 	y := 1 + 4 + m.nav.GetSelectedIdx()
-	m.contextMenu = overlay.NewContextMenu(x, y, items)
+	m.overlays.ShowPositioned(overlay.NewContextMenu(x, y, items), x, y, false)
 	m.state = stateContextMenu
 	return m, nil
 }
@@ -896,25 +902,27 @@ func validatePlanHasWaves(plansDir, planFile string) error {
 }
 
 // handleTmuxBrowserAction dispatches actions from the tmux session browser overlay.
-func (m *home) handleTmuxBrowserAction(action overlay.BrowserAction) (tea.Model, tea.Cmd) {
+// browser is the TmuxBrowserOverlay captured BEFORE HandleKey was called (so SelectedItem is valid).
+// action is the Result.Action string returned by HandleKey.
+func (m *home) handleTmuxBrowserAction(browser *overlay.TmuxBrowserOverlay, action string) (tea.Model, tea.Cmd) {
 	switch action {
-	case overlay.BrowserDismiss:
-		m.tmuxBrowser = nil
+	case "": // dismissed without action
+		m.overlays.Dismiss()
 		m.state = stateDefault
 		return m, nil
 
-	case overlay.BrowserKill:
-		if m.tmuxBrowser == nil {
+	case "kill":
+		if browser == nil {
 			return m, nil
 		}
-		item := m.tmuxBrowser.SelectedItem()
+		item := browser.SelectedItem()
 		if item.Name == "" {
 			return m, nil
 		}
 		name := item.Name
-		m.tmuxBrowser.RemoveSelected()
-		if m.tmuxBrowser.IsEmpty() {
-			m.tmuxBrowser = nil
+		browser.RemoveSelected()
+		if browser.IsEmpty() {
+			m.overlays.Dismiss()
 			m.state = stateDefault
 		}
 		return m, func() tea.Msg {
@@ -923,30 +931,28 @@ func (m *home) handleTmuxBrowserAction(action overlay.BrowserAction) (tea.Model,
 			return tmuxKillResultMsg{name: name, err: err}
 		}
 
-	case overlay.BrowserAdopt:
-		if m.tmuxBrowser == nil {
+	case "adopt":
+		if browser == nil {
 			return m, nil
 		}
-		item := m.tmuxBrowser.SelectedItem()
+		item := browser.SelectedItem()
 		if item.Name == "" {
 			return m, nil
 		}
-		m.tmuxBrowser = nil
 		m.state = stateDefault
 		return m.adoptOrphanSession(overlay.TmuxBrowserItem{
 			Name:  item.Name,
 			Title: item.Title,
 		})
 
-	case overlay.BrowserAttach:
-		if m.tmuxBrowser == nil {
+	case "attach":
+		if browser == nil {
 			return m, nil
 		}
-		item := m.tmuxBrowser.SelectedItem()
+		item := browser.SelectedItem()
 		if item.Name == "" {
 			return m, nil
 		}
-		m.tmuxBrowser = nil
 		m.state = stateDefault
 		name := item.Name
 		return m, tea.ExecProcess(exec.Command("tmux", "attach-session", "-t", name), func(err error) tea.Msg {

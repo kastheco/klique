@@ -9,17 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// BrowserAction represents what the user chose in the tmux browser.
-type BrowserAction int
-
-const (
-	BrowserNone    BrowserAction = iota
-	BrowserDismiss               // esc
-	BrowserKill                  // k (search empty)
-	BrowserAdopt                 // a (search empty)
-	BrowserAttach                // enter or o (search empty)
-)
-
 // TmuxBrowserItem holds metadata for a single tmux session (managed or orphaned).
 type TmuxBrowserItem struct {
 	Name      string
@@ -102,68 +91,6 @@ func (b *TmuxBrowserOverlay) applyFilter() {
 	}
 }
 
-// HandleKeyPress processes input and returns the action to take.
-func (b *TmuxBrowserOverlay) HandleKeyPress(msg tea.KeyMsg) BrowserAction {
-	switch msg.Type {
-	case tea.KeyEsc:
-		if b.searchQuery != "" {
-			b.searchQuery = ""
-			b.applyFilter()
-			return BrowserNone
-		}
-		return BrowserDismiss
-	case tea.KeyEnter:
-		if len(b.filtered) > 0 {
-			return BrowserAttach
-		}
-		return BrowserNone
-	case tea.KeyUp:
-		if b.selectedIdx > 0 {
-			b.selectedIdx--
-		}
-		return BrowserNone
-	case tea.KeyDown:
-		if b.selectedIdx < len(b.filtered)-1 {
-			b.selectedIdx++
-		}
-		return BrowserNone
-	case tea.KeyBackspace:
-		if len(b.searchQuery) > 0 {
-			runes := []rune(b.searchQuery)
-			b.searchQuery = string(runes[:len(runes)-1])
-			b.applyFilter()
-		}
-		return BrowserNone
-	case tea.KeyRunes:
-		r := string(msg.Runes)
-		// Action keys only fire when search is empty
-		if b.searchQuery == "" {
-			switch r {
-			case "k":
-				if len(b.filtered) > 0 {
-					return BrowserKill
-				}
-				return BrowserNone
-			case "a":
-				if len(b.filtered) > 0 && !b.SelectedItem().Managed {
-					return BrowserAdopt
-				}
-				return BrowserNone
-			case "o":
-				if len(b.filtered) > 0 {
-					return BrowserAttach
-				}
-				return BrowserNone
-			}
-		}
-		// All other runes type into search
-		b.searchQuery += r
-		b.applyFilter()
-		return BrowserNone
-	}
-	return BrowserNone
-}
-
 // SelectedItem returns the currently highlighted session, or a zero value if empty.
 func (b *TmuxBrowserOverlay) SelectedItem() TmuxBrowserItem {
 	if len(b.filtered) == 0 || b.selectedIdx >= len(b.filtered) {
@@ -187,8 +114,8 @@ func (b *TmuxBrowserOverlay) IsEmpty() bool {
 	return len(b.sessions) == 0
 }
 
-// Render draws the browser overlay.
-func (b *TmuxBrowserOverlay) Render() string {
+// render draws the browser overlay.
+func (b *TmuxBrowserOverlay) render() string {
 	var s strings.Builder
 
 	s.WriteString(browserTitleStyle.Render("tmux sessions"))
@@ -259,23 +186,69 @@ func (b *TmuxBrowserOverlay) SetSize(width, height int) {
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
 func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
-	action := b.HandleKeyPress(msg)
-	switch action {
-	case BrowserDismiss:
+	switch msg.Type {
+	case tea.KeyEsc:
+		if b.searchQuery != "" {
+			b.searchQuery = ""
+			b.applyFilter()
+			return Result{}
+		}
 		return Result{Dismissed: true}
-	case BrowserAttach:
-		return Result{Dismissed: true, Action: "attach"}
-	case BrowserKill:
-		return Result{Dismissed: true, Action: "kill"}
-	case BrowserAdopt:
-		return Result{Dismissed: true, Action: "adopt"}
+	case tea.KeyEnter:
+		if len(b.filtered) > 0 {
+			return Result{Dismissed: true, Action: "attach"}
+		}
+		return Result{}
+	case tea.KeyUp:
+		if b.selectedIdx > 0 {
+			b.selectedIdx--
+		}
+		return Result{}
+	case tea.KeyDown:
+		if b.selectedIdx < len(b.filtered)-1 {
+			b.selectedIdx++
+		}
+		return Result{}
+	case tea.KeyBackspace:
+		if len(b.searchQuery) > 0 {
+			runes := []rune(b.searchQuery)
+			b.searchQuery = string(runes[:len(runes)-1])
+			b.applyFilter()
+		}
+		return Result{}
+	case tea.KeyRunes:
+		r := string(msg.Runes)
+		// Action keys only fire when search is empty
+		if b.searchQuery == "" {
+			switch r {
+			case "k":
+				if len(b.filtered) > 0 {
+					return Result{Dismissed: true, Action: "kill"}
+				}
+				return Result{}
+			case "a":
+				if len(b.filtered) > 0 && !b.SelectedItem().Managed {
+					return Result{Dismissed: true, Action: "adopt"}
+				}
+				return Result{}
+			case "o":
+				if len(b.filtered) > 0 {
+					return Result{Dismissed: true, Action: "attach"}
+				}
+				return Result{}
+			}
+		}
+		// All other runes type into search
+		b.searchQuery += r
+		b.applyFilter()
+		return Result{}
 	}
 	return Result{}
 }
 
 // View implements Overlay. Returns the rendered overlay string.
 func (b *TmuxBrowserOverlay) View() string {
-	return b.Render()
+	return b.render()
 }
 
 // truncateStr truncates s to maxLen runes, appending "…" if truncated.

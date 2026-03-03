@@ -74,12 +74,12 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Dismiss overlays on click-outside
 	if m.state == stateContextMenu && msg.Button == tea.MouseButtonLeft {
-		m.contextMenu = nil
+		m.overlays.Dismiss()
 		m.state = stateDefault
 		return m, nil
 	}
 	if m.state == stateTmuxBrowser && msg.Button == tea.MouseButtonLeft {
-		m.tmuxBrowser = nil
+		m.overlays.Dismiss()
 		m.state = stateDefault
 		return m, nil
 	}
@@ -161,16 +161,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	if m.state == stateContextMenu {
-		if m.contextMenu == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		action, closed := m.contextMenu.HandleKeyPress(msg)
-		if closed {
-			m.contextMenu = nil
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
 			m.state = stateDefault
-			if action != "" {
-				return m.executeContextAction(action)
+			if result.Action != "" {
+				return m.executeContextAction(result.Action)
 			}
 			return m, nil
 		}
@@ -221,8 +220,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.promptAfterName {
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
-				m.textInputOverlay = overlay.NewTextInputOverlay("enter prompt", "")
-				m.textInputOverlay.SetSize(50, 5)
+				tio := overlay.NewTextInputOverlay("enter prompt", "")
+				tio.SetSize(50, 5)
+				m.overlays.Show(tio)
 				m.promptAfterName = false
 			}
 
@@ -269,17 +269,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	} else if m.state == statePrompt {
 		// Use the new TextInputOverlay component to handle all key events
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		result := m.overlays.HandleKey(msg)
 
 		// Check if the form was submitted or canceled
-		if shouldClose {
+		if result.Dismissed {
 			selected := m.nav.GetSelectedInstance()
 			// TODO: this should never happen since we set the instance in the previous state.
 			if selected == nil {
 				return m, nil
 			}
-			if m.textInputOverlay.IsSubmitted() {
-				promptText := m.textInputOverlay.GetValue()
+			if result.Submitted {
+				promptText := result.Value
 				if err := selected.SendPrompt(promptText); err != nil {
 					// TODO: we probably end up in a bad state here.
 					return m, m.handleError(err)
@@ -295,7 +295,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			// Close the overlay and reset state
-			m.textInputOverlay = nil
 			m.state = stateDefault
 			return m, tea.Sequence(
 				tea.WindowSize(),
@@ -312,18 +311,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle PR title input state
 	if m.state == statePRTitle {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				prTitle := m.textInputOverlay.GetValue()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				prTitle := result.Value
 				selected := m.nav.GetSelectedInstance()
 				if selected != nil && prTitle != "" {
 					m.pendingPRTitle = prTitle
-					m.textInputOverlay = nil
 
 					// Generate a PR body from git data
 					generatedBody := ""
@@ -337,12 +335,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 					// Transition to PR body editing state
 					m.state = statePRBody
-					m.textInputOverlay = overlay.NewTextInputOverlay("pr description (edit or submit)", generatedBody)
-					m.textInputOverlay.SetSize(80, 20)
+					tio := overlay.NewTextInputOverlay("pr description (edit or submit)", generatedBody)
+					tio.SetSize(80, 20)
+					m.overlays.Show(tio)
 					return m, nil
 				}
 			}
-			m.textInputOverlay = nil
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -352,18 +350,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle PR body input state
 	if m.state == statePRBody {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				prBody := m.textInputOverlay.GetValue()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				prBody := result.Value
 				prTitle := m.pendingPRTitle
 				selected := m.nav.GetSelectedInstance()
 				if selected != nil && prTitle != "" {
-					m.textInputOverlay = nil
 					m.pendingPRTitle = ""
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
@@ -384,7 +381,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					}, m.toastTickCmd())
 				}
 			}
-			m.textInputOverlay = nil
 			m.pendingPRTitle = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
@@ -395,21 +391,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle instance rename state
 	if m.state == stateRenameInstance {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				newName := m.textInputOverlay.GetValue()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				newName := result.Value
 				selected := m.nav.GetSelectedInstance()
 				if selected != nil && newName != "" {
 					selected.Title = newName
 					m.saveAllInstances()
 				}
 			}
-			m.textInputOverlay = nil
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -419,20 +414,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle plan rename state
 	if m.state == stateRenameTask {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				newName := strings.TrimSpace(m.textInputOverlay.GetValue())
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				newName := strings.TrimSpace(result.Value)
 				planFile := m.nav.GetSelectedPlanFile()
 				if planFile != "" && newName != "" && m.taskState != nil {
 					oldFile := planFile
 					newFile, err := m.taskState.Rename(oldFile, newName)
 					if err != nil {
-						m.textInputOverlay = nil
 						m.state = stateDefault
 						m.menu.SetState(ui.StateDefault)
 						return m, m.handleError(err)
@@ -453,7 +447,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.nav.SelectByID(ui.SidebarPlanPrefix + newFile)
 				}
 			}
-			m.textInputOverlay = nil
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -463,16 +456,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle chat-about-plan question input
 	if m.state == stateChatAboutTask {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				question := m.textInputOverlay.GetValue()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				question := result.Value
 				planFile := m.pendingChatAboutTask
-				m.textInputOverlay = nil
 				m.pendingChatAboutTask = ""
 				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
@@ -481,7 +473,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 				return m, tea.WindowSize()
 			}
-			m.textInputOverlay = nil
 			m.pendingChatAboutTask = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
@@ -528,18 +519,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle send prompt state
 	if m.state == stateSendPrompt {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				value := m.textInputOverlay.GetValue()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				value := result.Value
 				selected := m.nav.GetSelectedInstance()
 				if selected != nil && value != "" {
 					if err := selected.SendPrompt(value); err != nil {
-						m.textInputOverlay = nil
 						m.state = stateDefault
 						m.menu.SetState(ui.StateDefault)
 						return m, m.handleError(err)
@@ -555,7 +545,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					)
 				}
 			}
-			m.textInputOverlay = nil
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -565,42 +554,73 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle confirmation state
 	if m.state == stateConfirm {
-		if m.confirmationOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		switch msg.String() {
-		case m.confirmationOverlay.ConfirmKey, "enter":
-			action := m.pendingConfirmAction
-			m.state = stateDefault
-			m.confirmationOverlay = nil
-			m.pendingConfirmAction = nil
-			m.pendingWaveAbortAction = nil
-			m.pendingWaveNextAction = nil
-			m.pendingWaveConfirmTaskFile = ""
-			// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
-			// This prevents blocking the UI during I/O (git push, etc.).
-			return m, action
-		case "a":
-			// 'a' = abort, used by the failed-wave decision dialog.
+		// Pre-intercept 'a' (abort) before delegating to the overlay.
+		if msg.String() == "a" && m.pendingWaveAbortAction != nil {
 			abortAction := m.pendingWaveAbortAction
-			if abortAction == nil {
-				return m, nil // 'a' not bound for this confirm dialog
-			}
+			m.overlays.Dismiss()
 			m.state = stateDefault
-			m.confirmationOverlay = nil
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
 			m.pendingWaveConfirmTaskFile = ""
 			return m, abortAction
-		case m.confirmationOverlay.CancelKey:
-			// If this is the failed-wave dialog and 'n' (next wave) is the cancel key,
-			// fire the advance action instead of the normal cancel/re-prompt logic.
+		}
+		// Pre-intercept 'enter' as an alias for the confirm key.
+		// ConfirmationOverlay.HandleKey only handles ConfirmKey ("y"/"r"), not "enter".
+		effectiveMsg := msg
+		if msg.Type == tea.KeyEnter {
+			if co, ok := m.overlays.Current().(*overlay.ConfirmationOverlay); ok {
+				effectiveMsg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(co.ConfirmKey)}
+			}
+		}
+		result := m.overlays.HandleKey(effectiveMsg)
+		if result.Dismissed {
+			if result.Submitted {
+				// Confirmed (ConfirmKey pressed).
+				action := m.pendingConfirmAction
+				m.state = stateDefault
+				m.pendingConfirmAction = nil
+				m.pendingWaveAbortAction = nil
+				m.pendingWaveNextAction = nil
+				m.pendingWaveConfirmTaskFile = ""
+				// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
+				// This prevents blocking the UI during I/O (git push, etc.).
+				return m, action
+			}
+			// Cancelled (CancelKey or Esc).
+			cancelKey := result.Action // Action holds the key that triggered cancel
+			if cancelKey == "" {
+				// Esc dismiss — preserve everything, allow re-prompt on next tick (after cooldown).
+				if m.pendingWaveConfirmTaskFile != "" {
+					if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmTaskFile]; ok {
+						orch.ResetConfirm()
+					}
+					m.pendingWaveConfirmTaskFile = ""
+					m.waveConfirmDismissedAt = time.Now()
+				}
+				// Planner signal esc: same as cancel — signal is consumed, can't re-trigger.
+				if m.pendingPlannerTaskFile != "" {
+					m.plannerPrompted[m.pendingPlannerTaskFile] = true
+					m.killExistingPlanAgent(m.pendingPlannerTaskFile, session.AgentTypePlanner)
+					_ = m.saveAllInstances()
+					m.updateNavPanelStatus()
+					m.pendingPlannerInstanceTitle = ""
+					m.pendingPlannerTaskFile = ""
+				}
+				m.state = stateDefault
+				m.pendingConfirmAction = nil
+				m.pendingWaveAbortAction = nil
+				m.pendingWaveNextAction = nil
+				return m, nil
+			}
+			// CancelKey pressed — check if this is the failed-wave dialog where CancelKey="n" fires advance.
 			if m.pendingWaveNextAction != nil {
 				nextAction := m.pendingWaveNextAction
 				m.state = stateDefault
-				m.confirmationOverlay = nil
 				m.pendingConfirmAction = nil
 				m.pendingWaveAbortAction = nil
 				m.pendingWaveNextAction = nil
@@ -626,61 +646,43 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.pendingPlannerTaskFile = ""
 			}
 			m.state = stateDefault
-			m.confirmationOverlay = nil
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
-			return m, nil
-		case "esc":
-			// Esc — preserve everything, allow re-prompt on next tick (after cooldown).
-			if m.pendingWaveConfirmTaskFile != "" {
-				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmTaskFile]; ok {
-					orch.ResetConfirm()
-				}
-				m.pendingWaveConfirmTaskFile = ""
-				m.waveConfirmDismissedAt = time.Now()
-			}
-			// Planner signal esc: same as cancel — signal is consumed, can't re-trigger.
-			if m.pendingPlannerTaskFile != "" {
-				m.plannerPrompted[m.pendingPlannerTaskFile] = true
-				m.killExistingPlanAgent(m.pendingPlannerTaskFile, session.AgentTypePlanner)
-				_ = m.saveAllInstances()
-				m.updateNavPanelStatus()
-				m.pendingPlannerInstanceTitle = ""
-				m.pendingPlannerTaskFile = ""
-			}
-			m.state = stateDefault
-			m.confirmationOverlay = nil
-			m.pendingConfirmAction = nil
-			m.pendingWaveAbortAction = nil
-			m.pendingWaveNextAction = nil
-			return m, nil
-		default:
 			return m, nil
 		}
+		return m, nil
 	}
 
 	// Handle permission prompt state
 	if m.state == statePermission {
-		if m.permissionOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.permissionOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.permissionOverlay.IsConfirmed() {
-				choice := m.permissionOverlay.Choice()
-				// Read the pattern/description from the overlay (captured at detection
-				// time) rather than re-parsing CachedContent, which may have changed.
-				cacheKey := config.CacheKey(m.permissionOverlay.Pattern(), m.permissionOverlay.Description())
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				// Read the pattern/description captured at detection time.
+				cacheKey := config.CacheKey(m.pendingPermissionPattern, m.pendingPermissionDesc)
 				inst := m.pendingPermissionInstance
+
+				// Map action string to PermissionChoice.
+				var choice overlay.PermissionChoice
+				switch result.Action {
+				case "allow_always":
+					choice = overlay.PermissionAllowAlways
+				case "reject":
+					choice = overlay.PermissionReject
+				default:
+					choice = overlay.PermissionAllowOnce
+				}
 
 				// Cache "allow always" decisions
 				if choice == overlay.PermissionAllowAlways && cacheKey != "" && m.permissionStore != nil {
 					m.permissionStore.Remember(m.activeProject(), cacheKey)
 				}
 
-				m.permissionOverlay = nil
 				m.state = stateDefault
 
 				// Guard against re-trigger: the pane still shows the permission
@@ -711,6 +713,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						auditlog.WithInstance(inst.Title),
 					)
 					m.pendingPermissionInstance = nil
+					m.pendingPermissionPattern = ""
+					m.pendingPermissionDesc = ""
 					return m, func() tea.Msg {
 						capturedInst.SendPermissionResponse(capturedChoice)
 						return nil
@@ -719,14 +723,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			// Esc dismiss — also guard so the same prompt doesn't re-open.
 			if m.pendingPermissionInstance != nil {
-				guardKey := m.permissionOverlay.Pattern()
+				guardKey := m.pendingPermissionPattern
 				if guardKey == "" {
 					guardKey = "__handled__"
 				}
 				m.permissionHandled[m.pendingPermissionInstance] = guardKey
 			}
-			m.permissionOverlay = nil
 			m.pendingPermissionInstance = nil
+			m.pendingPermissionPattern = ""
+			m.pendingPermissionDesc = ""
 			m.state = stateDefault
 			return m, nil
 		}
@@ -735,32 +740,31 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle new plan description state
 	if m.state == stateNewPlan {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				description := strings.TrimSpace(m.textInputOverlay.GetValue())
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				description := strings.TrimSpace(result.Value)
 				if description == "" {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
-					m.textInputOverlay = nil
 					return m, m.handleError(fmt.Errorf("description cannot be empty"))
 				}
 				// Set heuristic title as fallback; AI title will replace it when it arrives
 				m.pendingPlanName = heuristicPlanTitle(description)
 				m.pendingPlanDesc = description
-				m.textInputOverlay = nil
 
 				// If the first line is already a viable slug, skip AI derivation
 				if firstLineIsViableSlug(description) {
 					topicNames := m.getTopicNames()
 					topicNames = append([]string{"(No topic)"}, topicNames...)
 					pickerTitle := fmt.Sprintf("assign to topic for '%s'", m.pendingPlanName)
-					m.pickerOverlay = overlay.NewPickerOverlay(pickerTitle, topicNames)
-					m.pickerOverlay.SetAllowCustom(true)
+					po := overlay.NewPickerOverlay(pickerTitle, topicNames)
+					po.SetAllowCustom(true)
+					m.overlays.Show(po)
 					m.state = stateNewPlanTopic
 					return m, nil
 				}
@@ -774,7 +778,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.textInputOverlay = nil
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -793,17 +796,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle new plan topic picker state
 	if m.state == stateNewPlanTopic {
-		if m.pickerOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			m.pendingPlanName = ""
 			m.pendingPlanDesc = ""
 			return m, nil
 		}
-		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
-		if shouldClose {
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
 			topic := ""
-			if m.pickerOverlay.IsSubmitted() {
-				picked := m.pickerOverlay.Value()
+			if result.Submitted {
+				picked := result.Value
 				if picked != "(No topic)" {
 					topic = picked
 				}
@@ -811,7 +814,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := m.createTaskEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
 				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
-				m.pickerOverlay = nil
 				m.pendingPlanName = ""
 				m.pendingPlanDesc = ""
 				return m, m.handleError(err)
@@ -820,7 +822,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.updateSidebarTasks()
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.pickerOverlay = nil
 			m.pendingPlanName = ""
 			m.pendingPlanDesc = ""
 			return m, tea.WindowSize()
@@ -830,17 +831,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle spawn agent form state
 	if m.state == stateSpawnAgent {
-		if m.formOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose := m.formOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.formOverlay.IsSubmitted() {
-				name := m.formOverlay.Name()
-				branch := m.formOverlay.Branch()
-				workPath := m.formOverlay.WorkPath()
-				m.formOverlay = nil
+		// Type-assert before HandleKey to access Name/Branch/WorkPath after dismiss.
+		fo, _ := m.overlays.Current().(*overlay.FormOverlay)
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted && fo != nil {
+				name := fo.Name()
+				branch := fo.Branch()
+				workPath := fo.WorkPath()
 
 				if name == "" {
 					m.state = stateDefault
@@ -852,7 +854,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.formOverlay = nil
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -860,29 +861,27 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle change-topic picker for existing plans
 	if m.state == stateChangeTopic {
-		if m.pickerOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			m.pendingChangeTopicTask = ""
 			return m, nil
 		}
-		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.pickerOverlay.IsSubmitted() && m.taskState != nil && m.pendingChangeTopicTask != "" {
-				picked := m.pickerOverlay.Value()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted && m.taskState != nil && m.pendingChangeTopicTask != "" {
+				picked := result.Value
 				newTopic := ""
 				if picked != "(No topic)" {
 					newTopic = picked
 				}
 				if err := m.taskState.SetTopic(m.pendingChangeTopicTask, newTopic); err != nil {
 					m.state = stateDefault
-					m.pickerOverlay = nil
 					m.pendingChangeTopicTask = ""
 					return m, m.handleError(err)
 				}
 				m.updateSidebarTasks()
 			}
 			m.state = stateDefault
-			m.pickerOverlay = nil
 			m.pendingChangeTopicTask = ""
 			return m, tea.WindowSize()
 		}
@@ -891,19 +890,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle set-status picker for force-overriding a plan's status
 	if m.state == stateSetStatus {
-		if m.pickerOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			m.pendingSetStatusTask = ""
 			return m, nil
 		}
-		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
-		if shouldClose {
-			if m.pickerOverlay.IsSubmitted() && m.taskState != nil && m.pendingSetStatusTask != "" {
-				picked := m.pickerOverlay.Value()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted && m.taskState != nil && m.pendingSetStatusTask != "" {
+				picked := result.Value
 				if picked != "" {
 					if err := m.taskState.ForceSetStatus(m.pendingSetStatusTask, taskstate.Status(picked)); err != nil {
 						m.state = stateDefault
-						m.pickerOverlay = nil
 						m.pendingSetStatusTask = ""
 						return m, m.handleError(err)
 					}
@@ -914,13 +912,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.updateSidebarTasks()
 					m.toastManager.Success(fmt.Sprintf("status → %s", picked))
 					m.state = stateDefault
-					m.pickerOverlay = nil
 					m.pendingSetStatusTask = ""
 					return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
-			m.pickerOverlay = nil
 			m.pendingSetStatusTask = ""
 			return m, tea.WindowSize()
 		}
@@ -929,44 +925,43 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle ClickUp search input state
 	if m.state == stateClickUpSearch {
-		if m.textInputOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-
-		closed := m.textInputOverlay.HandleKeyPress(msg)
-		if closed {
-			if m.textInputOverlay.IsSubmitted() {
-				query := strings.TrimSpace(m.textInputOverlay.GetValue())
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				query := strings.TrimSpace(result.Value)
 				if query != "" {
 					m.state = stateClickUpFetching
-					m.textInputOverlay = nil
+					m.overlays.Dismiss()
 					m.toastManager.Info("searching clickup...")
 					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
-			m.textInputOverlay = nil
+			m.overlays.Dismiss()
 		}
 		return m, nil
 	}
 
 	// Handle ClickUp task picker state
 	if m.state == stateClickUpPicker {
-		if m.pickerOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		closed := m.pickerOverlay.HandleKeyPress(msg)
-		if closed {
-			if m.pickerOverlay.IsSubmitted() {
-				selected := m.pickerOverlay.Value()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				selected := result.Value
 				if selected != "" {
 					for _, r := range m.clickUpResults {
 						label := r.ID + " · " + r.Name
 						if strings.HasPrefix(selected, label) {
 							m.state = stateClickUpFetching
-							m.pickerOverlay = nil
+							m.overlays.Dismiss()
 							m.toastManager.Info("fetching task details...")
 							return m, tea.Batch(m.fetchClickUpTaskWithTimeout(r.ID), m.toastTickCmd())
 						}
@@ -974,7 +969,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 			}
 			m.state = stateDefault
-			m.pickerOverlay = nil
+			m.overlays.Dismiss()
 		}
 		return m, nil
 	}
@@ -985,14 +980,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle ClickUp workspace picker state
 	if m.state == stateClickUpWorkspacePicker {
-		if m.pickerOverlay == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		closed := m.pickerOverlay.HandleKeyPress(msg)
-		if closed {
-			if m.pickerOverlay.IsSubmitted() {
-				selected := m.pickerOverlay.Value()
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			if result.Submitted {
+				selected := result.Value
 				if selected != "" && m.clickUpImporter != nil {
 					// Resolve label ("name (id)") back to bare workspace ID.
 					wsID := selected
@@ -1009,14 +1004,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					query := m.clickUpPendingQuery
 					m.clickUpPendingQuery = ""
 					m.clickUpWorkspaceMap = nil
-					m.pickerOverlay = nil
+					m.overlays.Dismiss()
 					m.state = stateClickUpFetching
 					m.toastManager.Info("searching clickup...")
 					return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
-			m.pickerOverlay = nil
+			m.overlays.Dismiss()
 			m.clickUpPendingQuery = ""
 			m.clickUpWorkspaceMap = nil
 		}
@@ -1024,12 +1019,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	if m.state == stateTmuxBrowser {
-		if m.tmuxBrowser == nil {
+		if !m.overlays.IsActive() {
 			m.state = stateDefault
 			return m, nil
 		}
-		action := m.tmuxBrowser.HandleKeyPress(msg)
-		return m.handleTmuxBrowserAction(action)
+		browser, _ := m.overlays.Current().(*overlay.TmuxBrowserOverlay)
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			m.state = stateDefault
+			return m.handleTmuxBrowserAction(browser, result.Action)
+		}
+		return m, nil
 	}
 
 	// Handle search state — allows typing to filter AND arrow keys to navigate
@@ -1222,8 +1222,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeySpace:
 		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
-			m.textInputOverlay = overlay.NewTextInputOverlay("enter clickup id or url", "")
-			m.textInputOverlay.SetSize(50, 1)
+			tio := overlay.NewTextInputOverlay("enter clickup id or url", "")
+			tio.SetSize(50, 1)
+			m.overlays.Show(tio)
 			return m, nil
 		}
 		if m.focusSlot == slotNav && m.nav.ToggleSelectedExpand() {
@@ -1337,8 +1338,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		m.state = statePRTitle
-		m.textInputOverlay = overlay.NewTextInputOverlay("pr title", selected.Title)
-		m.textInputOverlay.SetSize(60, 3)
+		tio := overlay.NewTextInputOverlay("pr title", selected.Title)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
 		return m, nil
 	case keys.KeyCheckout:
 		selected := m.nav.GetSelectedInstance()
@@ -1367,8 +1369,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Sidebar always has focus: handle plan/instance interactions first.
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
-			m.textInputOverlay = overlay.NewTextInputOverlay("enter clickup id or url", "")
-			m.textInputOverlay.SetSize(50, 1)
+			tio := overlay.NewTextInputOverlay("enter clickup id or url", "")
+			tio.SetSize(50, 1)
+			m.overlays.Show(tio)
 			return m, nil
 		}
 		// Plan header or plan file: open plan context menu
@@ -1433,8 +1436,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Toggle expand/collapse on the selected sidebar item (same as space's expand behavior).
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
-			m.textInputOverlay = overlay.NewTextInputOverlay("enter clickup id or url", "")
-			m.textInputOverlay.SetSize(50, 1)
+			tio := overlay.NewTextInputOverlay("enter clickup id or url", "")
+			tio.SetSize(50, 1)
+			m.overlays.Show(tio)
 			return m, nil
 		}
 		// Right on an instance while in the info tab: jump to the agent tab.
@@ -1446,10 +1450,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyNewPlan:
 		m.state = stateNewPlan
-		m.textInputOverlay = overlay.NewTextInputOverlay("new plan", "")
-		m.textInputOverlay.SetMultiline(true)
-		m.textInputOverlay.SetPlaceholder("describe what you want to work on...")
-		m.textInputOverlay.SetSize(70, 8)
+		tio := overlay.NewTextInputOverlay("new plan", "")
+		tio.SetMultiline(true)
+		tio.SetPlaceholder("describe what you want to work on...")
+		tio.SetSize(70, 8)
+		m.overlays.Show(tio)
 		return m, nil
 	case keys.KeySpawnAgent:
 		if m.tmuxSessionCount >= GlobalInstanceLimit {
@@ -1457,7 +1462,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)", GlobalInstanceLimit, m.tmuxSessionCount))
 		}
 		m.state = stateSpawnAgent
-		m.formOverlay = overlay.NewSpawnFormOverlay("spawn agent", 60)
+		m.overlays.Show(overlay.NewSpawnFormOverlay("spawn agent", 60))
 		return m, nil
 	case keys.KeyTmuxBrowser:
 		return m, m.discoverTmuxSessions()
@@ -1554,8 +1559,8 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.state = stateConfirm
 	m.pendingConfirmAction = action
 
-	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-	m.confirmationOverlay.SetWidth(50)
+	co := overlay.NewConfirmationOverlay(message)
+	m.overlays.Show(co)
 
 	return nil
 }
@@ -1580,10 +1585,11 @@ func (m *home) waveFailedConfirmAction(message, planFile string, entry taskstate
 	capturedEntry := entry
 
 	m.state = stateConfirm
-	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-	m.confirmationOverlay.ConfirmKey = "r"
-	m.confirmationOverlay.CancelKey = "n"
-	m.confirmationOverlay.SetWidth(60)
+	co := overlay.NewConfirmationOverlay(message)
+	co.ConfirmKey = "r"
+	co.CancelKey = "n"
+	co.SetSize(60, 0)
+	m.overlays.Show(co)
 
 	m.pendingConfirmAction = func() tea.Msg {
 		return waveRetryMsg{planFile: capturedPlanFile, entry: capturedEntry}

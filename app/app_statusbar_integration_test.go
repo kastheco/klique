@@ -24,6 +24,7 @@ func TestStatusBarIncludedInView(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&spin),
+		overlays:     overlay.NewManager(),
 		statusBar:    ui.NewStatusBar(),
 	}
 

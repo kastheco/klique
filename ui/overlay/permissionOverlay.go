@@ -42,26 +42,6 @@ func NewPermissionOverlay(instanceTitle, description, pattern string) *Permissio
 	}
 }
 
-// HandleKeyPress processes input. Returns true when the overlay should close.
-func (p *PermissionOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.String() {
-	case "left":
-		if p.selectedIdx > 0 {
-			p.selectedIdx--
-		}
-	case "right":
-		if p.selectedIdx < len(permissionChoiceLabels)-1 {
-			p.selectedIdx++
-		}
-	case "enter":
-		p.confirmed = true
-		return true
-	case "esc":
-		return true
-	}
-	return false
-}
-
 // Choice returns the selected permission choice.
 func (p *PermissionOverlay) Choice() PermissionChoice {
 	return PermissionChoice(p.selectedIdx)
@@ -83,8 +63,8 @@ func (p *PermissionOverlay) Description() string {
 	return p.description
 }
 
-// Render draws the permission overlay.
-func (p *PermissionOverlay) Render() string {
+// render draws the permission overlay.
+func (p *PermissionOverlay) render() string {
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorGold).
@@ -143,11 +123,6 @@ func (p *PermissionOverlay) Render() string {
 	return borderStyle.Render(b.String())
 }
 
-// SetWidth sets the overlay width.
-func (p *PermissionOverlay) SetWidth(w int) {
-	p.width = w
-}
-
 // permissionActionLabels maps selectedIdx to the action string returned by HandleKey.
 var permissionActionLabels = []string{"allow_once", "allow_always", "reject"}
 
@@ -176,7 +151,7 @@ func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
 
 // View implements Overlay. Returns the rendered overlay string.
 func (p *PermissionOverlay) View() string {
-	return p.Render()
+	return p.render()
 }
 
 // SetSize implements Overlay. Updates the available dimensions for the overlay.

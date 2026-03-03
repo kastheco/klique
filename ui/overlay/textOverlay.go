@@ -38,12 +38,6 @@ func (t *TextOverlay) HandleKey(msg tea.KeyMsg) Result {
 	return Result{Dismissed: true}
 }
 
-// HandleKeyPress processes a key press and updates the state.
-// Deprecated: use HandleKey instead. Returns true if the overlay should be closed.
-func (t *TextOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	return t.HandleKey(msg).Dismissed
-}
-
 // View renders the text overlay content.
 // Implements the Overlay interface.
 func (t *TextOverlay) View() string {
@@ -54,21 +48,9 @@ func (t *TextOverlay) View() string {
 	return style.Render(t.content)
 }
 
-// Render renders the text overlay.
-// Deprecated: use View instead.
-func (t *TextOverlay) Render(opts ...WhitespaceOption) string {
-	return t.View()
-}
-
 // SetSize updates the available dimensions for the overlay.
 // Implements the Overlay interface.
 func (t *TextOverlay) SetSize(w, h int) {
 	t.width = w
 	t.height = h
-}
-
-// SetWidth sets the width of the text overlay.
-// Deprecated: use SetSize instead.
-func (t *TextOverlay) SetWidth(width int) {
-	t.width = width
 }

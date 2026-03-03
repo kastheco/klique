@@ -112,6 +112,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
+		overlays:     overlay.NewManager(),
 		taskState:    ps,
 		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
@@ -136,7 +137,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 	// The push-prompt confirmation overlay must have been set.
 	assert.Equal(t, stateConfirm, updated.state,
 		"expected stateConfirm after coder exit with StatusImplementing")
-	assert.NotNil(t, updated.confirmationOverlay,
+	assert.True(t, updated.overlays.IsActive(),
 		"expected confirmation overlay to be set for push-prompt")
 }
 
@@ -180,6 +181,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
+		overlays:     overlay.NewManager(),
 		taskState:    ps,
 		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
@@ -202,7 +204,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 
 	assert.Equal(t, stateConfirm, updated.state,
 		"expected stateConfirm when coder is at prompt (PromptDetected && !AwaitingWork)")
-	assert.NotNil(t, updated.confirmationOverlay,
+	assert.True(t, updated.overlays.IsActive(),
 		"expected confirmation overlay for push-prompt on prompt-detected coder")
 }
 
@@ -235,6 +237,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
 		toastManager: overlay.NewToastManager(&sp),
+		overlays:     overlay.NewManager(),
 	}
 
 	// Call promptPushBranchThenAdvance — this sets pendingConfirmAction.
@@ -288,6 +291,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&sp),
+		overlays:     overlay.NewManager(),
 		taskState:    ps,
 		taskStateDir: plansDir,
 		fsm:          newPlanFSMForTest(t, plansDir),
@@ -305,7 +309,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 	updated1, ok := model1.(*home)
 	require.True(t, ok)
 	require.Equal(t, stateConfirm, updated1.state, "first tick must set stateConfirm")
-	firstOverlay := updated1.confirmationOverlay
+	firstOverlay := updated1.overlays.Current()
 	require.NotNil(t, firstOverlay)
 
 	// Second tick while stateConfirm is active: must NOT overwrite the overlay.
@@ -313,7 +317,7 @@ func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
 	updated2, ok := model2.(*home)
 	require.True(t, ok)
 	assert.Equal(t, stateConfirm, updated2.state, "state must remain stateConfirm")
-	assert.Same(t, firstOverlay, updated2.confirmationOverlay,
+	assert.Same(t, firstOverlay, updated2.overlays.Current(),
 		"second tick must not replace the existing confirmation overlay")
 }
 
@@ -382,6 +386,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
+		overlays:              overlay.NewManager(),
 		nav:                   ui.NewNavigationPanel(&sp),
 	}
 

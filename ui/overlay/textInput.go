@@ -103,22 +103,6 @@ func (t *TextInputOverlay) HandleKey(msg tea.KeyMsg) Result {
 	}
 }
 
-// HandleKeyPress processes a key press and updates the state accordingly.
-// Deprecated: use HandleKey instead. Returns true if the overlay should be closed.
-func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	return t.HandleKey(msg).Dismissed
-}
-
-// GetValue returns the current value of the text input.
-func (t *TextInputOverlay) GetValue() string {
-	return t.textarea.Value()
-}
-
-// IsSubmitted returns whether the form was submitted.
-func (t *TextInputOverlay) IsSubmitted() bool {
-	return t.Submitted
-}
-
 // View renders the text input overlay content.
 // Implements the Overlay interface.
 func (t *TextInputOverlay) View() string {
@@ -148,10 +132,4 @@ func (t *TextInputOverlay) View() string {
 	}
 
 	return style.Render(content)
-}
-
-// Render renders the text input overlay.
-// Deprecated: use View instead.
-func (t *TextInputOverlay) Render() string {
-	return t.View()
 }

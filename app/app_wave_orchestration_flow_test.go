@@ -34,6 +34,7 @@ func waveFlowHome(t *testing.T, ps *taskstate.TaskState, plansDir string, orchMa
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
+		overlays:          overlay.NewManager(),
 		taskState:         ps,
 		taskStateDir:      plansDir,
 		waveOrchestrators: orchMap,
@@ -58,6 +59,8 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 	require.False(t, orch.NeedsConfirm(), "latch already consumed, must be false")
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	mgr1 := overlay.NewManager()
+	mgr1.Show(overlay.NewConfirmationOverlay("Wave 1 complete. Start Wave 2?"))
 	h := &home{
 		ctx:                        context.Background(),
 		state:                      stateConfirm,
@@ -66,9 +69,9 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 		menu:                       ui.NewMenu(),
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
+		overlays:                   mgr1,
 		waveOrchestrators:          map[string]*WaveOrchestrator{"test.md": orch},
 		pendingWaveConfirmTaskFile: "test.md",
-		confirmationOverlay:        overlay.NewConfirmationOverlay("Wave 1 complete. Start Wave 2?"),
 	}
 
 	// Press 'n' (cancel key = default "n")
@@ -127,11 +130,13 @@ func TestWaveMonitor_PausedTaskCountsAsFailed(t *testing.T) {
 	// Wave must have detected failure and shown the failed-wave decision prompt
 	assert.Equal(t, stateConfirm, updated.state,
 		"paused task must trigger wave-failed decision prompt")
-	require.NotNil(t, updated.confirmationOverlay,
+	require.True(t, updated.overlays.IsActive(),
 		"confirmation overlay must be set for failed-wave decision")
-	assert.Equal(t, "r", updated.confirmationOverlay.ConfirmKey,
+	co1, ok1 := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok1, "current overlay must be a ConfirmationOverlay")
+	assert.Equal(t, "r", co1.ConfirmKey,
 		"failed-wave confirm key must be 'r' (retry)")
-	assert.Equal(t, "n", updated.confirmationOverlay.CancelKey,
+	assert.Equal(t, "n", co1.CancelKey,
 		"failed-wave cancel key must be 'n' (next wave)")
 	assert.NotNil(t, updated.pendingWaveNextAction,
 		"failed-wave next action must be set for 'n' (next wave)")
@@ -172,8 +177,10 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 	// Missing task must be treated as failed and trigger the failed-wave prompt
 	assert.Equal(t, stateConfirm, updated.state,
 		"missing task must trigger wave-failed decision prompt")
-	require.NotNil(t, updated.confirmationOverlay)
-	assert.Equal(t, "r", updated.confirmationOverlay.ConfirmKey,
+	require.True(t, updated.overlays.IsActive())
+	co2, ok2 := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok2, "current overlay must be a ConfirmationOverlay")
+	assert.Equal(t, "r", co2.ConfirmKey,
 		"failed-wave confirm key must be 'r' (retry)")
 }
 
@@ -194,6 +201,11 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 	require.Equal(t, WaveStateWaveComplete, orch.State())
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	abortCo := overlay.NewConfirmationOverlay("Wave 1 failed. r=retry n=next wave a=abort")
+	abortCo.ConfirmKey = "r"
+	abortCo.CancelKey = ""
+	mgrAbort := overlay.NewManager()
+	mgrAbort.Show(abortCo)
 	h := &home{
 		ctx:                        context.Background(),
 		state:                      stateConfirm,
@@ -202,16 +214,13 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 		menu:                       ui.NewMenu(),
 		tabbedWindow:               ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:               overlay.NewToastManager(&sp),
+		overlays:                   mgrAbort,
 		waveOrchestrators:          map[string]*WaveOrchestrator{planFile: orch},
 		pendingWaveConfirmTaskFile: planFile,
-		confirmationOverlay:        overlay.NewConfirmationOverlay("Wave 1 failed. r=retry n=next wave a=abort"),
 		pendingWaveAbortAction: func() tea.Msg {
 			return waveAbortMsg{planFile: planFile}
 		},
 	}
-	// Set confirm key to 'r' as the failed-wave dialog would
-	h.confirmationOverlay.ConfirmKey = "r"
-	h.confirmationOverlay.CancelKey = ""
 
 	// Press 'a' for abort
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
@@ -220,7 +229,7 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 
 	// State must return to default and abort action must be returned as cmd
 	assert.Equal(t, stateDefault, updated.state, "state must return to default after abort")
-	assert.Nil(t, updated.confirmationOverlay, "overlay must be cleared after abort")
+	assert.False(t, updated.overlays.IsActive(), "overlay must be cleared after abort")
 	assert.Nil(t, updated.pendingWaveAbortAction, "abort action must be cleared")
 	assert.NotNil(t, cmd, "abort tea.Cmd must be returned so Update can execute it")
 }
@@ -341,10 +350,12 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	// Confirmation dialog must appear for review
 	assert.Equal(t, stateConfirm, updated.state,
 		"state must be stateConfirm to prompt user for review")
-	require.NotNil(t, updated.confirmationOverlay,
+	require.True(t, updated.overlays.IsActive(),
 		"confirmation overlay must be set for all-complete review prompt")
+	co3, ok3 := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok3, "current overlay must be a ConfirmationOverlay")
 	// Standard confirm dialog (y/n) — not a wave-failed decision prompt
-	assert.Equal(t, "y", updated.confirmationOverlay.ConfirmKey,
+	assert.Equal(t, "y", co3.ConfirmKey,
 		"confirm key must be 'y' for review prompt")
 }
 
@@ -609,6 +620,8 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 	require.NoError(t, err)
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	mgrCancel := overlay.NewManager()
+	mgrCancel.Show(overlay.NewConfirmationOverlay("Plan 'cancel-kill' is ready. Start implementation?"))
 	h := &home{
 		ctx:                         context.Background(),
 		state:                       stateConfirm,
@@ -617,13 +630,13 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 		menu:                        ui.NewMenu(),
 		tabbedWindow:                ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:                overlay.NewToastManager(&sp),
+		overlays:                    mgrCancel,
 		storage:                     storage,
 		waveOrchestrators:           make(map[string]*WaveOrchestrator),
 		plannerPrompted:             make(map[string]bool),
 		coderPushPrompted:           make(map[string]bool),
 		pendingPlannerInstanceTitle: "planner-cancel-inst",
 		pendingPlannerTaskFile:      planFile,
-		confirmationOverlay:         overlay.NewConfirmationOverlay("Plan 'cancel-kill' is ready. Start implementation?"),
 		allInstances:                []*session.Instance{inst},
 	}
 	_ = h.nav.AddInstance(inst)
@@ -1004,9 +1017,11 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 	// Even with auto-advance enabled, failures must show the decision dialog
 	assert.Equal(t, stateConfirm, updated.state,
 		"failed wave must show decision dialog even when auto-advance is enabled")
-	require.NotNil(t, updated.confirmationOverlay,
+	require.True(t, updated.overlays.IsActive(),
 		"confirmation overlay must be set for failed-wave decision")
-	assert.Equal(t, "r", updated.confirmationOverlay.ConfirmKey,
+	co4, ok4 := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok4, "current overlay must be a ConfirmationOverlay")
+	assert.Equal(t, "r", co4.ConfirmKey,
 		"failed-wave confirm key must be 'r' (retry)")
 }
 
@@ -1060,7 +1075,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	// With auto-advance enabled and no failures, must NOT show a confirmation dialog
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"auto-advance must not show confirmation dialog on success")
-	assert.Nil(t, updated.confirmationOverlay,
+	assert.False(t, updated.overlays.IsActive(),
 		"no confirmation overlay must be shown when auto-advancing")
 
 	// The cmd must be non-nil (it contains the waveAdvanceMsg)

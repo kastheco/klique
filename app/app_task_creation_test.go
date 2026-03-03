@@ -61,6 +61,7 @@ func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 		state:        stateDefault,
 		keySent:      true,
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		overlays:     overlay.NewManager(),
 	}
 
 	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
@@ -69,7 +70,7 @@ func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 	updated, ok := model.(*home)
 	require.True(t, ok)
 	require.Equal(t, stateNewPlan, updated.state)
-	require.NotNil(t, updated.textInputOverlay)
+	require.True(t, updated.overlays.IsActive())
 }
 
 func TestHandleKeyPressNewPlanWithoutOverlayReturnsDefault(t *testing.T) {
@@ -84,11 +85,14 @@ func TestHandleKeyPressNewPlanWithoutOverlayReturnsDefault(t *testing.T) {
 }
 
 func TestNewPlanSubmitShowsTopicPicker(t *testing.T) {
+	tio1 := overlay.NewTextInputOverlay("new plan", "refactor auth module")
+	tio1.SetMultiline(true)
+	mgr1 := overlay.NewManager()
+	mgr1.Show(tio1)
 	h := &home{
-		state:            stateNewPlan,
-		textInputOverlay: overlay.NewTextInputOverlay("new plan", "refactor auth module"),
+		state:    stateNewPlan,
+		overlays: mgr1,
 	}
-	h.textInputOverlay.SetMultiline(true)
 
 	// Tab to submit button, then Enter
 	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
@@ -122,11 +126,14 @@ func TestHandleKeyPressNewPlanTopicWithoutPickerClearsPendingValues(t *testing.T
 }
 
 func TestNewPlanTopicPickerShowsPendingPlanName(t *testing.T) {
+	tio2 := overlay.NewTextInputOverlay("new plan", "auth refactor")
+	tio2.SetMultiline(true)
+	mgr2 := overlay.NewManager()
+	mgr2.Show(tio2)
 	h := &home{
-		state:            stateNewPlan,
-		textInputOverlay: overlay.NewTextInputOverlay("new plan", "auth refactor"),
+		state:    stateNewPlan,
+		overlays: mgr2,
 	}
-	h.textInputOverlay.SetMultiline(true)
 
 	// Tab to button, then Enter to submit — enters deriving state
 	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
@@ -141,16 +148,21 @@ func TestNewPlanTopicPickerShowsPendingPlanName(t *testing.T) {
 	updated2, ok := model2.(*home)
 	require.True(t, ok)
 	require.Equal(t, stateNewPlanTopic, updated2.state)
-	require.NotNil(t, updated2.pickerOverlay)
-	require.Contains(t, strings.ToLower(updated2.pickerOverlay.Render()), "auth refactor")
+	require.True(t, updated2.overlays.IsActive())
+	po2, ok2 := updated2.overlays.Current().(*overlay.PickerOverlay)
+	require.True(t, ok2, "current overlay must be a PickerOverlay")
+	require.Contains(t, strings.ToLower(po2.View()), "auth refactor")
 }
 
 func TestNewPlanSubmitEntersDerivingState(t *testing.T) {
+	tio3 := overlay.NewTextInputOverlay("new plan", "refactor auth module")
+	tio3.SetMultiline(true)
+	mgr3 := overlay.NewManager()
+	mgr3.Show(tio3)
 	h := &home{
-		state:            stateNewPlan,
-		textInputOverlay: overlay.NewTextInputOverlay("new plan", "refactor auth module"),
+		state:    stateNewPlan,
+		overlays: mgr3,
 	}
-	h.textInputOverlay.SetMultiline(true)
 
 	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
 	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
@@ -168,6 +180,7 @@ func TestDerivingStateTransitionsToTopicOnAITitle(t *testing.T) {
 		state:           stateNewPlanDeriving,
 		pendingPlanName: "heuristic-fallback",
 		pendingPlanDesc: "some description",
+		overlays:        overlay.NewManager(),
 	}
 
 	model, _ := h.Update(planTitleMsg{title: "ai derived title"})
@@ -176,7 +189,7 @@ func TestDerivingStateTransitionsToTopicOnAITitle(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, stateNewPlanTopic, updated.state)
 	require.Equal(t, "ai derived title", updated.pendingPlanName)
-	require.NotNil(t, updated.pickerOverlay)
+	require.True(t, updated.overlays.IsActive())
 }
 
 func TestDerivingStateFallsBackOnAIError(t *testing.T) {
@@ -184,6 +197,7 @@ func TestDerivingStateFallsBackOnAIError(t *testing.T) {
 		state:           stateNewPlanDeriving,
 		pendingPlanName: "heuristic fallback title",
 		pendingPlanDesc: "some description",
+		overlays:        overlay.NewManager(),
 	}
 
 	model, _ := h.Update(planTitleMsg{err: fmt.Errorf("timeout")})
@@ -192,7 +206,7 @@ func TestDerivingStateFallsBackOnAIError(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, stateNewPlanTopic, updated.state)
 	require.Equal(t, "heuristic fallback title", updated.pendingPlanName)
-	require.NotNil(t, updated.pickerOverlay)
+	require.True(t, updated.overlays.IsActive())
 }
 
 func TestDerivingStateBlocksKeyInput(t *testing.T) {
@@ -248,11 +262,14 @@ func TestIsUserInOverlay(t *testing.T) {
 }
 
 func TestNewPlanSubmitSkipsAIWhenFirstLineIsViableSlug(t *testing.T) {
+	tio4 := overlay.NewTextInputOverlay("new plan", "fix auth refresh\ndetails about the bug")
+	tio4.SetMultiline(true)
+	mgr4 := overlay.NewManager()
+	mgr4.Show(tio4)
 	h := &home{
-		state:            stateNewPlan,
-		textInputOverlay: overlay.NewTextInputOverlay("new plan", "fix auth refresh\ndetails about the bug"),
+		state:    stateNewPlan,
+		overlays: mgr4,
 	}
-	h.textInputOverlay.SetMultiline(true)
 
 	// Tab to submit button, then Enter
 	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
@@ -275,19 +292,24 @@ func TestNewPlanOverlaySizePreservedOnSpuriousWindowSize(t *testing.T) {
 		nav:          ui.NewNavigationPanel(&s),
 		menu:         ui.NewMenu(),
 		toastManager: overlay.NewToastManager(&s),
+		overlays:     overlay.NewManager(),
 	}
 	// Simulate initial terminal size.
 	h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 200, Height: 50})
 
-	// Now create the overlay with a fixed size.
-	h.textInputOverlay = overlay.NewTextInputOverlay("new plan", "")
-	h.textInputOverlay.SetMultiline(true)
-	h.textInputOverlay.SetSize(70, 8)
+	// Now create the overlay, show it via the manager, then set a fixed size.
+	// (Size must be set AFTER Show so it overrides the manager's auto-sizing.)
+	tio5 := overlay.NewTextInputOverlay("new plan", "")
+	tio5.SetMultiline(true)
+	h.overlays.Show(tio5)
+	tio5.SetSize(70, 8)
 
 	// Simulate a spurious WindowSize (same dimensions, triggered by instanceStartedMsg).
 	h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 200, Height: 50})
 
 	// Overlay should still be 70 wide, not 120 (200*0.6).
-	require.Equal(t, 70, h.textInputOverlay.Width())
-	require.Equal(t, 8, h.textInputOverlay.Height())
+	cur, ok := h.overlays.Current().(*overlay.TextInputOverlay)
+	require.True(t, ok, "current overlay must be a TextInputOverlay")
+	require.Equal(t, 70, cur.Width())
+	require.Equal(t, 8, cur.Height())
 }

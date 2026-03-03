@@ -67,12 +67,6 @@ func (c *ConfirmationOverlay) HandleKey(msg tea.KeyMsg) Result {
 	}
 }
 
-// HandleKeyPress processes a key press and updates the state.
-// Deprecated: use HandleKey instead. Returns true if the overlay should be closed.
-func (c *ConfirmationOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	return c.HandleKey(msg).Dismissed
-}
-
 // View renders the confirmation overlay content.
 // Implements the Overlay interface.
 func (c *ConfirmationOverlay) View() string {
@@ -87,21 +81,9 @@ func (c *ConfirmationOverlay) View() string {
 	return style.Render(content)
 }
 
-// Render renders the confirmation overlay.
-// Deprecated: use View instead.
-func (c *ConfirmationOverlay) Render(opts ...WhitespaceOption) string {
-	return c.View()
-}
-
 // SetSize updates the available dimensions for the overlay.
 // Implements the Overlay interface.
 func (c *ConfirmationOverlay) SetSize(w, h int) {
 	c.width = w
 	c.height = h
-}
-
-// SetWidth sets the width of the confirmation overlay.
-// Deprecated: use SetSize instead.
-func (c *ConfirmationOverlay) SetWidth(width int) {
-	c.width = width
 }

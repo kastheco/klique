@@ -8,6 +8,7 @@ type Manager struct {
 	centered bool // whether to center the overlay (true for modals)
 	shadow   bool // whether to show shadow/fade effect
 	w, h     int  // viewport dimensions
+	x, y     int  // explicit position (used when centered=false)
 }
 
 // NewManager creates an overlay manager with no active overlay.
@@ -16,7 +17,11 @@ func NewManager() *Manager {
 }
 
 // Show activates an overlay. Any previously active overlay is replaced.
+// No-op if m is nil.
 func (m *Manager) Show(o Overlay) {
+	if m == nil {
+		return
+	}
 	m.active = o
 	if m.w > 0 || m.h > 0 {
 		o.SetSize(m.w, m.h)
@@ -24,35 +29,73 @@ func (m *Manager) Show(o Overlay) {
 }
 
 // ShowAt activates an overlay at a specific position (for context menus).
+// No-op if m is nil.
 func (m *Manager) ShowAt(o Overlay, centered, shadow bool) {
+	if m == nil {
+		return
+	}
 	m.active = o
 	m.centered = centered
 	m.shadow = shadow
+	m.x = 0
+	m.y = 0
+	if m.w > 0 || m.h > 0 {
+		o.SetSize(m.w, m.h)
+	}
+}
+
+// ShowPositioned activates an overlay at an explicit screen position.
+// Use this for context menus and other non-centered overlays.
+// No-op if m is nil.
+func (m *Manager) ShowPositioned(o Overlay, x, y int, shadow bool) {
+	if m == nil {
+		return
+	}
+	m.active = o
+	m.centered = false
+	m.shadow = shadow
+	m.x = x
+	m.y = y
 	if m.w > 0 || m.h > 0 {
 		o.SetSize(m.w, m.h)
 	}
 }
 
 // Dismiss closes the active overlay without returning a result.
+// No-op if m is nil.
 func (m *Manager) Dismiss() {
+	if m == nil {
+		return
+	}
 	m.active = nil
 	m.centered = true
 	m.shadow = true
+	m.x = 0
+	m.y = 0
 }
 
 // IsActive returns true if a modal overlay is currently displayed.
+// Returns false if m is nil.
 func (m *Manager) IsActive() bool {
+	if m == nil {
+		return false
+	}
 	return m.active != nil
 }
 
 // Current returns the active overlay, or nil.
+// Returns nil if m is nil.
 func (m *Manager) Current() Overlay {
+	if m == nil {
+		return nil
+	}
 	return m.active
 }
 
 // HandleKey delegates to the active overlay. Returns a zero Result if inactive.
+// Returns a zero Result if m is nil.
 func (m *Manager) HandleKey(msg tea.KeyMsg) Result {
-	if m.active == nil {
+	if m == nil || m.active == nil {
 		return Result{}
 	}
 	result := m.active.HandleKey(msg)
@@ -60,12 +103,18 @@ func (m *Manager) HandleKey(msg tea.KeyMsg) Result {
 		m.active = nil
 		m.centered = true
 		m.shadow = true
+		m.x = 0
+		m.y = 0
 	}
 	return result
 }
 
 // SetSize updates the viewport dimensions and propagates to the active overlay.
+// No-op if m is nil.
 func (m *Manager) SetSize(w, h int) {
+	if m == nil {
+		return
+	}
 	m.w = w
 	m.h = h
 	if m.active != nil {
@@ -74,10 +123,10 @@ func (m *Manager) SetSize(w, h int) {
 }
 
 // Render composites the active overlay onto the background string.
-// Returns the background unchanged if no overlay is active.
+// Returns the background unchanged if no overlay is active or m is nil.
 func (m *Manager) Render(bg string) string {
-	if m.active == nil {
+	if m == nil || m.active == nil {
 		return bg
 	}
-	return PlaceOverlay(0, 0, m.active.View(), bg, m.shadow, m.centered)
+	return PlaceOverlay(m.x, m.y, m.active.View(), bg, m.shadow, m.centered)
 }

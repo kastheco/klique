@@ -30,6 +30,7 @@ func newTestHomeWithCache(t *testing.T) *home {
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&spin),
+		overlays:          overlay.NewManager(),
 		activeRepoPath:    t.TempDir(),
 		program:           "opencode",
 		permissionStore:   permStore,
@@ -74,7 +75,9 @@ func TestUpdate_PermissionPromptDetection_ShowsOverlay(t *testing.T) {
 	_, _ = m.Update(msg)
 
 	assert.Equal(t, statePermission, m.state)
-	require.NotNil(t, m.permissionOverlay)
+	require.NotNil(t, m.overlays.Current(), "permission overlay must be active")
+	_, ok := m.overlays.Current().(*overlay.PermissionOverlay)
+	assert.True(t, ok, "active overlay must be a PermissionOverlay")
 	assert.NotNil(t, m.pendingPermissionInstance)
 }
 
@@ -177,7 +180,7 @@ func TestHandleKeyPress_PermissionEnter_SendsResponse(t *testing.T) {
 
 	// Set up statePermission (overlay open, instance pending)
 	m.state = statePermission
-	m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*")
+	m.overlays.Show(overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*"))
 	m.pendingPermissionInstance = inst
 
 	// Enter confirms with current selection (default: allow always)
@@ -196,13 +199,13 @@ func TestHandleKeyPress_PermissionEsc_DismissesWithoutSending(t *testing.T) {
 	m.nav.AddInstance(inst)()
 
 	m.state = statePermission
-	m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*")
+	m.overlays.Show(overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*"))
 	m.pendingPermissionInstance = inst
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	assert.Equal(t, stateDefault, m.state, "esc should return to stateDefault")
-	assert.Nil(t, m.permissionOverlay, "overlay should be cleared")
+	assert.False(t, m.overlays.IsActive(), "overlay should be cleared")
 	assert.Nil(t, m.pendingPermissionInstance, "pending instance should be cleared")
 	// Esc must not send any permission response (nil cmd is fine; no auto-approve)
 	approvals := collectAutoApproveMsgs(cmd)
@@ -236,12 +239,12 @@ func TestPermissionDetection_ShowsOverlayForOpenCode(t *testing.T) {
 	assert.NotNil(t, pp)
 
 	// Simulate the detection path
-	m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
+	m.overlays.Show(overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern))
 	m.pendingPermissionInstance = inst
 	m.state = statePermission
 
 	assert.Equal(t, statePermission, m.state)
-	assert.NotNil(t, m.permissionOverlay)
+	assert.True(t, m.overlays.IsActive(), "permission overlay must be active")
 }
 
 func TestPermissionOverlay_ArrowKeysNavigate(t *testing.T) {
@@ -251,35 +254,35 @@ func TestPermissionOverlay_ArrowKeysNavigate(t *testing.T) {
 	assert.Equal(t, overlay.PermissionAllowOnce, po.Choice())
 
 	// Right → "allow always"
-	po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
 	assert.Equal(t, overlay.PermissionAllowAlways, po.Choice())
 
 	// Right → "reject"
-	po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
 	assert.Equal(t, overlay.PermissionReject, po.Choice())
 
 	// Right at end → stays on "reject"
-	po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
 	assert.Equal(t, overlay.PermissionReject, po.Choice())
 
 	// Left → back to "allow always"
-	po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyLeft})
+	po.HandleKey(tea.KeyMsg{Type: tea.KeyLeft})
 	assert.Equal(t, overlay.PermissionAllowAlways, po.Choice())
 }
 
 func TestPermissionOverlay_EnterConfirms(t *testing.T) {
 	po := overlay.NewPermissionOverlay("test", "Access /opt", "/opt/*")
-	closed := po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
-	assert.True(t, closed)
-	assert.True(t, po.IsConfirmed())
+	result := po.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.True(t, result.Submitted)
 	assert.Equal(t, overlay.PermissionAllowOnce, po.Choice()) // default matches opencode
 }
 
 func TestPermissionOverlay_EscDismisses(t *testing.T) {
 	po := overlay.NewPermissionOverlay("test", "Access /opt", "/opt/*")
-	closed := po.HandleKeyPress(tea.KeyMsg{Type: tea.KeyEsc})
-	assert.True(t, closed)
-	assert.False(t, po.IsConfirmed())
+	result := po.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.True(t, result.Dismissed)
+	assert.False(t, result.Submitted)
 }
 
 func TestPermissionCache_AutoApprovesCachedPattern(t *testing.T) {
