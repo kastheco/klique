@@ -131,6 +131,17 @@ func TestRestart_NotStarted_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRestart_PausedInstance_ReturnsError(t *testing.T) {
+	inst := &Instance{
+		Title:   "paused-restart",
+		started: true,
+		Status:  Paused,
+	}
+	err := inst.Restart()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "paused")
+}
+
 func TestStartOnBranch_SetsFields(t *testing.T) {
 	repoPath := setupGitRepo(t)
 

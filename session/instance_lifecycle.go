@@ -428,6 +428,9 @@ func (i *Instance) Restart() error {
 	if !i.started {
 		return fmt.Errorf("cannot restart instance that has not been started")
 	}
+	if i.Status == Paused {
+		return fmt.Errorf("cannot restart paused instance; resume it first")
+	}
 
 	// Best-effort kill of existing tmux session (may already be dead).
 	if i.tmuxSession != nil {

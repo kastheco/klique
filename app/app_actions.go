@@ -450,6 +450,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 				auditlog.WithAgent(capturedAgent),
 				auditlog.WithPlan(capturedPlan),
 			)
+			_ = m.saveAllInstances()
 			return instanceChangedMsg{}
 		}
 
