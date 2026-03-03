@@ -1,0 +1,73 @@
+Implement Task 1: Rewrite worktree.go — Struct and Constructors
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all upstream-derived code in `session/git/` to remove AGPL-tainted lines while preserving identical public API, behavior, and passing all existing tests.
+**Architecture:** Four files rewritten in-place: `worktree.go` (struct + constructors), `worktree_ops.go` (setup/cleanup/sync lifecycle), `worktree_git.go` (git CLI commands, push, PR ops), and `diff.go` (diff computation + stats). Each file is deleted and rewritten from its functional spec — no copy-paste from the original. The `GitWorktree` struct, all exported methods, and the `DiffStats` type keep their exact signatures so callers (`session/instance.go`, `session/instance_lifecycle.go`, `app/app_actions.go`, `app/app_state.go`, `main.go`) require zero changes. Files that are 100% original (`util.go`, `task_lifecycle.go`, `worktree_branch.go`) and all test files are untouched. Existing tests in `worktree_ops_test.go`, `util_test.go`, and `task_lifecycle_test.go` serve as the regression suite.
+**Tech Stack:** Go 1.24, `go-git/v5` (PlainOpen, plumbing refs), `os/exec` (git + gh CLI), testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/git/worktree.go`
+- Test: `session/git/task_lifecycle_test.go` (existing — exercises `NewGitWorktreeFromStorage` via `NewSharedTaskWorktree`)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing tests exercise `NewGitWorktreeFromStorage` (via `NewSharedTaskWorktree`), and all accessors (`GetRepoPath`, `GetWorktreePath`, `GetBranchName`, `GetBaseCommitSHA`). The `NewGitWorktree` and `NewGitWorktreeOnBranch` constructors are integration-tested through `Setup()` in `TestSetupFromExistingBranch_SetsBaseCommitSHA`.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./session/git/... -v -count=1
+```
+
+expected: PASS — all existing tests green before rewrite
+
+**Step 3: rewrite implementation**
+
+Delete `session/git/worktree.go` and rewrite from scratch based on this spec:
+
+- **`getWorktreeDirectory(repoPath string) (string, error)`** — returns `filepath.Join(repoPath, ".worktrees")`. Errors if `repoPath` is empty.
+- **`GitWorktree` struct** — five unexported fields: `repoPath`, `worktreePath`, `sessionName`, `branchName`, `baseCommitSHA` (all strings).
+- **`NewGitWorktreeFromStorage(repoPath, worktreePath, sessionName, branchName, baseCommitSHA string) *GitWorktree`** — direct field assignment constructor. Used when restoring from persisted state.
+- **`NewGitWorktree(repoPath, sessionName string) (*GitWorktree, string, error)`** — loads `config.LoadConfig()` for `BranchPrefix`, concatenates prefix + sessionName, sanitizes via `sanitizeBranchName`, resolves `repoPath` to absolute via `filepath.Abs` (falls back to original on error), finds git root via `findGitRepoRoot`, gets worktree dir, builds worktree path as `<worktreeDir>/<branchName>_<hex-nanosecond-timestamp>`.
+- **`NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree, string, error)`** — like `NewGitWorktree` but uses the provided `branch` (sanitized) instead of generating one from config prefix.
+- **Accessors:** `GetWorktreePath() string`, `GetBranchName() string`, `GetRepoPath() string`, `GetRepoName() string` (returns `filepath.Base(repoPath)`), `GetBaseCommitSHA() string`.
+
+Imports: `fmt`, `path/filepath`, `time`, `github.com/kastheco/kasmos/config`, `github.com/kastheco/kasmos/log`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/git/... -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/git/worktree.go
+git commit -m "feat(clean-room): rewrite session/git/worktree.go from scratch"
+```
