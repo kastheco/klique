@@ -1,0 +1,21 @@
+Implement docs/plans/02b-rewrite-overlay-ui.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `ui/overlay/tmuxBrowserOverlay.go:226` — "kill" action returns `Result{Dismissed: true, Action: "kill"}`, which causes the Manager to auto-clear the overlay. In the old code, `HandleKeyPress` returned `BrowserKill` without dismissing — the browser stayed open so the user could kill multiple sessions. Now the browser closes after every kill, breaking the multi-kill workflow. The fix: "kill" should return `Result{Action: "kill"}` (without `Dismissed: true`), and the app layer (`app/app_input.go:1021-1033`) needs to handle non-dismissed action results from the browser. Same pattern applies to "adopt" and "attach" which correctly dismiss, but the app layer's `if result.Dismissed` guard means non-dismissed actions are silently dropped.
+
+## important
+
+- `ui/overlay/formOverlay.go:183-200` — `View()` creates inline `lipgloss.NewStyle()` calls for title, hint, and border styles instead of using `DefaultStyles()`. The plan explicitly states "All three use `DefaultStyles()` for their border/title/hint rendering instead of inline `lipgloss.NewStyle()` calls." This is inconsistent with `pickerOverlay.go` and `contextMenu.go` which correctly use `DefaultStyles()`.
+
+- `ui/overlay/permissionOverlay.go:67-94` — `render()` creates 7 inline style definitions instead of using `DefaultStyles()`. The permission overlay has a unique gold title color (not iris), so `DefaultStyles()` may need a `WarningTitle` style or the overlay can use `styles.WarningBorder` + a local title override. Either way, the current approach duplicates what `Styles` was designed to consolidate.
+
+- `ui/overlay/tmuxBrowserOverlay.go:27-57` — 7 package-level `var` style declarations (`browserBorderStyle`, `browserTitleStyle`, `browserSearchStyle`, `browserItemStyle`, `browserSelectedStyle`, `browserMutedStyle`, `browserHintStyle`) remain. The plan Task 7 Step 3 says "Remove package-level `var` style declarations ... now served by `DefaultStyles()`". These should be replaced with `DefaultStyles()` calls in `render()`, matching the pattern used by `pickerOverlay.go` and `contextMenu.go`.
+
+## self-fixed
+
+- `ui/overlay/contextMenu.go:18-25` — removed dead `x, y` fields from `ContextMenu` struct (position now managed by `Manager.ShowPositioned`). Updated `NewContextMenu` signature to remove unused `x, y` params, updated all callers.
+- `app/app_input.go:938,944,964,972,1007,1014` — removed redundant `m.overlays.Dismiss()` calls in ClickUp handlers that fired after `HandleKey` already auto-cleared the overlay via `Result{Dismissed: true}`.

@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "fabeae0c9f68",
+  "strategy": "manual-commit",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_input.go",
+    "ui/overlay/formOverlay.go",
+    "ui/overlay/permissionOverlay.go",
+    "ui/overlay/theme.go",
+    "ui/overlay/theme_test.go",
+    "ui/overlay/tmuxBrowserOverlay.go",
+    "ui/overlay/tmuxBrowserOverlay_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fa/beae0c9f68/0/metadata.json",
+      "transcript": "/fa/beae0c9f68/0/full.jsonl",
+      "context": "/fa/beae0c9f68/0/context.md",
+      "content_hash": "/fa/beae0c9f68/0/content_hash.txt",
+      "prompt": "/fa/beae0c9f68/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 37,
+    "cache_creation_tokens": 93593,
+    "cache_read_tokens": 2760759,
+    "output_tokens": 16370,
+    "api_call_count": 36
+  }
+}
