@@ -465,6 +465,48 @@ func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
 	return nil
 }
 
+// Restart kills the tmux session (if alive) and starts a fresh one with the
+// same configuration. The worktree, branch, and instance identity are preserved.
+func (i *Instance) Restart() error {
+	if !i.started {
+		return fmt.Errorf("cannot restart instance that has not been started")
+	}
+
+	// Best-effort kill of existing tmux session (may already be dead).
+	if i.tmuxSession != nil {
+		_ = i.tmuxSession.Close()
+	}
+
+	// Create fresh tmux session with same config.
+	ts := tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	ts.SetAgentType(i.AgentType)
+	i.tmuxSession = ts
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+
+	// Determine working directory.
+	workDir := i.Path
+	if i.gitWorktree != nil {
+		workDir = i.gitWorktree.GetWorktreePath()
+	}
+
+	if err := ts.Start(workDir); err != nil {
+		return fmt.Errorf("failed to restart tmux session: %w", err)
+	}
+
+	// Reset ephemeral state.
+	i.Exited = false
+	i.PromptDetected = false
+	i.HasWorked = false
+	i.AwaitingWork = false
+	i.Notified = false
+	i.CachedContentSet = false
+	i.CachedContent = ""
+	i.SetStatus(Running)
+
+	return nil
+}
+
 // Resume recreates the worktree and restarts the tmux session
 func (i *Instance) Resume() error {
 	if !i.started {
