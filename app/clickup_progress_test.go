@@ -1,11 +1,22 @@
 package app
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/planfsm"
 	"github.com/kastheco/kasmos/config/planparser"
 	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
+	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPostClickUpProgressSkipsWithoutTaskID verifies that resolveClickUpTaskID
@@ -71,4 +82,135 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 // TestShouldPostWaveCompleteCommentNilOrch verifies nil-safety of the guard.
 func TestShouldPostWaveCompleteCommentNilOrch(t *testing.T) {
 	assert.False(t, shouldPostWaveCompleteComment(nil))
+}
+
+// TestFixerCompleteHook_ClearsPendingFeedback verifies that when an
+// ImplementFinished signal fires while pendingReviewFeedback is set (meaning
+// a fix-coder was spawned after ReviewChangesRequested), the feedback is
+// cleared from pendingReviewFeedback and a tea.Cmd is returned for the
+// fixer_complete ClickUp comment. Since home.postClickUpProgress returns nil
+// when there is no commenter (click-up not configured), we verify the
+// observable side-effect: pendingReviewFeedback is always cleared.
+func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
+	const planFile = "2026-03-02-fixer-hook.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	store, ps, fsm := newSharedStoreForTest(t, plansDir)
+	require.NoError(t, ps.Register(planFile, "fixer hook test", "plan/fixer-hook", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	coderInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "fixer-hook-implement",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(coderInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		allInstances:          []*session.Instance{coderInst},
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		planStore:             store,
+		planStoreProject:      "test",
+		fsm:                   fsm,
+		plannerPrompted:       make(map[string]bool),
+		pendingReviewFeedback: map[string]string{planFile: "fix the auth logic"},
+		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		instanceFinalizers:    make(map[*session.Instance]func()),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// Fire an ImplementFinished signal with pendingReviewFeedback set.
+	msg := metadataResultMsg{
+		PlanState: ps,
+		Signals: []planfsm.Signal{
+			{Event: planfsm.ImplementFinished, PlanFile: planFile},
+		},
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// pendingReviewFeedback must be cleared — fixer_complete hook consumed it.
+	_, hasFeedback := updated.pendingReviewFeedback[planFile]
+	assert.False(t, hasFeedback,
+		"pendingReviewFeedback must be cleared after ImplementFinished fires for a fix-coder")
+}
+
+// TestFixerCompleteHook_SkipsWhenNoFeedback verifies that the fixer_complete
+// hook does NOT fire when ImplementFinished is for an original coder (no
+// pending feedback). pendingReviewFeedback must remain empty/unchanged.
+func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
+	const planFile = "2026-03-02-no-feedback-hook.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	store, ps, fsm := newSharedStoreForTest(t, plansDir)
+	require.NoError(t, ps.Register(planFile, "no feedback test", "plan/no-feedback", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	coderInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "no-feedback-implement",
+		Path:      dir,
+		Program:   "claude",
+		PlanFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(coderInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		allInstances:          []*session.Instance{coderInst},
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		planState:             ps,
+		planStateDir:          plansDir,
+		planStore:             store,
+		planStoreProject:      "test",
+		fsm:                   fsm,
+		plannerPrompted:       make(map[string]bool),
+		pendingReviewFeedback: make(map[string]string), // no feedback for this plan
+		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		instanceFinalizers:    make(map[*session.Instance]func()),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// Fire ImplementFinished without any pending feedback.
+	msg := metadataResultMsg{
+		PlanState: ps,
+		Signals: []planfsm.Signal{
+			{Event: planfsm.ImplementFinished, PlanFile: planFile},
+		},
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// pendingReviewFeedback must still be empty — no fixer_complete hook fired.
+	assert.Empty(t, updated.pendingReviewFeedback,
+		"pendingReviewFeedback must remain empty when no feedback was pending")
 }
