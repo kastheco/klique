@@ -1,0 +1,133 @@
+Implement Task 2: Kill, Pause, Resume, and Send Commands
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add a `kas instance` CLI command tree that enables headless instance monitoring and lifecycle management — listing, killing, pausing, resuming, and prompting agent sessions without launching the TUI.
+**Architecture:** A new `cmd/instance.go` file follows the established pattern from `cmd/task.go`: testable `executeXxx()` functions with thin cobra wrappers. The `list` command reads raw `InstanceData` from `config.State` without reconstructing live tmux sessions. Lifecycle commands (`kill`, `pause`, `resume`, `send`) reconstruct the target `Instance` via `session.FromInstanceData` and call the existing lifecycle methods, then persist state back. All commands are wired into both `cmd/cmd.go` `NewRootCmd()` and `main.go` `init()`.
+**Tech Stack:** Go, cobra, `session.Storage`/`session.InstanceData`, `config.State`, `encoding/json`
+
+## Wave 2 of 2
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/instance.go`
+- Modify: `cmd/instance_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestFindInstanceData_Found(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "alpha", Status: session.Running},
+		{Title: "beta", Status: session.Paused},
+	}
+	found, err := findInstanceData(records, "beta")
+	require.NoError(t, err)
+	assert.Equal(t, "beta", found.Title)
+	assert.Equal(t, session.Paused, found.Status)
+}
+
+func TestFindInstanceData_NotFound(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "alpha", Status: session.Running},
+	}
+	_, err := findInstanceData(records, "missing")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFindInstanceData_FuzzyMatch(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "planner-my-feature", Status: session.Running},
+		{Title: "coder-my-feature-task-1", Status: session.Running},
+	}
+	// Exact match should work
+	found, err := findInstanceData(records, "planner-my-feature")
+	require.NoError(t, err)
+	assert.Equal(t, "planner-my-feature", found.Title)
+
+	// Substring match when no exact match
+	found, err = findInstanceData(records, "task-1")
+	require.NoError(t, err)
+	assert.Equal(t, "coder-my-feature-task-1", found.Title)
+}
+
+func TestFindInstanceData_AmbiguousSubstring(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "planner-foo", Status: session.Running},
+		{Title: "coder-foo", Status: session.Running},
+	}
+	_, err := findInstanceData(records, "foo")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ambiguous")
+}
+
+func TestValidateInstanceStatus_Kill(t *testing.T) {
+	// Kill should work on any non-paused, non-exited instance
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "kill"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "kill"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "kill"))
+}
+
+func TestValidateInstanceStatus_Pause(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "pause"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "pause"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "pause"))
+}
+
+func TestValidateInstanceStatus_Resume(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "resume"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "resume"))
+}
+
+func TestValidateInstanceStatus_Send(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "send"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "send"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "send"))
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./cmd/... -run "TestFindInstanceData|TestValidateInstanceStatus" -v
+```
+
+expected: FAIL — `findInstanceData`, `validateStatusForAction` undefined
+
+**Step 3: write minimal implementation**
+
+Add to `cmd/instance.go`:
+
+Helper functions:
+- `loadInstanceRecords(state config.StateManager) ([]session.InstanceData, error)` — unmarshals raw state to `[]InstanceData`
+- `findInstanceData(records []session.InstanceData, title string) (session.InstanceData, error)` — exact match first, then substring match; returns error on not-found or ambiguous
+- `validateStatusForAction(data session.InstanceData, action string) error` — validates the instance is in a compatible status for the requested action
+- `removeInstanceFromState(state config.StateManager, title string) error` — removes the named instance from persisted state
+- `updateInstanceInState(state config.StateManager, title string, updater func(*session.Instance) error) error` — reconstructs via `FromInstanceData`, applies the updater, saves state back
+
+Cobra subcommands:
+- `kill <title>` — validates status, reconstructs Instance, calls `Kill()`, removes from state
+- `pause <title>` — validates not-paused, reconstructs Instance, calls `Pause()`, updates state
+- `resume <title>` — validates paused, reconstructs Instance, calls `Resume()`, updates state
+- `send <title> <prompt>` — validates running/ready, reconstructs Instance, calls `SendPrompt()`, no state change needed
+
+All commands print a confirmation message on success (e.g., `killed: planner-foo`) and return errors via cobra's error handling.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -run "TestFindInstanceData|TestValidateInstanceStatus" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/instance.go cmd/instance_test.go
+git commit -m "feat: add kas instance kill/pause/resume/send commands"
+```
