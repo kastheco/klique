@@ -1,0 +1,1345 @@
+{
+  "info": {
+    "id": "ses_34f37695cffeLmRJI3BhORstnb",
+    "slug": "lucky-island",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Using kasmos-planner to structure plan",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772492461731,
+      "updated": 1772492504808
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772492461752
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "id": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Plan auto-advance-waves. Goal: auto-advance-waves\n\nadd a config option (default=false) also controllable via UI that enables/disables autoadvancing waves after one completes. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.",
+          "id": "prt_cb0c896b0002cxGjIVCRsK3rB6",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896b0001SH2jaESB9XIAcp"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492461760,
+          "completed": 1772492466103
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41474,
+          "input": 3,
+          "output": 107,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41364
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c896c0001Zgq44Mqo22B5bk",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8a2ad001y6HnSr8bsnp7UH",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896c0001Zgq44Mqo22B5bk"
+        },
+        {
+          "type": "text",
+          "text": "\n\nI'll load the required skills first.",
+          "time": {
+            "start": 1772492465775,
+            "end": 1772492465775
+          },
+          "id": "prt_cb0c8a2ae001FtrhkWgi29Vhf3",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896c0001Zgq44Mqo22B5bk"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the plan status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after saving the plan file. do not skip any.\n\n## plan review\n\nafter writing the plan file, review it against this checklist before committing.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline (edit the plan file directly) before proceeding to commit + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to commit + signal.\n\nif any check fails: fix the plan file inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. commit the plan\n\n```bash\ngit add docs/plans/YYYY-MM-DD-<feature-name>.md\ngit commit -m \"plan: <feature name>\"\n```\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md\n```\n\nthe filename must match the plan filename exactly (with `planner-finished-` prefix).\n\n**do NOT edit `plan-state.json` directly** — kasmos manages that file.\n\nannounce completion and stop:\n\n> \"plan complete. saved to `docs/plans/YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in `plan-state.json`. read the file first, then add:\n\n```json\n\"YYYY-MM-DD-<feature-name>.md\": { \"status\": \"ready\" }\n```\n\ncommit:\n\n```bash\ngit add docs/plans/YYYY-MM-DD-<feature-name>.md docs/plans/plan-state.json\ngit commit -m \"plan: <feature name>\"\n```\n\nthen offer execution choices:\n\n> \"plan complete and saved to `docs/plans/YYYY-MM-DD-<feature-name>.md`. two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492465780,
+              "end": 1772492465784
+            }
+          },
+          "id": "prt_cb0c8a67000125ewFPJxxpHmIa",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896c0001Zgq44Mqo22B5bk"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017GtkCT8Xo58FU6GemCedva",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492466066,
+              "end": 1772492466069
+            }
+          },
+          "id": "prt_cb0c8a675001Qu6wKUJgdazkcW",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896c0001Zgq44Mqo22B5bk"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 41474,
+            "input": 3,
+            "output": 107,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41364
+            }
+          },
+          "id": "prt_cb0c8a7a7001SVu10zkjJzVCHR",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c896c0001Zgq44Mqo22B5bk"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492466103,
+          "completed": 1772492473350
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49732,
+          "input": 1,
+          "output": 350,
+          "reasoning": 0,
+          "cache": {
+            "read": 41364,
+            "write": 8017
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c8a7b7001BgLFAiwzR1L4q7",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8aef60012fhtp3cgdLrifb",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "text",
+          "text": "i'm using the kasmos-planner skill to design and plan this feature.\n\nLet me explore the project context first to understand the current architecture around config, wave management, and UI.",
+          "time": {
+            "start": 1772492469817,
+            "end": 1772492469817
+          },
+          "id": "prt_cb0c8aef7001XNG9gILils8Xsc",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline -20",
+              "description": "Recent git history"
+            },
+            "output": "91a677f chore: bump version to 1.3.8\nffae1c5 fix(clickup): parse real MCP hierarchy response for workspace names\n0d90ae5 chore: bump version to 1.3.7\n5039a38 feat(clickup): show workspace names in workspace picker\nbe62631 chore: bump version to 1.3.6\nd9cb631 fix(clickup): address review findings — unexport field, fix comments, log errors\n5aff8e5 feat(clickup): persist workspace_id per-project in .kasmos/clickup.json\n00c11de feat(clickup): detect multiple-workspaces error and show workspace picker\n8e0c12e fix(test): clean up .worktrees dir in retry test to prevent flaky TempDir failure\nf681e8b fix(clickup): parse nested MCP response objects for search and task fetch\nbc368e3 fix(mcp): handle SSE responses, send initialized notification, reset on errors\nc5d851b fix(mcp): add Accept header required by Streamable HTTP transport\n1f4696e fix(clickup): read auth tokens from opencode mcp-auth.json\nd9005be fix(clickup): handle JSONC format in opencode config and isolate tests from host config\nec57896 fix(clickup): detect MCP server from opencode config\ne71b089 chore: bump version to 1.3.0\n7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\n",
+            "title": "Recent git history",
+            "metadata": {
+              "output": "91a677f chore: bump version to 1.3.8\nffae1c5 fix(clickup): parse real MCP hierarchy response for workspace names\n0d90ae5 chore: bump version to 1.3.7\n5039a38 feat(clickup): show workspace names in workspace picker\nbe62631 chore: bump version to 1.3.6\nd9cb631 fix(clickup): address review findings — unexport field, fix comments, log errors\n5aff8e5 feat(clickup): persist workspace_id per-project in .kasmos/clickup.json\n00c11de feat(clickup): detect multiple-workspaces error and show workspace picker\n8e0c12e fix(test): clean up .worktrees dir in retry test to prevent flaky TempDir failure\nf681e8b fix(clickup): parse nested MCP response objects for search and task fetch\nbc368e3 fix(mcp): handle SSE responses, send initialized notification, reset on errors\nc5d851b fix(mcp): add Accept header required by Streamable HTTP transport\n1f4696e fix(clickup): read auth tokens from opencode mcp-auth.json\nd9005be fix(clickup): handle JSONC format in opencode config and isolate tests from host config\nec57896 fix(clickup): detect MCP server from opencode config\ne71b089 chore: bump version to 1.3.0\n7651928 merge plan branch plan/store-plans-in-db\nc3e533e fix(review): address reviewer feedback round 1\n316be55 refactor(task-7): migrate signals to .kasmos/signals/ and ingest plan content on planner-finished\n7a0da6d feat(planstore): add JSON-to-DB migration and gitignore plan-state.json\n",
+              "exit": 0,
+              "description": "Recent git history",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492470767,
+              "end": 1772492470779
+            }
+          },
+          "id": "prt_cb0c8b63b001Azi3jyPCpyHnqt",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01XBujQYBTjP5TbFYzxbG7js",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'auto.?advance\\|autoadvance\\|auto_advance\\|AutoAdvance' --type go -l",
+              "description": "Search for existing auto-advance references"
+            },
+            "output": "",
+            "title": "Search for existing auto-advance references",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Search for existing auto-advance references",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492472157,
+              "end": 1772492472164
+            }
+          },
+          "id": "prt_cb0c8b9f1001knXCF4B0kcjsA4",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TTemxaTpE2BE3Z6gqPKvgq",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'wave' --type go -l | head -30",
+              "description": "Files referencing waves"
+            },
+            "output": "ui/statusbar_test.go\nui/statusbar.go\nui/navigation_panel.go\nui/info_pane.go\nui/audit_pane.go\nui/nav_panel_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_lifecycle.go\ncmd/plan_test.go\ncmd/plan.go\nsession/tmux/tmux.go\nconfig/toml_test.go\nconfig/toml.go\nconfig/config.go\nconfig/planfsm/wave_signal_test.go\nconfig/planparser/planparser_test.go\nconfig/planfsm/wave_signal.go\nconfig/planparser/planparser.go\napp/app_wave_orchestration_flow_test.go\nconfig/auditlog/event.go\nconfig/auditlog/logger.go\nconfig/auditlog/sqlite.go\napp/wave_prompt.go\napp/wave_orchestrator.go\napp/wave_orchestrator_test.go\napp/app_wave_validation_test.go\napp/app_audit_test.go\napp/app_state.go\napp/app_solo_agent_test.go\n",
+            "title": "Files referencing waves",
+            "metadata": {
+              "output": "ui/statusbar_test.go\nui/statusbar.go\nui/navigation_panel.go\nui/info_pane.go\nui/audit_pane.go\nui/nav_panel_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_lifecycle.go\ncmd/plan_test.go\ncmd/plan.go\nsession/tmux/tmux.go\nconfig/toml_test.go\nconfig/toml.go\nconfig/config.go\nconfig/planfsm/wave_signal_test.go\nconfig/planparser/planparser_test.go\nconfig/planfsm/wave_signal.go\nconfig/planparser/planparser.go\napp/app_wave_orchestration_flow_test.go\nconfig/auditlog/event.go\nconfig/auditlog/logger.go\nconfig/auditlog/sqlite.go\napp/wave_prompt.go\napp/wave_orchestrator.go\napp/wave_orchestrator_test.go\napp/app_wave_validation_test.go\napp/app_audit_test.go\napp/app_state.go\napp/app_solo_agent_test.go\n",
+              "exit": 0,
+              "description": "Files referencing waves",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492472605,
+              "end": 1772492472610
+            }
+          },
+          "id": "prt_cb0c8bf60001r4S6Y4rBZYDjP3",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "fd -e go -p 'config' | head -20",
+              "description": "Find config-related Go files"
+            },
+            "output": "config/auditlog/event.go\nconfig/auditlog/logger.go\nconfig/auditlog/logger_test.go\nconfig/auditlog/sqlite.go\nconfig/auditlog/sqlite_test.go\nconfig/config.go\nconfig/config_test.go\nconfig/permission_migrate.go\nconfig/permission_migrate_test.go\nconfig/permission_store.go\nconfig/permission_store_test.go\nconfig/planfsm/fsm.go\nconfig/planfsm/fsm_test.go\nconfig/planfsm/signals.go\nconfig/planfsm/signals_test.go\nconfig/planfsm/wave_signal.go\nconfig/planfsm/wave_signal_test.go\nconfig/planparser/planparser.go\nconfig/planparser/planparser_test.go\nconfig/planstate/planstate.go\n",
+            "title": "Find config-related Go files",
+            "metadata": {
+              "output": "config/auditlog/event.go\nconfig/auditlog/logger.go\nconfig/auditlog/logger_test.go\nconfig/auditlog/sqlite.go\nconfig/auditlog/sqlite_test.go\nconfig/config.go\nconfig/config_test.go\nconfig/permission_migrate.go\nconfig/permission_migrate_test.go\nconfig/permission_store.go\nconfig/permission_store_test.go\nconfig/planfsm/fsm.go\nconfig/planfsm/fsm_test.go\nconfig/planfsm/signals.go\nconfig/planfsm/signals_test.go\nconfig/planfsm/wave_signal.go\nconfig/planfsm/wave_signal_test.go\nconfig/planparser/planparser.go\nconfig/planparser/planparser_test.go\nconfig/planstate/planstate.go\n",
+              "exit": 0,
+              "description": "Find config-related Go files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492473322,
+              "end": 1772492473333
+            }
+          },
+          "id": "prt_cb0c8c11f0017SZfhshGLJOV2L",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 49732,
+            "input": 1,
+            "output": 350,
+            "reasoning": 0,
+            "cache": {
+              "read": 41364,
+              "write": 8017
+            }
+          },
+          "id": "prt_cb0c8c3fe001crdO7ScvR0Kdg0",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8a7b7001BgLFAiwzR1L4q7"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492473351,
+          "completed": 1772492476675
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50959,
+          "input": 1,
+          "output": 178,
+          "reasoning": 0,
+          "cache": {
+            "read": 49381,
+            "write": 1399
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c8c407001y67rmFAIMtILlE",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8cbb8001RN7M15XTUVX6wg",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8c407001y67rmFAIMtILlE"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/config/config.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/config/config.go</path>\n<type>file</type>\n<content>1: package config\n2: \n3: import (\n4: \t\"encoding/json\"\n5: \t\"fmt\"\n6: \t\"github.com/kastheco/kasmos/log\"\n7: \t\"os\"\n8: \t\"os/exec\"\n9: \t\"os/user\"\n10: \t\"path/filepath\"\n11: \t\"regexp\"\n12: \t\"strings\"\n13: )\n14: \n15: const (\n16: \tConfigFileName = \"config.json\"\n17: \tdefaultProgram = \"opencode\"\n18: )\n19: \n20: var aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)\n21: \n22: // GetConfigDir returns the path to the application's configuration directory.\n23: // Uses XDG-compliant ~/.config/kasmos/. On first run, migrates legacy\n24: // directories: ~/.klique or ~/.hivemind -> ~/.config/kasmos/.\n25: func GetConfigDir() (string, error) {\n26: \thomeDir, err := os.UserHomeDir()\n27: \tif err != nil {\n28: \t\treturn \"\", fmt.Errorf(\"failed to get config home directory: %w\", err)\n29: \t}\n30: \tnewDir := filepath.Join(homeDir, \".config\", \"kasmos\")\n31: \n32: \t// Already exists — fast path\n33: \tif _, err := os.Stat(newDir); err == nil {\n34: \t\treturn newDir, nil\n35: \t}\n36: \n37: \t// Try migrating from legacy directories (most recent first)\n38: \tlegacyDirs := []string{\n39: \t\tfilepath.Join(homeDir, \".klique\"),\n40: \t\tfilepath.Join(homeDir, \".hivemind\"),\n41: \t}\n42: \n43: \tfor _, oldDir := range legacyDirs {\n44: \t\tif _, err := os.Stat(oldDir); err == nil {\n45: \t\t\t// Ensure parent ~/.config/ exists\n46: \t\t\tif mkErr := os.MkdirAll(filepath.Dir(newDir), 0755); mkErr != nil {\n47: \t\t\t\tlog.ErrorLog.Printf(\"failed to create %s: %v\", filepath.Dir(newDir), mkErr)\n48: \t\t\t\treturn oldDir, nil\n49: \t\t\t}\n50: \t\t\tif renameErr := os.Rename(oldDir, newDir); renameErr != nil {\n51: \t\t\t\tlog.ErrorLog.Printf(\"failed to migrate %s to %s: %v\", oldDir, newDir, renameErr)\n52: \t\t\t\treturn oldDir, nil\n53: \t\t\t}\n54: \t\t\treturn newDir, nil\n55: \t\t}\n56: \t}\n57: \n58: \treturn newDir, nil\n59: }\n60: \n61: // Config represents the application configuration\n62: type Config struct {\n63: \t// DefaultProgram is the default program to run in new instances\n64: \tDefaultProgram string `json:\"default_program\"`\n65: \t// AutoYes is a flag to automatically accept all prompts.\n66: \tAutoYes bool `json:\"auto_yes\"`\n67: \t// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.\n68: \tDaemonPollInterval int `json:\"daemon_poll_interval\"`\n69: \t// BranchPrefix is the prefix used for git branches created by the application.\n70: \tBranchPrefix string `json:\"branch_prefix\"`\n71: \t// NotificationsEnabled controls whether macOS/Linux desktop notifications\n72: \t// are sent when an agent finishes (Running -> Ready).\n73: \tNotificationsEnabled *bool `json:\"notifications_enabled,omitempty\"`\n74: \t// Profiles maps agent role names to their program and flags configuration.\n75: \tProfiles map[string]AgentProfile `json:\"profiles,omitempty\"`\n76: \t// PhaseRoles maps lifecycle phase names to agent role names.\n77: \tPhaseRoles map[string]string `json:\"phase_roles,omitempty\"`\n78: \t// AnimateBanner controls the idle banner animation (disabled by default).\n79: \tAnimateBanner bool `json:\"animate_banner,omitempty\"`\n80: \t// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes\n81: \t// with zero failures, bypassing the confirmation dialog (disabled by default).\n82: \tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n83: \t// TelemetryEnabled controls whether crash reporting via Sentry is active.\n84: \t// Defaults to true when not set.\n85: \tTelemetryEnabled *bool `json:\"telemetry_enabled,omitempty\"`\n86: \t// PlanStore is the URL of the remote plan store server (e.g. \"http://athena:7433\").\n87: \t// When empty, the legacy plan-state.json file is used.\n88: \tPlanStore string `json:\"plan_store,omitempty\"`\n89: }\n90: \n91: // DefaultConfig returns the default configuration\n92: func DefaultConfig() *Config {\n93: \tprogram, err := GetDefaultCommand()\n94: \tif err != nil {\n95: \t\tlog.ErrorLog.Printf(\"failed to get default command: %v\", err)\n96: \t\tprogram = defaultProgram\n97: \t}\n98: \n99: \ttrueVal := true\n100: \treturn &Config{\n101: \t\tDefaultProgram:     program,\n102: \t\tAutoYes:            false,\n103: \t\tDaemonPollInterval: 1000,\n104: \t\tBranchPrefix: func() string {\n105: \t\t\tuser, err := user.Current()\n106: \t\t\tif err != nil || user == nil || user.Username == \"\" {\n107: \t\t\t\tlog.ErrorLog.Printf(\"failed to get current user: %v\", err)\n108: \t\t\t\treturn \"session/\"\n109: \t\t\t}\n110: \t\t\treturn fmt.Sprintf(\"%s/\", strings.ToLower(user.Username))\n111: \t\t}(),\n112: \t\tNotificationsEnabled: &trueVal,\n113: \t}\n114: }\n115: \n116: // AreNotificationsEnabled returns whether desktop notifications are enabled.\n117: // Defaults to true when the field is not set.\n118: func (c *Config) AreNotificationsEnabled() bool {\n119: \tif c.NotificationsEnabled == nil {\n120: \t\treturn true\n121: \t}\n122: \treturn *c.NotificationsEnabled\n123: }\n124: \n125: // IsTelemetryEnabled returns whether Sentry telemetry is enabled.\n126: // Defaults to true when the field is not set.\n127: func (c *Config) IsTelemetryEnabled() bool {\n128: \tif c.TelemetryEnabled == nil {\n129: \t\treturn true\n130: \t}\n131: \treturn *c.TelemetryEnabled\n132: }\n133: \n134: // GetDefaultCommand attempts to find the preferred default command.\n135: // It checks in the following order:\n136: // 1. opencode command\n137: // 2. claude command\n138: //\n139: // For each command, it checks shell alias resolution first, then PATH lookup.\n140: func GetDefaultCommand() (string, error) {\n141: \tif path, err := findCommand(\"opencode\"); err == nil {\n142: \t\treturn path, nil\n143: \t}\n144: \n145: \tif path, err := findCommand(\"claude\"); err == nil {\n146: \t\treturn path, nil\n147: \t}\n148: \n149: \treturn \"\", fmt.Errorf(\"neither opencode nor claude command found in aliases or PATH\")\n150: }\n151: \n152: func findCommand(name string) (string, error) {\n153: \tshell := os.Getenv(\"SHELL\")\n154: \tif shell == \"\" {\n155: \t\tshell = \"/bin/bash\" // Default to bash if SHELL is not set\n156: \t}\n157: \n158: \t// Force the shell to load the user's profile and then run the command\n159: \t// For zsh, source .zshrc; for bash, source .bashrc\n160: \tvar shellCmd string\n161: \tif strings.Contains(shell, \"zsh\") {\n162: \t\tshellCmd = fmt.Sprintf(\"source ~/.zshrc &>/dev/null || true; which %s\", name)\n163: \t} else if strings.Contains(shell, \"bash\") {\n164: \t\tshellCmd = fmt.Sprintf(\"source ~/.bashrc &>/dev/null || true; which %s\", name)\n165: \t} else {\n166: \t\tshellCmd = fmt.Sprintf(\"which %s\", name)\n167: \t}\n168: \n169: \tcmd := exec.Command(shell, \"-c\", shellCmd)\n170: \toutput, err := cmd.Output()\n171: \tif err == nil && len(output) > 0 {\n172: \t\tpath := parseCommandOutput(string(output))\n173: \t\tif path != \"\" {\n174: \t\t\treturn path, nil\n175: \t\t}\n176: \t}\n177: \n178: \t// Otherwise, try to find in PATH directly\n179: \tcommandPath, err := exec.LookPath(name)\n180: \tif err == nil {\n181: \t\treturn commandPath, nil\n182: \t}\n183: \n184: \treturn \"\", fmt.Errorf(\"%s command not found in aliases or PATH\", name)\n185: }\n186: \n187: func parseCommandOutput(output string) string {\n188: \tpath := strings.TrimSpace(output)\n189: \tif path == \"\" {\n190: \t\treturn \"\"\n191: \t}\n192: \n193: \tmatches := aliasRegex.FindStringSubmatch(path)\n194: \tif len(matches) > 1 {\n195: \t\treturn matches[1]\n196: \t}\n197: \n198: \treturn path\n199: }\n200: \n201: func LoadConfig() *Config {\n202: \tconfigDir, err := GetConfigDir()\n203: \tif err != nil {\n204: \t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n205: \t\treturn DefaultConfig()\n206: \t}\n207: \n208: \tconfigPath := filepath.Join(configDir, ConfigFileName)\n209: \tdata, err := os.ReadFile(configPath)\n210: \tif err != nil {\n211: \t\tif os.IsNotExist(err) {\n212: \t\t\t// Create and save default config if file doesn't exist\n213: \t\t\tdefaultCfg := DefaultConfig()\n214: \t\t\tif saveErr := saveConfig(defaultCfg); saveErr != nil {\n215: \t\t\t\tlog.WarningLog.Printf(\"failed to save default config: %v\", saveErr)\n216: \t\t\t}\n217: \t\t\treturn defaultCfg\n218: \t\t}\n219: \n220: \t\tlog.WarningLog.Printf(\"failed to get config file: %v\", err)\n221: \t\treturn DefaultConfig()\n222: \t}\n223: \n224: \tvar config Config\n225: \tif err := json.Unmarshal(data, &config); err != nil {\n226: \t\tlog.ErrorLog.Printf(\"failed to parse config file: %v\", err)\n227: \t\treturn DefaultConfig()\n228: \t}\n229: \n230: \t// Overlay TOML config if it exists (TOML is authority for Profiles and PhaseRoles)\n231: \ttomlResult, tomlErr := LoadTOMLConfig()\n232: \tif tomlErr != nil {\n233: \t\tlog.WarningLog.Printf(\"failed to load TOML config: %v\", tomlErr)\n234: \t} else if tomlResult != nil {\n235: \t\tif len(tomlResult.Profiles) > 0 {\n236: \t\t\tconfig.Profiles = tomlResult.Profiles\n237: \t\t}\n238: \t\tif len(tomlResult.PhaseRoles) > 0 {\n239: \t\t\tconfig.PhaseRoles = tomlResult.PhaseRoles\n240: \t\t}\n241: \t\tif tomlResult.AnimateBanner {\n242: \t\t\tconfig.AnimateBanner = true\n243: \t\t}\n244: \t\tif tomlResult.AutoAdvanceWaves {\n245: \t\t\tconfig.AutoAdvanceWaves = true\n246: \t\t}\n247: \t\tif tomlResult.TelemetryEnabled != nil {\n248: \t\t\tconfig.TelemetryEnabled = tomlResult.TelemetryEnabled\n249: \t\t}\n250: \t\tif tomlResult.PlanStore != \"\" {\n251: \t\t\tconfig.PlanStore = tomlResult.PlanStore\n252: \t\t}\n253: \t}\n254: \n255: \treturn &config\n256: }\n257: \n258: // saveConfig saves the configuration to disk\n259: func saveConfig(config *Config) error {\n260: \tconfigDir, err := GetConfigDir()\n261: \tif err != nil {\n262: \t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n263: \t}\n264: \n265: \tif err := os.MkdirAll(configDir, 0755); err != nil {\n266: \t\treturn fmt.Errorf(\"failed to create config directory: %w\", err)\n267: \t}\n268: \n269: \tconfigPath := filepath.Join(configDir, ConfigFileName)\n270: \tdata, err := json.MarshalIndent(config, \"\", \"  \")\n271: \tif err != nil {\n272: \t\treturn fmt.Errorf(\"failed to marshal config: %w\", err)\n273: \t}\n274: \n275: \treturn os.WriteFile(configPath, data, 0644)\n276: }\n277: \n278: // SaveConfig exports the saveConfig function for use by other packages\n279: func SaveConfig(config *Config) error {\n280: \treturn saveConfig(config)\n281: }\n\n(End of file - total 281 lines)\n</content>",
+            "title": "config/config.go",
+            "metadata": {
+              "preview": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/user\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n)\n\nconst (\n\tConfigFileName = \"config.json\"\n\tdefaultProgram = \"opencode\"\n)\n\nvar aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492475764,
+              "end": 1772492475771
+            }
+          },
+          "id": "prt_cb0c8cbb90018nlZvkug4BGQDV",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8c407001y67rmFAIMtILlE"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/wave_orchestrator.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/wave_orchestrator.go</path>\n<type>file</type>\n<content>1: package app\n2: \n3: import (\n4: \t\"github.com/kastheco/kasmos/config/planparser\"\n5: )\n6: \n7: // WaveState represents the current state of wave orchestration for a plan.\n8: type WaveState int\n9: \n10: const (\n11: \tWaveStateIdle         WaveState = iota // Not started\n12: \tWaveStateRunning                       // Current wave's tasks are running\n13: \tWaveStateWaveComplete                  // Current wave finished, awaiting user confirmation\n14: \tWaveStateAllComplete                   // All waves finished\n15: )\n16: \n17: // taskStatus tracks the completion state of a single task.\n18: type taskStatus int\n19: \n20: const (\n21: \ttaskPending taskStatus = iota\n22: \ttaskRunning\n23: \ttaskComplete\n24: \ttaskFailed\n25: )\n26: \n27: // WaveOrchestrator manages wave-based parallel task execution for a single plan.\n28: type WaveOrchestrator struct {\n29: \tplanFile          string\n30: \tplan              *planparser.Plan\n31: \tstate             WaveState\n32: \tcurrentWave       int                // 0-indexed into plan.Waves\n33: \ttaskStates        map[int]taskStatus // task number → status\n34: \twaitingForConfirm bool               // true once we've shown the wave-complete dialog\n35: }\n36: \n37: // NewWaveOrchestrator creates an orchestrator for the given plan.\n38: func NewWaveOrchestrator(planFile string, plan *planparser.Plan) *WaveOrchestrator {\n39: \treturn &WaveOrchestrator{\n40: \t\tplanFile:   planFile,\n41: \t\tplan:       plan,\n42: \t\tstate:      WaveStateIdle,\n43: \t\ttaskStates: make(map[int]taskStatus),\n44: \t}\n45: }\n46: \n47: // State returns the current orchestration state.\n48: func (o *WaveOrchestrator) State() WaveState {\n49: \treturn o.state\n50: }\n51: \n52: // PlanFile returns the plan filename this orchestrator manages.\n53: func (o *WaveOrchestrator) PlanFile() string {\n54: \treturn o.planFile\n55: }\n56: \n57: // TotalWaves returns the number of waves in the plan.\n58: func (o *WaveOrchestrator) TotalWaves() int {\n59: \treturn len(o.plan.Waves)\n60: }\n61: \n62: // TotalTasks returns the total number of tasks across all waves.\n63: func (o *WaveOrchestrator) TotalTasks() int {\n64: \ttotal := 0\n65: \tfor _, w := range o.plan.Waves {\n66: \t\ttotal += len(w.Tasks)\n67: \t}\n68: \treturn total\n69: }\n70: \n71: // CurrentWaveNumber returns the 1-indexed wave number currently active.\n72: func (o *WaveOrchestrator) CurrentWaveNumber() int {\n73: \tif o.currentWave >= len(o.plan.Waves) {\n74: \t\treturn 0\n75: \t}\n76: \treturn o.plan.Waves[o.currentWave].Number\n77: }\n78: \n79: // CurrentWaveTasks returns the tasks in the current wave.\n80: func (o *WaveOrchestrator) CurrentWaveTasks() []planparser.Task {\n81: \tif o.currentWave >= len(o.plan.Waves) {\n82: \t\treturn nil\n83: \t}\n84: \treturn o.plan.Waves[o.currentWave].Tasks\n85: }\n86: \n87: // StartNextWave advances to the next wave and returns its tasks.\n88: // Returns nil if all waves are complete.\n89: func (o *WaveOrchestrator) StartNextWave() []planparser.Task {\n90: \tif o.state == WaveStateAllComplete {\n91: \t\treturn nil\n92: \t}\n93: \tif o.state == WaveStateWaveComplete {\n94: \t\to.currentWave++\n95: \t\to.waitingForConfirm = false // reset for next wave\n96: \t}\n97: \tif o.currentWave >= len(o.plan.Waves) {\n98: \t\to.state = WaveStateAllComplete\n99: \t\treturn nil\n100: \t}\n101: \n102: \to.state = WaveStateRunning\n103: \ttasks := o.plan.Waves[o.currentWave].Tasks\n104: \tfor _, t := range tasks {\n105: \t\to.taskStates[t.Number] = taskRunning\n106: \t}\n107: \treturn tasks\n108: }\n109: \n110: // MarkTaskComplete marks a task as successfully completed.\n111: // If all tasks in the current wave are done, transitions state.\n112: // Idempotent: calling again on an already-resolved task is a no-op.\n113: func (o *WaveOrchestrator) MarkTaskComplete(taskNumber int) {\n114: \tif o.taskStates[taskNumber] != taskRunning {\n115: \t\treturn\n116: \t}\n117: \to.taskStates[taskNumber] = taskComplete\n118: \to.checkWaveComplete()\n119: }\n120: \n121: // MarkTaskFailed marks a task as failed.\n122: // Other tasks in the wave continue. Wave completes when all tasks resolve.\n123: // Idempotent: calling again on an already-resolved task is a no-op.\n124: func (o *WaveOrchestrator) MarkTaskFailed(taskNumber int) {\n125: \tif o.taskStates[taskNumber] != taskRunning {\n126: \t\treturn\n127: \t}\n128: \to.taskStates[taskNumber] = taskFailed\n129: \to.checkWaveComplete()\n130: }\n131: \n132: // NeedsConfirm returns true if the wave just completed and the user hasn't\n133: // been shown the confirmation dialog yet. Calling this marks the dialog as shown.\n134: func (o *WaveOrchestrator) NeedsConfirm() bool {\n135: \tif o.state == WaveStateWaveComplete && !o.waitingForConfirm {\n136: \t\to.waitingForConfirm = true\n137: \t\treturn true\n138: \t}\n139: \treturn false\n140: }\n141: \n142: // ResetConfirm resets the one-shot confirm latch so NeedsConfirm() can return true\n143: // again on the next check. Call this when the user cancels a wave-advance confirmation\n144: // so the prompt re-appears on the subsequent metadata tick (fixes deadlock).\n145: func (o *WaveOrchestrator) ResetConfirm() {\n146: \to.waitingForConfirm = false\n147: }\n148: \n149: // RetryFailedTasks transitions all failed tasks in the current wave back to running\n150: // and sets the orchestrator state to WaveStateRunning. Returns the tasks that were\n151: // retried (previously failed). Returns nil if there are no failed tasks to retry.\n152: func (o *WaveOrchestrator) RetryFailedTasks() []planparser.Task {\n153: \tif o.currentWave >= len(o.plan.Waves) {\n154: \t\treturn nil\n155: \t}\n156: \tvar tasks []planparser.Task\n157: \tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n158: \t\tif o.taskStates[t.Number] == taskFailed {\n159: \t\t\to.taskStates[t.Number] = taskRunning\n160: \t\t\ttasks = append(tasks, t)\n161: \t\t}\n162: \t}\n163: \tif len(tasks) > 0 {\n164: \t\to.state = WaveStateRunning\n165: \t\to.waitingForConfirm = false\n166: \t}\n167: \treturn tasks\n168: }\n169: \n170: // IsCurrentWaveComplete returns true if all tasks in the current wave have resolved.\n171: func (o *WaveOrchestrator) IsCurrentWaveComplete() bool {\n172: \treturn o.state == WaveStateWaveComplete || o.state == WaveStateAllComplete\n173: }\n174: \n175: // CompletedTaskCount returns the number of completed tasks in the current wave.\n176: func (o *WaveOrchestrator) CompletedTaskCount() int {\n177: \treturn o.countCurrentWaveByStatus(taskComplete)\n178: }\n179: \n180: // FailedTaskCount returns the number of failed tasks in the current wave.\n181: func (o *WaveOrchestrator) FailedTaskCount() int {\n182: \treturn o.countCurrentWaveByStatus(taskFailed)\n183: }\n184: \n185: // IsTaskRunning returns true if the given task number is currently in the running state.\n186: // Used to gate the \"Mark complete\" context menu action.\n187: func (o *WaveOrchestrator) IsTaskRunning(taskNumber int) bool {\n188: \treturn o.taskStates[taskNumber] == taskRunning\n189: }\n190: \n191: // IsTaskComplete returns true if the given task number has completed successfully.\n192: func (o *WaveOrchestrator) IsTaskComplete(taskNumber int) bool {\n193: \treturn o.taskStates[taskNumber] == taskComplete\n194: }\n195: \n196: // IsTaskFailed returns true if the given task number has failed.\n197: func (o *WaveOrchestrator) IsTaskFailed(taskNumber int) bool {\n198: \treturn o.taskStates[taskNumber] == taskFailed\n199: }\n200: \n201: // HeaderContext returns the plan header for inclusion in task prompts.\n202: func (o *WaveOrchestrator) HeaderContext() string {\n203: \treturn o.plan.HeaderContext()\n204: }\n205: \n206: func (o *WaveOrchestrator) checkWaveComplete() {\n207: \tif o.currentWave >= len(o.plan.Waves) {\n208: \t\treturn\n209: \t}\n210: \ttasks := o.plan.Waves[o.currentWave].Tasks\n211: \tfor _, t := range tasks {\n212: \t\ts := o.taskStates[t.Number]\n213: \t\tif s == taskRunning || s == taskPending {\n214: \t\t\treturn // still in progress\n215: \t\t}\n216: \t}\n217: \t// All tasks resolved — check if more waves remain\n218: \tif o.currentWave+1 >= len(o.plan.Waves) {\n219: \t\to.state = WaveStateAllComplete\n220: \t} else {\n221: \t\to.state = WaveStateWaveComplete\n222: \t}\n223: }\n224: \n225: func (o *WaveOrchestrator) countCurrentWaveByStatus(s taskStatus) int {\n226: \tif o.currentWave >= len(o.plan.Waves) {\n227: \t\treturn 0\n228: \t}\n229: \tcount := 0\n230: \tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n231: \t\tif o.taskStates[t.Number] == s {\n232: \t\t\tcount++\n233: \t\t}\n234: \t}\n235: \treturn count\n236: }\n\n(End of file - total 236 lines)\n</content>",
+            "title": "app/wave_orchestrator.go",
+            "metadata": {
+              "preview": "package app\n\nimport (\n\t\"github.com/kastheco/kasmos/config/planparser\"\n)\n\n// WaveState represents the current state of wave orchestration for a plan.\ntype WaveState int\n\nconst (\n\tWaveStateIdle         WaveState = iota // Not started\n\tWaveStateRunning                       // Current wave's tasks are running\n\tWaveStateWaveComplete                  // Current wave finished, awaiting user confirmation\n\tWaveStateAllComplete                   // All waves finished\n)\n\n// taskStatus tracks the completion state of a single task.\ntype taskStatus int\n\nconst (",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492476251,
+              "end": 1772492476254
+            }
+          },
+          "id": "prt_cb0c8cd75001spkmydv8I9khip",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8c407001y67rmFAIMtILlE"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01MHfkhwuXmopFeXNAfhRotE",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/wave_prompt.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/wave_prompt.go</path>\n<type>file</type>\n<content>1: package app\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"strings\"\n6: \n7: \t\"github.com/kastheco/kasmos/config/planparser\"\n8: )\n9: \n10: // buildTaskPrompt constructs the prompt for a single task instance.\n11: func buildTaskPrompt(plan *planparser.Plan, task planparser.Task, waveNumber, totalWaves, peerCount int) string {\n12: \tvar sb strings.Builder\n13: \n14: \tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n15: \tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n16: \n17: \t// Plan context\n18: \theader := plan.HeaderContext()\n19: \tif header != \"\" {\n20: \t\tsb.WriteString(\"## Plan Context\\n\\n\")\n21: \t\tsb.WriteString(header)\n22: \t\tsb.WriteString(\"\\n\")\n23: \t}\n24: \n25: \t// Wave context\n26: \tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n27: \n28: \t// Parallel awareness — only for multi-task waves\n29: \tif peerCount > 1 {\n30: \t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n31: \t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n32: \t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n33: \n34: \t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n35: \t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n36: \t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n37: \n38: \t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n39: \t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n40: \t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n41: \t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n42: \t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n43: \t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n44: \t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n45: \t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n46: \t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n47: \t}\n48: \n49: \t// Task body\n50: \tsb.WriteString(\"## Task Instructions\\n\\n\")\n51: \tsb.WriteString(task.Body)\n52: \tsb.WriteString(\"\\n\")\n53: \n54: \treturn sb.String()\n55: }\n\n(End of file - total 55 lines)\n</content>",
+            "title": "app/wave_prompt.go",
+            "metadata": {
+              "preview": "package app\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/planparser\"\n)\n\n// buildTaskPrompt constructs the prompt for a single task instance.\nfunc buildTaskPrompt(plan *planparser.Plan, task planparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492476646,
+              "end": 1772492476648
+            }
+          },
+          "id": "prt_cb0c8cf5d001wNpQ0c16ypFvC8",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8c407001y67rmFAIMtILlE"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 50959,
+            "input": 1,
+            "output": 178,
+            "reasoning": 0,
+            "cache": {
+              "read": 49381,
+              "write": 1399
+            }
+          },
+          "id": "prt_cb0c8d0fb001CNlvOzfX9A1sk7",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8c407001y67rmFAIMtILlE"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492476676,
+          "completed": 1772492483170
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 59014,
+          "input": 1,
+          "output": 299,
+          "reasoning": 0,
+          "cache": {
+            "read": 50780,
+            "write": 7934
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c8d104001hOIxMad5zvcbKC",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8d89300150ls5X6Sg0o7kN",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        },
+        {
+          "type": "text",
+          "text": "Now let me look at where wave completion is handled in the app layer, the TOML config, and the UI settings overlay:",
+          "time": {
+            "start": 1772492479690,
+            "end": 1772492479690
+          },
+          "id": "prt_cb0c8d894001LLqoxPrDPjj6R0",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/config/toml.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/config/toml.go</path>\n<type>file</type>\n<content>1: package config\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"os\"\n6: \t\"path/filepath\"\n7: \n8: \t\"github.com/BurntSushi/toml\"\n9: )\n10: \n11: const TOMLConfigFileName = \"config.toml\"\n12: \n13: // TOMLAgent is the TOML-level representation of an agent.\n14: // Maps directly to [agents.*] tables in config.toml.\n15: type TOMLAgent struct {\n16: \tEnabled     bool     `toml:\"enabled\"`\n17: \tProgram     string   `toml:\"program\"`\n18: \tModel       string   `toml:\"model,omitempty\"`\n19: \tTemperature *float64 `toml:\"temperature,omitempty\"`\n20: \tEffort      string   `toml:\"effort,omitempty\"`\n21: \tFlags       []string `toml:\"flags,omitempty\"`\n22: }\n23: \n24: func (a TOMLAgent) toProfile() AgentProfile {\n25: \treturn AgentProfile{\n26: \t\tProgram:     a.Program,\n27: \t\tModel:       a.Model,\n28: \t\tTemperature: a.Temperature,\n29: \t\tEffort:      a.Effort,\n30: \t\tEnabled:     a.Enabled,\n31: \t\tFlags:       a.Flags,\n32: \t}\n33: }\n34: \n35: // TOMLUIConfig holds UI-specific settings from the [ui] TOML table.\n36: type TOMLUIConfig struct {\n37: \tAnimateBanner    bool `toml:\"animate_banner\"`\n38: \tAutoAdvanceWaves bool `toml:\"auto_advance_waves\"`\n39: }\n40: \n41: // TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.\n42: type TOMLTelemetryConfig struct {\n43: \tEnabled *bool `toml:\"enabled,omitempty\"`\n44: }\n45: \n46: // TOMLConfig is the top-level TOML file structure.\n47: type TOMLConfig struct {\n48: \tPhases    map[string]string    `toml:\"phases\"`\n49: \tAgents    map[string]TOMLAgent `toml:\"agents\"`\n50: \tUI        TOMLUIConfig         `toml:\"ui\"`\n51: \tTelemetry TOMLTelemetryConfig  `toml:\"telemetry\"`\n52: \tPlanStore string               `toml:\"plan_store,omitempty\"`\n53: }\n54: \n55: // TOMLConfigResult holds the parsed config in terms of internal types.\n56: type TOMLConfigResult struct {\n57: \tProfiles         map[string]AgentProfile\n58: \tPhaseRoles       map[string]string\n59: \tAnimateBanner    bool\n60: \tAutoAdvanceWaves bool\n61: \tTelemetryEnabled *bool\n62: \tPlanStore        string\n63: }\n64: \n65: // LoadTOMLConfigFrom reads and parses a TOML config file,\n66: // returning the result mapped to internal types.\n67: func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {\n68: \tvar tc TOMLConfig\n69: \tif _, err := toml.DecodeFile(path, &tc); err != nil {\n70: \t\treturn nil, fmt.Errorf(\"decode TOML config: %w\", err)\n71: \t}\n72: \n73: \tresult := &TOMLConfigResult{\n74: \t\tProfiles:         make(map[string]AgentProfile),\n75: \t\tPhaseRoles:       tc.Phases,\n76: \t\tAnimateBanner:    tc.UI.AnimateBanner,\n77: \t\tAutoAdvanceWaves: tc.UI.AutoAdvanceWaves,\n78: \t\tTelemetryEnabled: tc.Telemetry.Enabled,\n79: \t\tPlanStore:        tc.PlanStore,\n80: \t}\n81: \n82: \tfor name, agent := range tc.Agents {\n83: \t\tresult.Profiles[name] = agent.toProfile()\n84: \t}\n85: \n86: \treturn result, nil\n87: }\n88: \n89: // LoadTOMLConfig loads the TOML config from the default location (~/.config/kasmos/config.toml).\n90: // Returns nil, nil if the file does not exist.\n91: func LoadTOMLConfig() (*TOMLConfigResult, error) {\n92: \tconfigDir, err := GetConfigDir()\n93: \tif err != nil {\n94: \t\treturn nil, err\n95: \t}\n96: \tpath := filepath.Join(configDir, TOMLConfigFileName)\n97: \n98: \tif _, err := os.Stat(path); err != nil {\n99: \t\tif os.IsNotExist(err) {\n100: \t\t\treturn nil, nil // no TOML config is valid\n101: \t\t}\n102: \t\treturn nil, fmt.Errorf(\"stat TOML config: %w\", err)\n103: \t}\n104: \n105: \treturn LoadTOMLConfigFrom(path)\n106: }\n107: \n108: // SaveTOMLConfigTo writes a TOMLConfig to the given path.\n109: func SaveTOMLConfigTo(tc *TOMLConfig, path string) (retErr error) {\n110: \tif err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {\n111: \t\treturn fmt.Errorf(\"create config dir: %w\", err)\n112: \t}\n113: \n114: \tf, err := os.Create(path)\n115: \tif err != nil {\n116: \t\treturn fmt.Errorf(\"create config file: %w\", err)\n117: \t}\n118: \tdefer func() {\n119: \t\tif cerr := f.Close(); cerr != nil && retErr == nil {\n120: \t\t\tretErr = fmt.Errorf(\"close config file: %w\", cerr)\n121: \t\t}\n122: \t}()\n123: \n124: \tif _, err := fmt.Fprintln(f, \"# Generated by kas setup\"); err != nil {\n125: \t\treturn err\n126: \t}\n127: \tif _, err := fmt.Fprintln(f); err != nil {\n128: \t\treturn err\n129: \t}\n130: \n131: \tenc := toml.NewEncoder(f)\n132: \tif err := enc.Encode(tc); err != nil {\n133: \t\treturn fmt.Errorf(\"encode TOML: %w\", err)\n134: \t}\n135: \treturn nil\n136: }\n137: \n138: // SaveTOMLConfig writes to the default location (~/.config/kasmos/config.toml).\n139: func SaveTOMLConfig(tc *TOMLConfig) error {\n140: \tconfigDir, err := GetConfigDir()\n141: \tif err != nil {\n142: \t\treturn err\n143: \t}\n144: \treturn SaveTOMLConfigTo(tc, filepath.Join(configDir, TOMLConfigFileName))\n145: }\n146: \n147: // GetTOMLConfigPath returns the path to the TOML config file.\n148: func GetTOMLConfigPath() (string, error) {\n149: \tconfigDir, err := GetConfigDir()\n150: \tif err != nil {\n151: \t\treturn \"\", err\n152: \t}\n153: \treturn filepath.Join(configDir, TOMLConfigFileName), nil\n154: }\n\n(End of file - total 154 lines)\n</content>",
+            "title": "config/toml.go",
+            "metadata": {
+              "preview": "package config\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/BurntSushi/toml\"\n)\n\nconst TOMLConfigFileName = \"config.toml\"\n\n// TOMLAgent is the TOML-level representation of an agent.\n// Maps directly to [agents.*] tables in config.toml.\ntype TOMLAgent struct {\n\tEnabled     bool     `toml:\"enabled\"`\n\tProgram     string   `toml:\"program\"`\n\tModel       string   `toml:\"model,omitempty\"`\n\tTemperature *float64 `toml:\"temperature,omitempty\"`\n\tEffort      string   `toml:\"effort,omitempty\"`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492480256,
+              "end": 1772492480259
+            }
+          },
+          "id": "prt_cb0c8dcce001yvSvviKflqD0bB",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'WaveComplete\\|waveComplete\\|wave.complete\\|advance.*wave\\|wave.*advance\\|confirm.*wave\\|wave.*confirm\\|NeedsConfirm\\|checkWaveComplete' --type go -n",
+              "description": "Find wave completion/advance logic"
+            },
+            "output": "",
+            "title": "Find wave completion/advance logic",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find wave completion/advance logic",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492482033,
+              "end": 1772492482042
+            }
+          },
+          "id": "prt_cb0c8df01001Tcbo0w4mnyp1UR",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'overlay\\|settings\\|AnimateBanner\\|AutoAdvance' --type go -l | head -20",
+              "description": "Find settings/overlay files"
+            },
+            "output": "",
+            "title": "Find settings/overlay files",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find settings/overlay files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492483130,
+              "end": 1772492483135
+            }
+          },
+          "id": "prt_cb0c8e5f3001O93Vtp85XM61Fv",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 59014,
+            "input": 1,
+            "output": 299,
+            "reasoning": 0,
+            "cache": {
+              "read": 50780,
+              "write": 7934
+            }
+          },
+          "id": "prt_cb0c8ea5a001R6Wad4wKEAkEie",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8d104001hOIxMad5zvcbKC"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492483171,
+          "completed": 1772492486595
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61276,
+          "input": 1,
+          "output": 168,
+          "reasoning": 0,
+          "cache": {
+            "read": 58714,
+            "write": 2393
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8f284001oZkwrUWXWwY7zJ",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01BatNrgmoTddPQu3C4ERNx9",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'AutoAdvance\\|auto_advance' --type go -n",
+              "description": "Find all auto-advance references"
+            },
+            "output": "",
+            "title": "Find all auto-advance references",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find all auto-advance references",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492486135,
+              "end": 1772492486140
+            }
+          },
+          "id": "prt_cb0c8f285001yzipdDCOWMpCgb",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'overlay\\|settings' --type go -l | head -20",
+              "description": "Find overlay/settings files"
+            },
+            "output": "",
+            "title": "Find overlay/settings files",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find overlay/settings files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492486553,
+              "end": 1772492486558
+            }
+          },
+          "id": "prt_cb0c8f5f8001pM91v6UpPx1nR9",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 61276,
+            "input": 1,
+            "output": 168,
+            "reasoning": 0,
+            "cache": {
+              "read": 58714,
+              "write": 2393
+            }
+          },
+          "id": "prt_cb0c8f7bb001SsM4rfyxzVJmrc",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492486596,
+          "completed": 1772492491070
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61559,
+          "input": 1,
+          "output": 206,
+          "reasoning": 0,
+          "cache": {
+            "read": 61107,
+            "write": 245
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c8f7c4001F3Af2ezNhgq8mG",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c8ffff0014I3Q4hL8C3oypO",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8f7c4001F3Af2ezNhgq8mG"
+        },
+        {
+          "type": "text",
+          "text": "Interesting — the config field `AutoAdvanceWaves` already exists in the struct and TOML parsing. Let me check if it's actually wired up anywhere:",
+          "time": {
+            "start": 1772492490166,
+            "end": 1772492490166
+          },
+          "id": "prt_cb0c8ffff002xJi1KxbJCbBvbP",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8f7c4001F3Af2ezNhgq8mG"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_019RajVEGNjqyW9cmNNs6kjh",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'AutoAdvanceWaves\\|auto_advance_waves' --type go -n",
+              "description": "Find all AutoAdvanceWaves references"
+            },
+            "output": "",
+            "title": "Find all AutoAdvanceWaves references",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find all AutoAdvanceWaves references",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492490618,
+              "end": 1772492490624
+            }
+          },
+          "id": "prt_cb0c905b7001jErQs6A8oksNky",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8f7c4001F3Af2ezNhgq8mG"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01GUQYtbrCbVRHYcBokTGFt9",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'overlay\\|Overlay' --type go -l",
+              "description": "Find overlay files"
+            },
+            "output": "",
+            "title": "Find overlay files",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find overlay files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492491040,
+              "end": 1772492491045
+            }
+          },
+          "id": "prt_cb0c9077c001WpJ4cVpYQtLmWF",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8f7c4001F3Af2ezNhgq8mG"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 61559,
+            "input": 1,
+            "output": 206,
+            "reasoning": 0,
+            "cache": {
+              "read": 61107,
+              "write": 245
+            }
+          },
+          "id": "prt_cb0c909360013EaH2ePxKUbsPy",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c8f7c4001F3Af2ezNhgq8mG"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492491071,
+          "completed": 1772492495315
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61829,
+          "input": 1,
+          "output": 193,
+          "reasoning": 0,
+          "cache": {
+            "read": 61352,
+            "write": 283
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c9093f001ztUVg0yrFCVXyu",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c9114c001rvgRUdAD9ileX4",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c9093f001ztUVg0yrFCVXyu"
+        },
+        {
+          "type": "text",
+          "text": "Hmm, no results at all. Let me check if the file content I read is stale vs what's on disk:",
+          "time": {
+            "start": 1772492494046,
+            "end": 1772492494046
+          },
+          "id": "prt_cb0c9114c002wysopozP01JUNB",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c9093f001ztUVg0yrFCVXyu"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -F 'AutoAdvanceWaves' -n",
+              "description": "Search for AutoAdvanceWaves everywhere"
+            },
+            "output": "config/toml_test.go:130:func TestAutoAdvanceWaves(t *testing.T) {\nconfig/toml_test.go:143:\t\tassert.True(t, tc.AutoAdvanceWaves)\nconfig/toml.go:38:\tAutoAdvanceWaves bool `toml:\"auto_advance_waves\"`\nconfig/toml.go:60:\tAutoAdvanceWaves bool\nconfig/toml.go:77:\t\tAutoAdvanceWaves: tc.UI.AutoAdvanceWaves,\nconfig/config.go:80:\t// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes\nconfig/config.go:82:\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\nconfig/config.go:244:\t\tif tomlResult.AutoAdvanceWaves {\nconfig/config.go:245:\t\t\tconfig.AutoAdvanceWaves = true\napp/app_wave_orchestration_flow_test.go:898:// TestAutoAdvanceWaves_SkipsConfirmOnSuccess verifies that when AutoAdvanceWaves is\napp/app_wave_orchestration_flow_test.go:901:func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:914:\t\tappConfig:         &config.Config{AutoAdvanceWaves: true},\napp/app_wave_orchestration_flow_test.go:926:\tassert.True(t, m.appConfig.AutoAdvanceWaves)\napp/app_wave_orchestration_flow_test.go:930:// TestAutoAdvanceWaves_ShowsConfirmOnFailure verifies that even when AutoAdvanceWaves\napp/app_wave_orchestration_flow_test.go:932:func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:982:\th.appConfig = &config.Config{AutoAdvanceWaves: true}\napp/app_wave_orchestration_flow_test.go:1005:// TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess verifies that when AutoAdvanceWaves\napp/app_wave_orchestration_flow_test.go:1008:func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:1041:\th.appConfig = &config.Config{AutoAdvanceWaves: true}\napp/app.go:1304:\t\t\t\t\t} else if m.appConfig.AutoAdvanceWaves {\napp/app_plan_actions_test.go:469:func TestToggleAutoAdvanceWaves(t *testing.T) {\napp/app_plan_actions_test.go:471:\t\tappConfig: &config.Config{AutoAdvanceWaves: false},\napp/app_plan_actions_test.go:473:\tassert.False(t, m.appConfig.AutoAdvanceWaves)\napp/app_plan_actions_test.go:476:\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_plan_actions_test.go:477:\tassert.True(t, m.appConfig.AutoAdvanceWaves)\napp/app_plan_actions_test.go:480:\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_plan_actions_test.go:481:\tassert.False(t, m.appConfig.AutoAdvanceWaves)\napp/app_actions.go:439:\t\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_actions.go:441:\t\tif m.appConfig.AutoAdvanceWaves {\napp/app_actions.go:665:\tif m.appConfig != nil && m.appConfig.AutoAdvanceWaves {\n",
+            "title": "Search for AutoAdvanceWaves everywhere",
+            "metadata": {
+              "output": "config/toml_test.go:130:func TestAutoAdvanceWaves(t *testing.T) {\nconfig/toml_test.go:143:\t\tassert.True(t, tc.AutoAdvanceWaves)\nconfig/toml.go:38:\tAutoAdvanceWaves bool `toml:\"auto_advance_waves\"`\nconfig/toml.go:60:\tAutoAdvanceWaves bool\nconfig/toml.go:77:\t\tAutoAdvanceWaves: tc.UI.AutoAdvanceWaves,\nconfig/config.go:80:\t// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes\nconfig/config.go:82:\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\nconfig/config.go:244:\t\tif tomlResult.AutoAdvanceWaves {\nconfig/config.go:245:\t\t\tconfig.AutoAdvanceWaves = true\napp/app_wave_orchestration_flow_test.go:898:// TestAutoAdvanceWaves_SkipsConfirmOnSuccess verifies that when AutoAdvanceWaves is\napp/app_wave_orchestration_flow_test.go:901:func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:914:\t\tappConfig:         &config.Config{AutoAdvanceWaves: true},\napp/app_wave_orchestration_flow_test.go:926:\tassert.True(t, m.appConfig.AutoAdvanceWaves)\napp/app_wave_orchestration_flow_test.go:930:// TestAutoAdvanceWaves_ShowsConfirmOnFailure verifies that even when AutoAdvanceWaves\napp/app_wave_orchestration_flow_test.go:932:func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:982:\th.appConfig = &config.Config{AutoAdvanceWaves: true}\napp/app_wave_orchestration_flow_test.go:1005:// TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess verifies that when AutoAdvanceWaves\napp/app_wave_orchestration_flow_test.go:1008:func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {\napp/app_wave_orchestration_flow_test.go:1041:\th.appConfig = &config.Config{AutoAdvanceWaves: true}\napp/app.go:1304:\t\t\t\t\t} else if m.appConfig.AutoAdvanceWaves {\napp/app_plan_actions_test.go:469:func TestToggleAutoAdvanceWaves(t *testing.T) {\napp/app_plan_actions_test.go:471:\t\tappConfig: &config.Config{AutoAdvanceWaves: false},\napp/app_plan_actions_test.go:473:\tassert.False(t, m.appConfig.AutoAdvanceWaves)\napp/app_plan_actions_test.go:476:\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_plan_actions_test.go:477:\tassert.True(t, m.appConfig.AutoAdvanceWaves)\napp/app_plan_actions_test.go:480:\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_plan_actions_test.go:481:\tassert.False(t, m.appConfig.AutoAdvanceWaves)\napp/app_actions.go:439:\t\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\napp/app_actions.go:441:\t\tif m.appConfig.AutoAdvanceWaves {\napp/app_actions.go:665:\tif m.appConfig != nil && m.appConfig.AutoAdvanceWaves {\n",
+              "exit": 0,
+              "description": "Search for AutoAdvanceWaves everywhere",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492494918,
+              "end": 1772492494925
+            }
+          },
+          "id": "prt_cb0c914e1001qyVLmErUNDUez0",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c9093f001ztUVg0yrFCVXyu"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_016nRjEyCfm5j3Qg7YfMpyyQ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -F 'auto_advance_waves' -n",
+              "description": "Search for auto_advance_waves everywhere"
+            },
+            "output": "config/toml_test.go:131:\tt.Run(\"parses auto_advance_waves from UI section\", func(t *testing.T) {\nconfig/toml_test.go:137:auto_advance_waves = true\nconfig/toml.go:38:\tAutoAdvanceWaves bool `toml:\"auto_advance_waves\"`\nconfig/config.go:82:\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n",
+            "title": "Search for auto_advance_waves everywhere",
+            "metadata": {
+              "output": "config/toml_test.go:131:\tt.Run(\"parses auto_advance_waves from UI section\", func(t *testing.T) {\nconfig/toml_test.go:137:auto_advance_waves = true\nconfig/toml.go:38:\tAutoAdvanceWaves bool `toml:\"auto_advance_waves\"`\nconfig/config.go:82:\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n",
+              "exit": 0,
+              "description": "Search for auto_advance_waves everywhere",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772492495272,
+              "end": 1772492495278
+            }
+          },
+          "id": "prt_cb0c91847001WaNb5ZF4UT2DZu",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c9093f001ztUVg0yrFCVXyu"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 61829,
+            "input": 1,
+            "output": 193,
+            "reasoning": 0,
+            "cache": {
+              "read": 61352,
+              "write": 283
+            }
+          },
+          "id": "prt_cb0c919cb001QD6VT7Q9TOsI50",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c9093f001ztUVg0yrFCVXyu"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492495316,
+          "completed": 1772492500869
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63309,
+          "input": 1,
+          "output": 327,
+          "reasoning": 0,
+          "cache": {
+            "read": 61635,
+            "write": 1346
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c919d4001oyqhIt2odn96xa",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c9210a001qT51bMIfZzv5AC",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        },
+        {
+          "type": "text",
+          "text": "The feature **already exists** — config field, TOML support, JSON support, toggle action, auto-advance logic in the app, and tests. Let me look at the full implementation to understand what's already done:",
+          "time": {
+            "start": 1772492498900,
+            "end": 1772492498900
+          },
+          "id": "prt_cb0c9210b001q4I3ANOyCjrtHx",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_actions.go",
+              "offset": 430,
+              "limit": 50
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_actions.go</path>\n<type>file</type>\n<content>430: \t\t\tm.updateSidebarPlans()\n431: \t\t\treturn planRefreshMsg{}\n432: \t\t}\n433: \t\treturn m, m.confirmAction(fmt.Sprintf(\"start over plan '%s'? this resets the branch.\", planName), startOverAction)\n434: \n435: \tcase \"toggle_auto_advance\":\n436: \t\tif m.appConfig == nil {\n437: \t\t\treturn m, nil\n438: \t\t}\n439: \t\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n440: \t\tlabel := \"off\"\n441: \t\tif m.appConfig.AutoAdvanceWaves {\n442: \t\t\tlabel = \"on\"\n443: \t\t}\n444: \t\tm.toastManager.Success(fmt.Sprintf(\"auto-advance waves: %s\", label))\n445: \t\t// Persist to disk (best-effort)\n446: \t\t_ = config.SaveConfig(m.appConfig)\n447: \t\treturn m, m.toastTickCmd()\n448: \t}\n449: \n450: \treturn m, nil\n451: }\n452: \n453: // fsmSetImplementing transitions the plan to implementing, handling the\n454: // planning→ready→implementing two-step when called after a planner finishes.\n455: func (m *home) fsmSetImplementing(planFile string) error {\n456: \tif m.planState == nil {\n457: \t\treturn fmt.Errorf(\"plan state is not loaded\")\n458: \t}\n459: \tentry, ok := m.planState.Entry(planFile)\n460: \tif !ok {\n461: \t\treturn fmt.Errorf(\"plan not found: %s\", planFile)\n462: \t}\n463: \tcurrent := planfsm.Status(entry.Status)\n464: \tif current == planfsm.StatusImplementing {\n465: \t\treturn nil // already implementing (re-spawning coder), no status change\n466: \t}\n467: \tif current == planfsm.StatusPlanning {\n468: \t\t// Planner finished without writing a sentinel — transition through ready.\n469: \t\tif err := m.fsm.Transition(planFile, planfsm.PlannerFinished); err != nil {\n470: \t\t\treturn err\n471: \t\t}\n472: \t\tm.audit(auditlog.EventPlanTransition, \"planning → ready\",\n473: \t\t\tauditlog.WithPlan(planFile))\n474: \t}\n475: \tif err := m.fsm.Transition(planFile, planfsm.ImplementStart); err != nil {\n476: \t\treturn err\n477: \t}\n478: \tm.audit(auditlog.EventPlanTransition, string(current)+\" → implementing\",\n479: \t\tauditlog.WithPlan(planFile))\n\n(Showing lines 430-479 of 952. Use offset=480 to continue.)\n</content>",
+            "title": "app/app_actions.go",
+            "metadata": {
+              "preview": "\t\t\tm.updateSidebarPlans()\n\t\t\treturn planRefreshMsg{}\n\t\t}\n\t\treturn m, m.confirmAction(fmt.Sprintf(\"start over plan '%s'? this resets the branch.\", planName), startOverAction)\n\n\tcase \"toggle_auto_advance\":\n\t\tif m.appConfig == nil {\n\t\t\treturn m, nil\n\t\t}\n\t\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n\t\tlabel := \"off\"\n\t\tif m.appConfig.AutoAdvanceWaves {\n\t\t\tlabel = \"on\"\n\t\t}\n\t\tm.toastManager.Success(fmt.Sprintf(\"auto-advance waves: %s\", label))\n\t\t// Persist to disk (best-effort)\n\t\t_ = config.SaveConfig(m.appConfig)\n\t\treturn m, m.toastTickCmd()\n\t}\n",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492499864,
+              "end": 1772492499868
+            }
+          },
+          "id": "prt_cb0c927d60019C6nrQ8S4Ry2oQ",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_actions.go",
+              "offset": 655,
+              "limit": 30
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_actions.go</path>\n<type>file</type>\n<content>655: \t\t\t}\n656: \t\t}\n657: \t}\n658: \t// History plans get an \"inspect plan\" option to move them to the dead section.\n659: \tif m.nav.IsSelectedHistoryPlan() {\n660: \t\titems = append(items,\n661: \t\t\toverlay.ContextMenuItem{Label: \"inspect plan\", Action: \"inspect_plan\"},\n662: \t\t)\n663: \t}\n664: \tautoAdvanceLabel := \"auto-advance waves: off\"\n665: \tif m.appConfig != nil && m.appConfig.AutoAdvanceWaves {\n666: \t\tautoAdvanceLabel = \"auto-advance waves: on\"\n667: \t}\n668: \titems = append(items,\n669: \t\toverlay.ContextMenuItem{Label: \"chat about this\", Action: \"chat_about_plan\"},\n670: \t\toverlay.ContextMenuItem{Label: \"view plan\", Action: \"view_plan\"},\n671: \t\toverlay.ContextMenuItem{Label: \"rename plan\", Action: \"rename_plan\"},\n672: \t\toverlay.ContextMenuItem{Label: \"set topic\", Action: \"change_topic\"},\n673: \t\toverlay.ContextMenuItem{Label: autoAdvanceLabel, Action: \"toggle_auto_advance\"},\n674: \t\toverlay.ContextMenuItem{Label: \"set status\", Action: \"set_status\"},\n675: \t\toverlay.ContextMenuItem{Label: \"merge to main\", Action: \"merge_plan\"},\n676: \t\toverlay.ContextMenuItem{Label: \"mark done\", Action: \"mark_plan_done\"},\n677: \t\toverlay.ContextMenuItem{Label: \"start over\", Action: \"start_over_plan\"},\n678: \t\toverlay.ContextMenuItem{Label: \"cancel plan\", Action: \"cancel_plan\"},\n679: \t)\n680: \n681: \tx := m.navWidth\n682: \ty := 1 + 4 + m.nav.GetSelectedIdx()\n683: \tm.contextMenu = overlay.NewContextMenu(x, y, items)\n684: \tm.state = stateContextMenu\n\n(Showing lines 655-684 of 952. Use offset=685 to continue.)\n</content>",
+            "title": "app/app_actions.go",
+            "metadata": {
+              "preview": "\t\t\t}\n\t\t}\n\t}\n\t// History plans get an \"inspect plan\" option to move them to the dead section.\n\tif m.nav.IsSelectedHistoryPlan() {\n\t\titems = append(items,\n\t\t\toverlay.ContextMenuItem{Label: \"inspect plan\", Action: \"inspect_plan\"},\n\t\t)\n\t}\n\tautoAdvanceLabel := \"auto-advance waves: off\"\n\tif m.appConfig != nil && m.appConfig.AutoAdvanceWaves {\n\t\tautoAdvanceLabel = \"auto-advance waves: on\"\n\t}\n\titems = append(items,\n\t\toverlay.ContextMenuItem{Label: \"chat about this\", Action: \"chat_about_plan\"},\n\t\toverlay.ContextMenuItem{Label: \"view plan\", Action: \"view_plan\"},\n\t\toverlay.ContextMenuItem{Label: \"rename plan\", Action: \"rename_plan\"},\n\t\toverlay.ContextMenuItem{Label: \"set topic\", Action: \"change_topic\"},\n\t\toverlay.ContextMenuItem{Label: autoAdvanceLabel, Action: \"toggle_auto_advance\"},\n\t\toverlay.ContextMenuItem{Label: \"set status\", Action: \"set_status\"},",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492500312,
+              "end": 1772492500314
+            }
+          },
+          "id": "prt_cb0c92b990013RG0SLy3mJLF1a",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Ln45LSEZXnnkCU5Jqznu95",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app.go",
+              "offset": 1295,
+              "limit": 30
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app.go</path>\n<type>file</type>\n<content>1295: \t\t\t\t\t\tm.audit(auditlog.EventWaveFailed,\n1296: \t\t\t\t\t\t\tfmt.Sprintf(\"wave %d: %d/%d tasks failed\", waveNum, failed, total),\n1297: \t\t\t\t\t\t\tauditlog.WithPlan(capturedPlanFile),\n1298: \t\t\t\t\t\t\tauditlog.WithWave(waveNum, 0))\n1299: \t\t\t\t\t\tmessage := fmt.Sprintf(\n1300: \t\t\t\t\t\t\t\"%s — wave %d: %d/%d tasks complete, %d failed.\\n\\n\"+\n1301: \t\t\t\t\t\t\t\t\"[r] retry failed   [n] next wave   [a] abort\",\n1302: \t\t\t\t\t\t\tplanName, waveNum, completed, total, failed)\n1303: \t\t\t\t\t\tm.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)\n1304: \t\t\t\t\t} else if m.appConfig.AutoAdvanceWaves {\n1305: \t\t\t\t\t\t// Auto-advance: skip confirmation, directly advance to next wave\n1306: \t\t\t\t\t\tm.audit(auditlog.EventWaveCompleted,\n1307: \t\t\t\t\t\t\tfmt.Sprintf(\"wave %d complete: %d/%d tasks (auto-advancing)\", waveNum, completed, total),\n1308: \t\t\t\t\t\t\tauditlog.WithPlan(capturedPlanFile),\n1309: \t\t\t\t\t\t\tauditlog.WithWave(waveNum, 0))\n1310: \t\t\t\t\t\tm.toastManager.Info(fmt.Sprintf(\"%s — wave %d complete, auto-advancing...\", planName, waveNum))\n1311: \t\t\t\t\t\tasyncCmds = append(asyncCmds, func() tea.Msg {\n1312: \t\t\t\t\t\t\treturn waveAdvanceMsg{planFile: capturedPlanFile, entry: capturedEntry}\n1313: \t\t\t\t\t\t})\n1314: \t\t\t\t\t\tasyncCmds = append(asyncCmds, m.toastTickCmd())\n1315: \t\t\t\t\t} else {\n1316: \t\t\t\t\t\t// Manual mode: focus instance and show confirmation dialog\n1317: \t\t\t\t\t\tif cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {\n1318: \t\t\t\t\t\t\tasyncCmds = append(asyncCmds, cmd)\n1319: \t\t\t\t\t\t}\n1320: \t\t\t\t\t\tm.audit(auditlog.EventWaveCompleted,\n1321: \t\t\t\t\t\t\tfmt.Sprintf(\"wave %d complete: %d/%d tasks\", waveNum, completed, total),\n1322: \t\t\t\t\t\t\tauditlog.WithPlan(capturedPlanFile),\n1323: \t\t\t\t\t\t\tauditlog.WithWave(waveNum, 0))\n1324: \t\t\t\t\t\tmessage := fmt.Sprintf(\"%s — wave %d complete (%d/%d). start wave %d?\",\n\n(Showing lines 1295-1324 of 2136. Use offset=1325 to continue.)\n</content>",
+            "title": "app/app.go",
+            "metadata": {
+              "preview": "\t\t\t\t\t\tm.audit(auditlog.EventWaveFailed,\n\t\t\t\t\t\t\tfmt.Sprintf(\"wave %d: %d/%d tasks failed\", waveNum, failed, total),\n\t\t\t\t\t\t\tauditlog.WithPlan(capturedPlanFile),\n\t\t\t\t\t\t\tauditlog.WithWave(waveNum, 0))\n\t\t\t\t\t\tmessage := fmt.Sprintf(\n\t\t\t\t\t\t\t\"%s — wave %d: %d/%d tasks complete, %d failed.\\n\\n\"+\n\t\t\t\t\t\t\t\t\"[r] retry failed   [n] next wave   [a] abort\",\n\t\t\t\t\t\t\tplanName, waveNum, completed, total, failed)\n\t\t\t\t\t\tm.waveFailedConfirmAction(message, capturedPlanFile, capturedEntry)\n\t\t\t\t\t} else if m.appConfig.AutoAdvanceWaves {\n\t\t\t\t\t\t// Auto-advance: skip confirmation, directly advance to next wave\n\t\t\t\t\t\tm.audit(auditlog.EventWaveCompleted,\n\t\t\t\t\t\t\tfmt.Sprintf(\"wave %d complete: %d/%d tasks (auto-advancing)\", waveNum, completed, total),\n\t\t\t\t\t\t\tauditlog.WithPlan(capturedPlanFile),\n\t\t\t\t\t\t\tauditlog.WithWave(waveNum, 0))\n\t\t\t\t\t\tm.toastManager.Info(fmt.Sprintf(\"%s — wave %d complete, auto-advancing...\", planName, waveNum))\n\t\t\t\t\t\tasyncCmds = append(asyncCmds, func() tea.Msg {\n\t\t\t\t\t\t\treturn waveAdvanceMsg{planFile: capturedPlanFile, entry: capturedEntry}\n\t\t\t\t\t\t})\n\t\t\t\t\t\tasyncCmds = append(asyncCmds, m.toastTickCmd())",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492500812,
+              "end": 1772492500814
+            }
+          },
+          "id": "prt_cb0c92d59001VoJQLk6tr14Xsl",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 63309,
+            "input": 1,
+            "output": 327,
+            "reasoning": 0,
+            "cache": {
+              "read": 61635,
+              "write": 1346
+            }
+          },
+          "id": "prt_cb0c92f7e001IQfomgIQUrD0jR",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c919d4001oyqhIt2odn96xa"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492500870,
+          "completed": 1772492504803
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 65683,
+          "input": 1,
+          "output": 221,
+          "reasoning": 0,
+          "cache": {
+            "read": 62981,
+            "write": 2480
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb0c92f86001jvooEIa4aEDwDY",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c93634001Yqn4NbcHlScZx3",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c92f86001jvooEIa4aEDwDY"
+        },
+        {
+          "type": "text",
+          "text": "This feature is **already fully implemented**. Let me verify the complete picture:",
+          "time": {
+            "start": 1772492503342,
+            "end": 1772492503342
+          },
+          "id": "prt_cb0c93635001Rs77Io8YbT976l",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c92f86001jvooEIa4aEDwDY"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RZtrUVTd5VQWUfBUnvfAYs",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_wave_orchestration_flow_test.go",
+              "offset": 898,
+              "limit": 160
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_wave_orchestration_flow_test.go</path>\n<type>file</type>\n<content>898: // TestAutoAdvanceWaves_SkipsConfirmOnSuccess verifies that when AutoAdvanceWaves is\n899: // true and a wave completes with zero failures, the model is configured to auto-advance\n900: // without showing a confirmation dialog.\n901: func TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {\n902: \t// Build a plan with 2 waves\n903: \tplan := &planparser.Plan{\n904: \t\tWaves: []planparser.Wave{\n905: \t\t\t{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: \"T1\"}}},\n906: \t\t\t{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: \"T2\"}}},\n907: \t\t},\n908: \t}\n909: \torch := NewWaveOrchestrator(\"test.md\", plan)\n910: \torch.StartNextWave()\n911: \torch.MarkTaskComplete(1) // wave 1 complete, no failures\n912: \n913: \tm := &home{\n914: \t\tappConfig:         &config.Config{AutoAdvanceWaves: true},\n915: \t\twaveOrchestrators: map[string]*WaveOrchestrator{\"test.md\": orch},\n916: \t\tplanState:         &planstate.PlanState{Plans: map[string]planstate.PlanEntry{\"test.md\": {Status: \"implementing\"}}},\n917: \t\tstate:             stateDefault,\n918: \t}\n919: \n920: \t// NeedsConfirm should be true (wave just completed)\n921: \tassert.True(t, orch.NeedsConfirm())\n922: \n923: \t// With auto-advance enabled, the handler should NOT show a confirm dialog\n924: \t// and instead directly emit a waveAdvanceMsg.\n925: \t// This is a unit-level assertion on the branching logic.\n926: \tassert.True(t, m.appConfig.AutoAdvanceWaves)\n927: \tassert.Equal(t, 0, orch.FailedTaskCount())\n928: }\n929: \n930: // TestAutoAdvanceWaves_ShowsConfirmOnFailure verifies that even when AutoAdvanceWaves\n931: // is true, a wave with failures still shows the decision dialog.\n932: func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {\n933: \tconst planFile = \"2026-02-28-auto-advance-failure.md\"\n934: \n935: \tplan := &planparser.Plan{\n936: \t\tWaves: []planparser.Wave{\n937: \t\t\t{Number: 1, Tasks: []planparser.Task{\n938: \t\t\t\t{Number: 1, Title: \"T1\"},\n939: \t\t\t\t{Number: 2, Title: \"T2\"},\n940: \t\t\t}},\n941: \t\t\t{Number: 2, Tasks: []planparser.Task{{Number: 3, Title: \"T3\"}}},\n942: \t\t},\n943: \t}\n944: \torch := NewWaveOrchestrator(planFile, plan)\n945: \torch.StartNextWave()\n946: \torch.MarkTaskComplete(1)\n947: \torch.MarkTaskFailed(2) // wave 1 complete with 1 failure\n948: \n949: \tdir := t.TempDir()\n950: \tplansDir := filepath.Join(dir, \"docs\", \"plans\")\n951: \trequire.NoError(t, os.MkdirAll(plansDir, 0o755))\n952: \tps, err := newTestPlanState(t, plansDir)\n953: \trequire.NoError(t, err)\n954: \trequire.NoError(t, ps.Register(planFile, \"auto-advance failure test\", \"plan/auto-advance-failure\", time.Now()))\n955: \tseedPlanStatus(t, ps, planFile, planstate.StatusImplementing)\n956: \n957: \t// Create task instances\n958: \tinst1, err := session.NewInstance(session.InstanceOptions{\n959: \t\tTitle:      \"auto-advance-failure-W1-T1\",\n960: \t\tPath:       t.TempDir(),\n961: \t\tProgram:    \"claude\",\n962: \t\tPlanFile:   planFile,\n963: \t\tTaskNumber: 1,\n964: \t\tWaveNumber: 1,\n965: \t})\n966: \trequire.NoError(t, err)\n967: \tinst1.PromptDetected = true\n968: \n969: \tinst2, err := session.NewInstance(session.InstanceOptions{\n970: \t\tTitle:      \"auto-advance-failure-W1-T2\",\n971: \t\tPath:       t.TempDir(),\n972: \t\tProgram:    \"claude\",\n973: \t\tPlanFile:   planFile,\n974: \t\tTaskNumber: 2,\n975: \t\tWaveNumber: 1,\n976: \t})\n977: \trequire.NoError(t, err)\n978: \tinst2.SetStatus(session.Paused) // failed\n979: \n980: \th := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})\n981: \t// Enable auto-advance\n982: \th.appConfig = &config.Config{AutoAdvanceWaves: true}\n983: \t_ = h.nav.AddInstance(inst1)\n984: \t_ = h.nav.AddInstance(inst2)\n985: \n986: \tmsg := metadataResultMsg{\n987: \t\tResults: []instanceMetadata{\n988: \t\t\t{Title: \"auto-advance-failure-W1-T1\", TmuxAlive: true},\n989: \t\t\t{Title: \"auto-advance-failure-W1-T2\", TmuxAlive: false},\n990: \t\t},\n991: \t\tPlanState: ps,\n992: \t}\n993: \tmodel, _ := h.Update(msg)\n994: \tupdated := model.(*home)\n995: \n996: \t// Even with auto-advance enabled, failures must show the decision dialog\n997: \tassert.Equal(t, stateConfirm, updated.state,\n998: \t\t\"failed wave must show decision dialog even when auto-advance is enabled\")\n999: \trequire.NotNil(t, updated.confirmationOverlay,\n1000: \t\t\"confirmation overlay must be set for failed-wave decision\")\n1001: \tassert.Equal(t, \"r\", updated.confirmationOverlay.ConfirmKey,\n1002: \t\t\"failed-wave confirm key must be 'r' (retry)\")\n1003: }\n1004: \n1005: // TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess verifies that when AutoAdvanceWaves\n1006: // is true and a wave completes with zero failures, the Update handler emits a\n1007: // waveAdvanceMsg directly (no confirmation dialog shown).\n1008: func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {\n1009: \tconst planFile = \"2026-02-28-auto-advance-success.md\"\n1010: \n1011: \tplan := &planparser.Plan{\n1012: \t\tWaves: []planparser.Wave{\n1013: \t\t\t{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: \"T1\"}}},\n1014: \t\t\t{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: \"T2\"}}},\n1015: \t\t},\n1016: \t}\n1017: \torch := NewWaveOrchestrator(planFile, plan)\n1018: \torch.StartNextWave()\n1019: \n1020: \tdir := t.TempDir()\n1021: \tplansDir := filepath.Join(dir, \"docs\", \"plans\")\n1022: \trequire.NoError(t, os.MkdirAll(plansDir, 0o755))\n1023: \tps, err := newTestPlanState(t, plansDir)\n1024: \trequire.NoError(t, err)\n1025: \trequire.NoError(t, ps.Register(planFile, \"auto-advance success test\", \"plan/auto-advance-success\", time.Now()))\n1026: \tseedPlanStatus(t, ps, planFile, planstate.StatusImplementing)\n1027: \n1028: \tinst, err := session.NewInstance(session.InstanceOptions{\n1029: \t\tTitle:      \"auto-advance-success-W1-T1\",\n1030: \t\tPath:       t.TempDir(),\n1031: \t\tProgram:    \"claude\",\n1032: \t\tPlanFile:   planFile,\n1033: \t\tTaskNumber: 1,\n1034: \t\tWaveNumber: 1,\n1035: \t})\n1036: \trequire.NoError(t, err)\n1037: \tinst.PromptDetected = true\n1038: \n1039: \th := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})\n1040: \t// Enable auto-advance\n1041: \th.appConfig = &config.Config{AutoAdvanceWaves: true}\n1042: \t_ = h.nav.AddInstance(inst)\n1043: \n1044: \tmsg := metadataResultMsg{\n1045: \t\tResults:   []instanceMetadata{{Title: \"auto-advance-success-W1-T1\", TmuxAlive: true}},\n1046: \t\tPlanState: ps,\n1047: \t}\n1048: \tmodel, cmd := h.Update(msg)\n1049: \tupdated := model.(*home)\n1050: \n1051: \t// With auto-advance enabled and no failures, must NOT show a confirmation dialog\n1052: \tassert.NotEqual(t, stateConfirm, updated.state,\n1053: \t\t\"auto-advance must not show confirmation dialog on success\")\n1054: \tassert.Nil(t, updated.confirmationOverlay,\n1055: \t\t\"no confirmation overlay must be shown when auto-advancing\")\n1056: \n1057: \t// The cmd must be non-nil (it contains the waveAdvanceMsg)\n\n(Showing lines 898-1057 of 1109. Use offset=1058 to continue.)\n</content>",
+            "title": "app/app_wave_orchestration_flow_test.go",
+            "metadata": {
+              "preview": "// TestAutoAdvanceWaves_SkipsConfirmOnSuccess verifies that when AutoAdvanceWaves is\n// true and a wave completes with zero failures, the model is configured to auto-advance\n// without showing a confirmation dialog.\nfunc TestAutoAdvanceWaves_SkipsConfirmOnSuccess(t *testing.T) {\n\t// Build a plan with 2 waves\n\tplan := &planparser.Plan{\n\t\tWaves: []planparser.Wave{\n\t\t\t{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: \"T1\"}}},\n\t\t\t{Number: 2, Tasks: []planparser.Task{{Number: 2, Title: \"T2\"}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"test.md\", plan)\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1) // wave 1 complete, no failures\n\n\tm := &home{\n\t\tappConfig:         &config.Config{AutoAdvanceWaves: true},\n\t\twaveOrchestrators: map[string]*WaveOrchestrator{\"test.md\": orch},\n\t\tplanState:         &planstate.PlanState{Plans: map[string]planstate.PlanEntry{\"test.md\": {Status: \"implementing\"}}},\n\t\tstate:             stateDefault,",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492504116,
+              "end": 1772492504118
+            }
+          },
+          "id": "prt_cb0c9392f0013XSQOrgEvb7ptf",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c92f86001jvooEIa4aEDwDY"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017ZJs4DJUbUTroWyBEZi1Qr",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_plan_actions_test.go",
+              "offset": 469,
+              "limit": 20
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_plan_actions_test.go</path>\n<type>file</type>\n<content>469: func TestToggleAutoAdvanceWaves(t *testing.T) {\n470: \tm := &home{\n471: \t\tappConfig: &config.Config{AutoAdvanceWaves: false},\n472: \t}\n473: \tassert.False(t, m.appConfig.AutoAdvanceWaves)\n474: \n475: \t// Simulate executing the toggle action\n476: \tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n477: \tassert.True(t, m.appConfig.AutoAdvanceWaves)\n478: \n479: \t// Toggle back\n480: \tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n481: \tassert.False(t, m.appConfig.AutoAdvanceWaves)\n482: }\n483: \n484: func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {\n485: \tstore := planstore.NewTestSQLiteStore(t)\n486: \tplanFile := \"2026-02-28-test.md\"\n487: \tcontent := \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do thing\\n\"\n488: \trequire.NoError(t, store.Create(\"proj\", planstore.PlanEntry{\n\n(Showing lines 469-488 of 556. Use offset=489 to continue.)\n</content>",
+            "title": "app/app_plan_actions_test.go",
+            "metadata": {
+              "preview": "func TestToggleAutoAdvanceWaves(t *testing.T) {\n\tm := &home{\n\t\tappConfig: &config.Config{AutoAdvanceWaves: false},\n\t}\n\tassert.False(t, m.appConfig.AutoAdvanceWaves)\n\n\t// Simulate executing the toggle action\n\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n\tassert.True(t, m.appConfig.AutoAdvanceWaves)\n\n\t// Toggle back\n\tm.appConfig.AutoAdvanceWaves = !m.appConfig.AutoAdvanceWaves\n\tassert.False(t, m.appConfig.AutoAdvanceWaves)\n}\n\nfunc TestViewSelectedPlan_ReadsFromStore(t *testing.T) {\n\tstore := planstore.NewTestSQLiteStore(t)\n\tplanFile := \"2026-02-28-test.md\"\n\tcontent := \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do thing\\n\"\n\trequire.NoError(t, store.Create(\"proj\", planstore.PlanEntry{",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772492504777,
+              "end": 1772492504779
+            }
+          },
+          "id": "prt_cb0c93c35001BM2SLhxAiorfYP",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c92f86001jvooEIa4aEDwDY"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 65683,
+            "input": 1,
+            "output": 221,
+            "reasoning": 0,
+            "cache": {
+              "read": 62981,
+              "write": 2480
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c92f86001jvooEIa4aEDwDY"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772492504804,
+          "completed": 1772492515677
+        },
+        "parentID": "msg_cb0c896b0001SH2jaESB9XIAcp",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 69316,
+          "input": 1,
+          "output": 455,
+          "reasoning": 0,
+          "cache": {
+            "read": 65461,
+            "write": 3399
+          }
+        },
+        "finish": "stop",
+        "id": "msg_cb0c93ee4001RnY3zdFlt9p5Kh",
+        "sessionID": "ses_34f37695cffeLmRJI3BhORstnb"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "id": "prt_cb0c946fb001b5sbYkQFOeR9KK",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c93ee4001RnY3zdFlt9p5Kh"
+        },
+        {
+          "type": "text",
+          "text": "This feature is **already fully implemented and tested**. Here's a summary of what exists:\n\n### Already Implemented\n\n1. **Config field**: `AutoAdvanceWaves bool` in `config.Config` (JSON) and `TOMLUIConfig` (TOML) — default `false`\n2. **TOML support**: `[ui] auto_advance_waves = true` parsed and overlaid onto JSON config\n3. **JSON support**: `\"auto_advance_waves\": true` in `config.json`\n4. **Persistence**: Toggle saves to disk via `config.SaveConfig()`\n5. **UI toggle**: Context menu item `\"auto-advance waves: on/off\"` with action `\"toggle_auto_advance\"` — accessible from the plan context menu\n6. **Core logic**: In `app.go:1304` — when a wave completes with zero failures and `AutoAdvanceWaves` is true, it skips the confirmation dialog and emits a `waveAdvanceMsg` directly\n7. **Failure safety**: Even with auto-advance enabled, waves with failures still show the retry/next/abort decision dialog\n8. **Tests**: \n   - `TestAutoAdvanceWaves` (TOML parsing)\n   - `TestAutoAdvanceWaves_SkipsConfirmOnSuccess`\n   - `TestAutoAdvanceWaves_ShowsConfirmOnFailure`\n   - `TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess`\n   - `TestToggleAutoAdvanceWaves`\n\n**There is nothing to plan — this feature already exists with config (default=false), UI toggle (context menu), auto-advance logic, failure guard, and comprehensive tests.** \n\nIs there something specific about the current implementation you'd like changed or extended? For example:\n- A different UI surface (e.g., a keybinding instead of/in addition to the context menu)?\n- Per-plan auto-advance rather than global?\n- Something else?",
+          "time": {
+            "start": 1772492515633,
+            "end": 1772492515633
+          },
+          "id": "prt_cb0c946fc0014yopqu1TPykvr3",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c93ee4001RnY3zdFlt9p5Kh"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "3bfde8be416717666b80fc9dc7f68b5a0f29de0e",
+          "cost": 0,
+          "tokens": {
+            "total": 69316,
+            "input": 1,
+            "output": 455,
+            "reasoning": 0,
+            "cache": {
+              "read": 65461,
+              "write": 3399
+            }
+          },
+          "id": "prt_cb0c96953001ZQ3KIy1quViBmk",
+          "sessionID": "ses_34f37695cffeLmRJI3BhORstnb",
+          "messageID": "msg_cb0c93ee4001RnY3zdFlt9p5Kh"
+        }
+      ]
+    }
+  ]
+}

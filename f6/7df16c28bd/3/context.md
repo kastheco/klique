@@ -1,0 +1,10 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan auto-advance-waves. Goal: auto-advance-waves
+
+add a config option (default=false) also controllable via UI that enables/disables autoadvancing waves after one completes. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
