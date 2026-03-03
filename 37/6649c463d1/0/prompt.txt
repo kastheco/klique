@@ -1,0 +1,253 @@
+Implement Task 1: Delete Old Files and Define Session Interface + Program Adapters
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Delete: `session/tmux/tmux.go`, `session/tmux/tmux_io.go`, `session/tmux/tmux_attach.go`, `session/tmux/tmux_unix.go`, `session/tmux/tmux_windows.go`
+- Create: `session/tmux/session.go`
+- Create: `session/tmux/adapter.go`
+- Create: `session/tmux/monitor.go`
+- Test: `session/tmux/adapter_test.go`
+- Test: `session/tmux/monitor_test.go`
+
+**Step 1: write the failing test**
+
+```go
+// adapter_test.go
+func TestClaudeAdapter_ReadyString(t *testing.T) {
+    a := claudeAdapter{}
+    assert.Equal(t, "Do you trust the files in this folder?", a.ReadyString())
+}
+
+func TestClaudeAdapter_DetectPrompt(t *testing.T) {
+    a := claudeAdapter{}
+    assert.True(t, a.DetectPrompt("No, and tell Claude what to do differently"))
+    assert.False(t, a.DetectPrompt("Working on it..."))
+}
+
+func TestClaudeAdapter_ReadyTap(t *testing.T) {
+    a := claudeAdapter{}
+    assert.True(t, a.NeedsTrustTap())
+}
+
+func TestOpenCodeAdapter_ReadyString(t *testing.T) {
+    a := opencodeAdapter{}
+    assert.Equal(t, "Ask anything", a.ReadyString())
+}
+
+func TestOpenCodeAdapter_DetectPrompt(t *testing.T) {
+    a := opencodeAdapter{}
+    // opencode idle = no "esc interrupt" shown
+    assert.True(t, a.DetectPrompt("some content without interrupt"))
+    assert.False(t, a.DetectPrompt("some content esc interrupt more"))
+}
+
+func TestOpenCodeAdapter_ReadyTap(t *testing.T) {
+    a := opencodeAdapter{}
+    assert.False(t, a.NeedsTrustTap())
+}
+
+func TestAdapterFor_Claude(t *testing.T) {
+    a := AdapterFor("claude")
+    assert.NotNil(t, a)
+    assert.Equal(t, "Do you trust the files in this folder?", a.ReadyString())
+}
+
+func TestAdapterFor_OpenCode(t *testing.T) {
+    a := AdapterFor("opencode")
+    assert.NotNil(t, a)
+    assert.Equal(t, "Ask anything", a.ReadyString())
+}
+
+func TestAdapterFor_Unknown(t *testing.T) {
+    a := AdapterFor("vim")
+    assert.Nil(t, a)
+}
+
+// monitor_test.go
+func TestStatusMonitor_DetectsChange(t *testing.T) {
+    m := NewStatusMonitor()
+    assert.True(t, m.RecordContent("hello"))
+    assert.False(t, m.RecordContent("hello"))
+}
+
+func TestStatusMonitor_DebounceThreshold(t *testing.T) {
+    m := NewStatusMonitor()
+    m.RecordContent("stable")
+    // First 14 unchanged ticks still report "updated" (debouncing)
+    for i := 0; i < 14; i++ {
+        assert.True(t, m.RecordContent("stable"), "tick %d should still debounce", i)
+    }
+    // 15th unchanged tick reports "not updated"
+    assert.False(t, m.RecordContent("stable"))
+}
+
+func TestStatusMonitor_ResetOnChange(t *testing.T) {
+    m := NewStatusMonitor()
+    m.RecordContent("a")
+    for i := 0; i < 20; i++ {
+        m.RecordContent("a")
+    }
+    // Now change — should report updated and reset debounce
+    assert.True(t, m.RecordContent("b"))
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestClaudeAdapter|TestOpenCodeAdapter|TestAdapterFor|TestStatusMonitor" -v
+```
+
+expected: FAIL — types don't exist yet
+
+**Step 3: write minimal implementation**
+
+Delete the 5 old files. Then create three new files:
+
+**`session/tmux/session.go`** — the `Session` interface and exported constants/types:
+
+```go
+package tmux
+
+// Session defines the contract for a managed terminal multiplexer session.
+// The instance layer depends on this interface, not the concrete TmuxSession.
+type Session interface {
+    // Lifecycle
+    Start(workDir string) error
+    Restore() error
+    Close() error
+    DoesSessionExist() bool
+
+    // I/O
+    SendKeys(keys string) error
+    TapEnter() error
+    TapRight() error
+    SendPermissionResponse(choice PermissionChoice) error
+    CapturePaneContent() (string, error)
+    CapturePaneContentWithOptions(start, end string) (string, error)
+    HasUpdated() (updated bool, hasPrompt bool)
+    HasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)
+    GetPanePID() (int, error)
+
+    // Attach/Detach
+    Attach() (chan struct{}, error)
+    Detach()
+    DetachSafely() error
+    SetDetachedSize(width, height int) error
+
+    // Accessors
+    GetPTY() *os.File
+    GetSanitizedName() string
+
+    // Configuration (builder-style, called before Start)
+    SetAgentType(agentType string)
+    SetInitialPrompt(prompt string)
+    SetTaskEnv(taskNumber, waveNumber, peerCount int)
+    SetSessionTitle(title string)
+    SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))
+    NewReset(name, program string, skipPermissions bool) Session
+}
+
+type PermissionChoice int
+
+const (
+    PermissionAllowOnce PermissionChoice = iota
+    PermissionAllowAlways
+    PermissionReject
+)
+
+const (
+    ProgramClaude   = "claude"
+    ProgramOpenCode = "opencode"
+    TmuxPrefix      = "kas_"
+)
+```
+
+**`session/tmux/adapter.go`** — program-specific behavior:
+
+```go
+package tmux
+
+// ProgramAdapter encapsulates program-specific behavior for readiness
+// detection, prompt detection, trust-screen handling, and CLI prompt syntax.
+type ProgramAdapter interface {
+    ReadyString() string
+    NeedsTrustTap() bool
+    DetectPrompt(plainContent string) bool
+    MaxWaitTime() time.Duration
+    BuildPromptArg(prompt, workDir string, writeFile func(string) string) string
+    SupportsCliPrompt() bool
+}
+
+// AdapterFor returns the adapter for the given program string, or nil
+// if the program has no special handling.
+func AdapterFor(program string) ProgramAdapter { ... }
+
+type claudeAdapter struct{}
+type opencodeAdapter struct{}
+```
+
+**`session/tmux/monitor.go`** — extracted status monitor:
+
+```go
+package tmux
+
+// StatusMonitor tracks pane content changes via hashing with ANSI stripping
+// and debounce logic to prevent false Running→Ready transitions.
+type StatusMonitor struct { ... }
+
+func NewStatusMonitor() *StatusMonitor { ... }
+// RecordContent hashes content (after ANSI strip), returns true if content
+// is considered "updated" (changed or still within debounce window).
+func (m *StatusMonitor) RecordContent(content string) bool { ... }
+// RecordFailure increments the failure counter. Returns true if the failure
+// should be logged (first failure, then every 75th).
+func (m *StatusMonitor) RecordFailure() bool { ... }
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -run "TestClaudeAdapter|TestOpenCodeAdapter|TestAdapterFor|TestStatusMonitor" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/session.go session/tmux/adapter.go session/tmux/adapter_test.go session/tmux/monitor.go session/tmux/monitor_test.go
+git rm session/tmux/tmux.go session/tmux/tmux_io.go session/tmux/tmux_attach.go session/tmux/tmux_unix.go session/tmux/tmux_windows.go
+git commit -m "feat(clean-room): define Session interface, program adapters, and status monitor"
+```
+
+---
+
+continue
