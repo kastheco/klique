@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d289d70b417b",
+  "strategy": "manual-commit",
+  "branch": "plan/01b-rewrite-git-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/git/diff.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d2/89d70b417b/0/metadata.json",
+      "transcript": "/d2/89d70b417b/0/full.jsonl",
+      "context": "/d2/89d70b417b/0/context.md",
+      "content_hash": "/d2/89d70b417b/0/content_hash.txt",
+      "prompt": "/d2/89d70b417b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5,
+    "cache_creation_tokens": 55384,
+    "cache_read_tokens": 140408,
+    "output_tokens": 1698,
+    "api_call_count": 5
+  }
+}

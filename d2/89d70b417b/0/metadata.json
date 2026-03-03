@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d289d70b417b",
+  "session_id": "ses_34bdf711effeGpxAoctLsWTf2a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T14:36:32.109972671Z",
+  "branch": "plan/01b-rewrite-git-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/git/diff.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "77d74a349652",
+  "token_usage": {
+    "input_tokens": 5,
+    "cache_creation_tokens": 55384,
+    "cache_read_tokens": 140408,
+    "output_tokens": 1698,
+    "api_call_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T14:36:32.074430537Z",
+    "agent_lines": 18,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 18,
+    "agent_percentage": 100
+  }
+}
