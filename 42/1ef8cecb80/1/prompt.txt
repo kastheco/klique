@@ -1,0 +1,88 @@
+Implement Task 1: Rewrite gradient.go and consts.go — Color Utilities and Banner Art
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 1 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/gradient.go`
+- Modify: `ui/consts.go`
+- Delete: `ui/list_styles.go.bak`
+- Test: `ui/gradient_test.go` (existing — 98 LOC, covers parseHex, lerpByte, GradientText, GradientBar)
+- Test: `ui/consts_test.go` (existing — covers FallBackText, BannerLines)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `gradient_test.go` covers `parseHex` edge cases (valid hex, missing `#`, short string), `lerpByte` interpolation (start/end/midpoint), `GradientText` (empty string, single char, multiline, newline preservation, ANSI reset suffix), and `GradientBar` (zero width, full bar, partial bar, overfill clamp). Existing `consts_test.go` covers `FallBackText` frame cycling and `BannerLines` returning exactly 6 lines per frame.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestParseHex|TestLerpByte|TestGradient|TestFallBack|TestBannerLines" -v -count=1
+```
+
+expected: PASS — all existing tests green before rewrite
+
+**Step 3: rewrite implementation**
+
+Delete `ui/list_styles.go.bak` (dead backup file, not imported anywhere).
+
+Delete the contents of `ui/gradient.go` and rewrite from scratch:
+
+- **`parseHex(hex string) (uint8, uint8, uint8)`** — strips leading `#`, returns `(0,0,0)` if remaining string is not exactly 6 chars. Uses `fmt.Sscanf` with `%02x%02x%02x` to parse R, G, B components.
+- **`lerpByte(a, b uint8, t float64) uint8`** — linear interpolation: `uint8(float64(a) + (float64(b)-float64(a))*t)`.
+- **`GradientText(text, startHex, endHex string) string`** — returns empty string if text is empty. Parses both hex colors. Counts visible (non-newline) runes. If zero visible, returns text as-is. Iterates runes: newlines pass through unchanged, visible chars get `\033[38;2;R;G;Bm` prefix with linearly interpolated color based on position `idx/(visible-1)`. Appends `\033[0m` reset at end.
+- **`GradientBar(width, filled int, startHex, endHex string) string`** — returns empty for `width <= 0`. Clamps `filled` to `[0, width]`. Renders `filled` `█` chars with gradient color, then `width-filled` `░` chars in dim gray (`rgb(60,60,60)`). Appends ANSI reset.
+
+Imports: `fmt`, `strings`.
+
+Delete the contents of `ui/consts.go` and rewrite from scratch:
+
+- **`fallbackBannerRaw`** — raw string literal containing the 6-row KASMOS block-art banner (exact same Unicode box-drawing characters).
+- **`blockPeriod`** — `[6]string` array: 4 blank rows of 3 spaces, then `"██╗"`, `"╚═╝"`.
+- **`bannerFrames`** — `[]string` computed by an `init`-style func literal: splits `fallbackBannerRaw` into 6 base lines, defines 4 suffix sets (0, 1, 2, 3 periods), for each suffix set appends the period glyphs column-wise to each row with a space separator, then applies `GradientText` with `GradientStart`/`GradientEnd` to the joined result.
+- **`FallBackText(frame int) string`** — returns `bannerFrames[frame % len(bannerFrames)]`.
+- **`BannerLines(frame int) []string`** — returns `strings.Split(bannerFrames[frame % len(bannerFrames)], "\n")`.
+
+Imports: `strings`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "TestParseHex|TestLerpByte|TestGradient|TestFallBack|TestBannerLines" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+rm -f ui/list_styles.go.bak
+git add ui/gradient.go ui/consts.go
+git rm -f ui/list_styles.go.bak 2>/dev/null || true
+git commit -m "feat(clean-room): rewrite gradient.go and consts.go from scratch"
+```
