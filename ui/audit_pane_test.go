@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -122,4 +123,36 @@ func TestAuditPane_Height(t *testing.T) {
 	pane := NewAuditPane()
 	pane.SetSize(60, 8)
 	assert.Equal(t, 8, pane.Height())
+}
+
+func TestAuditPane_MinuteHeaders(t *testing.T) {
+	pane := NewAuditPane()
+	pane.SetSize(60, 20)
+	pane.SetEvents([]AuditEventDisplay{
+		{Time: "12:35", Kind: "agent_finished", Icon: "✓", Message: "coder finished", Color: ColorGold, Level: "info"},
+		{Time: "12:34", Kind: "agent_spawned", Icon: "◆", Message: "spawned coder", Color: ColorFoam, Level: "info"},
+		{Time: "12:34", Kind: "plan_transition", Icon: "⟳", Message: "ready → implementing", Color: ColorIris, Level: "info"},
+	})
+	output := pane.String()
+	// Minute headers should appear as centered dividers
+	assert.Contains(t, output, "12:34")
+	assert.Contains(t, output, "12:35")
+	// Messages should still appear
+	assert.Contains(t, output, "spawned coder")
+	assert.Contains(t, output, "coder finished")
+	assert.Contains(t, output, "ready → implementing")
+}
+
+func TestAuditPane_NoPerLineTimestamp(t *testing.T) {
+	pane := NewAuditPane()
+	pane.SetSize(60, 20)
+	pane.SetEvents([]AuditEventDisplay{
+		{Time: "12:34", Kind: "agent_spawned", Icon: "◆", Message: "spawned coder", Color: ColorFoam, Level: "info"},
+	})
+	output := pane.String()
+	// The timestamp should appear in the minute header, not next to the icon on the event line.
+	// Event lines should be " ◆  message" not " 12:34  ◆  message".
+	// Count occurrences of "12:34" — should be exactly 1 (the header), not 2.
+	assert.Equal(t, 1, strings.Count(output, "12:34"),
+		"timestamp should appear once (in minute header), not per-line")
 }

@@ -92,7 +92,7 @@ func (p *AuditPane) ToggleVisible() {
 // Styles for the audit pane — Rosé Pine Moon palette.
 var (
 	auditDividerStyle = lipgloss.NewStyle().Foreground(ColorMuted)
-	auditTimeStyle    = lipgloss.NewStyle().Foreground(ColorMuted).Faint(true)
+	auditMinuteStyle  = lipgloss.NewStyle().Foreground(ColorMuted)
 	auditMsgStyle     = lipgloss.NewStyle().Foreground(ColorSubtle)
 	auditWarnMsgStyle = lipgloss.NewStyle().Foreground(ColorGold)
 	auditErrMsgStyle  = lipgloss.NewStyle().Foreground(ColorLove)
@@ -121,6 +121,20 @@ func (p *AuditPane) renderHeader() string {
 	return auditDividerStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
 }
 
+// renderMinuteHeader builds a centered minute divider: ────── HH:MM ──────
+// Mirrors renderHeader() but uses the minute string instead of "log".
+func (p *AuditPane) renderMinuteHeader(minute string) string {
+	inner := " " + minute + " "
+	innerW := len(inner)
+	remaining := p.width - innerW
+	if remaining < 2 {
+		return auditMinuteStyle.Render(inner)
+	}
+	left := remaining / 2
+	right := remaining - left
+	return auditMinuteStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
+}
+
 // renderBody builds the scrollable event list content.
 func (p *AuditPane) renderBody() string {
 	if len(p.events) == 0 {
@@ -129,10 +143,10 @@ func (p *AuditPane) renderBody() string {
 		)
 	}
 
-	// Available width for message text after time + icon + padding.
-	// Layout per row: " HH:MM  ◆  message"
-	//                  1  5   2 1 2 = 11 chars of overhead
-	const overhead = 11
+	// Available width for message text after icon + padding.
+	// Layout per row: " ◆  message"
+	//                  1 1 2 = 4 chars of overhead
+	const overhead = 4
 	msgWidth := p.width - overhead
 	if msgWidth < 10 {
 		msgWidth = 10
@@ -141,17 +155,25 @@ func (p *AuditPane) renderBody() string {
 	const contIndent = overhead
 
 	// Iterate oldest-first so newest events appear at the bottom.
+	// Emit a centered minute header whenever the minute changes.
 	lines := make([]string, 0, len(p.events))
+	var lastMinute string
 	for i := len(p.events) - 1; i >= 0; i-- {
 		e := p.events[i]
+
+		// Emit minute header on minute boundary.
+		if e.Time != lastMinute {
+			lines = append(lines, p.renderMinuteHeader(e.Time))
+			lastMinute = e.Time
+		}
+
 		icon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)
-		ts := auditTimeStyle.Render(e.Time)
 
 		// Word-wrap the message at msgWidth, then render each wrapped segment.
 		wrapped := wordwrap.String(e.Message, msgWidth)
 		segments := strings.Split(wrapped, "\n")
 
-		for i, seg := range segments {
+		for j, seg := range segments {
 			var styledSeg string
 			switch e.Level {
 			case "error":
@@ -162,8 +184,8 @@ func (p *AuditPane) renderBody() string {
 				styledSeg = auditMsgStyle.Render(seg)
 			}
 			var line string
-			if i == 0 {
-				line = auditRowPad.Render(ts + "  " + icon + "  " + styledSeg)
+			if j == 0 {
+				line = auditRowPad.Render(icon + "  " + styledSeg)
 			} else {
 				line = auditRowPad.Render(strings.Repeat(" ", contIndent) + styledSeg)
 			}
