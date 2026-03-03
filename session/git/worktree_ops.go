@@ -3,7 +3,6 @@ package git
 import (
 	"errors"
 	"fmt"
-	"github.com/kastheco/kasmos/log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,72 +10,69 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/kastheco/kasmos/log"
 )
 
-// Setup creates a new worktree for the session
+// Setup creates a new worktree for the session. It creates the worktrees
+// directory and determines whether the target branch already exists,
+// dispatching to the appropriate setup path.
 func (g *GitWorktree) Setup() error {
-	// Ensure worktrees directory exists early (can be done in parallel with branch check)
-	worktreesDir, err := getWorktreeDirectory(g.repoPath)
+	wtDir, err := getWorktreeDirectory(g.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to get worktree directory: %w", err)
 	}
 
-	// Create directory and check branch existence in parallel
-	errChan := make(chan error, 2)
-	var branchExists bool
+	type result struct{ err error }
+	mkdirDone := make(chan result, 1)
+	branchCheckDone := make(chan result, 1)
+	var branchFound bool
 
-	// Goroutine for directory creation
 	go func() {
-		errChan <- os.MkdirAll(worktreesDir, 0755)
+		mkdirDone <- result{os.MkdirAll(wtDir, 0755)}
 	}()
 
-	// Goroutine for branch check
 	go func() {
-		repo, err := git.PlainOpen(g.repoPath)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to open repository: %w", err)
+		repo, openErr := git.PlainOpen(g.repoPath)
+		if openErr != nil {
+			branchCheckDone <- result{fmt.Errorf("failed to open repository: %w", openErr)}
 			return
 		}
-
-		branchRef := plumbing.NewBranchReferenceName(g.branchName)
-		if _, err := repo.Reference(branchRef, false); err == nil {
-			branchExists = true
+		ref := plumbing.NewBranchReferenceName(g.branchName)
+		if _, refErr := repo.Reference(ref, false); refErr == nil {
+			branchFound = true
 		}
-		errChan <- nil
+		branchCheckDone <- result{nil}
 	}()
 
-	// Wait for both operations
-	for i := 0; i < 2; i++ {
-		if err := <-errChan; err != nil {
-			return err
-		}
+	if r := <-mkdirDone; r.err != nil {
+		return r.err
+	}
+	if r := <-branchCheckDone; r.err != nil {
+		return r.err
 	}
 
-	if branchExists {
+	if branchFound {
 		return g.setupFromExistingBranch()
 	}
 	return g.setupNewWorktree()
 }
 
-// setupFromExistingBranch creates a worktree from an existing branch
+// setupFromExistingBranch creates a worktree from a branch that already exists
+// in the repository. It first removes any stale worktree at the target path,
+// syncs the local branch with the remote, then creates the fresh worktree and
+// resolves the base commit SHA for diff computation.
 func (g *GitWorktree) setupFromExistingBranch() error {
-	// Directory already created in Setup(), skip duplicate creation
+	// Remove any stale worktree; ignore errors (it may not exist).
+	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
 
-	// Clean up any existing worktree first
-	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
-
-	// Sync local branch with remote before creating the worktree.
-	// This prevents local/remote divergence when an agent pushed to origin,
-	// the worktree was removed, and a new agent respawns on the same branch.
+	// Best-effort sync with remote before creating the worktree.
 	g.syncBranchWithRemote()
 
-	// Create a new worktree from the existing branch
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
 	}
 
-	// Resolve a base commit for diff computation. Try merge-base with HEAD
-	// of the main worktree first; fall back to the branch's own HEAD.
+	// Resolve the base commit SHA for diff computation.
 	if g.baseCommitSHA == "" {
 		if out, err := g.runGitCommand(g.repoPath, "merge-base", "HEAD", g.branchName); err == nil {
 			g.baseCommitSHA = strings.TrimSpace(out)
@@ -88,89 +84,81 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 	return nil
 }
 
-// syncBranchWithRemote fast-forwards the local branch to match origin if the
-// remote is ahead. This runs while the branch is NOT checked out in any
-// worktree (the old worktree was just removed), so we can safely update the
-// ref. If the branches have diverged (both have unique commits), we rebase
-// local on top of remote to keep a linear history.
+// syncBranchWithRemote reconciles the local branch with its remote counterpart.
+// It fetches origin/<branch>, and if the SHAs differ it either fast-forwards
+// (when local is an ancestor of remote) or rebases local commits onto remote
+// (when the histories have diverged). All errors are logged but not propagated —
+// this is a best-effort operation.
 func (g *GitWorktree) syncBranchWithRemote() {
 	remote := "origin/" + g.branchName
 
-	// Fetch the latest remote state for this branch.
 	_, _ = g.runGitCommand(g.repoPath, "fetch", "origin", g.branchName)
 
-	// Check if the remote tracking branch exists.
+	// Bail early if the remote tracking branch does not exist.
 	if _, err := g.runGitCommand(g.repoPath, "rev-parse", "--verify", remote); err != nil {
-		return // no remote branch — nothing to sync
+		return
 	}
 
-	// Check if local is already up-to-date with remote.
-	localSHA, err := g.runGitCommand(g.repoPath, "rev-parse", g.branchName)
+	localOut, err := g.runGitCommand(g.repoPath, "rev-parse", g.branchName)
 	if err != nil {
 		return
 	}
-	remoteSHA, err := g.runGitCommand(g.repoPath, "rev-parse", remote)
+	remoteOut, err := g.runGitCommand(g.repoPath, "rev-parse", remote)
 	if err != nil {
 		return
 	}
-	if strings.TrimSpace(localSHA) == strings.TrimSpace(remoteSHA) {
+
+	if strings.TrimSpace(localOut) == strings.TrimSpace(remoteOut) {
 		return // already in sync
 	}
 
-	// Try fast-forward first (remote is strictly ahead).
+	// Fast-forward if local is an ancestor of remote.
 	if _, err := g.runGitCommand(g.repoPath, "merge-base", "--is-ancestor", g.branchName, remote); err == nil {
-		// Local is ancestor of remote → safe to fast-forward.
-		if _, err := g.runGitCommand(g.repoPath, "branch", "-f", g.branchName, remote); err != nil {
-			log.WarningLog.Printf("syncBranchWithRemote: fast-forward %s to %s failed: %v", g.branchName, remote, err)
+		if _, ffErr := g.runGitCommand(g.repoPath, "branch", "-f", g.branchName, remote); ffErr != nil {
+			log.WarningLog.Printf("syncBranchWithRemote: fast-forward %s to %s failed: %v", g.branchName, remote, ffErr)
 		}
 		return
 	}
 
-	// Branches diverged — rebase local commits on top of remote.
-	// Since the branch isn't checked out anywhere, we use a temporary worktree.
+	// Histories have diverged — attempt a rebase.
 	log.InfoLog.Printf("syncBranchWithRemote: %s diverged from %s, rebasing", g.branchName, remote)
-	if _, err := g.runGitCommand(g.repoPath, "rebase", "--onto", remote, remote, g.branchName); err != nil {
-		// Rebase failed (conflicts) — abort and leave as-is. The agent will
-		// see the divergence and can handle it manually.
+	if _, rebaseErr := g.runGitCommand(g.repoPath, "rebase", "--onto", remote, remote, g.branchName); rebaseErr != nil {
 		_, _ = g.runGitCommand(g.repoPath, "rebase", "--abort")
-		log.WarningLog.Printf("syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v", g.branchName, remote, err)
+		log.WarningLog.Printf(
+			"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v",
+			g.branchName, remote, rebaseErr,
+		)
 	}
 }
 
-// setupNewWorktree creates a new worktree from HEAD
+// setupNewWorktree creates a brand-new branch from the current HEAD and adds
+// a worktree for it. It errors early if the repository has no commits yet.
 func (g *GitWorktree) setupNewWorktree() error {
-	// Directory already created in Setup(), skip duplicate creation
+	// Remove any stale worktree; ignore errors.
+	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
 
-	// Clean up any existing worktree first
-	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
-
-	// Open the repository
 	repo, err := git.PlainOpen(g.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Clean up any existing branch or reference
 	if err := g.cleanupExistingBranch(repo); err != nil {
 		return fmt.Errorf("failed to cleanup existing branch: %w", err)
 	}
 
-	output, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
+	headOut, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
 	if err != nil {
-		if strings.Contains(err.Error(), "fatal: ambiguous argument 'HEAD'") ||
-			strings.Contains(err.Error(), "fatal: not a valid object name") ||
-			strings.Contains(err.Error(), "fatal: HEAD: not a valid object name") {
+		msg := err.Error()
+		if strings.Contains(msg, "fatal: ambiguous argument 'HEAD'") ||
+			strings.Contains(msg, "fatal: not a valid object name") ||
+			strings.Contains(msg, "fatal: HEAD: not a valid object name") {
 			return fmt.Errorf("this appears to be a brand new repository: please create an initial commit before creating an instance")
 		}
 		return fmt.Errorf("failed to get HEAD commit hash: %w", err)
 	}
-	headCommit := strings.TrimSpace(output)
+	headCommit := strings.TrimSpace(headOut)
 	g.baseCommitSHA = headCommit
 
-	// Create a new worktree from the HEAD commit
-	// Otherwise, we'll inherit uncommitted changes from the previous worktree.
-	// This way, we can start the worktree with a clean slate.
-	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
 	}
@@ -178,22 +166,19 @@ func (g *GitWorktree) setupNewWorktree() error {
 	return nil
 }
 
-// Cleanup removes the worktree and associated branch
+// Cleanup removes the worktree and its associated branch, then prunes. All
+// sub-errors are collected and returned together via errors.Join.
 func (g *GitWorktree) Cleanup() error {
 	var errs []error
 
-	// Check if worktree path exists before attempting removal
-	if _, err := os.Stat(g.worktreePath); err == nil {
-		// Remove the worktree using git command
-		if _, err := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); err != nil {
-			errs = append(errs, err)
+	if _, statErr := os.Stat(g.worktreePath); statErr == nil {
+		if _, rmErr := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); rmErr != nil {
+			errs = append(errs, rmErr)
 		}
-	} else if !os.IsNotExist(err) {
-		// Only append error if it's not a "not exists" error
-		errs = append(errs, fmt.Errorf("failed to check worktree path: %w", err))
+	} else if !os.IsNotExist(statErr) {
+		errs = append(errs, fmt.Errorf("failed to stat worktree path: %w", statErr))
 	}
 
-	// Open the repository for branch cleanup
 	repo, err := git.PlainOpen(g.repoPath)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to open repository for cleanup: %w", err))
@@ -201,39 +186,31 @@ func (g *GitWorktree) Cleanup() error {
 	}
 
 	branchRef := plumbing.NewBranchReferenceName(g.branchName)
-
-	// Check if branch exists before attempting removal
 	if _, err := repo.Reference(branchRef, false); err == nil {
-		if err := repo.Storer.RemoveReference(branchRef); err != nil {
-			errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
+		if removeErr := repo.Storer.RemoveReference(branchRef); removeErr != nil {
+			errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, removeErr))
 		}
 	} else if err != plumbing.ErrReferenceNotFound {
-		errs = append(errs, fmt.Errorf("error checking branch %s existence: %w", g.branchName, err))
+		errs = append(errs, fmt.Errorf("error checking branch %s: %w", g.branchName, err))
 	}
 
-	// Prune the worktree to clean up any remaining references
-	if err := g.Prune(); err != nil {
-		errs = append(errs, err)
+	if pruneErr := g.Prune(); pruneErr != nil {
+		errs = append(errs, pruneErr)
 	}
 
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
+	return errors.Join(errs...)
 }
 
-// Remove removes the worktree but keeps the branch
+// Remove removes the worktree filesystem entry and git metadata but leaves the
+// branch intact so it can be re-attached later.
 func (g *GitWorktree) Remove() error {
-	// Remove the worktree using git command
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
-
 	return nil
 }
 
-// Prune removes all working tree administrative files and directories
+// Prune runs `git worktree prune` to remove stale administrative files.
 func (g *GitWorktree) Prune() error {
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "prune"); err != nil {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
@@ -241,15 +218,16 @@ func (g *GitWorktree) Prune() error {
 	return nil
 }
 
-// CleanupWorktrees removes all worktrees and their associated branches.
-// repoPath is the root of the git repository whose .worktrees/ to clean.
+// CleanupWorktrees removes every worktree found under repoPath/.worktrees/ and
+// deletes the associated branch for each one, then prunes. Worktrees that
+// cannot be removed via git fall back to os.RemoveAll.
 func CleanupWorktrees(repoPath string) error {
-	worktreesDir, err := getWorktreeDirectory(repoPath)
+	wtDir, err := getWorktreeDirectory(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to get worktree directory: %w", err)
 	}
 
-	entries, err := os.ReadDir(worktreesDir)
+	entries, err := os.ReadDir(wtDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -259,27 +237,30 @@ func CleanupWorktrees(repoPath string) error {
 
 	run := func(args ...string) (string, error) {
 		cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return "", fmt.Errorf("git %v: %s (%w)", args, out, err)
+		out, cmdErr := cmd.CombinedOutput()
+		if cmdErr != nil {
+			return "", fmt.Errorf("git %v: %s (%w)", args, out, cmdErr)
 		}
 		return string(out), nil
 	}
 
-	output, err := run("worktree", "list", "--porcelain")
+	// Build a path→branch map from the porcelain worktree list.
+	listOut, err := run("worktree", "list", "--porcelain")
 	if err != nil {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	worktreeBranches := make(map[string]string)
-	currentWorktree := ""
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "worktree ") {
-			currentWorktree = strings.TrimPrefix(line, "worktree ")
-		} else if strings.HasPrefix(line, "branch ") {
-			branchName := strings.TrimPrefix(strings.TrimPrefix(line, "branch "), "refs/heads/")
-			if currentWorktree != "" {
-				worktreeBranches[currentWorktree] = branchName
+	pathToBranch := make(map[string]string)
+	var currentPath string
+	for _, line := range strings.Split(listOut, "\n") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			currentPath = strings.TrimPrefix(line, "worktree ")
+		case strings.HasPrefix(line, "branch "):
+			branch := strings.TrimPrefix(line, "branch ")
+			branch = strings.TrimPrefix(branch, "refs/heads/")
+			if currentPath != "" {
+				pathToBranch[currentPath] = branch
 			}
 		}
 	}
@@ -289,28 +270,28 @@ func CleanupWorktrees(repoPath string) error {
 			continue
 		}
 
-		worktreePath := filepath.Join(worktreesDir, entry.Name())
+		wtPath := filepath.Join(wtDir, entry.Name())
 
-		if _, err := run("worktree", "remove", "-f", worktreePath); err != nil {
-			log.WarningLog.Printf("git worktree remove failed for %s, falling back to os.RemoveAll: %v", worktreePath, err)
-			if rmErr := os.RemoveAll(worktreePath); rmErr != nil {
-				log.ErrorLog.Printf("failed to remove worktree path %s: %v", worktreePath, rmErr)
+		if _, rmErr := run("worktree", "remove", "-f", wtPath); rmErr != nil {
+			log.WarningLog.Printf("git worktree remove failed for %s, falling back to os.RemoveAll: %v", wtPath, rmErr)
+			if fsErr := os.RemoveAll(wtPath); fsErr != nil {
+				log.ErrorLog.Printf("failed to remove worktree path %s: %v", wtPath, fsErr)
 			}
 		}
 
-		for path, branch := range worktreeBranches {
-			if strings.Contains(path, entry.Name()) {
-				if _, err := run("branch", "-D", branch); err != nil {
-					log.ErrorLog.Printf("failed to delete branch %s: %v", branch, err)
+		// Delete the branch that was associated with this worktree path.
+		for p, branch := range pathToBranch {
+			if strings.Contains(p, entry.Name()) {
+				if _, delErr := run("branch", "-D", branch); delErr != nil {
+					log.ErrorLog.Printf("failed to delete branch %s: %v", branch, delErr)
 				}
 				break
 			}
 		}
 	}
 
-	_, err = run("worktree", "prune")
-	if err != nil {
-		return fmt.Errorf("failed to prune worktrees: %w", err)
+	if _, pruneErr := run("worktree", "prune"); pruneErr != nil {
+		return fmt.Errorf("failed to prune worktrees: %w", pruneErr)
 	}
 
 	return nil
