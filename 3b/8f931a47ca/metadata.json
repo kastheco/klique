@@ -5,7 +5,8 @@
   "branch": "plan/04-rewrite-plumbing",
   "checkpoints_count": 1,
   "files_touched": [
-    "config/config.go"
+    "config/config.go",
+    "config/state.go"
   ],
   "sessions": [
     {
@@ -14,13 +15,20 @@
       "context": "/3b/8f931a47ca/0/context.md",
       "content_hash": "/3b/8f931a47ca/0/content_hash.txt",
       "prompt": "/3b/8f931a47ca/0/prompt.txt"
+    },
+    {
+      "metadata": "/3b/8f931a47ca/1/metadata.json",
+      "transcript": "/3b/8f931a47ca/1/full.jsonl",
+      "context": "/3b/8f931a47ca/1/context.md",
+      "content_hash": "/3b/8f931a47ca/1/content_hash.txt",
+      "prompt": "/3b/8f931a47ca/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1,
-    "cache_creation_tokens": 199,
-    "cache_read_tokens": 57330,
-    "output_tokens": 317,
-    "api_call_count": 1
+    "input_tokens": 2,
+    "cache_creation_tokens": 1592,
+    "cache_read_tokens": 123034,
+    "output_tokens": 499,
+    "api_call_count": 3
   }
 }
