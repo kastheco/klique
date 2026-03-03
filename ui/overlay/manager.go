@@ -18,18 +18,19 @@ func NewManager() *Manager {
 
 // Show activates an overlay. Any previously active overlay is replaced.
 // No-op if m is nil.
+// The overlay's own size (set in its constructor or by an explicit SetSize call
+// at the call site) is preserved. The manager propagates viewport dimensions to
+// overlays only on actual terminal-resize events via SetSize.
 func (m *Manager) Show(o Overlay) {
 	if m == nil {
 		return
 	}
 	m.active = o
-	if m.w > 0 || m.h > 0 {
-		o.SetSize(m.w, m.h)
-	}
 }
 
 // ShowAt activates an overlay at a specific position (for context menus).
 // No-op if m is nil.
+// The overlay's own size is preserved; see Show for the sizing rationale.
 func (m *Manager) ShowAt(o Overlay, centered, shadow bool) {
 	if m == nil {
 		return
@@ -39,14 +40,12 @@ func (m *Manager) ShowAt(o Overlay, centered, shadow bool) {
 	m.shadow = shadow
 	m.x = 0
 	m.y = 0
-	if m.w > 0 || m.h > 0 {
-		o.SetSize(m.w, m.h)
-	}
 }
 
 // ShowPositioned activates an overlay at an explicit screen position.
 // Use this for context menus and other non-centered overlays.
 // No-op if m is nil.
+// The overlay's own size is preserved; see Show for the sizing rationale.
 func (m *Manager) ShowPositioned(o Overlay, x, y int, shadow bool) {
 	if m == nil {
 		return
@@ -56,9 +55,6 @@ func (m *Manager) ShowPositioned(o Overlay, x, y int, shadow bool) {
 	m.shadow = shadow
 	m.x = x
 	m.y = y
-	if m.w > 0 || m.h > 0 {
-		o.SetSize(m.w, m.h)
-	}
 }
 
 // Dismiss closes the active overlay without returning a result.

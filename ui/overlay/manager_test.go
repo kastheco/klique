@@ -85,3 +85,56 @@ func TestManager_Dismiss(t *testing.T) {
 	mgr.Dismiss()
 	assert.False(t, mgr.IsActive())
 }
+
+// TestManager_Show_PreservesOverlaySize verifies that Show does not clobber the
+// overlay's constructor-set dimensions with the viewport size.
+func TestManager_Show_PreservesOverlaySize(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(120, 40) // viewport dimensions stored in manager
+
+	s := &stubOverlay{w: 50, h: 10} // constructor-set size
+	mgr.Show(s)
+
+	// Show must NOT overwrite the overlay's own size with the viewport size.
+	assert.Equal(t, 50, s.w, "Show must not clobber overlay width with viewport width")
+	assert.Equal(t, 10, s.h, "Show must not clobber overlay height with viewport height")
+}
+
+// TestManager_ShowAt_PreservesOverlaySize mirrors the above for ShowAt.
+func TestManager_ShowAt_PreservesOverlaySize(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(120, 40)
+
+	s := &stubOverlay{w: 50, h: 10}
+	mgr.ShowAt(s, false, false)
+
+	assert.Equal(t, 50, s.w, "ShowAt must not clobber overlay width with viewport width")
+	assert.Equal(t, 10, s.h, "ShowAt must not clobber overlay height with viewport height")
+}
+
+// TestManager_ShowPositioned_PreservesOverlaySize mirrors the above for ShowPositioned.
+func TestManager_ShowPositioned_PreservesOverlaySize(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(120, 40)
+
+	s := &stubOverlay{w: 56, h: 20}
+	mgr.ShowPositioned(s, 10, 5, false)
+
+	assert.Equal(t, 56, s.w, "ShowPositioned must not clobber overlay width with viewport width")
+	assert.Equal(t, 20, s.h, "ShowPositioned must not clobber overlay height with viewport height")
+}
+
+// TestManager_SetSize_PropagatesAfterShow verifies that an explicit terminal
+// resize still propagates to the active overlay even after the Show auto-sizing
+// is removed.
+func TestManager_SetSize_PropagatesAfterShow(t *testing.T) {
+	mgr := NewManager()
+
+	s := &stubOverlay{w: 50, h: 10} // constructor-set size
+	mgr.Show(s)
+
+	// Simulate a real terminal resize event — this SHOULD update the overlay.
+	mgr.SetSize(120, 40)
+	assert.Equal(t, 120, s.w, "SetSize must propagate to active overlay on terminal resize")
+	assert.Equal(t, 40, s.h, "SetSize must propagate to active overlay on terminal resize")
+}
