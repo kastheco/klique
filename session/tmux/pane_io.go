@@ -114,7 +114,13 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 // HasUpdated captures the pane and reports whether the session appears active.
 // updated is true when content has changed or is still within the debounce window.
 // hasPrompt is true when the adapter's DetectPrompt returns true for the captured content.
+//
+// Returns (false, false) when monitor is nil — the session has not been started
+// or restored yet, so no content can be meaningfully observed.
 func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
+	if t.monitor == nil {
+		return false, false
+	}
 	updated, hasPrompt, _, _ = t.HasUpdatedWithContent()
 	return
 }

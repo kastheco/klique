@@ -113,6 +113,22 @@ func TestGetSanitizedName(t *testing.T) {
 	assert.Equal(t, "kas_my-session", s.GetSanitizedName())
 }
 
+func TestHasUpdated_NilMonitor_ReturnsFalse(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			// Successful capture — would return updated=true without the nil guard.
+			return []byte("some pane content"), nil
+		},
+	}
+	s := NewTmuxSessionWithDeps("nil-mon", "opencode", false, &MockPtyFactory{}, cmdExec)
+	// monitor is nil (session not yet started/restored)
+
+	updated, hasPrompt := s.HasUpdated()
+	assert.False(t, updated, "HasUpdated with nil monitor should return updated=false")
+	assert.False(t, hasPrompt, "HasUpdated with nil monitor should return hasPrompt=false")
+}
+
 func TestHasUpdated_ContentChange(t *testing.T) {
 	callCount := 0
 	cmdExec := cmd_test.MockCmdExec{

@@ -237,11 +237,15 @@ func (t *TmuxSession) Start(workDir string) error {
 		program = program + " --agent " + t.agentType
 	}
 	if t.initialPrompt != "" {
-		switch {
-		case isOpenCodeProgram(t.program):
-			program = program + " --prompt " + t.promptArgOpenCode(workDir)
-		case isClaudeProgram(t.program):
-			program = program + " " + t.promptArgClaude(workDir)
+		if adapter := AdapterFor(t.program); adapter != nil && adapter.SupportsCliPrompt() {
+			arg := adapter.BuildPromptArg(t.initialPrompt, workDir, func(_ string) string {
+				return t.writePromptFile(workDir)
+			})
+			if isOpenCodeProgram(t.program) {
+				program = program + " --prompt " + arg
+			} else {
+				program = program + " " + arg
+			}
 		}
 		// aider/gemini: no CLI prompt support — callers keep QueuedPrompt
 		// set so the send-keys fallback fires from the app tick handler.
@@ -338,22 +342,22 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if isClaudeProgram(t.program) || isAiderProgram(t.program) || isGeminiProgram(t.program) || isOpenCodeProgram(t.program) {
+	programAdapter := AdapterFor(t.program)
+	if programAdapter != nil || isAiderProgram(t.program) || isGeminiProgram(t.program) {
 		t.reportProgress(4, "Waiting for program to start...")
 
 		var searchString string
-		var tapFunc func() error // nil means no key tap needed (e.g. opencode)
-		maxWaitTime := 30 * time.Second
+		var tapFunc func() error // nil means no key tap needed
+		var maxWaitTime time.Duration
 
-		switch {
-		case isClaudeProgram(t.program):
-			searchString = "Do you trust the files in this folder?"
-			tapFunc = t.TapEnter
-		case isOpenCodeProgram(t.program):
-			// opencode shows its input placeholder once the TUI is ready; no tap needed.
-			searchString = "Ask anything"
-			tapFunc = nil
-		default: // aider / gemini
+		if programAdapter != nil {
+			searchString = programAdapter.ReadyString()
+			maxWaitTime = programAdapter.MaxWaitTime()
+			if programAdapter.NeedsTrustTap() {
+				tapFunc = t.TapEnter
+			}
+		} else {
+			// aider / gemini: legacy programs with no adapter.
 			searchString = "Open documentation url for more info"
 			tapFunc = t.TapDAndEnter
 			maxWaitTime = 45 * time.Second

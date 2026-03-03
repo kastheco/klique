@@ -17,6 +17,9 @@ import (
 // inside tmux), then spawns two goroutines:
 //  1. PTY output → os.Stdout (io.Copy)
 //  2. os.Stdin → PTY, with Ctrl+Q (0x11) and Ctrl+Space (0x00) as detach keys
+//     (only when they arrive as the sole byte in a single read — the n==1 guard
+//     prevents NUL bytes in paste data or multi-byte sequences from triggering
+//     spurious detach)
 //
 // A 50 ms nuke window discards any buffered stdin bytes that accumulated
 // before the attach. Window-size monitoring is started via monitorWindowSize.
@@ -81,11 +84,16 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 				continue
 			}
 
-			for _, b := range buf[:n] {
-				if b == 0x11 || b == 0x00 { // Ctrl+Q or Ctrl+Space
-					t.Detach()
-					return
-				}
+			// Detach only when the read is an isolated single byte.
+			// The n==1 guard prevents two regressions that arise from scanning
+			// every byte in a multi-byte read:
+			//   1. NUL (0x00) bytes embedded in paste data (e.g. from Ctrl+Space
+			//      bindings in Emacs) triggering a spurious detach.
+			//   2. Legitimate input bytes before a detach key being discarded
+			//      instead of forwarded to the PTY.
+			if n == 1 && (buf[0] == 0x11 || buf[0] == 0x00) { // Ctrl+Q or Ctrl+Space
+				t.Detach()
+				return
 			}
 			_, _ = ptmx.Write(buf[:n])
 		}

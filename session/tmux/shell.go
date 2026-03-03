@@ -47,39 +47,3 @@ func (t *TmuxSession) writePromptFile(workDir string) string {
 	t.promptFile = f.Name()
 	return t.promptFile
 }
-
-// promptArgClaude returns the shell argument for Claude Code's initial prompt.
-// Short prompts are shell-escaped inline; long prompts are written to a file
-// and referenced via Claude Code's @file syntax.
-func (t *TmuxSession) promptArgClaude(workDir string) string {
-	if len(t.initialPrompt) <= MaxInlinePromptLen {
-		return shellEscapeSingleQuote(t.initialPrompt)
-	}
-	absPath := t.writePromptFile(workDir)
-	if absPath == "" {
-		return shellEscapeSingleQuote(t.initialPrompt)
-	}
-	// Claude Code's @file syntax reads the file contents as the prompt.
-	rel, err := filepath.Rel(workDir, absPath)
-	if err != nil {
-		rel = absPath
-	}
-	return "@" + rel
-}
-
-// promptArgOpenCode returns the shell argument for opencode's --prompt flag.
-// Short prompts are shell-escaped inline; long prompts are written to a file
-// and read back via shell command substitution since opencode doesn't support
-// file references.
-func (t *TmuxSession) promptArgOpenCode(workDir string) string {
-	if len(t.initialPrompt) <= MaxInlinePromptLen {
-		return shellEscapeSingleQuote(t.initialPrompt)
-	}
-	absPath := t.writePromptFile(workDir)
-	if absPath == "" {
-		return shellEscapeSingleQuote(t.initialPrompt)
-	}
-	// opencode --prompt expects a string value. Use command substitution
-	// to read the file contents since opencode has no @file syntax.
-	return "\"$(cat " + shellEscapeSingleQuote(absPath) + ")\""
-}
