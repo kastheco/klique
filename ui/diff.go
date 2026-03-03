@@ -2,42 +2,49 @@ package ui
 
 import (
 	"fmt"
-	"github.com/kastheco/kasmos/session"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kastheco/kasmos/session"
 	"github.com/mattn/go-runewidth"
 )
 
+// Exported diff line styles — callers may render individual lines with these.
 var (
 	AdditionStyle = lipgloss.NewStyle().Foreground(ColorDiffAdd)
 	DeletionStyle = lipgloss.NewStyle().Foreground(ColorDiffDelete)
 	HunkStyle     = lipgloss.NewStyle().Foreground(ColorDiffHunk)
+)
 
-	fileItemStyle = lipgloss.NewStyle().
-			Foreground(ColorIris)
+// Unexported styles used internally by DiffPane rendering.
+var (
+	fileItemStyle = lipgloss.NewStyle().Foreground(ColorIris)
+
 	fileItemSelectedStyle = lipgloss.NewStyle().
 				Background(ColorIris).
 				Foreground(ColorBase).
 				Bold(true)
-	fileItemDimStyle = lipgloss.NewStyle().
-				Foreground(ColorMuted)
+
+	fileItemDimStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+
 	filePanelBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(ColorOverlay)
+
 	filePanelBorderFocusedStyle = lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(ColorIris)
+
 	diffHeaderStyle = lipgloss.NewStyle().
 			Foreground(ColorIris).
 			Bold(true)
-	diffHintStyle = lipgloss.NewStyle().
-			Foreground(ColorMuted)
+
+	diffHintStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 )
 
-// fileChunk holds a single file's parsed diff data.
+// fileChunk holds the parsed diff data for a single file.
 type fileChunk struct {
 	path    string
 	added   int
@@ -45,6 +52,8 @@ type fileChunk struct {
 	diff    string
 }
 
+// DiffPane renders a two-column diff view: a file sidebar on the left and a
+// scrollable diff viewport on the right.
 type DiffPane struct {
 	viewport viewport.Model
 	width    int
@@ -55,13 +64,14 @@ type DiffPane struct {
 	totalRemoved int
 	fullDiff     string
 
-	// selectedFile: -1 = all files, 0..N = specific file
+	// selectedFile is -1 for "all files", or a 0-based index into files.
 	selectedFile int
 
-	// sidebarWidth is computed from file names
+	// sidebarWidth is the total outer width of the sidebar (content + border).
 	sidebarWidth int
 }
 
+// NewDiffPane creates a DiffPane ready for use.
 func NewDiffPane() *DiffPane {
 	return &DiffPane{
 		viewport:     viewport.New(0, 0),
@@ -69,6 +79,7 @@ func NewDiffPane() *DiffPane {
 	}
 }
 
+// SetSize updates the pane dimensions and re-flows the layout.
 func (d *DiffPane) SetSize(width, height int) {
 	d.width = width
 	d.height = height
@@ -78,39 +89,42 @@ func (d *DiffPane) SetSize(width, height int) {
 	d.rebuildViewport()
 }
 
-func (d *DiffPane) updateViewportWidth() {
-	diffWidth := d.width - d.sidebarWidth - 1
-	if diffWidth < 10 {
-		diffWidth = 10
-	}
-	d.viewport.Width = diffWidth
-}
-
+// computeSidebarWidth calculates the sidebar outer width from the longest file
+// entry, capped at 35 % of the total pane width.
 func (d *DiffPane) computeSidebarWidth() {
-	// Compute the inner content width needed, then add border frame.
-	borderFrame := filePanelBorderStyle.GetHorizontalFrameSize() // typically 2 for left+right border
+	hframe := filePanelBorderStyle.GetHorizontalFrameSize()
+
 	innerMin := 18
 	innerMax := innerMin
 	for _, f := range d.files {
 		base := filepath.Base(f.path)
-		statsW := len(fmt.Sprintf(" +%d -%d", f.added, f.removed))
-		w := runewidth.StringWidth(base) + statsW + 4
-		if w > innerMax {
-			innerMax = w
+		statsLen := len(fmt.Sprintf(" +%d -%d", f.added, f.removed))
+		needed := runewidth.StringWidth(base) + statsLen + 4
+		if needed > innerMax {
+			innerMax = needed
 		}
 	}
-	// Cap at 35% of total width (including border)
-	limit := d.width*35/100 - borderFrame
-	if limit < innerMin {
-		limit = innerMin
+
+	cap := d.width*35/100 - hframe
+	if cap < innerMin {
+		cap = innerMin
 	}
-	if innerMax > limit {
-		innerMax = limit
+	if innerMax > cap {
+		innerMax = cap
 	}
-	// sidebarWidth is the total outer width (content + border)
-	d.sidebarWidth = innerMax + borderFrame
+	d.sidebarWidth = innerMax + hframe
 }
 
+// updateViewportWidth sets the diff viewport width from the remaining space.
+func (d *DiffPane) updateViewportWidth() {
+	w := d.width - d.sidebarWidth - 1
+	if w < 10 {
+		w = 10
+	}
+	d.viewport.Width = w
+}
+
+// SetDiff loads diff data from the given instance into the pane.
 func (d *DiffPane) SetDiff(instance *session.Instance) {
 	if instance == nil || !instance.Started() {
 		d.files = nil
@@ -133,8 +147,10 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 	d.files = parseFileChunks(stats.Content)
 	d.fullDiff = colorizeDiff(stats.Content)
 
-	if d.selectedFile >= len(d.files) {
-		d.selectedFile = len(d.files) - 1
+	// Clamp selectedFile into the valid range.
+	last := len(d.files) - 1
+	if d.selectedFile > last {
+		d.selectedFile = last
 	}
 	if d.selectedFile < -1 {
 		d.selectedFile = -1
@@ -145,19 +161,22 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 	d.rebuildViewport()
 }
 
+// rebuildViewport reloads the viewport content for the active selection.
 func (d *DiffPane) rebuildViewport() {
 	if len(d.files) == 0 {
 		return
 	}
-	var diff string
-	if d.selectedFile < 0 {
-		diff = d.fullDiff
-	} else if d.selectedFile < len(d.files) {
-		diff = colorizeDiff(d.files[d.selectedFile].diff)
+	var content string
+	switch {
+	case d.selectedFile < 0:
+		content = d.fullDiff
+	case d.selectedFile < len(d.files):
+		content = colorizeDiff(d.files[d.selectedFile].diff)
 	}
-	d.viewport.SetContent(diff)
+	d.viewport.SetContent(content)
 }
 
+// String returns the rendered pane as a string.
 func (d *DiffPane) String() string {
 	if len(d.files) == 0 {
 		msg := "No changes"
@@ -166,73 +185,73 @@ func (d *DiffPane) String() string {
 		}
 		return lipgloss.Place(d.width, d.height, lipgloss.Center, lipgloss.Center, msg)
 	}
-
 	sidebar := d.renderSidebar()
-	diffContent := d.viewport.View()
-
-	// Join sidebar and diff horizontally
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", diffContent)
+	right := d.viewport.View()
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", right)
 }
 
-// renderSidebar builds the left-hand file list panel.
+// renderSidebar builds the bordered file-list panel.
 func (d *DiffPane) renderSidebar() string {
-	borderFrame := filePanelBorderStyle.GetHorizontalFrameSize()
-	innerWidth := d.sidebarWidth - borderFrame
+	hframe := filePanelBorderStyle.GetHorizontalFrameSize()
+	innerW := d.sidebarWidth - hframe
 
-	var b strings.Builder
+	var sb strings.Builder
 
-	// Header
-	additions := AdditionStyle.Render(fmt.Sprintf("+%d", d.totalAdded))
-	deletions := DeletionStyle.Render(fmt.Sprintf("-%d", d.totalRemoved))
-	headerText := fmt.Sprintf("%s %s", additions, deletions)
-	b.WriteString(headerText)
-	b.WriteString("\n")
+	// Header — coloured totals.
+	addStr := AdditionStyle.Render(fmt.Sprintf("+%d", d.totalAdded))
+	delStr := DeletionStyle.Render(fmt.Sprintf("-%d", d.totalRemoved))
+	sb.WriteString(addStr + " " + delStr + "\n")
 
-	// "All" entry
+	// "All" entry.
 	allLabel := "\uf0ce All"
 	if d.selectedFile == -1 {
-		b.WriteString(fileItemSelectedStyle.Width(innerWidth).Render(" " + allLabel))
+		sb.WriteString(fileItemSelectedStyle.Width(innerW).Render(" " + allLabel))
 	} else {
-		b.WriteString(fileItemStyle.Render(" " + allLabel))
+		sb.WriteString(fileItemStyle.Render(" " + allLabel))
 	}
-	b.WriteString("\n")
+	sb.WriteString("\n")
 
-	// File entries
-	for i, f := range d.files {
+	// Per-file entries.
+	for idx, f := range d.files {
 		base := filepath.Base(f.path)
 		dir := filepath.Dir(f.path)
-		isSelected := i == d.selectedFile
+		selected := idx == d.selectedFile
 
-		// Stats suffix
-		statsStr := ""
+		// Build plain stats string for width calculations.
+		var plainStats string
 		if f.added > 0 {
-			statsStr += fmt.Sprintf("+%d", f.added)
+			plainStats += fmt.Sprintf("+%d", f.added)
 		}
 		if f.removed > 0 {
-			if statsStr != "" {
-				statsStr += " "
+			if plainStats != "" {
+				plainStats += " "
 			}
-			statsStr += fmt.Sprintf("-%d", f.removed)
+			plainStats += fmt.Sprintf("-%d", f.removed)
 		}
 
-		if isSelected {
-			// Truncate filename to fit
-			maxName := innerWidth - runewidth.StringWidth(statsStr) - 3
+		if selected {
+			maxName := innerW - runewidth.StringWidth(plainStats) - 3
 			name := base
 			if maxName > 3 && runewidth.StringWidth(name) > maxName {
 				name = runewidth.Truncate(name, maxName, "…")
 			}
-			line := fmt.Sprintf(" %s %s", name, statsStr)
-			b.WriteString(fileItemSelectedStyle.Width(innerWidth).Render(line))
+			line := fmt.Sprintf(" %s %s", name, plainStats)
+			sb.WriteString(fileItemSelectedStyle.Width(innerW).Render(line))
 		} else {
-			// Show dir/ dimmed, filename in accent color
-			maxName := innerWidth - runewidth.StringWidth(statsStr) - 3
+			maxName := innerW - runewidth.StringWidth(plainStats) - 3
+
+			// Build coloured name with optional dim dir prefix.
 			var nameDisplay string
-			if dir != "." {
+			if dir == "." {
+				name := base
+				if maxName > 3 && runewidth.StringWidth(name) > maxName {
+					name = runewidth.Truncate(name, maxName, "…")
+				}
+				nameDisplay = fileItemStyle.Render(name)
+			} else {
 				dirPrefix := dir + "/"
 				remaining := maxName - runewidth.StringWidth(dirPrefix)
 				if remaining < 4 {
-					// Not enough room for dir, just show filename
 					name := base
 					if maxName > 3 && runewidth.StringWidth(name) > maxName {
 						name = runewidth.Truncate(name, maxName, "…")
@@ -245,16 +264,10 @@ func (d *DiffPane) renderSidebar() string {
 					}
 					nameDisplay = fileItemDimStyle.Render(dirPrefix) + fileItemStyle.Render(name)
 				}
-			} else {
-				name := base
-				if maxName > 3 && runewidth.StringWidth(name) > maxName {
-					name = runewidth.Truncate(name, maxName, "…")
-				}
-				nameDisplay = fileItemStyle.Render(name)
 			}
 
-			// Colored stats
-			coloredStats := ""
+			// Build coloured stats.
+			var coloredStats string
 			if f.added > 0 {
 				coloredStats += AdditionStyle.Render(fmt.Sprintf("+%d", f.added))
 			}
@@ -265,29 +278,29 @@ func (d *DiffPane) renderSidebar() string {
 				coloredStats += DeletionStyle.Render(fmt.Sprintf("-%d", f.removed))
 			}
 
-			b.WriteString(" " + nameDisplay + " " + coloredStats)
+			sb.WriteString(" " + nameDisplay + " " + coloredStats)
 		}
-		b.WriteString("\n")
+		sb.WriteString("\n")
 	}
 
-	// Fill remaining height with empty lines so the border stretches
-	lines := 2 + len(d.files)             // header + all entry + file entries
-	for i := lines; i < d.height-3; i++ { // -3 for border + hint
-		b.WriteString("\n")
+	// Pad to fill available height (border + hint accounted for).
+	occupied := 2 + len(d.files) // header line + "All" + file entries
+	for row := occupied; row < d.height-3; row++ {
+		sb.WriteString("\n")
 	}
 
-	// Hint at the bottom
-	b.WriteString(diffHintStyle.Render("shift+↑↓"))
+	// Navigation hint at the bottom.
+	sb.WriteString(diffHintStyle.Render("shift+↑↓"))
 
-	content := b.String()
-	vertFrame := filePanelBorderStyle.GetVerticalFrameSize()
-	innerHeight := d.height - vertFrame
-	if innerHeight < 1 {
-		innerHeight = 1
+	vframe := filePanelBorderStyle.GetVerticalFrameSize()
+	innerH := d.height - vframe
+	if innerH < 1 {
+		innerH = 1
 	}
-	return filePanelBorderStyle.Width(innerWidth).Height(innerHeight).Render(content)
+	return filePanelBorderStyle.Width(innerW).Height(innerH).Render(sb.String())
 }
 
+// FileUp moves the sidebar selection one entry upward (with wrap-around).
 func (d *DiffPane) FileUp() {
 	if len(d.files) == 0 {
 		return
@@ -300,6 +313,7 @@ func (d *DiffPane) FileUp() {
 	d.viewport.GotoTop()
 }
 
+// FileDown moves the sidebar selection one entry downward (with wrap-around).
 func (d *DiffPane) FileDown() {
 	if len(d.files) == 0 {
 		return
@@ -312,71 +326,83 @@ func (d *DiffPane) FileDown() {
 	d.viewport.GotoTop()
 }
 
+// ScrollUp scrolls the diff viewport up by 3 lines.
 func (d *DiffPane) ScrollUp() {
 	d.viewport.LineUp(3)
 }
 
+// ScrollDown scrolls the diff viewport down by 3 lines.
 func (d *DiffPane) ScrollDown() {
 	d.viewport.LineDown(3)
 }
 
+// HasFiles reports whether any diff files are loaded.
 func (d *DiffPane) HasFiles() bool {
 	return len(d.files) > 0
 }
 
-// parseFileChunks splits a unified diff into per-file chunks with stats.
+// parseFileChunks splits a unified diff into per-file chunks, counting
+// added/removed lines in each chunk.
 func parseFileChunks(content string) []fileChunk {
 	var chunks []fileChunk
-	var current *fileChunk
-	var currentLines strings.Builder
+	var cur *fileChunk
+	var buf strings.Builder
 
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(content, "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
-			if current != nil {
-				current.diff = currentLines.String()
-				currentLines.Reset()
+			// Flush previous chunk.
+			if cur != nil {
+				cur.diff = buf.String()
+				buf.Reset()
 			}
-			parts := strings.SplitN(line, " b/", 2)
+			// Extract the b/ path from "diff --git a/<path> b/<path>".
 			path := ""
-			if len(parts) == 2 {
+			if parts := strings.SplitN(line, " b/", 2); len(parts) == 2 {
 				path = parts[1]
 			}
 			chunks = append(chunks, fileChunk{path: path})
-			current = &chunks[len(chunks)-1]
-			currentLines.WriteString(line + "\n")
-		} else if current != nil {
-			currentLines.WriteString(line + "\n")
-			if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
-				current.added++
-			} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
-				current.removed++
-			}
+			cur = &chunks[len(chunks)-1]
+			buf.WriteString(line + "\n")
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		buf.WriteString(line + "\n")
+		switch {
+		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			cur.added++
+		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			cur.removed++
 		}
 	}
-	if current != nil {
-		current.diff = currentLines.String()
+	if cur != nil {
+		cur.diff = buf.String()
 	}
 	return chunks
 }
 
+// colorizeDiff applies ANSI colour styles to each line of a unified diff.
 func colorizeDiff(diff string) string {
-	var coloredOutput strings.Builder
 	lines := strings.Split(diff, "\n")
+	var out strings.Builder
+	out.Grow(len(diff) + len(lines)*8)
 	for _, line := range lines {
-		if len(line) > 0 {
-			if strings.HasPrefix(line, "@@") {
-				coloredOutput.WriteString(HunkStyle.Render(line) + "\n")
-			} else if line[0] == '+' && (len(line) == 1 || line[1] != '+') {
-				coloredOutput.WriteString(AdditionStyle.Render(line) + "\n")
-			} else if line[0] == '-' && (len(line) == 1 || line[1] != '-') {
-				coloredOutput.WriteString(DeletionStyle.Render(line) + "\n")
-			} else {
-				coloredOutput.WriteString(line + "\n")
-			}
-		} else {
-			coloredOutput.WriteString("\n")
+		if len(line) == 0 {
+			out.WriteByte('\n')
+			continue
 		}
+		switch {
+		case strings.HasPrefix(line, "@@"):
+			out.WriteString(HunkStyle.Render(line))
+		case line[0] == '+' && (len(line) == 1 || line[1] != '+'):
+			out.WriteString(AdditionStyle.Render(line))
+		case line[0] == '-' && (len(line) == 1 || line[1] != '-'):
+			out.WriteString(DeletionStyle.Render(line))
+		default:
+			out.WriteString(line)
+		}
+		out.WriteByte('\n')
 	}
-	return coloredOutput.String()
+	return out.String()
 }
