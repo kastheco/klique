@@ -14,7 +14,7 @@ import (
 )
 
 // NewServeCmd returns the `kas serve` cobra command.
-// It starts an HTTP server backed by a SQLite plan store.
+// It starts an HTTP server backed by a SQLite task store.
 func NewServeCmd() *cobra.Command {
 	var (
 		port int
@@ -24,12 +24,12 @@ func NewServeCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "start the plan store HTTP server",
-		Long:  "Start an HTTP server that exposes plan state over a REST API backed by SQLite.",
+		Short: "start the task store HTTP server",
+		Long:  "Start an HTTP server that exposes task state over a REST API backed by SQLite.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := taskstore.NewSQLiteStore(db)
 			if err != nil {
-				return fmt.Errorf("open plan store: %w", err)
+				return fmt.Errorf("open task store: %w", err)
 			}
 			defer store.Close()
 
@@ -41,7 +41,7 @@ func NewServeCmd() *cobra.Command {
 				Handler: handler,
 			}
 
-			fmt.Printf("plan store listening on http://%s (db: %s)\n", addr, db)
+			fmt.Printf("task store listening on http://%s (db: %s)\n", addr, db)
 
 			// Graceful shutdown on SIGINT/SIGTERM.
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
