@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772558729439,
-      "updated": 1772558778954
+      "updated": 1772558784250
     }
   },
   "messages": [
@@ -709,7 +709,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772558778943
+          "created": 1772558778943,
+          "completed": 1772558784238
         },
         "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
         "modelID": "claude-sonnet-4-6",
@@ -722,15 +723,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 64040,
+          "input": 1,
+          "output": 117,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 63315,
+            "write": 607
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb4bc823f001zfFiAFMGhnTbCw",
         "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
       },
@@ -758,22 +761,118 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add session/storage.go && git commit -m \"feat(clean-room): rewrite session/storage.go from scratch\"",
               "description": "Commit the rewritten storage.go"
             },
+            "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+            "title": "Commit the rewritten storage.go",
             "metadata": {
-              "output": "",
-              "description": "Commit the rewritten storage.go"
+              "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the rewritten storage.go",
+              "truncated": false
             },
             "time": {
-              "start": 1772558781866
+              "start": 1772558781865,
+              "end": 1772558784230
             }
           },
           "id": "prt_cb4bc892a001KFlNxHoW3t3qx4",
           "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
           "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64040,
+            "input": 1,
+            "output": 117,
+            "reasoning": 0,
+            "cache": {
+              "read": 63315,
+              "write": 607
+            }
+          },
+          "id": "prt_cb4bc96e7001zH9CPm8IbFjN1d",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558784239,
+          "completed": 1772558794977
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64516,
+          "input": 1,
+          "output": 409,
+          "reasoning": 0,
+          "cache": {
+            "read": 63922,
+            "write": 184
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "REDACTED",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "prt_cb4bc9d74001pRToFzYhu8cvmP",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass and the commit is done. Here's a summary of what was implemented:\n\n**`session/storage.go` — clean-room rewrite:**\n\n- **`InstanceData` struct** — JSON-serializable mirror of `Instance` with all required fields and correct `omitempty` tags on optional plan/orchestration fields\n- **`InstanceData.UnmarshalJSON`** — custom unmarshaler using an alias type (avoids recursion) with a legacy `plan_file` migration: if `task_file` is empty but `plan_file` is set, copies it over\n- **`GitWorktreeData` struct** — five string fields (RepoPath, WorktreePath, SessionName, BranchName, BaseCommitSHA) with JSON tags\n- **`DiffStatsData` struct** — Added, Removed (int), Content (string) with JSON tags\n- **`Storage` struct** — holds `config.StateManager`\n- **`NewStorage`** — simple constructor returning `&Storage{state: state}, nil`\n- **`SaveInstances`** — iterates started instances, calls `ToInstanceData()`, marshals to JSON, delegates to `state.SaveInstances()`\n- **`LoadInstances`** — unmarshals from `state.GetInstances()`, drops stale non-paused instances whose worktree path is gone (with warning), logs and skips instances that fail `FromInstanceData()` instead of hard-failing\n- **`DeleteInstance`** — loads all, filters out matching title, saves remainder; errors if not found\n- **`UpdateInstance`** — loads all, replaces matching title, saves; errors if not found\n- **`DeleteAllInstances`** — delegates to `state.DeleteAllInstances()`",
+          "time": {
+            "start": 1772558794938,
+            "end": 1772558794938
+          },
+          "id": "prt_cb4bc9d74002wVHsGggicGk7dO",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64516,
+            "input": 1,
+            "output": 409,
+            "reasoning": 0,
+            "cache": {
+              "read": 63922,
+              "write": 184
+            }
+          },
+          "id": "prt_cb4bcc0d8001gt2D1qqs0EPQP5",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
         }
       ]
     }
