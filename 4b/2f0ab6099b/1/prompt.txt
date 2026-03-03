@@ -1,0 +1,97 @@
+Implement Task 3: Rewrite daemon/ package
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all upstream-derived code in `config/config.go`, `config/state.go`, `cmd/cmd.go`, and `daemon/` to remove AGPL-tainted lines from the fork point (`bbc8cad`), enabling a license change. The rewrite preserves identical behavior and public API while replacing every line that traces back to the upstream fork.
+**Architecture:** Six files are rewritten in-place across three packages: `config/` (config.go, state.go), `cmd/` (cmd.go), and `daemon/` (daemon.go, daemon_unix.go, daemon_windows.go). Each file is deleted and rewritten from its functional specification — no copy-paste from the original. All exported types, functions, and method signatures stay identical so callers compile without changes. Files that are 100% post-fork original (`config/toml.go`, `config/profile.go`, `config/permission_store.go`, `config/permission_migrate.go`, `config/taskfsm/`, `config/taskparser/`, `config/taskstate/`, `config/taskstore/`, `config/auditlog/`, `cmd/task.go`, `cmd/serve.go`) are untouched. Existing tests in `config/config_test.go` and `cmd/cmd_test/` serve as the regression suite.
+**Tech Stack:** Go 1.24, encoding/json, os/exec, os/user, os/signal, syscall, cobra, testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 3 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `daemon/daemon.go`
+- Modify: `daemon/daemon_unix.go`
+- Modify: `daemon/daemon_windows.go`
+- Test: (no dedicated test file — daemon is integration-tested via the main binary)
+
+**Step 1: write the failing test**
+
+No new tests needed. The daemon package has no unit tests (it requires real tmux sessions and process management). The rewrite is verified by: (a) compilation, (b) the existing `go vet ./daemon/...` passing, and (c) manual smoke test of `kas --daemon` if desired. The daemon is a thin orchestration layer over `config.LoadState`, `session.NewStorage`, and `session.LoadInstances` — all of which have their own test suites.
+
+**Step 2: run test to verify baseline compiles**
+
+```bash
+go build ./daemon/...
+go vet ./daemon/...
+```
+
+expected: no errors
+
+**Step 3: rewrite implementation**
+
+Delete `daemon/daemon.go` and rewrite from scratch based on this functional spec:
+
+**`RunDaemon(cfg *config.Config) error`** — loads state via `config.LoadState()`, creates storage via `session.NewStorage(state)`, loads instances via `storage.LoadInstances()`. Sets `AutoYes = true` on all instances. Creates a polling goroutine with `time.NewTimer(pollInterval)` where `pollInterval = time.Duration(cfg.DaemonPollInterval) * time.Millisecond`. Each tick: for each started, non-paused instance, calls `HasUpdated()` — if `hasPrompt` is true, calls `TapEnter()` and `UpdateDiffStats()` (logging errors via `log.NewEvery(60s)`). Listens for `SIGINT`/`SIGTERM` via `signal.Notify`, stops the goroutine via a `stopCh` channel, waits on a `sync.WaitGroup`, saves instances, returns nil.
+
+**`LaunchDaemon() error`** — finds own executable via `os.Executable()`, creates `exec.Command(execPath, "--daemon")` with nil stdin/stdout/stderr and platform-specific `SysProcAttr` from `getSysProcAttr()`. Starts the process, writes PID to `<configDir>/daemon.pid`.
+
+**`StopDaemon() error`** — reads PID from `<configDir>/daemon.pid`. If file doesn't exist, returns nil. Finds process via `os.FindProcess(pid)`, kills it, removes PID file.
+
+Imports: `fmt`, `os`, `os/exec`, `os/signal`, `path/filepath`, `sync`, `syscall`, `time`, `github.com/kastheco/kasmos/config`, `github.com/kastheco/kasmos/log`, `github.com/kastheco/kasmos/session`.
+
+---
+
+Delete `daemon/daemon_unix.go` and rewrite from scratch:
+
+Build tag: `//go:build !windows`
+
+**`getSysProcAttr() *syscall.SysProcAttr`** — returns `&syscall.SysProcAttr{Setsid: true}` to create a new session for process detachment.
+
+Imports: `syscall`.
+
+---
+
+Delete `daemon/daemon_windows.go` and rewrite from scratch:
+
+Build tag: `//go:build windows`
+
+**`getSysProcAttr() *syscall.SysProcAttr`** — returns `&syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}`.
+
+Imports: `golang.org/x/sys/windows`, `syscall`.
+
+**Step 4: run test to verify it compiles**
+
+```bash
+go build ./daemon/...
+go vet ./daemon/...
+go build ./...
+```
+
+expected: no errors
+
+**Step 5: commit**
+
+```bash
+git add daemon/daemon.go daemon/daemon_unix.go daemon/daemon_windows.go
+git commit -m "feat(clean-room): rewrite daemon/ package from scratch"
+```
