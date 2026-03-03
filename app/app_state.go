@@ -1271,7 +1271,6 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 // spawns a reviewer agent via coderCompleteMsg.
 func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 	capturedPlanFile := inst.PlanFile
-	capturedTitle := inst.Title
 	// Mark as prompted so the metadata tick doesn't re-trigger the dialog
 	// while the user is deciding or after they dismiss it.
 	if m.coderPushPrompted == nil {
@@ -1282,10 +1281,7 @@ func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 	pushAction := func() tea.Msg {
 		worktree, err := inst.GetGitWorktree()
 		if err == nil {
-			_ = worktree.PushChanges(
-				fmt.Sprintf("[kas] push completed implementation for '%s'", capturedTitle),
-				false,
-			)
+			_ = worktree.Push(false)
 		}
 		return coderCompleteMsg{planFile: capturedPlanFile}
 	}

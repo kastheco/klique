@@ -20,7 +20,8 @@ func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error)
 	return string(output), nil
 }
 
-// PushChanges commits and pushes changes in the worktree to the remote branch
+// PushChanges commits and pushes changes in the worktree to the remote branch.
+// Used by user-triggered push actions where dirty state should be committed first.
 func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	if err := checkGHCLI(); err != nil {
 		return err
@@ -30,15 +31,19 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		return err
 	}
 
-	// Push the branch to remote.
+	return g.Push(open)
+}
+
+// Push pushes the current branch to the remote without committing.
+// Used by automated flows (plan completion, wave orchestration) where the
+// agent has already committed its work.
+func (g *GitWorktree) Push(open bool) error {
 	if _, err := g.runGitCommand(g.worktreePath, "push", "-u", "origin", g.branchName); err != nil {
 		return fmt.Errorf("failed to push branch %s: %w", g.branchName, err)
 	}
 
-	// Open the branch in the browser
 	if open {
 		if err := g.OpenBranchURL(); err != nil {
-			// Just log the error but don't fail the push operation
 			log.ErrorLog.Printf("failed to open branch URL: %v", err)
 		}
 	}

@@ -1538,10 +1538,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if inst.PlanFile == planFile && inst.TaskNumber > 0 {
 				worktree, err := inst.GetGitWorktree()
 				if err == nil {
-					_ = worktree.PushChanges(
-						fmt.Sprintf("[kas] push completed implementation for '%s'", planName),
-						false,
-					)
+					_ = worktree.Push(false)
 					break // one push is enough — all tasks share the worktree
 				}
 			}
