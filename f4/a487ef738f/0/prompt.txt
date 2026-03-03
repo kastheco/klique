@@ -1,0 +1,146 @@
+Implement Task 7: Update HTTP API paths and SQLite schema migration
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rename the "plan" lifecycle entity to "task" throughout the codebase to eliminate the terminology collision between "plan" (the lifecycle entity) and "planning" (the FSM status). Instances belong to tasks which optionally belong to topics — "a task awaiting planning" is clearer than "a plan awaiting planning."
+**Architecture:** Four-phase mechanical rename: (1) rename Go package directories and update import paths, (2) rename exported types and struct fields, (3) rename CLI commands, user-facing strings, and internal variables, (4) update HTTP API paths, SQL schema, and JSON serialization with backwards compatibility. Each phase uses `sd`/`comby` for batch replacements. The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.
+**Tech Stack:** Go 1.24, cobra CLI, SQLite, HTTP API, `sd` for batch string replacement, `mv` for file/directory renames
+
+## Wave 3 of 3
+
+## Parallel Execution
+
+You are Task 7 of 2 in Wave 3. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/taskstore/server.go` — change `/plans` routes to `/tasks`
+- Modify: `config/taskstore/http.go` — change URL builders from `/plans` to `/tasks`
+- Modify: `config/taskstore/sqlite.go` — add migration renaming `plans` table to `tasks`, update all SQL
+- Modify: `config/taskstore/server_test.go` — update test paths
+- Modify: `config/taskstore/http_test.go` — update test paths
+
+**Step 1: write the failing test**
+
+Add a migration test to `config/taskstore/sqlite_test.go`:
+
+```go
+func TestSQLiteMigration_PlansTableToTasks(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Store should work — the migration creates the tasks table
+	err = store.Create("proj", TaskEntry{Filename: "test.md", Status: StatusReady})
+	require.NoError(t, err)
+
+	entries, err := store.List("proj")
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "test.md", entries[0].Filename)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/taskstore/... -run TestSQLiteMigration_PlansTableToTasks -v
+```
+
+expected: FAIL or PASS depending on whether schema already uses `tasks`
+
+**Step 3: update HTTP paths and SQL schema**
+
+```bash
+# --- HTTP API paths in server.go ---
+sd '/v1/projects/{project}/plans' '/v1/projects/{project}/tasks' config/taskstore/server.go
+sd '"plan not found:' '"task not found:' config/taskstore/server.go
+
+# --- HTTP client paths in http.go ---
+sd '/plans"' '/tasks"' config/taskstore/http.go
+sd '/plans/' '/tasks/' config/taskstore/http.go
+
+# --- SQL schema: rename table from plans to tasks ---
+sd 'CREATE TABLE IF NOT EXISTS plans' 'CREATE TABLE IF NOT EXISTS tasks' config/taskstore/sqlite.go
+
+# --- SQL queries: plans → tasks ---
+sd 'INTO plans ' 'INTO tasks ' config/taskstore/sqlite.go
+sd 'FROM plans' 'FROM tasks' config/taskstore/sqlite.go
+sd 'UPDATE plans' 'UPDATE tasks' config/taskstore/sqlite.go
+sd 'ALTER TABLE plans' 'ALTER TABLE tasks' config/taskstore/sqlite.go
+sd 'table_info(plans)' 'table_info(tasks)' config/taskstore/sqlite.go
+sd '"list plans:' '"list tasks:' config/taskstore/sqlite.go
+sd '"list plans by status:' '"list tasks by status:' config/taskstore/sqlite.go
+sd '"list plans by topic:' '"list tasks by topic:' config/taskstore/sqlite.go
+sd '"iterate plans:' '"iterate tasks:' config/taskstore/sqlite.go
+
+# --- Test files ---
+sd '/plans' '/tasks' config/taskstore/server_test.go config/taskstore/http_test.go
+```
+
+Then add the table rename migration to `config/taskstore/sqlite.go`. In the `NewSQLiteStore` function, after the existing migrations, add:
+
+```go
+// Rename plans table to tasks (idempotent — only runs if plans exists and tasks doesn't).
+const plansToTasksMigration = `ALTER TABLE plans RENAME TO tasks`
+```
+
+Call it in `NewSQLiteStore` after the existing migration calls, wrapped in an idempotent check:
+
+```go
+// Migrate: rename plans → tasks (if old table exists)
+migrateRenameTable(db, "plans", "tasks")
+```
+
+Add the helper:
+
+```go
+func migrateRenameTable(db *sql.DB, oldName, newName string) {
+	// Check if old table exists
+	var count int
+	err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", oldName).Scan(&count)
+	if err != nil || count == 0 {
+		return // old table doesn't exist, nothing to migrate
+	}
+	// Check if new table already exists
+	err = db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", newName).Scan(&count)
+	if err != nil || count > 0 {
+		return // new table already exists
+	}
+	_, _ = db.Exec(fmt.Sprintf("ALTER TABLE %s RENAME TO %s", oldName, newName))
+}
+```
+
+Also update the `schema` const to use `tasks` instead of `plans` (already done by the `sd` command above). The migration handles existing databases; new databases get the `tasks` table directly from the schema.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./...
+go test ./config/taskstore/... -count=1 -v
+go test ./... -count=1 2>&1 | tail -30
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "refactor: rename HTTP API paths /plans→/tasks and migrate SQLite schema"
+```
