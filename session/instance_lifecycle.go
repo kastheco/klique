@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/internal/opencodesession"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session/git"
@@ -275,23 +275,11 @@ func (i *Instance) setTmuxTaskEnv() {
 	}
 }
 
-// planNameFromFile extracts the human-readable plan slug from a plan filename.
-// Example: "2026-03-02-automatic-session-naming.md" → "automatic-session-naming"
-func planNameFromFile(planFile string) string {
-	name := filepath.Base(planFile)
-	name = strings.TrimSuffix(name, ".md")
-	// Strip YYYY-MM-DD- date prefix (11 chars) if present.
-	if len(name) > 11 && name[4] == '-' && name[7] == '-' && name[10] == '-' {
-		name = name[11:]
-	}
-	return name
-}
-
 // buildTitleOpts maps an Instance's metadata to TitleOpts for BuildTitle.
 func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 	planName := ""
 	if inst.PlanFile != "" {
-		planName = planNameFromFile(inst.PlanFile)
+		planName = planstate.DisplayName(inst.PlanFile)
 	}
 	return opencodesession.TitleOpts{
 		PlanName:      planName,

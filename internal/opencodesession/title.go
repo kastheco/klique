@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // register sqlite driver
 )
+
+// kasPrefix is the prefix applied to all kasmos-managed session titles.
+// It distinguishes our titles from opencode's auto-generated ones.
+const kasPrefix = "kas: "
 
 // TitleOpts holds the metadata used to build a human-readable session title.
 type TitleOpts struct {
@@ -48,10 +51,10 @@ func BuildTitle(opts TitleOpts) string {
 
 	// Ad-hoc session with no recognized agent type: just prefix the subject.
 	if !hasVerb {
-		return "kas: " + subject
+		return kasPrefix + subject
 	}
 
-	title := fmt.Sprintf("kas: %s %s", verb, subject)
+	title := fmt.Sprintf("%s%s %s", kasPrefix, verb, subject)
 
 	// Append wave/task context when both are specified.
 	if opts.WaveNumber > 0 && opts.TaskNumber > 0 {
@@ -124,26 +127,6 @@ func ClaimAndSetTitle(db *sql.DB, workDir string, beforeStart time.Time, title s
 	return nil
 }
 
-// SetTitle is the high-level entry point: it builds the title from opts, resolves
-// the opencode SQLite database path, opens the DB in WAL mode, and claims+sets
-// the title on the matching session.
-//
-// DB path resolution order:
-//  1. $XDG_DATA_HOME/opencode/opencode.db
-//  2. ~/.local/share/opencode/opencode.db
-func SetTitle(workDir string, beforeStart time.Time, opts TitleOpts) error {
-	title := BuildTitle(opts)
-	dbPath := resolveDBPath()
-
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)")
-	if err != nil {
-		return fmt.Errorf("opencodesession: open db %s: %w", dbPath, err)
-	}
-	defer db.Close()
-
-	return ClaimAndSetTitle(db, workDir, beforeStart, title)
-}
-
 // resolveDBPath returns the path to the opencode SQLite database.
 func resolveDBPath() string {
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
@@ -161,7 +144,9 @@ func resolveDBPath() string {
 // pre-built title on the matching session. Use this when the title has already
 // been constructed (e.g. via BuildTitle) and you only need the DB write.
 //
-// DB path resolution follows the same order as SetTitle.
+// DB path resolution order:
+//  1. $XDG_DATA_HOME/opencode/opencode.db
+//  2. ~/.local/share/opencode/opencode.db
 func SetTitleDirect(workDir string, beforeStart time.Time, title string) error {
 	dbPath := resolveDBPath()
 	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)")
@@ -170,13 +155,4 @@ func SetTitleDirect(workDir string, beforeStart time.Time, title string) error {
 	}
 	defer db.Close()
 	return ClaimAndSetTitle(db, workDir, beforeStart, title)
-}
-
-// kasPrefix is the prefix applied to all kasmos-managed session titles.
-// It distinguishes our titles from opencode's auto-generated ones.
-const kasPrefix = "kas: "
-
-// IsKasmosManagedTitle reports whether the given title was set by kasmos.
-func IsKasmosManagedTitle(title string) bool {
-	return strings.HasPrefix(title, kasPrefix)
 }
