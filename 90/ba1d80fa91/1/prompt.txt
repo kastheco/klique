@@ -1,0 +1,9 @@
+the ci/cd is failing. figure out why and fix it.
+
+---
+
+drop windows from the ci/cd i dont care about it only linux/macos
+
+---
+
+commit this then cut a new release including everything on main since last release
