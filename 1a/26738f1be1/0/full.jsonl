@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772564393013,
-      "updated": 1772564497160
+      "updated": 1772564504339
     }
   },
   "messages": [
@@ -1012,7 +1012,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772564497151
+          "created": 1772564497151,
+          "completed": 1772564504330
         },
         "parentID": "msg_cb5122c44001rwLMkH8nv79wsq",
         "modelID": "claude-sonnet-4-6",
@@ -1025,15 +1026,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 78018,
+          "input": 1,
+          "output": 145,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 76300,
+            "write": 1572
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb513c2ff001gHTKWM14NMn1gp",
         "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga"
       },
@@ -1061,22 +1064,118 @@
           "callID": "toolu_011i2ktQvFUAnwsstPAbDGdi",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "cd /home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels && git add ui/preview.go && git commit -m \"feat(clean-room): rewrite preview.go from scratch\"",
               "description": "Commit the clean-room rewrite of preview.go"
             },
+            "output": "[plan/03-rewrite-ui-panels dea8ee4] feat(clean-room): rewrite preview.go from scratch\n 1 file changed, 211 insertions(+), 299 deletions(-)\n",
+            "title": "Commit the clean-room rewrite of preview.go",
             "metadata": {
-              "output": "",
-              "description": "Commit the clean-room rewrite of preview.go"
+              "output": "[plan/03-rewrite-ui-panels dea8ee4] feat(clean-room): rewrite preview.go from scratch\n 1 file changed, 211 insertions(+), 299 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the clean-room rewrite of preview.go",
+              "truncated": false
             },
             "time": {
-              "start": 1772564501056
+              "start": 1772564501053,
+              "end": 1772564504321
             }
           },
           "id": "prt_cb513cb2c001j9si7aYtRmqwlQ",
           "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga",
           "messageID": "msg_cb513c2ff001gHTKWM14NMn1gp"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5604c71bd09b48cd10865560a6a18da2e088da11",
+          "cost": 0,
+          "tokens": {
+            "total": 78018,
+            "input": 1,
+            "output": 145,
+            "reasoning": 0,
+            "cache": {
+              "read": 76300,
+              "write": 1572
+            }
+          },
+          "id": "prt_cb513df01001upO2e2w9RgsNMW",
+          "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga",
+          "messageID": "msg_cb513c2ff001gHTKWM14NMn1gp"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564504332,
+          "completed": 1772564509716
+        },
+        "parentID": "msg_cb5122c44001rwLMkH8nv79wsq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 78248,
+          "input": 1,
+          "output": 166,
+          "reasoning": 0,
+          "cache": {
+            "read": 77872,
+            "write": 209
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb513df0c0017oNQ5cS6to5v1f",
+        "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5604c71bd09b48cd10865560a6a18da2e088da11",
+          "id": "prt_cb513e2de001HuIC1difpWfjUX",
+          "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga",
+          "messageID": "msg_cb513df0c0017oNQ5cS6to5v1f"
+        },
+        {
+          "type": "text",
+          "text": "All 9 `TestPreview*` tests pass. The clean-room rewrite of `ui/preview.go` is complete and committed.\n\n**Summary of changes:**\n- Rewrote `preview.go` from scratch with the same public API and identical behavior\n- Extracted banner construction into a `buildFallbackText()` helper to separate concerns\n- Extracted `enterScrollMode()` helper to deduplicate the 4 scroll entry points (`ScrollUp`, `ScrollDown`, `HalfPageUp`, `HalfPageDown`)\n- Used Go 1.22+ `range N` syntax in `renderScrollbar` loop\n- All struct fields, method signatures, and rendering logic are identical in behavior to the original",
+          "time": {
+            "start": 1772564509686,
+            "end": 1772564509686
+          },
+          "id": "prt_cb513e2de002FZ4vspJB7CT1Jt",
+          "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga",
+          "messageID": "msg_cb513df0c0017oNQ5cS6to5v1f"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "5604c71bd09b48cd10865560a6a18da2e088da11",
+          "cost": 0,
+          "tokens": {
+            "total": 78248,
+            "input": 1,
+            "output": 166,
+            "reasoning": 0,
+            "cache": {
+              "read": 77872,
+              "write": 209
+            }
+          },
+          "id": "prt_cb513f40d001m3f7pnM2EGMxxM",
+          "sessionID": "ses_34aedd3caffezVYGBsiWnQl3ga",
+          "messageID": "msg_cb513df0c0017oNQ5cS6to5v1f"
         }
       ]
     }
