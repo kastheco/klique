@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "05271a596f7d",
+  "session_id": "ses_34b04b3e1ffeGeIEfbSmn30N1u",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T18:37:30.488772779Z",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/overlay/manager.go",
+    "ui/overlay/manager_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "10c61b19b304",
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 62934,
+    "cache_read_tokens": 835474,
+    "output_tokens": 6387,
+    "api_call_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T18:37:30.440370492Z",
+    "agent_lines": 0,
+    "human_added": 49,
+    "human_modified": 9,
+    "human_removed": 0,
+    "total_committed": 49,
+    "agent_percentage": 0
+  }
+}

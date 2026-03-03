@@ -1,0 +1,14 @@
+Implement docs/plans/02b-rewrite-overlay-ui.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `ui/overlay/manager.go:21-29` — `Manager.Show()` calls `o.SetSize(m.w, m.h)` which overwrites every overlay's constructor-set width with the full viewport dimensions. This causes all overlays to render at full viewport width instead of their intended sizes (ConfirmationOverlay: 50→viewport, PermissionOverlay: 50→viewport, TmuxBrowserOverlay: 56→viewport, PickerOverlay: 40→viewport, TextInputOverlay: explicit sizes like 50×5 or 70×8→viewport). Same issue in `ShowPositioned()` at line 50-62 (clobbers ContextMenu's auto-calculated width). The old code never auto-sized on show — it only resized on actual terminal resize events. Fix: remove the `o.SetSize(m.w, m.h)` calls from `Show()`, `ShowAt()`, and `ShowPositioned()`. The manager's `SetSize()` method (called from `updateHandleWindowSizeEvent` on actual terminal resize) is the correct place to propagate viewport dimensions. Call sites that need explicit sizing already call `SetSize()` on the overlay before or after `Show()`.
+
+- `app/app_input.go:1590` — `co.SetSize(60, 0)` is called BEFORE `m.overlays.Show(co)` at line 1591, so the explicit 60-char width for the wave-failed confirmation dialog gets immediately overwritten by `Show()`. Even after the `Show()` auto-sizing is removed (per the above fix), this call order is correct. But currently it's a double-clobber: constructor sets 50, `SetSize` sets 60, `Show` sets viewport. Multiple other call sites have the same pattern of `SetSize` before `Show` (e.g., `app/app_input.go:223-225`, `app/app_input.go:338-340`, `app/app_actions.go:99-101`, etc.) — all of these will work correctly once the `Show()` auto-sizing is removed.
+
+## self-fixed
+
+- `_typos.toml` — added typos config to suppress false positives for Go variable abbreviations `tio` (textInputOverlay) and `fo` (formOverlay) used throughout the codebase.
