@@ -554,3 +554,17 @@ func TestSetClickUpTaskID_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestPlanState_ReviewCycle(t *testing.T) {
+	ps := newTestPS(t)
+	require.NoError(t, ps.Create("test.md", "desc", "plan/test", "", time.Now()))
+
+	cycle, err := ps.ReviewCycle("test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 0, cycle)
+
+	require.NoError(t, ps.IncrementReviewCycle("test.md"))
+	cycle, err = ps.ReviewCycle("test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 1, cycle)
+}

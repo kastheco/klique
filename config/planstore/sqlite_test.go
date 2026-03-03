@@ -221,3 +221,29 @@ func TestClickUpTaskIDRoundTrip_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestSQLiteStore_ReviewCycle(t *testing.T) {
+	store := newTestStore(t)
+	entry := planstore.PlanEntry{
+		Filename: "test.md",
+		Status:   planstore.StatusReady,
+	}
+	require.NoError(t, store.Create("proj", entry))
+
+	// Default review cycle is 0.
+	got, err := store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.ReviewCycle)
+
+	// Increment and verify.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.ReviewCycle)
+
+	// Increment again.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 2, got.ReviewCycle)
+}

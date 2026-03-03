@@ -38,6 +38,9 @@ const contentMigration = `ALTER TABLE plans ADD COLUMN content TEXT NOT NULL DEF
 // clickupTaskIDMigration adds the clickup_task_id column to existing databases.
 const clickupTaskIDMigration = `ALTER TABLE plans ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`
 
+// reviewCycleMigration adds the review_cycle column to existing databases.
+const reviewCycleMigration = `ALTER TABLE plans ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`
+
 // SQLiteStore is a Store implementation backed by a SQLite database.
 type SQLiteStore struct {
 	db *sql.DB
@@ -80,6 +83,12 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	if err := migrateAddColumn(db, "clickup_task_id", clickupTaskIDMigration); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate clickup_task_id column: %w", err)
+	}
+
+	// Add review_cycle column if it doesn't exist (upgrade existing databases).
+	if err := migrateAddColumn(db, "review_cycle", reviewCycleMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate review_cycle column: %w", err)
 	}
 
 	return &SQLiteStore{db: db}, nil
@@ -139,8 +148,8 @@ func (s *SQLiteStore) Ping() error {
 // Returns an error if a plan with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 	const q = `
-		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(q,
 		project,
@@ -153,6 +162,7 @@ func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 		entry.Implemented,
 		entry.Content,
 		entry.ClickUpTaskID,
+		entry.ReviewCycle,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -167,7 +177,7 @@ func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) Get(project, filename string) (PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
 		WHERE project = ? AND filename = ?
 	`
@@ -180,7 +190,7 @@ func (s *SQLiteStore) Get(project, filename string) (PlanEntry, error) {
 func (s *SQLiteStore) Update(project, filename string, entry PlanEntry) error {
 	const q = `
 		UPDATE plans
-		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?
+		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?, review_cycle = ?
 		WHERE project = ? AND filename = ?
 	`
 	result, err := s.db.Exec(q,
@@ -192,6 +202,7 @@ func (s *SQLiteStore) Update(project, filename string, entry PlanEntry) error {
 		entry.Implemented,
 		entry.Content,
 		entry.ClickUpTaskID,
+		entry.ReviewCycle,
 		project,
 		filename,
 	)
@@ -236,7 +247,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 // List returns all plan entries for the given project, sorted by filename.
 func (s *SQLiteStore) List(project string) ([]PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
 		WHERE project = ?
 		ORDER BY filename ASC
@@ -265,7 +276,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEn
 	}
 
 	q := fmt.Sprintf(`
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
 		WHERE project = ? AND status IN (%s)
 		ORDER BY filename ASC
@@ -283,7 +294,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEn
 // sorted by filename.
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
 		FROM plans
 		WHERE project = ? AND topic = ?
 		ORDER BY filename ASC
@@ -395,10 +406,29 @@ func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
 	return nil
 }
 
+// IncrementReviewCycle atomically increments the review_cycle counter for an existing plan entry.
+// Returns an error if the plan is not found.
+func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {
+	const q = `UPDATE plans SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`
+	result, err := s.db.Exec(q, project, filename)
+	if err != nil {
+		return fmt.Errorf("increment review_cycle: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("increment review_cycle rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
 // scanPlanEntry scans a single row into a PlanEntry.
 func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
 	var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
-	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID); err != nil {
+	var reviewCycle int
+	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
 		if err == sql.ErrNoRows {
 			return PlanEntry{}, fmt.Errorf("plan not found")
 		}
@@ -414,6 +444,7 @@ func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
 		Implemented:   implemented,
 		Content:       content,
 		ClickUpTaskID: clickupTaskID,
+		ReviewCycle:   reviewCycle,
 	}, nil
 }
 
@@ -422,7 +453,8 @@ func scanPlanEntries(rows *sql.Rows) ([]PlanEntry, error) {
 	var entries []PlanEntry
 	for rows.Next() {
 		var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
-		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID); err != nil {
+		var reviewCycle int
+		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
 		entries = append(entries, PlanEntry{
@@ -435,6 +467,7 @@ func scanPlanEntries(rows *sql.Rows) ([]PlanEntry, error) {
 			Implemented:   implemented,
 			Content:       content,
 			ClickUpTaskID: clickupTaskID,
+			ReviewCycle:   reviewCycle,
 		})
 	}
 	if err := rows.Err(); err != nil {

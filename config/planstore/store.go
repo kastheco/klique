@@ -30,6 +30,7 @@ type PlanEntry struct {
 	Implemented   string    `json:"implemented,omitempty"`
 	Content       string    `json:"content,omitempty"`
 	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
+	ReviewCycle   int       `json:"review_cycle,omitempty"`
 }
 
 // TopicEntry holds the persisted metadata for a topic grouping.
@@ -54,6 +55,9 @@ type Store interface {
 
 	// ClickUp integration
 	SetClickUpTaskID(project, filename, taskID string) error
+
+	// Review cycle
+	IncrementReviewCycle(project, filename string) error
 
 	// Queries
 	List(project string) ([]PlanEntry, error)

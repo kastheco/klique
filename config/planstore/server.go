@@ -161,6 +161,21 @@ func NewHandler(store Store) http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Increment review cycle
+	mux.HandleFunc("POST /v1/projects/{project}/plans/{filename}/increment-review-cycle", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		if err := store.IncrementReviewCycle(project, filename); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	// Rename plan
 	mux.HandleFunc("POST /v1/projects/{project}/plans/{filename}/rename", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")

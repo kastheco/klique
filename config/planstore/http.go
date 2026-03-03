@@ -399,6 +399,29 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 	return nil
 }
 
+// IncrementReviewCycle increments the review cycle counter for an existing plan entry.
+func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
+	u := fmt.Sprintf("%s/increment-review-cycle", s.planItemURL(project, filename))
+	req, err := http.NewRequest(http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("plan store: build request: %w", err)
+	}
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("plan store: plan not found: %s", filename)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
 // Close is a no-op for HTTPStore — the HTTP client has no persistent connection
 // to release. It exists to satisfy the Store interface.
 func (s *HTTPStore) Close() error {

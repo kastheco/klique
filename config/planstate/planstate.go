@@ -32,6 +32,7 @@ type PlanEntry struct {
 	CreatedAt     time.Time `json:"created_at,omitempty"`
 	Implemented   string    `json:"implemented,omitempty"`
 	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
+	ReviewCycle   int       `json:"review_cycle,omitempty"`
 }
 
 type TopicEntry struct {
@@ -91,6 +92,7 @@ func Load(store planstore.Store, project, dir string) (*PlanState, error) {
 			CreatedAt:     e.CreatedAt,
 			Implemented:   e.Implemented,
 			ClickUpTaskID: e.ClickUpTaskID,
+			ReviewCycle:   e.ReviewCycle,
 		}
 	}
 
@@ -573,6 +575,7 @@ func (ps *PlanState) toPlanstoreEntry(filename string, e PlanEntry) planstore.Pl
 		CreatedAt:     e.CreatedAt,
 		Implemented:   e.Implemented,
 		ClickUpTaskID: e.ClickUpTaskID,
+		ReviewCycle:   e.ReviewCycle,
 	}
 }
 
@@ -588,5 +591,31 @@ func (ps *PlanState) SetClickUpTaskID(filename, taskID string) error {
 	if err := ps.store.SetClickUpTaskID(ps.project, filename, taskID); err != nil {
 		return fmt.Errorf("plan store: %w", err)
 	}
+	return nil
+}
+
+// ReviewCycle returns the current review cycle counter for the given plan.
+// Returns an error if the plan is not found.
+func (ps *PlanState) ReviewCycle(filename string) (int, error) {
+	entry, ok := ps.Plans[filename]
+	if !ok {
+		return 0, fmt.Errorf("plan not found: %s", filename)
+	}
+	return entry.ReviewCycle, nil
+}
+
+// IncrementReviewCycle increments the review cycle counter for the given plan
+// and persists to the store. Updates the in-memory state to reflect the new value.
+// Returns an error if the plan is not found.
+func (ps *PlanState) IncrementReviewCycle(filename string) error {
+	entry, ok := ps.Plans[filename]
+	if !ok {
+		return fmt.Errorf("plan not found: %s", filename)
+	}
+	if err := ps.store.IncrementReviewCycle(ps.project, filename); err != nil {
+		return fmt.Errorf("plan store: %w", err)
+	}
+	entry.ReviewCycle++
+	ps.Plans[filename] = entry
 	return nil
 }
