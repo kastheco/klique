@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f67df16c28bd",
+  "session_id": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T00:18:26.043396142Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".agents/skills/kasmos-planner/SKILL.md",
+    ".opencode/agents/planner.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "b64bb444d934",
+  "checkpoint_transcript_start": 5,
+  "transcript_lines_at_start": 5,
+  "token_usage": {
+    "input_tokens": 2,
+    "cache_creation_tokens": 337,
+    "cache_read_tokens": 68941,
+    "output_tokens": 189,
+    "api_call_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T00:18:26.032380515Z",
+    "agent_lines": 0,
+    "human_added": 15948,
+    "human_modified": 30,
+    "human_removed": 0,
+    "total_committed": 15948,
+    "agent_percentage": 0
+  }
+}
