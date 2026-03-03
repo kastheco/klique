@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "1f85695b464a",
+  "session_id": "ses_34dabbbd1ffeiILqME23snnhaP",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T06:22:16.464041644Z",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/wave_orchestrator.go",
+    "session/storage.go",
+    "config/toml.go",
+    "ui/overlay/tmuxBrowserOverlay.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "e434c3fe26f2",
+  "token_usage": {
+    "input_tokens": 94,
+    "cache_creation_tokens": 90322,
+    "cache_read_tokens": 6472701,
+    "output_tokens": 19220,
+    "api_call_count": 93
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T06:22:16.001961194Z",
+    "agent_lines": 31,
+    "human_added": 3908,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 3939,
+    "agent_percentage": 0.787001777100787
+  }
+}

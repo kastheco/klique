@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "1f85695b464a",
+  "strategy": "manual-commit",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/wave_orchestrator.go",
+    "config/toml.go",
+    "session/storage.go",
+    "ui/overlay/tmuxBrowserOverlay.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1f/85695b464a/0/metadata.json",
+      "transcript": "/1f/85695b464a/0/full.jsonl",
+      "context": "/1f/85695b464a/0/context.md",
+      "content_hash": "/1f/85695b464a/0/content_hash.txt",
+      "prompt": "/1f/85695b464a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 94,
+    "cache_creation_tokens": 90322,
+    "cache_read_tokens": 6472701,
+    "output_tokens": 19220,
+    "api_call_count": 93
+  }
+}
