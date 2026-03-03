@@ -1,0 +1,671 @@
+{
+  "info": {
+    "id": "ses_34af05eb4ffeY9zSo654knDXTO",
+    "slug": "misty-garden",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+    "title": "Rewrite info_pane.go and audit_pane.go",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772564226379,
+      "updated": 1772564244254
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772564226410
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 5: Rewrite info_pane.go and audit_pane.go — Metadata and Activity Panes\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.\n**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.\n**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify\n\n## Wave 1 of 3\n\n## Parallel Execution\n\nYou are Task 5 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `ui/info_pane.go`\n- Modify: `ui/audit_pane.go`\n- Test: `ui/info_pane_test.go` (existing — 152 LOC, covers data rendering, plan summary, wave progress, empty state)\n- Test: `ui/audit_pane_test.go` (existing — 158 LOC, covers event rendering, scroll, toggle, empty state)\n\n**Step 1: write the failing test**\n\nNo new tests needed. Existing `info_pane_test.go` covers: `NewInfoPane` defaults, `SetData` with instance data, plan header selection, plan summary with instance counts and line changes, wave progress rendering, status color mapping, empty state \"no instance selected\" message, and `SetSize` viewport refresh. Existing `audit_pane_test.go` covers: `NewAuditPane` defaults, `SetEvents` with event list, `Events()` accessor, minute header rendering, word-wrap continuation lines, scroll up/down, toggle visibility, empty state \"no events\" message, `EventKindIcon` mapping for all event kinds, and `Height()` accessor.\n\n**Step 2: run test to verify baseline passes**\n\n```bash\ngo test ./ui/... -run \"TestInfoPane|TestAuditPane|TestEventKindIcon\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 3: rewrite implementation**\n\nDelete the contents of `ui/info_pane.go` and rewrite from scratch:\n\n- **Styles** — `infoSectionStyle` (fg=`ColorFoam`, bold), `infoDividerStyle` (fg=`ColorOverlay`), `infoLabelStyle` (fg=`ColorMuted`, width 20), `infoValueStyle` (fg=`ColorText`).\n- **`InfoData` struct** — all fields as currently defined: instance fields (Title, Program, Branch, Path, Created, Status), plan fields (PlanName, PlanDescription, PlanStatus, PlanTopic, PlanBranch, PlanCreated), plan summary fields (PlanInstanceCount, PlanRunningCount, PlanReadyCount, PlanPausedCount, PlanAddedLines, PlanRemovedLines), resource fields (CPUPercent, MemMB), wave fields (AgentType, WaveNumber, TotalWaves, TaskNumber, TotalTasks, WaveTasks), flags (HasPlan, HasInstance, IsPlanHeaderSelected).\n- **`WaveTaskInfo` struct** — `Number int`, `State string` (\"complete\"/\"running\"/\"failed\"/\"pending\").\n- **`InfoPane` struct** — `width`, `height int`, `data InfoData`, `viewport viewport.Model`.\n- **`NewInfoPane() *InfoPane`** — fresh viewport.\n- **`SetSize(width, height int)`** — stores dimensions, updates viewport, re-renders content.\n- **`SetData(data InfoData)`** — stores data, re-renders, goes to top.\n- **`ScrollUp()`/`ScrollDown()`** — viewport line up/down by 1.\n- **`String() string`** — returns \"no instance selected\" if no instance and no plan header. Otherwise returns viewport view.\n- **`statusColor(status string) lipgloss.TerminalColor`** — maps status strings to theme colors.\n- **Helper renderers** — `renderRow(label, value)`, `renderStatusRow(label, value)` (with color), `renderDivider()` (dashes).\n- **Section renderers** — `renderPlanSection()` (plan metadata rows), `renderInstanceSection()` (instance metadata + wave/task + CPU/mem), `renderPlanSummary()` (plan header view with instance counts, line changes, \"view plan doc\" button via `zone.Mark(ZoneViewPlan, ...)`), `renderWaveSection()` (task glyphs with state icons).\n- **`render() string`** — dispatches: plan header selected → plan summary + optional wave section; instance selected → optional plan section + instance section + optional wave section. Joins with double newline.\n\nImports: `fmt`, `math`, `strings`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/lipgloss`, `github.com/lrstanley/bubblezone`.\n\nDelete the contents of `ui/audit_pane.go` and rewrite from scratch:\n\n- **`AuditEventDisplay` struct** — `Time string` (HH:MM), `Kind string`, `Icon string`, `Message string`, `Color lipgloss.Color`, `Level string` (\"info\"/\"warn\"/\"error\").\n- **`AuditPane` struct** — `events []AuditEventDisplay`, `viewport viewport.Model`, `width int`, `height int`, `visible bool`.\n- **`NewAuditPane() *AuditPane`** — visible by default, fresh viewport.\n- **`SetSize(w, h int)`** — stores dimensions, viewport body height = h-1 (header), re-renders body, goes to bottom.\n- **`SetEvents(events []AuditEventDisplay)`** — stores events, re-renders, goes to bottom.\n- **`Events() []AuditEventDisplay`** — accessor for tests.\n- **`ScrollDown(n int)`/`ScrollUp(n int)`** — viewport line down/up.\n- **`Visible() bool`**, **`Height() int`**, **`ToggleVisible()`**.\n- **Styles** — `auditDividerStyle` (fg=`ColorMuted`), `auditMinuteStyle` (fg=`ColorMuted`), `auditMsgStyle` (fg=`ColorSubtle`), `auditWarnMsgStyle` (fg=`ColorGold`), `auditErrMsgStyle` (fg=`ColorLove`), `auditEmptyStyle` (fg=`ColorMuted`), `auditRowPad` (padding-left 1).\n- **`String() string`** — joins header + viewport view vertically.\n- **`renderHeader() string`** — centered divider `────── log ──────` spanning width.\n- **`renderMinuteHeader(minute string) string`** — same pattern with minute string.\n- **`renderBody() string`** — if no events: \"· no events\". Otherwise iterates events oldest-first (reverse order), emits minute header on boundary changes, word-wraps messages at available width (width - 4 overhead), renders with level-based styling (error/warn/info), continuation lines indented to align under message text.\n- **`EventKindIcon(kind string) (string, lipgloss.Color)`** — maps event kind strings to (icon, color) pairs for all known event types (agent_spawned→◆/Foam, agent_finished→✓/Gold, agent_killed→✕/Love, etc.). Default: `·`/`ColorMuted`.\n- **`debugAudit(format string, args ...any)`** — writes to `/tmp/audit_debug.log` (append mode). Fire-and-forget, ignores errors.\n\nImports: `fmt`, `os`, `strings`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/lipgloss`, `github.com/muesli/reflow/wordwrap`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./ui/... -run \"TestInfoPane|TestAuditPane|TestEventKindIcon\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add ui/info_pane.go ui/audit_pane.go\ngit commit -m \"feat(clean-room): rewrite info_pane.go and audit_pane.go from scratch\"\n```",
+          "id": "prt_cb50fa15f002zrZ960cbZMVRmt",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa15f001fb37j4yFgOtSmq"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564226420,
+          "completed": 1772564230460
+        },
+        "parentID": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 42481,
+          "input": 3,
+          "output": 134,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 42344
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fa174001MPIAVXPeYct10X",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50faaa7001o3hbxHatleiSwl",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa174001MPIAVXPeYct10X"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then examining the existing files to understand what needs to be implemented.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/h/IZkG9NIyqqKt2fFDGXwH7yW9/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564228776,
+            "end": 1772564229672
+          },
+          "id": "prt_cb50faaa8001lkpIfgjmGryKrR",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa174001MPIAVXPeYct10X"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017k56fromKAiyDvvNVWu72r",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564230123,
+              "end": 1772564230128
+            }
+          },
+          "id": "prt_cb50fae2900174hVlh7mZ79WPM",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa174001MPIAVXPeYct10X"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017Fsoevc8ShfhNy1oQgXQcG",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564230421,
+              "end": 1772564230424
+            }
+          },
+          "id": "prt_cb50fafec001nCrwExxvJI0lF8",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa174001MPIAVXPeYct10X"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 42481,
+            "input": 3,
+            "output": 134,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 42344
+            }
+          },
+          "id": "prt_cb50fb12b001OTBfqYUaJj2UYl",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fa174001MPIAVXPeYct10X"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564230461,
+          "completed": 1772564234895
+        },
+        "parentID": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50820,
+          "input": 1,
+          "output": 213,
+          "reasoning": 0,
+          "cache": {
+            "read": 42344,
+            "write": 8262
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fb13d001JHxMkVw2CafmG8",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fb82b0015XghMM3Ln3pqsY",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the existing test files and current implementation files to understand what needs to be implemented.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/2+/REDACTED/Crgq/fjL/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564232240,
+            "end": 1772564233006
+          },
+          "id": "prt_cb50fb83000179wbPNTYIach4c",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        },
+        {
+          "type": "text",
+          "text": "Skills loaded. Let me now read the existing test files and the current implementations:",
+          "time": {
+            "start": 1772564233458,
+            "end": 1772564233458
+          },
+          "id": "prt_cb50fbb2f001Dvq1f8kShY7ENO",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/info_pane_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/info_pane_test.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/stretchr/testify/assert\"\n7: \t\"github.com/stretchr/testify/require\"\n8: )\n9: \n10: func TestInfoPane_NoInstance(t *testing.T) {\n11: \tp := NewInfoPane()\n12: \tp.SetSize(80, 24)\n13: \tp.SetData(InfoData{HasInstance: false})\n14: \tassert.Contains(t, p.String(), \"no instance selected\")\n15: }\n16: \n17: func TestInfoPane_AdHocInstance(t *testing.T) {\n18: \tp := NewInfoPane()\n19: \tp.SetSize(80, 24)\n20: \tp.SetData(InfoData{\n21: \t\tHasInstance: true,\n22: \t\tHasPlan:     false,\n23: \t\tTitle:       \"fix-login-bug\",\n24: \t\tProgram:     \"opencode\",\n25: \t\tBranch:      \"kas/fix-login-bug\",\n26: \t\tPath:        \"/home/kas/dev/myapp\",\n27: \t\tCreated:     \"2026-02-25 14:30\",\n28: \t\tStatus:      \"running\",\n29: \t})\n30: \toutput := p.String()\n31: \tassert.Contains(t, output, \"fix-login-bug\")\n32: \tassert.Contains(t, output, \"opencode\")\n33: \tassert.Contains(t, output, \"kas/fix-login-bug\")\n34: \tassert.Contains(t, output, \"running\")\n35: \tassert.NotContains(t, output, \"plan\")\n36: }\n37: \n38: func TestInfoPane_PlanBoundInstance(t *testing.T) {\n39: \tp := NewInfoPane()\n40: \tp.SetSize(80, 24)\n41: \tp.SetData(InfoData{\n42: \t\tHasInstance:     true,\n43: \t\tHasPlan:         true,\n44: \t\tTitle:           \"my-feature-coder\",\n45: \t\tProgram:         \"claude\",\n46: \t\tBranch:          \"plan/my-feature\",\n47: \t\tStatus:          \"running\",\n48: \t\tPlanName:        \"my-feature\",\n49: \t\tPlanDescription: \"add dark mode toggle\",\n50: \t\tPlanStatus:      \"implementing\",\n51: \t\tPlanTopic:       \"ui\",\n52: \t\tPlanBranch:      \"plan/my-feature\",\n53: \t\tPlanCreated:     \"2026-02-25\",\n54: \t\tAgentType:       \"coder\",\n55: \t\tWaveNumber:      2,\n56: \t\tTotalWaves:      3,\n57: \t\tTaskNumber:      4,\n58: \t\tTotalTasks:      6,\n59: \t})\n60: \toutput := p.String()\n61: \tassert.Contains(t, output, \"my-feature\")\n62: \tassert.Contains(t, output, \"add dark mode toggle\")\n63: \tassert.Contains(t, output, \"implementing\")\n64: \tassert.Contains(t, output, \"coder\")\n65: }\n66: \n67: func TestInfoPane_WaveProgress(t *testing.T) {\n68: \tp := NewInfoPane()\n69: \tp.SetSize(80, 24)\n70: \tp.SetData(InfoData{\n71: \t\tHasInstance: true,\n72: \t\tHasPlan:     true,\n73: \t\tTitle:       \"test-coder\",\n74: \t\tProgram:     \"claude\",\n75: \t\tStatus:      \"running\",\n76: \t\tPlanName:    \"test-plan\",\n77: \t\tPlanStatus:  \"implementing\",\n78: \t\tWaveTasks: []WaveTaskInfo{\n79: \t\t\t{Number: 1, State: \"complete\"},\n80: \t\t\t{Number: 2, State: \"running\"},\n81: \t\t\t{Number: 3, State: \"pending\"},\n82: \t\t},\n83: \t})\n84: \toutput := p.String()\n85: \tassert.Contains(t, output, \"✓\")\n86: \tassert.Contains(t, output, \"●\")\n87: \tassert.Contains(t, output, \"○\")\n88: }\n89: \n90: func TestInfoPane_Scrolling(t *testing.T) {\n91: \tp := NewInfoPane()\n92: \tp.SetSize(80, 5)\n93: \tp.SetData(InfoData{\n94: \t\tHasInstance:     true,\n95: \t\tHasPlan:         true,\n96: \t\tTitle:           \"test\",\n97: \t\tProgram:         \"claude\",\n98: \t\tPlanName:        \"test\",\n99: \t\tPlanDescription: \"desc\",\n100: \t\tPlanStatus:      \"ready\",\n101: \t\tWaveTasks: []WaveTaskInfo{\n102: \t\t\t{Number: 1, State: \"complete\"},\n103: \t\t\t{Number: 2, State: \"complete\"},\n104: \t\t\t{Number: 3, State: \"running\"},\n105: \t\t\t{Number: 4, State: \"pending\"},\n106: \t\t\t{Number: 5, State: \"pending\"},\n107: \t\t\t{Number: 6, State: \"pending\"},\n108: \t\t\t{Number: 7, State: \"pending\"},\n109: \t\t\t{Number: 8, State: \"pending\"},\n110: \t\t},\n111: \t})\n112: \tbefore := p.String()\n113: \trequire.NotEmpty(t, before)\n114: \tp.ScrollDown()\n115: \tafter := p.String()\n116: \tassert.NotEqual(t, before, after)\n117: }\n118: \n119: func TestInfoPane_PlanSummary(t *testing.T) {\n120: \tpane := NewInfoPane()\n121: \tpane.SetSize(60, 30)\n122: \tpane.SetData(InfoData{\n123: \t\tIsPlanHeaderSelected: true,\n124: \t\tPlanName:             \"my-feature\",\n125: \t\tPlanStatus:           \"implementing\",\n126: \t\tPlanInstanceCount:    3,\n127: \t\tPlanRunningCount:     2,\n128: \t\tPlanReadyCount:       1,\n129: \t})\n130: \n131: \toutput := pane.String()\n132: \tassert.Contains(t, output, \"my-feature\")\n133: \tassert.Contains(t, output, \"implementing\")\n134: \tassert.Contains(t, output, \"3 (2 running, 1 ready)\")\n135: \tassert.Contains(t, output, \"view plan doc\")\n136: }\n137: \n138: func TestInfoPane_InstanceWithResources(t *testing.T) {\n139: \tpane := NewInfoPane()\n140: \tpane.SetSize(60, 30)\n141: \tpane.SetData(InfoData{\n142: \t\tHasInstance: true,\n143: \t\tTitle:       \"task 1\",\n144: \t\tStatus:      \"running\",\n145: \t\tCPUPercent:  12.5,\n146: \t\tMemMB:       340,\n147: \t})\n148: \n149: \toutput := pane.String()\n150: \tassert.Contains(t, output, \"13%\")\n151: \tassert.Contains(t, output, \"340M\")\n152: }\n\n(End of file - total 152 lines)\n</content>",
+            "title": "ui/info_pane_test.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestInfoPane_NoInstance(t *testing.T) {\n\tp := NewInfoPane()\n\tp.SetSize(80, 24)\n\tp.SetData(InfoData{HasInstance: false})\n\tassert.Contains(t, p.String(), \"no instance selected\")\n}\n\nfunc TestInfoPane_AdHocInstance(t *testing.T) {\n\tp := NewInfoPane()\n\tp.SetSize(80, 24)\n\tp.SetData(InfoData{",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564234652,
+              "end": 1772564234667
+            }
+          },
+          "id": "prt_cb50fbcf3001y2l3AobOVv4CAm",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/audit_pane_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/audit_pane_test.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"strings\"\n6: \t\"testing\"\n7: \n8: \t\"github.com/stretchr/testify/assert\"\n9: )\n10: \n11: func TestAuditPane_RenderEmpty(t *testing.T) {\n12: \tpane := NewAuditPane()\n13: \tpane.SetSize(60, 10)\n14: \toutput := pane.String()\n15: \tassert.Contains(t, output, \"no events\")\n16: \t// Should render with the styled empty icon\n17: \tassert.Contains(t, output, \"·\")\n18: }\n19: \n20: func TestAuditPane_RenderEvents(t *testing.T) {\n21: \tpane := NewAuditPane()\n22: \tpane.SetSize(60, 10)\n23: \tpane.SetEvents([]AuditEventDisplay{\n24: \t\t{Time: \"12:34\", Kind: \"agent_spawned\", Icon: \"◆\", Message: \"spawned coder\", Color: ColorFoam, Level: \"info\"},\n25: \t\t{Time: \"12:35\", Kind: \"agent_finished\", Icon: \"✓\", Message: \"coder finished\", Color: ColorGold, Level: \"info\"},\n26: \t})\n27: \toutput := pane.String()\n28: \tassert.Contains(t, output, \"spawned coder\")\n29: \tassert.Contains(t, output, \"coder finished\")\n30: }\n31: \n32: func TestAuditPane_RenderLevels(t *testing.T) {\n33: \tpane := NewAuditPane()\n34: \tpane.SetSize(60, 10)\n35: \tpane.SetEvents([]AuditEventDisplay{\n36: \t\t{Time: \"12:34\", Kind: \"error\", Icon: \"!\", Message: \"something broke\", Color: ColorLove, Level: \"error\"},\n37: \t\t{Time: \"12:35\", Kind: \"permission_detected\", Icon: \"!\", Message: \"needs attention\", Color: ColorGold, Level: \"warn\"},\n38: \t\t{Time: \"12:36\", Kind: \"agent_spawned\", Icon: \"◆\", Message: \"spawned coder\", Color: ColorFoam, Level: \"info\"},\n39: \t})\n40: \toutput := pane.String()\n41: \tassert.Contains(t, output, \"something broke\")\n42: \tassert.Contains(t, output, \"needs attention\")\n43: \tassert.Contains(t, output, \"spawned coder\")\n44: }\n45: \n46: func TestAuditPane_ScrollDown(t *testing.T) {\n47: \tpane := NewAuditPane()\n48: \tpane.SetSize(60, 3) // very small — forces scroll\n49: \tevents := make([]AuditEventDisplay, 20)\n50: \tfor i := range events {\n51: \t\tevents[i] = AuditEventDisplay{\n52: \t\t\tTime:    fmt.Sprintf(\"12:%02d\", i),\n53: \t\t\tKind:    \"test\",\n54: \t\t\tIcon:    \"·\",\n55: \t\t\tMessage: fmt.Sprintf(\"event %d\", i),\n56: \t\t\tColor:   ColorText,\n57: \t\t\tLevel:   \"info\",\n58: \t\t}\n59: \t}\n60: \t// SetEvents pins the viewport to the bottom (newest events visible).\n61: \t// Scroll up toward older events and confirm newest is no longer in view.\n62: \tpane.SetEvents(events)\n63: \tpane.ScrollUp(5)\n64: \toutput := pane.String()\n65: \t// After scrolling up, the most recent event should no longer be visible.\n66: \tassert.NotContains(t, output, fmt.Sprintf(\"event %d\", len(events)-1))\n67: }\n68: \n69: func TestAuditPane_ToggleVisibility(t *testing.T) {\n70: \tpane := NewAuditPane()\n71: \tassert.True(t, pane.Visible())\n72: \tpane.ToggleVisible()\n73: \tassert.False(t, pane.Visible())\n74: \tpane.ToggleVisible()\n75: \tassert.True(t, pane.Visible())\n76: }\n77: \n78: func TestAuditPane_HeaderContainsLabel(t *testing.T) {\n79: \tpane := NewAuditPane()\n80: \tpane.SetSize(60, 10)\n81: \toutput := pane.String()\n82: \t// Header should contain the \"log\" label in the divider\n83: \tassert.Contains(t, output, \"log\")\n84: }\n85: \n86: func TestAuditPane_ScrollUp(t *testing.T) {\n87: \tpane := NewAuditPane()\n88: \tpane.SetSize(60, 3)\n89: \tevents := make([]AuditEventDisplay, 20)\n90: \tfor i := range events {\n91: \t\tevents[i] = AuditEventDisplay{\n92: \t\t\tTime:    fmt.Sprintf(\"12:%02d\", i),\n93: \t\t\tKind:    \"test\",\n94: \t\t\tIcon:    \"·\",\n95: \t\t\tMessage: fmt.Sprintf(\"event %d\", i),\n96: \t\t\tColor:   ColorText,\n97: \t\t\tLevel:   \"info\",\n98: \t\t}\n99: \t}\n100: \tpane.SetEvents(events)\n101: \tpane.ScrollDown(10)\n102: \tpane.ScrollUp(10)\n103: \t// After scrolling back up, should be near the top again\n104: \toutput := pane.String()\n105: \tassert.NotEmpty(t, output)\n106: }\n107: \n108: func TestAuditPane_MessageTruncation(t *testing.T) {\n109: \tpane := NewAuditPane()\n110: \tpane.SetSize(40, 5) // narrow width to trigger truncation\n111: \tlongMsg := \"this is a very long message that should be truncated because it exceeds the available width\"\n112: \tpane.SetEvents([]AuditEventDisplay{\n113: \t\t{Time: \"12:34\", Kind: \"test\", Icon: \"·\", Message: longMsg, Color: ColorText, Level: \"info\"},\n114: \t})\n115: \toutput := pane.String()\n116: \t// The full message should NOT appear — it should be truncated\n117: \tassert.NotContains(t, output, longMsg)\n118: \t// But a truncated prefix should be there\n119: \tassert.Contains(t, output, \"this is a very\")\n120: }\n121: \n122: func TestAuditPane_Height(t *testing.T) {\n123: \tpane := NewAuditPane()\n124: \tpane.SetSize(60, 8)\n125: \tassert.Equal(t, 8, pane.Height())\n126: }\n127: \n128: func TestAuditPane_MinuteHeaders(t *testing.T) {\n129: \tpane := NewAuditPane()\n130: \tpane.SetSize(60, 20)\n131: \tpane.SetEvents([]AuditEventDisplay{\n132: \t\t{Time: \"12:35\", Kind: \"agent_finished\", Icon: \"✓\", Message: \"coder finished\", Color: ColorGold, Level: \"info\"},\n133: \t\t{Time: \"12:34\", Kind: \"agent_spawned\", Icon: \"◆\", Message: \"spawned coder\", Color: ColorFoam, Level: \"info\"},\n134: \t\t{Time: \"12:34\", Kind: \"plan_transition\", Icon: \"⟳\", Message: \"ready → implementing\", Color: ColorIris, Level: \"info\"},\n135: \t})\n136: \toutput := pane.String()\n137: \t// Minute headers should appear as centered dividers\n138: \tassert.Contains(t, output, \"12:34\")\n139: \tassert.Contains(t, output, \"12:35\")\n140: \t// Messages should still appear\n141: \tassert.Contains(t, output, \"spawned coder\")\n142: \tassert.Contains(t, output, \"coder finished\")\n143: \tassert.Contains(t, output, \"ready → implementing\")\n144: }\n145: \n146: func TestAuditPane_NoPerLineTimestamp(t *testing.T) {\n147: \tpane := NewAuditPane()\n148: \tpane.SetSize(60, 20)\n149: \tpane.SetEvents([]AuditEventDisplay{\n150: \t\t{Time: \"12:34\", Kind: \"agent_spawned\", Icon: \"◆\", Message: \"spawned coder\", Color: ColorFoam, Level: \"info\"},\n151: \t})\n152: \toutput := pane.String()\n153: \t// The timestamp should appear in the minute header, not next to the icon on the event line.\n154: \t// Event lines should be \" ◆  message\" not \" 12:34  ◆  message\".\n155: \t// Count occurrences of \"12:34\" — should be exactly 1 (the header), not 2.\n156: \tassert.Equal(t, 1, strings.Count(output, \"12:34\"),\n157: \t\t\"timestamp should appear once (in minute header), not per-line\")\n158: }\n\n(End of file - total 158 lines)\n</content>",
+            "title": "ui/audit_pane_test.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestAuditPane_RenderEmpty(t *testing.T) {\n\tpane := NewAuditPane()\n\tpane.SetSize(60, 10)\n\toutput := pane.String()\n\tassert.Contains(t, output, \"no events\")\n\t// Should render with the styled empty icon\n\tassert.Contains(t, output, \"·\")\n}\n\nfunc TestAuditPane_RenderEvents(t *testing.T) {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564234830,
+              "end": 1772564234836
+            }
+          },
+          "id": "prt_cb50fc19e001Wp4tnRpwTFO4vj",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 50820,
+            "input": 1,
+            "output": 213,
+            "reasoning": 0,
+            "cache": {
+              "read": 42344,
+              "write": 8262
+            }
+          },
+          "id": "prt_cb50fc28100198vrGVVurVkzIH",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fb13d001JHxMkVw2CafmG8"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564234896,
+          "completed": 1772564239489
+        },
+        "parentID": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55683,
+          "input": 1,
+          "output": 269,
+          "reasoning": 0,
+          "cache": {
+            "read": 50606,
+            "write": 4807
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fc290001QDEZqzzSHCEgdd",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fc6b30017y72B3TyJIV6oi",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the existing implementation files and the theme file to understand the color constants:",
+          "metadata": {
+            "anthropic": {
+              "signature": "Eo8CCkYICxgCKkCIIyeUmARPBo/S+MIu5qcJPVBbznqUduJ/qYfzFSxPSgTA2yvzk+dS/REDACTED/REDACTED/REDACTED/Era0UcdkCQ4BJ+CYUcE/xgB"
+            }
+          },
+          "time": {
+            "start": 1772564235957,
+            "end": 1772564236732
+          },
+          "id": "prt_cb50fc6b5001FE3kbUKUYkpTyK",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "text",
+          "text": "Now let me read the current implementation files and theme:",
+          "time": {
+            "start": 1772564237141,
+            "end": 1772564237141
+          },
+          "id": "prt_cb50fc9be001grnIxmeNuME3pN",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/info_pane.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/info_pane.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"math\"\n6: \t\"strings\"\n7: \n8: \t\"github.com/charmbracelet/bubbles/viewport\"\n9: \t\"github.com/charmbracelet/lipgloss\"\n10: \tzone \"github.com/lrstanley/bubblezone\"\n11: )\n12: \n13: var (\n14: \tinfoSectionStyle = lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)\n15: \tinfoDividerStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n16: \tinfoLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Width(20)\n17: \tinfoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)\n18: )\n19: \n20: // InfoData holds the data to render in the info pane.\n21: // Built by the app layer from instance + plan + wave state.\n22: type InfoData struct {\n23: \t// Instance fields.\n24: \tTitle   string\n25: \tProgram string\n26: \tBranch  string\n27: \tPath    string\n28: \tCreated string\n29: \tStatus  string\n30: \n31: \t// Plan fields (empty for ad-hoc).\n32: \tPlanName        string\n33: \tPlanDescription string\n34: \tPlanStatus      string\n35: \tPlanTopic       string\n36: \tPlanBranch      string\n37: \tPlanCreated     string\n38: \n39: \t// Plan summary fields (shown when plan header is selected, no instance).\n40: \tPlanInstanceCount int\n41: \tPlanRunningCount  int\n42: \tPlanReadyCount    int\n43: \tPlanPausedCount   int\n44: \tPlanAddedLines    int\n45: \tPlanRemovedLines  int\n46: \n47: \t// Resource fields (shown when instance is selected).\n48: \tCPUPercent float64\n49: \tMemMB      float64\n50: \n51: \t// Wave fields (zero values = no wave).\n52: \tAgentType  string\n53: \tWaveNumber int\n54: \tTotalWaves int\n55: \tTaskNumber int\n56: \tTotalTasks int\n57: \tWaveTasks  []WaveTaskInfo\n58: \n59: \t// HasPlan is true when the instance is bound to a plan.\n60: \tHasPlan bool\n61: \t// HasInstance is true when an instance is selected.\n62: \tHasInstance bool\n63: \t// IsPlanHeaderSelected distinguishes plan header vs instance selection.\n64: \tIsPlanHeaderSelected bool\n65: }\n66: \n67: // WaveTaskInfo describes a single task in the current wave.\n68: type WaveTaskInfo struct {\n69: \tNumber int\n70: \tState  string // \"complete\", \"running\", \"failed\", \"pending\"\n71: }\n72: \n73: // InfoPane renders instance and plan metadata in the info tab.\n74: type InfoPane struct {\n75: \twidth, height int\n76: \tdata          InfoData\n77: \tviewport      viewport.Model\n78: }\n79: \n80: // NewInfoPane creates a new InfoPane.\n81: func NewInfoPane() *InfoPane {\n82: \tvp := viewport.New(0, 0)\n83: \treturn &InfoPane{viewport: vp}\n84: }\n85: \n86: // SetSize updates the pane dimensions.\n87: func (p *InfoPane) SetSize(width, height int) {\n88: \tp.width = width\n89: \tp.height = height\n90: \tp.viewport.Width = width\n91: \tp.viewport.Height = height\n92: \tp.viewport.SetContent(p.render())\n93: }\n94: \n95: // SetData updates the data to render.\n96: func (p *InfoPane) SetData(data InfoData) {\n97: \tp.data = data\n98: \tp.viewport.SetContent(p.render())\n99: \tp.viewport.GotoTop()\n100: }\n101: \n102: // ScrollUp scrolls the viewport up.\n103: func (p *InfoPane) ScrollUp() {\n104: \tp.viewport.LineUp(1)\n105: }\n106: \n107: // ScrollDown scrolls the viewport down.\n108: func (p *InfoPane) ScrollDown() {\n109: \tp.viewport.LineDown(1)\n110: }\n111: \n112: // String renders the info pane content.\n113: func (p *InfoPane) String() string {\n114: \tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n115: \t\treturn \"no instance selected\"\n116: \t}\n117: \treturn p.viewport.View()\n118: }\n119: \n120: func statusColor(status string) lipgloss.TerminalColor {\n121: \tswitch status {\n122: \tcase \"implementing\":\n123: \t\treturn ColorIris\n124: \tcase \"planning\", \"running\":\n125: \t\treturn ColorFoam\n126: \tcase \"reviewing\", \"done\":\n127: \t\treturn ColorGold\n128: \tcase \"ready\", \"cancelled\", \"paused\":\n129: \t\treturn ColorMuted\n130: \tcase \"failed\", \"error\":\n131: \t\treturn ColorLove\n132: \tdefault:\n133: \t\treturn ColorText\n134: \t}\n135: }\n136: \n137: func (p *InfoPane) renderRow(label, value string) string {\n138: \tvalueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n139: \tif valueWidth < 10 {\n140: \t\tvalueWidth = 10\n141: \t}\n142: \treturn lipgloss.JoinHorizontal(lipgloss.Top,\n143: \t\tinfoLabelStyle.Render(label),\n144: \t\tinfoValueStyle.Width(valueWidth).Render(value),\n145: \t)\n146: }\n147: \n148: func (p *InfoPane) renderStatusRow(label, value string) string {\n149: \tvalueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n150: \tif valueWidth < 10 {\n151: \t\tvalueWidth = 10\n152: \t}\n153: \treturn lipgloss.JoinHorizontal(lipgloss.Top,\n154: \t\tinfoLabelStyle.Render(label),\n155: \t\tlipgloss.NewStyle().Foreground(statusColor(value)).Width(valueWidth).Render(value),\n156: \t)\n157: }\n158: \n159: func (p *InfoPane) renderDivider() string {\n160: \tw := p.width - 4\n161: \tif w < 10 {\n162: \t\tw = 10\n163: \t}\n164: \treturn infoDividerStyle.Render(strings.Repeat(\"-\", w))\n165: }\n166: \n167: func (p *InfoPane) renderPlanSection() string {\n168: \tlines := []string{\n169: \t\tinfoSectionStyle.Render(\"plan\"),\n170: \t\tp.renderDivider(),\n171: \t}\n172: \tif p.data.PlanName != \"\" {\n173: \t\tlines = append(lines, p.renderRow(\"name\", p.data.PlanName))\n174: \t}\n175: \tif p.data.PlanDescription != \"\" {\n176: \t\tlines = append(lines, p.renderRow(\"description\", p.data.PlanDescription))\n177: \t}\n178: \tif p.data.PlanStatus != \"\" {\n179: \t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.PlanStatus))\n180: \t}\n181: \tif p.data.PlanTopic != \"\" {\n182: \t\tlines = append(lines, p.renderRow(\"topic\", p.data.PlanTopic))\n183: \t}\n184: \tif p.data.PlanBranch != \"\" {\n185: \t\tlines = append(lines, p.renderRow(\"branch\", p.data.PlanBranch))\n186: \t}\n187: \tif p.data.PlanCreated != \"\" {\n188: \t\tlines = append(lines, p.renderRow(\"created\", p.data.PlanCreated))\n189: \t}\n190: \treturn strings.Join(lines, \"\\n\")\n191: }\n192: \n193: func (p *InfoPane) renderInstanceSection() string {\n194: \tlines := []string{\n195: \t\tinfoSectionStyle.Render(\"instance\"),\n196: \t\tp.renderDivider(),\n197: \t}\n198: \tif p.data.Title != \"\" {\n199: \t\tlines = append(lines, p.renderRow(\"title\", p.data.Title))\n200: \t}\n201: \tif p.data.AgentType != \"\" {\n202: \t\tlines = append(lines, p.renderRow(\"role\", p.data.AgentType))\n203: \t}\n204: \tif p.data.Program != \"\" {\n205: \t\tlines = append(lines, p.renderRow(\"program\", p.data.Program))\n206: \t}\n207: \tif p.data.Status != \"\" {\n208: \t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.Status))\n209: \t}\n210: \tif p.data.Branch != \"\" {\n211: \t\tlines = append(lines, p.renderRow(\"branch\", p.data.Branch))\n212: \t}\n213: \tif p.data.Path != \"\" {\n214: \t\tlines = append(lines, p.renderRow(\"path\", p.data.Path))\n215: \t}\n216: \tif p.data.Created != \"\" {\n217: \t\tlines = append(lines, p.renderRow(\"created\", p.data.Created))\n218: \t}\n219: \tif p.data.WaveNumber > 0 {\n220: \t\tlines = append(lines, p.renderRow(\"wave\", fmt.Sprintf(\"%d/%d\", p.data.WaveNumber, p.data.TotalWaves)))\n221: \t}\n222: \tif p.data.TaskNumber > 0 {\n223: \t\tlines = append(lines, p.renderRow(\"task\", fmt.Sprintf(\"%d of %d\", p.data.TaskNumber, p.data.TotalTasks)))\n224: \t}\n225: \tif p.data.CPUPercent > 0 || p.data.MemMB > 0 {\n226: \t\tlines = append(lines, p.renderRow(\"cpu\", fmt.Sprintf(\"%.0f%%\", math.Round(p.data.CPUPercent))))\n227: \t\tlines = append(lines, p.renderRow(\"memory\", fmt.Sprintf(\"%.0fM\", p.data.MemMB)))\n228: \t}\n229: \treturn strings.Join(lines, \"\\n\")\n230: }\n231: \n232: func (p *InfoPane) renderPlanSummary() string {\n233: \tlines := []string{\n234: \t\tinfoSectionStyle.Render(\"plan\"),\n235: \t\tp.renderDivider(),\n236: \t}\n237: \tif p.data.PlanName != \"\" {\n238: \t\tlines = append(lines, p.renderRow(\"name\", p.data.PlanName))\n239: \t}\n240: \tif p.data.PlanStatus != \"\" {\n241: \t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.PlanStatus))\n242: \t}\n243: \tif p.data.PlanTopic != \"\" {\n244: \t\tlines = append(lines, p.renderRow(\"topic\", p.data.PlanTopic))\n245: \t}\n246: \tif p.data.PlanBranch != \"\" {\n247: \t\tlines = append(lines, p.renderRow(\"branch\", p.data.PlanBranch))\n248: \t}\n249: \tif p.data.PlanCreated != \"\" {\n250: \t\tlines = append(lines, p.renderRow(\"created\", p.data.PlanCreated))\n251: \t}\n252: \n253: \tif p.data.PlanInstanceCount > 0 {\n254: \t\tsummary := fmt.Sprintf(\"%d\", p.data.PlanInstanceCount)\n255: \t\tparts := []string{}\n256: \t\tif p.data.PlanRunningCount > 0 {\n257: \t\t\tparts = append(parts, fmt.Sprintf(\"%d running\", p.data.PlanRunningCount))\n258: \t\t}\n259: \t\tif p.data.PlanReadyCount > 0 {\n260: \t\t\tparts = append(parts, fmt.Sprintf(\"%d ready\", p.data.PlanReadyCount))\n261: \t\t}\n262: \t\tif p.data.PlanPausedCount > 0 {\n263: \t\t\tparts = append(parts, fmt.Sprintf(\"%d paused\", p.data.PlanPausedCount))\n264: \t\t}\n265: \t\tif len(parts) > 0 {\n266: \t\t\tsummary += \" (\" + strings.Join(parts, \", \") + \")\"\n267: \t\t}\n268: \t\tlines = append(lines, p.renderRow(\"instances\", summary))\n269: \t}\n270: \n271: \tif p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {\n272: \t\tdiff := fmt.Sprintf(\"+%d -%d\", p.data.PlanAddedLines, p.data.PlanRemovedLines)\n273: \t\tlines = append(lines, p.renderRow(\"lines changed\", diff))\n274: \t}\n275: \n276: \tlines = append(lines, \"\")\n277: \tviewDocStyle := lipgloss.NewStyle().\n278: \t\tForeground(ColorFoam).\n279: \t\tBorder(lipgloss.RoundedBorder()).\n280: \t\tBorderForeground(ColorOverlay).\n281: \t\tPadding(0, 2)\n282: \tlines = append(lines, zone.Mark(ZoneViewPlan, viewDocStyle.Render(\"view plan doc\")))\n283: \n284: \treturn strings.Join(lines, \"\\n\")\n285: }\n286: \n287: func (p *InfoPane) renderWaveSection() string {\n288: \tlines := []string{\n289: \t\tinfoSectionStyle.Render(\"wave progress\"),\n290: \t\tp.renderDivider(),\n291: \t}\n292: \tfor _, task := range p.data.WaveTasks {\n293: \t\tvar glyph string\n294: \t\tvar glyphColor lipgloss.TerminalColor\n295: \t\tswitch task.State {\n296: \t\tcase \"complete\":\n297: \t\t\tglyph = \"✓\"\n298: \t\t\tglyphColor = ColorFoam\n299: \t\tcase \"running\":\n300: \t\t\tglyph = \"●\"\n301: \t\t\tglyphColor = ColorIris\n302: \t\tcase \"failed\":\n303: \t\t\tglyph = \"✗\"\n304: \t\t\tglyphColor = ColorLove\n305: \t\tdefault:\n306: \t\t\tglyph = \"○\"\n307: \t\t\tglyphColor = ColorMuted\n308: \t\t}\n309: \t\tlabel := fmt.Sprintf(\"task %d\", task.Number)\n310: \t\tvalue := lipgloss.NewStyle().Foreground(glyphColor).Render(glyph) + \" \" + task.State\n311: \t\tlines = append(lines, infoLabelStyle.Render(label)+value)\n312: \t}\n313: \treturn strings.Join(lines, \"\\n\")\n314: }\n315: \n316: // render builds the content string. Called internally when data changes.\n317: func (p *InfoPane) render() string {\n318: \tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n319: \t\treturn \"no instance selected\"\n320: \t}\n321: \n322: \tvar sections []string\n323: \tif p.data.IsPlanHeaderSelected {\n324: \t\tsections = append(sections, p.renderPlanSummary())\n325: \t\tif len(p.data.WaveTasks) > 0 {\n326: \t\t\tsections = append(sections, p.renderWaveSection())\n327: \t\t}\n328: \t} else {\n329: \t\tif p.data.HasPlan {\n330: \t\t\tsections = append(sections, p.renderPlanSection())\n331: \t\t}\n332: \t\tsections = append(sections, p.renderInstanceSection())\n333: \t\tif len(p.data.WaveTasks) > 0 {\n334: \t\t\tsections = append(sections, p.renderWaveSection())\n335: \t\t}\n336: \t}\n337: \n338: \treturn strings.Join(sections, \"\\n\\n\")\n339: }\n\n(End of file - total 339 lines)\n</content>",
+            "title": "ui/info_pane.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"fmt\"\n\t\"math\"\n\t\"strings\"\n\n\t\"github.com/charmbracelet/bubbles/viewport\"\n\t\"github.com/charmbracelet/lipgloss\"\n\tzone \"github.com/lrstanley/bubblezone\"\n)\n\nvar (\n\tinfoSectionStyle = lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)\n\tinfoDividerStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n\tinfoLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Width(20)\n\tinfoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)\n)\n\n// InfoData holds the data to render in the info pane.",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564238745,
+              "end": 1772564238748
+            }
+          },
+          "id": "prt_cb50fcb56001nXIs01yd1rYXVB",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/audit_pane.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/audit_pane.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"strings\"\n5: \n6: \t\"github.com/charmbracelet/bubbles/viewport\"\n7: \t\"github.com/charmbracelet/lipgloss\"\n8: \t\"github.com/muesli/reflow/wordwrap\"\n9: )\n10: \n11: // AuditEventDisplay is a pre-formatted event for rendering in the audit pane.\n12: type AuditEventDisplay struct {\n13: \tTime    string         // formatted as \"HH:MM\"\n14: \tKind    string         // event kind string (e.g. \"agent_spawned\")\n15: \tIcon    string         // single-char icon\n16: \tMessage string         // human-readable message\n17: \tColor   lipgloss.Color // icon color\n18: \tLevel   string         // \"info\", \"warn\", \"error\"\n19: }\n20: \n21: // AuditPane renders a scrollable activity feed inside the navigation panel border.\n22: type AuditPane struct {\n23: \tevents   []AuditEventDisplay\n24: \tviewport viewport.Model\n25: \twidth    int\n26: \theight   int\n27: \tvisible  bool\n28: }\n29: \n30: // NewAuditPane creates a new AuditPane (visible by default).\n31: func NewAuditPane() *AuditPane {\n32: \tvp := viewport.New(0, 0)\n33: \treturn &AuditPane{\n34: \t\tvisible:  true,\n35: \t\tviewport: vp,\n36: \t}\n37: }\n38: \n39: // SetSize updates the pane dimensions and rebuilds the viewport content.\n40: func (p *AuditPane) SetSize(w, h int) {\n41: \tp.width = w\n42: \t// Reserve 1 line for the header divider.\n43: \tbodyH := h - 1\n44: \tif bodyH < 0 {\n45: \t\tbodyH = 0\n46: \t}\n47: \tp.height = h\n48: \tp.viewport.Width = w\n49: \tp.viewport.Height = bodyH\n50: \tp.viewport.SetContent(p.renderBody())\n51: }\n52: \n53: // SetEvents replaces the event list and refreshes the viewport.\n54: func (p *AuditPane) SetEvents(events []AuditEventDisplay) {\n55: \tp.events = events\n56: \tp.viewport.SetContent(p.renderBody())\n57: \tp.viewport.GotoBottom()\n58: }\n59: \n60: // Events returns the current list of pre-formatted audit event displays.\n61: // Primarily used in tests to inspect formatted event data without needing\n62: // a sized viewport.\n63: func (p *AuditPane) Events() []AuditEventDisplay {\n64: \treturn p.events\n65: }\n66: \n67: // ScrollDown scrolls the viewport down by n lines.\n68: func (p *AuditPane) ScrollDown(n int) {\n69: \tp.viewport.LineDown(n)\n70: }\n71: \n72: // ScrollUp scrolls the viewport up by n lines.\n73: func (p *AuditPane) ScrollUp(n int) {\n74: \tp.viewport.LineUp(n)\n75: }\n76: \n77: // Visible returns whether the pane is currently shown.\n78: func (p *AuditPane) Visible() bool {\n79: \treturn p.visible\n80: }\n81: \n82: // Height returns the current total height of the pane (header + body).\n83: func (p *AuditPane) Height() int {\n84: \treturn p.height\n85: }\n86: \n87: // ToggleVisible flips the visibility state.\n88: func (p *AuditPane) ToggleVisible() {\n89: \tp.visible = !p.visible\n90: }\n91: \n92: // Styles for the audit pane — Rosé Pine Moon palette.\n93: var (\n94: \tauditDividerStyle = lipgloss.NewStyle().Foreground(ColorMuted)\n95: \tauditMinuteStyle  = lipgloss.NewStyle().Foreground(ColorMuted)\n96: \tauditMsgStyle     = lipgloss.NewStyle().Foreground(ColorSubtle)\n97: \tauditWarnMsgStyle = lipgloss.NewStyle().Foreground(ColorGold)\n98: \tauditErrMsgStyle  = lipgloss.NewStyle().Foreground(ColorLove)\n99: \tauditEmptyStyle   = lipgloss.NewStyle().Foreground(ColorMuted)\n100: \tauditRowPad       = lipgloss.NewStyle().PaddingLeft(1)\n101: )\n102: \n103: // String renders the audit pane: a 1-line header divider + scrollable body.\n104: func (p *AuditPane) String() string {\n105: \theader := p.renderHeader()\n106: \tbody := p.viewport.View()\n107: \treturn lipgloss.JoinVertical(lipgloss.Left, header, body)\n108: }\n109: \n110: // renderHeader builds a centered divider: ────── log ──────\n111: // Matches the nav panel's navDividerLine aesthetic exactly.\n112: func (p *AuditPane) renderHeader() string {\n113: \tinner := \" log \"\n114: \tinnerW := len(inner)\n115: \tremaining := p.width - innerW\n116: \tif remaining < 2 {\n117: \t\treturn auditDividerStyle.Render(inner)\n118: \t}\n119: \tleft := remaining / 2\n120: \tright := remaining - left\n121: \treturn auditDividerStyle.Render(strings.Repeat(\"─\", left) + inner + strings.Repeat(\"─\", right))\n122: }\n123: \n124: // renderMinuteHeader builds a centered minute divider: ────── HH:MM ──────\n125: // Mirrors renderHeader() but uses the minute string instead of \"log\".\n126: func (p *AuditPane) renderMinuteHeader(minute string) string {\n127: \tinner := \" \" + minute + \" \"\n128: \tinnerW := len(inner)\n129: \tremaining := p.width - innerW\n130: \tif remaining < 2 {\n131: \t\treturn auditMinuteStyle.Render(inner)\n132: \t}\n133: \tleft := remaining / 2\n134: \tright := remaining - left\n135: \treturn auditMinuteStyle.Render(strings.Repeat(\"─\", left) + inner + strings.Repeat(\"─\", right))\n136: }\n137: \n138: // renderBody builds the scrollable event list content.\n139: func (p *AuditPane) renderBody() string {\n140: \tif len(p.events) == 0 {\n141: \t\treturn auditRowPad.Render(\n142: \t\t\tauditEmptyStyle.Render(\"· no events\"),\n143: \t\t)\n144: \t}\n145: \n146: \t// Available width for message text after icon + padding.\n147: \t// Layout per row: \" ◆  message\"\n148: \t//                  1 1 2 = 4 chars of overhead\n149: \tconst overhead = 4\n150: \tmsgWidth := p.width - overhead\n151: \tif msgWidth < 10 {\n152: \t\tmsgWidth = 10\n153: \t}\n154: \t// Continuation lines indent to align under the message text.\n155: \tconst contIndent = overhead\n156: \n157: \t// Iterate oldest-first so newest events appear at the bottom.\n158: \t// Emit a centered minute header whenever the minute changes.\n159: \tlines := make([]string, 0, len(p.events))\n160: \tvar lastMinute string\n161: \tfor i := len(p.events) - 1; i >= 0; i-- {\n162: \t\te := p.events[i]\n163: \n164: \t\t// Emit minute header on minute boundary.\n165: \t\tif e.Time != lastMinute {\n166: \t\t\tlines = append(lines, p.renderMinuteHeader(e.Time))\n167: \t\t\tlastMinute = e.Time\n168: \t\t}\n169: \n170: \t\ticon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)\n171: \n172: \t\t// Word-wrap the message at msgWidth, then render each wrapped segment.\n173: \t\twrapped := wordwrap.String(e.Message, msgWidth)\n174: \t\tsegments := strings.Split(wrapped, \"\\n\")\n175: \n176: \t\tfor j, seg := range segments {\n177: \t\t\tvar styledSeg string\n178: \t\t\tswitch e.Level {\n179: \t\t\tcase \"error\":\n180: \t\t\t\tstyledSeg = auditErrMsgStyle.Render(seg)\n181: \t\t\tcase \"warn\":\n182: \t\t\t\tstyledSeg = auditWarnMsgStyle.Render(seg)\n183: \t\t\tdefault:\n184: \t\t\t\tstyledSeg = auditMsgStyle.Render(seg)\n185: \t\t\t}\n186: \t\t\tvar line string\n187: \t\t\tif j == 0 {\n188: \t\t\t\tline = auditRowPad.Render(icon + \"  \" + styledSeg)\n189: \t\t\t} else {\n190: \t\t\t\tline = auditRowPad.Render(strings.Repeat(\" \", contIndent) + styledSeg)\n191: \t\t\t}\n192: \t\t\tlines = append(lines, line)\n193: \t\t}\n194: \t}\n195: \treturn strings.Join(lines, \"\\n\")\n196: }\n197: \n198: // EventKindIcon returns the icon and color for a given event kind string.\n199: // Used by the app layer when building AuditEventDisplay values.\n200: func EventKindIcon(kind string) (icon string, color lipgloss.Color) {\n201: \tswitch kind {\n202: \tcase \"agent_spawned\":\n203: \t\treturn \"◆\", ColorFoam\n204: \tcase \"agent_finished\":\n205: \t\treturn \"✓\", ColorGold\n206: \tcase \"agent_killed\":\n207: \t\treturn \"✕\", ColorLove\n208: \tcase \"agent_paused\":\n209: \t\treturn \"⏸\", ColorMuted\n210: \tcase \"agent_resumed\":\n211: \t\treturn \"▶\", ColorFoam\n212: \tcase \"plan_transition\":\n213: \t\treturn \"⟳\", ColorIris\n214: \tcase \"plan_created\":\n215: \t\treturn \"✦\", ColorFoam\n216: \tcase \"plan_merged\":\n217: \t\treturn \"⇒\", ColorGold\n218: \tcase \"plan_cancelled\":\n219: \t\treturn \"✕\", ColorLove\n220: \tcase \"wave_started\":\n221: \t\treturn \"⚡\", ColorGold\n222: \tcase \"wave_completed\":\n223: \t\treturn \"⚡\", ColorFoam\n224: \tcase \"wave_failed\":\n225: \t\treturn \"⚡\", ColorLove\n226: \tcase \"prompt_sent\":\n227: \t\treturn \"→\", ColorFoam\n228: \tcase \"git_push\":\n229: \t\treturn \"↑\", ColorFoam\n230: \tcase \"pr_created\":\n231: \t\treturn \"⎇\", ColorIris\n232: \tcase \"permission_detected\":\n233: \t\treturn \"!\", ColorGold\n234: \tcase \"permission_answered\":\n235: \t\treturn \"✓\", ColorGold\n236: \tcase \"session_started\":\n237: \t\treturn \"▶\", ColorFoam\n238: \tcase \"session_stopped\":\n239: \t\treturn \"■\", ColorMuted\n240: \tcase \"fsm_error\", \"error\":\n241: \t\treturn \"!\", ColorLove\n242: \tdefault:\n243: \t\treturn \"·\", ColorMuted\n244: \t}\n245: }\n\n(End of file - total 245 lines)\n</content>",
+            "title": "ui/audit_pane.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"strings\"\n\n\t\"github.com/charmbracelet/bubbles/viewport\"\n\t\"github.com/charmbracelet/lipgloss\"\n\t\"github.com/muesli/reflow/wordwrap\"\n)\n\n// AuditEventDisplay is a pre-formatted event for rendering in the audit pane.\ntype AuditEventDisplay struct {\n\tTime    string         // formatted as \"HH:MM\"\n\tKind    string         // event kind string (e.g. \"agent_spawned\")\n\tIcon    string         // single-char icon\n\tMessage string         // human-readable message\n\tColor   lipgloss.Color // icon color\n\tLevel   string         // \"info\", \"warn\", \"error\"\n}\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564239123,
+              "end": 1772564239126
+            }
+          },
+          "id": "prt_cb50fd19a001sW0wa3bGS3WUk6",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01B3ZbBUipf5HNfsuVAGFtPu",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/theme.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/theme.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import \"github.com/charmbracelet/lipgloss\"\n4: \n5: // Rosé Pine Moon palette\n6: // https://rosepinetheme.com/palette/\n7: var (\n8: \t// Base tones\n9: \tColorBase    = lipgloss.Color(\"#232136\")\n10: \tColorSurface = lipgloss.Color(\"#2a273f\")\n11: \tColorOverlay = lipgloss.Color(\"#393552\")\n12: \tColorMuted   = lipgloss.Color(\"#6e6a86\")\n13: \tColorSubtle  = lipgloss.Color(\"#908caa\")\n14: \tColorText    = lipgloss.Color(\"#e0def4\")\n15: \n16: \t// Semantic colors\n17: \tColorLove = lipgloss.Color(\"#eb6f92\") // error, danger\n18: \tColorGold = lipgloss.Color(\"#f6c177\") // warning\n19: \tColorRose = lipgloss.Color(\"#ea9a97\") // accent, secondary\n20: \tColorPine = lipgloss.Color(\"#3e8fb0\") // link\n21: \tColorFoam = lipgloss.Color(\"#9ccfd8\") // info, running\n22: \tColorIris = lipgloss.Color(\"#c4a7e7\") // highlight, primary\n23: \n24: \t// Gradient endpoints for the banner and focused tab label\n25: \tGradientStart = \"#9ccfd8\" // foam\n26: \tGradientEnd   = \"#c4a7e7\" // iris\n27: \n28: \t// Diff-specific (keep readable semantic greens/reds)\n29: \tColorDiffAdd    = lipgloss.Color(\"#9ccfd8\") // foam for additions\n30: \tColorDiffDelete = lipgloss.Color(\"#eb6f92\") // love for deletions\n31: \tColorDiffHunk   = lipgloss.Color(\"#c4a7e7\") // iris for hunk headers\n32: )\n\n(End of file - total 32 lines)\n</content>",
+            "title": "ui/theme.go",
+            "metadata": {
+              "preview": "package ui\n\nimport \"github.com/charmbracelet/lipgloss\"\n\n// Rosé Pine Moon palette\n// https://rosepinetheme.com/palette/\nvar (\n\t// Base tones\n\tColorBase    = lipgloss.Color(\"#232136\")\n\tColorSurface = lipgloss.Color(\"#2a273f\")\n\tColorOverlay = lipgloss.Color(\"#393552\")\n\tColorMuted   = lipgloss.Color(\"#6e6a86\")\n\tColorSubtle  = lipgloss.Color(\"#908caa\")\n\tColorText    = lipgloss.Color(\"#e0def4\")\n\n\t// Semantic colors\n\tColorLove = lipgloss.Color(\"#eb6f92\") // error, danger\n\tColorGold = lipgloss.Color(\"#f6c177\") // warning\n\tColorRose = lipgloss.Color(\"#ea9a97\") // accent, secondary\n\tColorPine = lipgloss.Color(\"#3e8fb0\") // link",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564239461,
+              "end": 1772564239463
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 55683,
+            "input": 1,
+            "output": 269,
+            "reasoning": 0,
+            "cache": {
+              "read": 50606,
+              "write": 4807
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fc290001QDEZqzzSHCEgdd"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564239490,
+          "completed": 1772564244246
+        },
+        "parentID": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64213,
+          "input": 1,
+          "output": 207,
+          "reasoning": 0,
+          "cache": {
+            "read": 55413,
+            "write": 8592
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "REDACTED",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now I can see the existing implementations. The existing code files already look like they're what the tests expect. Let me run the tests first to see if they pass already:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/H1yV3hdjUzH3ZZKECcn0UT0VzTf/vIH/TT6vRyI3l7B7xxYIARoCiwz/8/REDACTED/MCkkF4HEaMtiwqlcRDoM/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564240692,
+            "end": 1772564242498
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "Let me run the baseline tests first to see the current state:",
+          "time": {
+            "start": 1772564242587,
+            "end": 1772564242587
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels && go test ./ui/... -run \"TestInfoPane|TestAuditPane|TestEventKindIcon\" -v -count=1 2>&1",
+              "description": "Run baseline tests for info_pane and audit_pane"
+            },
+            "output": "=== RUN   TestAuditPane_RenderEmpty\n--- PASS: TestAuditPane_RenderEmpty (0.00s)\n=== RUN   TestAuditPane_RenderEvents\n--- PASS: TestAuditPane_RenderEvents (0.00s)\n=== RUN   TestAuditPane_RenderLevels\n--- PASS: TestAuditPane_RenderLevels (0.00s)\n=== RUN   TestAuditPane_ScrollDown\n--- PASS: TestAuditPane_ScrollDown (0.00s)\n=== RUN   TestAuditPane_ToggleVisibility\n--- PASS: TestAuditPane_ToggleVisibility (0.00s)\n=== RUN   TestAuditPane_HeaderContainsLabel\n--- PASS: TestAuditPane_HeaderContainsLabel (0.00s)\n=== RUN   TestAuditPane_ScrollUp\n--- PASS: TestAuditPane_ScrollUp (0.00s)\n=== RUN   TestAuditPane_MessageTruncation\n--- PASS: TestAuditPane_MessageTruncation (0.00s)\n=== RUN   TestAuditPane_Height\n--- PASS: TestAuditPane_Height (0.00s)\n=== RUN   TestAuditPane_MinuteHeaders\n--- PASS: TestAuditPane_MinuteHeaders (0.00s)\n=== RUN   TestAuditPane_NoPerLineTimestamp\n--- PASS: TestAuditPane_NoPerLineTimestamp (0.00s)\n=== RUN   TestInfoPane_NoInstance\n--- PASS: TestInfoPane_NoInstance (0.00s)\n=== RUN   TestInfoPane_AdHocInstance\n--- PASS: TestInfoPane_AdHocInstance (0.00s)\n=== RUN   TestInfoPane_PlanBoundInstance\n--- PASS: TestInfoPane_PlanBoundInstance (0.00s)\n=== RUN   TestInfoPane_WaveProgress\n--- PASS: TestInfoPane_WaveProgress (0.00s)\n=== RUN   TestInfoPane_Scrolling\n--- PASS: TestInfoPane_Scrolling (0.00s)\n=== RUN   TestInfoPane_PlanSummary\n--- PASS: TestInfoPane_PlanSummary (0.00s)\n=== RUN   TestInfoPane_InstanceWithResources\n--- PASS: TestInfoPane_InstanceWithResources (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/ui\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.002s [no tests to run]\n",
+            "title": "Run baseline tests for info_pane and audit_pane",
+            "metadata": {
+              "output": "=== RUN   TestAuditPane_RenderEmpty\n--- PASS: TestAuditPane_RenderEmpty (0.00s)\n=== RUN   TestAuditPane_RenderEvents\n--- PASS: TestAuditPane_RenderEvents (0.00s)\n=== RUN   TestAuditPane_RenderLevels\n--- PASS: TestAuditPane_RenderLevels (0.00s)\n=== RUN   TestAuditPane_ScrollDown\n--- PASS: TestAuditPane_ScrollDown (0.00s)\n=== RUN   TestAuditPane_ToggleVisibility\n--- PASS: TestAuditPane_ToggleVisibility (0.00s)\n=== RUN   TestAuditPane_HeaderContainsLabel\n--- PASS: TestAuditPane_HeaderContainsLabel (0.00s)\n=== RUN   TestAuditPane_ScrollUp\n--- PASS: TestAuditPane_ScrollUp (0.00s)\n=== RUN   TestAuditPane_MessageTruncation\n--- PASS: TestAuditPane_MessageTruncation (0.00s)\n=== RUN   TestAuditPane_Height\n--- PASS: TestAuditPane_Height (0.00s)\n=== RUN   TestAuditPane_MinuteHeaders\n--- PASS: TestAuditPane_MinuteHeaders (0.00s)\n=== RUN   TestAuditPane_NoPerLineTimestamp\n--- PASS: TestAuditPane_NoPerLineTimestamp (0.00s)\n=== RUN   TestInfoPane_NoInstance\n--- PASS: TestInfoPane_NoInstance (0.00s)\n=== RUN   TestInfoPane_AdHocInstance\n--- PASS: TestInfoPane_AdHocInstance (0.00s)\n=== RUN   TestInfoPane_PlanBoundInstance\n--- PASS: TestInfoPane_PlanBoundInstance (0.00s)\n=== RUN   TestInfoPane_WaveProgress\n--- PASS: TestInfoPane_WaveProgress (0.00s)\n=== RUN   TestInfoPane_Scrolling\n--- PASS: TestInfoPane_Scrolling (0.00s)\n=== RUN   TestInfoPane_PlanSummary\n--- PASS: TestInfoPane_PlanSummary (0.00s)\n=== RUN   TestInfoPane_InstanceWithResources\n--- PASS: TestInfoPane_InstanceWithResources (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/ui\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run baseline tests for info_pane and audit_pane",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564243933,
+              "end": 1772564244237
+            }
+          },
+          "id": "prt_cb50fe0a0001CjhpJQufxIAEOL",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 64213,
+            "input": 1,
+            "output": 207,
+            "reasoning": 0,
+            "cache": {
+              "read": 55413,
+              "write": 8592
+            }
+          },
+          "id": "prt_cb50fe70e0011P8DMthe4f6IMG",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564244247
+        },
+        "parentID": "msg_cb50fa15f001fb37j4yFgOtSmq",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb50fe717001fdL7V5TsWLa6tR",
+        "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50febd9001tQYlDHlyhKuJlI",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fe717001fdL7V5TsWLa6tR"
+        },
+        {
+          "type": "reasoning",
+          "text": "All tests are already passing. The task says to \"rewrite from scratch\" - but looking at the current implementation files, they already seem to be the clean-room versions (they don't have any AGPL-tainted code, and they're well-written). \n\nWait, the task says \"Delete the contents of `ui/info_pane.go` and rewrite from scratch\" - so I need to actually rewrite these files. The current implementation may or may not be the original tainted code. The task is to clean-room rewrite it.\n\nLooking at the current files, they already pass all the tests. The task is to rewrite them from scratch (to eliminate AGPL-tainted code). Let me understand - since the tests already pass, I need to rewrite the files with fresh implementations that still pass the tests.\n\n\nI can use the existing implementations as a reference for the API surface, but I need to write completely new code from scratch to ensure there's no AGPL-tainted content. Let me start rewriting both files with fresh implementations.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED//REDACTED/REDACTED/REDACTED//qg5aZTgZctQwSbab3y538HpyOOl/REDACTED/REDACTED/REDACTED/pzodta//REDACTED/REDACTED/OeOo/REDACTED/RjOl/REDACTED/ANDos9pzR28/UkKH2tw1nNn/I/KI3hUHBQpHC49SNBhVbVqzBWcgj6/lTfRmJxWLjA/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564245465,
+            "end": 1772564253338
+          },
+          "id": "prt_cb50febd9002Xqoo10TEnYSv0i",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fe717001fdL7V5TsWLa6tR"
+        },
+        {
+          "type": "text",
+          "text": "All baseline tests pass. Now I'll rewrite both files from scratch as required by the task. The tests serve as the regression gate:",
+          "time": {
+            "start": 1772564253357,
+            "end": 1772564253357
+          },
+          "id": "prt_cb5100a9c0017r4w3ztH58LPny",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fe717001fdL7V5TsWLa6tR"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01QCu2yCzkuCHmd6q4DtWbUi",
+          "tool": "write",
+          "state": {
+            "status": "pending",
+            "input": {},
+            "raw": ""
+          },
+          "id": "prt_cb5100aae001th6J81muP8nrnQ",
+          "sessionID": "ses_34af05eb4ffeY9zSo654knDXTO",
+          "messageID": "msg_cb50fe717001fdL7V5TsWLa6tR"
+        }
+      ]
+    }
+  ]
+}
