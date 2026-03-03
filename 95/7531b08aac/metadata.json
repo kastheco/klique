@@ -3,7 +3,7 @@
   "checkpoint_id": "957531b08aac",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     "cmd/plan.go",
     "cmd/plan_test.go"
@@ -22,13 +22,20 @@
       "context": "/95/7531b08aac/1/context.md",
       "content_hash": "/95/7531b08aac/1/content_hash.txt",
       "prompt": "/95/7531b08aac/1/prompt.txt"
+    },
+    {
+      "metadata": "/95/7531b08aac/2/metadata.json",
+      "transcript": "/95/7531b08aac/2/full.jsonl",
+      "context": "/95/7531b08aac/2/context.md",
+      "content_hash": "/95/7531b08aac/2/content_hash.txt",
+      "prompt": "/95/7531b08aac/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 20,
+    "input_tokens": 75003,
     "cache_creation_tokens": 81349,
-    "cache_read_tokens": 613475,
-    "output_tokens": 2345,
-    "api_call_count": 12
+    "cache_read_tokens": 1444963,
+    "output_tokens": 6885,
+    "api_call_count": 28
   }
 }
