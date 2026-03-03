@@ -1,0 +1,106 @@
+Implement Task 3: Thread ReviewCycle into opencode session titles
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Include review cycle numbers in instance titles, tmux session names, and opencode session labels (e.g. `-review-1`, `-fix-1`, `-review-2`) so each review/fix cycle gets unique identifiers, preventing tmux session clashes, stale caches, and opencode DB collisions.
+**Architecture:** Add a `ReviewCycle` counter to `PlanEntry` (persisted via `review_cycle` column in planstore SQLite). The counter starts at 0 and increments on each `ReviewChangesRequested` FSM transition. The three spawning functions (`spawnReviewer`, `spawnCoderWithFeedback`, `spawnPlanAgent` review case) read the cycle count and append it to instance titles. `BuildTitle` in `opencodesession` gains an optional `ReviewCycle` field for human-readable labels like `review #2`. The first review cycle (cycle 0) uses suffix `-review-1` / displays `review #1` (1-indexed for humans).
+**Tech Stack:** Go, SQLite (planstore), bubbletea TUI, tmux session management
+
+## Wave 2 of 2
+
+## Parallel Execution
+
+You are Task 3 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `internal/opencodesession/title.go`
+- Modify: `session/instance.go` (add ReviewCycle field)
+- Modify: `session/instance_lifecycle.go` (buildTitleOpts)
+- Test: `internal/opencodesession/title_test.go`
+- Test: `session/instance_title_test.go`
+
+**Step 1: write the failing test**
+
+In `internal/opencodesession/title_test.go`, add test cases for review cycle titles:
+
+```go
+{
+	name: "reviewer session cycle 1",
+	opts: TitleOpts{PlanName: "my-feature", AgentType: "reviewer", ReviewCycle: 1},
+	want: "kas: review #1 my-feature",
+},
+{
+	name: "reviewer session cycle 2",
+	opts: TitleOpts{PlanName: "my-feature", AgentType: "reviewer", ReviewCycle: 2},
+	want: "kas: review #2 my-feature",
+},
+{
+	name: "fixer session cycle 1",
+	opts: TitleOpts{PlanName: "my-feature", AgentType: "coder", ReviewCycle: 1},
+	want: "kas: implement my-feature",  // coder title unchanged — cycle is in instance title
+},
+```
+
+In `session/instance_title_test.go`, add a test case for a reviewer with ReviewCycle set:
+
+```go
+{
+	name: "reviewer with review cycle",
+	inst: &Instance{
+		PlanFile:    "2026-03-02-my-feature.md",
+		AgentType:   AgentTypeReviewer,
+		Title:       "my-feature-review-2",
+		ReviewCycle: 2,
+	},
+	want: "kas: review #2 my-feature",
+},
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./internal/opencodesession/... -run TestBuildTitle -v
+go test ./session/... -run TestBuildTitleOptsFromInstance -v
+```
+
+expected: FAIL — `ReviewCycle` field undefined in `TitleOpts` and `Instance`
+
+**Step 3: write minimal implementation**
+
+1. **`internal/opencodesession/title.go`**: Add `ReviewCycle int` to `TitleOpts`. In `BuildTitle`, when `AgentType == "reviewer"` and `ReviewCycle > 0`, change the title format from `"kas: review <subject>"` to `"kas: review #N <subject>"`.
+
+2. **`session/instance.go`**: Add `ReviewCycle int` field to `Instance` struct. Add it to `InstanceOptions`, `ToInstanceData`, `FromInstanceData`, and `InstanceData`.
+
+3. **`session/instance_lifecycle.go`**: In `buildTitleOpts`, pass `inst.ReviewCycle` to `TitleOpts.ReviewCycle`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./internal/opencodesession/... -run TestBuildTitle -v
+go test ./session/... -run TestBuildTitleOptsFromInstance -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add internal/opencodesession/title.go internal/opencodesession/title_test.go session/instance.go session/instance_lifecycle.go session/instance_title_test.go
+git commit -m "feat: display review cycle number in opencode session titles"
+```
