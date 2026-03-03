@@ -1,0 +1,223 @@
+Implement Task 3: Rewrite Shared Theme and Base Styles
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 3 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/overlay/theme.go`
+- Test: `ui/overlay/theme_test.go`
+
+This task consolidates the duplicated style definitions scattered across overlay files (every file defines its own border, title, hint, item, selected styles) into a shared `Styles` struct in `theme.go`. The concrete overlay rewrites in Wave 2 will use these shared styles.
+
+**Step 1: write the failing test**
+
+```go
+// theme_test.go
+package overlay
+
+import (
+    "testing"
+
+    "github.com/stretchr/testify/assert"
+)
+
+func TestStyles_ModalBorder(t *testing.T) {
+    s := DefaultStyles()
+    // Modal border should use the iris color
+    rendered := s.ModalBorder.Render("content")
+    assert.NotEmpty(t, rendered)
+}
+
+func TestStyles_FloatingBorder(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.FloatingBorder.Render("content")
+    assert.NotEmpty(t, rendered)
+}
+
+func TestStyles_Title(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.Title.Render("my title")
+    assert.Contains(t, rendered, "my title")
+}
+
+func TestStyles_Hint(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.Hint.Render("press esc")
+    assert.Contains(t, rendered, "press esc")
+}
+
+func TestStyles_SelectedItem(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.SelectedItem.Render("item")
+    assert.Contains(t, rendered, "item")
+}
+
+func TestStyles_Item(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.Item.Render("item")
+    assert.Contains(t, rendered, "item")
+}
+
+func TestStyles_DisabledItem(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.DisabledItem.Render("disabled")
+    assert.Contains(t, rendered, "disabled")
+}
+
+func TestStyles_SearchBar(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.SearchBar.Render("query")
+    assert.Contains(t, rendered, "query")
+}
+
+func TestStyles_WarningBorder(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.WarningBorder.Render("warning")
+    assert.NotEmpty(t, rendered)
+}
+
+func TestStyles_DangerBorder(t *testing.T) {
+    s := DefaultStyles()
+    rendered := s.DangerBorder.Render("danger")
+    assert.NotEmpty(t, rendered)
+}
+
+func TestThemeRosePine_NotNil(t *testing.T) {
+    theme := ThemeRosePine()
+    assert.NotNil(t, theme)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run TestStyles -v
+```
+
+expected: FAIL — `DefaultStyles`, `Styles` undefined
+
+**Step 3: write minimal implementation**
+
+Add the `Styles` struct and `DefaultStyles()` constructor to `theme.go`, keeping the existing `ThemeRosePine()` and color constants intact:
+
+```go
+// Styles holds the shared lipgloss styles used by all overlay types.
+type Styles struct {
+    // Border styles for different overlay contexts
+    ModalBorder   lipgloss.Style // centered modals (double border, iris)
+    FloatingBorder lipgloss.Style // floating overlays like context menus (rounded, iris)
+    WarningBorder lipgloss.Style // warning modals (rounded, gold)
+    DangerBorder  lipgloss.Style // danger modals (double border, love/red)
+
+    // Text styles
+    Title        lipgloss.Style // overlay title (bold, iris)
+    Hint         lipgloss.Style // hint/help text at bottom (muted)
+    Muted        lipgloss.Style // secondary text (muted foreground)
+
+    // List item styles (picker, context menu, browser)
+    Item         lipgloss.Style // normal list item
+    SelectedItem lipgloss.Style // highlighted/selected item
+    DisabledItem lipgloss.Style // disabled/greyed-out item
+    NumberPrefix lipgloss.Style // numbered shortcut prefix
+
+    // Search bar
+    SearchBar    lipgloss.Style // search input container
+
+    // Button styles
+    Button       lipgloss.Style // unfocused button
+    FocusedButton lipgloss.Style // focused/active button
+}
+
+// DefaultStyles returns the standard overlay style set using the Rosé Pine Moon palette.
+func DefaultStyles() Styles {
+    return Styles{
+        ModalBorder: lipgloss.NewStyle().
+            Border(lipgloss.DoubleBorder()).
+            BorderForeground(colorIris).
+            Padding(1, 2),
+        FloatingBorder: lipgloss.NewStyle().
+            Border(lipgloss.RoundedBorder()).
+            BorderForeground(colorIris).
+            Padding(1, 2),
+        WarningBorder: lipgloss.NewStyle().
+            Border(lipgloss.RoundedBorder()).
+            BorderForeground(colorGold).
+            Padding(1, 2),
+        DangerBorder: lipgloss.NewStyle().
+            Border(lipgloss.DoubleBorder()).
+            BorderForeground(colorLove).
+            Padding(1, 2),
+        Title: lipgloss.NewStyle().
+            Foreground(colorIris).
+            Bold(true).
+            MarginBottom(1),
+        Hint: lipgloss.NewStyle().
+            Foreground(colorMuted).
+            MarginTop(1),
+        Muted: lipgloss.NewStyle().
+            Foreground(colorMuted),
+        Item: lipgloss.NewStyle().
+            Padding(0, 1).
+            Foreground(colorText),
+        SelectedItem: lipgloss.NewStyle().
+            Padding(0, 1).
+            Background(colorFoam).
+            Foreground(colorBase),
+        DisabledItem: lipgloss.NewStyle().
+            Padding(0, 1).
+            Foreground(colorOverlay),
+        NumberPrefix: lipgloss.NewStyle().
+            Foreground(colorIris),
+        SearchBar: lipgloss.NewStyle().
+            Border(lipgloss.RoundedBorder()).
+            BorderForeground(colorFoam).
+            Padding(0, 1).
+            MarginBottom(1),
+        Button: lipgloss.NewStyle().
+            Foreground(colorSubtle),
+        FocusedButton: lipgloss.NewStyle().
+            Background(colorIris).
+            Foreground(colorBase),
+    }
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run TestStyles -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/theme.go ui/overlay/theme_test.go
+git commit -m "feat(overlay): add shared Styles struct consolidating duplicated style definitions"
+```
