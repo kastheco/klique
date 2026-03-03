@@ -3,11 +3,22 @@
   "checkpoint_id": "9f4e7ab2a6f4",
   "session_id": "ses_34ed870bfffe5tEKLY12qPzn6k",
   "strategy": "manual-commit",
-  "created_at": "2026-03-03T01:00:58.043619837Z",
-  "branch": "main",
+  "created_at": "2026-03-03T01:27:36.857956279Z",
+  "branch": "plan/restart-agent",
   "checkpoints_count": 0,
   "files_touched": [
-    "contracts/planner_prompt_contract_test.go"
+    "app/app_actions.go",
+    "app/app_plan_completion_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    ".entire/.gitignore",
+    ".entire/settings.json",
+    "app/app.go",
+    "app/app_planner_signal_test.go",
+    "app/app_restart_test.go",
+    "app/app_state.go",
+    "session/instance_lifecycle.go",
+    ".claude/settings.json",
+    ".opencode/plugins/entire.ts"
   ],
   "agent": "OpenCode",
   "turn_id": "936d0ff48a15",
@@ -21,12 +32,12 @@
     "api_call_count": 0
   },
   "initial_attribution": {
-    "calculated_at": "2026-03-03T01:00:57.971917411Z",
-    "agent_lines": 2,
-    "human_added": 0,
+    "calculated_at": "2026-03-03T01:27:36.785888528Z",
+    "agent_lines": 338,
+    "human_added": 85,
     "human_modified": 0,
     "human_removed": 0,
-    "total_committed": 2,
-    "agent_percentage": 100
+    "total_committed": 423,
+    "agent_percentage": 79.90543735224587
   }
 }
