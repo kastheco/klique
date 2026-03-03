@@ -78,3 +78,4 @@ git push origin main "v${NEW_VERSION}"
 ## CLI Tools (MANDATORY)
 
 You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
+When making the same change across 3+ files, use `sd`/`comby`/`ast-grep` — not repeated Edit calls.

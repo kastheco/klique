@@ -21,7 +21,7 @@ Plans move through a fixed set of states. Only the transitions listed below are 
 | `reviewing` | `done` | reviewer writes sentinel `reviewer-approved-<planfile>` |
 | `done` | — | terminal state, no further transitions |
 
-State is persisted in the **plan store** — a SQLite database (`~/.config/kasmos/plans.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas plan` CLI commands (manual mode).
+State is persisted in the **plan store** — a SQLite database (`~/.config/kasmos/planstore.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas plan` CLI commands (manual mode).
 
 ## Signal File Mechanics
 

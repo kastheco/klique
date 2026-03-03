@@ -24,6 +24,10 @@ ast-grep, comby, difftastic, sd, yq, typos, and scc. The deep-dive reference
 files in `resources/` should be read when you need to use that specific tool —
 you don't need to read all of them upfront.
 
+**Batch edit rule:** When making the same change across 3+ files, you MUST use
+`sd`, `comby`, or `ast-grep` instead of repeated Edit tool calls. One CLI command
+replaces N edits. This is enforced — see the Batch Edit Rule in the cli-tools skill.
+
 ## Parallel Execution
 
 You may be running alongside other agents on a shared worktree. When `KASMOS_TASK` is set,
