@@ -1,0 +1,619 @@
+{
+  "info": {
+    "id": "ses_34af05da9ffektTHtvjmTaHNvp",
+    "slug": "stellar-nebula",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+    "title": "Rewrite menu.go bottom keybind bar",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772564226646,
+      "updated": 1772564241578
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772564226677
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 3: Rewrite menu.go — Bottom Keybind Bar\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.\n**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.\n**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify\n\n## Wave 1 of 3\n\n## Parallel Execution\n\nYou are Task 3 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `ui/menu.go`\n- Test: `ui/menu_test.go` (existing — covers state transitions, option generation, rendering, focus mode)\n\n**Step 1: write the failing test**\n\nNo new tests needed. Existing `menu_test.go` covers: `NewMenu` defaults, `SetState` transitions (empty/default/new-instance/prompt), `SetInstance` with nil/non-nil, `SetFocusMode` toggle, `SetFocusSlot` sidebar/agent, `SetSidebarSpaceAction` variants, `Keydown`/`ClearKeydown`, `SetInDiffTab`, `String` output containing expected keybind labels, focus mode rendering with spinner and exit hint, tmux session count display, and group separator placement.\n\n**Step 2: run test to verify baseline passes**\n\n```bash\ngo test ./ui/... -run \"TestMenu\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 3: rewrite implementation**\n\nDelete the contents of `ui/menu.go` and rewrite from scratch:\n\n- **Styles** — package-level vars: `keyStyle` (fg=`ColorSubtle`), `descStyle` (fg=`ColorMuted`), `sepStyle` (fg=`ColorOverlay`), `actionGroupStyle` (fg=`ColorRose`), `menuStyle` (fg=`ColorFoam`). Separators: `separator = \" • \"`, `verticalSeparator = \" │ \"`.\n- **`MenuState` type** — `int` enum: `StateDefault`, `StateEmpty`, `StateNewInstance`, `StatePrompt`.\n- **Focus slot constants** — `MenuSlotSidebar=0`, `MenuSlotInfo=1`, `MenuSlotAgent=2`, `MenuSlotDiff=3`, `MenuSlotList=4`.\n- **`Menu` struct** — fields: `options []keys.KeyName`, `height int`, `width int`, `state MenuState`, `instance *session.Instance`, `isInDiffTab bool`, `isFocusMode bool`, `focusSlot int`, `sidebarSpaceAction string`, `keyDown keys.KeyName`, `systemGroupSize int`, `tmuxSessionCount int`.\n- **Default option slices** — `defaultMenuOptions`, `emptyMenuOptions`, `newInstanceMenuOptions`, `promptMenuOptions` using `keys.Key*` constants. `defaultSystemGroupSize=4`, `emptySystemGroupSize=3`.\n- **`NewMenu() *Menu`** — returns menu with `StateEmpty`, `keyDown: -1`, `sidebarSpaceAction: \"toggle\"`, default options.\n- **Setter methods** — `SetTmuxSessionCount`, `Keydown`, `ClearKeydown`, `SetState` (updates state + calls `updateOptions`), `SetInstance` (updates instance, auto-transitions state if not in special state, calls `updateOptions`), `SetInDiffTab`, `SetFocusMode`, `SetFocusSlot`, `SetSidebarSpaceAction` (validates \"expand\"/\"collapse\", defaults to \"toggle\"), `SetSize`.\n- **`updateOptions()`** — dispatches on focus mode (single exit key) or state: `StateEmpty` → sidebar or empty options based on focus slot; `StateDefault` → instance options if instance selected, else sidebar options; `StateNewInstance`/`StatePrompt` → submit-only options.\n- **`addSidebarOptions(includeNewPlan bool)`** — builds options: optional new-plan, action group (enter, space-expand, view-plan, audit-toggle), system group (search, help, quit).\n- **`addInstanceOptions()`** — builds options: management group (new-plan, kill), action group (enter, send-prompt, space, conditional yes/resume), system group (search, tab, help, quit).\n- **Focus mode styles** — `focusModeFrames` (braille spinner), `focusDotStyle` (fg=`ColorLove`, bold), `focusLabelStyle` (fg=`ColorLove`, bold), `focusHintKeyStyle` (fg=`ColorSubtle`), `focusHintDescStyle` (fg=`ColorMuted`).\n- **`renderFocusMode() string`** — animated spinner frame from wall-clock `time.Now().UnixMilli()/100`, badge \"interactive\" + spinner, hint \"ctrl+space exit\". Cursor-positioned: centered content + right-aligned tmux count.\n- **`String() string`** — if focus mode, delegates to `renderFocusMode`. Otherwise: iterates options, renders each with key+desc styling (action group uses `actionGroupStyle`, others use `keyStyle`+`descStyle`). Applies underline if `keyDown` matches. Inserts group separators (vertical `│` between groups, bullet `•` within). Centers the menu text, right-aligns tmux count. Uses cursor-based positioning to avoid overlap.\n\nImports: `fmt`, `strings`, `time`, `github.com/kastheco/kasmos/keys`, `github.com/kastheco/kasmos/session`, `github.com/charmbracelet/lipgloss`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./ui/... -run \"TestMenu\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add ui/menu.go\ngit commit -m \"feat(clean-room): rewrite menu.go from scratch\"\n```\n",
+          "id": "prt_cb50fa269001Ob40CkbNHKPFa0",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fa268001VvQd1Ut0wvRDRa"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564226687,
+          "completed": 1772564230486
+        },
+        "parentID": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41903,
+          "input": 2,
+          "output": 131,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41770
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fab9f001RU4HVHUYNWetFc",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then examining the existing code to understand the structure.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EpUCCkYICxgCKkC6Nkspe/REDACTED/REDACTED/CU39hsmXzppteKef5Hb/REDACTED/REDACTED//YLH8c80T9MQM7u7bwbV+SIxLVxgB"
+            }
+          },
+          "time": {
+            "start": 1772564229024,
+            "end": 1772564229775
+          },
+          "id": "prt_cb50faba0001WlxJFZvkVP0TYN",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01J51ZzjeBvk7nnGfBAeo4SF",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564230249,
+              "end": 1772564230253
+            }
+          },
+          "id": "prt_cb50fae900014OVrR5ihXF7Ef7",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564230451,
+              "end": 1772564230455
+            }
+          },
+          "id": "prt_cb50fb06a0015EfdTOjClfytZs",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 41903,
+            "input": 2,
+            "output": 131,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41770
+            }
+          },
+          "id": "prt_cb50fb147001DuYvWrdRCpWmet",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564230487,
+          "completed": 1772564233587
+        },
+        "parentID": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50233,
+          "input": 1,
+          "output": 204,
+          "reasoning": 0,
+          "cache": {
+            "read": 41770,
+            "write": 8258
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fb157001mx9s0qEAR0zwHO",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fb5f60019zY0ij5z6HzQVC",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the existing menu.go and menu_test.go files to understand the structure and what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/vL+/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564231670,
+            "end": 1772564232440
+          },
+          "id": "prt_cb50fb5f60028gKQUoOD0TSeeG",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        },
+        {
+          "type": "text",
+          "text": "Now let me examine the existing files:",
+          "time": {
+            "start": 1772564232855,
+            "end": 1772564232855
+          },
+          "id": "prt_cb50fb8fe001FsWu6O7rlPtsD2",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DxQwdci15d5iWSd5u8Eju7",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/menu.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/menu.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"strings\"\n6: \t\"time\"\n7: \n8: \t\"github.com/kastheco/kasmos/keys\"\n9: \t\"github.com/kastheco/kasmos/session\"\n10: \n11: \t\"github.com/charmbracelet/lipgloss\"\n12: )\n13: \n14: var keyStyle = lipgloss.NewStyle().Foreground(ColorSubtle)\n15: \n16: var descStyle = lipgloss.NewStyle().Foreground(ColorMuted)\n17: \n18: var sepStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n19: \n20: var actionGroupStyle = lipgloss.NewStyle().Foreground(ColorRose)\n21: \n22: var separator = \" • \"\n23: var verticalSeparator = \" │ \"\n24: \n25: var menuStyle = lipgloss.NewStyle().\n26: \tForeground(ColorFoam)\n27: \n28: // MenuState represents different states the menu can be in\n29: type MenuState int\n30: \n31: const (\n32: \tStateDefault MenuState = iota\n33: \tStateEmpty\n34: \tStateNewInstance\n35: \tStatePrompt\n36: )\n37: \n38: type Menu struct {\n39: \toptions       []keys.KeyName\n40: \theight, width int\n41: \tstate         MenuState\n42: \tinstance      *session.Instance\n43: \tisInDiffTab   bool\n44: \tisFocusMode   bool\n45: \tfocusSlot     int // which pane is focused (-1 = unknown)\n46: \n47: \t// sidebarSpaceAction controls the help label for KeySpaceExpand when the\n48: \t// sidebar is focused (\"expand\" or \"collapse\").\n49: \tsidebarSpaceAction string\n50: \n51: \t// keyDown is the key which is pressed. The default is -1.\n52: \tkeyDown keys.KeyName\n53: \n54: \t// systemGroupSize is the number of items in the trailing system group\n55: \t// (used for separator placement). Defaults to 4 if unset.\n56: \tsystemGroupSize int\n57: \n58: \t// tmuxSessionCount is displayed right-aligned in the bottom bar.\n59: \ttmuxSessionCount int\n60: }\n61: \n62: var defaultMenuOptions = []keys.KeyName{keys.KeyNewPlan, keys.KeySearch, keys.KeySpace, keys.KeyHelp, keys.KeyQuit}\n63: var defaultSystemGroupSize = 4 // search, space shortcuts, ? help, q quit\n64: var emptyMenuOptions = []keys.KeyName{keys.KeySearch, keys.KeyHelp, keys.KeyQuit}\n65: var emptySystemGroupSize = 3\n66: var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}\n67: var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}\n68: \n69: func NewMenu() *Menu {\n70: \treturn &Menu{\n71: \t\toptions:            defaultMenuOptions,\n72: \t\tstate:              StateEmpty,\n73: \t\tisInDiffTab:        false,\n74: \t\tkeyDown:            -1,\n75: \t\tsidebarSpaceAction: \"toggle\",\n76: \t}\n77: }\n78: \n79: func (m *Menu) SetTmuxSessionCount(count int) { m.tmuxSessionCount = count }\n80: \n81: func (m *Menu) Keydown(name keys.KeyName) {\n82: \tm.keyDown = name\n83: }\n84: \n85: func (m *Menu) ClearKeydown() {\n86: \tm.keyDown = -1\n87: }\n88: \n89: // SetState updates the menu state and options accordingly\n90: func (m *Menu) SetState(state MenuState) {\n91: \tm.state = state\n92: \tm.updateOptions()\n93: }\n94: \n95: // SetInstance updates the current instance and refreshes menu options\n96: func (m *Menu) SetInstance(instance *session.Instance) {\n97: \tm.instance = instance\n98: \t// Only change the state if we're not in a special state (NewInstance or Prompt)\n99: \tif m.state != StateNewInstance && m.state != StatePrompt {\n100: \t\tif m.instance != nil {\n101: \t\t\tm.state = StateDefault\n102: \t\t} else {\n103: \t\t\tm.state = StateEmpty\n104: \t\t}\n105: \t}\n106: \tm.updateOptions()\n107: }\n108: \n109: // SetInDiffTab updates whether we're currently in the diff tab\n110: func (m *Menu) SetInDiffTab(inDiffTab bool) {\n111: \tm.isInDiffTab = inDiffTab\n112: \tm.updateOptions()\n113: }\n114: \n115: // SetFocusMode updates whether the agent pane is in focus/interactive mode.\n116: func (m *Menu) SetFocusMode(focused bool) {\n117: \tm.isFocusMode = focused\n118: \tm.updateOptions()\n119: }\n120: \n121: // FocusSlot constants mirrored from app package to avoid import cycle.\n122: const (\n123: \tMenuSlotSidebar = 0\n124: \tMenuSlotInfo    = 1\n125: \tMenuSlotAgent   = 2\n126: \tMenuSlotDiff    = 3\n127: \tMenuSlotList    = 4\n128: )\n129: \n130: // SetFocusSlot updates which pane is focused so the menu can show context-sensitive keybinds.\n131: func (m *Menu) SetFocusSlot(slot int) {\n132: \tm.focusSlot = slot\n133: \tm.updateOptions()\n134: }\n135: \n136: // SetSidebarSpaceAction sets the sidebar-specific space-key label.\n137: func (m *Menu) SetSidebarSpaceAction(action string) {\n138: \tswitch action {\n139: \tcase \"expand\", \"collapse\":\n140: \t\tm.sidebarSpaceAction = action\n141: \tdefault:\n142: \t\tm.sidebarSpaceAction = \"toggle\"\n143: \t}\n144: }\n145: \n146: // updateOptions updates the menu options based on current state and instance\n147: func (m *Menu) updateOptions() {\n148: \tif m.isFocusMode {\n149: \t\tm.options = []keys.KeyName{keys.KeyExitFocus}\n150: \t\tm.systemGroupSize = 0\n151: \t\treturn\n152: \t}\n153: \tswitch m.state {\n154: \tcase StateEmpty:\n155: \t\tif m.focusSlot == MenuSlotSidebar {\n156: \t\t\tm.addSidebarOptions(false)\n157: \t\t} else {\n158: \t\t\tm.options = emptyMenuOptions\n159: \t\t\tm.systemGroupSize = emptySystemGroupSize\n160: \t\t}\n161: \tcase StateDefault:\n162: \t\t// Sidebar always has focus; show instance actions when an instance is\n163: \t\t// selected so the user can see relevant keybinds without switching panes.\n164: \t\tif m.instance != nil {\n165: \t\t\tm.addInstanceOptions()\n166: \t\t} else {\n167: \t\t\tm.addSidebarOptions(true)\n168: \t\t}\n169: \tcase StateNewInstance:\n170: \t\tm.options = newInstanceMenuOptions\n171: \t\tm.systemGroupSize = 0\n172: \tcase StatePrompt:\n173: \t\tm.options = promptMenuOptions\n174: \t\tm.systemGroupSize = 0\n175: \t}\n176: }\n177: \n178: func (m *Menu) addSidebarOptions(includeNewPlan bool) {\n179: \t// Sidebar-focused: show plan navigation keybinds\n180: \toptions := make([]keys.KeyName, 0, 8)\n181: \tif includeNewPlan {\n182: \t\toptions = append(options, keys.KeyNewPlan)\n183: \t}\n184: \tactionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan, keys.KeyAuditToggle}\n185: \tsystemGroup := []keys.KeyName{keys.KeySearch, keys.KeyHelp, keys.KeyQuit}\n186: \n187: \toptions = append(options, actionGroup...)\n188: \toptions = append(options, systemGroup...)\n189: \tm.options = options\n190: \tm.systemGroupSize = len(systemGroup)\n191: }\n192: \n193: func (m *Menu) addInstanceOptions() {\n194: \t// Instance management group\n195: \toptions := []keys.KeyName{keys.KeyNewPlan, keys.KeyKill}\n196: \n197: \t// Action group\n198: \tactionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace}\n199: \tif m.instance.PromptDetected && m.instance.Status != session.Paused {\n200: \t\tactionGroup = append(actionGroup, keys.KeySendYes)\n201: \t}\n202: \tif m.instance.Status == session.Paused {\n203: \t\tactionGroup = append(actionGroup, keys.KeyResume)\n204: \t}\n205: \n206: \t// Navigation group (when in diff tab): up/down navigate when diff is focused via Tab ring\n207: \n208: \t// System group\n209: \tsystemGroup := []keys.KeyName{keys.KeySearch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}\n210: \n211: \t// Combine all groups\n212: \toptions = append(options, actionGroup...)\n213: \toptions = append(options, systemGroup...)\n214: \n215: \tm.options = options\n216: \tm.systemGroupSize = len(systemGroup)\n217: }\n218: \n219: // SetSize sets the width of the window. The menu will be centered horizontally within this width.\n220: func (m *Menu) SetSize(width, height int) {\n221: \tm.width = width\n222: \tm.height = height\n223: }\n224: \n225: // focusModeFrames defines the animation frames for the interactive mode indicator.\n226: var focusModeFrames = []string{\"⠋\", \"⠙\", \"⠹\", \"⠸\", \"⠼\", \"⠴\", \"⠦\", \"⠧\", \"⠇\", \"⠏\"}\n227: \n228: var focusDotStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)\n229: var focusLabelStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)\n230: var focusHintKeyStyle = lipgloss.NewStyle().Foreground(ColorSubtle)\n231: var focusHintDescStyle = lipgloss.NewStyle().Foreground(ColorMuted)\n232: \n233: func (m *Menu) renderFocusMode() string {\n234: \t// Animated spinner frame based on wall-clock time (~100ms per frame).\n235: \tframe := focusModeFrames[int(time.Now().UnixMilli()/100)%len(focusModeFrames)]\n236: \tbadge := focusLabelStyle.Render(\"interactive\") + \" \" + focusDotStyle.Render(frame)\n237: \thint := focusHintKeyStyle.Render(\"ctrl+space\") + \" \" + focusHintDescStyle.Render(\"exit\")\n238: \tcenteredContent := badge + \"  \" + hint\n239: \n240: \tcenteredWidth := lipgloss.Width(centeredContent)\n241: \tcenteredStart := (m.width - centeredWidth) / 2\n242: \tif centeredStart < 0 {\n243: \t\tcenteredStart = 0\n244: \t}\n245: \n246: \ttmuxRendered := \"\"\n247: \ttmuxWidth := 0\n248: \tif m.tmuxSessionCount > 0 {\n249: \t\ttmuxRendered = statusBarTmuxCountStyle.Render(fmt.Sprintf(\"tmux:%d\", m.tmuxSessionCount))\n250: \t\ttmuxWidth = lipgloss.Width(tmuxRendered)\n251: \t}\n252: \trightStart := m.width - tmuxWidth - 1\n253: \tif rightStart < centeredStart+centeredWidth {\n254: \t\trightStart = centeredStart + centeredWidth\n255: \t}\n256: \n257: \tvar line strings.Builder\n258: \tcursor := 0\n259: \twriteAt := func(start, visualWidth int, text string) {\n260: \t\tif text == \"\" || start < cursor {\n261: \t\t\treturn\n262: \t\t}\n263: \t\tif start > cursor {\n264: \t\t\tline.WriteString(strings.Repeat(\" \", start-cursor))\n265: \t\t}\n266: \t\tline.WriteString(text)\n267: \t\tcursor = start + visualWidth\n268: \t}\n269: \twriteAt(centeredStart, centeredWidth, centeredContent)\n270: \twriteAt(rightStart, tmuxWidth, tmuxRendered)\n271: \tif cursor < m.width {\n272: \t\tline.WriteString(strings.Repeat(\" \", m.width-cursor))\n273: \t}\n274: \treturn line.String()\n275: }\n276: \n277: func (m *Menu) String() string {\n278: \tif m.isFocusMode {\n279: \t\treturn m.renderFocusMode()\n280: \t}\n281: \n282: \tvar s strings.Builder\n283: \n284: \t// Define group boundaries dynamically based on option count\n285: \t// Instance management: n, D (2 items)\n286: \t// Action group: enter, space, submit, P, pause/resume [+ shift-up if diff tab] (variable)\n287: \t// System group: X, /, tab, ?, q (at the end)\n288: \tsysSize := m.systemGroupSize\n289: \tif sysSize == 0 {\n290: \t\tsysSize = 4\n291: \t}\n292: \tactionEnd := len(m.options) - sysSize\n293: \n294: \tvar groups []struct {\n295: \t\tstart int\n296: \t\tend   int\n297: \t}\n298: \tif m.state == StateEmpty {\n299: \t\t// No group separators in empty state — all items are one flat group.\n300: \t\tgroups = []struct {\n301: \t\t\tstart int\n302: \t\t\tend   int\n303: \t\t}{\n304: \t\t\t{0, len(m.options)},\n305: \t\t}\n306: \t} else {\n307: \t\tgroups = []struct {\n308: \t\t\tstart int\n309: \t\t\tend   int\n310: \t\t}{\n311: \t\t\t{0, 2},                      // Instance management group\n312: \t\t\t{2, actionEnd},              // Action group\n313: \t\t\t{actionEnd, len(m.options)}, // System group\n314: \t\t}\n315: \t}\n316: \n317: \tfor i, k := range m.options {\n318: \t\tbinding := keys.GlobalkeyBindings[k]\n319: \t\thelp := binding.Help()\n320: \t\thelpKey := help.Key\n321: \t\thelpDesc := help.Desc\n322: \t\tif k == keys.KeySpaceExpand {\n323: \t\t\thelpDesc = m.sidebarSpaceAction\n324: \t\t}\n325: \n326: \t\tvar (\n327: \t\t\tlocalActionStyle = actionGroupStyle\n328: \t\t\tlocalKeyStyle    = keyStyle\n329: \t\t\tlocalDescStyle   = descStyle\n330: \t\t)\n331: \t\tif m.keyDown == k {\n332: \t\t\tlocalActionStyle = localActionStyle.Underline(true)\n333: \t\t\tlocalKeyStyle = localKeyStyle.Underline(true)\n334: \t\t\tlocalDescStyle = localDescStyle.Underline(true)\n335: \t\t}\n336: \n337: \t\tvar inActionGroup bool\n338: \t\tswitch m.state {\n339: \t\tcase StateEmpty:\n340: \t\t\t// For empty state, action group is everything before the system group\n341: \t\t\tinActionGroup = i < actionEnd\n342: \t\tdefault:\n343: \t\t\t// For other states, the action group is the second group\n344: \t\t\tinActionGroup = i >= groups[1].start && i < groups[1].end\n345: \t\t}\n346: \n347: \t\tif inActionGroup {\n348: \t\t\ts.WriteString(localActionStyle.Render(helpKey + \" \" + helpDesc))\n349: \t\t} else {\n350: \t\t\ts.WriteString(localKeyStyle.Render(helpKey))\n351: \t\t\ts.WriteString(descStyle.Render(\" \"))\n352: \t\t\ts.WriteString(localDescStyle.Render(helpDesc))\n353: \t\t}\n354: \n355: \t\t// Add appropriate separator\n356: \t\tif i != len(m.options)-1 {\n357: \t\t\tisGroupEnd := false\n358: \t\t\tfor _, group := range groups {\n359: \t\t\t\tif i == group.end-1 {\n360: \t\t\t\t\ts.WriteString(sepStyle.Render(verticalSeparator))\n361: \t\t\t\t\tisGroupEnd = true\n362: \t\t\t\t\tbreak\n363: \t\t\t\t}\n364: \t\t\t}\n365: \t\t\tif !isGroupEnd {\n366: \t\t\t\ts.WriteString(sepStyle.Render(separator))\n367: \t\t\t}\n368: \t\t}\n369: \t}\n370: \n371: \tcenteredMenuText := menuStyle.Render(s.String())\n372: \tmenuWidth := lipgloss.Width(centeredMenuText)\n373: \n374: \ttmuxRendered := \"\"\n375: \ttmuxWidth := 0\n376: \tif m.tmuxSessionCount > 0 {\n377: \t\ttmuxRendered = statusBarTmuxCountStyle.Render(fmt.Sprintf(\"tmux:%d\", m.tmuxSessionCount))\n378: \t\ttmuxWidth = lipgloss.Width(tmuxRendered)\n379: \t}\n380: \n381: \tmenuStart := (m.width - menuWidth) / 2\n382: \tif menuStart < 0 {\n383: \t\tmenuStart = 0\n384: \t}\n385: \trightStart := m.width - tmuxWidth - 1\n386: \tif rightStart < menuStart+menuWidth {\n387: \t\trightStart = menuStart + menuWidth\n388: \t}\n389: \n390: \tvar line strings.Builder\n391: \tcursor := 0\n392: \twriteAt := func(start, visualWidth int, text string) {\n393: \t\tif text == \"\" || start < cursor {\n394: \t\t\treturn\n395: \t\t}\n396: \t\tif start > cursor {\n397: \t\t\tline.WriteString(strings.Repeat(\" \", start-cursor))\n398: \t\t}\n399: \t\tline.WriteString(text)\n400: \t\tcursor = start + visualWidth\n401: \t}\n402: \twriteAt(menuStart, menuWidth, centeredMenuText)\n403: \twriteAt(rightStart, tmuxWidth, tmuxRendered)\n404: \tif cursor < m.width {\n405: \t\tline.WriteString(strings.Repeat(\" \", m.width-cursor))\n406: \t}\n407: \treturn line.String()\n408: }\n\n(End of file - total 408 lines)\n</content>",
+            "title": "ui/menu.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/keys\"\n\t\"github.com/kastheco/kasmos/session\"\n\n\t\"github.com/charmbracelet/lipgloss\"\n)\n\nvar keyStyle = lipgloss.NewStyle().Foreground(ColorSubtle)\n\nvar descStyle = lipgloss.NewStyle().Foreground(ColorMuted)\n\nvar sepStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n\nvar actionGroupStyle = lipgloss.NewStyle().Foreground(ColorRose)",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564233315,
+              "end": 1772564233322
+            }
+          },
+          "id": "prt_cb50fba98001e6qqhgicDHbJ8G",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_014CxHHy2hLyk5G555xZpW47",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/menu_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/menu_test.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"strings\"\n5: \t\"testing\"\n6: \n7: \t\"github.com/kastheco/kasmos/session\"\n8: )\n9: \n10: func stripMenuANSI(s string) string {\n11: \tvar b strings.Builder\n12: \tinEsc := false\n13: \tfor _, r := range s {\n14: \t\tif r == '\\x1b' {\n15: \t\t\tinEsc = true\n16: \t\t}\n17: \t\tif !inEsc {\n18: \t\t\tb.WriteRune(r)\n19: \t\t}\n20: \t\tif inEsc && r == 'm' {\n21: \t\t\tinEsc = false\n22: \t\t}\n23: \t}\n24: \treturn b.String()\n25: }\n26: \n27: func TestMenu_SidebarEmptyHidesNewPlanAndUsesUpdatedLabels(t *testing.T) {\n28: \tm := NewMenu()\n29: \tm.SetSize(140, 1)\n30: \tm.SetState(StateEmpty)\n31: \tm.SetFocusSlot(MenuSlotSidebar)\n32: \n33: \tout := stripMenuANSI(m.String())\n34: \n35: \tif strings.Contains(out, \"new plan\") {\n36: \t\tt.Fatalf(\"menu should hide 'new plan' hint when fallback logo is showing; got: %q\", out)\n37: \t}\n38: \tif !strings.Contains(out, \"↵/o select\") {\n39: \t\tt.Fatalf(\"menu should label enter as select; got: %q\", out)\n40: \t}\n41: \tif !strings.Contains(out, \"space toggle\") {\n42: \t\tt.Fatalf(\"menu should label space as toggle; got: %q\", out)\n43: \t}\n44: \tif !strings.Contains(out, \"p preview\") {\n45: \t\tt.Fatalf(\"menu should label p as preview; got: %q\", out)\n46: \t}\n47: }\n48: \n49: func TestMenu_SidebarSpaceActionLabelOverridesToggle(t *testing.T) {\n50: \tm := NewMenu()\n51: \tm.SetSize(140, 1)\n52: \tm.SetState(StateDefault)\n53: \tm.SetFocusSlot(MenuSlotSidebar)\n54: \n55: \tm.SetSidebarSpaceAction(\"expand\")\n56: \tout := stripMenuANSI(m.String())\n57: \tif !strings.Contains(out, \"space expand\") {\n58: \t\tt.Fatalf(\"menu should render dynamic sidebar space label; got: %q\", out)\n59: \t}\n60: \n61: \tm.SetSidebarSpaceAction(\"collapse\")\n62: \tout = stripMenuANSI(m.String())\n63: \tif !strings.Contains(out, \"space collapse\") {\n64: \t\tt.Fatalf(\"menu should update sidebar space label to collapse; got: %q\", out)\n65: \t}\n66: }\n67: \n68: func TestMenu_InstancePromptDetectedShowsYesKeybind(t *testing.T) {\n69: \tm := NewMenu()\n70: \tm.SetSize(140, 1)\n71: \tm.SetFocusSlot(MenuSlotList)\n72: \tm.SetInstance(&session.Instance{Status: session.Running, PromptDetected: true})\n73: \tm.SetState(StateDefault)\n74: \n75: \tout := stripMenuANSI(m.String())\n76: \tif !strings.Contains(out, \"y yes\") {\n77: \t\tt.Fatalf(\"menu should show yes keybind for prompted instance; got: %q\", out)\n78: \t}\n79: }\n80: \n81: func TestMenu_InstanceWithoutPromptHidesYesKeybind(t *testing.T) {\n82: \tm := NewMenu()\n83: \tm.SetSize(140, 1)\n84: \tm.SetFocusSlot(MenuSlotList)\n85: \tm.SetInstance(&session.Instance{Status: session.Running, PromptDetected: false})\n86: \tm.SetState(StateDefault)\n87: \n88: \tout := stripMenuANSI(m.String())\n89: \tif strings.Contains(out, \"y yes\") {\n90: \t\tt.Fatalf(\"menu should hide yes keybind when instance has no prompt; got: %q\", out)\n91: \t}\n92: }\n93: \n94: func TestMenu_TmuxSessionCountRightAligned(t *testing.T) {\n95: \tm := NewMenu()\n96: \tm.SetSize(120, 1)\n97: \tm.SetState(StateEmpty)\n98: \tm.SetTmuxSessionCount(7)\n99: \n100: \tout := stripMenuANSI(m.String())\n101: \tif !strings.Contains(out, \"tmux:7\") {\n102: \t\tt.Fatalf(\"menu should contain tmux:7; got: %q\", out)\n103: \t}\n104: \t// tmux label should appear near the right edge (after the centered menu content)\n105: \tidx := strings.Index(out, \"tmux:7\")\n106: \tif idx < 80 {\n107: \t\tt.Fatalf(\"tmux:7 should be right-aligned (index >= 80), got index %d in: %q\", idx, out)\n108: \t}\n109: }\n110: \n111: func TestMenu_TmuxSessionCountZeroHidden(t *testing.T) {\n112: \tm := NewMenu()\n113: \tm.SetSize(120, 1)\n114: \tm.SetState(StateEmpty)\n115: \tm.SetTmuxSessionCount(0)\n116: \n117: \tout := stripMenuANSI(m.String())\n118: \tif strings.Contains(out, \"tmux:\") {\n119: \t\tt.Fatalf(\"menu should hide tmux count when zero; got: %q\", out)\n120: \t}\n121: }\n122: \n123: func TestMenu_SidebarShowsAuditLogHint(t *testing.T) {\n124: \tm := NewMenu()\n125: \tm.SetSize(200, 1)\n126: \tm.SetState(StateDefault)\n127: \tm.SetFocusSlot(MenuSlotSidebar)\n128: \n129: \tout := stripMenuANSI(m.String())\n130: \tif !strings.Contains(out, \"L log\") {\n131: \t\tt.Fatalf(\"menu should show 'L log' audit toggle hint in sidebar; got: %q\", out)\n132: \t}\n133: }\n\n(End of file - total 133 lines)\n</content>",
+            "title": "ui/menu_test.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/session\"\n)\n\nfunc stripMenuANSI(s string) string {\n\tvar b strings.Builder\n\tinEsc := false\n\tfor _, r := range s {\n\t\tif r == '\\x1b' {\n\t\t\tinEsc = true\n\t\t}\n\t\tif !inEsc {\n\t\t\tb.WriteRune(r)\n\t\t}\n\t\tif inEsc && r == 'm' {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564233564,
+              "end": 1772564233566
+            }
+          },
+          "id": "prt_cb50fbc64001Lkqn8lf3LZ3xjy",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 50233,
+            "input": 1,
+            "output": 204,
+            "reasoning": 0,
+            "cache": {
+              "read": 41770,
+              "write": 8258
+            }
+          },
+          "id": "prt_cb50fbd690012WFmPBoxFqOGoF",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fb157001mx9s0qEAR0zwHO"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564233588,
+          "completed": 1772564238430
+        },
+        "parentID": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57580,
+          "input": 1,
+          "output": 275,
+          "reasoning": 0,
+          "cache": {
+            "read": 50028,
+            "write": 7276
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fbd74001TWsoHME6g6Rl6p",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fc21c001aUE9D9YXy6jbCM",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me look at the keys package to understand the available key constants and bindings:",
+          "metadata": {
+            "anthropic": {
+              "signature": "EoMCCkYICxgCKkBnj7HCP/eQnai4/g7kvXCbABq7bbM/REDACTED/REDACTED/gKDlCsZ1b4WCjocgVuWNw6dz/Z5mv4tUOqP453VbDn8MGhgB"
+            }
+          },
+          "time": {
+            "start": 1772564234780,
+            "end": 1772564235151
+          },
+          "id": "prt_cb50fc21c002wgUSUwT1MnyHmH",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        },
+        {
+          "type": "text",
+          "text": "Now let me look at related files to understand the key constants and session types:",
+          "time": {
+            "start": 1772564235589,
+            "end": 1772564235589
+          },
+          "id": "prt_cb50fc39000112f3eT6vHtZPG3",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls /home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/keys/",
+              "description": "List keys package files"
+            },
+            "output": "keys.go\nkeys_test.go\n",
+            "title": "List keys package files",
+            "metadata": {
+              "output": "keys.go\nkeys_test.go\n",
+              "exit": 0,
+              "description": "List keys package files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564236509,
+              "end": 1772564236528
+            }
+          },
+          "id": "prt_cb50fc54a001FdDjmNTQg1OJ0n",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./ui/... -run \"TestMenu\" -v -count=1 2>&1 | head -50",
+              "description": "Run baseline menu tests",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+            },
+            "output": "=== RUN   TestMenu_SidebarEmptyHidesNewPlanAndUsesUpdatedLabels\n--- PASS: TestMenu_SidebarEmptyHidesNewPlanAndUsesUpdatedLabels (0.00s)\n=== RUN   TestMenu_SidebarSpaceActionLabelOverridesToggle\n--- PASS: TestMenu_SidebarSpaceActionLabelOverridesToggle (0.00s)\n=== RUN   TestMenu_InstancePromptDetectedShowsYesKeybind\n--- PASS: TestMenu_InstancePromptDetectedShowsYesKeybind (0.00s)\n=== RUN   TestMenu_InstanceWithoutPromptHidesYesKeybind\n--- PASS: TestMenu_InstanceWithoutPromptHidesYesKeybind (0.00s)\n=== RUN   TestMenu_TmuxSessionCountRightAligned\n--- PASS: TestMenu_TmuxSessionCountRightAligned (0.00s)\n=== RUN   TestMenu_TmuxSessionCountZeroHidden\n--- PASS: TestMenu_TmuxSessionCountZeroHidden (0.00s)\n=== RUN   TestMenu_SidebarShowsAuditLogHint\n--- PASS: TestMenu_SidebarShowsAuditLogHint (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/ui\t0.003s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.002s [no tests to run]\n",
+            "title": "Run baseline menu tests",
+            "metadata": {
+              "output": "=== RUN   TestMenu_SidebarEmptyHidesNewPlanAndUsesUpdatedLabels\n--- PASS: TestMenu_SidebarEmptyHidesNewPlanAndUsesUpdatedLabels (0.00s)\n=== RUN   TestMenu_SidebarSpaceActionLabelOverridesToggle\n--- PASS: TestMenu_SidebarSpaceActionLabelOverridesToggle (0.00s)\n=== RUN   TestMenu_InstancePromptDetectedShowsYesKeybind\n--- PASS: TestMenu_InstancePromptDetectedShowsYesKeybind (0.00s)\n=== RUN   TestMenu_InstanceWithoutPromptHidesYesKeybind\n--- PASS: TestMenu_InstanceWithoutPromptHidesYesKeybind (0.00s)\n=== RUN   TestMenu_TmuxSessionCountRightAligned\n--- PASS: TestMenu_TmuxSessionCountRightAligned (0.00s)\n=== RUN   TestMenu_TmuxSessionCountZeroHidden\n--- PASS: TestMenu_TmuxSessionCountZeroHidden (0.00s)\n=== RUN   TestMenu_SidebarShowsAuditLogHint\n--- PASS: TestMenu_SidebarShowsAuditLogHint (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/ui\t0.003s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run baseline menu tests",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564237754,
+              "end": 1772564238420
+            }
+          },
+          "id": "prt_cb50fc8df001wD1hiJ6Nyr1QtP",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 57580,
+            "input": 1,
+            "output": 275,
+            "reasoning": 0,
+            "cache": {
+              "read": 50028,
+              "write": 7276
+            }
+          },
+          "id": "prt_cb50fd056001slSP4r35w67oCz",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fbd74001TWsoHME6g6Rl6p"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564238431,
+          "completed": 1772564241571
+        },
+        "parentID": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58215,
+          "input": 1,
+          "output": 161,
+          "reasoning": 0,
+          "cache": {
+            "read": 57304,
+            "write": 749
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb50fd05f001rSf0FSqj2QCiOt",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fd52a001SKWAlwhfrdJGOd",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fd05f001rSf0FSqj2QCiOt"
+        },
+        {
+          "type": "reasoning",
+          "text": "The baseline tests pass. Now I need to rewrite `menu.go` from scratch with a completely new implementation while keeping the same API and behavior.\n\nLet me read the keys package to understand the key constants available:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/6axga0RFY54OPe5o2i/REDACTED/REDACTED/REDACTED/f0HuQ/ri9/REDACTED/REDACTED/x8BR5GDvpb8t5kJTBK/REDACTED/mCtaV5lyF0m8NxTL56n1Mr/LyIjYQHGAE="
+            }
+          },
+          "time": {
+            "start": 1772564239659,
+            "end": 1772564240851
+          },
+          "id": "prt_cb50fd52b001kRztlOTGc3rCm5",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fd05f001rSf0FSqj2QCiOt"
+        },
+        {
+          "type": "text",
+          "text": "Baseline passes. Let me read the keys package to understand the available constants:",
+          "time": {
+            "start": 1772564241361,
+            "end": 1772564241361
+          },
+          "id": "prt_cb50fd9d4001wLIRdgLftMCPU9",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fd05f001rSf0FSqj2QCiOt"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/keys/keys.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/keys/keys.go</path>\n<type>file</type>\n<content>1: package keys\n2: \n3: import (\n4: \t\"github.com/charmbracelet/bubbles/key\"\n5: )\n6: \n7: type KeyName int\n8: \n9: const (\n10: \tKeyUp KeyName = iota\n11: \tKeyDown\n12: \tKeyEnter\n13: \tKeyKill  // k — soft kill: terminates tmux session, keeps instance in list\n14: \tKeyAbort // K — full abort: kills tmux, removes worktree, removes from list\n15: \tKeyQuit\n16: \tKeyReview\n17: \tKeyPush\n18: \tKeySubmit\n19: \n20: \tKeyTab        // Tab is a special keybinding for cycling the focus ring.\n21: \tKeySubmitName // SubmitName is a special keybinding for submitting the name of a new instance.\n22: \n23: \tKeyCheckout\n24: \tKeyResume\n25: \tKeyPrompt             // New key for entering a prompt\n26: \tKeyHelp               // Key for showing help screen\n27: \tKeyNewSkipPermissions // Key for creating instance with --dangerously-skip-permissions\n28: \n29: \tKeyNewPlan    // Key for creating a new plan\n30: \tKeySearch     // Key for activating search\n31: \tKeyArrowLeft  // Key for in-pane horizontal navigation left (tree collapse, etc.)\n32: \tKeyArrowRight // Key for in-pane horizontal navigation right (tree expand, etc.)\n33: \n34: \tKeyCreatePR // Key for creating a pull request\n35: \n36: \tKeySendPrompt // Key for sending a prompt to a running instance\n37: \tKeySendYes    // Key for sending yes to a waiting instance\n38: \n39: \tKeySpace // Key for opening context menu on selected item\n40: \n41: \t// Instance filter keybindings\n42: \tKeyFilterAll    // Key for showing all instances\n43: \tKeyFilterActive // Key for showing only active instances\n44: \tKeyCycleSort    // Key for cycling sort mode\n45: \n46: \tKeyInfoTab // Key for jumping directly to info tab\n47: \n48: \t// Tab switching keybindings (Shift+1/2/3 = !/@ /#)\n49: \tKeyTabAgent\n50: \tKeyTabDiff\n51: \tKeyTabInfo\n52: \n53: \tKeySpawnAgent    // s - spawn ad-hoc agent session\n54: \tKeyFocusList     // Key for focusing the right sidebar / instance list\n55: \tKeyViewPlan      // Key for viewing the selected plan's markdown\n56: \tKeyToggleSidebar // Key for toggling sidebar visibility\n57: \tKeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)\n58: \tKeySpaceExpand   // Space key with expand/collapse label (sidebar context)\n59: \n60: \tKeyTmuxBrowser // t - browse orphaned tmux sessions\n61: \n62: \tKeyAuditToggle // L - toggle audit log pane visibility\n63: )\n64: \n65: // Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.\n66: const (\n67: \tKeyGitTab = KeyInfoTab\n68: \tKeyTabGit = KeyTabInfo\n69: )\n70: \n71: // GlobalKeyStringsMap is a global, immutable map string to keybinding.\n72: var GlobalKeyStringsMap = map[string]KeyName{\n73: \t\"up\":     KeyUp,\n74: \t\"down\":   KeyDown,\n75: \t\"N\":      KeyPrompt,\n76: \t\"enter\":  KeyEnter,\n77: \t\"o\":      KeyEnter,\n78: \t\"n\":      KeyNewPlan,\n79: \t\"k\":      KeyKill,\n80: \t\"K\":      KeyAbort,\n81: \t\"q\":      KeyQuit,\n82: \t\"tab\":    KeyTab,\n83: \t\"c\":      KeyCheckout,\n84: \t\"r\":      KeyResume,\n85: \t\"?\":      KeyHelp,\n86: \t\"S\":      KeyNewSkipPermissions,\n87: \t\"/\":      KeySearch,\n88: \t\"left\":   KeyArrowLeft,\n89: \t\"right\":  KeyArrowRight,\n90: \t\"P\":      KeyCreatePR,\n91: \t\"i\":      KeySendPrompt,\n92: \t\"y\":      KeySendYes,\n93: \t\" \":      KeySpace,\n94: \t\"1\":      KeyFilterAll,\n95: \t\"2\":      KeyFilterActive,\n96: \t\"3\":      KeyCycleSort,\n97: \t\"t\":      KeyTmuxBrowser,\n98: \t\"s\":      KeySpawnAgent,\n99: \t\"L\":      KeyAuditToggle,\n100: \t\"T\":      KeyFocusList,\n101: \t\"p\":      KeyViewPlan,\n102: \t\"ctrl+s\": KeyToggleSidebar,\n103: \t\"g\":      KeyInfoTab,\n104: \t\"!\":      KeyTabAgent,\n105: \t\"@\":      KeyTabDiff,\n106: \t\"#\":      KeyTabInfo,\n107: }\n108: \n109: // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.\n110: var GlobalkeyBindings = map[KeyName]key.Binding{\n111: \tKeyUp: key.NewBinding(\n112: \t\tkey.WithKeys(\"up\"),\n113: \t\tkey.WithHelp(\"↑\", \"up\"),\n114: \t),\n115: \tKeyDown: key.NewBinding(\n116: \t\tkey.WithKeys(\"down\"),\n117: \t\tkey.WithHelp(\"↓\", \"down\"),\n118: \t),\n119: \tKeyEnter: key.NewBinding(\n120: \t\tkey.WithKeys(\"enter\", \"o\"),\n121: \t\tkey.WithHelp(\"↵/o\", \"select\"),\n122: \t),\n123: \tKeyKill: key.NewBinding(\n124: \t\tkey.WithKeys(\"k\"),\n125: \t\tkey.WithHelp(\"k\", \"kill\"),\n126: \t),\n127: \tKeyAbort: key.NewBinding(\n128: \t\tkey.WithKeys(\"K\"),\n129: \t\tkey.WithHelp(\"K\", \"abort\"),\n130: \t),\n131: \tKeyHelp: key.NewBinding(\n132: \t\tkey.WithKeys(\"?\"),\n133: \t\tkey.WithHelp(\"?\", \"help\"),\n134: \t),\n135: \tKeyQuit: key.NewBinding(\n136: \t\tkey.WithKeys(\"q\"),\n137: \t\tkey.WithHelp(\"q\", \"quit\"),\n138: \t),\n139: \tKeyNewPlan: key.NewBinding(\n140: \t\tkey.WithKeys(\"n\"),\n141: \t\tkey.WithHelp(\"n\", \"new plan\"),\n142: \t),\n143: \tKeyPrompt: key.NewBinding(\n144: \t\tkey.WithKeys(\"N\"),\n145: \t\tkey.WithHelp(\"N\", \"new with prompt\"),\n146: \t),\n147: \tKeyCheckout: key.NewBinding(\n148: \t\tkey.WithKeys(\"c\"),\n149: \t\tkey.WithHelp(\"c\", \"checkout\"),\n150: \t),\n151: \tKeyTab: key.NewBinding(\n152: \t\tkey.WithKeys(\"tab\"),\n153: \t\tkey.WithHelp(\"tab\", \"cycle panes\"),\n154: \t),\n155: \tKeyResume: key.NewBinding(\n156: \t\tkey.WithKeys(\"r\"),\n157: \t\tkey.WithHelp(\"r\", \"resume\"),\n158: \t),\n159: \tKeyNewSkipPermissions: key.NewBinding(\n160: \t\tkey.WithKeys(\"S\"),\n161: \t\tkey.WithHelp(\"S\", \"new (skip permissions)\"),\n162: \t),\n163: \tKeySearch: key.NewBinding(\n164: \t\tkey.WithKeys(\"/\"),\n165: \t\tkey.WithHelp(\"/\", \"search\"),\n166: \t),\n167: \tKeyCreatePR: key.NewBinding(\n168: \t\tkey.WithKeys(\"P\"),\n169: \t\tkey.WithHelp(\"P\", \"create PR\"),\n170: \t),\n171: \tKeyArrowLeft: key.NewBinding(\n172: \t\tkey.WithKeys(\"left\"),\n173: \t\tkey.WithHelp(\"←\", \"left\"),\n174: \t),\n175: \tKeyArrowRight: key.NewBinding(\n176: \t\tkey.WithKeys(\"right\"),\n177: \t\tkey.WithHelp(\"→\", \"right\"),\n178: \t),\n179: \tKeySendPrompt: key.NewBinding(\n180: \t\tkey.WithKeys(\"i\"),\n181: \t\tkey.WithHelp(\"i\", \"interactive\"),\n182: \t),\n183: \tKeySendYes: key.NewBinding(\n184: \t\tkey.WithKeys(\"y\"),\n185: \t\tkey.WithHelp(\"y\", \"yes\"),\n186: \t),\n187: \tKeySpace: key.NewBinding(\n188: \t\tkey.WithKeys(\" \"),\n189: \t\tkey.WithHelp(\"space\", \"menu\"),\n190: \t),\n191: \tKeyFilterAll: key.NewBinding(\n192: \t\tkey.WithKeys(\"1\"),\n193: \t\tkey.WithHelp(\"1\", \"all\"),\n194: \t),\n195: \tKeyFilterActive: key.NewBinding(\n196: \t\tkey.WithKeys(\"2\"),\n197: \t\tkey.WithHelp(\"2\", \"active\"),\n198: \t),\n199: \tKeyCycleSort: key.NewBinding(\n200: \t\tkey.WithKeys(\"3\"),\n201: \t\tkey.WithHelp(\"3\", \"sort\"),\n202: \t),\n203: \tKeySpawnAgent: key.NewBinding(\n204: \t\tkey.WithKeys(\"s\"),\n205: \t\tkey.WithHelp(\"s\", \"spawn agent\"),\n206: \t),\n207: \tKeyFocusList: key.NewBinding(\n208: \t\tkey.WithKeys(\"T\"),\n209: \t\tkey.WithHelp(\"T\", \"right sidebar\"),\n210: \t),\n211: \tKeyViewPlan: key.NewBinding(\n212: \t\tkey.WithKeys(\"p\"),\n213: \t\tkey.WithHelp(\"p\", \"preview\"),\n214: \t),\n215: \tKeyToggleSidebar: key.NewBinding(\n216: \t\tkey.WithKeys(\"ctrl+s\"),\n217: \t\tkey.WithHelp(\"ctrl+s\", \"toggle sidebar\"),\n218: \t),\n219: \tKeyInfoTab: key.NewBinding(\n220: \t\tkey.WithKeys(\"g\"),\n221: \t\tkey.WithHelp(\"g\", \"info tab\"),\n222: \t),\n223: \tKeyTabAgent: key.NewBinding(\n224: \t\tkey.WithKeys(\"!\"),\n225: \t\tkey.WithHelp(\"!/@ /#\", \"switch tab\"),\n226: \t),\n227: \tKeyTabDiff: key.NewBinding(\n228: \t\tkey.WithKeys(\"@\"),\n229: \t\tkey.WithHelp(\"@\", \"diff tab\"),\n230: \t),\n231: \tKeyTabInfo: key.NewBinding(\n232: \t\tkey.WithKeys(\"#\"),\n233: \t\tkey.WithHelp(\"#\", \"info tab\"),\n234: \t),\n235: \tKeyExitFocus: key.NewBinding(\n236: \t\tkey.WithKeys(\"ctrl+@\"),\n237: \t\tkey.WithHelp(\"ctrl+space\", \"exit focus\"),\n238: \t),\n239: \n240: \tKeySpaceExpand: key.NewBinding(\n241: \t\tkey.WithKeys(\" \"),\n242: \t\tkey.WithHelp(\"space\", \"toggle\"),\n243: \t),\n244: \n245: \tKeyTmuxBrowser: key.NewBinding(\n246: \t\tkey.WithKeys(\"t\"),\n247: \t\tkey.WithHelp(\"t\", \"tmux sessions\"),\n248: \t),\n249: \n250: \tKeyAuditToggle: key.NewBinding(\n251: \t\tkey.WithKeys(\"L\"),\n252: \t\tkey.WithHelp(\"L\", \"log\"),\n253: \t),\n254: \n255: \t// -- Special keybindings --\n256: \n257: \tKeySubmitName: key.NewBinding(\n258: \t\tkey.WithKeys(\"enter\"),\n259: \t\tkey.WithHelp(\"enter\", \"submit name\"),\n260: \t),\n261: }\n\n(End of file - total 261 lines)\n</content>",
+            "title": "keys/keys.go",
+            "metadata": {
+              "preview": "package keys\n\nimport (\n\t\"github.com/charmbracelet/bubbles/key\"\n)\n\ntype KeyName int\n\nconst (\n\tKeyUp KeyName = iota\n\tKeyDown\n\tKeyEnter\n\tKeyKill  // k — soft kill: terminates tmux session, keeps instance in list\n\tKeyAbort // K — full abort: kills tmux, removes worktree, removes from list\n\tKeyQuit\n\tKeyReview\n\tKeyPush\n\tKeySubmit\n\n\tKeyTab        // Tab is a special keybinding for cycling the focus ring.",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564241544,
+              "end": 1772564241547
+            }
+          },
+          "id": "prt_cb50fdbda001qSFypFkNzGpz4T",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fd05f001rSf0FSqj2QCiOt"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "cost": 0,
+          "tokens": {
+            "total": 58215,
+            "input": 1,
+            "output": 161,
+            "reasoning": 0,
+            "cache": {
+              "read": 57304,
+              "write": 749
+            }
+          },
+          "id": "prt_cb50fdc9c001Xgi5t0IHJsLS7b",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fd05f001rSf0FSqj2QCiOt"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564241572
+        },
+        "parentID": "msg_cb50fa268001VvQd1Ut0wvRDRa",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb50fdca4001Yw5MZgRcNZLlxz",
+        "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f1fb44cfe8dbceae8a7c26b253851e7a25c0947f",
+          "id": "prt_cb50fe258001cYI2IO4WLaGs8f",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fdca4001Yw5MZgRcNZLlxz"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1772564243033
+          },
+          "id": "prt_cb50fe259001GMCqtSPHgZQ5gF",
+          "sessionID": "ses_34af05da9ffektTHtvjmTaHNvp",
+          "messageID": "msg_cb50fdca4001Yw5MZgRcNZLlxz"
+        }
+      ]
+    }
+  ]
+}
