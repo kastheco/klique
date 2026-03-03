@@ -1,0 +1,2008 @@
+{
+  "info": {
+    "id": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+    "slug": "stellar-moon",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+    "title": "kas: implement 01a-rewrite-tmux-layer",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 4,
+      "deletions": 1,
+      "files": 2
+    },
+    "time": {
+      "created": 1772553806320,
+      "updated": 1772553914425
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772553806342
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "session/tmux/interface_check_test.go",
+              "before": "",
+              "after": "package tmux\n\n// Compile-time assertion: *TmuxSession must satisfy Session interface.\nvar _ Session = (*TmuxSession)(nil)\n",
+              "additions": 4,
+              "deletions": 0,
+              "status": "added"
+            },
+            {
+              "file": "session/tmux/session.go",
+              "before": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error\n\tSendPermissionResponse(choice PermissionChoice) error\n\tCapturePaneContent() (string, error)\n\tCapturePaneContentWithOptions(start, end string) (string, error)\n\tHasUpdated() (updated bool, hasPrompt bool)\n\tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n\tGetPanePID() (int, error)\n\n\t// Attach/Detach\n\tAttach() (chan struct{}, error)\n\tDetach()\n\tDetachSafely() error\n\tSetDetachedSize(width, height int) error\n\n\t// Accessors\n\tGetPTY() *os.File\n\tGetSanitizedName() string\n\n\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n\tNewReset(name, program string, skipPermissions bool) Session\n}\n\n// PermissionChoice represents the user's response to a permission prompt.\ntype PermissionChoice int\n\nconst (\n\tPermissionAllowOnce PermissionChoice = iota\n\tPermissionAllowAlways\n\tPermissionReject\n)\n",
+              "after": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error\n\tSendPermissionResponse(choice PermissionChoice) error\n\tCapturePaneContent() (string, error)\n\tCapturePaneContentWithOptions(start, end string) (string, error)\n\tHasUpdated() (updated bool, hasPrompt bool)\n\tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n\tGetPanePID() (int, error)\n\n\t// Attach/Detach\n\tAttach() (chan struct{}, error)\n\tDetach()\n\tDetachSafely() error\n\tSetDetachedSize(width, height int) error\n\n\t// Accessors\n\tGetPTY() *os.File\n\tGetSanitizedName() string\n\n\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n}\n\n// PermissionChoice represents the user's response to a permission prompt.\ntype PermissionChoice int\n\nconst (\n\tPermissionAllowOnce PermissionChoice = iota\n\tPermissionAllowAlways\n\tPermissionReject\n)\n",
+              "additions": 0,
+              "deletions": 1,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement docs/plans/01a-rewrite-tmux-layer.md using the `kasmos-coder` skill. Execute all tasks sequentially.\n\nReviewer feedback from previous round:\nRound 1 — changes required.\n\n## important\n\n- `session/tmux/session.go:44` — `*TmuxSession` does not satisfy the `Session` interface because `NewReset` returns `*TmuxSession` but the interface declares `NewReset(...) Session`. The interface was introduced by this plan but is immediately broken. Fix: either (a) remove `NewReset` from the `Session` interface since callers use the concrete type, or (b) change `TmuxSession.NewReset` to return `Session` and update the caller at `session/instance_lifecycle.go:451` to use a type assertion. Option (a) is simpler and matches current usage.\n\n## self-fixed (no action needed)\n\n- `session/tmux/tmux_session.go:92-95` — removed dead `adapter any` field and stale \"Will be typed as ProgramAdapter\" comment; the field was never read or written\n- `session/tmux/pane_io.go:124-128` — restored capture-failure error logging that was missing (empty if-body where old code logged via `log.ErrorLog`); failures were being silently swallowed\n- `session/tmux/tmux_session.go:31-33` — fixed stale struct doc comment referencing \"The adapter field will hold the ProgramAdapter once that interface is defined\" when the interface already exists",
+          "id": "prt_cb470a200002vy7cro0Fst5Q77",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470a200001U0vgc3XkV5GD3Y"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553806352,
+          "completed": 1772553810227
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40184,
+          "input": 3,
+          "output": 98,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 40083
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb470a210001BDO8G2snd6o1rm",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470a210001BDO8G2snd6o1rm"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the kasmos-coder skill and then reading the plan to understand what needs to be implemented.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553809135,
+            "end": 1772553809918
+          },
+          "id": "prt_cb470acef001fHbHdjkJuBjHks",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470a210001BDO8G2snd6o1rm"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_018xtkXcwUt4S2QcqRhoiktc",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553810200,
+              "end": 1772553810204
+            }
+          },
+          "id": "prt_cb470b003001YG53LNi01jRgFr",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470a210001BDO8G2snd6o1rm"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 40184,
+            "input": 3,
+            "output": 98,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 40083
+            }
+          },
+          "id": "prt_cb470b12a00114dBRczxfG40AS",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470a210001BDO8G2snd6o1rm"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553810228,
+          "completed": 1772553814328
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 44720,
+          "input": 1,
+          "output": 213,
+          "reasoning": 0,
+          "cache": {
+            "read": 40083,
+            "write": 4423
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb470b134001BoJt7c0i79NqY5",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb470b7d9001Np4YbHbA6bahXZ",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the plan file to understand what needs to be implemented.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553811929,
+            "end": 1772553812327
+          },
+          "id": "prt_cb470b7d9002eGRDzRZGvZayc8",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        },
+        {
+          "type": "text",
+          "text": "Now let me read the plan and understand the current state of the codebase:",
+          "time": {
+            "start": 1772553813170,
+            "end": 1772553813170
+          },
+          "id": "prt_cb470b968001Bxz7BescNOO2cw",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/docs/plans/01a-rewrite-tmux-layer.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/docs/plans/01a-rewrite-tmux-layer.md</path>\n<type>file</type>\n<content>\n\n(End of file - total 0 lines)\n</content>",
+            "title": "docs/plans/01a-rewrite-tmux-layer.md",
+            "metadata": {
+              "preview": "",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553813961,
+              "end": 1772553813965
+            }
+          },
+          "id": "prt_cb470bcb2001tj4IDinxFqAZQ3",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01HmLAfQxWbEAujXkwkjALdz",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux</path>\n<type>directory</type>\n<entries>\nadapter_test.go\nadapter.go\nattach_test.go\nattach.go\nenv_vars_test.go\nmonitor_test.go\nmonitor.go\npane_io_test.go\npane_io.go\npty.go\nsession_title_test.go\nsession.go\nshell_test.go\nshell.go\ntmux_permission_test.go\ntmux_session_test.go\ntmux_session.go\ntmux_test.go\nwinsize_unix.go\nwinsize_windows.go\n\n(20 entries)\n</entries>",
+            "title": "session/tmux",
+            "metadata": {
+              "preview": "adapter_test.go\nadapter.go\nattach_test.go\nattach.go\nenv_vars_test.go\nmonitor_test.go\nmonitor.go\npane_io_test.go\npane_io.go\npty.go\nsession_title_test.go\nsession.go\nshell_test.go\nshell.go\ntmux_permission_test.go\ntmux_session_test.go\ntmux_session.go\ntmux_test.go\nwinsize_unix.go\nwinsize_windows.go",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553814302,
+              "end": 1772553814304
+            }
+          },
+          "id": "prt_cb470bff3001H9wGaEm9DwEo1L",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 44720,
+            "input": 1,
+            "output": 213,
+            "reasoning": 0,
+            "cache": {
+              "read": 40083,
+              "write": 4423
+            }
+          },
+          "id": "prt_cb470c12f0017AAkX4Ds8Ay68K",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470b134001BoJt7c0i79NqY5"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553814329,
+          "completed": 1772553817861
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 45246,
+          "input": 1,
+          "output": 204,
+          "reasoning": 0,
+          "cache": {
+            "read": 44506,
+            "write": 535
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb470c138001zmtErLDoEUosAg",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb470c776001MKSC3Gde6vWvXg",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470c138001zmtErLDoEUosAg"
+        },
+        {
+          "type": "reasoning",
+          "text": "The plan file is empty. Let me check for the Session interface and the TmuxSession to understand the current issue.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED//QVmKoMB/REDACTED/REDACTED/8cqhuG+H9+QIUsTmYGZuxITwYc//7FO/7XBgY1MoA2a7YYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772553815926,
+            "end": 1772553816693
+          },
+          "id": "prt_cb470c7760022Jms5sBS5pZ2VN",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470c138001zmtErLDoEUosAg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01PfXkYErP5XkdNvoD4RboGF",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"os\"\n5: \t\"time\"\n6: )\n7: \n8: // Session defines the contract for a managed terminal multiplexer session.\n9: // The instance layer depends on this interface, not the concrete TmuxSession.\n10: type Session interface {\n11: \t// Lifecycle\n12: \tStart(workDir string) error\n13: \tRestore() error\n14: \tClose() error\n15: \tDoesSessionExist() bool\n16: \n17: \t// I/O\n18: \tSendKeys(keys string) error\n19: \tTapEnter() error\n20: \tTapRight() error\n21: \tSendPermissionResponse(choice PermissionChoice) error\n22: \tCapturePaneContent() (string, error)\n23: \tCapturePaneContentWithOptions(start, end string) (string, error)\n24: \tHasUpdated() (updated bool, hasPrompt bool)\n25: \tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n26: \tGetPanePID() (int, error)\n27: \n28: \t// Attach/Detach\n29: \tAttach() (chan struct{}, error)\n30: \tDetach()\n31: \tDetachSafely() error\n32: \tSetDetachedSize(width, height int) error\n33: \n34: \t// Accessors\n35: \tGetPTY() *os.File\n36: \tGetSanitizedName() string\n37: \n38: \t// Configuration (builder-style, called before Start)\n39: \tSetAgentType(agentType string)\n40: \tSetInitialPrompt(prompt string)\n41: \tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n42: \tSetSessionTitle(title string)\n43: \tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n44: \tNewReset(name, program string, skipPermissions bool) Session\n45: }\n46: \n47: // PermissionChoice represents the user's response to a permission prompt.\n48: type PermissionChoice int\n49: \n50: const (\n51: \tPermissionAllowOnce PermissionChoice = iota\n52: \tPermissionAllowAlways\n53: \tPermissionReject\n54: )\n\n(End of file - total 54 lines)\n</content>",
+            "title": "session/tmux/session.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553817478,
+              "end": 1772553817485
+            }
+          },
+          "id": "prt_cb470ca77001edeMe0VMRvzTOk",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470c138001zmtErLDoEUosAg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Uck5koNFvzYJ5Rz5UiDDfg",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"context\"\n5: \t\"errors\"\n6: \t\"fmt\"\n7: \t\"os\"\n8: \t\"os/exec\"\n9: \t\"path/filepath\"\n10: \t\"regexp\"\n11: \t\"strconv\"\n12: \t\"strings\"\n13: \t\"sync\"\n14: \t\"time\"\n15: \n16: \t\"github.com/kastheco/kasmos/cmd\"\n17: \t\"github.com/kastheco/kasmos/log\"\n18: )\n19: \n20: const ProgramClaude = \"claude\"\n21: \n22: const ProgramAider = \"aider\"\n23: const ProgramGemini = \"gemini\"\n24: const ProgramOpenCode = \"opencode\"\n25: \n26: // ansiRe strips ANSI escape sequences (SGR, cursor movement, etc.) so that\n27: // content hashing is not affected by cursor blink, color resets, or other\n28: // terminal control codes that change between captures of an otherwise-idle pane.\n29: var ansiRe = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n30: \n31: // TmuxSession represents a managed tmux session.\n32: // It implements the Session interface defined in session.go.\n33: type TmuxSession struct {\n34: \t// Initialized by NewTmuxSession\n35: \t//\n36: \t// sanitizedName is the kas_-prefixed, whitespace-free tmux session name.\n37: \tsanitizedName string\n38: \tprogram       string\n39: \t// ptyFactory is used to create a PTY for the tmux session.\n40: \tptyFactory PtyFactory\n41: \t// cmdExec is used to execute commands in the tmux session.\n42: \tcmdExec cmd.Executor\n43: \t// skipPermissions appends --dangerously-skip-permissions to Claude commands.\n44: \tskipPermissions bool\n45: \t// agentType, when non-empty, appends --agent <type> to the program command.\n46: \tagentType string\n47: \t// initialPrompt, when non-empty, is baked into the CLI command at Start()\n48: \t// using per-program syntax (--prompt for opencode, positional for claude).\n49: \tinitialPrompt string\n50: \t// taskNumber, waveNumber, peerCount are set for wave task instances.\n51: \t// When non-zero, they are prepended as KASMOS_TASK, KASMOS_WAVE, KASMOS_PEERS\n52: \t// env vars to the program command string.\n53: \ttaskNumber int\n54: \twaveNumber int\n55: \tpeerCount  int\n56: \t// ProgressFunc is called with (stage, description) during Start() to report progress.\n57: \tProgressFunc func(stage int, desc string)\n58: \t// promptFile is the path to a temporary file containing the initial prompt.\n59: \t// Set during Start() when the prompt exceeds maxInlinePromptLen. Cleaned up by Close().\n60: \tpromptFile string\n61: \t// sessionTitle is the desired human-readable title for the opencode session.\n62: \t// When non-empty and titleFunc is set, the title is applied after the session\n63: \t// reports ready (after \"Ask anything\" is detected).\n64: \tsessionTitle string\n65: \t// titleFunc is a callback that performs the actual DB title update for opencode sessions.\n66: \t// It is injected by the instance layer to avoid a direct dependency from tmux → opencodesession.\n67: \t// Called as a goroutine (best-effort, non-blocking) after session startup.\n68: \ttitleFunc func(workDir string, beforeStart time.Time, title string)\n69: \n70: \t// Initialized by Start or Restore\n71: \t//\n72: \t// ptmx is a PTY running the tmux attach command. This can be resized to change the\n73: \t// stdout dimensions of the tmux pane. On detach, we close it and set a new one.\n74: \t// This should never be nil after a successful Start or Restore.\n75: \tptmx *os.File\n76: \t// monitor monitors the tmux pane content and sends signals to the UI when its status changes.\n77: \tmonitor *StatusMonitor\n78: \n79: \t// Initialized by Attach; deinitialized by Detach.\n80: \t//\n81: \t// attachCh is closed at the very end of detaching. Used to signal callers.\n82: \tattachCh chan struct{}\n83: \t// ctx, cancel, wg manage goroutines launched by Attach.\n84: \tctx    context.Context\n85: \tcancel func()\n86: \twg     *sync.WaitGroup\n87: \t// outerMouseWasEnabled is set when Attach() disables mouse on the outer tmux\n88: \t// session so Detach() can restore it.\n89: \touterMouseWasEnabled bool\n90: }\n91: \n92: // TmuxPrefix is the prefix added to all kas-managed tmux session names.\n93: const TmuxPrefix = \"kas_\"\n94: \n95: var whiteSpaceRegex = regexp.MustCompile(`\\s+`)\n96: \n97: // cleanupSessionsRe matches current kas_ sessions and legacy klique_/hivemind_ sessions.\n98: var cleanupSessionsRe = regexp.MustCompile(`(?:kas_|klique_|hivemind_).*:`)\n99: \n100: // toKasTmuxName converts a human-readable name to a kas_-prefixed tmux session name.\n101: // Whitespace is removed and dots are replaced with underscores (tmux does this natively).\n102: func toKasTmuxName(str string) string {\n103: \tstr = whiteSpaceRegex.ReplaceAllString(str, \"\")\n104: \tstr = strings.ReplaceAll(str, \".\", \"_\") // tmux replaces all . with _\n105: \treturn fmt.Sprintf(\"%s%s\", TmuxPrefix, str)\n106: }\n107: \n108: // ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.\n109: func ToKasTmuxNamePublic(name string) string {\n110: \treturn toKasTmuxName(name)\n111: }\n112: \n113: // NewTmuxSession creates a new TmuxSession with the given name and program.\n114: func NewTmuxSession(name string, program string, skipPermissions bool) *TmuxSession {\n115: \treturn newTmuxSession(name, program, skipPermissions, MakePtyFactory(), cmd.MakeExecutor())\n116: }\n117: \n118: // NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.\n119: func NewTmuxSessionWithDeps(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {\n120: \treturn newTmuxSession(name, program, skipPermissions, ptyFactory, cmdExec)\n121: }\n122: \n123: func newTmuxSession(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {\n124: \treturn &TmuxSession{\n125: \t\tsanitizedName:   toKasTmuxName(name),\n126: \t\tprogram:         program,\n127: \t\tskipPermissions: skipPermissions,\n128: \t\tptyFactory:      ptyFactory,\n129: \t\tcmdExec:         cmdExec,\n130: \t}\n131: }\n132: \n133: // NewReset creates a fresh TmuxSession preserving the ptyFactory and cmdExec\n134: // from the receiver. Used by Instance.Restart() to avoid replacing injected\n135: // test dependencies with real implementations.\n136: func (t *TmuxSession) NewReset(name string, program string, skipPermissions bool) *TmuxSession {\n137: \treturn newTmuxSession(name, program, skipPermissions, t.ptyFactory, t.cmdExec)\n138: }\n139: \n140: // NewTmuxSessionFromExisting creates a TmuxSession that wraps an already-running\n141: // tmux session identified by its raw sanitized name. Used for adopting orphans.\n142: func NewTmuxSessionFromExisting(sanitizedName string, program string, skipPermissions bool) *TmuxSession {\n143: \treturn &TmuxSession{\n144: \t\tsanitizedName:   sanitizedName,\n145: \t\tprogram:         program,\n146: \t\tskipPermissions: skipPermissions,\n147: \t\tptyFactory:      MakePtyFactory(),\n148: \t\tcmdExec:         cmd.MakeExecutor(),\n149: \t}\n150: }\n151: \n152: // SetAgentType sets the agent type flag to inject at startup (planner/coder/reviewer).\n153: // The value is trimmed of surrounding whitespace.\n154: func (t *TmuxSession) SetAgentType(agentType string) {\n155: \tt.agentType = strings.TrimSpace(agentType)\n156: }\n157: \n158: // SetInitialPrompt sets the initial prompt to bake into the CLI command at launch.\n159: // Supported programs: opencode (--prompt), claude (positional arg).\n160: // For unsupported programs the prompt is ignored; callers should keep\n161: // QueuedPrompt set so the send-keys fallback fires.\n162: func (t *TmuxSession) SetInitialPrompt(prompt string) {\n163: \tt.initialPrompt = prompt\n164: }\n165: \n166: // SetTaskEnv sets the task identity env vars for parallel wave execution.\n167: // When set, KASMOS_TASK, KASMOS_WAVE, and KASMOS_PEERS are prepended to the\n168: // program command string at Start() time.\n169: func (t *TmuxSession) SetTaskEnv(taskNumber, waveNumber, peerCount int) {\n170: \tt.taskNumber = taskNumber\n171: \tt.waveNumber = waveNumber\n172: \tt.peerCount = peerCount\n173: }\n174: \n175: // SetSessionTitle sets the desired title for the opencode session.\n176: // When non-empty and a titleFunc is also set, the title is applied after\n177: // the session reports ready. The \"kas: \" prefix is expected to already be\n178: // included by the caller (e.g. from BuildTitle in the opencodesession package).\n179: func (t *TmuxSession) SetSessionTitle(title string) {\n180: \tt.sessionTitle = title\n181: }\n182: \n183: // SetTitleFunc sets the callback used to apply the session title after startup.\n184: // The callback receives the work directory, a timestamp taken just before the\n185: // tmux session was created, and the desired title string. It runs in a goroutine\n186: // (fire-and-forget) so title setting never blocks or delays session startup.\n187: func (t *TmuxSession) SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string)) {\n188: \tt.titleFunc = fn\n189: }\n190: \n191: // reportProgress calls ProgressFunc if set.\n192: func (t *TmuxSession) reportProgress(stage int, desc string) {\n193: \tif t.ProgressFunc != nil {\n194: \t\tt.ProgressFunc(stage, desc)\n195: \t}\n196: }\n197: \n198: // isClaudeProgram returns true if the program string refers to Claude Code.\n199: func isClaudeProgram(program string) bool {\n200: \treturn strings.HasSuffix(program, ProgramClaude)\n201: }\n202: \n203: // isAiderProgram returns true if the program string refers to Aider.\n204: // Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.\n205: // Will be removed when aider support is fully dropped.\n206: func isAiderProgram(program string) bool {\n207: \treturn strings.HasPrefix(program, ProgramAider)\n208: }\n209: \n210: // isGeminiProgram returns true if the program string refers to Gemini.\n211: // Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.\n212: // Will be removed when gemini support is fully dropped.\n213: func isGeminiProgram(program string) bool {\n214: \treturn strings.HasPrefix(program, ProgramGemini)\n215: }\n216: \n217: // isOpenCodeProgram returns true if the program string refers to OpenCode.\n218: func isOpenCodeProgram(program string) bool {\n219: \treturn strings.HasSuffix(program, ProgramOpenCode)\n220: }\n221: \n222: // Start creates and starts a new tmux session, then attaches to it.\n223: // program is the command to run in the session. workDir is the git worktree directory.\n224: func (t *TmuxSession) Start(workDir string) error {\n225: \t// Reattach to a surviving session from a previous crash/interrupt\n226: \t// instead of killing it — the agent may still be running.\n227: \tif t.DoesSessionExist() {\n228: \t\treturn t.Restore()\n229: \t}\n230: \n231: \t// Append --dangerously-skip-permissions for Claude programs if enabled.\n232: \tprogram := t.program\n233: \tif t.skipPermissions && isClaudeProgram(program) {\n234: \t\tprogram = program + \" --dangerously-skip-permissions\"\n235: \t}\n236: \tif t.agentType != \"\" && !strings.Contains(program, \"--agent\") {\n237: \t\tprogram = program + \" --agent \" + t.agentType\n238: \t}\n239: \tif t.initialPrompt != \"\" {\n240: \t\tswitch {\n241: \t\tcase isOpenCodeProgram(t.program):\n242: \t\t\tprogram = program + \" --prompt \" + t.promptArgOpenCode(workDir)\n243: \t\tcase isClaudeProgram(t.program):\n244: \t\t\tprogram = program + \" \" + t.promptArgClaude(workDir)\n245: \t\t}\n246: \t\t// aider/gemini: no CLI prompt support — callers keep QueuedPrompt\n247: \t\t// set so the send-keys fallback fires from the app tick handler.\n248: \t}\n249: \n250: \t// Append --print-logs and redirect stderr to a per-session log file so\n251: \t// kasmos-spawned opencode agents always have debug logs available.\n252: \tif isOpenCodeProgram(t.program) {\n253: \t\tlogDir := filepath.Join(workDir, promptDir, \"logs\")\n254: \t\tif err := os.MkdirAll(logDir, 0o755); err == nil {\n255: \t\t\tlogFile := filepath.Join(logDir, t.sanitizedName+\".log\")\n256: \t\t\tprogram = program + \" --print-logs 2>>\" + shellEscapeSingleQuote(logFile)\n257: \t\t}\n258: \t}\n259: \n260: \t// Prepend KASMOS_MANAGED=1 so the agent process sees it from startup.\n261: \tprogram = \"KASMOS_MANAGED=1 \" + program\n262: \n263: \t// Prepend task identity env vars for parallel wave execution.\n264: \tif t.taskNumber > 0 {\n265: \t\tprogram = fmt.Sprintf(\"KASMOS_TASK=%d KASMOS_WAVE=%d KASMOS_PEERS=%d %s\",\n266: \t\t\tt.taskNumber, t.waveNumber, t.peerCount, program)\n267: \t}\n268: \n269: \tt.reportProgress(1, \"Creating tmux session...\")\n270: \n271: \t// Record the timestamp immediately before launching the tmux session.\n272: \t// This is passed to titleFunc so it can find the opencode DB session\n273: \t// that was created at or after this moment.\n274: \tbeforeStart := time.Now()\n275: \n276: \t// Create a new detached tmux session and start the program in it.\n277: \tcmd := exec.Command(\"tmux\", \"new-session\", \"-d\", \"-s\", t.sanitizedName, \"-c\", workDir, program)\n278: \n279: \tptmx, err := t.ptyFactory.Start(cmd)\n280: \tif err != nil {\n281: \t\t// Cleanup any partially created session if any exists.\n282: \t\tif t.DoesSessionExist() {\n283: \t\t\tcleanupCmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", t.sanitizedName)\n284: \t\t\tif cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {\n285: \t\t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n286: \t\t\t}\n287: \t\t}\n288: \t\treturn fmt.Errorf(\"error starting tmux session: %w\", err)\n289: \t}\n290: \n291: \tt.reportProgress(2, \"Waiting for session to start...\")\n292: \n293: \t// Poll for session existence with exponential backoff.\n294: \ttimeout := time.After(2 * time.Second)\n295: \tsleepDuration := 5 * time.Millisecond\n296: \tfor !t.DoesSessionExist() {\n297: \t\tselect {\n298: \t\tcase <-timeout:\n299: \t\t\tif cleanupErr := t.Close(); cleanupErr != nil {\n300: \t\t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n301: \t\t\t}\n302: \t\t\treturn fmt.Errorf(\"timed out waiting for tmux session %s: %v\", t.sanitizedName, err)\n303: \t\tdefault:\n304: \t\t\ttime.Sleep(sleepDuration)\n305: \t\t\t// Exponential backoff up to 50ms max.\n306: \t\t\tif sleepDuration < 50*time.Millisecond {\n307: \t\t\t\tsleepDuration *= 2\n308: \t\t\t}\n309: \t\t}\n310: \t}\n311: \tptmx.Close()\n312: \n313: \t// Set history limit to enable scrollback (default is 2000, we use 10000 for more history).\n314: \thistoryCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"history-limit\", \"10000\")\n315: \tif err := t.cmdExec.Run(historyCmd); err != nil {\n316: \t\tlog.InfoLog.Printf(\"Warning: failed to set history-limit for session %s: %v\", t.sanitizedName, err)\n317: \t}\n318: \n319: \t// Hide the tmux status bar — the kasmos TUI provides its own chrome.\n320: \tstatusCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"status\", \"off\")\n321: \tif err := t.cmdExec.Run(statusCmd); err != nil {\n322: \t\tlog.InfoLog.Printf(\"Warning: failed to hide status bar for session %s: %v\", t.sanitizedName, err)\n323: \t}\n324: \n325: \t// Inject KASMOS_MANAGED=1 so agents can detect they're running under kasmos orchestration.\n326: \tenvCmd := exec.Command(\"tmux\", \"set-environment\", \"-t\", t.sanitizedName, \"KASMOS_MANAGED\", \"1\")\n327: \tif err := t.cmdExec.Run(envCmd); err != nil {\n328: \t\tlog.InfoLog.Printf(\"Warning: failed to set KASMOS_MANAGED env for session %s: %v\", t.sanitizedName, err)\n329: \t}\n330: \n331: \tt.reportProgress(3, \"Configuring session...\")\n332: \n333: \terr = t.Restore()\n334: \tif err != nil {\n335: \t\tif cleanupErr := t.Close(); cleanupErr != nil {\n336: \t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n337: \t\t}\n338: \t\treturn fmt.Errorf(\"error restoring tmux session: %w\", err)\n339: \t}\n340: \n341: \tif isClaudeProgram(t.program) || isAiderProgram(t.program) || isGeminiProgram(t.program) || isOpenCodeProgram(t.program) {\n342: \t\tt.reportProgress(4, \"Waiting for program to start...\")\n343: \n344: \t\tvar searchString string\n345: \t\tvar tapFunc func() error // nil means no key tap needed (e.g. opencode)\n346: \t\tmaxWaitTime := 30 * time.Second\n347: \n348: \t\tswitch {\n349: \t\tcase isClaudeProgram(t.program):\n350: \t\t\tsearchString = \"Do you trust the files in this folder?\"\n351: \t\t\ttapFunc = t.TapEnter\n352: \t\tcase isOpenCodeProgram(t.program):\n353: \t\t\t// opencode shows its input placeholder once the TUI is ready; no tap needed.\n354: \t\t\tsearchString = \"Ask anything\"\n355: \t\t\ttapFunc = nil\n356: \t\tdefault: // aider / gemini\n357: \t\t\tsearchString = \"Open documentation url for more info\"\n358: \t\t\ttapFunc = t.TapDAndEnter\n359: \t\t\tmaxWaitTime = 45 * time.Second\n360: \t\t}\n361: \n362: \t\t// Poll with exponential backoff until the ready string appears or we time out.\n363: \t\tstartTime := time.Now()\n364: \t\tsleepDuration := 100 * time.Millisecond\n365: \n366: \t\tfor time.Since(startTime) < maxWaitTime {\n367: \t\t\ttime.Sleep(sleepDuration)\n368: \t\t\tcontent, err := t.CapturePaneContent()\n369: \t\t\tif err == nil && strings.Contains(content, searchString) {\n370: \t\t\t\tif tapFunc != nil {\n371: \t\t\t\t\tif err := tapFunc(); err != nil {\n372: \t\t\t\t\t\tlog.ErrorLog.Printf(\"could not tap enter on trust screen: %v\", err)\n373: \t\t\t\t\t}\n374: \t\t\t\t}\n375: \t\t\t\tbreak\n376: \t\t\t}\n377: \n378: \t\t\t// Exponential backoff with cap at 1 second.\n379: \t\t\tsleepDuration = time.Duration(float64(sleepDuration) * 1.2)\n380: \t\t\tif sleepDuration > time.Second {\n381: \t\t\t\tsleepDuration = time.Second\n382: \t\t\t}\n383: \t\t}\n384: \n385: \t\t// After the session is ready, set the opencode session title (best-effort, non-blocking).\n386: \t\t// Only fires for opencode programs with a title and callback configured.\n387: \t\tif isOpenCodeProgram(t.program) && t.sessionTitle != \"\" && t.titleFunc != nil {\n388: \t\t\tgo t.titleFunc(workDir, beforeStart, t.sessionTitle)\n389: \t\t}\n390: \t}\n391: \treturn nil\n392: }\n393: \n394: // Restore attaches to an existing session and restores the window size.\n395: func (t *TmuxSession) Restore() error {\n396: \tptmx, err := t.ptyFactory.Start(exec.Command(\"tmux\", \"attach-session\", \"-t\", t.sanitizedName))\n397: \tif err != nil {\n398: \t\treturn fmt.Errorf(\"error opening PTY: %w\", err)\n399: \t}\n400: \tt.ptmx = ptmx\n401: \tt.monitor = NewStatusMonitor()\n402: \t// Idempotently hide the status bar — also covers sessions restored from crash\n403: \t// that were created before this option was set.\n404: \tstatusCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"status\", \"off\")\n405: \tif err := t.cmdExec.Run(statusCmd); err != nil {\n406: \t\tlog.InfoLog.Printf(\"Warning: failed to hide status bar for restored session %s: %v\", t.sanitizedName, err)\n407: \t}\n408: \treturn nil\n409: }\n410: \n411: // outerTmuxSession returns the name of the enclosing tmux session (the one\n412: // running kasmos), or \"\" if we are not inside tmux.\n413: func outerTmuxSession() string {\n414: \tif os.Getenv(\"TMUX\") == \"\" {\n415: \t\treturn \"\"\n416: \t}\n417: \tout, err := exec.Command(\"tmux\", \"display-message\", \"-p\", \"#{session_name}\").Output()\n418: \tif err != nil {\n419: \t\treturn \"\"\n420: \t}\n421: \treturn strings.TrimSpace(string(out))\n422: }\n423: \n424: // outerMouseEnabled reports whether mouse is currently on in the given tmux session.\n425: func outerMouseEnabled(session string) bool {\n426: \tout, err := exec.Command(\"tmux\", \"show-options\", \"-t\", session, \"mouse\").Output()\n427: \tif err != nil {\n428: \t\treturn false\n429: \t}\n430: \treturn strings.Contains(string(out), \"on\")\n431: }\n432: \n433: // Close terminates the tmux session and cleans up resources.\n434: func (t *TmuxSession) Close() error {\n435: \tvar errs []error\n436: \n437: \tif t.ptmx != nil {\n438: \t\tif err := t.ptmx.Close(); err != nil {\n439: \t\t\terrs = append(errs, fmt.Errorf(\"error closing PTY: %w\", err))\n440: \t\t}\n441: \t\tt.ptmx = nil\n442: \t}\n443: \n444: \tcmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", t.sanitizedName)\n445: \tif err := t.cmdExec.Run(cmd); err != nil {\n446: \t\terrs = append(errs, fmt.Errorf(\"error killing tmux session: %w\", err))\n447: \t}\n448: \n449: \tif t.promptFile != \"\" {\n450: \t\tos.Remove(t.promptFile)\n451: \t\tt.promptFile = \"\"\n452: \t}\n453: \n454: \treturn errors.Join(errs...)\n455: }\n456: \n457: // DoesSessionExist returns true if the tmux session is currently running.\n458: func (t *TmuxSession) DoesSessionExist() bool {\n459: \t// Using \"-t name\" does a prefix match, which is wrong. `-t=` does an exact match.\n460: \texistsCmd := exec.Command(\"tmux\", \"has-session\", fmt.Sprintf(\"-t=%s\", t.sanitizedName))\n461: \treturn t.cmdExec.Run(existsCmd) == nil\n462: }\n463: \n464: // CleanupSessions kills all tmux sessions that start with the kas prefix.\n465: // Also cleans up legacy \"hivemind_\" and \"klique_\" sessions from before the rename.\n466: func CleanupSessions(cmdExec cmd.Executor) error {\n467: \t// First try to list sessions.\n468: \tcmd := exec.Command(\"tmux\", \"ls\")\n469: \toutput, err := cmdExec.Output(cmd)\n470: \n471: \t// If there's an error and it's because no server is running, that's fine.\n472: \t// Exit code 1 typically means no sessions exist.\n473: \tif err != nil {\n474: \t\tif exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {\n475: \t\t\treturn nil // No sessions to clean up.\n476: \t\t}\n477: \t\treturn fmt.Errorf(\"failed to list tmux sessions: %v\", err)\n478: \t}\n479: \n480: \tmatches := cleanupSessionsRe.FindAllString(string(output), -1)\n481: \tfor i, match := range matches {\n482: \t\tmatches[i] = match[:strings.Index(match, \":\")]\n483: \t}\n484: \n485: \tfor _, match := range matches {\n486: \t\tlog.InfoLog.Printf(\"cleaning up session: %s\", match)\n487: \t\tif err := cmdExec.Run(exec.Command(\"tmux\", \"kill-session\", \"-t\", match)); err != nil {\n488: \t\t\treturn fmt.Errorf(\"failed to kill tmux session %s: %v\", match, err)\n489: \t\t}\n490: \t}\n491: \treturn nil\n492: }\n493: \n494: // OrphanSession represents a kas_ tmux session not tracked by any kasmos Instance.\n495: type OrphanSession struct {\n496: \tName     string    // raw tmux session name, e.g. \"kas_auth-refactor-implement\"\n497: \tTitle    string    // human name with \"kas_\" prefix stripped\n498: \tCreated  time.Time // session creation time\n499: \tWindows  int       // window count\n500: \tAttached bool      // whether another client is attached\n501: \tWidth    int       // pane columns\n502: \tHeight   int       // pane rows\n503: }\n504: \n505: // DiscoverOrphans lists kas_-prefixed tmux sessions that are NOT in knownNames.\n506: // knownNames should contain the sanitized tmux names of all current Instances.\n507: func DiscoverOrphans(cmdExec cmd.Executor, knownNames []string) ([]OrphanSession, error) {\n508: \tlsCmd := exec.Command(\"tmux\", \"ls\", \"-F\",\n509: \t\t\"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}\")\n510: \toutput, err := cmdExec.Output(lsCmd)\n511: \tif err != nil {\n512: \t\tif _, ok := err.(*exec.ExitError); ok {\n513: \t\t\treturn nil, nil // no tmux server running or no sessions\n514: \t\t}\n515: \t\treturn nil, fmt.Errorf(\"failed to list tmux sessions: %w\", err)\n516: \t}\n517: \n518: \tknown := make(map[string]bool, len(knownNames))\n519: \tfor _, n := range knownNames {\n520: \t\tknown[n] = true\n521: \t}\n522: \n523: \tvar orphans []OrphanSession\n524: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n525: \t\tif line == \"\" {\n526: \t\t\tcontinue\n527: \t\t}\n528: \t\tparts := strings.SplitN(line, \"|\", 6)\n529: \t\tif len(parts) < 6 {\n530: \t\t\tcontinue\n531: \t\t}\n532: \t\tname := parts[0]\n533: \t\tif !strings.HasPrefix(name, TmuxPrefix) {\n534: \t\t\tcontinue\n535: \t\t}\n536: \t\tif known[name] {\n537: \t\t\tcontinue\n538: \t\t}\n539: \n540: \t\tvar created time.Time\n541: \t\tif epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {\n542: \t\t\tcreated = time.Unix(epoch, 0)\n543: \t\t}\n544: \t\twindows, _ := strconv.Atoi(parts[2])\n545: \t\tattached := parts[3] != \"0\"\n546: \t\twidth, _ := strconv.Atoi(parts[4])\n547: \t\theight, _ := strconv.Atoi(parts[5])\n548: \n549: \t\ttitle := strings.TrimPrefix(name, TmuxPrefix)\n550: \t\torphans = append(orphans, OrphanSession{\n551: \t\t\tName:     name,\n552: \t\t\tTitle:    title,\n553: \t\t\tCreated:  created,\n554: \t\t\tWindows:  windows,\n555: \t\t\tAttached: attached,\n556: \t\t\tWidth:    width,\n557: \t\t\tHeight:   height,\n558: \t\t})\n559: \t}\n560: \treturn orphans, nil\n561: }\n562: \n563: // SessionInfo represents any kas_ tmux session (managed or orphaned).\n564: type SessionInfo struct {\n565: \tName     string    // raw tmux session name, e.g. \"kas_auth-refactor-implement\"\n566: \tTitle    string    // human name with \"kas_\" prefix stripped\n567: \tCreated  time.Time // session creation time\n568: \tWindows  int       // window count\n569: \tAttached bool      // whether another client is attached\n570: \tWidth    int       // pane columns\n571: \tHeight   int       // pane rows\n572: \tManaged  bool      // true if matched a known instance name\n573: }\n574: \n575: // DiscoverAll lists all kas_-prefixed tmux sessions, marking each as Managed\n576: // if its name appears in knownNames. knownNames should contain the sanitized\n577: // tmux names of all current Instances (e.g. from ToKasTmuxNamePublic).\n578: func DiscoverAll(cmdExec cmd.Executor, knownNames []string) ([]SessionInfo, error) {\n579: \tlsCmd := exec.Command(\"tmux\", \"ls\", \"-F\",\n580: \t\t\"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}\")\n581: \toutput, err := cmdExec.Output(lsCmd)\n582: \tif err != nil {\n583: \t\tif _, ok := err.(*exec.ExitError); ok {\n584: \t\t\treturn nil, nil\n585: \t\t}\n586: \t\treturn nil, fmt.Errorf(\"failed to list tmux sessions: %w\", err)\n587: \t}\n588: \n589: \tknown := make(map[string]bool, len(knownNames))\n590: \tfor _, n := range knownNames {\n591: \t\tknown[n] = true\n592: \t}\n593: \n594: \tvar sessions []SessionInfo\n595: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n596: \t\tif line == \"\" {\n597: \t\t\tcontinue\n598: \t\t}\n599: \t\tparts := strings.SplitN(line, \"|\", 6)\n600: \t\tif len(parts) < 6 {\n601: \t\t\tcontinue\n602: \t\t}\n603: \t\tname := parts[0]\n604: \t\tif !strings.HasPrefix(name, TmuxPrefix) {\n605: \t\t\tcontinue\n606: \t\t}\n607: \n608: \t\tvar created time.Time\n609: \t\tif epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {\n610: \t\t\tcreated = time.Unix(epoch, 0)\n611: \t\t}\n612: \t\twindows, _ := strconv.Atoi(parts[2])\n613: \t\tattached := parts[3] != \"0\"\n614: \t\twidth, _ := strconv.Atoi(parts[4])\n615: \t\theight, _ := strconv.Atoi(parts[5])\n616: \n617: \t\tsessions = append(sessions, SessionInfo{\n618: \t\t\tName:     name,\n619: \t\t\tTitle:    strings.TrimPrefix(name, TmuxPrefix),\n620: \t\t\tCreated:  created,\n621: \t\t\tWindows:  windows,\n622: \t\t\tAttached: attached,\n623: \t\t\tWidth:    width,\n624: \t\t\tHeight:   height,\n625: \t\t\tManaged:  known[name],\n626: \t\t})\n627: \t}\n628: \treturn sessions, nil\n629: }\n630: \n631: // CountKasSessions returns the number of kas_-prefixed tmux sessions.\n632: // Returns 0 if no tmux server is running or on any error.\n633: func CountKasSessions(cmdExec cmd.Executor) int {\n634: \tlsCmd := exec.Command(\"tmux\", \"ls\")\n635: \toutput, err := cmdExec.Output(lsCmd)\n636: \tif err != nil {\n637: \t\treturn 0\n638: \t}\n639: \tcount := 0\n640: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n641: \t\tif strings.HasPrefix(line, TmuxPrefix) {\n642: \t\t\tcount++\n643: \t\t}\n644: \t}\n645: \treturn count\n646: }\n\n(End of file - total 646 lines)\n</content>",
+            "title": "session/tmux/tmux_session.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"context\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strconv\"\n\t\"strings\"\n\t\"sync\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\nconst ProgramClaude = \"claude\"",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553817812,
+              "end": 1772553817816
+            }
+          },
+          "id": "prt_cb470cd8700102PJysemU9isXz",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470c138001zmtErLDoEUosAg"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 45246,
+            "input": 1,
+            "output": 204,
+            "reasoning": 0,
+            "cache": {
+              "read": 44506,
+              "write": 535
+            }
+          },
+          "id": "prt_cb470cee5001CMdnzD1z67vEWh",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470c138001zmtErLDoEUosAg"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553817862,
+          "completed": 1772553828181
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 56054,
+          "input": 1,
+          "output": 438,
+          "reasoning": 0,
+          "cache": {
+            "read": 45041,
+            "write": 10574
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb470d70b0010E6n2pvtbZoQlY",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "The reviewer feedback says:\n\n- `session/tmux/session.go:44` — `*TmuxSession` does not satisfy the `Session` interface because `NewReset` returns `*TmuxSession` but the interface declares `NewReset(...) Session`. The interface was introduced by this plan but is immediately broken. Fix: either (a) remove `NewReset` from the `Session` interface since callers use the concrete type, or (b) change `TmuxSession.NewReset` to return `Session` and update the caller at `session/instance_lifecycle.go:451` to use a type assertion. Option (a) is simpler and matches current usage.\n\n\nLet me look at how `NewReset` is actually being called at that location to see which approach makes more sense.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/8MDoZ0tc/REDACTED/REDACTED/REDACTED/FZ4kqm3a6uazZh/REDACTED/nmNcroNWBiaxr6KbUu73/g/REDACTED/bKQHRgGNWdm/REDACTED/REDACTED/REDACTED/+cO7Y4W/REDACTED/REDACTED/FpuNo70Wew3QuAd/NvJbDnGAE="
+            }
+          },
+          "time": {
+            "start": 1772553819915,
+            "end": 1772553825297
+          },
+          "id": "prt_cb470d70b002QRtNuYakmkyJsn",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "Now let me check the instance lifecycle file where `NewReset` is called:",
+          "time": {
+            "start": 1772553825308,
+            "end": 1772553825308
+          },
+          "id": "prt_cb470ec140010AMhGXT74lMTA5",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/instance_lifecycle.go",
+              "offset": 440,
+              "limit": 30
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/instance_lifecycle.go</path>\n<type>file</type>\n<content>440: \t}\n441: \tif i.Status == Paused {\n442: \t\treturn fmt.Errorf(\"cannot restart paused instance; resume it first\")\n443: \t}\n444: \n445: \t// Best-effort kill of existing tmux session (may already be dead).\n446: \tif i.tmuxSession != nil {\n447: \t\t_ = i.tmuxSession.Close()\n448: \t}\n449: \n450: \t// Create fresh tmux session preserving injected deps (pty/cmd factories).\n451: \tts := i.tmuxSession.NewReset(i.Title, i.Program, i.SkipPermissions)\n452: \tts.SetAgentType(i.AgentType)\n453: \ti.tmuxSession = ts\n454: \ti.setTmuxTaskEnv()\n455: \ti.configureSessionTitle()\n456: \n457: \t// Determine working directory.\n458: \tworkDir := i.Path\n459: \tif i.gitWorktree != nil {\n460: \t\tworkDir = i.gitWorktree.GetWorktreePath()\n461: \t}\n462: \n463: \tif err := ts.Start(workDir); err != nil {\n464: \t\treturn fmt.Errorf(\"failed to restart tmux session: %w\", err)\n465: \t}\n466: \n467: \t// Reset ephemeral state.\n468: \ti.Exited = false\n469: \ti.PromptDetected = false\n\n(Showing lines 440-469 of 534. Use offset=470 to continue.)\n</content>",
+            "title": "session/instance_lifecycle.go",
+            "metadata": {
+              "preview": "\t}\n\tif i.Status == Paused {\n\t\treturn fmt.Errorf(\"cannot restart paused instance; resume it first\")\n\t}\n\n\t// Best-effort kill of existing tmux session (may already be dead).\n\tif i.tmuxSession != nil {\n\t\t_ = i.tmuxSession.Close()\n\t}\n\n\t// Create fresh tmux session preserving injected deps (pty/cmd factories).\n\tts := i.tmuxSession.NewReset(i.Title, i.Program, i.SkipPermissions)\n\tts.SetAgentType(i.AgentType)\n\ti.tmuxSession = ts\n\ti.setTmuxTaskEnv()\n\ti.configureSessionTitle()\n\n\t// Determine working directory.\n\tworkDir := i.Path\n\tif i.gitWorktree != nil {",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553826880,
+              "end": 1772553826883
+            }
+          },
+          "id": "prt_cb470ec1e001WbiDSVJskkeQ67",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go build ./session/tmux/... 2>&1",
+              "description": "Check current build errors in tmux package"
+            },
+            "output": "",
+            "title": "Check current build errors in tmux package",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check current build errors in tmux package",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553828052,
+              "end": 1772553828171
+            }
+          },
+          "id": "prt_cb470f242001wiYV7wzQ9iMsZz",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 56054,
+            "input": 1,
+            "output": 438,
+            "reasoning": 0,
+            "cache": {
+              "read": 45041,
+              "write": 10574
+            }
+          },
+          "id": "prt_cb470f74c001C2kpv2ZCVuVduw",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553828182,
+          "completed": 1772553832813
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 56728,
+          "input": 1,
+          "output": 143,
+          "reasoning": 0,
+          "cache": {
+            "read": 55615,
+            "write": 969
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb470f756001jev42UqMeNgntP",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb4710098001DuVlr8is9Rlm4S",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470f756001jev42UqMeNgntP"
+        },
+        {
+          "type": "reasoning",
+          "text": "The build passes! Let me check if there's a build error specifically with the interface issue.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/bvlBfEgxJJn5OaoLD4nSa/REDACTED/wx0S/fTNJxh8zJ00/5YkrXpUI8gzmNEjp/REDACTED/MSOv03D94TY+/kXdtBO7wOsKMDqIPWzzscUhgB"
+            }
+          },
+          "time": {
+            "start": 1772553830552,
+            "end": 1772553831413
+          },
+          "id": "prt_cb4710098002RgKxci3tdD7KI2",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470f756001jev42UqMeNgntP"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01T6G18L1duL4pCK1UNRHpFa",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go build ./... 2>&1",
+              "description": "Check full build errors"
+            },
+            "output": "",
+            "title": "Check full build errors",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check full build errors",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553832032,
+              "end": 1772553832804
+            }
+          },
+          "id": "prt_cb47103f8001JMHr0Gad7KzGpk",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470f756001jev42UqMeNgntP"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 56728,
+            "input": 1,
+            "output": 143,
+            "reasoning": 0,
+            "cache": {
+              "read": 55615,
+              "write": 969
+            }
+          },
+          "id": "prt_cb4710965001O1dvOC8lb2jsIu",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb470f756001jev42UqMeNgntP"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553832813,
+          "completed": 1772553836945
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 56914,
+          "input": 1,
+          "output": 160,
+          "reasoning": 0,
+          "cache": {
+            "read": 56584,
+            "write": 169
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "It builds. Let me check the instance.go to see how `tmuxSession` field is typed.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553835293,
+            "end": 1772553836089
+          },
+          "id": "prt_cb471131d001J7JxthE4yGuB8o",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01PFtSSUumhPphJocueFnEhx",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && rg \"tmuxSession\" session/instance.go | head -20",
+              "description": "Check tmuxSession field type in instance.go"
+            },
+            "output": "\t// tmuxSession is the tmux session for the instance.\n\ttmuxSession *tmux.TmuxSession\n\t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t\tinstance.tmuxSession = ts\n\t\t\t// attaches the PTY. The tmuxSession is already set so Start()\n\tif i.tmuxSession == nil {\n\treturn i.tmuxSession.DoesSessionExist()\n",
+            "title": "Check tmuxSession field type in instance.go",
+            "metadata": {
+              "output": "\t// tmuxSession is the tmux session for the instance.\n\ttmuxSession *tmux.TmuxSession\n\t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t\tinstance.tmuxSession = ts\n\t\t\t// attaches the PTY. The tmuxSession is already set so Start()\n\tif i.tmuxSession == nil {\n\treturn i.tmuxSession.DoesSessionExist()\n",
+              "exit": 0,
+              "description": "Check tmuxSession field type in instance.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553836913,
+              "end": 1772553836918
+            }
+          },
+          "id": "prt_cb4711639001QHj4jTGowQrk73",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 56914,
+            "input": 1,
+            "output": 160,
+            "reasoning": 0,
+            "cache": {
+              "read": 56584,
+              "write": 169
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553836946,
+          "completed": 1772553846525
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57509,
+          "input": 1,
+          "output": 468,
+          "reasoning": 0,
+          "cache": {
+            "read": 56753,
+            "write": 287
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4711992001m1K4eY5RBQVYSK",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb4712231001BTH3miB8IJfrwH",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4711992001m1K4eY5RBQVYSK"
+        },
+        {
+          "type": "reasoning",
+          "text": "The field `tmuxSession` is typed as `*tmux.TmuxSession`, not `tmux.Session`. So when we call `i.tmuxSession.NewReset(...)`, the result is `*TmuxSession` which is then assigned to `i.tmuxSession` which is `*TmuxSession`. That part works fine.\n\nThe problem is the `Session` interface at line 44 declares `NewReset(...) Session`, but `TmuxSession.NewReset` returns `*TmuxSession`, not `Session`. In Go, the return types in interfaces must exactly match. Since `*TmuxSession` is not the same as `Session`, `*TmuxSession` does NOT implement the `Session` interface.\n \nBut the build passes, which means the interface conformance check isn't being triggered. Go only validates interface satisfaction when you actually assign a value to an interface type, and since `tmuxSession` is declared as `*tmux.TmuxSession` directly rather than as `tmux.Session`, the compiler never checks whether it conforms to the interface.\n\nLet me search through the codebase to see if anything is actually holding a `tmux.Session` interface value.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EoULCkYICxgCKkB/REDACTED/REDACTED/r6P9iHoaDF4VoYUtlk+0/REDACTED/yWL7+Ik3bHA6mJxNKS/REDACTED/NFH91Sm1I/REDACTED/MtZDYsrJC3dIF8H1A390/Cp038UVh3zj/REDACTED/U/REDACTED/4Pr/REDACTED/REDACTED//ZSJvsDWgmMw38/REDACTED/zxO/r/REDACTED/REDACTED/V+LPySkgu3QO/REDACTED/REDACTED/REDACTED/REDACTED/iMMXhCXdhLATkejsyT99wOc/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/yHldkaq/REDACTED/hK/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553839153,
+            "end": 1772553846481
+          },
+          "id": "prt_cb4712231002Bb7gGXZ9yOsyUi",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4711992001m1K4eY5RBQVYSK"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012gcXVfDZuY1RpcCvu9vQeR",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && rg \"tmux\\.Session\" --type go",
+              "description": "Find usages of tmux.Session interface"
+            },
+            "output": "app/app.go:\tsessions []tmux.SessionInfo\napp/app_test.go:\t\t\tsessions: []tmux.SessionInfo{\napp/app_test.go:\t\t\tsessions: []tmux.SessionInfo{\n",
+            "title": "Find usages of tmux.Session interface",
+            "metadata": {
+              "output": "app/app.go:\tsessions []tmux.SessionInfo\napp/app_test.go:\t\t\tsessions: []tmux.SessionInfo{\napp/app_test.go:\t\t\tsessions: []tmux.SessionInfo{\n",
+              "exit": 0,
+              "description": "Find usages of tmux.Session interface",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553846504,
+              "end": 1772553846514
+            }
+          },
+          "id": "prt_cb4713ed2001uEw29b409crlPT",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4711992001m1K4eY5RBQVYSK"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 57509,
+            "input": 1,
+            "output": 468,
+            "reasoning": 0,
+            "cache": {
+              "read": 56753,
+              "write": 287
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4711992001m1K4eY5RBQVYSK"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553846526,
+          "completed": 1772553856725
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57960,
+          "input": 1,
+          "output": 387,
+          "reasoning": 0,
+          "cache": {
+            "read": 57040,
+            "write": 532
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb4714dcc001hC5d4By7A2ezI7",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "The `tmux.Session` interface isn't used anywhere as a type for storing a `*TmuxSession`. The `session.go` defines the interface, but it's never actually used as a type constraint (the `tmuxSession` field is `*tmux.TmuxSession`, not `tmux.Session`).\n\nThe reviewer is saying that `*TmuxSession` does not satisfy the `Session` interface because `NewReset` returns `*TmuxSession` but the interface says `NewReset(...) Session`. The fix is option (a): remove `NewReset` from the `Session` interface.\n \nI should check if there are any compile-time assertions that would catch this mismatch, like assignment checks that verify the type implements the interface.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/cUifn8Vi8ya4jtkTpMAu4C/REDACTED/REDACTED/fu2W9h28nS1mA/REDACTED/C9wAkfzL2QD6glpICuno/REDACTED/tC0QepjVcgcuLv5VpJs/REDACTED/REDACTED/REDACTED///REDACTED/REDACTED/XdExgMrrEW/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553850317,
+            "end": 1772553854874
+          },
+          "id": "prt_cb4714dcd001uJSHLWwOa5btD1",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && rg \"Session\\b\" session/tmux/ --type go | rg -v \"StatusMonitor|NewStatusMonitor|OrphanSession|SessionInfo|TmuxSession|sanitizedName|Does.*Session|kill-session|new-session|attach-session|has-session|session_name|session_created|session_windows|session_attached|cleanupSessions\"",
+              "description": "Find where Session interface is referenced"
+            },
+            "output": "session/tmux/session.go:// Session defines the contract for a managed terminal multiplexer session.\nsession/tmux/session.go:type Session interface {\nsession/tmux/session.go:\tNewReset(name, program string, skipPermissions bool) Session\nsession/tmux/tmux_session.go:// It implements the Session interface defined in session.go.\nsession/tmux/tmux_session_test.go:func TestStart_CreatesAndRestoresSession(t *testing.T) {\n",
+            "title": "Find where Session interface is referenced",
+            "metadata": {
+              "output": "session/tmux/session.go:// Session defines the contract for a managed terminal multiplexer session.\nsession/tmux/session.go:type Session interface {\nsession/tmux/session.go:\tNewReset(name, program string, skipPermissions bool) Session\nsession/tmux/tmux_session.go:// It implements the Session interface defined in session.go.\nsession/tmux/tmux_session_test.go:func TestStart_CreatesAndRestoresSession(t *testing.T) {\n",
+              "exit": 0,
+              "description": "Find where Session interface is referenced",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553856695,
+              "end": 1772553856706
+            }
+          },
+          "id": "prt_cb4715f9c001HpktuBW5R6bQWK",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 57960,
+            "input": 1,
+            "output": 387,
+            "reasoning": 0,
+            "cache": {
+              "read": 57040,
+              "write": 532
+            }
+          },
+          "id": "prt_cb47166ca001A12RBJ8wcbY0f3",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553856727,
+          "completed": 1772553862511
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58442,
+          "input": 1,
+          "output": 349,
+          "reasoning": 0,
+          "cache": {
+            "read": 57572,
+            "write": 520
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb47166d7001Nv58Mj9KuerP1g",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb4716cbd001M1vrdDFYFck4q6",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47166d7001Nv58Mj9KuerP1g"
+        },
+        {
+          "type": "reasoning",
+          "text": "The `Session` interface is defined in `session.go`, and it includes `NewReset(name, program string, skipPermissions bool) Session`. However, `TmuxSession.NewReset` returns `*TmuxSession`, not `Session`.\n\nThe build passes because there's no place where a `*TmuxSession` is assigned to a `Session` variable. But the interface is broken/inconsistent.\n\nThe reviewer's recommendation is option (a): remove `NewReset` from the `Session` interface since callers use the concrete type. This is the right fix:\n\n1. The caller at `session/instance_lifecycle.go:451` uses `*tmux.TmuxSession` directly (the `tmuxSession` field is `*tmux.TmuxSession`)\n\n\n2. Since callers always work with the concrete type, there's no need for `NewReset` to be part of the interface\n\nLet me check if there are any type assertions or interface checks that would require keeping it.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/exg/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/PpDQLSWcMelzzDw/REDACTED/Q/GdJe//REDACTED/awtrvF9DhvISf4d5Y8QQKWeO/REDACTED/a33wxhhjC761IsA4HBmBoyU/REDACTED/tJI1bPNJqIO/SHpGAE="
+            }
+          },
+          "time": {
+            "start": 1772553858237,
+            "end": 1772553862447
+          },
+          "id": "prt_cb4716cbd0029br4IRti6whO5O",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47166d7001Nv58Mj9KuerP1g"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01CCCSwm1UnGNTCHvEHHbbip",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && rg \"var _ tmux.Session|var _ Session\" --type go",
+              "description": "Check for interface compliance assertions"
+            },
+            "output": "",
+            "title": "Check for interface compliance assertions",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Check for interface compliance assertions",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553862483,
+              "end": 1772553862494
+            }
+          },
+          "id": "prt_cb4717d31001Zz1ERlbuKX8sZc",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47166d7001Nv58Mj9KuerP1g"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 58442,
+            "input": 1,
+            "output": 349,
+            "reasoning": 0,
+            "cache": {
+              "read": 57572,
+              "write": 520
+            }
+          },
+          "id": "prt_cb4717d650016dhsuVjgyK7tdP",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47166d7001Nv58Mj9KuerP1g"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553862512,
+          "completed": 1772553866617
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58631,
+          "input": 1,
+          "output": 166,
+          "reasoning": 0,
+          "cache": {
+            "read": 58092,
+            "write": 372
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4717d700011Qv9AiJo6p8uZo",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb47182cc001QpYuDPx33vtCbJ",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4717d700011Qv9AiJo6p8uZo"
+        },
+        {
+          "type": "text",
+          "text": "The fix is clear. Option (a) from the reviewer: remove `NewReset` from the `Session` interface since callers use the concrete `*TmuxSession` type directly. The interface method declaration is broken because the implementation returns `*TmuxSession` but the interface declares `Session`, and these can't match under Go's strict return type rules.",
+          "time": {
+            "start": 1772553865967,
+            "end": 1772553865967
+          },
+          "id": "prt_cb47182cc002f0dLgw9yB1CUWS",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4717d700011Qv9AiJo6p8uZo"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "todowrite",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "Remove NewReset from Session interface (option a from reviewer)",
+                  "status": "in_progress",
+                  "priority": "high"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"Remove NewReset from Session interface (option a from reviewer)\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  }\n]",
+            "title": "1 todos",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "Remove NewReset from Session interface (option a from reviewer)",
+                  "status": "in_progress",
+                  "priority": "high"
+                }
+              ],
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553866587,
+              "end": 1772553866587
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4717d700011Qv9AiJo6p8uZo"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 58631,
+            "input": 1,
+            "output": 166,
+            "reasoning": 0,
+            "cache": {
+              "read": 58092,
+              "write": 372
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4717d700011Qv9AiJo6p8uZo"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553866618,
+          "completed": 1772553870946
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58801,
+          "input": 1,
+          "output": 113,
+          "reasoning": 0,
+          "cache": {
+            "read": 58464,
+            "write": 223
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4718d7a001cRG405X2u2MXq6",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb4719948001n0savH5eKJmoaN",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4718d7a001cRG405X2u2MXq6"
+        },
+        {
+          "type": "text",
+          "text": "First, write a test that verifies the interface conformance (should fail before fix):",
+          "time": {
+            "start": 1772553870490,
+            "end": 1772553870490
+          },
+          "id": "prt_cb471994b001us2Du73xuFLUvd",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4718d7a001cRG405X2u2MXq6"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session_test.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"os/exec\"\n6: \t\"strings\"\n7: \t\"testing\"\n8: \n9: \tcmd2 \"github.com/kastheco/kasmos/cmd\"\n10: \t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n11: \t\"github.com/stretchr/testify/assert\"\n12: \t\"github.com/stretchr/testify/require\"\n13: )\n14: \n15: func TestToKasTmuxName(t *testing.T) {\n16: \tassert.Equal(t, \"kas_asdf\", toKasTmuxName(\"asdf\"))\n17: \tassert.Equal(t, \"kas_asdf__asdf\", toKasTmuxName(\"a sd f . . asdf\"))\n18: }\n19: \n20: func TestNewTmuxSession_SanitizesName(t *testing.T) {\n21: \ts := NewTmuxSession(\"my.session\", \"claude\", false)\n22: \tassert.Equal(t, \"kas_my_session\", s.GetSanitizedName())\n23: }\n24: \n25: func TestSetAgentType(t *testing.T) {\n26: \ts := NewTmuxSession(\"test\", \"opencode\", false)\n27: \ts.SetAgentType(\"  planner  \")\n28: \t// agentType should be trimmed — verified indirectly via Start command construction\n29: \tassert.Equal(t, \"planner\", s.agentType)\n30: }\n31: \n32: func TestSetTaskEnv(t *testing.T) {\n33: \ts := NewTmuxSession(\"test\", \"claude\", false)\n34: \ts.SetTaskEnv(3, 2, 4)\n35: \tassert.Equal(t, 3, s.taskNumber)\n36: \tassert.Equal(t, 2, s.waveNumber)\n37: \tassert.Equal(t, 4, s.peerCount)\n38: }\n39: \n40: func TestNewReset_PreservesDeps(t *testing.T) {\n41: \tpty := NewMockPtyFactory(t)\n42: \texec := cmd_test.NewMockExecutor()\n43: \ts := NewTmuxSessionWithDeps(\"orig\", \"claude\", false, pty, exec)\n44: \treset := s.NewReset(\"new\", \"opencode\", true)\n45: \tassert.Equal(t, \"kas_new\", reset.GetSanitizedName())\n46: }\n47: \n48: func TestNewTmuxSessionFromExisting(t *testing.T) {\n49: \ts := NewTmuxSessionFromExisting(\"kas_orphan\", \"claude\", false)\n50: \tassert.Equal(t, \"kas_orphan\", s.GetSanitizedName())\n51: }\n52: \n53: func TestToKasTmuxNamePublic(t *testing.T) {\n54: \tassert.Equal(t, \"kas_foo\", ToKasTmuxNamePublic(\"foo\"))\n55: }\n56: \n57: func TestCleanupSessions_KillsKasAndLegacy(t *testing.T) {\n58: \tvar killed []string\n59: \tcmdExec := cmd_test.MockCmdExec{\n60: \t\tRunFunc: func(cmd *exec.Cmd) error {\n61: \t\t\targs := cmd.Args\n62: \t\t\tif len(args) >= 2 && args[1] == \"kill-session\" {\n63: \t\t\t\tfor i, arg := range args {\n64: \t\t\t\t\tif arg == \"-t\" && i+1 < len(args) {\n65: \t\t\t\t\t\tkilled = append(killed, args[i+1])\n66: \t\t\t\t\t}\n67: \t\t\t\t}\n68: \t\t\t}\n69: \t\t\treturn nil\n70: \t\t},\n71: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n72: \t\t\treturn []byte(\n73: \t\t\t\t\"kas_session1: 1 windows\\n\" +\n74: \t\t\t\t\t\"klique_legacy: 1 windows\\n\" +\n75: \t\t\t\t\t\"hivemind_old: 1 windows\\n\" +\n76: \t\t\t\t\t\"unrelated: 1 windows\\n\",\n77: \t\t\t), nil\n78: \t\t},\n79: \t}\n80: \terr := CleanupSessions(cmdExec)\n81: \trequire.NoError(t, err)\n82: \tassert.Len(t, killed, 3)\n83: \tassert.NotContains(t, killed, \"unrelated\")\n84: }\n85: \n86: func TestDiscoverOrphans_FindsUntracked(t *testing.T) {\n87: \tcmdExec := cmd_test.NewMockExecutor()\n88: \tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n89: \t\treturn []byte(\"kas_foo|1740000000|1|0|80|24\\nkas_orphan|1740000000|1|0|80|24\\n\"), nil\n90: \t}\n91: \torphans, err := DiscoverOrphans(cmdExec, []string{\"kas_foo\"})\n92: \trequire.NoError(t, err)\n93: \tassert.Len(t, orphans, 1)\n94: \tassert.Equal(t, \"kas_orphan\", orphans[0].Name)\n95: }\n96: \n97: func TestDiscoverAll_MarksManaged(t *testing.T) {\n98: \tcmdExec := cmd_test.NewMockExecutor()\n99: \tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n100: \t\treturn []byte(\"kas_foo|1740000000|1|0|80|24\\nkas_bar|1740000000|1|0|80|24\\n\"), nil\n101: \t}\n102: \tsessions, err := DiscoverAll(cmdExec, []string{\"kas_foo\"})\n103: \trequire.NoError(t, err)\n104: \tassert.Len(t, sessions, 2)\n105: \tmanaged := 0\n106: \tfor _, s := range sessions {\n107: \t\tif s.Managed {\n108: \t\t\tmanaged++\n109: \t\t}\n110: \t}\n111: \tassert.Equal(t, 1, managed)\n112: }\n113: \n114: func TestCountKasSessions_Simple(t *testing.T) {\n115: \tcmdExec := cmd_test.NewMockExecutor()\n116: \tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n117: \t\treturn []byte(\"kas_foo:1 windows\\nkas_bar:1 windows\\nother:1 windows\\n\"), nil\n118: \t}\n119: \tassert.Equal(t, 2, CountKasSessions(cmdExec))\n120: }\n121: \n122: func TestStart_CreatesAndRestoresSession(t *testing.T) {\n123: \tptyFactory := NewMockPtyFactory(t)\n124: \tcreated := false\n125: \tcmdExec := cmd_test.MockCmdExec{\n126: \t\tRunFunc: func(cmd *exec.Cmd) error {\n127: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n128: \t\t\t\tcreated = true\n129: \t\t\t\treturn fmt.Errorf(\"no session\")\n130: \t\t\t}\n131: \t\t\treturn nil\n132: \t\t},\n133: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n134: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n135: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n136: \t\t\t}\n137: \t\t\treturn []byte(\"output\"), nil\n138: \t\t},\n139: \t}\n140: \n141: \tworkdir := t.TempDir()\n142: \ts := NewTmuxSessionWithDeps(\"test-start\", \"claude\", false, ptyFactory, cmdExec)\n143: \terr := s.Start(workdir)\n144: \trequire.NoError(t, err)\n145: \trequire.Len(t, ptyFactory.cmds, 2) // new-session + attach-session\n146: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"new-session\")\n147: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"KASMOS_MANAGED=1\")\n148: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[1]), \"attach-session\")\n149: }\n150: \n151: func TestStart_WithSkipPermissions(t *testing.T) {\n152: \tptyFactory := NewMockPtyFactory(t)\n153: \tcreated := false\n154: \tcmdExec := cmd_test.MockCmdExec{\n155: \t\tRunFunc: func(cmd *exec.Cmd) error {\n156: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n157: \t\t\t\tcreated = true\n158: \t\t\t\treturn fmt.Errorf(\"no session\")\n159: \t\t\t}\n160: \t\t\treturn nil\n161: \t\t},\n162: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n163: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n164: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n165: \t\t\t}\n166: \t\t\treturn []byte(\"output\"), nil\n167: \t\t},\n168: \t}\n169: \n170: \tworkdir := t.TempDir()\n171: \ts := NewTmuxSessionWithDeps(\"test-skip\", \"claude\", true, ptyFactory, cmdExec)\n172: \terr := s.Start(workdir)\n173: \trequire.NoError(t, err)\n174: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"--dangerously-skip-permissions\")\n175: }\n176: \n177: func TestStart_OpenCode_NoTrustTap(t *testing.T) {\n178: \tptyFactory := NewMockPtyFactory(t)\n179: \tcreated := false\n180: \tvar ranCmds []string\n181: \tcmdExec := cmd_test.MockCmdExec{\n182: \t\tRunFunc: func(cmd *exec.Cmd) error {\n183: \t\t\tranCmds = append(ranCmds, cmd2.ToString(cmd))\n184: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n185: \t\t\t\tcreated = true\n186: \t\t\t\treturn fmt.Errorf(\"no session\")\n187: \t\t\t}\n188: \t\t\treturn nil\n189: \t\t},\n190: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n191: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n192: \t\t\t\treturn []byte(\"Ask anything\"), nil\n193: \t\t\t}\n194: \t\t\treturn []byte(\"output\"), nil\n195: \t\t},\n196: \t}\n197: \n198: \tworkdir := t.TempDir()\n199: \ts := NewTmuxSessionWithDeps(\"test-oc\", \"opencode\", false, ptyFactory, cmdExec)\n200: \terr := s.Start(workdir)\n201: \trequire.NoError(t, err)\n202: \tfor _, c := range ranCmds {\n203: \t\tassert.NotContains(t, c, \"send-keys\")\n204: \t}\n205: }\n206: \n207: func TestStart_InjectsAgentFlag(t *testing.T) {\n208: \tptyFactory := NewMockPtyFactory(t)\n209: \tcreated := false\n210: \tcmdExec := cmd_test.MockCmdExec{\n211: \t\tRunFunc: func(cmd *exec.Cmd) error {\n212: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n213: \t\t\t\tcreated = true\n214: \t\t\t\treturn fmt.Errorf(\"no session\")\n215: \t\t\t}\n216: \t\t\treturn nil\n217: \t\t},\n218: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n219: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n220: \t\t\t\treturn []byte(\"Ask anything\"), nil\n221: \t\t\t}\n222: \t\t\treturn []byte(\"output\"), nil\n223: \t\t},\n224: \t}\n225: \n226: \tworkdir := t.TempDir()\n227: \ts := NewTmuxSessionWithDeps(\"test-agent\", \"opencode\", false, ptyFactory, cmdExec)\n228: \ts.SetAgentType(\"planner\")\n229: \terr := s.Start(workdir)\n230: \trequire.NoError(t, err)\n231: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"--agent planner\")\n232: }\n233: \n234: func TestStart_InjectsTaskEnvVars(t *testing.T) {\n235: \tptyFactory := NewMockPtyFactory(t)\n236: \tcreated := false\n237: \tcmdExec := cmd_test.MockCmdExec{\n238: \t\tRunFunc: func(cmd *exec.Cmd) error {\n239: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n240: \t\t\t\tcreated = true\n241: \t\t\t\treturn fmt.Errorf(\"no session\")\n242: \t\t\t}\n243: \t\t\treturn nil\n244: \t\t},\n245: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n246: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n247: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n248: \t\t\t}\n249: \t\t\treturn []byte(\"output\"), nil\n250: \t\t},\n251: \t}\n252: \n253: \tworkdir := t.TempDir()\n254: \ts := NewTmuxSessionWithDeps(\"test-env\", \"claude\", false, ptyFactory, cmdExec)\n255: \ts.SetTaskEnv(3, 2, 4)\n256: \terr := s.Start(workdir)\n257: \trequire.NoError(t, err)\n258: \tcmdStr := cmd2.ToString(ptyFactory.cmds[0])\n259: \tassert.Contains(t, cmdStr, \"KASMOS_TASK=3\")\n260: \tassert.Contains(t, cmdStr, \"KASMOS_WAVE=2\")\n261: \tassert.Contains(t, cmdStr, \"KASMOS_PEERS=4\")\n262: }\n263: \n264: func TestStart_WithInitialPrompt_OpenCode(t *testing.T) {\n265: \tptyFactory := NewMockPtyFactory(t)\n266: \tcreated := false\n267: \tcmdExec := cmd_test.MockCmdExec{\n268: \t\tRunFunc: func(cmd *exec.Cmd) error {\n269: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n270: \t\t\t\tcreated = true\n271: \t\t\t\treturn fmt.Errorf(\"no session\")\n272: \t\t\t}\n273: \t\t\treturn nil\n274: \t\t},\n275: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n276: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n277: \t\t\t\treturn []byte(\"Ask anything\"), nil\n278: \t\t\t}\n279: \t\t\treturn []byte(\"output\"), nil\n280: \t\t},\n281: \t}\n282: \n283: \tworkdir := t.TempDir()\n284: \ts := NewTmuxSessionWithDeps(\"test-prompt\", \"opencode\", false, ptyFactory, cmdExec)\n285: \ts.SetAgentType(\"planner\")\n286: \ts.SetInitialPrompt(\"Plan auth. Goal: JWT tokens.\")\n287: \terr := s.Start(workdir)\n288: \trequire.NoError(t, err)\n289: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"--prompt 'Plan auth. Goal: JWT tokens.'\")\n290: }\n291: \n292: func TestStart_WithInitialPrompt_Claude(t *testing.T) {\n293: \tptyFactory := NewMockPtyFactory(t)\n294: \tcreated := false\n295: \tcmdExec := cmd_test.MockCmdExec{\n296: \t\tRunFunc: func(cmd *exec.Cmd) error {\n297: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n298: \t\t\t\tcreated = true\n299: \t\t\t\treturn fmt.Errorf(\"no session\")\n300: \t\t\t}\n301: \t\t\treturn nil\n302: \t\t},\n303: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n304: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n305: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n306: \t\t\t}\n307: \t\t\treturn []byte(\"output\"), nil\n308: \t\t},\n309: \t}\n310: \n311: \tworkdir := t.TempDir()\n312: \ts := NewTmuxSessionWithDeps(\"test-claude-prompt\", \"claude\", false, ptyFactory, cmdExec)\n313: \ts.SetInitialPrompt(\"Implement the auth module.\")\n314: \terr := s.Start(workdir)\n315: \trequire.NoError(t, err)\n316: \tassert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), \"'Implement the auth module.'\")\n317: }\n\n(End of file - total 317 lines)\n</content>",
+            "title": "session/tmux/tmux_session_test.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"strings\"\n\t\"testing\"\n\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestToKasTmuxName(t *testing.T) {\n\tassert.Equal(t, \"kas_asdf\", toKasTmuxName(\"asdf\"))\n\tassert.Equal(t, \"kas_asdf__asdf\", toKasTmuxName(\"a sd f . . asdf\"))\n}\n\nfunc TestNewTmuxSession_SanitizesName(t *testing.T) {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772553870913,
+              "end": 1772553870916
+            }
+          },
+          "id": "prt_cb4719c9b0013nO4F5gi4W3f70",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4718d7a001cRG405X2u2MXq6"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "cost": 0,
+          "tokens": {
+            "total": 58801,
+            "input": 1,
+            "output": 113,
+            "reasoning": 0,
+            "cache": {
+              "read": 58464,
+              "write": 223
+            }
+          },
+          "id": "prt_cb4719e5800134Y4J9t240POf6",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4718d7a001cRG405X2u2MXq6"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553870947,
+          "completed": 1772553884674
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64146,
+          "input": 1,
+          "output": 598,
+          "reasoning": 0,
+          "cache": {
+            "read": 58687,
+            "write": 4860
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4719e630012kR1AxdcQzxKtm",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "id": "prt_cb471a636001KTiy1T2NoamkKP",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me write a compile-time assertion test that checks `*TmuxSession` implements `Session`. This will fail to compile because of the `NewReset` return type mismatch.\n\nActually, let me first understand the issue better. In Go, for a method to satisfy an interface:\n- The method name must match\n- The parameter types must match\n- The **return types must match exactly**\n\nSince the interface has `NewReset(name, program string, skipPermissions bool) Session` and the implementation has `func (t *TmuxSession) NewReset(...) *TmuxSession`, these don't match because `*TmuxSession != Session`.\n\n\nThis means `*TmuxSession` doesn't satisfy `Session`. I'll add a compile-time assertion like `var _ Session = (*TmuxSession)(nil)` which will fail at compile time with the current code, then fix the interface by removing `NewReset` from it since callers should use the concrete type directly.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/ZURZ2N9c9W6/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/6UqO4uJ/REDACTED/sPqdc686X+RbEYs8arVNiOKIIEw/fGGaWGQ6TEZYsVavb6FhgdEj/REDACTED/REDACTED/REDACTED/REDACTED/h/7iqjCkNqm/ZrjZEi1if99eNCW4hmlsrDHt8/YddrwB2od+LO/REDACTED/Pa41Hvnraepzd7iw+q/deUyvoVa7KGlggSQqe2NqbyBGAS/Rrl6RgB"
+            }
+          },
+          "time": {
+            "start": 1772553872951,
+            "end": 1772553882685
+          },
+          "id": "prt_cb471a637001f0MqXe08E2yTMy",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        },
+        {
+          "type": "text",
+          "text": "Now I'll add a compile-time interface assertion test first (it should fail to compile), then fix the interface:",
+          "time": {
+            "start": 1772553882939,
+            "end": 1772553882939
+          },
+          "id": "prt_cb471cc4f0012oSeYbvCn42JP2",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DQtwzX9wyjwJvYpTQJwxQp",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cat > /tmp/test_interface_check.go << 'EOF'\npackage tmux\n\n// Compile-time assertion: *TmuxSession must satisfy Session interface.\nvar _ Session = (*TmuxSession)(nil)\nEOF\ncp /tmp/test_interface_check.go /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/interface_check_test.go\ncd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go build ./session/tmux/... 2>&1",
+              "description": "Add compile-time interface check to confirm the bug"
+            },
+            "output": "",
+            "title": "Add compile-time interface check to confirm the bug",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Add compile-time interface check to confirm the bug",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553884517,
+              "end": 1772553884662
+            }
+          },
+          "id": "prt_cb471cd44001jbGKbBgj1LBcCk",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d2e99c94db462bd0ba3cda6fbe53837ab2ca1f45",
+          "cost": 0,
+          "tokens": {
+            "total": 64146,
+            "input": 1,
+            "output": 598,
+            "reasoning": 0,
+            "cache": {
+              "read": 58687,
+              "write": 4860
+            }
+          },
+          "id": "prt_cb471d3f7001PXfbRzWi3WviG4",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        },
+        {
+          "type": "patch",
+          "hash": "f2e49661b4a140b9c93a3be5e594447e3e96deb5",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/interface_check_test.go"
+          ],
+          "id": "prt_cb471d4000015qBfu3kCAUGfPK",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4719e630012kR1AxdcQzxKtm"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553884676,
+          "completed": 1772553891186
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64478,
+          "input": 1,
+          "output": 314,
+          "reasoning": 0,
+          "cache": {
+            "read": 63547,
+            "write": 616
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb471d404001NDwntr7v7Rl86s",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d2e99c94db462bd0ba3cda6fbe53837ab2ca1f45",
+          "id": "prt_cb471d9c6001T64vBzqZKh36M8",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb471d404001NDwntr7v7Rl86s"
+        },
+        {
+          "type": "reasoning",
+          "text": "Hmm, it doesn't fail. Let me try `go test` instead to see if there's an issue.\n\nWait - I misread. Let me check again. The file is not a test file (it doesn't end in `_test.go`), so it's production code. But the variable in the `test` file won't be checked during `go build ./session/tmux/...` unless tests are compiled.\n\nActually, I added it as `interface_check_test.go` - wait, I'm looking at the content I wrote. The file name is `interface_check_test.go` but the package is `package tmux` (not `package tmux_test`). \n\nI should run the tests with a flag that compiles the test code without actually running any tests, so I can catch any compilation errors.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/8Yh8zT8/WVRf8qCeSp0qmiLmIooc09y9SXn0xc/REDACTED/b0hqcF2/XypkrAzvkMx9B7pOwjCnb/gQdAISCfqsb0ZQYXaubDLJ+/sWaHMD+ONGNPGusS3Zjtsh93dgKA/REDACTED/REDACTED/+YcriHTkVF8L/REDACTED/REDACTED/YmVBSqgNtptYtCWlWeuaweOc+/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772553886151,
+            "end": 1772553890650
+          },
+          "id": "prt_cb471d9c7001Y7DIHgEU75odoP",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb471d404001NDwntr7v7Rl86s"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go vet ./session/tmux/... 2>&1",
+              "description": "Check if interface conformance fails with go vet"
+            },
+            "output": "# github.com/kastheco/kasmos/session/tmux\n# [github.com/kastheco/kasmos/session/tmux]\nvet: session/tmux/interface_check_test.go:4:17: cannot use (*TmuxSession)(nil) (value of type *TmuxSession) as Session value in variable declaration: *TmuxSession does not implement Session (wrong type for method NewReset)\n\t\thave NewReset(string, string, bool) *TmuxSession\n\t\twant NewReset(string, string, bool) Session\n",
+            "title": "Check if interface conformance fails with go vet",
+            "metadata": {
+              "output": "# github.com/kastheco/kasmos/session/tmux\n# [github.com/kastheco/kasmos/session/tmux]\nvet: session/tmux/interface_check_test.go:4:17: cannot use (*TmuxSession)(nil) (value of type *TmuxSession) as Session value in variable declaration: *TmuxSession does not implement Session (wrong type for method NewReset)\n\t\thave NewReset(string, string, bool) *TmuxSession\n\t\twant NewReset(string, string, bool) Session\n",
+              "exit": 1,
+              "description": "Check if interface conformance fails with go vet",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553890829,
+              "end": 1772553891170
+            }
+          },
+          "id": "prt_cb471eb5b0014RrLAyKHnOrDqH",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb471d404001NDwntr7v7Rl86s"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d2e99c94db462bd0ba3cda6fbe53837ab2ca1f45",
+          "cost": 0,
+          "tokens": {
+            "total": 64478,
+            "input": 1,
+            "output": 314,
+            "reasoning": 0,
+            "cache": {
+              "read": 63547,
+              "write": 616
+            }
+          },
+          "id": "prt_cb471ed630018926nCH0vD9dKm",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb471d404001NDwntr7v7Rl86s"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553891189,
+          "completed": 1772553898220
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64965,
+          "input": 1,
+          "output": 344,
+          "reasoning": 0,
+          "cache": {
+            "read": 64163,
+            "write": 457
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d2e99c94db462bd0ba3cda6fbe53837ab2ca1f45",
+          "id": "prt_cb471f673001uq4GpEo5P9B1M7",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "The interface conformance issue is confirmed. Now apply the fix — remove `NewReset` from the `Session` interface (option a):",
+          "time": {
+            "start": 1772553894326,
+            "end": 1772553894326
+          },
+          "id": "prt_cb471f674001Df93G0pDWfrpH1",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01QgpSqgUHry53et1iihekwH",
+          "tool": "edit",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go",
+              "oldString": "\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n\tNewReset(name, program string, skipPermissions bool) Session\n}",
+              "newString": "\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n}"
+            },
+            "output": "Edit applied successfully.",
+            "title": "session/tmux/session.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/instance_lifecycle.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session_test.go": []
+              },
+              "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go\n@@ -40,9 +40,8 @@\n \tSetInitialPrompt(prompt string)\n \tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n \tSetSessionTitle(title string)\n \tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n-\tNewReset(name, program string, skipPermissions bool) Session\n }\n \n // PermissionChoice represents the user's response to a permission prompt.\n type PermissionChoice int\n",
+              "filediff": {
+                "file": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go",
+                "before": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error\n\tSendPermissionResponse(choice PermissionChoice) error\n\tCapturePaneContent() (string, error)\n\tCapturePaneContentWithOptions(start, end string) (string, error)\n\tHasUpdated() (updated bool, hasPrompt bool)\n\tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n\tGetPanePID() (int, error)\n\n\t// Attach/Detach\n\tAttach() (chan struct{}, error)\n\tDetach()\n\tDetachSafely() error\n\tSetDetachedSize(width, height int) error\n\n\t// Accessors\n\tGetPTY() *os.File\n\tGetSanitizedName() string\n\n\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n\tNewReset(name, program string, skipPermissions bool) Session\n}\n\n// PermissionChoice represents the user's response to a permission prompt.\ntype PermissionChoice int\n\nconst (\n\tPermissionAllowOnce PermissionChoice = iota\n\tPermissionAllowAlways\n\tPermissionReject\n)\n",
+                "after": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error\n\tSendPermissionResponse(choice PermissionChoice) error\n\tCapturePaneContent() (string, error)\n\tCapturePaneContentWithOptions(start, end string) (string, error)\n\tHasUpdated() (updated bool, hasPrompt bool)\n\tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n\tGetPanePID() (int, error)\n\n\t// Attach/Detach\n\tAttach() (chan struct{}, error)\n\tDetach()\n\tDetachSafely() error\n\tSetDetachedSize(width, height int) error\n\n\t// Accessors\n\tGetPTY() *os.File\n\tGetSanitizedName() string\n\n\t// Configuration (builder-style, called before Start)\n\tSetAgentType(agentType string)\n\tSetInitialPrompt(prompt string)\n\tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n\tSetSessionTitle(title string)\n\tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n}\n\n// PermissionChoice represents the user's response to a permission prompt.\ntype PermissionChoice int\n\nconst (\n\tPermissionAllowOnce PermissionChoice = iota\n\tPermissionAllowAlways\n\tPermissionReject\n)\n",
+                "additions": 0,
+                "deletions": 1
+              },
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553898031,
+              "end": 1772553898204
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "cost": 0,
+          "tokens": {
+            "total": 64965,
+            "input": 1,
+            "output": 344,
+            "reasoning": 0,
+            "cache": {
+              "read": 64163,
+              "write": 457
+            }
+          },
+          "id": "prt_cb47208dd001LvJndXqW35QrJ6",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "d2e99c94db462bd0ba3cda6fbe53837ab2ca1f45",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553898221,
+          "completed": 1772553902532
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 65109,
+          "input": 1,
+          "output": 129,
+          "reasoning": 0,
+          "cache": {
+            "read": 64620,
+            "write": 359
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb47208ed001X70QWoj1LFeNEN",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "id": "prt_cb472132c001C4VnRZ4uDN2SJF",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47208ed001X70QWoj1LFeNEN"
+        },
+        {
+          "type": "text",
+          "text": "Now verify the compile-time assertion passes:",
+          "time": {
+            "start": 1772553901205,
+            "end": 1772553901205
+          },
+          "id": "prt_cb472132e001ILRkYNDpy34Mc8",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47208ed001X70QWoj1LFeNEN"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Xd63MPRvKNLvCgYUurtut9",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go vet ./session/tmux/... 2>&1",
+              "description": "Verify interface conformance check now passes"
+            },
+            "output": "",
+            "title": "Verify interface conformance check now passes",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Verify interface conformance check now passes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553902310,
+              "end": 1772553902426
+            }
+          },
+          "id": "prt_cb472149b001nG6p2Qsd7DJV51",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47208ed001X70QWoj1LFeNEN"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "cost": 0,
+          "tokens": {
+            "total": 65109,
+            "input": 1,
+            "output": 129,
+            "reasoning": 0,
+            "cache": {
+              "read": 64620,
+              "write": 359
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47208ed001X70QWoj1LFeNEN"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553902534,
+          "completed": 1772553910376
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 65263,
+          "input": 1,
+          "output": 128,
+          "reasoning": 0,
+          "cache": {
+            "read": 64979,
+            "write": 155
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb47219c6001QNVIVOv7S5rs5G",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47219c6001QNVIVOv7S5rs5G"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012rSu1e56RcEsE5SqfJyK2W",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go build ./... 2>&1 && go test ./session/tmux/... 2>&1",
+              "description": "Run full build and tmux package tests"
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/session/tmux\t2.809s\n",
+            "title": "Run full build and tmux package tests",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/session/tmux\t2.809s\n",
+              "exit": 0,
+              "description": "Run full build and tmux package tests",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553906042,
+              "end": 1772553910367
+            }
+          },
+          "id": "prt_cb472234f0014yD5IsaAIhslth",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47219c6001QNVIVOv7S5rs5G"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "cost": 0,
+          "tokens": {
+            "total": 65263,
+            "input": 1,
+            "output": 128,
+            "reasoning": 0,
+            "cache": {
+              "read": 64979,
+              "write": 155
+            }
+          },
+          "id": "prt_cb4723860001Q2Wr4SruxVwS4q",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb47219c6001QNVIVOv7S5rs5G"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553910377,
+          "completed": 1772553914414
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 65442,
+          "input": 1,
+          "output": 143,
+          "reasoning": 0,
+          "cache": {
+            "read": 65134,
+            "write": 164
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass. Let me also check the `time` import in `session.go` is still needed (it's used for `SetTitleFunc`):",
+          "time": {
+            "start": 1772553913137,
+            "end": 1772553913137
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01SfKszD5ZVksguVD6cWcWtp",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go build ./... 2>&1",
+              "description": "Full build verification"
+            },
+            "output": "",
+            "title": "Full build verification",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Full build verification",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772553913809,
+              "end": 1772553914405
+            }
+          },
+          "id": "prt_cb47243350018Qzkos83Iulbt6",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "cost": 0,
+          "tokens": {
+            "total": 65442,
+            "input": 1,
+            "output": 143,
+            "reasoning": 0,
+            "cache": {
+              "read": 65134,
+              "write": 164
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772553914416
+        },
+        "parentID": "msg_cb470a200001U0vgc3XkV5GD3Y",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb4724830001X34TTIGl8DtYK9",
+        "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9f23e191a0b828cc50c8fa7e12aa2d09914891dd",
+          "id": "REDACTED",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4724830001X34TTIGl8DtYK9"
+        },
+        {
+          "type": "text",
+          "text": "Clean build. Now commit:",
+          "time": {
+            "start": 1772553916945,
+            "end": 1772553916945
+          },
+          "id": "prt_cb4724fea002H6VBK7TUN466gO",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4724830001X34TTIGl8DtYK9"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01P7ZPQeHC3CgxeNSSeXnst9",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && git add session/tmux/session.go session/tmux/interface_check_test.go && git commit -m \"fix(tmux): remove NewReset from Session interface to restore conformance\n\n*TmuxSession.NewReset returns *TmuxSession but the Session interface\ndeclared NewReset(...) Session, making *TmuxSession fail to implement\nSession. Since all callers (instance_lifecycle.go) use the concrete\n*TmuxSession type directly, NewReset does not need to be part of the\ninterface. Removes the method from Session and adds a compile-time\nassertion (var _ Session = (*TmuxSession)(nil)) to prevent future drift.\"",
+              "description": "Commit interface fix with compile-time assertion"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit interface fix with compile-time assertion"
+            },
+            "time": {
+              "start": 1772553920204
+            }
+          },
+          "id": "prt_cb4725212001H3bJXYEuoeYR05",
+          "sessionID": "ses_34b8f5e0fffeiyMw8GaEPTQL6L",
+          "messageID": "msg_cb4724830001X34TTIGl8DtYK9"
+        }
+      ]
+    }
+  ]
+}

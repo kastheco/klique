@@ -1,0 +1,14 @@
+Implement docs/plans/01a-rewrite-tmux-layer.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## important
+
+- `session/tmux/session.go:44` — `*TmuxSession` does not satisfy the `Session` interface because `NewReset` returns `*TmuxSession` but the interface declares `NewReset(...) Session`. The interface was introduced by this plan but is immediately broken. Fix: either (a) remove `NewReset` from the `Session` interface since callers use the concrete type, or (b) change `TmuxSession.NewReset` to return `Session` and update the caller at `session/instance_lifecycle.go:451` to use a type assertion. Option (a) is simpler and matches current usage.
+
+## self-fixed (no action needed)
+
+- `session/tmux/tmux_session.go:92-95` — removed dead `adapter any` field and stale "Will be typed as ProgramAdapter" comment; the field was never read or written
+- `session/tmux/pane_io.go:124-128` — restored capture-failure error logging that was missing (empty if-body where old code logged via `log.ErrorLog`); failures were being silently swallowed
+- `session/tmux/tmux_session.go:31-33` — fixed stale struct doc comment referencing "The adapter field will hold the ProgramAdapter once that interface is defined" when the interface already exists
