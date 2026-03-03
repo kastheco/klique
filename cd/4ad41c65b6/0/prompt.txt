@@ -1,0 +1,76 @@
+Implement Task 2: Rewrite cmd/cmd.go
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all upstream-derived code in `config/config.go`, `config/state.go`, `cmd/cmd.go`, and `daemon/` to remove AGPL-tainted lines from the fork point (`bbc8cad`), enabling a license change. The rewrite preserves identical behavior and public API while replacing every line that traces back to the upstream fork.
+**Architecture:** Six files are rewritten in-place across three packages: `config/` (config.go, state.go), `cmd/` (cmd.go), and `daemon/` (daemon.go, daemon_unix.go, daemon_windows.go). Each file is deleted and rewritten from its functional specification — no copy-paste from the original. All exported types, functions, and method signatures stay identical so callers compile without changes. Files that are 100% post-fork original (`config/toml.go`, `config/profile.go`, `config/permission_store.go`, `config/permission_migrate.go`, `config/taskfsm/`, `config/taskparser/`, `config/taskstate/`, `config/taskstore/`, `config/auditlog/`, `cmd/task.go`, `cmd/serve.go`) are untouched. Existing tests in `config/config_test.go` and `cmd/cmd_test/` serve as the regression suite.
+**Tech Stack:** Go 1.24, encoding/json, os/exec, os/user, os/signal, syscall, cobra, testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/cmd.go`
+- Test: `cmd/cmd_test/testutils.go` (existing, no changes needed)
+
+**Step 1: write the failing test**
+
+No new tests needed. The `cmd/cmd.go` file defines the `Executor` interface, `Exec` struct, `MakeExecutor`, `ToString`, and `NewRootCmd` — all exercised by the existing test infrastructure in `cmd/cmd_test/testutils.go` and indirectly by `cmd/task_test.go` and `cmd/serve_test.go`. The `NewRootCmd` function is also tested by the cobra command tree tests.
+
+**Step 2: run test to verify it passes (baseline)**
+
+```bash
+go test ./cmd/... -v -count=1
+```
+
+expected: PASS — all existing tests pass before we touch anything
+
+**Step 3: rewrite implementation**
+
+Delete `cmd/cmd.go` and rewrite from scratch based on this functional spec:
+
+**`Executor` interface** — `Run(cmd *exec.Cmd) error`, `Output(cmd *exec.Cmd) ([]byte, error)`.
+
+**`Exec` struct** — empty struct implementing `Executor`. `Run` delegates to `cmd.Run()`. `Output` delegates to `cmd.Output()`.
+
+**`MakeExecutor() Executor`** — returns `Exec{}`.
+
+**`ToString(cmd *exec.Cmd) string`** — returns `"<nil>"` for nil cmd, otherwise `strings.Join(cmd.Args, " ")`.
+
+**`NewRootCmd() *cobra.Command`** — creates root command with `Use: "kas"`, `Short: "kas - Manage multiple AI agents"`. Adds `NewTaskCmd()` and `NewServeCmd()` as subcommands.
+
+Imports: `os/exec`, `strings`, `github.com/spf13/cobra`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/cmd.go
+git commit -m "feat(clean-room): rewrite cmd/cmd.go from scratch"
+```
