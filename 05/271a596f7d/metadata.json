@@ -3,7 +3,7 @@
   "checkpoint_id": "05271a596f7d",
   "strategy": "manual-commit",
   "branch": "plan/02b-rewrite-overlay-ui",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "ui/overlay/manager.go",
     "ui/overlay/manager_test.go"
@@ -29,13 +29,20 @@
       "context": "/05/271a596f7d/2/context.md",
       "content_hash": "/05/271a596f7d/2/content_hash.txt",
       "prompt": "/05/271a596f7d/2/prompt.txt"
+    },
+    {
+      "metadata": "/05/271a596f7d/3/metadata.json",
+      "transcript": "/05/271a596f7d/3/full.jsonl",
+      "context": "/05/271a596f7d/3/context.md",
+      "content_hash": "/05/271a596f7d/3/content_hash.txt",
+      "prompt": "/05/271a596f7d/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 18,
-    "cache_creation_tokens": 62934,
-    "cache_read_tokens": 835474,
-    "output_tokens": 6387,
-    "api_call_count": 17
+    "input_tokens": 31,
+    "cache_creation_tokens": 118766,
+    "cache_read_tokens": 1358878,
+    "output_tokens": 9682,
+    "api_call_count": 28
   }
 }
