@@ -165,6 +165,13 @@
       "context": "/ee/f77501f7a7/2/context.md",
       "content_hash": "/ee/f77501f7a7/2/content_hash.txt",
       "prompt": "/ee/f77501f7a7/2/prompt.txt"
+    },
+    {
+      "metadata": "/ee/f77501f7a7/3/metadata.json",
+      "transcript": "/ee/f77501f7a7/3/full.jsonl",
+      "context": "/ee/f77501f7a7/3/context.md",
+      "content_hash": "/ee/f77501f7a7/3/content_hash.txt",
+      "prompt": "/ee/f77501f7a7/3/prompt.txt"
     }
   ],
   "token_usage": {
