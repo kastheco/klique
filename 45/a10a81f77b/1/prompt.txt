@@ -1,0 +1,81 @@
+Implement Task 2: Update planner skill template and agent prompt
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop prepending `YYYY-MM-DD-` to plan filenames so that working on a plan across multiple days doesn't cause slug mismatches; the slug alone is a sufficient unique identifier.
+**Architecture:** The date prefix is generated in 4 places: `buildPlanFilename()`, `createPlanEntry()`, `importClickUpTask()`, and `ScaffoldFilename()`. `DisplayName()` strips it for display, and `Rename()` preserves it. All of these must be updated to produce dateless slugs (e.g. `auth-refactor.md` instead of `2026-02-21-auth-refactor.md`). `DisplayName()` becomes a simple `.md` strip. `Rename()` drops the date-preservation logic. The planner skill template, planner agent prompt, and ~20 test files need their hardcoded `2026-XX-XX-` prefixed filenames updated. The `dedupePlanFilename` functions already work on the base slug so they need no logic changes, only test expectation updates.
+**Tech Stack:** Go, bubbletea (TUI), planstate/planstore packages, kasmos-planner skill (Markdown)
+
+## Wave 2 of 2
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`
+- Modify: `.opencode/skills/kasmos-planner/SKILL.md`
+- Modify: `.opencode/agents/planner.md`
+- Test: `contracts/planner_prompt_contract_test.go`
+
+**Step 1: write the failing test**
+
+Update `TestPlannerPromptBranchPolicy` in `contracts/planner_prompt_contract_test.go` — add a negative check that the prompt must NOT contain `YYYY-MM-DD`:
+```go
+if strings.Contains(text, "YYYY-MM-DD") {
+    t.Fatalf("planner prompt still references date prefix convention YYYY-MM-DD")
+}
+```
+
+Also update the signal reference check — it should still find `.kasmos/signals/planner-finished-` (this is format-agnostic and already passes). And update the `<date>-<name>.md` references to `<name>.md` in the prompt.
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./contracts/... -run TestPlannerPromptBranchPolicy -v
+```
+
+expected: FAIL — planner.md still contains `<date>-<name>.md` and SKILL.md contains `YYYY-MM-DD`
+
+**Step 3: write minimal implementation**
+
+1. **`.opencode/agents/planner.md`** — replace all `<date>-<name>` references with `<name>`:
+   - `.kasmos/signals/planner-finished-<date>-<name>.md` → `.kasmos/signals/planner-finished-<name>.md`
+   - `kas plan register <date>-<name>.md` → `kas plan register <name>.md`
+
+2. **`.opencode/skills/kasmos-planner/SKILL.md`** and **`internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`** — update the naming convention and all signal/filename references:
+   - `**plan naming convention:** \`YYYY-MM-DD-<feature-name>.md\`` → `**plan naming convention:** \`<feature-name>.md\``
+   - `touch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md` → `touch .kasmos/signals/planner-finished-<feature-name>.md`
+   - `kas plan register YYYY-MM-DD-<feature-name>.md` → `kas plan register <feature-name>.md`
+   - All quoted plan filenames like `` `YYYY-MM-DD-<feature-name>.md` `` → `` `<feature-name>.md` ``
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./contracts/... -run TestPlannerPromptBranchPolicy -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add .opencode/agents/planner.md .opencode/skills/kasmos-planner/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md contracts/planner_prompt_contract_test.go
+git commit -m "docs: update planner skill and agent prompt to dateless slug convention"
+```
