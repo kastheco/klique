@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772580683600,
-      "updated": 1772580910819
+      "updated": 1772580920192
     }
   },
   "messages": [
@@ -4141,7 +4141,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772580910807
+          "created": 1772580910807,
+          "completed": 1772580920177
         },
         "parentID": "msg_cb60abf6a001tM62gs4JNHDET9",
         "modelID": "claude-sonnet-4-6",
@@ -4154,15 +4155,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 85516,
+          "input": 1,
+          "output": 152,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 84707,
+            "write": 656
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb60e36d700166SjHQ1gjGy5tN",
         "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC"
       },
@@ -4190,22 +4193,118 @@
           "callID": "toolu_01Uq695W1NMcGNHiEyENCCjb",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "cd /home/kas/dev/kasmos/.worktrees/plan-instance-management-cli && git add cmd/instance.go cmd/instance_test.go cmd/cmd.go main.go && git commit -m \"feat: add kas instance list command with text/json output\"",
               "description": "Commit instance list command implementation"
             },
+            "output": "[plan/instance-management-cli 42b5d34] feat: add kas instance list command with text/json output\n 4 files changed, 251 insertions(+)\n create mode 100644 cmd/instance.go\n create mode 100644 cmd/instance_test.go\n",
+            "title": "Commit instance list command implementation",
             "metadata": {
-              "output": "",
-              "description": "Commit instance list command implementation"
+              "output": "[plan/instance-management-cli 42b5d34] feat: add kas instance list command with text/json output\n 4 files changed, 251 insertions(+)\n create mode 100644 cmd/instance.go\n create mode 100644 cmd/instance_test.go\n",
+              "exit": 0,
+              "description": "Commit instance list command implementation",
+              "truncated": false
             },
             "time": {
-              "start": 1772580917384
+              "start": 1772580917383,
+              "end": 1772580920167
             }
           },
           "id": "prt_cb60e4b45001BD632RuDReQUuf",
           "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC",
           "messageID": "msg_cb60e36d700166SjHQ1gjGy5tN"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "35a3131285c54aa59cf86c425b25a9bfb708efba",
+          "cost": 0,
+          "tokens": {
+            "total": 85516,
+            "input": 1,
+            "output": 152,
+            "reasoning": 0,
+            "cache": {
+              "read": 84707,
+              "write": 656
+            }
+          },
+          "id": "prt_cb60e5b68001jrFXLZyBywON5Q",
+          "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC",
+          "messageID": "msg_cb60e36d700166SjHQ1gjGy5tN"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772580920179,
+          "completed": 1772580931435
+        },
+        "parentID": "msg_cb60abf6a001tM62gs4JNHDET9",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 85925,
+          "input": 1,
+          "output": 327,
+          "reasoning": 0,
+          "cache": {
+            "read": 85363,
+            "write": 234
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb60e5b73001P5PxpYEnaZ77fS",
+        "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "35a3131285c54aa59cf86c425b25a9bfb708efba",
+          "id": "prt_cb60e6ce1001Bp6e0aPwc8oWml",
+          "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC",
+          "messageID": "msg_cb60e5b73001P5PxpYEnaZ77fS"
+        },
+        {
+          "type": "text",
+          "text": "Task 1 complete. Here's a summary of what was implemented:\n\n## Summary\n\n**Files created/modified:**\n- `cmd/instance.go` — New file with `executeInstanceList`, `NewInstanceCmd`, and supporting types\n- `cmd/instance_test.go` — 4 tests covering text output, JSON output, empty list, and status filtering\n- `cmd/cmd.go` — Added `root.AddCommand(NewInstanceCmd())`\n- `main.go` — Added `rootCmd.AddCommand(cmd2.NewInstanceCmd())`\n\n**Key design decision:** The `cmd` package cannot import `session` due to a pre-existing cycle (`session/tmux` → `cmd` for the `Executor` interface). The implementation uses a local `instanceRecord` struct that mirrors `session.InstanceData`'s JSON layout (with `instanceStatus` int constants matching `session.Status` iota values). This is documented in comments. The test similarly avoids importing `session` by using numeric status values directly.\n\n**Behavior:**\n- `kas instance list` — tab-aligned text table with TITLE, STATUS, BRANCH, PROGRAM, TASK columns\n- `kas instance list --format json` — JSON array with `title`, `status` (string), `branch`, `program`, `task_file`, `agent_type`, `created_at` fields\n- `kas instance list --status paused` — filters by status label",
+          "time": {
+            "start": 1772580931399,
+            "end": 1772580931399
+          },
+          "id": "prt_cb60e6ce2001752Z8ebjEgJqwo",
+          "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC",
+          "messageID": "msg_cb60e5b73001P5PxpYEnaZ77fS"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "35a3131285c54aa59cf86c425b25a9bfb708efba",
+          "cost": 0,
+          "tokens": {
+            "total": 85925,
+            "input": 1,
+            "output": 327,
+            "reasoning": 0,
+            "cache": {
+              "read": 85363,
+              "write": 234
+            }
+          },
+          "id": "prt_cb60e87600014gYtZCw14cC0qV",
+          "sessionID": "ses_349f540afffe3eJ0cAgyYMZ6fC",
+          "messageID": "msg_cb60e5b73001P5PxpYEnaZ77fS"
         }
       ]
     }
