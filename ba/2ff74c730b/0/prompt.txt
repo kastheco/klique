@@ -1,0 +1,14 @@
+Implement docs/plans/01a-rewrite-tmux-layer.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `session/tmux/attach.go:84-89` — detach key detection scans all bytes in buffer instead of requiring single-byte read. The old code used `nr == 1 && (buf[0] == 17 || buf[0] == 0)` which only detached when the detach key was the sole byte read. The new code `for _, b := range buf[:n]` scans every byte, causing two regressions: (1) NUL bytes (0x00) in paste data trigger spurious detach — Ctrl+Space generates 0x00 and is a common keybinding in editors like Emacs; (2) the entire buffer is discarded when a detach key appears mid-buffer, losing legitimate input bytes before the detach key. Fix: restore the `n == 1` guard so detach only fires on isolated single-byte reads.
+
+## important
+
+- `session/tmux/adapter.go:1-137` — the ProgramAdapter interface defines 6 methods (ReadyString, NeedsTrustTap, DetectPrompt, MaxWaitTime, BuildPromptArg, SupportsCliPrompt) but only DetectPrompt is used in production code (pane_io.go:141). The Start() method in tmux_session.go still uses hardcoded switch-case with isClaudeProgram/isOpenCodeProgram helpers and promptArgClaude/promptArgOpenCode from shell.go. Either integrate the adapter into Start() to replace the hardcoded switch-case, or remove the unused methods from the interface and adapter implementations to avoid dead code. The plan did not call for a new adapter abstraction — this is scope creep that should be resolved one way or the other.
+
+- `session/tmux/pane_io.go:117-120` — HasUpdated() behavioral change: the old code returned `(false, false)` when `monitor == nil`; the new code delegates to HasUpdatedWithContent which returns `updated=true` when monitor is nil (line 148). While mitigated by the instance layer's `!i.started` guard, this changes the contract of HasUpdated. If monitor is nil, the session hasn't been started/restored, so reporting "updated=true" is misleading. Fix: add a nil-monitor guard at the top of HasUpdated that returns `(false, false)` to match the old behavior, or document the intentional change.
