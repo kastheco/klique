@@ -722,17 +722,17 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 
 	cycle, _ := m.planState.ReviewCycle(planFile)
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
-		Title:     fmt.Sprintf("%s-review-%d", planName, cycle+1),
-		Path:      m.activeRepoPath,
-		Program:   m.programForAgent(session.AgentTypeReviewer),
-		PlanFile:  planFile,
-		AgentType: session.AgentTypeReviewer,
+		Title:       fmt.Sprintf("%s-review-%d", planName, cycle+1),
+		Path:        m.activeRepoPath,
+		Program:     m.programForAgent(session.AgentTypeReviewer),
+		PlanFile:    planFile,
+		AgentType:   session.AgentTypeReviewer,
+		ReviewCycle: cycle + 1,
 	})
 	if err != nil {
 		log.WarningLog.Printf("could not create reviewer instance for %q: %v", planFile, err)
 		return nil
 	}
-	reviewerInst.ReviewCycle = cycle + 1
 	reviewerInst.IsReviewer = true
 	reviewerInst.QueuedPrompt = prompt
 	reviewerInst.SetStatus(session.Loading)
@@ -916,17 +916,17 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 
 	cycle, _ := m.planState.ReviewCycle(planFile)
 	coderInst, err := session.NewInstance(session.InstanceOptions{
-		Title:     fmt.Sprintf("%s-fix-%d", planName, cycle),
-		Path:      m.activeRepoPath,
-		Program:   m.programForAgent(session.AgentTypeCoder),
-		PlanFile:  planFile,
-		AgentType: session.AgentTypeCoder,
+		Title:       fmt.Sprintf("%s-fix-%d", planName, cycle),
+		Path:        m.activeRepoPath,
+		Program:     m.programForAgent(session.AgentTypeCoder),
+		PlanFile:    planFile,
+		AgentType:   session.AgentTypeCoder,
+		ReviewCycle: cycle,
 	})
 	if err != nil {
 		log.WarningLog.Printf("could not create coder instance for %q: %v", planFile, err)
 		return nil
 	}
-	coderInst.ReviewCycle = cycle
 	coderInst.QueuedPrompt = prompt
 	coderInst.SetStatus(session.Loading)
 
@@ -1454,14 +1454,16 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 
 	planName := planstate.DisplayName(planFile)
 	title := planName + "-" + action
+	// reviewCycle is resolved once and reused for both the title and the instance field.
+	var reviewCycle int
 	if action == "solo" {
 		// Solo sessions run on main branch, so their tmux session names must stay
 		// unique to avoid accidentally reattaching to another solo session.
 		title = planName + "-solo"
 	} else if action == "review" {
 		// Use cycle-suffixed title so each review round gets a unique tmux session name.
-		cycle, _ := m.planState.ReviewCycle(planFile)
-		title = fmt.Sprintf("%s-review-%d", planName, cycle+1)
+		reviewCycle, _ = m.planState.ReviewCycle(planFile)
+		title = fmt.Sprintf("%s-review-%d", planName, reviewCycle+1)
 	}
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     title,
@@ -1479,8 +1481,7 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	if agentType == session.AgentTypeReviewer {
 		inst.IsReviewer = true
 		// Set ReviewCycle so the instance carries the same cycle number used in the title.
-		cycle, _ := m.planState.ReviewCycle(planFile)
-		inst.ReviewCycle = cycle + 1
+		inst.ReviewCycle = reviewCycle + 1
 	}
 	if action == "solo" {
 		inst.SoloAgent = true
