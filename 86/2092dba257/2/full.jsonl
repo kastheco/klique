@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772548558313,
-      "updated": 1772548605099
+      "updated": 1772548613240
     }
   },
   "messages": [
@@ -685,7 +685,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772548605091
+          "created": 1772548605091,
+          "completed": 1772548613229
         },
         "parentID": "msg_cb4208df2001WdwbUnV6GtGi4e",
         "modelID": "claude-sonnet-4-6",
@@ -698,15 +699,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 56956,
+          "input": 1,
+          "output": 128,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 55897,
+            "write": 930
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb42144a2001ztG5ONjPNAS7OY",
         "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z"
       },
@@ -734,22 +737,118 @@
           "callID": "toolu_01JgvwTuNdDsifRdsMovf7FF",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add session/git/worktree.go && git commit -m \"feat(clean-room): rewrite session/git/worktree.go from scratch\"",
               "description": "Commit the clean-room rewrite"
             },
+            "output": "[plan/01b-rewrite-git-layer 7e08370] feat(clean-room): rewrite session/git/worktree.go from scratch\n 1 file changed, 36 insertions(+), 42 deletions(-)\n",
+            "title": "Commit the clean-room rewrite",
             "metadata": {
-              "output": "",
-              "description": "Commit the clean-room rewrite"
+              "output": "[plan/01b-rewrite-git-layer 7e08370] feat(clean-room): rewrite session/git/worktree.go from scratch\n 1 file changed, 36 insertions(+), 42 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the clean-room rewrite",
+              "truncated": false
             },
             "time": {
-              "start": 1772548608716
+              "start": 1772548608715,
+              "end": 1772548613221
             }
           },
           "id": "prt_cb4214d96001EulvImskDC1jI4",
           "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z",
           "messageID": "msg_cb42144a2001ztG5ONjPNAS7OY"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fd3deb241ec628bbb3b65b6a7fa7bdf0d2bc07a8",
+          "cost": 0,
+          "tokens": {
+            "total": 56956,
+            "input": 1,
+            "output": 128,
+            "reasoning": 0,
+            "cache": {
+              "read": 55897,
+              "write": 930
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z",
+          "messageID": "msg_cb42144a2001ztG5ONjPNAS7OY"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548613230,
+          "completed": 1772548618979
+        },
+        "parentID": "msg_cb4208df2001WdwbUnV6GtGi4e",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57276,
+          "input": 1,
+          "output": 249,
+          "reasoning": 0,
+          "cache": {
+            "read": 56827,
+            "write": 199
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb421646e001AeByN6snJiLVVG",
+        "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fd3deb241ec628bbb3b65b6a7fa7bdf0d2bc07a8",
+          "id": "prt_cb4216978001oTNJUlDS7J9Q7A",
+          "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z",
+          "messageID": "msg_cb421646e001AeByN6snJiLVVG"
+        },
+        {
+          "type": "text",
+          "text": "Task 1 complete. The clean-room rewrite of `session/git/worktree.go` is committed. All 6 tests pass:\n\n- `TestTaskBranchFromFile` ✅\n- `TestTaskWorktreePath` ✅  \n- `TestNewSharedTaskWorktree` ✅ — exercises `NewGitWorktreeFromStorage` (via `NewSharedTaskWorktree`) and all accessors\n- `TestSetupFromExistingBranch_SetsBaseCommitSHA` ✅ — integration-tests `NewGitWorktreeOnBranch` constructor through `Setup()`\n- `TestSanitizeBranchName` (10 subtests) ✅\n- `TestCleanupWorktrees_RemovesWorktreeAndBranch` ✅\n\nThe rewrite preserves the exact public API (`GitWorktree` struct, all 5 accessors, all 3 constructors, `getWorktreeDirectory`) with zero changes to callers.",
+          "time": {
+            "start": 1772548618942,
+            "end": 1772548618942
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z",
+          "messageID": "msg_cb421646e001AeByN6snJiLVVG"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "fd3deb241ec628bbb3b65b6a7fa7bdf0d2bc07a8",
+          "cost": 0,
+          "tokens": {
+            "total": 57276,
+            "input": 1,
+            "output": 249,
+            "reasoning": 0,
+            "cache": {
+              "read": 56827,
+              "write": 199
+            }
+          },
+          "id": "prt_cb4217ada001TqIlxKJ1NXXn0n",
+          "sessionID": "ses_34bdf7216ffeHJOErp9yl0pP7Z",
+          "messageID": "msg_cb421646e001AeByN6snJiLVVG"
         }
       ]
     }
