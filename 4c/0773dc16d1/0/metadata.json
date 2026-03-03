@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "4c0773dc16d1",
+  "session_id": "ses_34bdf711effeGpxAoctLsWTf2a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T14:37:17.923391389Z",
+  "branch": "plan/01b-rewrite-git-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/git/worktree_git.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "77d74a349652",
+  "checkpoint_transcript_start": 7,
+  "transcript_lines_at_start": 7,
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 2097,
+    "cache_read_tokens": 63643,
+    "output_tokens": 125,
+    "api_call_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T14:37:17.885912192Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 62,
+    "human_removed": 6,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
