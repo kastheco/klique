@@ -3,92 +3,95 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/kastheco/kasmos/log"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/kastheco/kasmos/log"
 )
 
 const (
+	// ConfigFileName is the name of the JSON config file within the config dir.
 	ConfigFileName = "config.json"
+
+	// defaultProgram is the fallback program name when command detection fails.
 	defaultProgram = "opencode"
 )
 
+// aliasRegex matches shell alias output to extract the real command path.
+// Handles formats: "aliased to <path>", "-> <path>", "= <path>".
 var aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
 
-// GetConfigDir returns the path to the application's configuration directory.
-// Uses XDG-compliant ~/.config/kasmos/. On first run, migrates legacy
-// directories: ~/.klique or ~/.hivemind -> ~/.config/kasmos/.
+// GetConfigDir returns the XDG-compliant config directory (~/.config/kasmos/).
+// On first call without that directory, it attempts to migrate legacy directories
+// (.klique, then .hivemind) via rename. If migration fails it returns the old path.
 func GetConfigDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
-	newDir := filepath.Join(homeDir, ".config", "kasmos")
 
-	// Already exists — fast path
-	if _, err := os.Stat(newDir); err == nil {
-		return newDir, nil
+	target := filepath.Join(home, ".config", "kasmos")
+
+	// Fast path: target already exists.
+	if _, statErr := os.Stat(target); statErr == nil {
+		return target, nil
 	}
 
-	// Try migrating from legacy directories (most recent first)
-	legacyDirs := []string{
-		filepath.Join(homeDir, ".klique"),
-		filepath.Join(homeDir, ".hivemind"),
-	}
-
-	for _, oldDir := range legacyDirs {
-		if _, err := os.Stat(oldDir); err == nil {
-			// Ensure parent ~/.config/ exists
-			if mkErr := os.MkdirAll(filepath.Dir(newDir), 0755); mkErr != nil {
-				log.ErrorLog.Printf("failed to create %s: %v", filepath.Dir(newDir), mkErr)
-				return oldDir, nil
-			}
-			if renameErr := os.Rename(oldDir, newDir); renameErr != nil {
-				log.ErrorLog.Printf("failed to migrate %s to %s: %v", oldDir, newDir, renameErr)
-				return oldDir, nil
-			}
-			return newDir, nil
+	// Try each legacy directory in preference order.
+	for _, legacy := range []string{
+		filepath.Join(home, ".klique"),
+		filepath.Join(home, ".hivemind"),
+	} {
+		if _, statErr := os.Stat(legacy); statErr != nil {
+			continue
 		}
+		// Ensure ~/.config/ parent exists before rename.
+		if mkErr := os.MkdirAll(filepath.Dir(target), 0755); mkErr != nil {
+			log.ErrorLog.Printf("failed to create %s: %v", filepath.Dir(target), mkErr)
+			return legacy, nil
+		}
+		if mvErr := os.Rename(legacy, target); mvErr != nil {
+			log.ErrorLog.Printf("failed to migrate %s to %s: %v", legacy, target, mvErr)
+			return legacy, nil
+		}
+		return target, nil
 	}
 
-	return newDir, nil
+	// No legacy dir found — return target path; caller creates it on first write.
+	return target, nil
 }
 
-// Config represents the application configuration
+// Config holds all persistent application configuration.
 type Config struct {
-	// DefaultProgram is the default program to run in new instances
+	// DefaultProgram is the command launched for new instances.
 	DefaultProgram string `json:"default_program"`
-	// AutoYes is a flag to automatically accept all prompts.
+	// AutoYes makes the daemon automatically accept all agent prompts.
 	AutoYes bool `json:"auto_yes"`
-	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
+	// DaemonPollInterval is how often (ms) the daemon checks sessions.
 	DaemonPollInterval int `json:"daemon_poll_interval"`
-	// BranchPrefix is the prefix used for git branches created by the application.
+	// BranchPrefix is prepended to git branch names created by the app.
 	BranchPrefix string `json:"branch_prefix"`
-	// NotificationsEnabled controls whether macOS/Linux desktop notifications
-	// are sent when an agent finishes (Running -> Ready).
+	// NotificationsEnabled controls desktop notifications; defaults to true when nil.
 	NotificationsEnabled *bool `json:"notifications_enabled,omitempty"`
-	// Profiles maps agent role names to their program and flags configuration.
+	// Profiles maps role names to agent program configurations.
 	Profiles map[string]AgentProfile `json:"profiles,omitempty"`
-	// PhaseRoles maps lifecycle phase names to agent role names.
+	// PhaseRoles maps lifecycle phase names to role names.
 	PhaseRoles map[string]string `json:"phase_roles,omitempty"`
-	// AnimateBanner controls the idle banner animation (disabled by default).
+	// AnimateBanner enables the idle banner animation (off by default).
 	AnimateBanner bool `json:"animate_banner,omitempty"`
-	// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes
-	// with zero failures, bypassing the confirmation dialog (disabled by default).
+	// AutoAdvanceWaves skips the confirmation dialog after a clean wave.
 	AutoAdvanceWaves bool `json:"auto_advance_waves,omitempty"`
-	// TelemetryEnabled controls whether crash reporting via Sentry is active.
-	// Defaults to true when not set.
+	// TelemetryEnabled controls Sentry crash reporting; defaults to true when nil.
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
-	// DatabaseURL is the URL of the remote kasmos store server (e.g. "http://athena:7433").
-	// When empty, the legacy plan-state.json file is used.
+	// DatabaseURL is the remote kasmos store URL; uses local file when empty.
 	DatabaseURL string `json:"database_url,omitempty"`
 }
 
-// DefaultConfig returns the default configuration
+// DefaultConfig builds a Config populated with sensible out-of-the-box values.
 func DefaultConfig() *Config {
 	program, err := GetDefaultCommand()
 	if err != nil {
@@ -97,24 +100,30 @@ func DefaultConfig() *Config {
 	}
 
 	trueVal := true
+	prefix := branchPrefix()
+
 	return &Config{
-		DefaultProgram:     program,
-		AutoYes:            false,
-		DaemonPollInterval: 1000,
-		BranchPrefix: func() string {
-			user, err := user.Current()
-			if err != nil || user == nil || user.Username == "" {
-				log.ErrorLog.Printf("failed to get current user: %v", err)
-				return "session/"
-			}
-			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
-		}(),
+		DefaultProgram:       program,
+		AutoYes:              false,
+		DaemonPollInterval:   1000,
+		BranchPrefix:         prefix,
 		NotificationsEnabled: &trueVal,
 	}
 }
 
-// AreNotificationsEnabled returns whether desktop notifications are enabled.
-// Defaults to true when the field is not set.
+// branchPrefix derives the git branch prefix from the current OS user.
+// Falls back to "session/" when the username is unavailable.
+func branchPrefix() string {
+	u, err := user.Current()
+	if err != nil || u == nil || u.Username == "" {
+		log.ErrorLog.Printf("failed to get current user: %v", err)
+		return "session/"
+	}
+	return fmt.Sprintf("%s/", strings.ToLower(u.Username))
+}
+
+// AreNotificationsEnabled reports whether desktop notifications are active.
+// Returns true when NotificationsEnabled is nil (opt-out semantics).
 func (c *Config) AreNotificationsEnabled() bool {
 	if c.NotificationsEnabled == nil {
 		return true
@@ -122,8 +131,8 @@ func (c *Config) AreNotificationsEnabled() bool {
 	return *c.NotificationsEnabled
 }
 
-// IsTelemetryEnabled returns whether Sentry telemetry is enabled.
-// Defaults to true when the field is not set.
+// IsTelemetryEnabled reports whether Sentry telemetry is active.
+// Returns true when TelemetryEnabled is nil (opt-out semantics).
 func (c *Config) IsTelemetryEnabled() bool {
 	if c.TelemetryEnabled == nil {
 		return true
@@ -131,151 +140,140 @@ func (c *Config) IsTelemetryEnabled() bool {
 	return *c.TelemetryEnabled
 }
 
-// GetDefaultCommand attempts to find the preferred default command.
-// It checks in the following order:
-// 1. opencode command
-// 2. claude command
-//
-// For each command, it checks shell alias resolution first, then PATH lookup.
+// GetDefaultCommand returns the preferred agent command path.
+// It tries opencode first, then falls back to claude.
 func GetDefaultCommand() (string, error) {
-	if path, err := findCommand("opencode"); err == nil {
-		return path, nil
+	if p, err := findCommand("opencode"); err == nil {
+		return p, nil
 	}
-
-	if path, err := findCommand("claude"); err == nil {
-		return path, nil
+	if p, err := findCommand("claude"); err == nil {
+		return p, nil
 	}
-
 	return "", fmt.Errorf("neither opencode nor claude command found in aliases or PATH")
 }
 
+// findCommand locates name via the user's login shell and PATH.
+// It sources the appropriate rc file so aliases are visible, then falls
+// back to exec.LookPath when the shell subprocess fails.
 func findCommand(name string) (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
-		shell = "/bin/bash" // Default to bash if SHELL is not set
+		shell = "/bin/bash"
 	}
 
-	// Force the shell to load the user's profile and then run the command
-	// For zsh, source .zshrc; for bash, source .bashrc
-	var shellCmd string
-	if strings.Contains(shell, "zsh") {
-		shellCmd = fmt.Sprintf("source ~/.zshrc &>/dev/null || true; which %s", name)
-	} else if strings.Contains(shell, "bash") {
-		shellCmd = fmt.Sprintf("source ~/.bashrc &>/dev/null || true; which %s", name)
-	} else {
-		shellCmd = fmt.Sprintf("which %s", name)
+	var inline string
+	switch {
+	case strings.Contains(shell, "zsh"):
+		inline = fmt.Sprintf("source ~/.zshrc &>/dev/null || true; which %s", name)
+	case strings.Contains(shell, "bash"):
+		inline = fmt.Sprintf("source ~/.bashrc &>/dev/null || true; which %s", name)
+	default:
+		inline = fmt.Sprintf("which %s", name)
 	}
 
-	cmd := exec.Command(shell, "-c", shellCmd)
-	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		path := parseCommandOutput(string(output))
-		if path != "" {
-			return path, nil
+	out, err := exec.Command(shell, "-c", inline).Output()
+	if err == nil && len(out) > 0 {
+		if p := parseCommandOutput(string(out)); p != "" {
+			return p, nil
 		}
 	}
 
-	// Otherwise, try to find in PATH directly
-	commandPath, err := exec.LookPath(name)
-	if err == nil {
-		return commandPath, nil
+	// Fallback: consult PATH directly.
+	if p, lookErr := exec.LookPath(name); lookErr == nil {
+		return p, nil
 	}
 
 	return "", fmt.Errorf("%s command not found in aliases or PATH", name)
 }
 
+// parseCommandOutput extracts a command path from raw shell output.
+// It resolves alias declarations (e.g. "opencode: aliased to /usr/local/bin/opencode")
+// and returns an empty string for blank output.
 func parseCommandOutput(output string) string {
-	path := strings.TrimSpace(output)
-	if path == "" {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
 		return ""
 	}
-
-	matches := aliasRegex.FindStringSubmatch(path)
-	if len(matches) > 1 {
-		return matches[1]
+	if m := aliasRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+		return m[1]
 	}
-
-	return path
+	return trimmed
 }
 
+// LoadConfig reads config.json from the config directory. When the file is
+// absent it creates and persists a default. On parse errors it returns a default.
+// TOML config is overlaid after JSON load for Profiles, PhaseRoles, and flags.
 func LoadConfig() *Config {
-	configDir, err := GetConfigDir()
+	dir, err := GetConfigDir()
 	if err != nil {
 		log.ErrorLog.Printf("failed to get config directory: %v", err)
 		return DefaultConfig()
 	}
 
-	configPath := filepath.Join(configDir, ConfigFileName)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Create and save default config if file doesn't exist
-			defaultCfg := DefaultConfig()
-			if saveErr := saveConfig(defaultCfg); saveErr != nil {
+	data, readErr := os.ReadFile(filepath.Join(dir, ConfigFileName))
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			def := DefaultConfig()
+			if saveErr := saveConfig(def); saveErr != nil {
 				log.WarningLog.Printf("failed to save default config: %v", saveErr)
 			}
-			return defaultCfg
+			return def
 		}
-
-		log.WarningLog.Printf("failed to get config file: %v", err)
+		log.WarningLog.Printf("failed to get config file: %v", readErr)
 		return DefaultConfig()
 	}
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", err)
+	var cfg Config
+	if unmarshalErr := json.Unmarshal(data, &cfg); unmarshalErr != nil {
+		log.ErrorLog.Printf("failed to parse config file: %v", unmarshalErr)
 		return DefaultConfig()
 	}
 
-	// Overlay TOML config if it exists (TOML is authority for Profiles and PhaseRoles)
-	tomlResult, tomlErr := LoadTOMLConfig()
+	// Overlay TOML config values where present — TOML is authoritative for these fields.
+	tomlCfg, tomlErr := LoadTOMLConfig()
 	if tomlErr != nil {
 		log.WarningLog.Printf("failed to load TOML config: %v", tomlErr)
-	} else if tomlResult != nil {
-		if len(tomlResult.Profiles) > 0 {
-			config.Profiles = tomlResult.Profiles
+	} else if tomlCfg != nil {
+		if len(tomlCfg.Profiles) > 0 {
+			cfg.Profiles = tomlCfg.Profiles
 		}
-		if len(tomlResult.PhaseRoles) > 0 {
-			config.PhaseRoles = tomlResult.PhaseRoles
+		if len(tomlCfg.PhaseRoles) > 0 {
+			cfg.PhaseRoles = tomlCfg.PhaseRoles
 		}
-		if tomlResult.AnimateBanner {
-			config.AnimateBanner = true
+		if tomlCfg.AnimateBanner {
+			cfg.AnimateBanner = true
 		}
-		if tomlResult.AutoAdvanceWaves {
-			config.AutoAdvanceWaves = true
+		if tomlCfg.AutoAdvanceWaves {
+			cfg.AutoAdvanceWaves = true
 		}
-		if tomlResult.TelemetryEnabled != nil {
-			config.TelemetryEnabled = tomlResult.TelemetryEnabled
+		if tomlCfg.TelemetryEnabled != nil {
+			cfg.TelemetryEnabled = tomlCfg.TelemetryEnabled
 		}
-		if tomlResult.DatabaseURL != "" {
-			config.DatabaseURL = tomlResult.DatabaseURL
+		if tomlCfg.DatabaseURL != "" {
+			cfg.DatabaseURL = tomlCfg.DatabaseURL
 		}
 	}
 
-	return &config
+	return &cfg
 }
 
-// saveConfig saves the configuration to disk
-func saveConfig(config *Config) error {
-	configDir, err := GetConfigDir()
+// saveConfig serialises cfg as indented JSON and writes it to the config directory.
+func saveConfig(cfg *Config) error {
+	dir, err := GetConfigDir()
 	if err != nil {
 		return fmt.Errorf("failed to get config directory: %w", err)
 	}
-
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+	if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
+		return fmt.Errorf("failed to create config directory: %w", mkErr)
 	}
-
-	configPath := filepath.Join(configDir, ConfigFileName)
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+	data, marshalErr := json.MarshalIndent(cfg, "", "  ")
+	if marshalErr != nil {
+		return fmt.Errorf("failed to marshal config: %w", marshalErr)
 	}
-
-	return os.WriteFile(configPath, data, 0644)
+	return os.WriteFile(filepath.Join(dir, ConfigFileName), data, 0644)
 }
 
-// SaveConfig exports the saveConfig function for use by other packages
-func SaveConfig(config *Config) error {
-	return saveConfig(config)
+// SaveConfig is the exported wrapper around saveConfig.
+func SaveConfig(cfg *Config) error {
+	return saveConfig(cfg)
 }
