@@ -2,12 +2,15 @@ package git
 
 import (
 	"fmt"
-	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/log"
 	"path/filepath"
 	"time"
+
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/log"
 )
 
+// getWorktreeDirectory returns the directory used to store git worktrees for
+// the given repository. Returns an error when repoPath is empty.
 func getWorktreeDirectory(repoPath string) (string, error) {
 	if repoPath == "" {
 		return "", fmt.Errorf("repo path is required for worktree directory")
@@ -15,21 +18,18 @@ func getWorktreeDirectory(repoPath string) (string, error) {
 	return filepath.Join(repoPath, ".worktrees"), nil
 }
 
-// GitWorktree manages git worktree operations for a session
+// GitWorktree manages git worktree operations for a session.
 type GitWorktree struct {
-	// Path to the repository
-	repoPath string
-	// Path to the worktree
-	worktreePath string
-	// Name of the session
-	sessionName string
-	// Branch name for the worktree
-	branchName string
-	// Base commit hash for the worktree
+	repoPath      string
+	worktreePath  string
+	sessionName   string
+	branchName    string
 	baseCommitSHA string
 }
 
-func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+// NewGitWorktreeFromStorage constructs a GitWorktree directly from persisted
+// state without any filesystem interaction. Used when restoring from storage.
+func NewGitWorktreeFromStorage(repoPath, worktreePath, sessionName, branchName, baseCommitSHA string) *GitWorktree {
 	return &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  worktreePath,
@@ -39,47 +39,41 @@ func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName
 	}
 }
 
-// NewGitWorktree creates a new GitWorktree instance
-func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
+// NewGitWorktree creates a GitWorktree with an auto-generated branch name
+// derived from the configured branch prefix and the session name.
+func NewGitWorktree(repoPath, sessionName string) (*GitWorktree, string, error) {
 	cfg := config.LoadConfig()
-	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sessionName)
-	// Sanitize the final branch name to handle invalid characters from any source
-	// (e.g., backslashes from Windows domain usernames like DOMAIN\user)
-	branchName = sanitizeBranchName(branchName)
+	branchName := sanitizeBranchName(fmt.Sprintf("%s%s", cfg.BranchPrefix, sessionName))
 
-	// Convert repoPath to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		log.ErrorLog.Printf("git worktree path abs error, falling back to repoPath %s: %s", repoPath, err)
-		// If we can't get absolute path, use original path as fallback
 		absPath = repoPath
 	}
 
-	repoPath, err = findGitRepoRoot(absPath)
+	resolvedRoot, err := findGitRepoRoot(absPath)
 	if err != nil {
 		return nil, "", err
 	}
 
-	worktreeDir, err := getWorktreeDirectory(repoPath)
+	worktreeDir, err := getWorktreeDirectory(resolvedRoot)
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Use sanitized branch name for the worktree directory name
-	worktreePath := filepath.Join(worktreeDir, branchName)
-	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	worktreePath := fmt.Sprintf("%s_%x", filepath.Join(worktreeDir, branchName), time.Now().UnixNano())
 
 	return &GitWorktree{
-		repoPath:     repoPath,
+		repoPath:     resolvedRoot,
+		worktreePath: worktreePath,
 		sessionName:  sessionName,
 		branchName:   branchName,
-		worktreePath: worktreePath,
 	}, branchName, nil
 }
 
-// NewGitWorktreeOnBranch creates a GitWorktree targeting a specific branch name.
-// Unlike NewGitWorktree which auto-generates a branch, this uses the exact branch provided.
-// Setup() will handle whether the branch already exists or needs creating.
+// NewGitWorktreeOnBranch creates a GitWorktree targeting a specific branch
+// rather than generating one from the config prefix. The branch name is
+// sanitized before use. Setup handles whether the branch already exists.
 func NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree, string, error) {
 	branch = sanitizeBranchName(branch)
 
@@ -88,48 +82,48 @@ func NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree,
 		absPath = repoPath
 	}
 
-	repoPath, err = findGitRepoRoot(absPath)
+	resolvedRoot, err := findGitRepoRoot(absPath)
 	if err != nil {
 		return nil, "", err
 	}
 
-	worktreeDir, err := getWorktreeDirectory(repoPath)
+	worktreeDir, err := getWorktreeDirectory(resolvedRoot)
 	if err != nil {
 		return nil, "", err
 	}
 
-	worktreePath := filepath.Join(worktreeDir, branch)
-	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	worktreePath := fmt.Sprintf("%s_%x", filepath.Join(worktreeDir, branch), time.Now().UnixNano())
 
 	return &GitWorktree{
-		repoPath:     repoPath,
+		repoPath:     resolvedRoot,
+		worktreePath: worktreePath,
 		sessionName:  sessionName,
 		branchName:   branch,
-		worktreePath: worktreePath,
 	}, branch, nil
 }
 
-// GetWorktreePath returns the path to the worktree
+// GetWorktreePath returns the filesystem path of the worktree.
 func (g *GitWorktree) GetWorktreePath() string {
 	return g.worktreePath
 }
 
-// GetBranchName returns the name of the branch associated with this worktree
+// GetBranchName returns the git branch associated with this worktree.
 func (g *GitWorktree) GetBranchName() string {
 	return g.branchName
 }
 
-// GetRepoPath returns the path to the repository
+// GetRepoPath returns the root path of the git repository.
 func (g *GitWorktree) GetRepoPath() string {
 	return g.repoPath
 }
 
-// GetRepoName returns the name of the repository (last part of the repoPath).
+// GetRepoName returns the base name of the repository directory.
 func (g *GitWorktree) GetRepoName() string {
 	return filepath.Base(g.repoPath)
 }
 
-// GetBaseCommitSHA returns the base commit SHA for the worktree
+// GetBaseCommitSHA returns the commit SHA recorded as the base when the
+// worktree was set up.
 func (g *GitWorktree) GetBaseCommitSHA() string {
 	return g.baseCommitSHA
 }
