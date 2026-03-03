@@ -321,13 +321,16 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 		[]byte("../..\n"), 0o644,
 	))
 
-	// Verify resolveRepoRoot resolves correctly from the worktree
-	root, err := resolveRepoRoot(worktree)
+	// Test resolvePlansDir end-to-end by chdir'ing into the worktree.
+	// The worktree has no docs/plans/ — resolvePlansDir must resolve via
+	// resolveRepoRoot back to the main repo.
+	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	assert.Equal(t, mainRepo, root)
+	t.Cleanup(func() { require.NoError(t, os.Chdir(origDir)) })
+	require.NoError(t, os.Chdir(worktree))
 
-	// Use the resolved plansDir (as resolvePlansDir would after the fix)
-	resolvedPlansDir := filepath.Join(root, "docs", "plans")
+	resolvedPlansDir, err := resolvePlansDir()
+	require.NoError(t, err)
 	assert.Equal(t, plansDir, resolvedPlansDir)
 
 	// Populate the store and verify plan operations succeed

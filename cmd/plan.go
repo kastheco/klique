@@ -158,6 +158,7 @@ func executePlanImplement(plansDir, planFile string, wave int, store planstore.S
 		if err := fsm.Transition(planFile, planfsm.PlannerFinished); err != nil {
 			return err
 		}
+		current = planfsm.StatusReady
 	}
 	// Advance to implementing unless already there.
 	if current != planfsm.StatusImplementing {
@@ -514,12 +515,18 @@ func resolveRepoRoot(dir string) (string, error) {
 	return filepath.Dir(mainGitDir), nil
 }
 
-// resolveRepoRootViaGit shells out to git to find the repository root. Used
-// as a fallback when the .git file-based resolution fails.
+// resolveRepoRootViaGit shells out to git to find the main repository root.
+// It uses --git-common-dir (which always points to the main repo's .git) rather
+// than --show-toplevel (which returns the worktree checkout path in worktrees).
 func resolveRepoRootViaGit(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--git-common-dir").Output()
 	if err != nil {
 		return "", fmt.Errorf("resolve repo root for %s: %w", dir, err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	gitDir := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	// --git-common-dir returns the .git directory; repo root is its parent.
+	return filepath.Dir(filepath.Clean(gitDir)), nil
 }
