@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "fdb293b3b67c",
+  "strategy": "manual-commit",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/taskstore/sqlite.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fd/b293b3b67c/0/metadata.json",
+      "transcript": "/fd/b293b3b67c/0/full.jsonl",
+      "context": "/fd/b293b3b67c/0/context.md",
+      "content_hash": "/fd/b293b3b67c/0/content_hash.txt",
+      "prompt": "/fd/b293b3b67c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 33,
+    "cache_creation_tokens": 143089,
+    "cache_read_tokens": 3385776,
+    "output_tokens": 7724,
+    "api_call_count": 33
+  }
+}
