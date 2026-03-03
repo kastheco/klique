@@ -1,0 +1,240 @@
+Implement Task 5: Rename PlanFile to TaskFile, plan-prefixed variables/methods, and file renames
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rename the "plan" lifecycle entity to "task" throughout the codebase to eliminate the terminology collision between "plan" (the lifecycle entity) and "planning" (the FSM status). Instances belong to tasks which optionally belong to topics — "a task awaiting planning" is clearer than "a plan awaiting planning."
+**Architecture:** Four-phase mechanical rename: (1) rename Go package directories and update import paths, (2) rename exported types and struct fields, (3) rename CLI commands, user-facing strings, and internal variables, (4) update HTTP API paths, SQL schema, and JSON serialization with backwards compatibility. Each phase uses `sd`/`comby` for batch replacements. The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.
+**Tech Stack:** Go 1.24, cobra CLI, SQLite, HTTP API, `sd` for batch string replacement, `mv` for file/directory renames
+
+## Wave 2 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/instance.go` — `PlanFile` → `TaskFile` field
+- Modify: `session/storage.go` — `PlanFile` → `TaskFile` field + JSON tag + backwards-compat unmarshal
+- Modify: `session/instance_lifecycle.go` — references
+- Modify: `config/auditlog/event.go`, `config/auditlog/logger.go`, `config/auditlog/sqlite.go` — `PlanFile` → `TaskFile`
+- Modify: `app/app.go`, `app/app_state.go`, `app/app_actions.go`, `app/app_input.go` — all `.PlanFile` refs, struct fields, methods, message types, state constants
+- Modify: `app/wave_orchestrator.go` — `planFile` field → `taskFile`, `PlanFile()` → `TaskFile()`
+- Modify: `app/clickup_progress.go`, `app/wave_prompt.go` — rename functions
+- Modify: `cmd/plan.go` → `cmd/task.go` — rename functions
+- Modify: `session/git/plan_lifecycle.go` → `session/git/task_lifecycle.go` — rename functions
+- Modify: `config/config.go`, `config/toml.go` — `PlanStore` → `DatabaseURL`, TOML/JSON key `plan_store` → `database_url`
+- Modify: `ui/navigation_panel.go` — references
+- Rename: all test files with `plan` in name
+- Modify: all `app/*_test.go`, `cmd/*_test.go` files
+
+**Step 1: write the failing test**
+
+No new tests — field and method rename. Existing tests validate correctness.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./... -count=1 2>&1 | tail -10
+```
+
+expected: PASS (baseline)
+
+**Step 3: rename fields, variables, methods, and files**
+
+```bash
+# ============================================================
+# PART A: PlanFile → TaskFile struct field rename
+# ============================================================
+
+# 1. Rename the struct field in session/instance.go and session/storage.go
+sd 'PlanFile string' 'TaskFile string' session/instance.go session/storage.go
+
+# 2. Rename JSON tag
+sd '"plan_file,omitempty"' '"task_file,omitempty"' session/storage.go
+
+# 3. Rename all .PlanFile references across the codebase
+sd '\.PlanFile' '.TaskFile' $(fd -e go)
+
+# 4. Rename PlanFile: struct literal keys
+sd 'PlanFile:' 'TaskFile:' $(fd -e go)
+
+# 5. Rename in auditlog
+sd 'PlanFile' 'TaskFile' config/auditlog/event.go config/auditlog/logger.go config/auditlog/sqlite.go config/auditlog/sqlite_test.go
+
+# 6. Rename the test file
+mv session/instance_planfile_test.go session/instance_taskfile_test.go
+
+# 7. Update the wave orchestrator's planFile field → taskFile
+sd 'planFile  string' 'taskFile  string' app/wave_orchestrator.go
+sd 'planFile:' 'taskFile:' app/wave_orchestrator.go
+sd 'o\.planFile' 'o.taskFile' app/wave_orchestrator.go
+sd 'func (o \*WaveOrchestrator) PlanFile' 'func (o *WaveOrchestrator) TaskFile' app/wave_orchestrator.go
+sd 'orch\.PlanFile\(\)' 'orch.TaskFile()' $(fd -e go -p 'app/')
+
+# 8. Add backwards-compatible JSON deserialization to session/storage.go
+```
+
+For step 8, add this method to `session/storage.go` after the `InstanceData` struct:
+
+```go
+// UnmarshalJSON implements custom JSON unmarshaling to handle the rename from
+// plan_file to task_file. Existing state.json files may use the old field name.
+func (d *InstanceData) UnmarshalJSON(data []byte) error {
+	type Alias InstanceData
+	aux := &struct {
+		*Alias
+		PlanFile string `json:"plan_file,omitempty"`
+	}{Alias: (*Alias)(d)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if d.TaskFile == "" && aux.PlanFile != "" {
+		d.TaskFile = aux.PlanFile
+	}
+	return nil
+}
+```
+
+```bash
+# ============================================================
+# PART B: app/ home struct fields and pending fields
+# ============================================================
+
+sd 'planState ' 'taskState ' app/app.go
+sd 'planStore ' 'taskStore ' app/app.go
+sd 'planStoreProject' 'taskStoreProject' $(fd -e go -p 'app/')
+sd 'planStateDir' 'taskStateDir' $(fd -e go -p 'app/')
+sd 'm\.planState' 'm.taskState' $(fd -e go -p 'app/')
+sd 'm\.planStore' 'm.taskStore' $(fd -e go -p 'app/')
+sd 'h\.planState' 'h.taskState' $(fd -e go -p 'app/')
+sd 'h\.planStore' 'h.taskStore' $(fd -e go -p 'app/')
+sd 'pendingPlannerPlanFile' 'pendingPlannerTaskFile' $(fd -e go -p 'app/')
+sd 'pendingChatAboutPlan' 'pendingChatAboutTask' $(fd -e go -p 'app/')
+sd 'pendingChangeTopicPlan' 'pendingChangeTopicTask' $(fd -e go -p 'app/')
+sd 'pendingSetStatusPlan' 'pendingSetStatusTask' $(fd -e go -p 'app/')
+
+# ============================================================
+# PART C: app/ method renames
+# ============================================================
+
+sd 'loadPlanState' 'loadTaskState' $(fd -e go -p 'app/')
+sd 'updateSidebarPlans' 'updateSidebarTasks' $(fd -e go -p 'app/')
+sd 'spawnPlanAgent' 'spawnTaskAgent' $(fd -e go -p 'app/')
+sd 'planBranch' 'taskBranch' $(fd -e go -p 'app/')
+sd 'materializePlanFile' 'materializeTaskFile' $(fd -e go -p 'app/')
+sd 'ingestPlanContent' 'ingestTaskContent' $(fd -e go -p 'app/')
+sd 'triggerPlanStage' 'triggerTaskStage' $(fd -e go -p 'app/')
+sd 'executePlanStage' 'executeTaskStage' $(fd -e go -p 'app/')
+sd 'findPlanInstance' 'findTaskInstance' $(fd -e go -p 'app/')
+sd 'openPlanContextMenu' 'openTaskContextMenu' $(fd -e go -p 'app/')
+
+# ============================================================
+# PART D: app/ message types and state constants
+# ============================================================
+
+sd 'planRefreshMsg' 'taskRefreshMsg' $(fd -e go -p 'app/')
+sd 'planStageConfirmedMsg' 'taskStageConfirmedMsg' $(fd -e go -p 'app/')
+# plannerCompleteMsg stays — refers to planner agent role, not the entity
+sd 'stateRenamePlan' 'stateRenameTask' $(fd -e go -p 'app/')
+sd 'stateChatAboutPlan' 'stateChatAboutTask' $(fd -e go -p 'app/')
+
+# ============================================================
+# PART E: app/ prompt builders
+# ============================================================
+
+sd 'buildPlanPrompt' 'buildPlanningPrompt' $(fd -e go -p 'app/')
+sd 'buildModifyPlanPrompt' 'buildModifyTaskPrompt' $(fd -e go -p 'app/')
+sd 'buildChatAboutPlanPrompt' 'buildChatAboutTaskPrompt' $(fd -e go -p 'app/')
+sd 'spawnChatAboutPlan' 'spawnChatAboutTask' $(fd -e go -p 'app/')
+
+# ============================================================
+# PART F: session/git/plan_lifecycle.go renames
+# ============================================================
+
+sd 'PlanBranchFromFile' 'TaskBranchFromFile' $(fd -e go)
+sd 'PlanWorktreePath' 'TaskWorktreePath' $(fd -e go)
+sd 'NewSharedPlanWorktree' 'NewSharedTaskWorktree' $(fd -e go)
+sd 'CommitPlanScaffoldOnMain' 'CommitTaskScaffoldOnMain' $(fd -e go)
+sd 'EnsurePlanBranch' 'EnsureTaskBranch' $(fd -e go)
+sd 'MergePlanBranch' 'MergeTaskBranch' $(fd -e go)
+sd 'ResetPlanBranch' 'ResetTaskBranch' $(fd -e go)
+mv session/git/plan_lifecycle.go session/git/task_lifecycle.go
+mv session/git/plan_lifecycle_test.go session/git/task_lifecycle_test.go
+
+# ============================================================
+# PART G: cmd/ renames
+# ============================================================
+
+sd 'NewPlanCmd' 'NewTaskCmd' $(fd -e go)
+sd 'executePlanRegister' 'executeTaskRegister' cmd/plan.go
+sd 'executePlanList' 'executeTaskList' cmd/plan.go cmd/plan_test.go
+sd 'executePlanListWithStore' 'executeTaskListWithStore' cmd/plan.go
+sd 'executePlanSetStatus' 'executeTaskSetStatus' cmd/plan.go
+sd 'executePlanTransition' 'executeTaskTransition' cmd/plan.go
+sd 'executePlanImplement' 'executeTaskImplement' cmd/plan.go
+sd 'executePlanLinkClickUp' 'executeTaskLinkClickUp' cmd/plan.go cmd/plan_test.go
+sd 'loadPlanState' 'loadTaskState' cmd/plan.go
+# projectFromPlansDir stays — refers to docs/plans/ directory path
+mv cmd/plan.go cmd/task.go
+mv cmd/plan_test.go cmd/task_test.go
+
+# ============================================================
+# PART H: Rename test files with "plan" in name
+# ============================================================
+
+mv app/app_plan_actions_test.go app/app_task_actions_test.go
+mv app/app_plan_completion_test.go app/app_task_completion_test.go
+mv app/app_plan_context_actions_test.go app/app_task_context_actions_test.go
+mv app/app_plan_creation_test.go app/app_task_creation_test.go
+mv app/plan_cancel_rename_delay_test.go app/task_cancel_rename_delay_test.go
+mv app/plan_title.go app/task_title.go
+mv app/plan_title_test.go app/task_title_test.go
+
+# ============================================================
+# PART I: config/ renames (PlanStore → DatabaseURL)
+# The config field is the URL to the store server. Since the DB
+# will serve as the core kasmos database (not just tasks), use
+# a generic name. Internal struct fields (planStore→taskStore)
+# stay task-specific since they hold a taskstore.Store client.
+# ============================================================
+
+sd 'PlanStore string' 'DatabaseURL string' config/config.go
+sd '"plan_store,omitempty"' '"database_url,omitempty"' config/config.go
+sd '\.PlanStore' '.DatabaseURL' $(fd -e go -p 'config/')
+sd 'cfg\.PlanStore' 'cfg.DatabaseURL' $(fd -e go)
+sd 'config\.PlanStore' 'config.DatabaseURL' $(fd -e go)
+sd 'PlanStore string' 'DatabaseURL string' config/toml.go
+sd '"plan_store,omitempty"' '"database_url,omitempty"' config/toml.go
+sd '\.PlanStore' '.DatabaseURL' config/toml.go
+sd 'tomlResult\.PlanStore' 'tomlResult.DatabaseURL' config/config.go
+
+# (factory.go planStoreURL→storeURL already done in Task 1)
+
+# Update comment in config.go
+sd '// PlanStore is the URL of the remote plan store server' '// DatabaseURL is the URL of the remote kasmos store server' config/config.go
+
+# Update comment in factory.go
+sd 'local SQLite planstore' 'local SQLite kasmos database' config/taskstore/factory.go
+
+# Update appConfig.PlanStore → appConfig.DatabaseURL in app/app.go
+sd 'appConfig\.PlanStore' 'appConfig.DatabaseURL' $(fd -e go -p 'app/')
+
+# Rename planStoreURL local var in app/app.go to storeURL
+sd 'planStoreURL' 'storeURL' $(fd -e go -p 'app/')
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./...
+go test ./... -count=1 2>&1 | tail -30
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "refactor: rename PlanFile→TaskFile, plan-prefixed vars/methods, and file renames"
+```
