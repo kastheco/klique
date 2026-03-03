@@ -804,7 +804,7 @@ func (n *NavigationPanel) CyclePrevActive() {
 
 func (n *NavigationPanel) cycleActive(step int) {
 	// Build the cycle list in visual (top-to-bottom) order so Ctrl+Up/Down
-	// follows the on-screen layout across attention/active/solo sections.
+	// follows the on-screen layout across active/solo sections.
 	// For collapsed plan headers, insert their hidden instances at the
 	// header's position so cycling can auto-expand them.
 	var ordered []*session.Instance
@@ -1047,14 +1047,10 @@ func navPlanStatusIcon(row navRow) string {
 
 // navSectionLabel returns a lowercase section label for a plan sort key.
 func navSectionLabel(key int) string {
-	switch key {
-	case 0:
-		return "attention"
-	case 1:
+	if key < 2 {
 		return "active"
-	default:
-		return "plans"
 	}
+	return "plans"
 }
 
 // navDividerLine builds a full-width rule like "──── label ────" spanning w cells.
@@ -1297,15 +1293,14 @@ func (n *NavigationPanel) String() string {
 			inDeadSection = false
 		}
 
-		// Insert section dividers between plan sort-key groups
+		// Insert section dividers between plan sort-key groups.
+		// Sort keys 0 (notification) and 1 (running) are merged into a single
+		// "active" section so the list doesn't jump between attention/active.
 		if row.Kind == navRowPlanHeader && !inDeadSection {
 			sk := 2
-			if row.HasNotification {
-				sk = 0
-			} else if row.HasRunning {
-				sk = 1
-			} else if row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
-				sk = 1
+			if row.HasNotification || row.HasRunning ||
+				row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
+				sk = 0 // unified active group
 			}
 			if sk != lastPlanKey {
 				label := navSectionLabel(sk)
