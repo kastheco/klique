@@ -8,6 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildClickUpComment(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   string
+		detail  string
+		wantSub string
+	}{
+		{"plan_ready", "plan_ready", "3 tasks, 2 waves", "plan finalized"},
+		{"wave_complete", "wave_complete", "wave 1/2: 3/3 tasks", "wave 1/2"},
+		{"review_approved", "review_approved", "", "review approved"},
+		{"review_changes", "review_changes_requested", "fix the tests", "changes requested"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comment := buildClickUpProgressComment(tt.event, "my-feature", tt.detail)
+			assert.Contains(t, comment, tt.wantSub)
+		})
+	}
+}
+
 func TestNewWaveOrchestrator(t *testing.T) {
 	plan := &planparser.Plan{
 		Goal: "test",

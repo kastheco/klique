@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1922,6 +1923,137 @@ func (m *home) refreshAuditPane() {
 	if m.nav != nil && m.auditPane.Visible() {
 		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.Height())
 	}
+}
+
+// buildClickUpProgressComment formats a concise markdown comment for ClickUp.
+// Prefixes with "🤖 kasmos:" so comments are identifiable.
+// Events:
+//   - plan_ready: "plan finalized — {detail}"
+//   - wave_complete: "wave {detail} complete"
+//   - review_approved: "review approved — implementation complete"
+//   - review_changes_requested: "review: changes requested — {detail}"
+//   - fixer_complete: "fixer agent completed — {detail}"
+func buildClickUpProgressComment(event, planName, detail string) string {
+	var body string
+	switch event {
+	case "plan_ready":
+		if detail != "" {
+			body = "plan finalized — " + detail
+		} else {
+			body = "plan finalized"
+		}
+	case "wave_complete":
+		if detail != "" {
+			body = "wave " + detail + " complete"
+		} else {
+			body = "wave complete"
+		}
+	case "review_approved":
+		body = "review approved — implementation complete"
+	case "review_changes_requested":
+		if detail != "" {
+			body = "review: changes requested — " + detail
+		} else {
+			body = "review: changes requested"
+		}
+	case "fixer_complete":
+		if detail != "" {
+			body = "fixer agent completed — " + detail
+		} else {
+			body = "fixer agent completed"
+		}
+	default:
+		if detail != "" {
+			body = event + " — " + detail
+		} else {
+			body = event
+		}
+	}
+	return "🤖 kasmos: **" + planName + "** — " + body
+}
+
+// postClickUpProgress resolves the ClickUp task ID for the given plan and posts
+// a progress comment. Returns a fire-and-forget tea.Cmd. Returns nil if no task
+// ID is associated with the plan or the commenter is unavailable. All errors
+// are logged, never surfaced to the user.
+func (m *home) postClickUpProgress(planFile, event, detail string) tea.Cmd {
+	if m.planState == nil {
+		return nil
+	}
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		return nil
+	}
+
+	taskID := entry.ClickUpTaskID
+	if taskID == "" {
+		// Fall back to parsing from plan content.
+		if m.planStore != nil {
+			content, err := m.planStore.GetContent(m.planStoreProject, planFile)
+			if err == nil {
+				taskID = clickup.ParseClickUpTaskID(content)
+			}
+		}
+	}
+	if taskID == "" {
+		return nil
+	}
+
+	planName := planstate.DisplayName(planFile)
+	comment := buildClickUpProgressComment(event, planName, detail)
+
+	commenter := m.getOrCreateCommenter(m.ctx)
+	if commenter == nil {
+		return nil
+	}
+
+	capturedTaskID := taskID
+	capturedComment := comment
+	capturedCommenter := commenter
+	return func() tea.Msg {
+		if err := capturedCommenter.PostComment(capturedTaskID, capturedComment); err != nil {
+			log.WarningLog.Printf("postClickUpProgress: %v", err)
+		}
+		return nil
+	}
+}
+
+// getOrCreateCommenter returns a Commenter backed by the same MCP client as
+// the Importer if it already exists, or initializes a new MCP connection.
+// Returns nil on any error (fail-open).
+func (m *home) getOrCreateCommenter(ctx context.Context) *clickup.Commenter {
+	if m.clickUpCommenter != nil {
+		return m.clickUpCommenter
+	}
+	if m.clickUpConfig == nil {
+		return nil
+	}
+
+	// Reuse the shared MCP client if the importer already initialized it.
+	if m.clickUpMCPClient != nil {
+		m.clickUpCommenter = clickup.NewCommenter(m.clickUpMCPClient)
+		if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
+			m.clickUpCommenter.SetWorkspaceID(projCfg.WorkspaceID)
+		}
+		return m.clickUpCommenter
+	}
+
+	// No MCP client yet — try to get one via getOrCreateImporter (initializes
+	// the shared transport and stores clickUpMCPClient as a side-effect).
+	if _, err := m.getOrCreateImporter(ctx); err != nil {
+		log.WarningLog.Printf("getOrCreateCommenter: importer init failed: %v", err)
+		return nil
+	}
+
+	// clickUpMCPClient is now set by getOrCreateImporter.
+	if m.clickUpMCPClient == nil {
+		return nil
+	}
+	m.clickUpCommenter = clickup.NewCommenter(m.clickUpMCPClient)
+	if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
+		m.clickUpCommenter.SetWorkspaceID(projCfg.WorkspaceID)
+	}
+	return m.clickUpCommenter
 }
 
 // coalesceRestarts merges adjacent session_started + session_stopped pairs
