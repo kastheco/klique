@@ -29,18 +29,20 @@ const ProgramOpenCode = "opencode"
 // terminal control codes that change between captures of an otherwise-idle pane.
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
-// TmuxSession represents a managed tmux session
+// TmuxSession represents a managed tmux session.
+// It implements the Session interface (defined in session.go, created in Wave 1 Task 1).
+// The adapter field will hold the ProgramAdapter once that interface is defined.
 type TmuxSession struct {
 	// Initialized by NewTmuxSession
 	//
-	// The name of the tmux session and the sanitized name used for tmux commands.
+	// sanitizedName is the kas_-prefixed, whitespace-free tmux session name.
 	sanitizedName string
 	program       string
 	// ptyFactory is used to create a PTY for the tmux session.
 	ptyFactory PtyFactory
 	// cmdExec is used to execute commands in the tmux session.
 	cmdExec cmd.Executor
-	// skipPermissions appends --dangerously-skip-permissions to Claude commands
+	// skipPermissions appends --dangerously-skip-permissions to Claude commands.
 	skipPermissions bool
 	// agentType, when non-empty, appends --agent <type> to the program command.
 	agentType string
@@ -69,28 +71,32 @@ type TmuxSession struct {
 
 	// Initialized by Start or Restore
 	//
-	// ptmx is a PTY is running the tmux attach command. This can be resized to change the
+	// ptmx is a PTY running the tmux attach command. This can be resized to change the
 	// stdout dimensions of the tmux pane. On detach, we close it and set a new one.
-	// This should never be nil.
+	// This should never be nil after a successful Start or Restore.
 	ptmx *os.File
-	// monitor monitors the tmux pane content and sends signals to the UI when it's status changes
+	// monitor monitors the tmux pane content and sends signals to the UI when its status changes.
 	monitor *statusMonitor
 
-	// Initialized by Attach
-	// Deinitialized by Detach
+	// Initialized by Attach; deinitialized by Detach.
 	//
-	// Channel to be closed at the very end of detaching. Used to signal callers.
+	// attachCh is closed at the very end of detaching. Used to signal callers.
 	attachCh chan struct{}
-	// While attached, we use some goroutines to manage the window size and stdin/stdout. This stuff
-	// is used to terminate them on Detach. We don't want them to outlive the attached window.
+	// ctx, cancel, wg manage goroutines launched by Attach.
 	ctx    context.Context
 	cancel func()
 	wg     *sync.WaitGroup
 	// outerMouseWasEnabled is set when Attach() disables mouse on the outer tmux
 	// session so Detach() can restore it.
 	outerMouseWasEnabled bool
+
+	// adapter holds the program-specific behavior implementation (ProgramAdapter).
+	// Defined as any until the ProgramAdapter interface is committed by Task 1.
+	// Will be typed as ProgramAdapter once session.go is available.
+	adapter any
 }
 
+// TmuxPrefix is the prefix added to all kas-managed tmux session names.
 const TmuxPrefix = "kas_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
@@ -98,10 +104,17 @@ var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 // cleanupSessionsRe matches current kas_ sessions and legacy klique_/hivemind_ sessions.
 var cleanupSessionsRe = regexp.MustCompile(`(?:kas_|klique_|hivemind_).*:`)
 
+// toKasTmuxName converts a human-readable name to a kas_-prefixed tmux session name.
+// Whitespace is removed and dots are replaced with underscores (tmux does this natively).
 func toKasTmuxName(str string) string {
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
 	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
+}
+
+// ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.
+func ToKasTmuxNamePublic(name string) string {
+	return toKasTmuxName(name)
 }
 
 // NewTmuxSession creates a new TmuxSession with the given name and program.
@@ -144,6 +157,7 @@ func NewTmuxSessionFromExisting(sanitizedName string, program string, skipPermis
 }
 
 // SetAgentType sets the agent type flag to inject at startup (planner/coder/reviewer).
+// The value is trimmed of surrounding whitespace.
 func (t *TmuxSession) SetAgentType(agentType string) {
 	t.agentType = strings.TrimSpace(agentType)
 }
@@ -181,6 +195,7 @@ func (t *TmuxSession) SetTitleFunc(fn func(workDir string, beforeStart time.Time
 	t.titleFunc = fn
 }
 
+// reportProgress calls ProgressFunc if set.
 func (t *TmuxSession) reportProgress(stage int, desc string) {
 	if t.ProgressFunc != nil {
 		t.ProgressFunc(stage, desc)
@@ -193,11 +208,15 @@ func isClaudeProgram(program string) bool {
 }
 
 // isAiderProgram returns true if the program string refers to Aider.
+// Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.
+// Will be removed when aider support is fully dropped.
 func isAiderProgram(program string) bool {
 	return strings.HasPrefix(program, ProgramAider)
 }
 
 // isGeminiProgram returns true if the program string refers to Gemini.
+// Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.
+// Will be removed when gemini support is fully dropped.
 func isGeminiProgram(program string) bool {
 	return strings.HasPrefix(program, ProgramGemini)
 }
@@ -207,6 +226,8 @@ func isOpenCodeProgram(program string) bool {
 	return strings.HasSuffix(program, ProgramOpenCode)
 }
 
+// statusMonitor tracks changes to tmux pane content using hash-based comparison.
+// It is used by HasUpdated to detect when the agent is active vs idle.
 type statusMonitor struct {
 	// Store hashes to save memory.
 	prevOutputHash []byte
@@ -234,8 +255,8 @@ func (m *statusMonitor) hash(s string) []byte {
 	return h.Sum(nil)
 }
 
-// Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
-// the session (ex. claude). workdir is the git worktree directory.
+// Start creates and starts a new tmux session, then attaches to it.
+// program is the command to run in the session. workDir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
 	// Reattach to a surviving session from a previous crash/interrupt
 	// instead of killing it — the agent may still be running.
@@ -243,7 +264,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		return t.Restore()
 	}
 
-	// Append --dangerously-skip-permissions for Claude programs if enabled
+	// Append --dangerously-skip-permissions for Claude programs if enabled.
 	program := t.program
 	if t.skipPermissions && isClaudeProgram(program) {
 		program = program + " --dangerously-skip-permissions"
@@ -273,7 +294,6 @@ func (t *TmuxSession) Start(workDir string) error {
 	}
 
 	// Prepend KASMOS_MANAGED=1 so the agent process sees it from startup.
-	// tmux set-environment (below) only affects new panes, not the initial program.
 	program = "KASMOS_MANAGED=1 " + program
 
 	// Prepend task identity env vars for parallel wave execution.
@@ -289,7 +309,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	// that was created at or after this moment.
 	beforeStart := time.Now()
 
-	// Create a new detached tmux session and start claude in it
+	// Create a new detached tmux session and start the program in it.
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
@@ -306,7 +326,7 @@ func (t *TmuxSession) Start(workDir string) error {
 
 	t.reportProgress(2, "Waiting for session to start...")
 
-	// Poll for session existence with exponential backoff
+	// Poll for session existence with exponential backoff.
 	timeout := time.After(2 * time.Second)
 	sleepDuration := 5 * time.Millisecond
 	for !t.DoesSessionExist() {
@@ -318,7 +338,7 @@ func (t *TmuxSession) Start(workDir string) error {
 			return fmt.Errorf("timed out waiting for tmux session %s: %v", t.sanitizedName, err)
 		default:
 			time.Sleep(sleepDuration)
-			// Exponential backoff up to 50ms max
+			// Exponential backoff up to 50ms max.
 			if sleepDuration < 50*time.Millisecond {
 				sleepDuration *= 2
 			}
@@ -326,7 +346,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	}
 	ptmx.Close()
 
-	// Set history limit to enable scrollback (default is 2000, we'll use 10000 for more history)
+	// Set history limit to enable scrollback (default is 2000, we use 10000 for more history).
 	historyCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "history-limit", "10000")
 	if err := t.cmdExec.Run(historyCmd); err != nil {
 		log.InfoLog.Printf("Warning: failed to set history-limit for session %s: %v", t.sanitizedName, err)
@@ -338,11 +358,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		log.InfoLog.Printf("Warning: failed to hide status bar for session %s: %v", t.sanitizedName, err)
 	}
 
-	// Keep mouse off so tmux doesn't intercept scroll-wheel events into copy
-	// mode. The TUI applications (opencode, claude) handle their own mouse/scroll.
-
 	// Inject KASMOS_MANAGED=1 so agents can detect they're running under kasmos orchestration.
-	// This enables skills/prompts to use sentinel files instead of editing plan-state.json directly.
 	envCmd := exec.Command("tmux", "set-environment", "-t", t.sanitizedName, "KASMOS_MANAGED", "1")
 	if err := t.cmdExec.Run(envCmd); err != nil {
 		log.InfoLog.Printf("Warning: failed to set KASMOS_MANAGED env for session %s: %v", t.sanitizedName, err)
@@ -411,7 +427,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	return nil
 }
 
-// Restore attaches to an existing session and restores the window size
+// Restore attaches to an existing session and restores the window size.
 func (t *TmuxSession) Restore() error {
 	ptmx, err := t.ptyFactory.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
 	if err != nil {
@@ -450,7 +466,7 @@ func outerMouseEnabled(session string) bool {
 	return strings.Contains(string(out), "on")
 }
 
-// Close terminates the tmux session and cleans up resources
+// Close terminates the tmux session and cleans up resources.
 func (t *TmuxSession) Close() error {
 	var errs []error
 
@@ -474,6 +490,7 @@ func (t *TmuxSession) Close() error {
 	return errors.Join(errs...)
 }
 
+// DoesSessionExist returns true if the tmux session is currently running.
 func (t *TmuxSession) DoesSessionExist() bool {
 	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
 	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
@@ -481,17 +498,17 @@ func (t *TmuxSession) DoesSessionExist() bool {
 }
 
 // CleanupSessions kills all tmux sessions that start with the kas prefix.
-// Also cleans up legacy "hivemind_" sessions from before the rename.
+// Also cleans up legacy "hivemind_" and "klique_" sessions from before the rename.
 func CleanupSessions(cmdExec cmd.Executor) error {
-	// First try to list sessions
+	// First try to list sessions.
 	cmd := exec.Command("tmux", "ls")
 	output, err := cmdExec.Output(cmd)
 
-	// If there's an error and it's because no server is running, that's fine
-	// Exit code 1 typically means no sessions exist
+	// If there's an error and it's because no server is running, that's fine.
+	// Exit code 1 typically means no sessions exist.
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return nil // No sessions to clean up
+			return nil // No sessions to clean up.
 		}
 		return fmt.Errorf("failed to list tmux sessions: %v", err)
 	}
@@ -662,9 +679,4 @@ func CountKasSessions(cmdExec cmd.Executor) int {
 		}
 	}
 	return count
-}
-
-// ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.
-func ToKasTmuxNamePublic(name string) string {
-	return toKasTmuxName(name)
 }
