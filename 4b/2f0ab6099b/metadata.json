@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "4b2f0ab6099b",
+  "strategy": "manual-commit",
+  "branch": "plan/04-rewrite-plumbing",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "daemon/daemon.go",
+    "daemon/daemon_unix.go",
+    "daemon/daemon_windows.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/4b/2f0ab6099b/0/metadata.json",
+      "transcript": "/4b/2f0ab6099b/0/full.jsonl",
+      "context": "/4b/2f0ab6099b/0/context.md",
+      "content_hash": "/4b/2f0ab6099b/0/content_hash.txt",
+      "prompt": "/4b/2f0ab6099b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 211,
+    "cache_read_tokens": 54161,
+    "output_tokens": 206,
+    "api_call_count": 1
+  }
+}
