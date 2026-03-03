@@ -1,0 +1,813 @@
+{
+  "info": {
+    "id": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+    "slug": "calm-sailor",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Review cycle count in instance names",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772511968491,
+      "updated": 1772511993889
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772511968530
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "id": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Plan review-cycle-count-should-be-included. Goal: review cycle count should be included in instance names, session names, and labels \"review #1\" -review-1 suffix, -fix-1 suffix, -review-2 suffix, etc etc\n\nthe second cycle keeps having issues clashing with existing sessions, caches, etc. easier to just avoid it outright each should be treated fresh anyways. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.",
+          "id": "prt_cb1f23cff002Og1WZZ1mU2fWQr",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23cff001dRf5VyiKkD0rsB"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511968538,
+          "completed": 1772511972584
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40101,
+          "input": 3,
+          "output": 107,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 39991
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1f23d1a001MPxWKiiZX1qfz9",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23d1a001MPxWKiiZX1qfz9"
+        },
+        {
+          "type": "text",
+          "text": "\n\nI'll load the required skills first.",
+          "time": {
+            "start": 1772511972228,
+            "end": 1772511972228
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23d1a001MPxWKiiZX1qfz9"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01FQvaboCG5unPpCEBXcLGhC",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the plan status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `YYYY-MM-DD-<feature-name>.md`\n\nPlans are stored in the **plan store** (SQLite database or HTTP API), not as files on disk.\nUse `kas plan register` to register plans after writing content.\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the plan content is passed to kasmos via sentinel — kasmos registers it\nin the plan store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas plan register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md\n```\n\nthe filename must match the plan filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify plan state directly** — kasmos manages the plan store.\n\nannounce completion and stop:\n\n> \"plan complete: `YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the plan store using the CLI:\n\n```bash\nkas plan register YYYY-MM-DD-<feature-name>.md\n```\n\nthis creates an entry in the plan store with status `ready`. the plan content should be\nwritten to the store via `kas plan` or committed as a `.md` file in `docs/plans/` for\n`kas plan register` to pick up.\n\nthen offer execution choices:\n\n> \"plan complete: `YYYY-MM-DD-<feature-name>.md` (registered in plan store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511972532,
+              "end": 1772511972537
+            }
+          },
+          "id": "prt_cb1f24b84001oOHrgYFvQyeLFo",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23d1a001MPxWKiiZX1qfz9"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012fYi5JJSimyCugyMcbAJZG",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511972551,
+              "end": 1772511972555
+            }
+          },
+          "id": "prt_cb1f24cb5001DXqPTXrBTqcO10",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23d1a001MPxWKiiZX1qfz9"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "cost": 0,
+          "tokens": {
+            "total": 40101,
+            "input": 3,
+            "output": 107,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 39991
+            }
+          },
+          "id": "prt_cb1f24cd50010vXqkoptBvM6sn",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f23d1a001MPxWKiiZX1qfz9"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511972584,
+          "completed": 1772511979416
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48401,
+          "input": 1,
+          "output": 349,
+          "reasoning": 0,
+          "cache": {
+            "read": 39991,
+            "write": 8060
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1f24ce8001vJd2rZftZF0LN4",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "id": "prt_cb1f25404001jpVAhtAlVr8foQ",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "text",
+          "text": "i'm using the kasmos-planner skill to design and plan this feature.\n\nLet me explore the codebase to understand how review cycles, instance names, session names, and labels are currently constructed.",
+          "time": {
+            "start": 1772511976092,
+            "end": 1772511976092
+          },
+          "id": "prt_cb1f254050014GEFSRoXQj4c7r",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017Kvr9PFrodynuFBRajy5ne",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline -20",
+              "description": "Recent git history"
+            },
+            "output": "898e406 fix: address review findings for plan-status-cli-bugs\na4899ed fix: make kas plan CLI worktree-aware via resolveRepoRoot\n01582da [kas] push completed implementation for 'have-to-kill-twice'\n5c48a10 fix: allow single-action cleanup of exited instances without double-kill\n957ee8b plan: add wave headers to 2026-03-03-plan-status-cli-bugs.md\n9eed42e plan: add wave headers to 2026-03-03-cleanup-prompts.md\n8e10801 plan: fix plan status CLI bugs (worktree CWD, stale variable, template docs)\n2f7abd1 plan: add wave headers to 2026-03-03-have-to-kill-twice.md\nc57276b fix: auto-commit dirty worktrees on Kill() to prevent data loss\n7d7d690 fix: merge attention and active sidebar sections into single unified list\n4d28e54 fix: purge stale plan-state.json and spec-kitty refs from skills and agents\n8b9534a fix: preserve injected deps in Restart() to fix CI test failures\n4a94a95 chore: bump version to 1.3.13\n360c1c2 ci: drop windows from build matrix and release targets\ndcd9cc5 fix: unify CLI and TUI planstore DB path to planstore.db\n9191be6 feat(clickup): post progress comments to ClickUp at plan lifecycle milestones\n41cdd68 fix(reviewer): address all round-1 reviewer feedback for clickup progress\n7777a90 [kas] update from 'update-clickup-with-progress-review' on 02 Mar 26 18:59 CST (paused)\nac37a85 fix: restore version to 1.3.12 and clarify comment in commenter.go (reviewer self-fix)\nb3cf960 feat(clickup): post progress comments to ClickUp at plan lifecycle milestones\n",
+            "title": "Recent git history",
+            "metadata": {
+              "output": "898e406 fix: address review findings for plan-status-cli-bugs\na4899ed fix: make kas plan CLI worktree-aware via resolveRepoRoot\n01582da [kas] push completed implementation for 'have-to-kill-twice'\n5c48a10 fix: allow single-action cleanup of exited instances without double-kill\n957ee8b plan: add wave headers to 2026-03-03-plan-status-cli-bugs.md\n9eed42e plan: add wave headers to 2026-03-03-cleanup-prompts.md\n8e10801 plan: fix plan status CLI bugs (worktree CWD, stale variable, template docs)\n2f7abd1 plan: add wave headers to 2026-03-03-have-to-kill-twice.md\nc57276b fix: auto-commit dirty worktrees on Kill() to prevent data loss\n7d7d690 fix: merge attention and active sidebar sections into single unified list\n4d28e54 fix: purge stale plan-state.json and spec-kitty refs from skills and agents\n8b9534a fix: preserve injected deps in Restart() to fix CI test failures\n4a94a95 chore: bump version to 1.3.13\n360c1c2 ci: drop windows from build matrix and release targets\ndcd9cc5 fix: unify CLI and TUI planstore DB path to planstore.db\n9191be6 feat(clickup): post progress comments to ClickUp at plan lifecycle milestones\n41cdd68 fix(reviewer): address all round-1 reviewer feedback for clickup progress\n7777a90 [kas] update from 'update-clickup-with-progress-review' on 02 Mar 26 18:59 CST (paused)\nac37a85 fix: restore version to 1.3.12 and clarify comment in commenter.go (reviewer self-fix)\nb3cf960 feat(clickup): post progress comments to ClickUp at plan lifecycle milestones\n",
+              "exit": 0,
+              "description": "Recent git history",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511976713,
+              "end": 1772511976726
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_019Dt1HoAvhg2pZw2hUEUymn",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -l 'review' --type go",
+              "description": "Files mentioning review"
+            },
+            "output": "app/app_test.go\napp/app_input.go\napp/app.go\napp/wave_orchestrator_test.go\napp/clickup_progress_test.go\napp/app_state.go\napp/app_wave_orchestration_flow_test.go\napp/app_planner_signal_test.go\napp/app_plan_completion_test.go\napp/app_actions.go\napp/plan_cancel_rename_delay_test.go\napp/fsm_test_helpers_test.go\napp/app_solo_agent_test.go\napp/app_plan_creation_test.go\napp/app_plan_actions_test.go\napp/help.go\napp/app_state_sidebar_status_test.go\napp/app_permission_test.go\napp/app_input_right_on_instance_test.go\napp/app_statusbar_integration_test.go\napp/app_input_viewport_test.go\napp/app_reviewer_program_test.go\nui/zones.go\nui/statusbar_test.go\nui/statusbar.go\nui/navigation_panel.go\nui/info_pane.go\nui/menu_test.go\nui/preview.go\nui/nav_panel_test.go\nui/tabbed_window.go\nui/tabbed_window_test.go\nui/preview_fallback_test.go\nui/preview_test.go\nui/overlay/tmuxBrowserOverlay.go\nsession/instance_title_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_session.go\nsession/instance_session_async_test.go\nsession/tmux/tmux.go\nsession/git/plan_lifecycle.go\nkeys/keys.go\nkeys/keys_test.go\nconfig/toml_test.go\nconfig/planstore/store.go\ncontracts/planner_prompt_contract_test.go\nconfig/planfsm/signals_test.go\nconfig/planfsm/signals.go\nconfig/planfsm/fsm_test.go\nconfig/planfsm/fsm.go\ninternal/opencodesession/title_test.go\nconfig/planstate/planstate_test.go\ninternal/opencodesession/title.go\nconfig/planstate/planstate.go\ncmd/plan_test.go\ncmd/plan.go\ninternal/initcmd/scaffold/scaffold.go\ninternal/check/project.go\ninternal/check/project_test.go\ninternal/initcmd/scaffold/scaffold_test.go\ninternal/initcmd/harness/harness.go\ninternal/initcmd/wizard/roles.go\ninternal/initcmd/wizard/wizard.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/wizard_test.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/wizard/model.go\ninternal/initcmd/wizard/model_review.go\ncheck_test.go\nmain.go\n",
+            "title": "Files mentioning review",
+            "metadata": {
+              "output": "app/app_test.go\napp/app_input.go\napp/app.go\napp/wave_orchestrator_test.go\napp/clickup_progress_test.go\napp/app_state.go\napp/app_wave_orchestration_flow_test.go\napp/app_planner_signal_test.go\napp/app_plan_completion_test.go\napp/app_actions.go\napp/plan_cancel_rename_delay_test.go\napp/fsm_test_helpers_test.go\napp/app_solo_agent_test.go\napp/app_plan_creation_test.go\napp/app_plan_actions_test.go\napp/help.go\napp/app_state_sidebar_status_test.go\napp/app_permission_test.go\napp/app_input_right_on_instance_test.go\napp/app_statusbar_integration_test.go\napp/app_input_viewport_test.go\napp/app_reviewer_program_test.go\nui/zones.go\nui/statusbar_test.go\nui/statusbar.go\nui/navigation_panel.go\nui/info_pane.go\nui/menu_test.go\nui/preview.go\nui/nav_panel_test.go\nui/tabbed_window.go\nui/tabbed_window_test.go\nui/preview_fallback_test.go\nui/preview_test.go\nui/overlay/tmuxBrowserOverlay.go\nsession/instance_title_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_session.go\nsession/instance_session_async_test.go\nsession/tmux/tmux.go\nsession/git/plan_lifecycle.go\nkeys/keys.go\nkeys/keys_test.go\nconfig/toml_test.go\nconfig/planstore/store.go\ncontracts/planner_prompt_contract_test.go\nconfig/planfsm/signals_test.go\nconfig/planfsm/signals.go\nconfig/planfsm/fsm_test.go\nconfig/planfsm/fsm.go\ninternal/opencodesession/title_test.go\nconfig/planstate/planstate_test.go\ninternal/opencodesession/title.go\nconfig/planstate/planstate.go\ncmd/plan_test.go\ncmd/plan.go\ninternal/initcmd/scaffold/scaffold.go\ninternal/check/project.go\ninternal/check/project_test.go\ninternal/initcmd/scaffold/scaffold_test.go\ninternal/initcmd/harness/harness.go\ninternal/initcmd/wizard/roles.go\ninternal/initcmd/wizard/wizard.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/wizard_test.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/wizard/model.go\ninternal/initcmd/wizard/model_review.go\ncheck_test.go\nmain.go\n",
+              "exit": 0,
+              "description": "Files mentioning review",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511977490,
+              "end": 1772511977499
+            }
+          },
+          "id": "prt_cb1f25d0a001v3mfkRvx3Ouspp",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_0117Y19YYm7LhDHXNMWQGZWw",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -l 'session.*name\\|SessionName\\|sessionName\\|tmux.*session\\|worktree' --type go",
+              "description": "Files with session/worktree naming"
+            },
+            "output": "",
+            "title": "Files with session/worktree naming",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Files with session/worktree naming",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511978605,
+              "end": 1772511978612
+            }
+          },
+          "id": "prt_cb1f26014001c5NiBDMeftWthk",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017iHiuhA16YfXtak6KbbFmh",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo \"${KASMOS_MANAGED:-}\"",
+              "description": "Check kasmos managed mode"
+            },
+            "output": "1\n",
+            "title": "Check kasmos managed mode",
+            "metadata": {
+              "output": "1\n",
+              "exit": 0,
+              "description": "Check kasmos managed mode",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511979379,
+              "end": 1772511979381
+            }
+          },
+          "id": "prt_cb1f2646f001ThpyDiIbT6vnb9",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "cost": 0,
+          "tokens": {
+            "total": 48401,
+            "input": 1,
+            "output": 349,
+            "reasoning": 0,
+            "cache": {
+              "read": 39991,
+              "write": 8060
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f24ce8001vJd2rZftZF0LN4"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511979417,
+          "completed": 1772511984155
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50066,
+          "input": 1,
+          "output": 313,
+          "reasoning": 0,
+          "cache": {
+            "read": 48051,
+            "write": 1701
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "id": "prt_cb1f26de0001v8ic6kxVQaVR77",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "Managed mode is active. Let me dig into the core naming/session logic:",
+          "time": {
+            "start": 1772511981810,
+            "end": 1772511981810
+          },
+          "id": "prt_cb1f26de1001y1Q1vLKQGF7I1T",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Ny7aKHb6vDtVw9aA77XCCS",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/session/instance.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/session/instance.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"path/filepath\"\n6: \t\"time\"\n7: \n8: \t\"github.com/kastheco/kasmos/session/git\"\n9: \t\"github.com/kastheco/kasmos/session/tmux\"\n10: )\n11: \n12: type Status int\n13: \n14: const (\n15: \t// Running is the status when the instance is running and claude is working.\n16: \tRunning Status = iota\n17: \t// Ready is if the claude instance is ready to be interacted with (waiting for user input).\n18: \tReady\n19: \t// Loading is if the instance is loading (if we are starting it up or something).\n20: \tLoading\n21: \t// Paused is if the instance is paused (worktree removed but branch preserved).\n22: \tPaused\n23: )\n24: \n25: // AgentType constants identify the role of an agent session within a plan lifecycle.\n26: const (\n27: \tAgentTypePlanner  = \"planner\"\n28: \tAgentTypeCoder    = \"coder\"\n29: \tAgentTypeReviewer = \"reviewer\"\n30: \tAgentTypeFixer    = \"fixer\"\n31: )\n32: \n33: // Instance is a running instance of claude code.\n34: type Instance struct {\n35: \t// Title is the title of the instance.\n36: \tTitle string\n37: \t// Path is the path to the workspace.\n38: \tPath string\n39: \t// Branch is the branch of the instance.\n40: \tBranch string\n41: \t// Status is the status of the instance.\n42: \tStatus Status\n43: \t// Program is the program to run in the instance.\n44: \tProgram string\n45: \t// Height is the height of the instance.\n46: \tHeight int\n47: \t// Width is the width of the instance.\n48: \tWidth int\n49: \t// CreatedAt is the time the instance was created.\n50: \tCreatedAt time.Time\n51: \t// UpdatedAt is the time the instance was last updated.\n52: \tUpdatedAt time.Time\n53: \t// AutoYes is true if the instance should automatically press enter when prompted.\n54: \tAutoYes bool\n55: \t// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.\n56: \tSkipPermissions bool\n57: \t// PlanFile is the plan filename this instance is implementing (empty = no plan).\n58: \tPlanFile string\n59: \t// Topic is the topic/group this instance belongs to (from plan-state).\n60: \tTopic string\n61: \t// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.\n62: \tAgentType string\n63: \t// TaskNumber is the task number within a plan (1-indexed). 0 = not a wave task.\n64: \tTaskNumber int\n65: \t// WaveNumber is the wave number this task belongs to (1-indexed). 0 = not a wave task.\n66: \tWaveNumber int\n67: \t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n68: \tPeerCount int\n69: \t// IsReviewer is true when this instance is a reviewer session for a plan.\n70: \t// Deprecated: use AgentType == AgentTypeReviewer instead.\n71: \tIsReviewer bool\n72: \t// ImplementationComplete is true when the coder finished and the plan transitioned to review.\n73: \t// The instance is auto-paused and rendered with a dim/completed visual style.\n74: \tImplementationComplete bool\n75: \t// SoloAgent is true when this instance was spawned via \"start solo agent\" — no\n76: \t// automatic lifecycle transitions (push prompt, review spawning) apply.\n77: \tSoloAgent bool\n78: \t// Exited is true when the instance's tmux session has died. Used by the UI\n79: \t// to render dead instances with greyed-out strikethrough styling.\n80: \tExited bool\n81: \t// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.\n82: \tQueuedPrompt string\n83: \n84: \t// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).\n85: \tsharedWorktree bool\n86: \t// LoadingStage tracks the current startup progress. Exported so the UI can read it.\n87: \tLoadingStage int\n88: \t// LoadingTotal is the total number of startup stages.\n89: \tLoadingTotal int\n90: \t// LoadingMessage describes the current loading step.\n91: \tLoadingMessage string\n92: \n93: \t// Notified is true when the instance finished (Running→Ready) and the user\n94: \t// hasn't selected it yet. Cleared when the user selects this instance.\n95: \tNotified bool\n96: \n97: \t// LastActiveAt is set whenever the instance is marked as Running.\n98: \tLastActiveAt time.Time\n99: \n100: \t// PromptDetected is true when the instance's program is waiting for user input.\n101: \t// Reset to false when the instance resumes running. Used by the sidebar to\n102: \t// persistently show a running indicator without flickering.\n103: \tPromptDetected bool\n104: \n105: \t// AwaitingWork is set when a QueuedPrompt is delivered to the agent, and\n106: \t// cleared when the agent transitions to Running. The wave orchestrator uses\n107: \t// this to avoid treating the initial idle prompt as task completion.\n108: \tAwaitingWork bool\n109: \n110: \t// HasWorked is set to true when the agent produces at least one content\n111: \t// update (md.Updated) after receiving its task prompt. The wave orchestrator\n112: \t// requires this before treating PromptDetected as task completion — prevents\n113: \t// permission prompts or early returns from prematurely completing a wave.\n114: \tHasWorked bool\n115: \n116: \t// CPUPercent is the current CPU usage of the instance's process.\n117: \tCPUPercent float64\n118: \t// MemMB is the current memory usage in megabytes.\n119: \tMemMB float64\n120: \n121: \t// LastActivity is the most recently detected agent activity (ephemeral, not persisted).\n122: \tLastActivity *Activity\n123: \n124: \t// CachedContent is the last tmux capture-pane output, set in app.Update from metadata results.\n125: \t// Used by the preview tick to avoid redundant subprocess calls.\n126: \tCachedContent string\n127: \t// CachedContentSet tracks whether CachedContent has been initialized.\n128: \t// This distinguishes \"no cache yet\" from a valid empty pane capture.\n129: \tCachedContentSet bool\n130: \n131: \t// DiffStats stores the current git diff statistics\n132: \tdiffStats *git.DiffStats\n133: \n134: \t// The below fields are initialized upon calling Start().\n135: \n136: \tstarted bool\n137: \t// tmuxSession is the tmux session for the instance.\n138: \ttmuxSession *tmux.TmuxSession\n139: \t// gitWorktree is the git worktree for the instance.\n140: \tgitWorktree *git.GitWorktree\n141: }\n142: \n143: // ToInstanceData converts an Instance to its serializable form\n144: func (i *Instance) ToInstanceData() InstanceData {\n145: \tdata := InstanceData{\n146: \t\tTitle:                  i.Title,\n147: \t\tPath:                   i.Path,\n148: \t\tBranch:                 i.Branch,\n149: \t\tStatus:                 i.Status,\n150: \t\tHeight:                 i.Height,\n151: \t\tWidth:                  i.Width,\n152: \t\tCreatedAt:              i.CreatedAt,\n153: \t\tUpdatedAt:              time.Now(),\n154: \t\tProgram:                i.Program,\n155: \t\tAutoYes:                i.AutoYes,\n156: \t\tSkipPermissions:        i.SkipPermissions,\n157: \t\tPlanFile:               i.PlanFile,\n158: \t\tAgentType:              i.AgentType,\n159: \t\tTaskNumber:             i.TaskNumber,\n160: \t\tWaveNumber:             i.WaveNumber,\n161: \t\tPeerCount:              i.PeerCount,\n162: \t\tIsReviewer:             i.IsReviewer,\n163: \t\tImplementationComplete: i.ImplementationComplete,\n164: \t\tSoloAgent:              i.SoloAgent,\n165: \t\tQueuedPrompt:           i.QueuedPrompt,\n166: \t}\n167: \n168: \t// Only include worktree data if gitWorktree is initialized\n169: \tif i.gitWorktree != nil {\n170: \t\tdata.Worktree = GitWorktreeData{\n171: \t\t\tRepoPath:      i.gitWorktree.GetRepoPath(),\n172: \t\t\tWorktreePath:  i.gitWorktree.GetWorktreePath(),\n173: \t\t\tSessionName:   i.Title,\n174: \t\t\tBranchName:    i.gitWorktree.GetBranchName(),\n175: \t\t\tBaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),\n176: \t\t}\n177: \t}\n178: \n179: \t// Only include diff stats if they exist\n180: \tif i.diffStats != nil {\n181: \t\tdata.DiffStats = DiffStatsData{\n182: \t\t\tAdded:   i.diffStats.Added,\n183: \t\t\tRemoved: i.diffStats.Removed,\n184: \t\t\tContent: i.diffStats.Content,\n185: \t\t}\n186: \t}\n187: \n188: \treturn data\n189: }\n190: \n191: // FromInstanceData creates a new Instance from serialized data\n192: func FromInstanceData(data InstanceData) (*Instance, error) {\n193: \tinstance := &Instance{\n194: \t\tTitle:                  data.Title,\n195: \t\tPath:                   data.Path,\n196: \t\tBranch:                 data.Branch,\n197: \t\tStatus:                 data.Status,\n198: \t\tHeight:                 data.Height,\n199: \t\tWidth:                  data.Width,\n200: \t\tCreatedAt:              data.CreatedAt,\n201: \t\tUpdatedAt:              data.UpdatedAt,\n202: \t\tProgram:                data.Program,\n203: \t\tSkipPermissions:        data.SkipPermissions,\n204: \t\tPlanFile:               data.PlanFile,\n205: \t\tAgentType:              data.AgentType,\n206: \t\tTaskNumber:             data.TaskNumber,\n207: \t\tWaveNumber:             data.WaveNumber,\n208: \t\tPeerCount:              data.PeerCount,\n209: \t\tIsReviewer:             data.IsReviewer,\n210: \t\tImplementationComplete: data.ImplementationComplete,\n211: \t\tSoloAgent:              data.SoloAgent,\n212: \t\tQueuedPrompt:           data.QueuedPrompt,\n213: \t\tgitWorktree: git.NewGitWorktreeFromStorage(\n214: \t\t\tdata.Worktree.RepoPath,\n215: \t\t\tdata.Worktree.WorktreePath,\n216: \t\t\tdata.Worktree.SessionName,\n217: \t\t\tdata.Worktree.BranchName,\n218: \t\t\tdata.Worktree.BaseCommitSHA,\n219: \t\t),\n220: \t\tdiffStats: &git.DiffStats{\n221: \t\t\tAdded:   data.DiffStats.Added,\n222: \t\t\tRemoved: data.DiffStats.Removed,\n223: \t\t\tContent: data.DiffStats.Content,\n224: \t\t},\n225: \t}\n226: \n227: \tif instance.Paused() {\n228: \t\tinstance.started = true\n229: \t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n230: \t} else {\n231: \t\t// Non-destructive restore: check if the tmux session still exists\n232: \t\t// before attempting to attach. Start(false) calls Kill() on failure\n233: \t\t// which would destroy a live tmux session — use a gentler path instead.\n234: \t\tts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n235: \t\tts.SetAgentType(instance.AgentType)\n236: \t\tinstance.tmuxSession = ts\n237: \n238: \t\tif !ts.DoesSessionExist() {\n239: \t\t\t// Tmux session is gone — mark as exited so the UI can render it\n240: \t\t\t// as dead and allow cleanup, rather than silently dropping it.\n241: \t\t\tinstance.started = true\n242: \t\t\tinstance.Exited = true\n243: \t\t\tinstance.SetStatus(Ready)\n244: \t\t} else {\n245: \t\t\t// Session exists — do the full restore via Start(false) which\n246: \t\t\t// attaches the PTY. The tmuxSession is already set so Start()\n247: \t\t\t// will reuse it.\n248: \t\t\tif err := instance.Start(false); err != nil {\n249: \t\t\t\treturn nil, err\n250: \t\t\t}\n251: \t\t}\n252: \t}\n253: \n254: \treturn instance, nil\n255: }\n256: \n257: // Options for creating a new instance\n258: type InstanceOptions struct {\n259: \t// Title is the title of the instance.\n260: \tTitle string\n261: \t// Path is the path to the workspace.\n262: \tPath string\n263: \t// Program is the program to run in the instance (e.g. \"claude\", \"aider --model ollama_chat/gemma3:1b\")\n264: \tProgram string\n265: \t// If AutoYes is true, then\n266: \tAutoYes bool\n267: \t// SkipPermissions enables --dangerously-skip-permissions for Claude instances.\n268: \tSkipPermissions bool\n269: \t// PlanFile binds this instance to a plan from plan-state.json.\n270: \tPlanFile string\n271: \t// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.\n272: \tAgentType string\n273: \t// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).\n274: \tTaskNumber int\n275: \t// WaveNumber is the wave this task belongs to (1-indexed, 0 = not a wave task).\n276: \tWaveNumber int\n277: \t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n278: \tPeerCount int\n279: }\n280: \n281: func NewInstance(opts InstanceOptions) (*Instance, error) {\n282: \tt := time.Now()\n283: \n284: \t// Convert path to absolute\n285: \tabsPath, err := filepath.Abs(opts.Path)\n286: \tif err != nil {\n287: \t\treturn nil, fmt.Errorf(\"failed to get absolute path: %w\", err)\n288: \t}\n289: \n290: \treturn &Instance{\n291: \t\tTitle:           opts.Title,\n292: \t\tStatus:          Ready,\n293: \t\tPath:            absPath,\n294: \t\tProgram:         opts.Program,\n295: \t\tHeight:          0,\n296: \t\tWidth:           0,\n297: \t\tCreatedAt:       t,\n298: \t\tUpdatedAt:       t,\n299: \t\tAutoYes:         opts.AutoYes,\n300: \t\tSkipPermissions: opts.SkipPermissions,\n301: \t\tPlanFile:        opts.PlanFile,\n302: \t\tAgentType:       opts.AgentType,\n303: \t\tTaskNumber:      opts.TaskNumber,\n304: \t\tWaveNumber:      opts.WaveNumber,\n305: \t\tPeerCount:       opts.PeerCount,\n306: \t}, nil\n307: }\n308: \n309: func (i *Instance) RepoName() (string, error) {\n310: \tif !i.started {\n311: \t\treturn \"\", fmt.Errorf(\"cannot get repo name for instance that has not been started\")\n312: \t}\n313: \tif i.gitWorktree == nil {\n314: \t\t// Planner instances run on the main branch without a worktree —\n315: \t\t// derive the repo name from the instance path instead.\n316: \t\treturn filepath.Base(i.Path), nil\n317: \t}\n318: \treturn i.gitWorktree.GetRepoName(), nil\n319: }\n320: \n321: // GetRepoPath returns the repo path for this instance, or empty string if not started.\n322: func (i *Instance) GetRepoPath() string {\n323: \tif !i.started || i.gitWorktree == nil {\n324: \t\treturn \"\"\n325: \t}\n326: \treturn i.gitWorktree.GetRepoPath()\n327: }\n328: \n329: // GetWorktreePath returns the worktree path for this instance, or empty string if unavailable.\n330: func (i *Instance) GetWorktreePath() string {\n331: \tif i.gitWorktree == nil {\n332: \t\treturn \"\"\n333: \t}\n334: \treturn i.gitWorktree.GetWorktreePath()\n335: }\n336: \n337: func (i *Instance) SetStatus(status Status) {\n338: \tif i.Status == Running && status == Ready {\n339: \t\ti.Notified = true\n340: \t\t// Wave task instances are managed by the orchestrator — suppress\n341: \t\t// per-task desktop notifications; the user gets a toast when the\n342: \t\t// wave completes instead.\n343: \t\tif i.TaskNumber == 0 {\n344: \t\t\tSendNotification(\"kas\", fmt.Sprintf(\"'%s' has finished\", i.Title))\n345: \t\t}\n346: \t}\n347: \tif status == Running || status == Loading {\n348: \t\ti.LastActiveAt = time.Now()\n349: \t\ti.PromptDetected = false\n350: \t\ti.Notified = false\n351: \t}\n352: \tif status == Running {\n353: \t\ti.AwaitingWork = false\n354: \t}\n355: \ti.Status = status\n356: }\n357: \n358: func (i *Instance) setLoadingProgress(stage int, message string) {\n359: \ti.LoadingStage = stage\n360: \ti.LoadingMessage = message\n361: }\n362: \n363: func (i *Instance) Started() bool {\n364: \treturn i.started\n365: }\n366: \n367: // SetTitle sets the title of the instance. Returns an error if the instance has started.\n368: // We cant change the title once it's been used for a tmux session etc.\n369: func (i *Instance) SetTitle(title string) error {\n370: \tif i.started {\n371: \t\treturn fmt.Errorf(\"cannot change title of a started instance\")\n372: \t}\n373: \ti.Title = title\n374: \treturn nil\n375: }\n376: \n377: func (i *Instance) Paused() bool {\n378: \treturn i.Status == Paused\n379: }\n380: \n381: // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.\n382: func (i *Instance) TmuxAlive() bool {\n383: \tif i.tmuxSession == nil {\n384: \t\treturn false\n385: \t}\n386: \treturn i.tmuxSession.DoesSessionExist()\n387: }\n\n(End of file - total 387 lines)\n</content>",
+            "title": "session/instance.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\ntype Status int\n\nconst (\n\t// Running is the status when the instance is running and claude is working.\n\tRunning Status = iota\n\t// Ready is if the claude instance is ready to be interacted with (waiting for user input).\n\tReady\n\t// Loading is if the instance is loading (if we are starting it up or something).\n\tLoading",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511982376,
+              "end": 1772511982383
+            }
+          },
+          "id": "prt_cb1f270f3001inP3I6cFqLpGNz",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01JQR7Cg9Meo7zKCX2LyedjJ",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/session/instance_session.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/session/instance_session.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"os/exec\"\n6: \t\"strconv\"\n7: \t\"strings\"\n8: \t\"time\"\n9: \n10: \t\"github.com/kastheco/kasmos/log\"\n11: \t\"github.com/kastheco/kasmos/session/git\"\n12: \t\"github.com/kastheco/kasmos/session/tmux\"\n13: )\n14: \n15: func (i *Instance) Preview() (string, error) {\n16: \tif !i.started || i.Status == Paused {\n17: \t\treturn \"\", nil\n18: \t}\n19: \treturn i.tmuxSession.CapturePaneContent()\n20: }\n21: \n22: func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {\n23: \tif !i.started {\n24: \t\treturn false, false\n25: \t}\n26: \treturn i.tmuxSession.HasUpdated()\n27: }\n28: \n29: // NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected\n30: // to this instance's tmux PTY for zero-latency interactive focus mode.\n31: func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {\n32: \tif !i.started || i.tmuxSession == nil {\n33: \t\treturn nil, fmt.Errorf(\"instance not started\")\n34: \t}\n35: \tsessionName := i.tmuxSession.GetSanitizedName()\n36: \treturn NewEmbeddedTerminal(sessionName, cols, rows)\n37: }\n38: \n39: // TapEnter sends an enter key press to the tmux session if AutoYes is enabled.\n40: func (i *Instance) TapEnter() {\n41: \tif !i.started || !i.AutoYes {\n42: \t\treturn\n43: \t}\n44: \tif err := i.tmuxSession.TapEnter(); err != nil {\n45: \t\tlog.ErrorLog.Printf(\"error tapping enter: %v\", err)\n46: \t}\n47: }\n48: \n49: func (i *Instance) Attach() (chan struct{}, error) {\n50: \tif !i.started {\n51: \t\treturn nil, fmt.Errorf(\"cannot attach instance that has not been started\")\n52: \t}\n53: \treturn i.tmuxSession.Attach()\n54: }\n55: \n56: func (i *Instance) SetPreviewSize(width, height int) error {\n57: \tif !i.started || i.Status == Paused {\n58: \t\treturn fmt.Errorf(\"cannot set preview size for instance that has not been started or \" +\n59: \t\t\t\"is paused\")\n60: \t}\n61: \treturn i.tmuxSession.SetDetachedSize(width, height)\n62: }\n63: \n64: // GetGitWorktree returns the git worktree for the instance\n65: func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {\n66: \tif !i.started {\n67: \t\treturn nil, fmt.Errorf(\"cannot get git worktree for instance that has not been started\")\n68: \t}\n69: \treturn i.gitWorktree, nil\n70: }\n71: \n72: // SendPrompt sends a prompt to the tmux session\n73: func (i *Instance) SendPrompt(prompt string) error {\n74: \tif !i.started {\n75: \t\treturn fmt.Errorf(\"instance not started\")\n76: \t}\n77: \tif i.tmuxSession == nil {\n78: \t\treturn fmt.Errorf(\"tmux session not initialized\")\n79: \t}\n80: \tif err := i.tmuxSession.SendKeys(prompt); err != nil {\n81: \t\treturn fmt.Errorf(\"error sending keys to tmux session: %w\", err)\n82: \t}\n83: \n84: \t// Brief pause to prevent carriage return from being interpreted as newline\n85: \ttime.Sleep(100 * time.Millisecond)\n86: \tif err := i.tmuxSession.TapEnter(); err != nil {\n87: \t\treturn fmt.Errorf(\"error tapping enter: %w\", err)\n88: \t}\n89: \n90: \treturn nil\n91: }\n92: \n93: // PreviewFullHistory captures the entire tmux pane output including full scrollback history\n94: func (i *Instance) PreviewFullHistory() (string, error) {\n95: \tif !i.started || i.Status == Paused {\n96: \t\treturn \"\", nil\n97: \t}\n98: \treturn i.tmuxSession.CapturePaneContentWithOptions(\"-\", \"-\")\n99: }\n100: \n101: // SetTmuxSession sets the tmux session for testing purposes\n102: func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {\n103: \ti.tmuxSession = session\n104: }\n105: \n106: // MarkStartedForTest sets the started flag without spawning a real tmux session.\n107: // Use only in tests that need to simulate a running instance.\n108: func (i *Instance) MarkStartedForTest() {\n109: \ti.started = true\n110: }\n111: \n112: // SendKeys sends keys to the tmux session\n113: func (i *Instance) SendKeys(keys string) error {\n114: \tif !i.started || i.Status == Paused {\n115: \t\treturn fmt.Errorf(\"cannot send keys to instance that has not been started or is paused\")\n116: \t}\n117: \treturn i.tmuxSession.SendKeys(keys)\n118: }\n119: \n120: // InstanceMetadata holds the results of polling a single instance.\n121: // Collected in a goroutine — all fields are values, no pointers into the model.\n122: type InstanceMetadata struct {\n123: \tContent            string // raw tmux capture-pane output\n124: \tContentCaptured    bool\n125: \tUpdated            bool\n126: \tHasPrompt          bool\n127: \tDiffStats          *git.DiffStats\n128: \tCPUPercent         float64\n129: \tMemMB              float64\n130: \tResourceUsageValid bool\n131: \tTmuxAlive          bool              // tmux has-session result (for reviewer completion check)\n132: \tPermissionPrompt   *PermissionPrompt // non-nil when opencode shows a permission dialog\n133: }\n134: \n135: // CollectMetadata gathers all per-tick data for this instance via subprocess calls.\n136: // Safe to call from a goroutine — reads only, no model mutations.\n137: // Combines HasUpdated + UpdateDiffStats + UpdateResourceUsage data collection\n138: // into a single method, eliminating redundant capture-pane calls.\n139: func (i *Instance) CollectMetadata() InstanceMetadata {\n140: \tvar m InstanceMetadata\n141: \n142: \tif !i.started || i.Status == Paused {\n143: \t\treturn m\n144: \t}\n145: \n146: \t// Single capture-pane call — reused for hash check, activity parsing, and preview.\n147: \tm.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()\n148: \n149: \t// Git diff stats\n150: \tif i.gitWorktree != nil {\n151: \t\tstats := i.gitWorktree.Diff()\n152: \t\tif stats.Error != nil {\n153: \t\t\tif !strings.Contains(stats.Error.Error(), \"base commit SHA not set\") &&\n154: \t\t\t\t!strings.Contains(stats.Error.Error(), \"worktree path gone\") {\n155: \t\t\t\tlog.WarningLog.Printf(\"diff stats error: %v\", stats.Error)\n156: \t\t\t}\n157: \t\t\t// On error, return nil stats (caller keeps previous)\n158: \t\t} else {\n159: \t\t\tm.DiffStats = stats\n160: \t\t}\n161: \t}\n162: \n163: \t// Permission prompt detection\n164: \tif m.ContentCaptured && m.Content != \"\" {\n165: \t\tm.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)\n166: \t}\n167: \n168: \t// Resource usage (pgrep + ps)\n169: \tm.CPUPercent, m.MemMB, m.ResourceUsageValid = i.collectResourceUsage()\n170: \n171: \t// Session liveness (tmux has-session) — used by reviewer completion check.\n172: \tm.TmuxAlive = i.TmuxAlive()\n173: \n174: \treturn m\n175: }\n176: \n177: // SetDiffStats sets the diff stats from externally collected data.\n178: func (i *Instance) SetDiffStats(stats *git.DiffStats) {\n179: \ti.diffStats = stats\n180: }\n181: \n182: // UpdateDiffStats updates the git diff statistics for this instance\n183: func (i *Instance) UpdateDiffStats() error {\n184: \tif !i.started {\n185: \t\ti.diffStats = nil\n186: \t\treturn nil\n187: \t}\n188: \n189: \tif i.Status == Paused {\n190: \t\t// Keep the previous diff stats if the instance is paused\n191: \t\treturn nil\n192: \t}\n193: \n194: \tstats := i.gitWorktree.Diff()\n195: \tif stats.Error != nil {\n196: \t\tif strings.Contains(stats.Error.Error(), \"base commit SHA not set\") {\n197: \t\t\t// Worktree is not fully set up yet, not an error\n198: \t\t\ti.diffStats = nil\n199: \t\t\treturn nil\n200: \t\t}\n201: \t\tif strings.Contains(stats.Error.Error(), \"worktree path gone\") {\n202: \t\t\t// Worktree was cleaned up (pause, merge, external deletion).\n203: \t\t\t// Clear stats silently — don't spam logs every tick.\n204: \t\t\ti.diffStats = nil\n205: \t\t\treturn nil\n206: \t\t}\n207: \t\treturn fmt.Errorf(\"failed to get diff stats: %w\", stats.Error)\n208: \t}\n209: \n210: \ti.diffStats = stats\n211: \treturn nil\n212: }\n213: \n214: // collectResourceUsage queries CPU and memory usage via subprocess calls.\n215: // Returns (cpu%, memMB, ok). Safe to call from a goroutine.\n216: func (i *Instance) collectResourceUsage() (float64, float64, bool) {\n217: \tif !i.started || i.tmuxSession == nil {\n218: \t\treturn 0, 0, false\n219: \t}\n220: \n221: \tpid, err := i.tmuxSession.GetPanePID()\n222: \tif err != nil {\n223: \t\treturn 0, 0, false\n224: \t}\n225: \n226: \ttargetPid := strconv.Itoa(pid)\n227: \tchildCmd := exec.Command(\"pgrep\", \"-P\", strconv.Itoa(pid))\n228: \tif childOutput, err := childCmd.Output(); err == nil {\n229: \t\tif children := strings.Fields(strings.TrimSpace(string(childOutput))); len(children) > 0 {\n230: \t\t\ttargetPid = children[0]\n231: \t\t}\n232: \t}\n233: \n234: \tpsCmd := exec.Command(\"ps\", \"-o\", \"%cpu=,rss=\", \"-p\", targetPid)\n235: \toutput, err := psCmd.Output()\n236: \tif err != nil {\n237: \t\treturn 0, 0, false\n238: \t}\n239: \n240: \tfields := strings.Fields(strings.TrimSpace(string(output)))\n241: \tif len(fields) < 2 {\n242: \t\treturn 0, 0, false\n243: \t}\n244: \n245: \tcpu, err := strconv.ParseFloat(fields[0], 64)\n246: \tif err != nil {\n247: \t\treturn 0, 0, false\n248: \t}\n249: \trssKB, err := strconv.ParseFloat(fields[1], 64)\n250: \tif err != nil {\n251: \t\treturn 0, 0, false\n252: \t}\n253: \treturn cpu, rssKB / 1024, true\n254: }\n255: \n256: // UpdateResourceUsage queries the process tree for CPU and memory usage.\n257: // Kept for backward compat but now delegates to collectResourceUsage.\n258: func (i *Instance) UpdateResourceUsage() {\n259: \tif cpu, mem, ok := i.collectResourceUsage(); ok {\n260: \t\ti.CPUPercent, i.MemMB = cpu, mem\n261: \t}\n262: }\n263: \n264: // GetDiffStats returns the current git diff statistics\n265: func (i *Instance) GetDiffStats() *git.DiffStats {\n266: \treturn i.diffStats\n267: }\n268: \n269: // SendPermissionResponse sends the key sequence for the given permission choice to the agent pane.\n270: func (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {\n271: \tif !i.started || i.tmuxSession == nil {\n272: \t\treturn\n273: \t}\n274: \tif err := i.tmuxSession.SendPermissionResponse(choice); err != nil {\n275: \t\tlog.ErrorLog.Printf(\"error sending permission response: %v\", err)\n276: \t}\n277: }\n\n(End of file - total 277 lines)\n</content>",
+            "title": "session/instance_session.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"strconv\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\nfunc (i *Instance) Preview() (string, error) {\n\tif !i.started || i.Status == Paused {\n\t\treturn \"\", nil\n\t}\n\treturn i.tmuxSession.CapturePaneContent()\n}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511982825,
+              "end": 1772511982827
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/session/instance_title_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/session/instance_title_test.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/kastheco/kasmos/internal/opencodesession\"\n7: \t\"github.com/stretchr/testify/assert\"\n8: )\n9: \n10: func TestBuildTitleOptsFromInstance(t *testing.T) {\n11: \ttests := []struct {\n12: \t\tname string\n13: \t\tinst *Instance\n14: \t\twant string\n15: \t}{\n16: \t\t{\n17: \t\t\tname: \"planner with plan file\",\n18: \t\t\tinst: &Instance{\n19: \t\t\t\tPlanFile:  \"2026-03-02-automatic-session-naming.md\",\n20: \t\t\t\tAgentType: AgentTypePlanner,\n21: \t\t\t\tTitle:     \"automatic-session-naming-plan\",\n22: \t\t\t},\n23: \t\t\twant: \"kas: plan automatic-session-naming\",\n24: \t\t},\n25: \t\t{\n26: \t\t\tname: \"coder wave task\",\n27: \t\t\tinst: &Instance{\n28: \t\t\t\tPlanFile:   \"2026-03-02-automatic-session-naming.md\",\n29: \t\t\t\tAgentType:  AgentTypeCoder,\n30: \t\t\t\tWaveNumber: 2,\n31: \t\t\t\tTaskNumber: 3,\n32: \t\t\t\tTitle:      \"automatic-session-naming-W2-T3\",\n33: \t\t\t},\n34: \t\t\twant: \"kas: implement automatic-session-naming w2/t3\",\n35: \t\t},\n36: \t\t{\n37: \t\t\tname: \"reviewer\",\n38: \t\t\tinst: &Instance{\n39: \t\t\t\tPlanFile:  \"2026-03-02-automatic-session-naming.md\",\n40: \t\t\t\tAgentType: AgentTypeReviewer,\n41: \t\t\t\tTitle:     \"automatic-session-naming-review\",\n42: \t\t\t},\n43: \t\t\twant: \"kas: review automatic-session-naming\",\n44: \t\t},\n45: \t\t{\n46: \t\t\tname: \"fixer ad-hoc\",\n47: \t\t\tinst: &Instance{\n48: \t\t\t\tAgentType: AgentTypeFixer,\n49: \t\t\t\tTitle:     \"fix-login-bug\",\n50: \t\t\t},\n51: \t\t\twant: \"kas: fix fix-login-bug\",\n52: \t\t},\n53: \t\t{\n54: \t\t\tname: \"ad-hoc no agent type\",\n55: \t\t\tinst: &Instance{\n56: \t\t\t\tTitle: \"my-session\",\n57: \t\t\t},\n58: \t\t\twant: \"kas: my-session\",\n59: \t\t},\n60: \t}\n61: \tfor _, tt := range tests {\n62: \t\tt.Run(tt.name, func(t *testing.T) {\n63: \t\t\topts := buildTitleOpts(tt.inst)\n64: \t\t\tgot := opencodesession.BuildTitle(opts)\n65: \t\t\tassert.Equal(t, tt.want, got)\n66: \t\t})\n67: \t}\n68: }\n\n(End of file - total 68 lines)\n</content>",
+            "title": "session/instance_title_test.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/internal/opencodesession\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTitleOptsFromInstance(t *testing.T) {\n\ttests := []struct {\n\t\tname string\n\t\tinst *Instance\n\t\twant string\n\t}{\n\t\t{\n\t\t\tname: \"planner with plan file\",\n\t\t\tinst: &Instance{\n\t\t\t\tPlanFile:  \"2026-03-02-automatic-session-naming.md\",\n\t\t\t\tAgentType: AgentTypePlanner,",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511983215,
+              "end": 1772511983217
+            }
+          },
+          "id": "prt_cb1f274ea0017fFdnRpMHeAn2F",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EQBWTZeZcG89wximio2RiW",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/internal/opencodesession/title.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/internal/opencodesession/title.go</path>\n<type>file</type>\n<content>1: // Package opencodesession manages opencode session titles for kasmos-spawned agents.\n2: package opencodesession\n3: \n4: import (\n5: \t\"database/sql\"\n6: \t\"fmt\"\n7: \t\"os\"\n8: \t\"path/filepath\"\n9: \t\"time\"\n10: \n11: \t_ \"modernc.org/sqlite\" // register sqlite driver\n12: )\n13: \n14: // kasPrefix is the prefix applied to all kasmos-managed session titles.\n15: // It distinguishes our titles from opencode's auto-generated ones.\n16: const kasPrefix = \"kas: \"\n17: \n18: // TitleOpts holds the metadata used to build a human-readable session title.\n19: type TitleOpts struct {\n20: \t// PlanName is the plan slug (e.g. \"automatic-session-naming\").\n21: \tPlanName string\n22: \t// AgentType is the role of the agent (e.g. \"planner\", \"coder\", \"reviewer\", \"fixer\").\n23: \tAgentType string\n24: \t// WaveNumber and TaskNumber, when non-zero, append wave/task context to the title.\n25: \tWaveNumber int\n26: \tTaskNumber int\n27: \t// InstanceTitle is used as the subject for ad-hoc sessions or when PlanName is empty.\n28: \tInstanceTitle string\n29: }\n30: \n31: // agentVerbs maps agent type identifiers to their title verb prefix.\n32: var agentVerbs = map[string]string{\n33: \t\"planner\":  \"plan\",\n34: \t\"coder\":    \"implement\",\n35: \t\"reviewer\": \"review\",\n36: \t\"fixer\":    \"fix\",\n37: }\n38: \n39: // BuildTitle returns a kasmos-managed title string for an opencode session.\n40: // All titles are prefixed with \"kas: \" to distinguish them from opencode's\n41: // auto-generated titles.\n42: func BuildTitle(opts TitleOpts) string {\n43: \t// Determine the subject — prefer PlanName, fall back to InstanceTitle.\n44: \tsubject := opts.PlanName\n45: \tif subject == \"\" {\n46: \t\tsubject = opts.InstanceTitle\n47: \t}\n48: \n49: \t// Look up the verb for the agent type.\n50: \tverb, hasVerb := agentVerbs[opts.AgentType]\n51: \n52: \t// Ad-hoc session with no recognized agent type: just prefix the subject.\n53: \tif !hasVerb {\n54: \t\treturn kasPrefix + subject\n55: \t}\n56: \n57: \ttitle := fmt.Sprintf(\"%s%s %s\", kasPrefix, verb, subject)\n58: \n59: \t// Append wave/task context when both are specified.\n60: \tif opts.WaveNumber > 0 && opts.TaskNumber > 0 {\n61: \t\ttitle += fmt.Sprintf(\" w%d/t%d\", opts.WaveNumber, opts.TaskNumber)\n62: \t}\n63: \n64: \treturn title\n65: }\n66: \n67: // ClaimAndSetTitle atomically claims the first unclaimed opencode session that\n68: // matches the given working directory and was created after beforeStart, then\n69: // sets its title to the provided value.\n70: //\n71: // \"Unclaimed\" means the title does NOT start with \"kas: \". This prevents two\n72: // concurrent goroutines from claiming the same session in a parallel wave.\n73: //\n74: // It is a best-effort operation: if no matching session is found, it returns nil.\n75: func ClaimAndSetTitle(db *sql.DB, workDir string, beforeStart time.Time, title string) error {\n76: \tbeforeStartMs := beforeStart.UnixMilli()\n77: \n78: \t// Find all unclaimed sessions in this directory created after beforeStart.\n79: \trows, err := db.Query(\n80: \t\t`SELECT id FROM session\n81: \t\t WHERE directory = ? AND time_created >= ? AND title NOT LIKE 'kas: %'\n82: \t\t ORDER BY time_created ASC`,\n83: \t\tworkDir, beforeStartMs,\n84: \t)\n85: \tif err != nil {\n86: \t\treturn fmt.Errorf(\"opencodesession: query sessions: %w\", err)\n87: \t}\n88: \tdefer rows.Close()\n89: \n90: \tvar candidates []string\n91: \tfor rows.Next() {\n92: \t\tvar id string\n93: \t\tif err := rows.Scan(&id); err != nil {\n94: \t\t\treturn fmt.Errorf(\"opencodesession: scan session id: %w\", err)\n95: \t\t}\n96: \t\tcandidates = append(candidates, id)\n97: \t}\n98: \tif err := rows.Err(); err != nil {\n99: \t\treturn fmt.Errorf(\"opencodesession: iterate sessions: %w\", err)\n100: \t}\n101: \trows.Close() // Close before attempting updates.\n102: \n103: \tnowMs := time.Now().UnixMilli()\n104: \n105: \t// Attempt an atomic claim on each candidate in ascending time_created order.\n106: \tfor _, id := range candidates {\n107: \t\tres, err := db.Exec(\n108: \t\t\t`UPDATE session SET title = ?, time_updated = ?\n109: \t\t\t WHERE id = ? AND title NOT LIKE 'kas: %'`,\n110: \t\t\ttitle, nowMs, id,\n111: \t\t)\n112: \t\tif err != nil {\n113: \t\t\treturn fmt.Errorf(\"opencodesession: update session title: %w\", err)\n114: \t\t}\n115: \t\taffected, err := res.RowsAffected()\n116: \t\tif err != nil {\n117: \t\t\treturn fmt.Errorf(\"opencodesession: rows affected: %w\", err)\n118: \t\t}\n119: \t\tif affected == 1 {\n120: \t\t\t// Successfully claimed this session.\n121: \t\t\treturn nil\n122: \t\t}\n123: \t\t// Another goroutine claimed this candidate; try the next one.\n124: \t}\n125: \n126: \t// No candidates remain — best-effort, not an error.\n127: \treturn nil\n128: }\n129: \n130: // resolveDBPath returns the path to the opencode SQLite database.\n131: func resolveDBPath() string {\n132: \tif xdg := os.Getenv(\"XDG_DATA_HOME\"); xdg != \"\" {\n133: \t\treturn filepath.Join(xdg, \"opencode\", \"opencode.db\")\n134: \t}\n135: \thome, err := os.UserHomeDir()\n136: \tif err != nil {\n137: \t\t// Fall back to a relative path as last resort.\n138: \t\treturn filepath.Join(\".local\", \"share\", \"opencode\", \"opencode.db\")\n139: \t}\n140: \treturn filepath.Join(home, \".local\", \"share\", \"opencode\", \"opencode.db\")\n141: }\n142: \n143: // SetTitleDirect opens the opencode SQLite DB and claims+sets the given\n144: // pre-built title on the matching session. Use this when the title has already\n145: // been constructed (e.g. via BuildTitle) and you only need the DB write.\n146: //\n147: // DB path resolution order:\n148: //  1. $XDG_DATA_HOME/opencode/opencode.db\n149: //  2. ~/.local/share/opencode/opencode.db\n150: func SetTitleDirect(workDir string, beforeStart time.Time, title string) error {\n151: \tdbPath := resolveDBPath()\n152: \tdb, err := sql.Open(\"sqlite\", dbPath+\"?_pragma=journal_mode(WAL)\")\n153: \tif err != nil {\n154: \t\treturn fmt.Errorf(\"opencodesession: open db %s: %w\", dbPath, err)\n155: \t}\n156: \tdefer db.Close()\n157: \treturn ClaimAndSetTitle(db, workDir, beforeStart, title)\n158: }\n\n(End of file - total 158 lines)\n</content>",
+            "title": "internal/opencodesession/title.go",
+            "metadata": {
+              "preview": "// Package opencodesession manages opencode session titles for kasmos-spawned agents.\npackage opencodesession\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t_ \"modernc.org/sqlite\" // register sqlite driver\n)\n\n// kasPrefix is the prefix applied to all kasmos-managed session titles.\n// It distinguishes our titles from opencode's auto-generated ones.\nconst kasPrefix = \"kas: \"\n\n// TitleOpts holds the metadata used to build a human-readable session title.\ntype TitleOpts struct {\n\t// PlanName is the plan slug (e.g. \"automatic-session-naming\").",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511983665,
+              "end": 1772511983667
+            }
+          },
+          "id": "prt_cb1f2767000176cC4gLxJu3g72",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TUUCAa3UDdAcDGSVS7dTUV",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/internal/opencodesession/title_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/internal/opencodesession/title_test.go</path>\n<type>file</type>\n<content>1: package opencodesession\n2: \n3: import (\n4: \t\"database/sql\"\n5: \t\"testing\"\n6: \t\"time\"\n7: \n8: \t\"github.com/stretchr/testify/assert\"\n9: \t\"github.com/stretchr/testify/require\"\n10: \t_ \"modernc.org/sqlite\"\n11: )\n12: \n13: func TestBuildTitle(t *testing.T) {\n14: \ttests := []struct {\n15: \t\tname string\n16: \t\topts TitleOpts\n17: \t\twant string\n18: \t}{\n19: \t\t{\n20: \t\t\tname: \"planner session\",\n21: \t\t\topts: TitleOpts{PlanName: \"automatic-session-naming\", AgentType: \"planner\"},\n22: \t\t\twant: \"kas: plan automatic-session-naming\",\n23: \t\t},\n24: \t\t{\n25: \t\t\tname: \"coder session\",\n26: \t\t\topts: TitleOpts{PlanName: \"automatic-session-naming\", AgentType: \"coder\"},\n27: \t\t\twant: \"kas: implement automatic-session-naming\",\n28: \t\t},\n29: \t\t{\n30: \t\t\tname: \"reviewer session\",\n31: \t\t\topts: TitleOpts{PlanName: \"automatic-session-naming\", AgentType: \"reviewer\"},\n32: \t\t\twant: \"kas: review automatic-session-naming\",\n33: \t\t},\n34: \t\t{\n35: \t\t\tname: \"wave task session\",\n36: \t\t\topts: TitleOpts{PlanName: \"automatic-session-naming\", AgentType: \"coder\", WaveNumber: 2, TaskNumber: 3},\n37: \t\t\twant: \"kas: implement automatic-session-naming w2/t3\",\n38: \t\t},\n39: \t\t{\n40: \t\t\tname: \"fixer session\",\n41: \t\t\topts: TitleOpts{InstanceTitle: \"fix-login-bug\", AgentType: \"fixer\"},\n42: \t\t\twant: \"kas: fix fix-login-bug\",\n43: \t\t},\n44: \t\t{\n45: \t\t\tname: \"ad-hoc session no agent type\",\n46: \t\t\topts: TitleOpts{InstanceTitle: \"my-session\"},\n47: \t\t\twant: \"kas: my-session\",\n48: \t\t},\n49: \t}\n50: \tfor _, tt := range tests {\n51: \t\tt.Run(tt.name, func(t *testing.T) {\n52: \t\t\tgot := BuildTitle(tt.opts)\n53: \t\t\tassert.Equal(t, tt.want, got)\n54: \t\t})\n55: \t}\n56: }\n57: \n58: func setupTestDB(t *testing.T) *sql.DB {\n59: \tt.Helper()\n60: \tdb, err := sql.Open(\"sqlite\", \":memory:\")\n61: \trequire.NoError(t, err)\n62: \tt.Cleanup(func() { db.Close() })\n63: \t_, err = db.Exec(`CREATE TABLE session (\n64: \t\tid TEXT PRIMARY KEY,\n65: \t\tproject_id TEXT NOT NULL,\n66: \t\ttitle TEXT NOT NULL,\n67: \t\tdirectory TEXT NOT NULL,\n68: \t\ttime_created INTEGER NOT NULL,\n69: \t\ttime_updated INTEGER NOT NULL\n70: \t)`)\n71: \trequire.NoError(t, err)\n72: \treturn db\n73: }\n74: \n75: func TestClaimAndSetTitle_SingleSession(t *testing.T) {\n76: \tdb := setupTestDB(t)\n77: \tnow := time.Now().UnixMilli()\n78: \t_, err := db.Exec(`INSERT INTO session (id, project_id, title, directory, time_created, time_updated)\n79: \t\tVALUES ('ses_1', 'proj_1', 'auto-generated garbage', '/work/dir', ?, ?)`, now, now)\n80: \trequire.NoError(t, err)\n81: \n82: \tbeforeStart := time.UnixMilli(now - 100)\n83: \terr = ClaimAndSetTitle(db, \"/work/dir\", beforeStart, \"kas: plan my-feature\")\n84: \trequire.NoError(t, err)\n85: \n86: \tvar title string\n87: \terr = db.QueryRow(`SELECT title FROM session WHERE id = 'ses_1'`).Scan(&title)\n88: \trequire.NoError(t, err)\n89: \tassert.Equal(t, \"kas: plan my-feature\", title)\n90: }\n91: \n92: func TestClaimAndSetTitle_SkipsAlreadyClaimed(t *testing.T) {\n93: \tdb := setupTestDB(t)\n94: \tnow := time.Now().UnixMilli()\n95: \t// First session already claimed by kasmos\n96: \t_, err := db.Exec(`INSERT INTO session (id, project_id, title, directory, time_created, time_updated)\n97: \t\tVALUES ('ses_1', 'proj_1', 'kas: implement other-plan', '/work/dir', ?, ?)`, now-50, now-50)\n98: \trequire.NoError(t, err)\n99: \t// Second session unclaimed\n100: \t_, err = db.Exec(`INSERT INTO session (id, project_id, title, directory, time_created, time_updated)\n101: \t\tVALUES ('ses_2', 'proj_1', 'I will load skills first', '/work/dir', ?, ?)`, now, now)\n102: \trequire.NoError(t, err)\n103: \n104: \tbeforeStart := time.UnixMilli(now - 100)\n105: \terr = ClaimAndSetTitle(db, \"/work/dir\", beforeStart, \"kas: implement my-feature w1/t2\")\n106: \trequire.NoError(t, err)\n107: \n108: \tvar title string\n109: \terr = db.QueryRow(`SELECT title FROM session WHERE id = 'ses_2'`).Scan(&title)\n110: \trequire.NoError(t, err)\n111: \tassert.Equal(t, \"kas: implement my-feature w1/t2\", title)\n112: }\n113: \n114: func TestClaimAndSetTitle_NoMatchReturnsNil(t *testing.T) {\n115: \tdb := setupTestDB(t)\n116: \t// No sessions in DB\n117: \terr := ClaimAndSetTitle(db, \"/work/dir\", time.Now(), \"kas: plan foo\")\n118: \tassert.NoError(t, err) // best-effort, no error on miss\n119: }\n120: \n121: func TestClaimAndSetTitle_ParallelClaims(t *testing.T) {\n122: \tdb := setupTestDB(t)\n123: \tnow := time.Now().UnixMilli()\n124: \t// Three sessions created nearly simultaneously (simulating parallel wave tasks)\n125: \tfor i, id := range []string{\"ses_1\", \"ses_2\", \"ses_3\"} {\n126: \t\t_, err := db.Exec(`INSERT INTO session (id, project_id, title, directory, time_created, time_updated)\n127: \t\t\tVALUES (?, 'proj_1', 'garbage title', '/shared/worktree', ?, ?)`,\n128: \t\t\tid, now+int64(i*100), now+int64(i*100))\n129: \t\trequire.NoError(t, err)\n130: \t}\n131: \n132: \tbeforeStart := time.UnixMilli(now - 50)\n133: \n134: \t// Simulate three goroutines claiming sequentially (real parallelism tested by SQLite's single-writer lock)\n135: \terr := ClaimAndSetTitle(db, \"/shared/worktree\", beforeStart, \"kas: implement plan w1/t1\")\n136: \trequire.NoError(t, err)\n137: \terr = ClaimAndSetTitle(db, \"/shared/worktree\", beforeStart, \"kas: implement plan w1/t2\")\n138: \trequire.NoError(t, err)\n139: \terr = ClaimAndSetTitle(db, \"/shared/worktree\", beforeStart, \"kas: implement plan w1/t3\")\n140: \trequire.NoError(t, err)\n141: \n142: \t// Each session should have a unique title\n143: \ttitles := make(map[string]bool)\n144: \trows, err := db.Query(`SELECT title FROM session WHERE directory = '/shared/worktree' ORDER BY time_created ASC`)\n145: \trequire.NoError(t, err)\n146: \tdefer rows.Close()\n147: \tfor rows.Next() {\n148: \t\tvar title string\n149: \t\trequire.NoError(t, rows.Scan(&title))\n150: \t\ttitles[title] = true\n151: \t}\n152: \tassert.Len(t, titles, 3)\n153: \tassert.True(t, titles[\"kas: implement plan w1/t1\"])\n154: \tassert.True(t, titles[\"kas: implement plan w1/t2\"])\n155: \tassert.True(t, titles[\"kas: implement plan w1/t3\"])\n156: }\n\n(End of file - total 156 lines)\n</content>",
+            "title": "internal/opencodesession/title_test.go",
+            "metadata": {
+              "preview": "package opencodesession\n\nimport (\n\t\"database/sql\"\n\t\"testing\"\n\t\"time\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n\t_ \"modernc.org/sqlite\"\n)\n\nfunc TestBuildTitle(t *testing.T) {\n\ttests := []struct {\n\t\tname string\n\t\topts TitleOpts\n\t\twant string\n\t}{\n\t\t{\n\t\t\tname: \"planner session\",",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511984114,
+              "end": 1772511984115
+            }
+          },
+          "id": "prt_cb1f27832001CYHPtIOTbUqAPf",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "cost": 0,
+          "tokens": {
+            "total": 50066,
+            "input": 1,
+            "output": 313,
+            "reasoning": 0,
+            "cache": {
+              "read": 48051,
+              "write": 1701
+            }
+          },
+          "id": "prt_cb1f27a13001WYBtsp1u8JQ1Q3",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511984156,
+          "completed": 1772511990321
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64684,
+          "input": 1,
+          "output": 216,
+          "reasoning": 0,
+          "cache": {
+            "read": 49752,
+            "write": 14715
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1f27a1c0010qgIYKFXeIkaBP",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "id": "prt_cb1f281e4001igx0oNg27y7aDF",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f27a1c0010qgIYKFXeIkaBP"
+        },
+        {
+          "type": "text",
+          "text": "Now let me look at how review sessions are spawned and how branches/worktrees are named:",
+          "time": {
+            "start": 1772511987010,
+            "end": 1772511987010
+          },
+          "id": "prt_cb1f281e4002Nwp7kJpb17HvUU",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f27a1c0010qgIYKFXeIkaBP"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n 'reviewer|review.*spawn|spawnReview|startReview|ReviewerInstance|review.*branch|review.*session|review.*title|review.*label' --type go -l",
+              "description": "Files with review spawning logic"
+            },
+            "output": "main.go\ncheck_test.go\ninternal/opencodesession/title_test.go\ninternal/opencodesession/title.go\ninternal/check/project.go\ninternal/check/project_test.go\ninternal/initcmd/scaffold/scaffold.go\ninternal/initcmd/scaffold/scaffold_test.go\ninternal/initcmd/wizard/wizard_test.go\ninternal/initcmd/wizard/wizard.go\ninternal/initcmd/wizard/roles.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/model.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/harness/harness.go\nconfig/toml_test.go\nsession/tmux/tmux.go\nsession/instance_title_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_session.go\napp/app_test.go\nsession/git/plan_lifecycle.go\nui/preview.go\nui/tabbed_window.go\napp/app_state_sidebar_status_test.go\nui/nav_panel_test.go\napp/app.go\napp/app_plan_completion_test.go\napp/app_actions.go\napp/app_state.go\napp/app_reviewer_program_test.go\napp/app_plan_actions_test.go\nui/overlay/tmuxBrowserOverlay.go\nconfig/planfsm/fsm.go\nconfig/planstate/planstate_test.go\n",
+            "title": "Files with review spawning logic",
+            "metadata": {
+              "output": "main.go\ncheck_test.go\ninternal/opencodesession/title_test.go\ninternal/opencodesession/title.go\ninternal/check/project.go\ninternal/check/project_test.go\ninternal/initcmd/scaffold/scaffold.go\ninternal/initcmd/scaffold/scaffold_test.go\ninternal/initcmd/wizard/wizard_test.go\ninternal/initcmd/wizard/wizard.go\ninternal/initcmd/wizard/roles.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/model.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/harness/harness.go\nconfig/toml_test.go\nsession/tmux/tmux.go\nsession/instance_title_test.go\nsession/storage.go\nsession/instance.go\nsession/instance_session.go\napp/app_test.go\nsession/git/plan_lifecycle.go\nui/preview.go\nui/tabbed_window.go\napp/app_state_sidebar_status_test.go\nui/nav_panel_test.go\napp/app.go\napp/app_plan_completion_test.go\napp/app_actions.go\napp/app_state.go\napp/app_reviewer_program_test.go\napp/app_plan_actions_test.go\nui/overlay/tmuxBrowserOverlay.go\nconfig/planfsm/fsm.go\nconfig/planstate/planstate_test.go\n",
+              "exit": 0,
+              "description": "Files with review spawning logic",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511989013,
+              "end": 1772511989024
+            }
+          },
+          "id": "prt_cb1f28543001FYauY3Va05qoc8",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f27a1c0010qgIYKFXeIkaBP"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01NGqFtMuCzb32RYu6UGSCLT",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n 'review' app/app_actions.go",
+              "description": "Review logic in app_actions"
+            },
+            "output": "173:\t\tstatuses := []string{\"ready\", \"planning\", \"implementing\", \"reviewing\", \"done\", \"cancelled\"}\n199:\tcase \"start_review\":\n204:\t\treturn m.triggerPlanStage(planFile, \"review\")\n330:\t\t\t// works from ready/implementing/reviewing states.\n346:\tcase \"request_review\":\n505:// fsmSetReviewing walks the FSM to reviewing from any earlier state.\n506:// If already reviewing, it's a no-op (allows re-spawning a reviewer).\n517:\t\treturn nil // already reviewing, no-op\n528:\tm.audit(auditlog.EventPlanTransition, string(current)+\" → reviewing\",\n570:\t\t// ready, planning, implementing, reviewing → Cancel then Reopen\n653:\t\t\t// user can manually advance through plan → implement → review → done.\n660:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n666:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n670:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n675:\t\t\t\t\toverlay.ContextMenuItem{Label: \"request review\", Action: \"request_review\"},\n761:\t\t\t\"review\":    \"implement\",\n762:\t\t\t\"finished\":  \"review\",\n863:\tcase \"review\":\n867:\t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → reviewing\",\n872:\t\treviewPrompt := scaffold.LoadReviewPrompt(\"docs/plans/\"+planFile, planName)\n873:\t\treturn m.spawnPlanAgent(planFile, \"review\", reviewPrompt)\n966:\tcase \"plan\", \"implement\", \"solo\", \"review\":\n",
+            "title": "Review logic in app_actions",
+            "metadata": {
+              "output": "173:\t\tstatuses := []string{\"ready\", \"planning\", \"implementing\", \"reviewing\", \"done\", \"cancelled\"}\n199:\tcase \"start_review\":\n204:\t\treturn m.triggerPlanStage(planFile, \"review\")\n330:\t\t\t// works from ready/implementing/reviewing states.\n346:\tcase \"request_review\":\n505:// fsmSetReviewing walks the FSM to reviewing from any earlier state.\n506:// If already reviewing, it's a no-op (allows re-spawning a reviewer).\n517:\t\treturn nil // already reviewing, no-op\n528:\tm.audit(auditlog.EventPlanTransition, string(current)+\" → reviewing\",\n570:\t\t// ready, planning, implementing, reviewing → Cancel then Reopen\n653:\t\t\t// user can manually advance through plan → implement → review → done.\n660:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n666:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n670:\t\t\t\t\toverlay.ContextMenuItem{Label: \"start review\", Action: \"start_review\"},\n675:\t\t\t\t\toverlay.ContextMenuItem{Label: \"request review\", Action: \"request_review\"},\n761:\t\t\t\"review\":    \"implement\",\n762:\t\t\t\"finished\":  \"review\",\n863:\tcase \"review\":\n867:\t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → reviewing\",\n872:\t\treviewPrompt := scaffold.LoadReviewPrompt(\"docs/plans/\"+planFile, planName)\n873:\t\treturn m.spawnPlanAgent(planFile, \"review\", reviewPrompt)\n966:\tcase \"plan\", \"implement\", \"solo\", \"review\":\n",
+              "exit": 0,
+              "description": "Review logic in app_actions",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772511990172,
+              "end": 1772511990175
+            }
+          },
+          "id": "prt_cb1f28d1b001fUEHYYeAk8l8Ll",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f27a1c0010qgIYKFXeIkaBP"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "cost": 0,
+          "tokens": {
+            "total": 64684,
+            "input": 1,
+            "output": 216,
+            "reasoning": 0,
+            "cache": {
+              "read": 49752,
+              "write": 14715
+            }
+          },
+          "id": "prt_cb1f29228001izCkbgY7JBDzFf",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f27a1c0010qgIYKFXeIkaBP"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511990322,
+          "completed": 1772511993883
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 65733,
+          "input": 1,
+          "output": 193,
+          "reasoning": 0,
+          "cache": {
+            "read": 64467,
+            "write": 1072
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1f292320011sia8hjsPQ7eIx",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "id": "prt_cb1f29a80001ANWMCvjx6I2qc0",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f292320011sia8hjsPQ7eIx"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_actions.go",
+              "offset": 850,
+              "limit": 200
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_actions.go</path>\n<type>file</type>\n<content>850: \t\t}\n851: \n852: \t\torch := NewWaveOrchestrator(planFile, plan)\n853: \t\tm.waveOrchestrators[planFile] = orch\n854: \n855: \t\tif err := m.fsmSetImplementing(planFile); err != nil {\n856: \t\t\treturn m, m.handleError(err)\n857: \t\t}\n858: \t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → implementing\",\n859: \t\t\tauditlog.WithPlan(planFile))\n860: \t\tm.loadPlanState()\n861: \t\tm.updateSidebarPlans()\n862: \t\treturn m.startNextWave(orch, entry)\n863: \tcase \"review\":\n864: \t\tif err := m.fsmSetReviewing(planFile); err != nil {\n865: \t\t\treturn m, m.handleError(err)\n866: \t\t}\n867: \t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → reviewing\",\n868: \t\t\tauditlog.WithPlan(planFile))\n869: \t\tm.loadPlanState()\n870: \t\tm.updateSidebarPlans()\n871: \t\tplanName := planstate.DisplayName(planFile)\n872: \t\treviewPrompt := scaffold.LoadReviewPrompt(\"docs/plans/\"+planFile, planName)\n873: \t\treturn m.spawnPlanAgent(planFile, \"review\", reviewPrompt)\n874: \t}\n875: \n876: \t// Non-agent stages (finished): mark plan done via FSM.\n877: \tif err := m.fsm.Transition(planFile, planfsm.ReviewApproved); err != nil {\n878: \t\treturn m, m.handleError(err)\n879: \t}\n880: \tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → done\",\n881: \t\tauditlog.WithPlan(planFile))\n882: \tm.loadPlanState()\n883: \tm.updateSidebarPlans()\n884: \treturn m, nil\n885: }\n886: \n887: // validatePlanHasWaves reads a plan file and checks it has ## Wave headers.\n888: // Returns an error if the plan lacks wave annotations.\n889: func validatePlanHasWaves(plansDir, planFile string) error {\n890: \tcontent, err := os.ReadFile(filepath.Join(plansDir, planFile))\n891: \tif err != nil {\n892: \t\treturn fmt.Errorf(\"read plan: %w\", err)\n893: \t}\n894: \t_, err = planparser.Parse(string(content))\n895: \treturn err\n896: }\n897: \n898: // handleTmuxBrowserAction dispatches actions from the tmux session browser overlay.\n899: func (m *home) handleTmuxBrowserAction(action overlay.BrowserAction) (tea.Model, tea.Cmd) {\n900: \tswitch action {\n901: \tcase overlay.BrowserDismiss:\n902: \t\tm.tmuxBrowser = nil\n903: \t\tm.state = stateDefault\n904: \t\treturn m, nil\n905: \n906: \tcase overlay.BrowserKill:\n907: \t\tif m.tmuxBrowser == nil {\n908: \t\t\treturn m, nil\n909: \t\t}\n910: \t\titem := m.tmuxBrowser.SelectedItem()\n911: \t\tif item.Name == \"\" {\n912: \t\t\treturn m, nil\n913: \t\t}\n914: \t\tname := item.Name\n915: \t\tm.tmuxBrowser.RemoveSelected()\n916: \t\tif m.tmuxBrowser.IsEmpty() {\n917: \t\t\tm.tmuxBrowser = nil\n918: \t\t\tm.state = stateDefault\n919: \t\t}\n920: \t\treturn m, func() tea.Msg {\n921: \t\t\tkillCmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", name)\n922: \t\t\terr := killCmd.Run()\n923: \t\t\treturn tmuxKillResultMsg{name: name, err: err}\n924: \t\t}\n925: \n926: \tcase overlay.BrowserAdopt:\n927: \t\tif m.tmuxBrowser == nil {\n928: \t\t\treturn m, nil\n929: \t\t}\n930: \t\titem := m.tmuxBrowser.SelectedItem()\n931: \t\tif item.Name == \"\" {\n932: \t\t\treturn m, nil\n933: \t\t}\n934: \t\tm.tmuxBrowser = nil\n935: \t\tm.state = stateDefault\n936: \t\treturn m.adoptOrphanSession(overlay.TmuxBrowserItem{\n937: \t\t\tName:  item.Name,\n938: \t\t\tTitle: item.Title,\n939: \t\t})\n940: \n941: \tcase overlay.BrowserAttach:\n942: \t\tif m.tmuxBrowser == nil {\n943: \t\t\treturn m, nil\n944: \t\t}\n945: \t\titem := m.tmuxBrowser.SelectedItem()\n946: \t\tif item.Name == \"\" {\n947: \t\t\treturn m, nil\n948: \t\t}\n949: \t\tm.tmuxBrowser = nil\n950: \t\tm.state = stateDefault\n951: \t\tname := item.Name\n952: \t\treturn m, tea.ExecProcess(exec.Command(\"tmux\", \"attach-session\", \"-t\", name), func(err error) tea.Msg {\n953: \t\t\treturn tmuxAttachReturnMsg{}\n954: \t\t})\n955: \n956: \tdefault:\n957: \t\treturn m, nil\n958: \t}\n959: }\n960: \n961: // isLocked returns true if the given stage cannot be triggered given the current plan status.\n962: // The context menu already gates which forward stages are offered, so this only\n963: // guards against truly nonsensical transitions (e.g. marking \"finished\" when already done).\n964: func isLocked(status planstate.Status, stage string) bool {\n965: \tswitch stage {\n966: \tcase \"plan\", \"implement\", \"solo\", \"review\":\n967: \t\t// Forward progression is always allowed — the FSM helpers\n968: \t\t// (fsmSetImplementing, fsmSetReviewing) walk through intermediate states.\n969: \t\treturn false\n970: \tcase \"finished\":\n971: \t\treturn status != planstate.StatusReviewing\n972: \tdefault:\n973: \t\treturn true\n974: \t}\n975: }\n\n(End of file - total 975 lines)\n</content>",
+            "title": "app/app_actions.go",
+            "metadata": {
+              "preview": "\t\t}\n\n\t\torch := NewWaveOrchestrator(planFile, plan)\n\t\tm.waveOrchestrators[planFile] = orch\n\n\t\tif err := m.fsmSetImplementing(planFile); err != nil {\n\t\t\treturn m, m.handleError(err)\n\t\t}\n\t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → implementing\",\n\t\t\tauditlog.WithPlan(planFile))\n\t\tm.loadPlanState()\n\t\tm.updateSidebarPlans()\n\t\treturn m.startNextWave(orch, entry)\n\tcase \"review\":\n\t\tif err := m.fsmSetReviewing(planFile); err != nil {\n\t\t\treturn m, m.handleError(err)\n\t\t}\n\t\tm.audit(auditlog.EventPlanTransition, string(entry.Status)+\" → reviewing\",\n\t\t\tauditlog.WithPlan(planFile))\n\t\tm.loadPlanState()",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511993229,
+              "end": 1772511993232
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f292320011sia8hjsPQ7eIx"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/app/app_actions.go",
+              "offset": 900,
+              "limit": 200
+            },
+            "output": "<path>/home/kas/dev/kasmos/app/app_actions.go</path>\n<type>file</type>\n<content>900: \tswitch action {\n901: \tcase overlay.BrowserDismiss:\n902: \t\tm.tmuxBrowser = nil\n903: \t\tm.state = stateDefault\n904: \t\treturn m, nil\n905: \n906: \tcase overlay.BrowserKill:\n907: \t\tif m.tmuxBrowser == nil {\n908: \t\t\treturn m, nil\n909: \t\t}\n910: \t\titem := m.tmuxBrowser.SelectedItem()\n911: \t\tif item.Name == \"\" {\n912: \t\t\treturn m, nil\n913: \t\t}\n914: \t\tname := item.Name\n915: \t\tm.tmuxBrowser.RemoveSelected()\n916: \t\tif m.tmuxBrowser.IsEmpty() {\n917: \t\t\tm.tmuxBrowser = nil\n918: \t\t\tm.state = stateDefault\n919: \t\t}\n920: \t\treturn m, func() tea.Msg {\n921: \t\t\tkillCmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", name)\n922: \t\t\terr := killCmd.Run()\n923: \t\t\treturn tmuxKillResultMsg{name: name, err: err}\n924: \t\t}\n925: \n926: \tcase overlay.BrowserAdopt:\n927: \t\tif m.tmuxBrowser == nil {\n928: \t\t\treturn m, nil\n929: \t\t}\n930: \t\titem := m.tmuxBrowser.SelectedItem()\n931: \t\tif item.Name == \"\" {\n932: \t\t\treturn m, nil\n933: \t\t}\n934: \t\tm.tmuxBrowser = nil\n935: \t\tm.state = stateDefault\n936: \t\treturn m.adoptOrphanSession(overlay.TmuxBrowserItem{\n937: \t\t\tName:  item.Name,\n938: \t\t\tTitle: item.Title,\n939: \t\t})\n940: \n941: \tcase overlay.BrowserAttach:\n942: \t\tif m.tmuxBrowser == nil {\n943: \t\t\treturn m, nil\n944: \t\t}\n945: \t\titem := m.tmuxBrowser.SelectedItem()\n946: \t\tif item.Name == \"\" {\n947: \t\t\treturn m, nil\n948: \t\t}\n949: \t\tm.tmuxBrowser = nil\n950: \t\tm.state = stateDefault\n951: \t\tname := item.Name\n952: \t\treturn m, tea.ExecProcess(exec.Command(\"tmux\", \"attach-session\", \"-t\", name), func(err error) tea.Msg {\n953: \t\t\treturn tmuxAttachReturnMsg{}\n954: \t\t})\n955: \n956: \tdefault:\n957: \t\treturn m, nil\n958: \t}\n959: }\n960: \n961: // isLocked returns true if the given stage cannot be triggered given the current plan status.\n962: // The context menu already gates which forward stages are offered, so this only\n963: // guards against truly nonsensical transitions (e.g. marking \"finished\" when already done).\n964: func isLocked(status planstate.Status, stage string) bool {\n965: \tswitch stage {\n966: \tcase \"plan\", \"implement\", \"solo\", \"review\":\n967: \t\t// Forward progression is always allowed — the FSM helpers\n968: \t\t// (fsmSetImplementing, fsmSetReviewing) walk through intermediate states.\n969: \t\treturn false\n970: \tcase \"finished\":\n971: \t\treturn status != planstate.StatusReviewing\n972: \tdefault:\n973: \t\treturn true\n974: \t}\n975: }\n\n(End of file - total 975 lines)\n</content>",
+            "title": "app/app_actions.go",
+            "metadata": {
+              "preview": "\tswitch action {\n\tcase overlay.BrowserDismiss:\n\t\tm.tmuxBrowser = nil\n\t\tm.state = stateDefault\n\t\treturn m, nil\n\n\tcase overlay.BrowserKill:\n\t\tif m.tmuxBrowser == nil {\n\t\t\treturn m, nil\n\t\t}\n\t\titem := m.tmuxBrowser.SelectedItem()\n\t\tif item.Name == \"\" {\n\t\t\treturn m, nil\n\t\t}\n\t\tname := item.Name\n\t\tm.tmuxBrowser.RemoveSelected()\n\t\tif m.tmuxBrowser.IsEmpty() {\n\t\t\tm.tmuxBrowser = nil\n\t\t\tm.state = stateDefault\n\t\t}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772511993849,
+              "end": 1772511993851
+            }
+          },
+          "id": "prt_cb1f29d8e001C6W4wCV6tU4uPc",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f292320011sia8hjsPQ7eIx"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "26d213311297a3bf0a8366e5a4efdc8c49976685",
+          "cost": 0,
+          "tokens": {
+            "total": 65733,
+            "input": 1,
+            "output": 193,
+            "reasoning": 0,
+            "cache": {
+              "read": 64467,
+              "write": 1072
+            }
+          },
+          "id": "prt_cb1f2a0130010G7GLwNVDt8n4S",
+          "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+          "messageID": "msg_cb1f292320011sia8hjsPQ7eIx"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772511993884
+        },
+        "parentID": "msg_cb1f23cff001dRf5VyiKkD0rsB",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "id": "msg_cb1f2a01c001iGYFwGNdU7dtQq",
+        "sessionID": "ses_34e0dc314ffeu3xqecIvTwyq9q"
+      },
+      "parts": []
+    }
+  ]
+}
