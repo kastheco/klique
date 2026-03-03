@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "36e35b1ce2c3",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/01a-rewrite-tmux-layer.md",
+    "docs/plans/01b-rewrite-git-layer.md",
+    "docs/plans/02a-rewrite-session-core.md",
+    "docs/plans/02b-rewrite-overlay-ui.md",
+    "docs/plans/03-rewrite-ui-panels.md",
+    "docs/plans/04-rewrite-plumbing.md",
+    "docs/plans/extract-orchestrator.md",
+    "docs/plans/instance-management-cli.md",
+    "docs/plans/rename-plan-to-task.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/36/e35b1ce2c3/0/metadata.json",
+      "transcript": "/36/e35b1ce2c3/0/full.jsonl",
+      "context": "",
+      "content_hash": "/36/e35b1ce2c3/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
