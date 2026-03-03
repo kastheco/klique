@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "ef0d4b6fa016",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".opencode/commands/kas.cleanup.md",
+    ".opencode/commands/kas.finish-branch.md",
+    ".opencode/commands/kas.implement.md",
+    ".opencode/commands/kas.reset-task.md",
+    ".opencode/commands/kas.triage.md",
+    "app/app.go",
+    "app/app_state.go",
+    "app/app_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/fsm_test_helpers_test.go",
+    "config/taskfsm/fsm.go",
+    "config/taskstore/factory.go",
+    "config/taskstore/store.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ef/0d4b6fa016/0/metadata.json",
+      "transcript": "/ef/0d4b6fa016/0/full.jsonl",
+      "context": "/ef/0d4b6fa016/0/context.md",
+      "content_hash": "/ef/0d4b6fa016/0/content_hash.txt",
+      "prompt": "/ef/0d4b6fa016/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 55,
+    "cache_creation_tokens": 113348,
+    "cache_read_tokens": 4773669,
+    "output_tokens": 16754,
+    "api_call_count": 53
+  }
+}

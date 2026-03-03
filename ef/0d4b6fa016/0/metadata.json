@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "ef0d4b6fa016",
+  "session_id": "ses_34a776c85ffeMfdYf2z8BJXryx",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T21:17:03.511722769Z",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".opencode/commands/kas.cleanup.md",
+    ".opencode/commands/kas.reset-task.md",
+    "app/app_state.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/fsm_test_helpers_test.go",
+    "config/taskfsm/fsm.go",
+    "config/taskstore/factory.go",
+    ".opencode/commands/kas.finish-branch.md",
+    ".opencode/commands/kas.implement.md",
+    ".opencode/commands/kas.triage.md",
+    "app/app.go",
+    "app/app_test.go",
+    "config/taskstore/store.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "bb6d963ef1ed",
+  "token_usage": {
+    "input_tokens": 55,
+    "cache_creation_tokens": 113348,
+    "cache_read_tokens": 4773669,
+    "output_tokens": 16754,
+    "api_call_count": 53
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T21:17:03.182413543Z",
+    "agent_lines": 77,
+    "human_added": 10,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 87,
+    "agent_percentage": 88.50574712643679
+  }
+}
