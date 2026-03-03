@@ -1556,12 +1556,23 @@ func (n *NavigationPanel) String() string {
 	return zone.Mark(ZoneNavPanel, placed)
 }
 
-// isAuditContinuationLine returns true if the line is a word-wrap fragment
-// without a leading timestamp (i.e. not a primary event line).
+// isAuditContinuationLine returns true if the line is a word-wrap
+// continuation fragment rather than a primary event or minute header line.
+// Primary lines: " ◆  text" (1 leading space + icon) or "── 15:06 ──" (0 spaces).
+// Continuations: "      text" (5+ leading spaces for alignment).
 func isAuditContinuationLine(line string) bool {
-	stripped := strings.TrimLeft(ansi.Strip(line), " ")
-	if stripped == "" {
+	plain := ansi.Strip(line)
+	if len(plain) == 0 || strings.TrimSpace(plain) == "" {
 		return true
 	}
-	return stripped[0] < '0' || stripped[0] > '9'
+	// Count leading spaces — continuation lines have 2+ (pad + overhead).
+	spaces := 0
+	for _, r := range plain {
+		if r == ' ' {
+			spaces++
+		} else {
+			break
+		}
+	}
+	return spaces >= 2
 }
