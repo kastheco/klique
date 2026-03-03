@@ -1,0 +1,146 @@
+Implement Task 1: Instance List Command with JSON Support
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add a `kas instance` CLI command tree that enables headless instance monitoring and lifecycle management — listing, killing, pausing, resuming, and prompting agent sessions without launching the TUI.
+**Architecture:** A new `cmd/instance.go` file follows the established pattern from `cmd/task.go`: testable `executeXxx()` functions with thin cobra wrappers. The `list` command reads raw `InstanceData` from `config.State` without reconstructing live tmux sessions. Lifecycle commands (`kill`, `pause`, `resume`, `send`) reconstruct the target `Instance` via `session.FromInstanceData` and call the existing lifecycle methods, then persist state back. All commands are wired into both `cmd/cmd.go` `NewRootCmd()` and `main.go` `init()`.
+**Tech Stack:** Go, cobra, `session.Storage`/`session.InstanceData`, `config.State`, `encoding/json`
+
+## Wave 1 of 2
+
+## Task Instructions
+
+**Files:**
+- Create: `cmd/instance.go`
+- Create: `cmd/instance_test.go`
+- Modify: `cmd/cmd.go`
+- Modify: `main.go`
+
+**Step 1: write the failing test**
+
+```go
+// cmd/instance_test.go
+package cmd
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/session"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// newTestState returns a State pre-populated with the given instances.
+func newTestState(t *testing.T, instances []session.InstanceData) *config.State {
+	t.Helper()
+	raw, err := json.Marshal(instances)
+	require.NoError(t, err)
+	s := config.DefaultState()
+	s.InstancesData = raw
+	return s
+}
+
+func TestInstanceList_Text(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{
+		{Title: "planner-foo", Status: session.Running, Branch: "plan/foo", Program: "claude", TaskFile: "foo.md"},
+		{Title: "coder-bar", Status: session.Ready, Branch: "plan/bar", Program: "opencode", TaskFile: "bar.md"},
+		{Title: "solo-baz", Status: session.Paused, Branch: "plan/baz", Program: "claude"},
+	})
+
+	output := executeInstanceList(state, "text")
+	assert.Contains(t, output, "planner-foo")
+	assert.Contains(t, output, "coder-bar")
+	assert.Contains(t, output, "solo-baz")
+	assert.Contains(t, output, "running")
+	assert.Contains(t, output, "ready")
+	assert.Contains(t, output, "paused")
+}
+
+func TestInstanceList_JSON(t *testing.T) {
+	instances := []session.InstanceData{
+		{Title: "agent-1", Status: session.Running, Branch: "plan/agent", Program: "claude"},
+	}
+	state := newTestState(t, instances)
+
+	output := executeInstanceList(state, "json")
+	var parsed []map[string]interface{}
+	err := json.Unmarshal([]byte(output), &parsed)
+	require.NoError(t, err)
+	assert.Len(t, parsed, 1)
+	assert.Equal(t, "agent-1", parsed[0]["title"])
+}
+
+func TestInstanceList_Empty(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{})
+	output := executeInstanceList(state, "text")
+	assert.Equal(t, "no instances\n", output)
+}
+
+func TestInstanceList_StatusFilter(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{
+		{Title: "running-1", Status: session.Running, Program: "claude"},
+		{Title: "paused-1", Status: session.Paused, Program: "claude"},
+	})
+
+	output := executeInstanceList(state, "text", "paused")
+	assert.Contains(t, output, "paused-1")
+	assert.NotContains(t, output, "running-1")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./cmd/... -run TestInstanceList -v
+```
+
+expected: FAIL — `executeInstanceList` undefined
+
+**Step 3: write minimal implementation**
+
+Create `cmd/instance.go` with:
+- `statusString(s session.Status) string` helper to convert numeric status to text
+- `executeInstanceList(state config.StateManager, format string, statusFilters ...string) string` — reads raw `InstancesData` from state, unmarshals to `[]session.InstanceData`, formats as text table or JSON
+- `NewInstanceCmd() *cobra.Command` — parent `kas instance` command with `list` subcommand
+- `list` subcommand with `--format` (text/json) and `--status` filter flags
+
+Wire into `cmd/cmd.go` `NewRootCmd()`:
+```go
+root.AddCommand(NewInstanceCmd())
+```
+
+Wire into `main.go` `init()`:
+```go
+rootCmd.AddCommand(cmd2.NewInstanceCmd())
+```
+
+Text output format (tab-aligned):
+```
+TITLE              STATUS    BRANCH              PROGRAM    TASK
+planner-foo        running   plan/foo            claude     foo.md
+coder-bar          ready     plan/bar            opencode   bar.md
+```
+
+JSON output: array of objects with `title`, `status`, `branch`, `program`, `task_file`, `agent_type`, `created_at` fields.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -run TestInstanceList -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/instance.go cmd/instance_test.go cmd/cmd.go main.go
+git commit -m "feat: add kas instance list command with text/json output"
+```
+
+---
