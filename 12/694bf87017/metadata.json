@@ -1,0 +1,63 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "12694bf87017",
+  "strategy": "manual-commit",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_audit_test.go",
+    "app/app_input.go",
+    "app/app_plan_actions_test.go",
+    "app/app_plan_completion_test.go",
+    "app/app_plan_context_actions_test.go",
+    "app/app_planner_signal_test.go",
+    "app/app_solo_agent_test.go",
+    "app/app_state.go",
+    "app/app_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/clickup_progress.go",
+    "app/clickup_progress_test.go",
+    "app/fsm_test_helpers_test.go",
+    "app/plan_cancel_rename_delay_test.go",
+    "cmd/plan.go",
+    "cmd/plan_test.go",
+    "cmd/serve.go",
+    "config/auditlog/sqlite_test.go",
+    "config/planfsm/fsm.go",
+    "config/planfsm/fsm_test.go",
+    "config/planfsm/signals_test.go",
+    "config/planstore/embedded_test.go",
+    "config/planstore/factory.go",
+    "config/planstore/http.go",
+    "config/planstore/http_test.go",
+    "config/planstore/migrate.go",
+    "config/planstore/server.go",
+    "config/planstore/server_test.go",
+    "config/planstore/sqlite.go",
+    "config/planstore/sqlite_test.go",
+    "config/planstore/store.go",
+    "config/taskstate/taskstate.go",
+    "config/taskstate/taskstate_test.go",
+    "session/git/plan_lifecycle.go",
+    "session/instance_lifecycle.go",
+    "ui/navigation_panel.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/12/694bf87017/0/metadata.json",
+      "transcript": "/12/694bf87017/0/full.jsonl",
+      "context": "/12/694bf87017/0/context.md",
+      "content_hash": "/12/694bf87017/0/content_hash.txt",
+      "prompt": "/12/694bf87017/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
