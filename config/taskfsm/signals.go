@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"os"
@@ -9,14 +9,14 @@ import (
 // Signal represents a parsed sentinel file from an agent.
 type Signal struct {
 	Event    Event
-	PlanFile string
+	TaskFile string
 	Body     string // file contents (e.g. review feedback)
 	filePath string // full path for deletion
 }
 
 // Key returns a dedup key for this signal (event + plan file).
 func (s Signal) Key() string {
-	return string(s.Event) + ":" + s.PlanFile
+	return string(s.Event) + ":" + s.TaskFile
 }
 
 // sentinelPrefixes maps filename prefixes to FSM events.
@@ -79,7 +79,7 @@ func parseSignal(dir, filename string) (Signal, bool) {
 			}
 			return Signal{
 				Event:    sp.event,
-				PlanFile: planFile,
+				TaskFile: planFile,
 				Body:     body,
 				filePath: filePath,
 			}, true

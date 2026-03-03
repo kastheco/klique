@@ -389,7 +389,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	// a PlannerFinished signal (sentinel written after the goroutine loaded state).
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	// We can't set the private filePath, so we pre-delete the sentinel file
 	// (ConsumeSignal would normally delete it — safe to skip deletion here).
@@ -460,7 +460,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.ImplementFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
@@ -541,7 +541,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.ReviewChangesRequested,
-		PlanFile: planFile,
+		TaskFile: planFile,
 		Body:     feedback,
 	}
 	msg := metadataResultMsg{
@@ -693,7 +693,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	// === Part 1: ReviewChangesRequested → coder with cycle suffix ===
 	signal1 := taskfsm.Signal{
 		Event:    taskfsm.ReviewChangesRequested,
-		PlanFile: planFile,
+		TaskFile: planFile,
 		Body:     feedback,
 	}
 	_, _ = h.Update(metadataResultMsg{
@@ -716,7 +716,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	// The FSM store has status=implementing (transitioned by part 1).
 	signal2 := taskfsm.Signal{
 		Event:    taskfsm.ImplementFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	_, _ = h.Update(metadataResultMsg{
 		PlanState: h.planState,

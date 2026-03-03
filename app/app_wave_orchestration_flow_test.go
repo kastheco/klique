@@ -586,7 +586,7 @@ func TestWaveSignal_TriggersImplementation(t *testing.T) {
 	waveSignals := taskfsm.ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 1, waveSignals[0].WaveNumber)
-	assert.Equal(t, planFile, waveSignals[0].PlanFile)
+	assert.Equal(t, planFile, waveSignals[0].TaskFile)
 }
 
 // TestPlannerExit_CancelKillsInstanceAndMarksPrompted verifies that pressing "n"
@@ -811,7 +811,7 @@ func TestPlannerExit_FocusesPlannerInstance_BeforeConfirm(t *testing.T) {
 	// Use the signal-driven path: PlannerFinished signal triggers the dialog.
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		Results: []instanceMetadata{

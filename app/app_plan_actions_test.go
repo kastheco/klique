@@ -383,7 +383,7 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 	seedPlanStatus(t, ps, conflictPlan, taskstate.StatusImplementing)
 
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
-	h.fsm = newFSMForTest(t, plansDir).PlanStateMachine
+	h.fsm = newFSMForTest(t, plansDir).TaskStateMachine
 	h.activeRepoPath = dir
 	h.program = "opencode"
 	return h, targetPlan
@@ -448,7 +448,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	h := &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            newFSMForTest(t, plansDir).PlanStateMachine,
+		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
@@ -534,7 +534,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 	h := &home{
 		planState:      ps,
 		planStateDir:   plansDir,
-		fsm:            newFSMForTest(t, plansDir).PlanStateMachine,
+		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),

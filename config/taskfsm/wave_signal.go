@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"os"
@@ -11,7 +11,7 @@ import (
 // WaveSignal represents a parsed implement-wave signal file.
 type WaveSignal struct {
 	WaveNumber int
-	PlanFile   string
+	TaskFile   string
 	filePath   string // full path for deletion
 }
 
@@ -29,7 +29,7 @@ func ParseWaveSignal(filename string) (WaveSignal, bool) {
 	}
 	return WaveSignal{
 		WaveNumber: wave,
-		PlanFile:   m[2],
+		TaskFile:   m[2],
 	}, true
 }
 

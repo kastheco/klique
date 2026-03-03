@@ -80,7 +80,7 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
@@ -195,7 +195,7 @@ func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
@@ -259,7 +259,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
@@ -309,7 +309,7 @@ func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
-		PlanFile: planFile,
+		TaskFile: planFile,
 	}
 	msg := metadataResultMsg{
 		PlanState: ps,
