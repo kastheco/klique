@@ -1,0 +1,12 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan 03-rewrite-ui-panels. Goal: Rewrite UI Panels Implementation Plan. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
+### Prompt 2
+
+a clean-room rewrite to escape AGPL-3.1 or something like that. if you can clean up the UI/UX along the way awesome but i like the current ui
+
