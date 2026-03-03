@@ -1,0 +1,8 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+[Image 1]  im trying to merge have-to-kill-twice into main, please rebase it onto main then merge it in (ff if possible)
+
