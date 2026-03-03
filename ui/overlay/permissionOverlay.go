@@ -42,26 +42,6 @@ func NewPermissionOverlay(instanceTitle, description, pattern string) *Permissio
 	}
 }
 
-// HandleKeyPress processes input. Returns true when the overlay should close.
-func (p *PermissionOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.String() {
-	case "left":
-		if p.selectedIdx > 0 {
-			p.selectedIdx--
-		}
-	case "right":
-		if p.selectedIdx < len(permissionChoiceLabels)-1 {
-			p.selectedIdx++
-		}
-	case "enter":
-		p.confirmed = true
-		return true
-	case "esc":
-		return true
-	}
-	return false
-}
-
 // Choice returns the selected permission choice.
 func (p *PermissionOverlay) Choice() PermissionChoice {
 	return PermissionChoice(p.selectedIdx)
@@ -83,47 +63,21 @@ func (p *PermissionOverlay) Description() string {
 	return p.description
 }
 
-// Render draws the permission overlay.
-func (p *PermissionOverlay) Render() string {
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorGold).
-		Padding(1, 2).
-		Width(p.width)
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(colorGold)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(colorText)
-
-	patternStyle := lipgloss.NewStyle().
-		Foreground(colorMuted)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(colorMuted)
-
-	selectedStyle := lipgloss.NewStyle().
-		Background(colorFoam).
-		Foreground(colorBase).
-		Padding(0, 1)
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(colorText).
-		Padding(0, 1)
+// render draws the permission overlay.
+func (p *PermissionOverlay) render() string {
+	st := DefaultStyles()
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("△ permission required"))
+	b.WriteString(st.WarningTitle.Render("△ permission required"))
 	b.WriteString("\n")
-	b.WriteString(descStyle.Render(p.description))
+	b.WriteString(st.Item.Render(p.description))
 	if p.pattern != "" {
 		b.WriteString("\n")
-		b.WriteString(patternStyle.Render(fmt.Sprintf("pattern: %s", p.pattern)))
+		b.WriteString(st.Muted.Render(fmt.Sprintf("pattern: %s", p.pattern)))
 	}
 	if p.instanceTitle != "" {
 		b.WriteString("\n")
-		b.WriteString(patternStyle.Render(fmt.Sprintf("instance: %s", p.instanceTitle)))
+		b.WriteString(st.Muted.Render(fmt.Sprintf("instance: %s", p.instanceTitle)))
 	}
 	b.WriteString("\n\n")
 
@@ -131,19 +85,50 @@ func (p *PermissionOverlay) Render() string {
 	var choices []string
 	for i, label := range permissionChoiceLabels {
 		if i == p.selectedIdx {
-			choices = append(choices, selectedStyle.Render("▸ "+label))
+			choices = append(choices, st.SelectedItem.Render("▸ "+label))
 		} else {
-			choices = append(choices, normalStyle.Render("  "+label))
+			choices = append(choices, st.Item.Render("  "+label))
 		}
 	}
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, choices...))
 	b.WriteString("\n\n")
-	b.WriteString(hintStyle.Render("←→ select · enter confirm · esc dismiss"))
+	b.WriteString(st.Muted.Render("←→ select · enter confirm · esc dismiss"))
 
-	return borderStyle.Render(b.String())
+	return st.WarningBorder.Width(p.width).Render(b.String())
 }
 
-// SetWidth sets the overlay width.
-func (p *PermissionOverlay) SetWidth(w int) {
+// permissionActionLabels maps selectedIdx to the action string returned by HandleKey.
+var permissionActionLabels = []string{"allow_once", "allow_always", "reject"}
+
+// HandleKey implements Overlay. Processes a key event and returns a Result.
+func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
+	switch msg.Type {
+	case tea.KeyLeft:
+		if p.selectedIdx > 0 {
+			p.selectedIdx--
+		}
+		return Result{}
+	case tea.KeyRight:
+		if p.selectedIdx < len(permissionChoiceLabels)-1 {
+			p.selectedIdx++
+		}
+		return Result{}
+	case tea.KeyEnter:
+		p.confirmed = true
+		action := permissionActionLabels[p.selectedIdx]
+		return Result{Dismissed: true, Submitted: true, Action: action}
+	case tea.KeyEsc:
+		return Result{Dismissed: true}
+	}
+	return Result{}
+}
+
+// View implements Overlay. Returns the rendered overlay string.
+func (p *PermissionOverlay) View() string {
+	return p.render()
+}
+
+// SetSize implements Overlay. Updates the available dimensions for the overlay.
+func (p *PermissionOverlay) SetSize(w, h int) {
 	p.width = w
 }

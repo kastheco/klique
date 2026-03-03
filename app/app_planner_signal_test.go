@@ -54,6 +54,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
+		overlays:              overlay.NewManager(),
 		taskState:             ps,
 		taskStateDir:          plansDir,
 		taskStore:             store,
@@ -92,8 +93,8 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 
 	assert.Equal(t, stateConfirm, updated.state,
 		"PlannerFinished signal must set stateConfirm")
-	assert.NotNil(t, updated.confirmationOverlay,
-		"PlannerFinished signal must set confirmationOverlay")
+	assert.True(t, updated.overlays.IsActive(),
+		"PlannerFinished signal must show confirmation overlay")
 	assert.Equal(t, planFile, updated.pendingPlannerTaskFile,
 		"pendingPlannerTaskFile must be set to the plan file from the signal")
 }
@@ -154,7 +155,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 	h.state = stateConfirm
 	h.pendingPlannerInstanceTitle = plannerInst.Title
 	h.pendingPlannerTaskFile = planFile
-	h.confirmationOverlay = overlay.NewConfirmationOverlay("plan is ready. start implementation?")
+	h.overlays.Show(overlay.NewConfirmationOverlay("plan is ready. start implementation?"))
 	h.pendingConfirmAction = func() tea.Msg {
 		return plannerCompleteMsg{planFile: planFile}
 	}
@@ -207,7 +208,7 @@ func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
 
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"no confirm dialog when plannerPrompted is already true")
-	assert.Nil(t, updated.confirmationOverlay,
+	assert.False(t, updated.overlays.IsActive(),
 		"no confirmation overlay when plannerPrompted is already true")
 }
 
@@ -235,8 +236,8 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"tmux death without sentinel must NOT show a confirm dialog")
-	assert.Nil(t, updated.confirmationOverlay,
-		"tmux death without sentinel must NOT set confirmationOverlay")
+	assert.False(t, updated.overlays.IsActive(),
+		"tmux death without sentinel must NOT show confirmation overlay")
 
 	// Plan must remain in StatusPlanning (not advanced).
 	entry, ok := updated.taskState.Entry(planFile)
@@ -255,7 +256,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 	// Simulate an active overlay (e.g. new-plan form is open).
 	existingOverlay := overlay.NewConfirmationOverlay("unrelated question?")
 	h.state = stateConfirm
-	h.confirmationOverlay = existingOverlay
+	h.overlays.Show(existingOverlay)
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
@@ -270,7 +271,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 	updated := model.(*home)
 
 	// Overlay must be untouched — we must NOT clobber it.
-	assert.Same(t, existingOverlay, updated.confirmationOverlay,
+	assert.Same(t, existingOverlay, updated.overlays.Current(),
 		"existing overlay must not be replaced while active")
 
 	// The plan file must be queued for deferred dialog.
@@ -279,7 +280,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 
 	// Now simulate the overlay clearing (state returns to default).
 	updated.state = stateDefault
-	updated.confirmationOverlay = nil
+	updated.overlays.Dismiss()
 
 	// Send an empty metadata tick — deferred dialog should fire.
 	emptyMsg := metadataResultMsg{PlanState: ps}
@@ -288,7 +289,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 
 	assert.Equal(t, stateConfirm, updated2.state,
 		"deferred PlannerFinished dialog must show on next tick after overlay clears")
-	assert.NotNil(t, updated2.confirmationOverlay,
+	assert.True(t, updated2.overlays.IsActive(),
 		"confirmation overlay must be set for deferred dialog")
 	assert.Empty(t, updated2.deferredPlannerDialogs,
 		"deferredPlannerDialogs must be cleared after showing the dialog")
@@ -305,7 +306,7 @@ func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
 	// Pre-existing confirm overlay.
 	existingOverlay := overlay.NewConfirmationOverlay("existing question?")
 	h.state = stateConfirm
-	h.confirmationOverlay = existingOverlay
+	h.overlays.Show(existingOverlay)
 
 	signal := taskfsm.Signal{
 		Event:    taskfsm.PlannerFinished,
@@ -321,7 +322,7 @@ func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
 
 	assert.Equal(t, stateConfirm, updated.state,
 		"state must remain stateConfirm")
-	assert.Same(t, existingOverlay, updated.confirmationOverlay,
+	assert.Same(t, existingOverlay, updated.overlays.Current(),
 		"existing overlay must not be replaced when confirm is already active")
 	assert.Empty(t, updated.pendingPlannerTaskFile,
 		"pendingPlannerTaskFile must not be set when confirm is already active")

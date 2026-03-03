@@ -4,37 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-var pickerBorderStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorIris).
-	Padding(1, 2)
-
-var pickerTitleStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(colorIris).
-	MarginBottom(1)
-
-var pickerSearchActiveStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorFoam).
-	Padding(0, 1).
-	MarginBottom(1)
-
-var pickerItemStyle = lipgloss.NewStyle().
-	Padding(0, 1).
-	Foreground(colorText)
-
-var pickerSelectedItemStyle = lipgloss.NewStyle().
-	Padding(0, 1).
-	Background(colorFoam).
-	Foreground(colorBase)
-
-var pickerHintStyle = lipgloss.NewStyle().
-	Foreground(colorMuted).
-	MarginTop(1)
 
 // PickerOverlay shows a searchable list of options for selection.
 type PickerOverlay struct {
@@ -69,38 +39,6 @@ func (p *PickerOverlay) SetTitle(title string) {
 // SetAllowCustom enables free-text entry when the search query doesn't match any item.
 func (p *PickerOverlay) SetAllowCustom(allow bool) {
 	p.allowCustom = allow
-}
-
-// HandleKeyPress processes input. Returns true when the overlay should close.
-func (p *PickerOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.String() {
-	case "esc":
-		p.cancelled = true
-		return true
-	case "enter":
-		p.submitted = true
-		return true
-	case "up", "shift+tab":
-		if p.selectedIdx > 0 {
-			p.selectedIdx--
-		}
-	case "down", "tab":
-		if p.selectedIdx < len(p.filtered)-1 {
-			p.selectedIdx++
-		}
-	case "backspace":
-		if len(p.searchQuery) > 0 {
-			runes := []rune(p.searchQuery)
-			p.searchQuery = string(runes[:len(runes)-1])
-			p.applyFilter()
-		}
-	default:
-		if msg.Type == tea.KeyRunes {
-			p.searchQuery += string(msg.Runes)
-			p.applyFilter()
-		}
-	}
-	return false
 }
 
 const customPrefix = "+ Create: "
@@ -155,21 +93,53 @@ func (p *PickerOverlay) Value() string {
 	return val
 }
 
-// IsSubmitted returns true if the user pressed Enter.
-func (p *PickerOverlay) IsSubmitted() bool {
-	return p.submitted
+// SetSize implements Overlay. Updates available dimensions; width is used for layout.
+func (p *PickerOverlay) SetSize(width, height int) {
+	p.width = width
 }
 
-// Render draws the picker overlay.
-func (p *PickerOverlay) Render() string {
+// HandleKey implements Overlay. It processes a key event and returns a Result
+// indicating whether the overlay should close and what was selected.
+func (p *PickerOverlay) HandleKey(msg tea.KeyMsg) Result {
+	switch msg.String() {
+	case "esc":
+		p.cancelled = true
+		return Result{Dismissed: true, Submitted: false}
+	case "enter":
+		p.submitted = true
+		return Result{Dismissed: true, Submitted: true, Value: p.Value()}
+	case "up", "shift+tab":
+		if p.selectedIdx > 0 {
+			p.selectedIdx--
+		}
+	case "down", "tab":
+		if p.selectedIdx < len(p.filtered)-1 {
+			p.selectedIdx++
+		}
+	case "backspace":
+		if len(p.searchQuery) > 0 {
+			runes := []rune(p.searchQuery)
+			p.searchQuery = string(runes[:len(runes)-1])
+			p.applyFilter()
+		}
+	default:
+		if msg.Type == tea.KeyRunes {
+			p.searchQuery += string(msg.Runes)
+			p.applyFilter()
+		}
+	}
+	return Result{}
+}
+
+// View implements Overlay using DefaultStyles for rendering.
+func (p *PickerOverlay) View() string {
+	st := DefaultStyles()
 	var b strings.Builder
 
-	// Title
-	b.WriteString(pickerTitleStyle.Render(p.title))
+	b.WriteString(st.Title.Render(p.title))
 	b.WriteString("\n")
 
-	// Search bar
-	innerWidth := p.width - 8 // borders + padding
+	innerWidth := p.width - 8
 	if innerWidth < 10 {
 		innerWidth = 10
 	}
@@ -177,30 +147,24 @@ func (p *PickerOverlay) Render() string {
 	if searchText == "" {
 		searchText = "\uf002 Type to filter..."
 	}
-	b.WriteString(pickerSearchActiveStyle.Width(innerWidth).Render(searchText))
+	b.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
 	b.WriteString("\n")
 
-	// Items
 	if len(p.filtered) == 0 {
-		b.WriteString(pickerHintStyle.Render("  No matches"))
+		b.WriteString(st.Hint.Render("  No matches"))
 		b.WriteString("\n")
 	} else {
 		for i, item := range p.filtered {
 			if i == p.selectedIdx {
-				b.WriteString(pickerSelectedItemStyle.Width(innerWidth).Render("▸ " + item))
+				b.WriteString(st.SelectedItem.Width(innerWidth).Render("▸ " + item))
 			} else {
-				b.WriteString(pickerItemStyle.Width(innerWidth).Render("  " + item))
+				b.WriteString(st.Item.Width(innerWidth).Render("  " + item))
 			}
 			b.WriteString("\n")
 		}
 	}
 
-	// Hint
-	b.WriteString(pickerHintStyle.Render("↑↓ navigate • enter select • esc cancel"))
+	b.WriteString(st.Hint.Render("↑↓ navigate • enter select • esc cancel"))
 
-	return pickerBorderStyle.Width(p.width).Render(b.String())
-}
-
-func (p *PickerOverlay) SetSize(width, height int) {
-	p.width = width
+	return st.FloatingBorder.Width(p.width).Render(b.String())
 }

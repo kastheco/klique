@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // FormOverlay is a multi-field form overlay backed by huh.Form.
@@ -103,83 +102,12 @@ func (f *FormOverlay) updateForm(msg tea.Msg) {
 	}
 }
 
-// HandleKeyPress processes a key and returns true when the overlay should close.
-func (f *FormOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.Type {
-	case tea.KeyEsc:
-		f.canceled = true
-		return true
-
-	case tea.KeyEnter:
-		if strings.TrimSpace(f.nameVal) == "" {
-			return false
-		}
-		f.submitted = true
-		return true
-
-	case tea.KeyTab, tea.KeyDown:
-		focused := f.focusedKey()
-		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[len(f.fieldKeys)-1] {
-			for i := 0; i < len(f.fieldKeys)-1; i++ {
-				f.updateForm(huh.PrevField())
-			}
-			return false
-		}
-		f.updateForm(huh.NextField())
-		return false
-
-	case tea.KeyShiftTab, tea.KeyUp:
-		focused := f.focusedKey()
-		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[0] {
-			for i := 0; i < len(f.fieldKeys)-1; i++ {
-				f.updateForm(huh.NextField())
-			}
-			return false
-		}
-		f.updateForm(huh.PrevField())
-		return false
-
-	default:
-		f.updateForm(msg)
-		return false
-	}
-}
-
 func (f *FormOverlay) focusedKey() string {
 	field := f.form.GetFocusedField()
 	if field == nil {
 		return ""
 	}
 	return field.GetKey()
-}
-
-// Render returns the styled overlay string.
-func (f *FormOverlay) Render() string {
-	w := f.width
-	if w < 40 {
-		w = 40
-	}
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(colorIris).
-		Bold(true).
-		MarginBottom(1)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(colorMuted).
-		MarginTop(1)
-
-	content := titleStyle.Render(f.title) + "\n"
-	content += f.form.View() + "\n"
-	content += hintStyle.Render("tab/↑↓ navigate · enter create")
-
-	style := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(colorIris).
-		Padding(1, 2).
-		Width(w)
-
-	return style.Render(content)
 }
 
 // Name returns the name field value.
@@ -202,7 +130,65 @@ func (f *FormOverlay) WorkPath() string {
 	return strings.TrimSpace(f.pathVal)
 }
 
-// IsSubmitted returns true when the form was submitted.
-func (f *FormOverlay) IsSubmitted() bool {
-	return f.submitted
+// HandleKey implements Overlay. Processes a key event and returns a Result.
+func (f *FormOverlay) HandleKey(msg tea.KeyMsg) Result {
+	switch msg.Type {
+	case tea.KeyEsc:
+		f.canceled = true
+		return Result{Dismissed: true}
+
+	case tea.KeyEnter:
+		if strings.TrimSpace(f.nameVal) == "" {
+			return Result{}
+		}
+		f.submitted = true
+		return Result{Dismissed: true, Submitted: true, Value: f.Name()}
+
+	case tea.KeyTab, tea.KeyDown:
+		focused := f.focusedKey()
+		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[len(f.fieldKeys)-1] {
+			for i := 0; i < len(f.fieldKeys)-1; i++ {
+				f.updateForm(huh.PrevField())
+			}
+			return Result{}
+		}
+		f.updateForm(huh.NextField())
+		return Result{}
+
+	case tea.KeyShiftTab, tea.KeyUp:
+		focused := f.focusedKey()
+		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[0] {
+			for i := 0; i < len(f.fieldKeys)-1; i++ {
+				f.updateForm(huh.NextField())
+			}
+			return Result{}
+		}
+		f.updateForm(huh.PrevField())
+		return Result{}
+
+	default:
+		f.updateForm(msg)
+		return Result{}
+	}
+}
+
+// View implements Overlay. Returns the rendered overlay string.
+func (f *FormOverlay) View() string {
+	w := f.width
+	if w < 40 {
+		w = 40
+	}
+
+	st := DefaultStyles()
+
+	content := st.Title.Render(f.title) + "\n"
+	content += f.form.View() + "\n"
+	content += st.Hint.Render("tab/↑↓ navigate · enter create")
+
+	return st.ModalBorder.Width(w).Render(content)
+}
+
+// SetSize implements Overlay. Updates the available width for the overlay.
+func (f *FormOverlay) SetSize(w, h int) {
+	f.width = w
 }

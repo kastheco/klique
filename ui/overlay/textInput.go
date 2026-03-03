@@ -16,6 +16,7 @@ type TextInputOverlay struct {
 	OnSubmit      func()
 	width, height int
 	multiline     bool
+	styles        Styles
 }
 
 // NewTextInputOverlay creates a new text input overlay with the given title and initial value.
@@ -38,6 +39,7 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 		FocusIndex: 0,
 		Submitted:  false,
 		Canceled:   false,
+		styles:     DefaultStyles(),
 	}
 }
 
@@ -52,6 +54,8 @@ func (t *TextInputOverlay) SetPlaceholder(text string) {
 	t.textarea.Placeholder = text
 }
 
+// SetSize updates the available dimensions for the overlay.
+// Implements the Overlay interface.
 func (t *TextInputOverlay) SetSize(width, height int) {
 	t.textarea.SetHeight(height)
 	t.width = width
@@ -64,9 +68,9 @@ func (t *TextInputOverlay) Width() int { return t.width }
 // Height returns the current height of the overlay.
 func (t *TextInputOverlay) Height() int { return t.height }
 
-// HandleKeyPress processes a key press and updates the state accordingly.
-// Returns true if the overlay should be closed.
-func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
+// HandleKey processes a key event and returns the result.
+// Implements the Overlay interface.
+func (t *TextInputOverlay) HandleKey(msg tea.KeyMsg) Result {
 	switch msg.Type {
 	case tea.KeyTab, tea.KeyShiftTab:
 		t.FocusIndex = (t.FocusIndex + 1) % 2
@@ -75,60 +79,34 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		} else {
 			t.textarea.Blur()
 		}
-		return false
+		return Result{}
 	case tea.KeyEsc:
 		t.Canceled = true
-		return true
+		return Result{Dismissed: true, Submitted: false}
 	case tea.KeyEnter:
 		if t.multiline && t.FocusIndex == 0 {
 			// In multiline mode, Enter inserts a newline when textarea is focused
 			t.textarea, _ = t.textarea.Update(msg)
-			return false
+			return Result{}
 		}
 		// Submit (non-multiline, or button is focused in multiline)
 		t.Submitted = true
 		if t.OnSubmit != nil {
 			t.OnSubmit()
 		}
-		return true
+		return Result{Dismissed: true, Submitted: true, Value: t.textarea.Value()}
 	default:
 		if t.FocusIndex == 0 {
 			t.textarea, _ = t.textarea.Update(msg)
 		}
-		return false
+		return Result{}
 	}
 }
 
-// GetValue returns the current value of the text input.
-func (t *TextInputOverlay) GetValue() string {
-	return t.textarea.Value()
-}
-
-// IsSubmitted returns whether the form was submitted.
-func (t *TextInputOverlay) IsSubmitted() bool {
-	return t.Submitted
-}
-
-// Render renders the text input overlay.
-func (t *TextInputOverlay) Render() string {
-	// Create styles
-	style := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(colorIris).
-		Padding(1, 2)
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(colorIris).
-		Bold(true).
-		MarginBottom(1)
-
-	buttonStyle := lipgloss.NewStyle().
-		Foreground(colorSubtle)
-
-	focusedButtonStyle := buttonStyle
-	focusedButtonStyle = focusedButtonStyle.
-		Background(colorIris).
-		Foreground(colorBase)
+// View renders the text input overlay content.
+// Implements the Overlay interface.
+func (t *TextInputOverlay) View() string {
+	style := t.styles.ModalBorder
 
 	// Set textarea width to fit within the overlay
 	w := t.width
@@ -138,19 +116,19 @@ func (t *TextInputOverlay) Render() string {
 	t.textarea.SetWidth(w - 6) // Account for padding and borders
 
 	// Build the view
-	content := titleStyle.Render(t.Title) + "\n"
+	content := t.styles.Title.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
 
 	// Render enter button with appropriate style
 	enterButton := " Enter "
 	if t.FocusIndex == 1 {
-		enterButton = focusedButtonStyle.Render(enterButton)
+		enterButton = t.styles.FocusedButton.Render(enterButton)
 	} else {
-		enterButton = buttonStyle.Render(enterButton)
+		enterButton = t.styles.Button.Render(enterButton)
 	}
 	content += enterButton
 	if t.multiline {
-		content += "  " + lipgloss.NewStyle().Foreground(colorMuted).Render("tab → enter submit · esc cancel")
+		content += "  " + t.styles.Muted.Render("tab → enter submit · esc cancel")
 	}
 
 	return style.Render(content)

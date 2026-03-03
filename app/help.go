@@ -165,8 +165,9 @@ func (m *home) showHelpScreen(helpType helpText, onDismiss func()) (tea.Model, t
 
 		content := helpType.toContent()
 
-		m.textOverlay = overlay.NewTextOverlay(content)
-		m.textOverlay.OnDismiss = onDismiss
+		to := overlay.NewTextOverlay(content)
+		to.OnDismiss = onDismiss
+		m.overlays.Show(to)
 		m.state = stateHelp
 		return m, nil
 	}
@@ -181,8 +182,8 @@ func (m *home) showHelpScreen(helpType helpText, onDismiss func()) (tea.Model, t
 // handleHelpState handles key events when in help state
 func (m *home) handleHelpState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Any key press will close the help overlay
-	shouldClose := m.textOverlay.HandleKeyPress(msg)
-	if shouldClose {
+	result := m.overlays.HandleKey(msg)
+	if result.Dismissed {
 		m.state = stateDefault
 		return m, tea.Sequence(
 			tea.WindowSize(),

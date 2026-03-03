@@ -1,0 +1,4 @@
+[default.extend-words]
+# Go variable abbreviations used throughout the codebase
+tio = "tio"   # textInputOverlay
+fo = "fo"     # formOverlay

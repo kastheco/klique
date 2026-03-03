@@ -45,6 +45,7 @@ func newCancelDelayHome(t *testing.T, store taskstore.Store, ps *taskstate.TaskS
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
+		overlays:       overlay.NewManager(),
 		storage:        storage,
 		activeRepoPath: repoDir,
 	}
@@ -110,7 +111,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	// pre-submitted TextInputOverlay (value = "zebra", Submitted = true).
 	// Pressing Enter on a submitted overlay triggers the rename code path.
 	tio := overlay.NewTextInputOverlay("rename plan", "zebra")
-	h.textInputOverlay = tio
+	h.overlays.Show(tio)
 	h.state = stateRenameTask
 
 	enterKey := tea.KeyMsg{Type: tea.KeyEnter}

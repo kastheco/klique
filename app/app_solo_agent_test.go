@@ -52,6 +52,7 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
+		overlays:          overlay.NewManager(),
 		taskState:         ps,
 		taskStateDir:      plansDir,
 		fsm:               fsm,
@@ -71,6 +72,6 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"solo agent exit must NOT trigger confirmation overlay")
-	assert.Nil(t, updated.confirmationOverlay,
+	assert.False(t, updated.overlays.IsActive(),
 		"solo agent exit must NOT set confirmation overlay")
 }

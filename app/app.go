@@ -179,14 +179,8 @@ type home struct {
 	toastManager *overlay.ToastManager
 	// global spinner instance. we plumb this down to where it's needed
 	spinner spinner.Model
-	// textInputOverlay handles text input with state
-	textInputOverlay *overlay.TextInputOverlay
-	// formOverlay handles multi-field form input (plan creation)
-	formOverlay *overlay.FormOverlay
-	// textOverlay displays text information
-	textOverlay *overlay.TextOverlay
-	// confirmationOverlay displays confirmation modals
-	confirmationOverlay *overlay.ConfirmationOverlay
+	// overlays manages the single active modal overlay.
+	overlays *overlay.Manager
 	// pendingConfirmAction stores the tea.Cmd to run asynchronously when confirmed
 	pendingConfirmAction tea.Cmd
 
@@ -209,12 +203,6 @@ type home struct {
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
 
-	// contextMenu is the right-click context menu overlay
-	contextMenu *overlay.ContextMenu
-	// pickerOverlay is the topic picker overlay for move-to-topic
-	pickerOverlay *overlay.PickerOverlay
-	// tmuxBrowser is the tmux session browser overlay.
-	tmuxBrowser *overlay.TmuxBrowserOverlay
 	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
 	tmuxSessionCount int
 	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
@@ -335,10 +323,14 @@ type home struct {
 
 	// -- Permission prompt handling --
 
-	// permissionOverlay is the modal shown when an opencode permission prompt is detected.
-	permissionOverlay *overlay.PermissionOverlay
 	// pendingPermissionInstance is the instance that triggered the permission modal.
 	pendingPermissionInstance *session.Instance
+	// pendingPermissionPattern is the pattern from the active permission overlay.
+	// Captured at detection time so it's available after the overlay is dismissed.
+	pendingPermissionPattern string
+	// pendingPermissionDesc is the description from the active permission overlay.
+	// Captured at detection time so it's available after the overlay is dismissed.
+	pendingPermissionDesc string
 	// permissionStore persists "allow always" decisions in the shared SQLite database.
 	permissionStore config.PermissionStore
 	// permissionHandled tracks in-flight auto-approvals: instance → pattern.
@@ -451,6 +443,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 
 	h.nav = ui.NewNavigationPanel(&h.spinner)
 	h.toastManager = overlay.NewToastManager(&h.spinner)
+	h.overlays = overlay.NewManager()
 
 	// Show a warning toast if a remote plan store was configured but unreachable
 	// (we fell back to the embedded server).
@@ -592,11 +585,8 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	// Many handlers emit tea.WindowSize() as a batched side-effect (e.g.
 	// instanceStartedMsg) — those fire with the same dimensions and should
 	// not overwrite the overlay's explicit sizing.
-	if m.textInputOverlay != nil && termResized {
-		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
-	}
-	if m.textOverlay != nil && termResized {
-		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+	if termResized {
+		m.overlays.SetSize(msg.Width, msg.Height)
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -719,7 +709,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.clickUpWorkspaceMap[id] = id
 					}
 				}
-				m.pickerOverlay = overlay.NewPickerOverlay("select clickup workspace", items)
+				m.overlays.Show(overlay.NewPickerOverlay("select clickup workspace", items))
 				return m, nil
 			}
 			m.toastManager.Error("clickup search failed: " + msg.Err.Error())
@@ -744,7 +734,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			items[i] = label
 		}
 		m.state = stateClickUpPicker
-		m.pickerOverlay = overlay.NewPickerOverlay("select clickup task", items)
+		m.overlays.Show(overlay.NewPickerOverlay("select clickup task", items))
 		return m, nil
 	case tickUpdateMetadataMessage:
 		// Snapshot the instance list for the goroutine. The slice header is
@@ -1135,8 +1125,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						asyncCmds = append(asyncCmds, cmd)
 					}
 					// Show modal (statePermission blocks re-entry on subsequent ticks).
-					m.permissionOverlay = overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
-					m.permissionOverlay.SetWidth(55)
+					perm := overlay.NewPermissionOverlay(inst.Title, pp.Description, pp.Pattern)
+					m.pendingPermissionPattern = pp.Pattern
+					m.pendingPermissionDesc = pp.Description
+					m.overlays.Show(perm)
 					m.pendingPermissionInstance = inst
 					m.state = statePermission
 					m.audit(auditlog.EventPermissionDetected,
@@ -1627,7 +1619,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				items[i].Status = statusString(inst.Status)
 			}
 		}
-		m.tmuxBrowser = overlay.NewTmuxBrowserOverlay(items)
+		m.overlays.Show(overlay.NewTmuxBrowserOverlay(items))
 		m.state = stateTmuxBrowser
 		return m, nil
 	case tmuxKillResultMsg:
@@ -1657,8 +1649,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			topicNames := m.getTopicNames()
 			topicNames = append([]string{"(No topic)"}, topicNames...)
 			pickerTitle := fmt.Sprintf("assign to topic for '%s'", m.pendingPlanName)
-			m.pickerOverlay = overlay.NewPickerOverlay(pickerTitle, topicNames)
-			m.pickerOverlay.SetAllowCustom(true)
+			p := overlay.NewPickerOverlay(pickerTitle, topicNames)
+			p.SetAllowCustom(true)
+			m.overlays.Show(p)
 			m.state = stateNewPlanTopic
 			return m, nil
 		}
@@ -1666,8 +1659,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil && msg.title != "" {
 			if m.state == stateNewPlanTopic && m.pendingPlanDesc != "" {
 				m.pendingPlanName = msg.title
-				if m.pickerOverlay != nil {
-					m.pickerOverlay.SetTitle(
+				if po, ok := m.overlays.Current().(*overlay.PickerOverlay); ok {
+					po.SetTitle(
 						fmt.Sprintf("assign to topic for '%s'", msg.title),
 					)
 					return m, tea.WindowSize()
@@ -1783,61 +1776,7 @@ func (m *home) View() string {
 		m.menu.String(),
 	)
 
-	var result string
-	switch {
-	case m.state == stateSendPrompt && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == statePRTitle && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == statePRBody && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateRenameInstance && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateRenameTask && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateNewPlan && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateSpawnAgent && m.formOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.formOverlay.Render(), mainView, true, true)
-	case m.state == stateNewPlanTopic && m.pickerOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == stateClickUpSearch && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateClickUpPicker && m.pickerOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == stateClickUpWorkspacePicker && m.pickerOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == stateChangeTopic && m.pickerOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == stateSetStatus && m.pickerOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	case m.state == statePrompt:
-		if m.textInputOverlay == nil {
-			log.ErrorLog.Printf("text input overlay is nil")
-		}
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateHelp:
-		if m.textOverlay == nil {
-			log.ErrorLog.Printf("text overlay is nil")
-		}
-		result = overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	case m.state == stateConfirm:
-		if m.confirmationOverlay == nil {
-			log.ErrorLog.Printf("confirmation overlay is nil")
-		}
-		result = overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
-	case m.state == statePermission && m.permissionOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.permissionOverlay.Render(), mainView, true, true)
-	case m.state == stateContextMenu && m.contextMenu != nil:
-		cx, cy := m.contextMenu.GetPosition()
-		result = overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
-	case m.state == stateChatAboutTask && m.textInputOverlay != nil:
-		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case m.state == stateTmuxBrowser && m.tmuxBrowser != nil:
-		result = overlay.PlaceOverlay(0, 0, m.tmuxBrowser.Render(), mainView, true, true)
-	default:
-		result = mainView
-	}
+	result := m.overlays.Render(mainView)
 
 	if toastView := m.toastManager.View(); toastView != "" {
 		x, y := m.toastManager.GetPosition()

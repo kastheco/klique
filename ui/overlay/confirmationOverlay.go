@@ -5,7 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ConfirmationOverlay represents a confirmation dialog overlay
+// ConfirmationOverlay represents a confirmation dialog overlay.
 type ConfirmationOverlay struct {
 	// Whether the overlay has been dismissed
 	Dismissed bool
@@ -13,6 +13,8 @@ type ConfirmationOverlay struct {
 	message string
 	// Width of the overlay
 	width int
+	// height is stored but not used for layout (fixed content height)
+	height int
 	// Callback function to be called when the user confirms (presses 'y')
 	OnConfirm func()
 	// Callback function to be called when the user cancels (presses 'n' or 'esc')
@@ -21,51 +23,54 @@ type ConfirmationOverlay struct {
 	ConfirmKey string
 	// Custom cancel key (defaults to 'n')
 	CancelKey string
-	// Custom styling options
-	borderColor lipgloss.Color
+	// styles holds the shared overlay styles
+	styles Styles
 }
 
-// NewConfirmationOverlay creates a new confirmation dialog overlay with the given message
+// NewConfirmationOverlay creates a new confirmation dialog overlay with the given message.
 func NewConfirmationOverlay(message string) *ConfirmationOverlay {
 	return &ConfirmationOverlay{
-		Dismissed:   false,
-		message:     message,
-		width:       50, // Default width
-		ConfirmKey:  "y",
-		CancelKey:   "n",
-		borderColor: colorLove,
+		Dismissed:  false,
+		message:    message,
+		width:      50, // Default width
+		ConfirmKey: "y",
+		CancelKey:  "n",
+		styles:     DefaultStyles(),
 	}
 }
 
-// HandleKeyPress processes a key press and updates the state
-// Returns true if the overlay should be closed
-func (c *ConfirmationOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.String() {
+// HandleKey processes a key event and returns the result.
+// Implements the Overlay interface.
+func (c *ConfirmationOverlay) HandleKey(msg tea.KeyMsg) Result {
+	key := msg.String()
+	switch key {
 	case c.ConfirmKey:
 		c.Dismissed = true
 		if c.OnConfirm != nil {
 			c.OnConfirm()
 		}
-		return true
-	case c.CancelKey, "esc":
+		return Result{Dismissed: true, Submitted: true, Action: key}
+	case c.CancelKey:
 		c.Dismissed = true
 		if c.OnCancel != nil {
 			c.OnCancel()
 		}
-		return true
+		return Result{Dismissed: true, Submitted: false, Action: key}
+	case "esc":
+		c.Dismissed = true
+		if c.OnCancel != nil {
+			c.OnCancel()
+		}
+		return Result{Dismissed: true, Submitted: false}
 	default:
-		// Ignore other keys in confirmation state
-		return false
+		return Result{}
 	}
 }
 
-// Render renders the confirmation overlay
-func (c *ConfirmationOverlay) Render(opts ...WhitespaceOption) string {
-	style := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(c.borderColor).
-		Padding(1, 2).
-		Width(c.width)
+// View renders the confirmation overlay content.
+// Implements the Overlay interface.
+func (c *ConfirmationOverlay) View() string {
+	style := c.styles.DangerBorder.Width(c.width)
 
 	// Add the confirmation instructions
 	content := c.message + "\n\n" +
@@ -73,11 +78,12 @@ func (c *ConfirmationOverlay) Render(opts ...WhitespaceOption) string {
 		lipgloss.NewStyle().Bold(true).Render(c.CancelKey) + " or " +
 		lipgloss.NewStyle().Bold(true).Render("esc") + " to cancel"
 
-	// Apply the border style and return
 	return style.Render(content)
 }
 
-// SetWidth sets the width of the confirmation overlay
-func (c *ConfirmationOverlay) SetWidth(width int) {
-	c.width = width
+// SetSize updates the available dimensions for the overlay.
+// Implements the Overlay interface.
+func (c *ConfirmationOverlay) SetSize(w, h int) {
+	c.width = w
+	c.height = h
 }

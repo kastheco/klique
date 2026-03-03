@@ -2,10 +2,9 @@ package overlay
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-// TextOverlay represents a text screen overlay
+// TextOverlay represents a text screen overlay.
 type TextOverlay struct {
 	// Whether the overlay has been dismissed
 	Dismissed bool
@@ -14,42 +13,44 @@ type TextOverlay struct {
 	// Content to display in the overlay
 	content string
 
-	width int
+	width  int
+	height int
+	styles Styles
 }
 
-// NewTextOverlay creates a new text screen overlay with the given title and content
+// NewTextOverlay creates a new text screen overlay with the given content.
 func NewTextOverlay(content string) *TextOverlay {
 	return &TextOverlay{
 		Dismissed: false,
 		content:   content,
+		styles:    DefaultStyles(),
 	}
 }
 
-// HandleKeyPress processes a key press and updates the state
-// Returns true if the overlay should be closed
-func (t *TextOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	// Close on any key
+// HandleKey processes a key event and returns the result.
+// Any key dismisses the text overlay.
+// Implements the Overlay interface.
+func (t *TextOverlay) HandleKey(msg tea.KeyMsg) Result {
 	t.Dismissed = true
-	// Call the OnDismiss callback if it exists
 	if t.OnDismiss != nil {
 		t.OnDismiss()
 	}
-	return true
+	return Result{Dismissed: true}
 }
 
-// Render renders the text overlay
-func (t *TextOverlay) Render(opts ...WhitespaceOption) string {
-	// Create styles
-	style := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(colorIris).
-		Padding(1, 2).
-		Width(t.width)
-
-	// Apply the border style and return
+// View renders the text overlay content.
+// Implements the Overlay interface.
+func (t *TextOverlay) View() string {
+	style := t.styles.ModalBorder
+	if t.width > 0 {
+		style = style.Width(t.width)
+	}
 	return style.Render(t.content)
 }
 
-func (t *TextOverlay) SetWidth(width int) {
-	t.width = width
+// SetSize updates the available dimensions for the overlay.
+// Implements the Overlay interface.
+func (t *TextOverlay) SetSize(w, h int) {
+	t.width = w
+	t.height = h
 }

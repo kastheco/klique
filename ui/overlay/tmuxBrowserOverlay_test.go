@@ -18,8 +18,8 @@ func TestTmuxBrowserOverlay_Basic(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 	require.NotNil(t, b)
 
-	// Render should not panic and should contain session titles
-	rendered := b.Render()
+	// View should not panic and should contain session titles
+	rendered := b.View()
 	assert.Contains(t, rendered, "foo")
 	assert.Contains(t, rendered, "bar")
 }
@@ -34,13 +34,13 @@ func TestTmuxBrowserOverlay_Navigation(t *testing.T) {
 
 	assert.Equal(t, 0, b.selectedIdx)
 
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	assert.Equal(t, 1, b.selectedIdx)
 
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	assert.Equal(t, 2, b.selectedIdx)
 
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyUp})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
 	assert.Equal(t, 1, b.selectedIdx)
 }
 
@@ -54,8 +54,8 @@ func TestTmuxBrowserOverlay_SearchFilter(t *testing.T) {
 
 	// Type "db" to filter — note: "a" and "k" are action keys when search is empty,
 	// so we use "d" then "b" (non-action-key characters) to enter search mode safely.
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	assert.Len(t, b.filtered, 1)
 	assert.Equal(t, 1, b.filtered[0]) // index of "db"
 }
@@ -66,22 +66,24 @@ func TestTmuxBrowserOverlay_Actions(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		key      tea.KeyMsg
-		expected BrowserAction
+		name          string
+		key           tea.KeyMsg
+		wantDismissed bool
+		wantAction    string
 	}{
-		{"esc dismisses", tea.KeyMsg{Type: tea.KeyEsc}, BrowserDismiss},
-		{"enter attaches", tea.KeyMsg{Type: tea.KeyEnter}, BrowserAttach},
-		{"k kills when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, BrowserKill},
-		{"a adopts when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, BrowserAdopt},
-		{"o attaches when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")}, BrowserAttach},
+		{"esc dismisses", tea.KeyMsg{Type: tea.KeyEsc}, true, ""},
+		{"enter attaches", tea.KeyMsg{Type: tea.KeyEnter}, true, "attach"},
+		{"k kills when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, false, "kill"},
+		{"a adopts when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, true, "adopt"},
+		{"o attaches when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")}, true, "attach"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := NewTmuxBrowserOverlay(items)
-			action := b.HandleKeyPress(tt.key)
-			assert.Equal(t, tt.expected, action)
+			result := b.HandleKey(tt.key)
+			assert.Equal(t, tt.wantDismissed, result.Dismissed)
+			assert.Equal(t, tt.wantAction, result.Action)
 		})
 	}
 }
@@ -93,12 +95,12 @@ func TestTmuxBrowserOverlay_ActionKeysTypeWhenSearchActive(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 
 	// Type "x" to enter search mode
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	assert.Equal(t, "x", b.searchQuery)
 
 	// Now "k" should type into search, not kill
-	action := b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	assert.Equal(t, BrowserNone, action)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	assert.False(t, result.Dismissed)
 	assert.Equal(t, "xk", b.searchQuery)
 }
 
@@ -110,7 +112,7 @@ func TestTmuxBrowserOverlay_SelectedItem(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 	assert.Equal(t, "kas_a", b.SelectedItem().Name)
 
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	assert.Equal(t, "kas_b", b.SelectedItem().Name)
 }
 
@@ -121,7 +123,7 @@ func TestTmuxBrowserOverlay_RemoveItem(t *testing.T) {
 		{Name: "kas_c", Title: "c", Created: time.Now()},
 	}
 	b := NewTmuxBrowserOverlay(items)
-	b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyDown}) // select "b"
+	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown}) // select "b"
 
 	b.RemoveSelected()
 	assert.Len(t, b.sessions, 2)
@@ -132,7 +134,7 @@ func TestTmuxBrowserOverlay_RemoveItem(t *testing.T) {
 func TestTmuxBrowserOverlay_Empty(t *testing.T) {
 	b := NewTmuxBrowserOverlay(nil)
 	assert.True(t, b.IsEmpty())
-	rendered := b.Render()
+	rendered := b.View()
 	assert.Contains(t, rendered, "no sessions")
 }
 
@@ -142,9 +144,10 @@ func TestTmuxBrowserOverlay_ManagedItemBlocksAdopt(t *testing.T) {
 	}
 	b := NewTmuxBrowserOverlay(items)
 
-	// "a" should be a no-op for managed items
-	action := b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	assert.Equal(t, BrowserNone, action)
+	// "a" should be a no-op for managed items — not dismissed, no action
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	assert.False(t, result.Dismissed)
+	assert.Empty(t, result.Action)
 }
 
 func TestTmuxBrowserOverlay_OrphanItemAllowsAdopt(t *testing.T) {
@@ -153,8 +156,9 @@ func TestTmuxBrowserOverlay_OrphanItemAllowsAdopt(t *testing.T) {
 	}
 	b := NewTmuxBrowserOverlay(items)
 
-	action := b.HandleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	assert.Equal(t, BrowserAdopt, action)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "adopt", result.Action)
 }
 
 func TestTmuxBrowserOverlay_ManagedItemRendersAgentType(t *testing.T) {
@@ -162,7 +166,7 @@ func TestTmuxBrowserOverlay_ManagedItemRendersAgentType(t *testing.T) {
 		{Name: "kas_auth", Title: "auth", Created: time.Now(), Managed: true, AgentType: "coder", TaskFile: "auth-plan"},
 	}
 	b := NewTmuxBrowserOverlay(items)
-	rendered := b.Render()
+	rendered := b.View()
 	assert.Contains(t, rendered, "coder")
 }
 
@@ -172,8 +176,27 @@ func TestTmuxBrowserOverlay_MixedItems(t *testing.T) {
 		{Name: "kas_orphan", Title: "orphan", Created: time.Now(), Managed: false},
 	}
 	b := NewTmuxBrowserOverlay(items)
-	rendered := b.Render()
+	rendered := b.View()
 	assert.Contains(t, rendered, "managed")
 	assert.Contains(t, rendered, "orphan")
 	assert.Contains(t, rendered, "planner")
+}
+
+func TestTmuxBrowserOverlay_ImplementsOverlay(t *testing.T) {
+	var _ Overlay = NewTmuxBrowserOverlay(nil)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
+	b := NewTmuxBrowserOverlay(nil)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.True(t, result.Dismissed)
+	assert.Empty(t, result.Action)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Attach(t *testing.T) {
+	items := []TmuxBrowserItem{{Name: "sess", Title: "my-session"}}
+	b := NewTmuxBrowserOverlay(items)
+	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "attach", result.Action)
 }

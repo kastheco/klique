@@ -5,42 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-var contextMenuStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorIris).
-	Padding(0, 1)
-
-var contextItemStyle = lipgloss.NewStyle().
-	Foreground(colorText).
-	Padding(0, 1)
-
-var contextSelectedStyle = lipgloss.NewStyle().
-	Foreground(colorBase).
-	Background(colorFoam).
-	Padding(0, 1)
-
-var contextDisabledStyle = lipgloss.NewStyle().
-	Foreground(colorOverlay).
-	Padding(0, 1)
-
-var contextSearchStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorOverlay).
-	Padding(0, 1).
-	MarginBottom(1)
-
-var contextSearchPlaceholderStyle = lipgloss.NewStyle().
-	Foreground(colorMuted)
-
-var contextHintStyle = lipgloss.NewStyle().
-	Foreground(colorMuted).
-	MarginTop(1)
-
-var contextNumberStyle = lipgloss.NewStyle().
-	Foreground(colorIris)
 
 // ContextMenuItem represents a single menu option.
 type ContextMenuItem struct {
@@ -54,7 +19,6 @@ type ContextMenu struct {
 	items       []ContextMenuItem
 	filtered    []filteredItem
 	selectedIdx int
-	x, y        int // screen position
 	width       int
 	searchQuery string
 }
@@ -65,12 +29,11 @@ type filteredItem struct {
 	origIdx int // 1-based number for display and hotkey
 }
 
-// NewContextMenu creates a context menu at the given screen position.
-func NewContextMenu(x, y int, items []ContextMenuItem) *ContextMenu {
+// NewContextMenu creates a context menu with the given items.
+// Position is managed by the OverlayManager via ShowPositioned.
+func NewContextMenu(items []ContextMenuItem) *ContextMenu {
 	c := &ContextMenu{
 		items: items,
-		x:     x,
-		y:     y,
 	}
 	c.applyFilter()
 	c.calculateWidth()
@@ -131,17 +94,17 @@ func (c *ContextMenu) skipToNonDisabled(direction int) {
 	}
 }
 
-// HandleKeyPress processes key events. Returns the selected action string, or "" if no selection.
-// Returns ("", false) if menu stays open, (action, true) if an item was selected, ("", true) if dismissed.
-func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
+// HandleKey implements Overlay. It processes a key event and returns a Result
+// indicating whether the menu should close and which action was selected.
+func (c *ContextMenu) HandleKey(msg tea.KeyMsg) Result {
 	switch msg.String() {
 	case "esc":
-		return "", true
+		return Result{Dismissed: true}
 	case " ", "enter":
 		if c.selectedIdx < len(c.filtered) && !c.filtered[c.selectedIdx].item.Disabled {
-			return c.filtered[c.selectedIdx].item.Action, true
+			return Result{Dismissed: true, Action: c.filtered[c.selectedIdx].item.Action}
 		}
-		return "", false
+		return Result{}
 	case "up":
 		if len(c.filtered) > 0 {
 			start := c.selectedIdx
@@ -183,51 +146,50 @@ func (c *ContextMenu) HandleKeyPress(msg tea.KeyMsg) (string, bool) {
 				for i, fi := range c.filtered {
 					if fi.origIdx == num && !fi.item.Disabled {
 						c.selectedIdx = i
-						return fi.item.Action, true
+						return Result{Dismissed: true, Action: fi.item.Action}
 					}
 				}
-				return "", false
+				return Result{}
 			}
 			c.searchQuery += string(msg.Runes)
 			c.applyFilter()
 		}
 	}
-	return "", false
+	return Result{}
 }
 
-// Render returns the styled menu string.
-func (c *ContextMenu) Render() string {
+// View implements Overlay using DefaultStyles for rendering.
+func (c *ContextMenu) View() string {
+	st := DefaultStyles()
 	var b strings.Builder
 
-	// Search bar
 	innerWidth := c.width
 	if innerWidth < 10 {
 		innerWidth = 10
 	}
 	searchText := c.searchQuery
 	if searchText == "" {
-		searchText = contextSearchPlaceholderStyle.Render("\uf002 Type to filter...")
+		searchText = st.Muted.Render("\uf002 Type to filter...")
 	}
-	b.WriteString(contextSearchStyle.Width(innerWidth).Render(searchText))
+	b.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
 	b.WriteString("\n")
 
-	// Items with numbers
 	if len(c.filtered) == 0 {
-		b.WriteString(contextDisabledStyle.Width(c.width).Render("No matches"))
+		b.WriteString(st.DisabledItem.Width(c.width).Render("No matches"))
 	} else {
 		for i, fi := range c.filtered {
-			numPrefix := contextNumberStyle.Render(fmt.Sprintf("%d", fi.origIdx))
+			numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
 			label := fmt.Sprintf(" %s", fi.item.Label)
 
 			var line string
 			if fi.item.Disabled {
-				line = contextDisabledStyle.Width(c.width).Render(
+				line = st.DisabledItem.Width(c.width).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else if i == c.selectedIdx {
-				line = contextSelectedStyle.Width(c.width).Render(
+				line = st.SelectedItem.Width(c.width).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else {
-				line = contextItemStyle.Render(numPrefix + label)
+				line = st.Item.Render(numPrefix + label)
 			}
 			b.WriteString(line)
 			if i < len(c.filtered)-1 {
@@ -237,14 +199,14 @@ func (c *ContextMenu) Render() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(contextHintStyle.Render("↑↓ nav • space select • esc close"))
+	b.WriteString(st.Hint.Render("↑↓ nav • space select • esc close"))
 
-	return contextMenuStyle.Render(b.String())
+	return st.FloatingBorder.Width(c.width).Render(b.String())
 }
 
-// GetPosition returns the screen coordinates for overlay placement.
-func (c *ContextMenu) GetPosition() (int, int) {
-	return c.x, c.y
+// SetSize implements Overlay. Updates available dimensions; width is used for menu layout.
+func (c *ContextMenu) SetSize(width, height int) {
+	c.width = width
 }
 
 // Items returns all menu items (including disabled ones), in original order.

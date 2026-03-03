@@ -397,7 +397,7 @@ func TestTriggerPlanStage_SoloRespectsTopicConcurrencyGate(t *testing.T) {
 
 	assert.Equal(t, stateConfirm, updated.state,
 		"solo stage must show topic concurrency confirmation when another plan in topic is implementing")
-	require.NotNil(t, updated.confirmationOverlay,
+	require.True(t, updated.overlays.IsActive(),
 		"confirmation overlay must be shown for solo topic conflict")
 	require.NotNil(t, updated.pendingConfirmAction,
 		"confirm action must be set for solo topic conflict")
@@ -453,6 +453,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
+		overlays:       overlay.NewManager(),
 		activeRepoPath: dir,
 	}
 
@@ -462,7 +463,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	// Simulate: context menu selected "set_status", which sets up the picker
 	_, _ = h.executeContextAction("set_status")
 	assert.Equal(t, stateSetStatus, h.state, "set_status action should enter stateSetStatus")
-	assert.NotNil(t, h.pickerOverlay, "picker overlay should be created for status selection")
+	assert.True(t, h.overlays.IsActive(), "picker overlay should be created for status selection")
 	assert.Equal(t, planFile, h.pendingSetStatusTask, "pending plan file should be stored")
 }
 

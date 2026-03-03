@@ -5,6 +5,90 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Styles holds the shared lipgloss styles used by all overlay types.
+type Styles struct {
+	// Border styles for different overlay contexts
+	ModalBorder    lipgloss.Style // centered modals (double border, iris)
+	FloatingBorder lipgloss.Style // floating overlays like context menus (rounded, iris)
+	WarningBorder  lipgloss.Style // warning modals (rounded, gold)
+	DangerBorder   lipgloss.Style // danger modals (double border, love/red)
+
+	// Text styles
+	Title        lipgloss.Style // overlay title (bold, iris)
+	WarningTitle lipgloss.Style // overlay title for warning overlays (bold, gold)
+	Hint         lipgloss.Style // hint/help text at bottom (muted)
+	Muted        lipgloss.Style // secondary text (muted foreground)
+
+	// List item styles (picker, context menu, browser)
+	Item         lipgloss.Style // normal list item
+	SelectedItem lipgloss.Style // highlighted/selected item
+	DisabledItem lipgloss.Style // disabled/greyed-out item
+	NumberPrefix lipgloss.Style // numbered shortcut prefix
+
+	// Search bar
+	SearchBar lipgloss.Style // search input container
+
+	// Button styles
+	Button        lipgloss.Style // unfocused button
+	FocusedButton lipgloss.Style // focused/active button
+}
+
+// DefaultStyles returns the standard overlay style set using the Rosé Pine Moon palette.
+func DefaultStyles() Styles {
+	return Styles{
+		ModalBorder: lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(colorIris).
+			Padding(1, 2),
+		FloatingBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorIris).
+			Padding(1, 2),
+		WarningBorder: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorGold).
+			Padding(1, 2),
+		DangerBorder: lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(colorLove).
+			Padding(1, 2),
+		Title: lipgloss.NewStyle().
+			Foreground(colorIris).
+			Bold(true).
+			MarginBottom(1),
+		WarningTitle: lipgloss.NewStyle().
+			Foreground(colorGold).
+			Bold(true),
+		Hint: lipgloss.NewStyle().
+			Foreground(colorMuted).
+			MarginTop(1),
+		Muted: lipgloss.NewStyle().
+			Foreground(colorMuted),
+		Item: lipgloss.NewStyle().
+			Padding(0, 1).
+			Foreground(colorText),
+		SelectedItem: lipgloss.NewStyle().
+			Padding(0, 1).
+			Background(colorFoam).
+			Foreground(colorBase),
+		DisabledItem: lipgloss.NewStyle().
+			Padding(0, 1).
+			Foreground(colorOverlay),
+		NumberPrefix: lipgloss.NewStyle().
+			Foreground(colorIris),
+		SearchBar: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorFoam).
+			Padding(0, 1).
+			MarginBottom(1),
+		Button: lipgloss.NewStyle().
+			Foreground(colorSubtle),
+		FocusedButton: lipgloss.NewStyle().
+			Background(colorIris).
+			Foreground(colorBase),
+	}
+}
+
 // Rosé Pine Moon palette — mirrors ui/theme.go.
 // https://rosepinetheme.com/palette/
 var (
