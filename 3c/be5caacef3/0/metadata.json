@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "3cbe5caacef3",
+  "session_id": "840b1904-87f8-4ed5-aa44-1685a9ff5b17",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T20:32:59.463757523Z",
+  "branch": "release/2.0",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "web/src/app/components/PageContent.tsx",
+    ".goreleaser.yaml",
+    "LICENSE.md",
+    "README.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6fc64c711e5a",
+  "checkpoint_transcript_start": 2,
+  "transcript_lines_at_start": 2,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T20:32:59.449475476Z",
+    "agent_lines": 21,
+    "human_added": 1712,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1733,
+    "agent_percentage": 1.2117714945181766
+  }
+}
