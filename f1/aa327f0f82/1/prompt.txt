@@ -1,0 +1,129 @@
+Implement Task 1: Add ReviewCycle field to planstore and planstate
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Include review cycle numbers in instance titles, tmux session names, and opencode session labels (e.g. `-review-1`, `-fix-1`, `-review-2`) so each review/fix cycle gets unique identifiers, preventing tmux session clashes, stale caches, and opencode DB collisions.
+**Architecture:** Add a `ReviewCycle` counter to `PlanEntry` (persisted via `review_cycle` column in planstore SQLite). The counter starts at 0 and increments on each `ReviewChangesRequested` FSM transition. The three spawning functions (`spawnReviewer`, `spawnCoderWithFeedback`, `spawnPlanAgent` review case) read the cycle count and append it to instance titles. `BuildTitle` in `opencodesession` gains an optional `ReviewCycle` field for human-readable labels like `review #2`. The first review cycle (cycle 0) uses suffix `-review-1` / displays `review #1` (1-indexed for humans).
+**Tech Stack:** Go, SQLite (planstore), bubbletea TUI, tmux session management
+
+## Wave 1 of 2
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/planstore/store.go`
+- Modify: `config/planstore/sqlite.go`
+- Modify: `config/planstore/http.go`
+- Modify: `config/planstore/server.go`
+- Modify: `config/planstate/planstate.go`
+- Test: `config/planstore/sqlite_test.go`
+- Test: `config/planstate/planstate_test.go`
+
+**Step 1: write the failing test**
+
+In `config/planstore/sqlite_test.go`, add a test that creates a plan, increments its review cycle, and reads it back:
+
+```go
+func TestSQLiteStore_ReviewCycle(t *testing.T) {
+	store := newTestStore(t)
+	entry := PlanEntry{
+		Filename: "test.md",
+		Status:   StatusReady,
+	}
+	require.NoError(t, store.Create("proj", entry))
+
+	// Default review cycle is 0.
+	got, err := store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.ReviewCycle)
+
+	// Increment and verify.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.ReviewCycle)
+
+	// Increment again.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 2, got.ReviewCycle)
+}
+```
+
+In `config/planstate/planstate_test.go`, add a test for the planstate wrapper:
+
+```go
+func TestPlanState_ReviewCycle(t *testing.T) {
+	ps := newTestPlanState(t)
+	require.NoError(t, ps.Create("test.md", "desc", "plan/test", "", time.Now()))
+
+	cycle, err := ps.ReviewCycle("test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 0, cycle)
+
+	require.NoError(t, ps.IncrementReviewCycle("test.md"))
+	cycle, err = ps.ReviewCycle("test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 1, cycle)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/planstore/... -run TestSQLiteStore_ReviewCycle -v
+go test ./config/planstate/... -run TestPlanState_ReviewCycle -v
+```
+
+expected: FAIL — `ReviewCycle` field undefined, `IncrementReviewCycle` method undefined
+
+**Step 3: write minimal implementation**
+
+1. **`config/planstore/store.go`**: Add `ReviewCycle int` field to `PlanEntry`. Add `IncrementReviewCycle(project, filename string) error` to the `Store` interface.
+
+2. **`config/planstore/sqlite.go`**:
+   - Add `review_cycle_migration` constant: `ALTER TABLE plans ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`
+   - Call `migrateAddColumn(db, "review_cycle", ...)` in `NewSQLiteStore`
+   - Add `review_cycle` to all INSERT/UPDATE/SELECT queries (Create, Get, Update, List, ListByStatus, ListByTopic, scanPlanEntry, scanPlanEntries)
+   - Implement `IncrementReviewCycle`: `UPDATE plans SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`
+
+3. **`config/planstore/http.go`**: Add `IncrementReviewCycle` method that POSTs to `/v1/projects/{project}/plans/{filename}/increment-review-cycle`.
+
+4. **`config/planstore/server.go`**: Add handler for `POST /v1/projects/{project}/plans/{filename}/increment-review-cycle` that calls `store.IncrementReviewCycle`.
+
+5. **`config/planstate/planstate.go`**: Add `ReviewCycle int` to `PlanEntry`. Add `ReviewCycle(filename) (int, error)` and `IncrementReviewCycle(filename) error` methods. Wire `ReviewCycle` through `toPlanstoreEntry` and the `Load` mapping.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./config/planstore/... -run TestSQLiteStore_ReviewCycle -v
+go test ./config/planstate/... -run TestPlanState_ReviewCycle -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add config/planstore/store.go config/planstore/sqlite.go config/planstore/http.go config/planstore/server.go config/planstate/planstate.go config/planstore/sqlite_test.go config/planstate/planstate_test.go
+git commit -m "feat: add ReviewCycle counter to planstore and planstate"
+```
