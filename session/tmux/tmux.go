@@ -124,6 +124,13 @@ func newTmuxSession(name string, program string, skipPermissions bool, ptyFactor
 	}
 }
 
+// NewReset creates a fresh TmuxSession preserving the ptyFactory and cmdExec
+// from the receiver. Used by Instance.Restart() to avoid replacing injected
+// test dependencies with real implementations.
+func (t *TmuxSession) NewReset(name string, program string, skipPermissions bool) *TmuxSession {
+	return newTmuxSession(name, program, skipPermissions, t.ptyFactory, t.cmdExec)
+}
+
 // NewTmuxSessionFromExisting creates a TmuxSession that wraps an already-running
 // tmux session identified by its raw sanitized name. Used for adopting orphans.
 func NewTmuxSessionFromExisting(sanitizedName string, program string, skipPermissions bool) *TmuxSession {

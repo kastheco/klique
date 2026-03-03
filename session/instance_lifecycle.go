@@ -437,8 +437,8 @@ func (i *Instance) Restart() error {
 		_ = i.tmuxSession.Close()
 	}
 
-	// Create fresh tmux session with same config.
-	ts := tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	// Create fresh tmux session preserving injected deps (pty/cmd factories).
+	ts := i.tmuxSession.NewReset(i.Title, i.Program, i.SkipPermissions)
 	ts.SetAgentType(i.AgentType)
 	i.tmuxSession = ts
 	i.setTmuxTaskEnv()
