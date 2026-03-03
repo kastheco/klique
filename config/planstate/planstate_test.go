@@ -519,3 +519,38 @@ func TestPlanState_LoadRequiresStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, ps.Plans, 1)
 }
+
+func TestSetClickUpTaskID(t *testing.T) {
+	ps := newTestPS(t)
+	require.NoError(t, ps.Create("cu-test.md", "clickup test", "plan/cu-test", "", time.Now()))
+
+	// Initially empty
+	entry, ok := ps.Entry("cu-test.md")
+	require.True(t, ok)
+	assert.Equal(t, "", entry.ClickUpTaskID, "task ID must be empty before set")
+
+	// Set the task ID
+	require.NoError(t, ps.SetClickUpTaskID("cu-test.md", "CU-abc456"))
+
+	// In-memory state is updated
+	entry, ok = ps.Entry("cu-test.md")
+	require.True(t, ok)
+	assert.Equal(t, "CU-abc456", entry.ClickUpTaskID, "in-memory task ID must be updated")
+}
+
+func TestClickUpTaskIDEmpty(t *testing.T) {
+	ps := newTestPS(t)
+	require.NoError(t, ps.Create("empty-cu.md", "no clickup", "plan/empty-cu", "", time.Now()))
+
+	// Entry without ClickUpTaskID must have empty string
+	entry, ok := ps.Entry("empty-cu.md")
+	require.True(t, ok)
+	assert.Equal(t, "", entry.ClickUpTaskID, "new plan must have empty ClickUpTaskID")
+}
+
+func TestSetClickUpTaskID_NotFound(t *testing.T) {
+	ps := newTestPS(t)
+	err := ps.SetClickUpTaskID("nonexistent.md", "CU-xyz")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

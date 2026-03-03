@@ -21,14 +21,15 @@ const (
 
 // PlanEntry holds the persisted metadata for a single plan.
 type PlanEntry struct {
-	Filename    string    `json:"filename"`
-	Status      Status    `json:"status"`
-	Description string    `json:"description,omitempty"`
-	Branch      string    `json:"branch,omitempty"`
-	Topic       string    `json:"topic,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	Implemented string    `json:"implemented,omitempty"`
-	Content     string    `json:"content,omitempty"`
+	Filename      string    `json:"filename"`
+	Status        Status    `json:"status"`
+	Description   string    `json:"description,omitempty"`
+	Branch        string    `json:"branch,omitempty"`
+	Topic         string    `json:"topic,omitempty"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	Implemented   string    `json:"implemented,omitempty"`
+	Content       string    `json:"content,omitempty"`
+	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
 }
 
 // TopicEntry holds the persisted metadata for a topic grouping.
@@ -50,6 +51,9 @@ type Store interface {
 	// Content access
 	GetContent(project, filename string) (string, error)
 	SetContent(project, filename, content string) error
+
+	// ClickUp integration
+	SetClickUpTaskID(project, filename, taskID string) error
 
 	// Queries
 	List(project string) ([]PlanEntry, error)

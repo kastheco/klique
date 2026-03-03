@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1164,6 +1165,11 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 		m.toastManager.Error("failed to save imported plan content: " + err.Error())
 		return m, m.toastTickCmd()
 	}
+	if task.ID != "" {
+		if err := m.planState.SetClickUpTaskID(filename, task.ID); err != nil {
+			log.WarningLog.Printf("importClickUpTask: failed to set clickup task id for %q: %v", filename, err)
+		}
+	}
 
 	if err := m.fsm.Transition(filename, planfsm.PlanStart); err != nil {
 		log.WarningLog.Printf("clickup import transition failed for %q: %v", filename, err)
@@ -1937,6 +1943,103 @@ func (m *home) refreshAuditPane() {
 	if m.nav != nil && m.auditPane.Visible() {
 		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.Height())
 	}
+}
+
+// buildClickUpProgressComment formats a concise markdown comment for ClickUp.
+// Prefixes with "🤖 kasmos:" so comments are identifiable.
+// Events:
+//   - plan_ready: "plan finalized — {detail}"
+//   - wave_complete: "wave {detail} complete"
+//   - review_approved: "review approved — implementation complete"
+//   - review_changes_requested: "review: changes requested — {detail}"
+//   - fixer_complete: "fixer agent completed — {detail}"
+func buildClickUpProgressComment(event, planName, detail string) string {
+	var body string
+	switch event {
+	case "plan_ready":
+		if detail != "" {
+			body = "plan finalized — " + detail
+		} else {
+			body = "plan finalized"
+		}
+	case "wave_complete":
+		if detail != "" {
+			body = "wave " + detail + " complete"
+		} else {
+			body = "wave complete"
+		}
+	case "review_approved":
+		body = "review approved — implementation complete"
+	case "review_changes_requested":
+		if detail != "" {
+			body = "review: changes requested — " + detail
+		} else {
+			body = "review: changes requested"
+		}
+	case "fixer_complete":
+		if detail != "" {
+			body = "fixer agent completed — " + detail
+		} else {
+			body = "fixer agent completed"
+		}
+	default:
+		if detail != "" {
+			body = event + " — " + detail
+		} else {
+			body = event
+		}
+	}
+	return "🤖 kasmos: **" + planName + "** — " + body
+}
+
+// postClickUpProgress resolves the ClickUp task ID for the given plan and posts
+// a progress comment. Returns a fire-and-forget tea.Cmd. Returns nil if no task
+// ID is associated with the plan or the commenter is unavailable. All errors
+// are logged, never surfaced to the user.
+func (m *home) postClickUpProgress(planFile, event, detail string) tea.Cmd {
+	if m.planState == nil {
+		return nil
+	}
+	entry, ok := m.planState.Entry(planFile)
+	if !ok {
+		return nil
+	}
+
+	// Fetch content for fallback task ID resolution only when the field is empty.
+	var content string
+	if entry.ClickUpTaskID == "" && m.planStore != nil {
+		content, _ = m.planStore.GetContent(m.planStoreProject, planFile)
+	}
+	taskID := resolveClickUpTaskID(entry, content)
+
+	planName := planstate.DisplayName(planFile)
+	comment := buildClickUpProgressComment(event, planName, detail)
+
+	commenter := m.getOrCreateCommenter(m.ctx)
+	return postClickUpProgress(commenter, taskID, comment)
+}
+
+// getOrCreateCommenter returns a Commenter backed by the same MCP client as
+// the Importer if it already exists. Returns nil when no MCP client has been
+// initialized yet — progress comments are best-effort and the importer is
+// always initialized before plans acquire ClickUp task IDs, so this fallback
+// path is never hit in practice. Lazy initialization via getOrCreateImporter
+// is deliberately avoided: that call does blocking I/O (MCP subprocess spawn)
+// and must not run inside the synchronous Update() path.
+func (m *home) getOrCreateCommenter(_ context.Context) *clickup.Commenter {
+	if m.clickUpCommenter != nil {
+		return m.clickUpCommenter
+	}
+	if m.clickUpConfig == nil || m.clickUpMCPClient == nil {
+		return nil
+	}
+
+	// Reuse the shared MCP client initialized by the importer.
+	m.clickUpCommenter = clickup.NewCommenter(m.clickUpMCPClient)
+	if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
+		m.clickUpCommenter.SetWorkspaceID(projCfg.WorkspaceID)
+	}
+	return m.clickUpCommenter
 }
 
 // coalesceRestarts merges adjacent session_started + session_stopped pairs

@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS topics (
 // contentMigration adds the content column to existing databases that predate it.
 const contentMigration = `ALTER TABLE plans ADD COLUMN content TEXT NOT NULL DEFAULT ''`
 
+// clickupTaskIDMigration adds the clickup_task_id column to existing databases.
+const clickupTaskIDMigration = `ALTER TABLE plans ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`
+
 // SQLiteStore is a Store implementation backed by a SQLite database.
 type SQLiteStore struct {
 	db *sql.DB
@@ -73,6 +76,12 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("migrate content column: %w", err)
 	}
 
+	// Add clickup_task_id column if it doesn't exist (upgrade existing databases).
+	if err := migrateAddColumn(db, "clickup_task_id", clickupTaskIDMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate clickup_task_id column: %w", err)
+	}
+
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -80,7 +89,12 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 // doesn't already exist. This upgrades databases created before the column
 // was introduced.
 func migrateAddContentColumn(db *sql.DB) error {
-	// Check if the column already exists by querying the table info.
+	return migrateAddColumn(db, "content", contentMigration)
+}
+
+// migrateAddColumn adds a column to the plans table if it doesn't already
+// exist, running the provided ALTER TABLE statement when needed.
+func migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {
 	rows, err := db.Query("PRAGMA table_info(plans)")
 	if err != nil {
 		return fmt.Errorf("query table info: %w", err)
@@ -96,7 +110,7 @@ func migrateAddContentColumn(db *sql.DB) error {
 		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
 			return fmt.Errorf("scan table info: %w", err)
 		}
-		if name == "content" {
+		if name == columnName {
 			return nil // column already exists
 		}
 	}
@@ -105,8 +119,8 @@ func migrateAddContentColumn(db *sql.DB) error {
 	}
 
 	// Column doesn't exist — add it.
-	if _, err := db.Exec(contentMigration); err != nil {
-		return fmt.Errorf("add content column: %w", err)
+	if _, err := db.Exec(alterSQL); err != nil {
+		return fmt.Errorf("add %s column: %w", columnName, err)
 	}
 	return nil
 }
@@ -125,8 +139,8 @@ func (s *SQLiteStore) Ping() error {
 // Returns an error if a plan with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 	const q = `
-		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO plans (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(q,
 		project,
@@ -138,6 +152,7 @@ func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 		formatTime(entry.CreatedAt),
 		entry.Implemented,
 		entry.Content,
+		entry.ClickUpTaskID,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -152,7 +167,7 @@ func (s *SQLiteStore) Create(project string, entry PlanEntry) error {
 // Returns an error if the plan is not found.
 func (s *SQLiteStore) Get(project, filename string) (PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
 		FROM plans
 		WHERE project = ? AND filename = ?
 	`
@@ -165,7 +180,7 @@ func (s *SQLiteStore) Get(project, filename string) (PlanEntry, error) {
 func (s *SQLiteStore) Update(project, filename string, entry PlanEntry) error {
 	const q = `
 		UPDATE plans
-		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?
+		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?
 		WHERE project = ? AND filename = ?
 	`
 	result, err := s.db.Exec(q,
@@ -176,6 +191,7 @@ func (s *SQLiteStore) Update(project, filename string, entry PlanEntry) error {
 		formatTime(entry.CreatedAt),
 		entry.Implemented,
 		entry.Content,
+		entry.ClickUpTaskID,
 		project,
 		filename,
 	)
@@ -220,7 +236,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 // List returns all plan entries for the given project, sorted by filename.
 func (s *SQLiteStore) List(project string) ([]PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
 		FROM plans
 		WHERE project = ?
 		ORDER BY filename ASC
@@ -249,7 +265,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEn
 	}
 
 	q := fmt.Sprintf(`
-		SELECT filename, status, description, branch, topic, created_at, implemented, content
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
 		FROM plans
 		WHERE project = ? AND status IN (%s)
 		ORDER BY filename ASC
@@ -267,7 +283,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]PlanEn
 // sorted by filename.
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]PlanEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content
+		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id
 		FROM plans
 		WHERE project = ? AND topic = ?
 		ORDER BY filename ASC
@@ -361,24 +377,43 @@ func (s *SQLiteStore) SetContent(project, filename, content string) error {
 	return nil
 }
 
+// SetClickUpTaskID sets the ClickUp task ID for an existing plan entry.
+// Returns an error if the plan is not found.
+func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
+	const q = `UPDATE plans SET clickup_task_id = ? WHERE project = ? AND filename = ?`
+	result, err := s.db.Exec(q, taskID, project, filename)
+	if err != nil {
+		return fmt.Errorf("set clickup_task_id: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set clickup_task_id rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
 // scanPlanEntry scans a single row into a PlanEntry.
 func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
-	var filename, status, description, branch, topic, createdAt, implemented, content string
-	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content); err != nil {
+	var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
+	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID); err != nil {
 		if err == sql.ErrNoRows {
 			return PlanEntry{}, fmt.Errorf("plan not found")
 		}
 		return PlanEntry{}, fmt.Errorf("scan plan: %w", err)
 	}
 	return PlanEntry{
-		Filename:    filename,
-		Status:      Status(status),
-		Description: description,
-		Branch:      branch,
-		Topic:       topic,
-		CreatedAt:   parseTime(createdAt),
-		Implemented: implemented,
-		Content:     content,
+		Filename:      filename,
+		Status:        Status(status),
+		Description:   description,
+		Branch:        branch,
+		Topic:         topic,
+		CreatedAt:     parseTime(createdAt),
+		Implemented:   implemented,
+		Content:       content,
+		ClickUpTaskID: clickupTaskID,
 	}, nil
 }
 
@@ -386,19 +421,20 @@ func scanPlanEntry(row *sql.Row) (PlanEntry, error) {
 func scanPlanEntries(rows *sql.Rows) ([]PlanEntry, error) {
 	var entries []PlanEntry
 	for rows.Next() {
-		var filename, status, description, branch, topic, createdAt, implemented, content string
-		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content); err != nil {
+		var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
+		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
 		entries = append(entries, PlanEntry{
-			Filename:    filename,
-			Status:      Status(status),
-			Description: description,
-			Branch:      branch,
-			Topic:       topic,
-			CreatedAt:   parseTime(createdAt),
-			Implemented: implemented,
-			Content:     content,
+			Filename:      filename,
+			Status:        Status(status),
+			Description:   description,
+			Branch:        branch,
+			Topic:         topic,
+			CreatedAt:     parseTime(createdAt),
+			Implemented:   implemented,
+			Content:       content,
+			ClickUpTaskID: clickupTaskID,
 		})
 	}
 	if err := rows.Err(); err != nil {
