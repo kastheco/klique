@@ -1,0 +1,3 @@
+Plan cleanup-prompts. Goal: cleanup-prompts
+
+when a plan is named by manually setting the first line to a slug (like have-to-kill-twice, that slug and any newlines following it should not appear a second time in the Goal line that follows). Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
