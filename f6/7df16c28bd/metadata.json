@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f67df16c28bd",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".agents/skills/kasmos-coder/SKILL.md",
+    ".agents/skills/kasmos-fixer/SKILL.md",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    ".agents/skills/kasmos-planner/SKILL.md",
+    ".claude/agents/coder.md",
+    ".claude/agents/planner.md",
+    ".opencode/agents/coder.md",
+    ".opencode/agents/planner.md",
+    ".opencode/commands/kas.cleanup.md",
+    ".opencode/commands/kas.implement.md",
+    ".opencode/commands/kas.reset-plan.md",
+    ".opencode/commands/kas.triage.md",
+    "docs/plans/2026-02-28-auto-advance-waves.md",
+    "docs/plans/plan-state.json",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/codex/AGENTS.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    "internal/initcmd/scaffold/templates/shared/review-prompt.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md",
+    "main.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f6/7df16c28bd/0/metadata.json",
+      "transcript": "/f6/7df16c28bd/0/full.jsonl",
+      "context": "",
+      "content_hash": "/f6/7df16c28bd/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
