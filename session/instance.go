@@ -107,6 +107,10 @@ type Instance struct {
 	// this to avoid treating the initial idle prompt as task completion.
 	AwaitingWork bool
 
+	// ReviewCycle is the 1-indexed review/fix cycle counter for this instance.
+	// 0 means not a review cycle instance. Incremented on each ReviewChangesRequested transition.
+	ReviewCycle int
+
 	// HasWorked is set to true when the agent produces at least one content
 	// update (md.Updated) after receiving its task prompt. The wave orchestrator
 	// requires this before treating PromptDetected as task completion — prevents
@@ -163,6 +167,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		ImplementationComplete: i.ImplementationComplete,
 		SoloAgent:              i.SoloAgent,
 		QueuedPrompt:           i.QueuedPrompt,
+		ReviewCycle:            i.ReviewCycle,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -210,6 +215,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		ImplementationComplete: data.ImplementationComplete,
 		SoloAgent:              data.SoloAgent,
 		QueuedPrompt:           data.QueuedPrompt,
+		ReviewCycle:            data.ReviewCycle,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -276,6 +282,8 @@ type InstanceOptions struct {
 	WaveNumber int
 	// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).
 	PeerCount int
+	// ReviewCycle is the 1-indexed review cycle number (0 = not a review cycle instance).
+	ReviewCycle int
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -303,6 +311,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		TaskNumber:      opts.TaskNumber,
 		WaveNumber:      opts.WaveNumber,
 		PeerCount:       opts.PeerCount,
+		ReviewCycle:     opts.ReviewCycle,
 	}, nil
 }
 

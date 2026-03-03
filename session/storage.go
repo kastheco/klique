@@ -31,6 +31,7 @@ type InstanceData struct {
 	ImplementationComplete bool      `json:"implementation_complete,omitempty"`
 	SoloAgent              bool      `json:"solo_agent,omitempty"`
 	QueuedPrompt           string    `json:"queued_prompt,omitempty"`
+	ReviewCycle            int       `json:"review_cycle,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`

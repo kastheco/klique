@@ -26,6 +26,9 @@ type TitleOpts struct {
 	TaskNumber int
 	// InstanceTitle is used as the subject for ad-hoc sessions or when PlanName is empty.
 	InstanceTitle string
+	// ReviewCycle is the 1-indexed review cycle number. When non-zero and AgentType is
+	// "reviewer", the title includes "#N" to disambiguate multiple review rounds.
+	ReviewCycle int
 }
 
 // agentVerbs maps agent type identifiers to their title verb prefix.
@@ -54,7 +57,13 @@ func BuildTitle(opts TitleOpts) string {
 		return kasPrefix + subject
 	}
 
-	title := fmt.Sprintf("%s%s %s", kasPrefix, verb, subject)
+	// For reviewers with a non-zero cycle, include the cycle number in the title.
+	var title string
+	if opts.AgentType == "reviewer" && opts.ReviewCycle > 0 {
+		title = fmt.Sprintf("%sreview #%d %s", kasPrefix, opts.ReviewCycle, subject)
+	} else {
+		title = fmt.Sprintf("%s%s %s", kasPrefix, verb, subject)
+	}
 
 	// Append wave/task context when both are specified.
 	if opts.WaveNumber > 0 && opts.TaskNumber > 0 {

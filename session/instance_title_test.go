@@ -57,6 +57,16 @@ func TestBuildTitleOptsFromInstance(t *testing.T) {
 			},
 			want: "kas: my-session",
 		},
+		{
+			name: "reviewer with review cycle",
+			inst: &Instance{
+				PlanFile:    "2026-03-02-my-feature.md",
+				AgentType:   AgentTypeReviewer,
+				Title:       "my-feature-review-2",
+				ReviewCycle: 2,
+			},
+			want: "kas: review #2 my-feature",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

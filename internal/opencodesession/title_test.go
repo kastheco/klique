@@ -46,6 +46,21 @@ func TestBuildTitle(t *testing.T) {
 			opts: TitleOpts{InstanceTitle: "my-session"},
 			want: "kas: my-session",
 		},
+		{
+			name: "reviewer session cycle 1",
+			opts: TitleOpts{PlanName: "my-feature", AgentType: "reviewer", ReviewCycle: 1},
+			want: "kas: review #1 my-feature",
+		},
+		{
+			name: "reviewer session cycle 2",
+			opts: TitleOpts{PlanName: "my-feature", AgentType: "reviewer", ReviewCycle: 2},
+			want: "kas: review #2 my-feature",
+		},
+		{
+			name: "fixer session cycle 1",
+			opts: TitleOpts{PlanName: "my-feature", AgentType: "coder", ReviewCycle: 1},
+			want: "kas: implement my-feature", // coder title unchanged — cycle is in instance title
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

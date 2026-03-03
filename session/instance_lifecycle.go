@@ -287,6 +287,7 @@ func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 		WaveNumber:    inst.WaveNumber,
 		TaskNumber:    inst.TaskNumber,
 		InstanceTitle: inst.Title,
+		ReviewCycle:   inst.ReviewCycle,
 	}
 }
 
