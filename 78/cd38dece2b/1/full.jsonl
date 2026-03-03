@@ -7,13 +7,13 @@
     "title": "Storage persistence rewrite",
     "version": "1.2.15",
     "summary": {
-      "additions": 0,
-      "deletions": 0,
-      "files": 0
+      "additions": 149,
+      "deletions": 142,
+      "files": 3
     },
     "time": {
       "created": 1772558729439,
-      "updated": 1772558744266
+      "updated": 1772558784250
     }
   },
   "messages": [
@@ -24,7 +24,32 @@
           "created": 1772558729471
         },
         "summary": {
-          "diffs": []
+          "diffs": [
+            {
+              "file": "session/activity.go",
+              "before": "package session\n\nimport (\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\t\"time\"\n)\n\n// Activity represents what an agent is currently doing.\ntype Activity struct {\n\t// Action is the type of activity (e.g. \"editing\", \"running\", \"reading\", \"searching\", \"working\").\n\tAction string\n\t// Detail provides additional context (e.g. filename or command).\n\tDetail string\n\t// Timestamp is when this activity was detected.\n\tTimestamp time.Time\n}\n\n// ansiRegex strips ANSI escape codes from terminal output.\nvar ansiRegex = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n\n// claudeSpinnerAction matches Claude's spinner lines like \"⠙ Editing src/auth.go\"\n// The spinner character varies, so we match any single character before the action word.\nvar claudeEditingRegex = regexp.MustCompile(`(?:Editing|Writing)\\s+(.+)`)\nvar claudeReadingRegex = regexp.MustCompile(`Reading\\s+(.+)`)\nvar claudeRunningRegex = regexp.MustCompile(`Running\\s+(.+)`)\nvar claudeSearchingRegex = regexp.MustCompile(`Searching`)\nvar claudeShellCmdRegex = regexp.MustCompile(`\\$\\s+(.+)`)\n\n// aiderEditingRegex matches Aider's editing pattern.\nvar aiderEditingRegex = regexp.MustCompile(`Editing\\s+(.+)`)\n\n// ParseActivity parses the pane content to extract the current activity.\n// It scans the last ~30 lines for known patterns. program is the agent name\n// (e.g. \"claude\", \"aider\"). Returns nil if no activity is detected.\nfunc ParseActivity(content string, program string) *Activity {\n\tclean := ansiRegex.ReplaceAllString(content, \"\")\n\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only scan the last 30 lines for performance.\n\tstart := len(lines) - 30\n\tif start < 0 {\n\t\tstart = 0\n\t}\n\ttail := lines[start:]\n\n\t// Scan from the bottom up so we find the most recent activity first.\n\tfor i := len(tail) - 1; i >= 0; i-- {\n\t\tline := strings.TrimSpace(tail[i])\n\t\tif line == \"\" {\n\t\t\tcontinue\n\t\t}\n\n\t\tif strings.Contains(strings.ToLower(program), \"claude\") {\n\t\t\tif a := parseClaudeLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t} else if strings.Contains(strings.ToLower(program), \"aider\") {\n\t\t\tif a := parseAiderLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t}\n\n\t\t// Generic patterns that work for any agent.\n\t\tif a := parseGenericLine(line); a != nil {\n\t\t\treturn a\n\t\t}\n\t}\n\n\treturn nil\n}\n\nfunc parseClaudeLine(line string) *Activity {\n\tif m := claudeEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeReadingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"reading\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeRunningRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif claudeSearchingRegex.MatchString(line) {\n\t\treturn &Activity{\n\t\t\tAction:    \"searching\",\n\t\t\tDetail:    \"\",\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeShellCmdRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc parseAiderLine(line string) *Activity {\n\tif m := aiderEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc parseGenericLine(line string) *Activity {\n\t// Try to detect shell commands from common prompt patterns.\n\tif m := claudeShellCmdRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// cleanFilename extracts just the basename if the detail looks like a file path.\nfunc cleanFilename(s string) string {\n\ts = strings.TrimSpace(s)\n\t// If it contains path separators, use only the base name for brevity.\n\tif strings.Contains(s, \"/\") {\n\t\treturn filepath.Base(s)\n\t}\n\treturn s\n}\n\n// truncateDetail truncates a string to maxLen characters, appending \"...\" if truncated.\nfunc truncateDetail(s string, maxLen int) string {\n\tif len(s) <= maxLen {\n\t\treturn s\n\t}\n\tif maxLen <= 3 {\n\t\treturn s[:maxLen]\n\t}\n\treturn s[:maxLen-3] + \"...\"\n}\n",
+              "after": "package session\n\nimport (\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\t\"time\"\n)\n\n// Activity represents what an agent is currently doing.\ntype Activity struct {\n\t// Action is the type of activity (e.g. \"editing\", \"running\", \"reading\", \"searching\").\n\tAction string\n\t// Detail provides additional context (e.g. filename or command).\n\tDetail string\n\t// Timestamp is when this activity was detected.\n\tTimestamp time.Time\n}\n\n// ansiRegex matches ANSI escape sequences so they can be stripped from terminal output.\nvar ansiRegex = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n\n// Claude-specific patterns.\nvar (\n\tclaudeEditingRegex   = regexp.MustCompile(`(?:Editing|Writing)\\s+(.+)`)\n\tclaudeReadingRegex   = regexp.MustCompile(`Reading\\s+(.+)`)\n\tclaudeRunningRegex   = regexp.MustCompile(`Running\\s+(.+)`)\n\tclaudeSearchingRegex = regexp.MustCompile(`Searching`)\n\tclaudeShellRegex     = regexp.MustCompile(`\\$\\s+(.+)`)\n)\n\n// Aider-specific patterns.\nvar aiderEditingRegex = regexp.MustCompile(`Editing\\s+(.+)`)\n\n// ParseActivity scans the last 30 lines of content (bottom-up) and returns the\n// most recent recognisable agent activity. program is compared case-insensitively\n// against known agent names (\"claude\", \"aider\"). Returns nil when nothing matches.\nfunc ParseActivity(content string, program string) *Activity {\n\tstripped := ansiRegex.ReplaceAllString(content, \"\")\n\tlines := strings.Split(stripped, \"\\n\")\n\n\t// Restrict scan window to the last 30 lines.\n\tstart := len(lines) - 30\n\tif start < 0 {\n\t\tstart = 0\n\t}\n\ttail := lines[start:]\n\n\tprog := strings.ToLower(program)\n\n\t// Scan from bottom to top so the most recent match wins.\n\tfor i := len(tail) - 1; i >= 0; i-- {\n\t\tline := strings.TrimSpace(tail[i])\n\t\tif line == \"\" {\n\t\t\tcontinue\n\t\t}\n\n\t\tif strings.Contains(prog, \"claude\") {\n\t\t\tif a := parseClaudeLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t} else if strings.Contains(prog, \"aider\") {\n\t\t\tif a := parseAiderLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t}\n\n\t\tif a := parseGenericLine(line); a != nil {\n\t\t\treturn a\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// parseClaudeLine attempts to match a line against Claude-specific patterns.\nfunc parseClaudeLine(line string) *Activity {\n\tif m := claudeEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeReadingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"reading\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeRunningRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif claudeSearchingRegex.MatchString(line) {\n\t\treturn &Activity{\n\t\t\tAction:    \"searching\",\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeShellRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// parseAiderLine attempts to match a line against Aider-specific patterns.\nfunc parseAiderLine(line string) *Activity {\n\tif m := aiderEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// parseGenericLine matches patterns common to any agent (e.g. shell prompt lines).\nfunc parseGenericLine(line string) *Activity {\n\tif m := claudeShellRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// cleanFilename returns filepath.Base(s) when s contains a path separator,\n// otherwise the trimmed string itself.\nfunc cleanFilename(s string) string {\n\ts = strings.TrimSpace(s)\n\tif strings.Contains(s, \"/\") {\n\t\treturn filepath.Base(s)\n\t}\n\treturn s\n}\n\n// truncateDetail shortens s to at most maxLen characters. When truncation is\n// needed and maxLen > 3, the result ends with \"...\".\nfunc truncateDetail(s string, maxLen int) string {\n\tif len(s) <= maxLen {\n\t\treturn s\n\t}\n\tif maxLen <= 3 {\n\t\treturn s[:maxLen]\n\t}\n\treturn s[:maxLen-3] + \"...\"\n}\n",
+              "additions": 31,
+              "deletions": 28,
+              "status": "modified"
+            },
+            {
+              "file": "session/permission_prompt.go",
+              "before": "package session\n\nimport (\n\t\"strings\"\n\n\t\"github.com/charmbracelet/x/ansi\"\n)\n\n// PermissionPrompt represents a detected permission request from an agent.\ntype PermissionPrompt struct {\n\t// Description is the human-readable description, e.g. \"Access external directory /opt\".\n\tDescription string\n\t// Pattern is the permission pattern, e.g. \"/opt/*\".\n\tPattern string\n}\n\n// ParsePermissionPrompt scans pane content for an opencode \"Permission required\" dialog.\n// Returns nil if no permission prompt is detected or if the program is not opencode.\nfunc ParsePermissionPrompt(content string, program string) *PermissionPrompt {\n\tif !strings.Contains(strings.ToLower(program), \"opencode\") {\n\t\treturn nil\n\t}\n\n\tclean := ansi.Strip(content)\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only scan the bottom 25 lines of the pane. The permission dialog is\n\t// rendered at the bottom of opencode's TUI (~10 lines for the dialog\n\t// plus status bar). Scanning the full pane false-positives on\n\t// conversation text that discusses permissions.\n\tconst tailLines = 25\n\tstartLine := len(lines) - tailLines\n\tif startLine < 0 {\n\t\tstartLine = 0\n\t}\n\tlines = lines[startLine:]\n\n\t// Two structural checks to avoid false-positives from conversation text:\n\t//  1. \"△ Permission required\" header (the △ glyph is opencode UI chrome)\n\t//  2. Button bar with \"Allow once\" + \"Allow always\" on the same line\n\t// Both must appear within the tail window.\n\tpermIdx := -1\n\tfor i, line := range lines {\n\t\ttrimmed := strings.TrimSpace(line)\n\t\tif strings.Contains(trimmed, \"△\") && strings.Contains(trimmed, \"Permission required\") {\n\t\t\tpermIdx = i\n\t\t\tbreak\n\t\t}\n\t}\n\tif permIdx < 0 {\n\t\treturn nil\n\t}\n\n\thasButtons := false\n\tfor _, line := range lines[permIdx:] {\n\t\tif strings.Contains(line, \"Allow once\") && strings.Contains(line, \"Allow always\") {\n\t\t\thasButtons = true\n\t\t\tbreak\n\t\t}\n\t}\n\tif !hasButtons {\n\t\treturn nil\n\t}\n\n\tprompt := &PermissionPrompt{}\n\n\t// Description is on the next non-empty line after \"Permission required\".\n\t// Strip leading arrow prefixes — opencode uses both \"← \" and \"→ \".\n\tfor i := permIdx + 1; i < len(lines); i++ {\n\t\ttrimmed := strings.TrimSpace(lines[i])\n\t\tif trimmed == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"← \")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"←\")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"→ \")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"→\")\n\t\ttrimmed = strings.TrimSpace(trimmed)\n\t\tprompt.Description = trimmed\n\t\tbreak\n\t}\n\n\t// Pattern: find \"Patterns\" header, then first line starting with \"- \".\n\tfor i := permIdx; i < len(lines); i++ {\n\t\tif strings.TrimSpace(lines[i]) == \"Patterns\" {\n\t\t\tfor j := i + 1; j < len(lines); j++ {\n\t\t\t\ttrimmed := strings.TrimSpace(lines[j])\n\t\t\t\tif trimmed == \"\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif strings.HasPrefix(trimmed, \"- \") {\n\t\t\t\t\tprompt.Pattern = strings.TrimPrefix(trimmed, \"- \")\n\t\t\t\t\tbreak\n\t\t\t\t}\n\t\t\t\tbreak // non-empty, non-pattern line — stop\n\t\t\t}\n\t\t\tbreak\n\t\t}\n\t}\n\n\treturn prompt\n}\n",
+              "after": "package session\n\nimport (\n\t\"strings\"\n\n\t\"github.com/charmbracelet/x/ansi\"\n)\n\n// PermissionPrompt represents a detected permission request from an agent.\ntype PermissionPrompt struct {\n\t// Description is the human-readable description, e.g. \"Access external directory /opt\".\n\tDescription string\n\t// Pattern is the permission pattern, e.g. \"/opt/*\".\n\tPattern string\n}\n\n// ParsePermissionPrompt scans pane content for an opencode \"Permission required\" dialog.\n// Returns nil if no permission prompt is detected or if the program is not opencode.\nfunc ParsePermissionPrompt(content string, program string) *PermissionPrompt {\n\tif !strings.Contains(strings.ToLower(program), \"opencode\") {\n\t\treturn nil\n\t}\n\n\tclean := ansi.Strip(content)\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only examine the last 25 lines — the permission dialog renders at the\n\t// bottom of opencode's TUI. Limiting the scan window avoids false-positives\n\t// from conversation text that may mention \"Permission required\".\n\tconst tailLines = 25\n\tif start := len(lines) - tailLines; start > 0 {\n\t\tlines = lines[start:]\n\t}\n\n\t// Structural check 1: locate the \"△ Permission required\" header line.\n\t// The △ glyph is unique to opencode's UI chrome; its presence on the same\n\t// line as \"Permission required\" is the primary signal.\n\tpermIdx := -1\n\tfor i, line := range lines {\n\t\tt := strings.TrimSpace(line)\n\t\tif strings.Contains(t, \"△\") && strings.Contains(t, \"Permission required\") {\n\t\t\tpermIdx = i\n\t\t\tbreak\n\t\t}\n\t}\n\tif permIdx < 0 {\n\t\treturn nil\n\t}\n\n\t// Structural check 2: button bar with both \"Allow once\" and \"Allow always\"\n\t// must appear after the header line. Without this guard a bare mention of\n\t// \"Permission required\" in conversation text would create false-positives.\n\tbuttonFound := false\n\tfor _, line := range lines[permIdx:] {\n\t\tif strings.Contains(line, \"Allow once\") && strings.Contains(line, \"Allow always\") {\n\t\t\tbuttonFound = true\n\t\t\tbreak\n\t\t}\n\t}\n\tif !buttonFound {\n\t\treturn nil\n\t}\n\n\tprompt := &PermissionPrompt{}\n\n\t// Description: first non-empty line after the header.\n\t// opencode prefixes the description with \"← \" or \"→ \" arrow glyphs.\n\tfor i := permIdx + 1; i < len(lines); i++ {\n\t\tt := strings.TrimSpace(lines[i])\n\t\tif t == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tt = strings.TrimPrefix(t, \"← \")\n\t\tt = strings.TrimPrefix(t, \"←\")\n\t\tt = strings.TrimPrefix(t, \"→ \")\n\t\tt = strings.TrimPrefix(t, \"→\")\n\t\tprompt.Description = strings.TrimSpace(t)\n\t\tbreak\n\t}\n\n\t// Pattern: locate \"Patterns\" header, then take the first non-empty line\n\t// that starts with \"- \".\n\tfor i := permIdx; i < len(lines); i++ {\n\t\tif strings.TrimSpace(lines[i]) != \"Patterns\" {\n\t\t\tcontinue\n\t\t}\n\t\tfor j := i + 1; j < len(lines); j++ {\n\t\t\tt := strings.TrimSpace(lines[j])\n\t\t\tif t == \"\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif strings.HasPrefix(t, \"- \") {\n\t\t\t\tprompt.Pattern = strings.TrimPrefix(t, \"- \")\n\t\t\t}\n\t\t\tbreak\n\t\t}\n\t\tbreak\n\t}\n\n\treturn prompt\n}\n",
+              "additions": 38,
+              "deletions": 39,
+              "status": "modified"
+            },
+            {
+              "file": "session/storage.go",
+              "before": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData represents the serializable data of an Instance\ntype InstanceData struct {\n\tTitle                  string    `json:\"title\"`\n\tPath                   string    `json:\"path\"`\n\tBranch                 string    `json:\"branch\"`\n\tStatus                 Status    `json:\"status\"`\n\tHeight                 int       `json:\"height\"`\n\tWidth                  int       `json:\"width\"`\n\tCreatedAt              time.Time `json:\"created_at\"`\n\tUpdatedAt              time.Time `json:\"updated_at\"`\n\tAutoYes                bool      `json:\"auto_yes\"`\n\tSkipPermissions        bool      `json:\"skip_permissions\"`\n\tTaskFile               string    `json:\"task_file,omitempty\"`\n\tAgentType              string    `json:\"agent_type,omitempty\"`\n\tTaskNumber             int       `json:\"task_number,omitempty\"`\n\tWaveNumber             int       `json:\"wave_number,omitempty\"`\n\tPeerCount              int       `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool      `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool      `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool      `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string    `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int       `json:\"review_cycle,omitempty\"`\n\n\tProgram   string          `json:\"program\"`\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements custom JSON unmarshaling to handle the rename from\n// plan_file to task_file. Existing state.json files may use the old field name.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{Alias: (*Alias)(d)}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData represents the serializable data of a GitWorktree\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData represents the serializable data of a DiffStats\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage handles saving and loading instances using the state interface\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage creates a new storage instance\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{\n\t\tstate: state,\n\t}, nil\n}\n\n// SaveInstances saves the list of instances to disk\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\t// Convert instances to InstanceData\n\tdata := make([]InstanceData, 0)\n\tfor _, instance := range instances {\n\t\tif instance.Started() {\n\t\t\tdata = append(data, instance.ToInstanceData())\n\t\t}\n\t}\n\n\t// Marshal to JSON\n\tjsonData, err := json.Marshal(data)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(jsonData)\n}\n\n// LoadInstances loads the list of instances from disk\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\tjsonData := s.state.GetInstances()\n\n\tvar instancesData []InstanceData\n\tif err := json.Unmarshal(jsonData, &instancesData); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(instancesData))\n\tfor _, data := range instancesData {\n\t\t// Skip non-paused instances whose worktree no longer exists on disk.\n\t\t// This cleans up stale state from old sessions or config migrations\n\t\t// (e.g. worktree path was moved from ~/.config/kasmos/worktrees/ to <repo>/.worktrees/).\n\t\tif data.Status != Paused && data.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(data.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\tdata.Title, data.Worktree.WorktreePath)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tinstance, err := FromInstanceData(data)\n\t\tif err != nil {\n\t\t\t// Log and skip instances that fail to restore (e.g. dead tmux session)\n\t\t\t// instead of hard-failing, which would prevent ALL instances from loading.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", data.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, instance)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes an instance from storage\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tfound := false\n\tnewInstances := make([]*Instance, 0)\n\tfor _, instance := range instances {\n\t\tdata := instance.ToInstanceData()\n\t\tif data.Title != title {\n\t\t\tnewInstances = append(newInstances, instance)\n\t\t} else {\n\t\t\tfound = true\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(newInstances)\n}\n\n// UpdateInstance updates an existing instance in storage\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tdata := instance.ToInstanceData()\n\tfound := false\n\tfor i, existing := range instances {\n\t\texistingData := existing.ToInstanceData()\n\t\tif existingData.Title == data.Title {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", data.Title)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes all stored instances\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n",
+              "after": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData is the JSON-serializable mirror of Instance fields used for persistence.\ntype InstanceData struct {\n\tTitle           string    `json:\"title\"`\n\tPath            string    `json:\"path\"`\n\tBranch          string    `json:\"branch\"`\n\tStatus          Status    `json:\"status\"`\n\tHeight          int       `json:\"height\"`\n\tWidth           int       `json:\"width\"`\n\tCreatedAt       time.Time `json:\"created_at\"`\n\tUpdatedAt       time.Time `json:\"updated_at\"`\n\tAutoYes         bool      `json:\"auto_yes\"`\n\tSkipPermissions bool      `json:\"skip_permissions\"`\n\tProgram         string    `json:\"program\"`\n\n\t// Optional plan/orchestration fields.\n\tTaskFile               string `json:\"task_file,omitempty\"`\n\tAgentType              string `json:\"agent_type,omitempty\"`\n\tTaskNumber             int    `json:\"task_number,omitempty\"`\n\tWaveNumber             int    `json:\"wave_number,omitempty\"`\n\tPeerCount              int    `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool   `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool   `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool   `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int    `json:\"review_cycle,omitempty\"`\n\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements a custom unmarshaler that handles the historical rename from\n// the \"plan_file\" JSON key to \"task_file\". State files written before the rename used\n// \"plan_file\"; if that field is present and \"task_file\" is empty, the value is migrated.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\t// Use an alias to avoid infinite recursion when calling json.Unmarshal.\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{\n\t\tAlias: (*Alias)(d),\n\t}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\t// Migrate legacy field.\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData is the serializable form of a git.GitWorktree.\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData is the serializable form of a git.DiffStats.\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage persists instances via a config.StateManager.\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage constructs a Storage backed by the given state manager.\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{state: state}, nil\n}\n\n// SaveInstances serialises all started instances and writes them to the state store.\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\trecords := make([]InstanceData, 0, len(instances))\n\tfor _, inst := range instances {\n\t\tif inst.Started() {\n\t\t\trecords = append(records, inst.ToInstanceData())\n\t\t}\n\t}\n\n\traw, err := json.Marshal(records)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(raw)\n}\n\n// LoadInstances reads instances from the state store and restores them.\n// Stale entries (non-paused instances whose worktree directory no longer exists)\n// are dropped with a warning instead of causing a hard failure.\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\traw := s.state.GetInstances()\n\n\tvar records []InstanceData\n\tif err := json.Unmarshal(raw, &records); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(records))\n\tfor _, rec := range records {\n\t\t// Drop non-paused instances whose worktree path has disappeared from disk.\n\t\tif rec.Status != Paused && rec.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(rec.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\n\t\t\t\t\t\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\trec.Title, rec.Worktree.WorktreePath,\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tinst, err := FromInstanceData(rec)\n\t\tif err != nil {\n\t\t\t// Log and skip rather than failing the entire load.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", rec.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, inst)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes the instance with the given title from persistent storage.\n// Returns an error when no matching instance is found.\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tremaining := instances[:0]\n\tfound := false\n\tfor _, inst := range instances {\n\t\tif inst.ToInstanceData().Title == title {\n\t\t\tfound = true\n\t\t} else {\n\t\t\tremaining = append(remaining, inst)\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(remaining)\n}\n\n// UpdateInstance replaces the stored record for the instance (matched by title).\n// Returns an error when no matching instance is found.\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\ttarget := instance.ToInstanceData().Title\n\tfound := false\n\tfor i, inst := range instances {\n\t\tif inst.ToInstanceData().Title == target {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", target)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes every stored instance from the state store.\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n",
+              "additions": 80,
+              "deletions": 75,
+              "status": "modified"
+            }
+          ]
         },
         "agent": "coder",
         "model": {
@@ -454,7 +479,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772558744257
+          "created": 1772558744257,
+          "completed": 1772558775062
         },
         "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
         "modelID": "claude-sonnet-4-6",
@@ -467,15 +493,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 63302,
+          "input": 1,
+          "output": 2241,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 54814,
+            "write": 6246
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb4bbfac1001EO5WLHK6L2uDop",
         "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
       },
@@ -519,13 +547,332 @@
           "callID": "toolu_01AX2BhMTwoqZQnh6KjJtZh2",
           "tool": "write",
           "state": {
-            "status": "pending",
-            "input": {},
-            "raw": ""
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go",
+              "content": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData is the JSON-serializable mirror of Instance fields used for persistence.\ntype InstanceData struct {\n\tTitle           string    `json:\"title\"`\n\tPath            string    `json:\"path\"`\n\tBranch          string    `json:\"branch\"`\n\tStatus          Status    `json:\"status\"`\n\tHeight          int       `json:\"height\"`\n\tWidth           int       `json:\"width\"`\n\tCreatedAt       time.Time `json:\"created_at\"`\n\tUpdatedAt       time.Time `json:\"updated_at\"`\n\tAutoYes         bool      `json:\"auto_yes\"`\n\tSkipPermissions bool      `json:\"skip_permissions\"`\n\tProgram         string    `json:\"program\"`\n\n\t// Optional plan/orchestration fields.\n\tTaskFile               string `json:\"task_file,omitempty\"`\n\tAgentType              string `json:\"agent_type,omitempty\"`\n\tTaskNumber             int    `json:\"task_number,omitempty\"`\n\tWaveNumber             int    `json:\"wave_number,omitempty\"`\n\tPeerCount              int    `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool   `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool   `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool   `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int    `json:\"review_cycle,omitempty\"`\n\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements a custom unmarshaler that handles the historical rename from\n// the \"plan_file\" JSON key to \"task_file\". State files written before the rename used\n// \"plan_file\"; if that field is present and \"task_file\" is empty, the value is migrated.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\t// Use an alias to avoid infinite recursion when calling json.Unmarshal.\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{\n\t\tAlias: (*Alias)(d),\n\t}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\t// Migrate legacy field.\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData is the serializable form of a git.GitWorktree.\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData is the serializable form of a git.DiffStats.\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage persists instances via a config.StateManager.\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage constructs a Storage backed by the given state manager.\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{state: state}, nil\n}\n\n// SaveInstances serialises all started instances and writes them to the state store.\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\trecords := make([]InstanceData, 0, len(instances))\n\tfor _, inst := range instances {\n\t\tif inst.Started() {\n\t\t\trecords = append(records, inst.ToInstanceData())\n\t\t}\n\t}\n\n\traw, err := json.Marshal(records)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(raw)\n}\n\n// LoadInstances reads instances from the state store and restores them.\n// Stale entries (non-paused instances whose worktree directory no longer exists)\n// are dropped with a warning instead of causing a hard failure.\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\traw := s.state.GetInstances()\n\n\tvar records []InstanceData\n\tif err := json.Unmarshal(raw, &records); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(records))\n\tfor _, rec := range records {\n\t\t// Drop non-paused instances whose worktree path has disappeared from disk.\n\t\tif rec.Status != Paused && rec.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(rec.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\n\t\t\t\t\t\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\trec.Title, rec.Worktree.WorktreePath,\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tinst, err := FromInstanceData(rec)\n\t\tif err != nil {\n\t\t\t// Log and skip rather than failing the entire load.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", rec.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, inst)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes the instance with the given title from persistent storage.\n// Returns an error when no matching instance is found.\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tremaining := instances[:0]\n\tfound := false\n\tfor _, inst := range instances {\n\t\tif inst.ToInstanceData().Title == title {\n\t\t\tfound = true\n\t\t} else {\n\t\t\tremaining = append(remaining, inst)\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(remaining)\n}\n\n// UpdateInstance replaces the stored record for the instance (matched by title).\n// Returns an error when no matching instance is found.\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\ttarget := instance.ToInstanceData().Title\n\tfound := false\n\tfor i, inst := range instances {\n\t\tif inst.ToInstanceData().Title == target {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", target)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes every stored instance from the state store.\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "session/storage.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_taskfile_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558774876,
+              "end": 1772558775051
+            }
           },
           "id": "REDACTED",
           "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
           "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 63302,
+            "input": 1,
+            "output": 2241,
+            "reasoning": 0,
+            "cache": {
+              "read": 54814,
+              "write": 6246
+            }
+          },
+          "id": "prt_cb4bc730c001R5hsTqVLNsmI36",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "patch",
+          "hash": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/activity.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/permission_prompt.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go"
+          ],
+          "id": "prt_cb4bc7314001mxkM4JdpcBmH4k",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558775063,
+          "completed": 1772558778942
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63436,
+          "input": 1,
+          "output": 120,
+          "reasoning": 0,
+          "cache": {
+            "read": 61060,
+            "write": 2255
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bc731700115SLOWSi2FalqQ",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "prt_cb4bc787f001wQX8cBEDLsMPOk",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "text",
+          "text": "Now let's run the tests to verify they pass:",
+          "time": {
+            "start": 1772558777170,
+            "end": 1772558777170
+          },
+          "id": "prt_cb4bc7880001P3SyjL8jPea8Yz",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./session/... -run \"TestInstanceData|TestNewInstance_Sets\" -v -count=1 2>&1",
+              "description": "Run tests to verify rewritten storage.go passes"
+            },
+            "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+            "title": "Run tests to verify rewritten storage.go passes",
+            "metadata": {
+              "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run tests to verify rewritten storage.go passes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558778584,
+              "end": 1772558778933
+            }
+          },
+          "id": "prt_cb4bc7b5300164WW7HAiv0I6Ch",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 63436,
+            "input": 1,
+            "output": 120,
+            "reasoning": 0,
+            "cache": {
+              "read": 61060,
+              "write": 2255
+            }
+          },
+          "id": "prt_cb4bc8236001iW06L5cnAvrzE3",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558778943,
+          "completed": 1772558784238
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64040,
+          "input": 1,
+          "output": 117,
+          "reasoning": 0,
+          "cache": {
+            "read": 63315,
+            "write": 607
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bc823f001zfFiAFMGhnTbCw",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "text",
+          "text": "All 9 tests pass. Now commit:",
+          "time": {
+            "start": 1772558780707,
+            "end": 1772558780707
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add session/storage.go && git commit -m \"feat(clean-room): rewrite session/storage.go from scratch\"",
+              "description": "Commit the rewritten storage.go"
+            },
+            "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+            "title": "Commit the rewritten storage.go",
+            "metadata": {
+              "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the rewritten storage.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558781865,
+              "end": 1772558784230
+            }
+          },
+          "id": "prt_cb4bc892a001KFlNxHoW3t3qx4",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64040,
+            "input": 1,
+            "output": 117,
+            "reasoning": 0,
+            "cache": {
+              "read": 63315,
+              "write": 607
+            }
+          },
+          "id": "prt_cb4bc96e7001zH9CPm8IbFjN1d",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558784239,
+          "completed": 1772558794977
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64516,
+          "input": 1,
+          "output": 409,
+          "reasoning": 0,
+          "cache": {
+            "read": 63922,
+            "write": 184
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "REDACTED",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "prt_cb4bc9d74001pRToFzYhu8cvmP",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass and the commit is done. Here's a summary of what was implemented:\n\n**`session/storage.go` — clean-room rewrite:**\n\n- **`InstanceData` struct** — JSON-serializable mirror of `Instance` with all required fields and correct `omitempty` tags on optional plan/orchestration fields\n- **`InstanceData.UnmarshalJSON`** — custom unmarshaler using an alias type (avoids recursion) with a legacy `plan_file` migration: if `task_file` is empty but `plan_file` is set, copies it over\n- **`GitWorktreeData` struct** — five string fields (RepoPath, WorktreePath, SessionName, BranchName, BaseCommitSHA) with JSON tags\n- **`DiffStatsData` struct** — Added, Removed (int), Content (string) with JSON tags\n- **`Storage` struct** — holds `config.StateManager`\n- **`NewStorage`** — simple constructor returning `&Storage{state: state}, nil`\n- **`SaveInstances`** — iterates started instances, calls `ToInstanceData()`, marshals to JSON, delegates to `state.SaveInstances()`\n- **`LoadInstances`** — unmarshals from `state.GetInstances()`, drops stale non-paused instances whose worktree path is gone (with warning), logs and skips instances that fail `FromInstanceData()` instead of hard-failing\n- **`DeleteInstance`** — loads all, filters out matching title, saves remainder; errors if not found\n- **`UpdateInstance`** — loads all, replaces matching title, saves; errors if not found\n- **`DeleteAllInstances`** — delegates to `state.DeleteAllInstances()`",
+          "time": {
+            "start": 1772558794938,
+            "end": 1772558794938
+          },
+          "id": "prt_cb4bc9d74002wVHsGggicGk7dO",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64516,
+            "input": 1,
+            "output": 409,
+            "reasoning": 0,
+            "cache": {
+              "read": 63922,
+              "write": 184
+            }
+          },
+          "id": "prt_cb4bcc0d8001gt2D1qqs0EPQP5",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
         }
       ]
     }
