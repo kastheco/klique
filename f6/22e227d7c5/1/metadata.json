@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f622e227d7c5",
+  "session_id": "ses_34afa8362ffeIwYvxqSlfB3Qcs",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T18:53:46.270814366Z",
+  "branch": "release/2.0",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/03-rewrite-ui-panels.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "27aaecddc09e",
+  "token_usage": {
+    "input_tokens": 33,
+    "cache_creation_tokens": 160315,
+    "cache_read_tokens": 3456553,
+    "output_tokens": 19958,
+    "api_call_count": 30
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T18:53:46.141355433Z",
+    "agent_lines": 0,
+    "human_added": 305,
+    "human_modified": 199,
+    "human_removed": 0,
+    "total_committed": 305,
+    "agent_percentage": 0
+  }
+}
