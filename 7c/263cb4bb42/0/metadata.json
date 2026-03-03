@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "7c263cb4bb42",
+  "session_id": "ses_34db7c61fffeYBqRlDRaP2VlWV",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T06:07:04.617793802Z",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/taskstore/http_test.go",
+    "config/taskstore/server_test.go",
+    "config/taskstore/sqlite_test.go",
+    "config/taskstore/testing.go",
+    "config/taskstore/migrate.go",
+    "config/taskstore/server.go",
+    "config/taskstore/store.go",
+    "config/taskstore/testhelper_test.go",
+    "config/taskstore/factory_test.go",
+    "config/taskstore/http.go",
+    "config/taskstore/sqlite.go",
+    "config/taskstore/embedded.go",
+    "config/taskstore/embedded_test.go",
+    "config/taskstore/factory.go",
+    "config/taskstore/migrate_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "51dab6223fb9",
+  "checkpoint_transcript_start": 8,
+  "transcript_lines_at_start": 8,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T06:07:04.231003145Z",
+    "agent_lines": 2169,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2169,
+    "agent_percentage": 100
+  }
+}
