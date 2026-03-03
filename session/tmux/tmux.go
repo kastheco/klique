@@ -58,6 +58,14 @@ type TmuxSession struct {
 	// promptFile is the path to a temporary file containing the initial prompt.
 	// Set during Start() when the prompt exceeds maxInlinePromptLen. Cleaned up by Close().
 	promptFile string
+	// sessionTitle is the desired human-readable title for the opencode session.
+	// When non-empty and titleFunc is set, the title is applied after the session
+	// reports ready (after "Ask anything" is detected).
+	sessionTitle string
+	// titleFunc is a callback that performs the actual DB title update for opencode sessions.
+	// It is injected by the instance layer to avoid a direct dependency from tmux → opencodesession.
+	// Called as a goroutine (best-effort, non-blocking) after session startup.
+	titleFunc func(workDir string, beforeStart time.Time, title string)
 
 	// Initialized by Start or Restore
 	//
@@ -148,6 +156,22 @@ func (t *TmuxSession) SetTaskEnv(taskNumber, waveNumber, peerCount int) {
 	t.taskNumber = taskNumber
 	t.waveNumber = waveNumber
 	t.peerCount = peerCount
+}
+
+// SetSessionTitle sets the desired title for the opencode session.
+// When non-empty and a titleFunc is also set, the title is applied after
+// the session reports ready. The "kas: " prefix is expected to already be
+// included by the caller (e.g. from BuildTitle in the opencodesession package).
+func (t *TmuxSession) SetSessionTitle(title string) {
+	t.sessionTitle = title
+}
+
+// SetTitleFunc sets the callback used to apply the session title after startup.
+// The callback receives the work directory, a timestamp taken just before the
+// tmux session was created, and the desired title string. It runs in a goroutine
+// (fire-and-forget) so title setting never blocks or delays session startup.
+func (t *TmuxSession) SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string)) {
+	t.titleFunc = fn
 }
 
 func (t *TmuxSession) reportProgress(stage int, desc string) {
@@ -252,6 +276,11 @@ func (t *TmuxSession) Start(workDir string) error {
 	}
 
 	t.reportProgress(1, "Creating tmux session...")
+
+	// Record the timestamp immediately before launching the tmux session.
+	// This is passed to titleFunc so it can find the opencode DB session
+	// that was created at or after this moment.
+	beforeStart := time.Now()
 
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
@@ -364,6 +393,12 @@ func (t *TmuxSession) Start(workDir string) error {
 			if sleepDuration > time.Second {
 				sleepDuration = time.Second
 			}
+		}
+
+		// After the session is ready, set the opencode session title (best-effort, non-blocking).
+		// Only fires for opencode programs with a title and callback configured.
+		if isOpenCodeProgram(t.program) && t.sessionTitle != "" && t.titleFunc != nil {
+			go t.titleFunc(workDir, beforeStart, t.sessionTitle)
 		}
 	}
 	return nil
