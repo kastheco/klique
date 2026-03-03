@@ -7,13 +7,13 @@
     "title": "Rewrite gradient.go and consts.go utilities",
     "version": "1.2.15",
     "summary": {
-      "additions": 68,
-      "deletions": 53,
-      "files": 3
+      "additions": 156,
+      "deletions": 138,
+      "files": 4
     },
     "time": {
       "created": 1772564226482,
-      "updated": 1772564277340
+      "updated": 1772564293081
     }
   },
   "messages": [
@@ -39,6 +39,14 @@
               "after": "package ui\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n)\n\n// parseHex converts a \"#RRGGBB\" hex string to (r, g, b) uint8 components.\n// Returns (0, 0, 0) if the input (after stripping leading '#') is not exactly 6 chars.\nfunc parseHex(hex string) (uint8, uint8, uint8) {\n\tif len(hex) > 0 && hex[0] == '#' {\n\t\thex = hex[1:]\n\t}\n\tif len(hex) != 6 {\n\t\treturn 0, 0, 0\n\t}\n\tvar r, g, b uint8\n\tfmt.Sscanf(hex, \"%02x%02x%02x\", &r, &g, &b)\n\treturn r, g, b\n}\n\n// lerpByte linearly interpolates between byte a and byte b at position t ∈ [0,1].\nfunc lerpByte(a, b uint8, t float64) uint8 {\n\treturn uint8(float64(a) + (float64(b)-float64(a))*t)\n}\n\n// GradientText renders text with a left-to-right truecolor gradient from startHex to endHex.\n// Newline characters are passed through unchanged. An ANSI reset sequence is appended at the end.\n// Returns an empty string when text is empty. Returns text unchanged when it has no visible runes.\nfunc GradientText(text, startHex, endHex string) string {\n\tif text == \"\" {\n\t\treturn \"\"\n\t}\n\n\tr1, g1, b1 := parseHex(startHex)\n\tr2, g2, b2 := parseHex(endHex)\n\n\trunes := []rune(text)\n\tvisible := 0\n\tfor _, ch := range runes {\n\t\tif ch != '\\n' {\n\t\t\tvisible++\n\t\t}\n\t}\n\tif visible == 0 {\n\t\treturn text\n\t}\n\n\tvar sb strings.Builder\n\tidx := 0\n\tfor _, ch := range runes {\n\t\tif ch == '\\n' {\n\t\t\tsb.WriteRune('\\n')\n\t\t\tcontinue\n\t\t}\n\t\tt := 0.0\n\t\tif visible > 1 {\n\t\t\tt = float64(idx) / float64(visible-1)\n\t\t}\n\t\tcr := lerpByte(r1, r2, t)\n\t\tcg := lerpByte(g1, g2, t)\n\t\tcb := lerpByte(b1, b2, t)\n\t\tsb.WriteString(fmt.Sprintf(\"\\033[38;2;%d;%d;%dm%c\", cr, cg, cb, ch))\n\t\tidx++\n\t}\n\tsb.WriteString(\"\\033[0m\")\n\treturn sb.String()\n}\n\n// GradientBar renders a horizontal progress bar of `width` characters.\n// The `filled` portion uses full-block (█) characters colored with the gradient from\n// startHex to endHex. The remainder uses light-shade (░) characters in dim gray.\n// Returns empty string when width <= 0. Clamps filled to [0, width].\nfunc GradientBar(width, filled int, startHex, endHex string) string {\n\tif width <= 0 {\n\t\treturn \"\"\n\t}\n\tif filled < 0 {\n\t\tfilled = 0\n\t}\n\tif filled > width {\n\t\tfilled = width\n\t}\n\n\tr1, g1, b1 := parseHex(startHex)\n\tr2, g2, b2 := parseHex(endHex)\n\n\tvar sb strings.Builder\n\tfor i := 0; i < filled; i++ {\n\t\tt := 0.0\n\t\tif filled > 1 {\n\t\t\tt = float64(i) / float64(filled-1)\n\t\t}\n\t\tcr := lerpByte(r1, r2, t)\n\t\tcg := lerpByte(g1, g2, t)\n\t\tcb := lerpByte(b1, b2, t)\n\t\tsb.WriteString(fmt.Sprintf(\"\\033[38;2;%d;%d;%dm█\", cr, cg, cb))\n\t}\n\tif filled < width {\n\t\tsb.WriteString(\"\\033[38;2;60;60;60m\")\n\t\tsb.WriteString(strings.Repeat(\"░\", width-filled))\n\t}\n\tsb.WriteString(\"\\033[0m\")\n\treturn sb.String()\n}\n",
               "additions": 21,
               "deletions": 15,
+              "status": "modified"
+            },
+            {
+              "file": "ui/info_pane.go",
+              "before": "package ui\n\nimport (\n\t\"fmt\"\n\t\"math\"\n\t\"strings\"\n\n\t\"github.com/charmbracelet/bubbles/viewport\"\n\t\"github.com/charmbracelet/lipgloss\"\n\tzone \"github.com/lrstanley/bubblezone\"\n)\n\nvar (\n\tinfoSectionStyle = lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)\n\tinfoDividerStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n\tinfoLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Width(20)\n\tinfoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)\n)\n\n// InfoData holds the data to render in the info pane.\n// Built by the app layer from instance + plan + wave state.\ntype InfoData struct {\n\t// Instance fields.\n\tTitle   string\n\tProgram string\n\tBranch  string\n\tPath    string\n\tCreated string\n\tStatus  string\n\n\t// Plan fields (empty for ad-hoc).\n\tPlanName        string\n\tPlanDescription string\n\tPlanStatus      string\n\tPlanTopic       string\n\tPlanBranch      string\n\tPlanCreated     string\n\n\t// Plan summary fields (shown when plan header is selected, no instance).\n\tPlanInstanceCount int\n\tPlanRunningCount  int\n\tPlanReadyCount    int\n\tPlanPausedCount   int\n\tPlanAddedLines    int\n\tPlanRemovedLines  int\n\n\t// Resource fields (shown when instance is selected).\n\tCPUPercent float64\n\tMemMB      float64\n\n\t// Wave fields (zero values = no wave).\n\tAgentType  string\n\tWaveNumber int\n\tTotalWaves int\n\tTaskNumber int\n\tTotalTasks int\n\tWaveTasks  []WaveTaskInfo\n\n\t// HasPlan is true when the instance is bound to a plan.\n\tHasPlan bool\n\t// HasInstance is true when an instance is selected.\n\tHasInstance bool\n\t// IsPlanHeaderSelected distinguishes plan header vs instance selection.\n\tIsPlanHeaderSelected bool\n}\n\n// WaveTaskInfo describes a single task in the current wave.\ntype WaveTaskInfo struct {\n\tNumber int\n\tState  string // \"complete\", \"running\", \"failed\", \"pending\"\n}\n\n// InfoPane renders instance and plan metadata in the info tab.\ntype InfoPane struct {\n\twidth, height int\n\tdata          InfoData\n\tviewport      viewport.Model\n}\n\n// NewInfoPane creates a new InfoPane.\nfunc NewInfoPane() *InfoPane {\n\tvp := viewport.New(0, 0)\n\treturn &InfoPane{viewport: vp}\n}\n\n// SetSize updates the pane dimensions.\nfunc (p *InfoPane) SetSize(width, height int) {\n\tp.width = width\n\tp.height = height\n\tp.viewport.Width = width\n\tp.viewport.Height = height\n\tp.viewport.SetContent(p.render())\n}\n\n// SetData updates the data to render.\nfunc (p *InfoPane) SetData(data InfoData) {\n\tp.data = data\n\tp.viewport.SetContent(p.render())\n\tp.viewport.GotoTop()\n}\n\n// ScrollUp scrolls the viewport up.\nfunc (p *InfoPane) ScrollUp() {\n\tp.viewport.LineUp(1)\n}\n\n// ScrollDown scrolls the viewport down.\nfunc (p *InfoPane) ScrollDown() {\n\tp.viewport.LineDown(1)\n}\n\n// String renders the info pane content.\nfunc (p *InfoPane) String() string {\n\tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n\t\treturn \"no instance selected\"\n\t}\n\treturn p.viewport.View()\n}\n\nfunc statusColor(status string) lipgloss.TerminalColor {\n\tswitch status {\n\tcase \"implementing\":\n\t\treturn ColorIris\n\tcase \"planning\", \"running\":\n\t\treturn ColorFoam\n\tcase \"reviewing\", \"done\":\n\t\treturn ColorGold\n\tcase \"ready\", \"cancelled\", \"paused\":\n\t\treturn ColorMuted\n\tcase \"failed\", \"error\":\n\t\treturn ColorLove\n\tdefault:\n\t\treturn ColorText\n\t}\n}\n\nfunc (p *InfoPane) renderRow(label, value string) string {\n\tvalueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n\tif valueWidth < 10 {\n\t\tvalueWidth = 10\n\t}\n\treturn lipgloss.JoinHorizontal(lipgloss.Top,\n\t\tinfoLabelStyle.Render(label),\n\t\tinfoValueStyle.Width(valueWidth).Render(value),\n\t)\n}\n\nfunc (p *InfoPane) renderStatusRow(label, value string) string {\n\tvalueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n\tif valueWidth < 10 {\n\t\tvalueWidth = 10\n\t}\n\treturn lipgloss.JoinHorizontal(lipgloss.Top,\n\t\tinfoLabelStyle.Render(label),\n\t\tlipgloss.NewStyle().Foreground(statusColor(value)).Width(valueWidth).Render(value),\n\t)\n}\n\nfunc (p *InfoPane) renderDivider() string {\n\tw := p.width - 4\n\tif w < 10 {\n\t\tw = 10\n\t}\n\treturn infoDividerStyle.Render(strings.Repeat(\"-\", w))\n}\n\nfunc (p *InfoPane) renderPlanSection() string {\n\tlines := []string{\n\t\tinfoSectionStyle.Render(\"plan\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.PlanName != \"\" {\n\t\tlines = append(lines, p.renderRow(\"name\", p.data.PlanName))\n\t}\n\tif p.data.PlanDescription != \"\" {\n\t\tlines = append(lines, p.renderRow(\"description\", p.data.PlanDescription))\n\t}\n\tif p.data.PlanStatus != \"\" {\n\t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.PlanStatus))\n\t}\n\tif p.data.PlanTopic != \"\" {\n\t\tlines = append(lines, p.renderRow(\"topic\", p.data.PlanTopic))\n\t}\n\tif p.data.PlanBranch != \"\" {\n\t\tlines = append(lines, p.renderRow(\"branch\", p.data.PlanBranch))\n\t}\n\tif p.data.PlanCreated != \"\" {\n\t\tlines = append(lines, p.renderRow(\"created\", p.data.PlanCreated))\n\t}\n\treturn strings.Join(lines, \"\\n\")\n}\n\nfunc (p *InfoPane) renderInstanceSection() string {\n\tlines := []string{\n\t\tinfoSectionStyle.Render(\"instance\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.Title != \"\" {\n\t\tlines = append(lines, p.renderRow(\"title\", p.data.Title))\n\t}\n\tif p.data.AgentType != \"\" {\n\t\tlines = append(lines, p.renderRow(\"role\", p.data.AgentType))\n\t}\n\tif p.data.Program != \"\" {\n\t\tlines = append(lines, p.renderRow(\"program\", p.data.Program))\n\t}\n\tif p.data.Status != \"\" {\n\t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.Status))\n\t}\n\tif p.data.Branch != \"\" {\n\t\tlines = append(lines, p.renderRow(\"branch\", p.data.Branch))\n\t}\n\tif p.data.Path != \"\" {\n\t\tlines = append(lines, p.renderRow(\"path\", p.data.Path))\n\t}\n\tif p.data.Created != \"\" {\n\t\tlines = append(lines, p.renderRow(\"created\", p.data.Created))\n\t}\n\tif p.data.WaveNumber > 0 {\n\t\tlines = append(lines, p.renderRow(\"wave\", fmt.Sprintf(\"%d/%d\", p.data.WaveNumber, p.data.TotalWaves)))\n\t}\n\tif p.data.TaskNumber > 0 {\n\t\tlines = append(lines, p.renderRow(\"task\", fmt.Sprintf(\"%d of %d\", p.data.TaskNumber, p.data.TotalTasks)))\n\t}\n\tif p.data.CPUPercent > 0 || p.data.MemMB > 0 {\n\t\tlines = append(lines, p.renderRow(\"cpu\", fmt.Sprintf(\"%.0f%%\", math.Round(p.data.CPUPercent))))\n\t\tlines = append(lines, p.renderRow(\"memory\", fmt.Sprintf(\"%.0fM\", p.data.MemMB)))\n\t}\n\treturn strings.Join(lines, \"\\n\")\n}\n\nfunc (p *InfoPane) renderPlanSummary() string {\n\tlines := []string{\n\t\tinfoSectionStyle.Render(\"plan\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.PlanName != \"\" {\n\t\tlines = append(lines, p.renderRow(\"name\", p.data.PlanName))\n\t}\n\tif p.data.PlanStatus != \"\" {\n\t\tlines = append(lines, p.renderStatusRow(\"status\", p.data.PlanStatus))\n\t}\n\tif p.data.PlanTopic != \"\" {\n\t\tlines = append(lines, p.renderRow(\"topic\", p.data.PlanTopic))\n\t}\n\tif p.data.PlanBranch != \"\" {\n\t\tlines = append(lines, p.renderRow(\"branch\", p.data.PlanBranch))\n\t}\n\tif p.data.PlanCreated != \"\" {\n\t\tlines = append(lines, p.renderRow(\"created\", p.data.PlanCreated))\n\t}\n\n\tif p.data.PlanInstanceCount > 0 {\n\t\tsummary := fmt.Sprintf(\"%d\", p.data.PlanInstanceCount)\n\t\tparts := []string{}\n\t\tif p.data.PlanRunningCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d running\", p.data.PlanRunningCount))\n\t\t}\n\t\tif p.data.PlanReadyCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d ready\", p.data.PlanReadyCount))\n\t\t}\n\t\tif p.data.PlanPausedCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d paused\", p.data.PlanPausedCount))\n\t\t}\n\t\tif len(parts) > 0 {\n\t\t\tsummary += \" (\" + strings.Join(parts, \", \") + \")\"\n\t\t}\n\t\tlines = append(lines, p.renderRow(\"instances\", summary))\n\t}\n\n\tif p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {\n\t\tdiff := fmt.Sprintf(\"+%d -%d\", p.data.PlanAddedLines, p.data.PlanRemovedLines)\n\t\tlines = append(lines, p.renderRow(\"lines changed\", diff))\n\t}\n\n\tlines = append(lines, \"\")\n\tviewDocStyle := lipgloss.NewStyle().\n\t\tForeground(ColorFoam).\n\t\tBorder(lipgloss.RoundedBorder()).\n\t\tBorderForeground(ColorOverlay).\n\t\tPadding(0, 2)\n\tlines = append(lines, zone.Mark(ZoneViewPlan, viewDocStyle.Render(\"view plan doc\")))\n\n\treturn strings.Join(lines, \"\\n\")\n}\n\nfunc (p *InfoPane) renderWaveSection() string {\n\tlines := []string{\n\t\tinfoSectionStyle.Render(\"wave progress\"),\n\t\tp.renderDivider(),\n\t}\n\tfor _, task := range p.data.WaveTasks {\n\t\tvar glyph string\n\t\tvar glyphColor lipgloss.TerminalColor\n\t\tswitch task.State {\n\t\tcase \"complete\":\n\t\t\tglyph = \"✓\"\n\t\t\tglyphColor = ColorFoam\n\t\tcase \"running\":\n\t\t\tglyph = \"●\"\n\t\t\tglyphColor = ColorIris\n\t\tcase \"failed\":\n\t\t\tglyph = \"✗\"\n\t\t\tglyphColor = ColorLove\n\t\tdefault:\n\t\t\tglyph = \"○\"\n\t\t\tglyphColor = ColorMuted\n\t\t}\n\t\tlabel := fmt.Sprintf(\"task %d\", task.Number)\n\t\tvalue := lipgloss.NewStyle().Foreground(glyphColor).Render(glyph) + \" \" + task.State\n\t\tlines = append(lines, infoLabelStyle.Render(label)+value)\n\t}\n\treturn strings.Join(lines, \"\\n\")\n}\n\n// render builds the content string. Called internally when data changes.\nfunc (p *InfoPane) render() string {\n\tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n\t\treturn \"no instance selected\"\n\t}\n\n\tvar sections []string\n\tif p.data.IsPlanHeaderSelected {\n\t\tsections = append(sections, p.renderPlanSummary())\n\t\tif len(p.data.WaveTasks) > 0 {\n\t\t\tsections = append(sections, p.renderWaveSection())\n\t\t}\n\t} else {\n\t\tif p.data.HasPlan {\n\t\t\tsections = append(sections, p.renderPlanSection())\n\t\t}\n\t\tsections = append(sections, p.renderInstanceSection())\n\t\tif len(p.data.WaveTasks) > 0 {\n\t\t\tsections = append(sections, p.renderWaveSection())\n\t\t}\n\t}\n\n\treturn strings.Join(sections, \"\\n\\n\")\n}\n",
+              "after": "package ui\n\nimport (\n\t\"fmt\"\n\t\"math\"\n\t\"strings\"\n\n\t\"github.com/charmbracelet/bubbles/viewport\"\n\t\"github.com/charmbracelet/lipgloss\"\n\tzone \"github.com/lrstanley/bubblezone\"\n)\n\nvar (\n\tinfoSectionStyle = lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)\n\tinfoDividerStyle = lipgloss.NewStyle().Foreground(ColorOverlay)\n\tinfoLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted).Width(20)\n\tinfoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)\n)\n\n// InfoData carries display data for the info pane.\n// Populated by the app layer from instance + plan + wave state.\ntype InfoData struct {\n\t// Instance fields\n\tTitle   string\n\tProgram string\n\tBranch  string\n\tPath    string\n\tCreated string\n\tStatus  string\n\n\t// Plan fields (empty when no plan is associated)\n\tPlanName        string\n\tPlanDescription string\n\tPlanStatus      string\n\tPlanTopic       string\n\tPlanBranch      string\n\tPlanCreated     string\n\n\t// Plan summary fields (rendered when plan header row is selected)\n\tPlanInstanceCount int\n\tPlanRunningCount  int\n\tPlanReadyCount    int\n\tPlanPausedCount   int\n\tPlanAddedLines    int\n\tPlanRemovedLines  int\n\n\t// Resource utilisation\n\tCPUPercent float64\n\tMemMB      float64\n\n\t// Wave / task context (zero values mean no wave info)\n\tAgentType  string\n\tWaveNumber int\n\tTotalWaves int\n\tTaskNumber int\n\tTotalTasks int\n\tWaveTasks  []WaveTaskInfo\n\n\t// Selection state flags\n\tHasPlan              bool\n\tHasInstance          bool\n\tIsPlanHeaderSelected bool\n}\n\n// WaveTaskInfo describes a single task slot in the current wave.\ntype WaveTaskInfo struct {\n\tNumber int\n\tState  string // \"complete\", \"running\", \"failed\", or \"pending\"\n}\n\n// InfoPane renders instance and plan metadata inside a scrollable viewport.\ntype InfoPane struct {\n\twidth, height int\n\tdata          InfoData\n\tviewport      viewport.Model\n}\n\n// NewInfoPane returns a zero-sized InfoPane ready for use.\nfunc NewInfoPane() *InfoPane {\n\treturn &InfoPane{viewport: viewport.New(0, 0)}\n}\n\n// SetSize stores dimensions and refreshes the viewport.\nfunc (p *InfoPane) SetSize(width, height int) {\n\tp.width = width\n\tp.height = height\n\tp.viewport.Width = width\n\tp.viewport.Height = height\n\tp.viewport.SetContent(p.render())\n}\n\n// SetData replaces the current data and re-renders from the top.\nfunc (p *InfoPane) SetData(data InfoData) {\n\tp.data = data\n\tp.viewport.SetContent(p.render())\n\tp.viewport.GotoTop()\n}\n\n// ScrollUp moves the viewport one line toward the top.\nfunc (p *InfoPane) ScrollUp() {\n\tp.viewport.LineUp(1)\n}\n\n// ScrollDown moves the viewport one line toward the bottom.\nfunc (p *InfoPane) ScrollDown() {\n\tp.viewport.LineDown(1)\n}\n\n// String returns the visible portion of the pane, or a placeholder when\n// neither an instance nor a plan header is selected.\nfunc (p *InfoPane) String() string {\n\tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n\t\treturn \"no instance selected\"\n\t}\n\treturn p.viewport.View()\n}\n\n// statusColor maps known status strings to palette colors.\nfunc statusColor(status string) lipgloss.TerminalColor {\n\tswitch status {\n\tcase \"implementing\":\n\t\treturn ColorIris\n\tcase \"planning\", \"running\":\n\t\treturn ColorFoam\n\tcase \"reviewing\", \"done\":\n\t\treturn ColorGold\n\tcase \"ready\", \"cancelled\", \"paused\":\n\t\treturn ColorMuted\n\tcase \"failed\", \"error\":\n\t\treturn ColorLove\n\tdefault:\n\t\treturn ColorText\n\t}\n}\n\n// renderRow renders a single label+value row.\nfunc (p *InfoPane) renderRow(label, value string) string {\n\tvalW := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n\tif valW < 10 {\n\t\tvalW = 10\n\t}\n\treturn lipgloss.JoinHorizontal(lipgloss.Top,\n\t\tinfoLabelStyle.Render(label),\n\t\tinfoValueStyle.Width(valW).Render(value),\n\t)\n}\n\n// renderStatusRow renders a label+value row where the value is coloured by status.\nfunc (p *InfoPane) renderStatusRow(label, value string) string {\n\tvalW := p.width - lipgloss.Width(infoLabelStyle.Render(label))\n\tif valW < 10 {\n\t\tvalW = 10\n\t}\n\treturn lipgloss.JoinHorizontal(lipgloss.Top,\n\t\tinfoLabelStyle.Render(label),\n\t\tlipgloss.NewStyle().Foreground(statusColor(value)).Width(valW).Render(value),\n\t)\n}\n\n// renderDivider renders a horizontal rule sized to the pane width.\nfunc (p *InfoPane) renderDivider() string {\n\tw := p.width - 4\n\tif w < 10 {\n\t\tw = 10\n\t}\n\treturn infoDividerStyle.Render(strings.Repeat(\"-\", w))\n}\n\n// renderPlanSection renders the plan metadata block for instance-bound views.\nfunc (p *InfoPane) renderPlanSection() string {\n\trows := []string{\n\t\tinfoSectionStyle.Render(\"plan\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.PlanName != \"\" {\n\t\trows = append(rows, p.renderRow(\"name\", p.data.PlanName))\n\t}\n\tif p.data.PlanDescription != \"\" {\n\t\trows = append(rows, p.renderRow(\"description\", p.data.PlanDescription))\n\t}\n\tif p.data.PlanStatus != \"\" {\n\t\trows = append(rows, p.renderStatusRow(\"status\", p.data.PlanStatus))\n\t}\n\tif p.data.PlanTopic != \"\" {\n\t\trows = append(rows, p.renderRow(\"topic\", p.data.PlanTopic))\n\t}\n\tif p.data.PlanBranch != \"\" {\n\t\trows = append(rows, p.renderRow(\"branch\", p.data.PlanBranch))\n\t}\n\tif p.data.PlanCreated != \"\" {\n\t\trows = append(rows, p.renderRow(\"created\", p.data.PlanCreated))\n\t}\n\treturn strings.Join(rows, \"\\n\")\n}\n\n// renderInstanceSection renders the instance metadata block.\nfunc (p *InfoPane) renderInstanceSection() string {\n\trows := []string{\n\t\tinfoSectionStyle.Render(\"instance\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.Title != \"\" {\n\t\trows = append(rows, p.renderRow(\"title\", p.data.Title))\n\t}\n\tif p.data.AgentType != \"\" {\n\t\trows = append(rows, p.renderRow(\"role\", p.data.AgentType))\n\t}\n\tif p.data.Program != \"\" {\n\t\trows = append(rows, p.renderRow(\"program\", p.data.Program))\n\t}\n\tif p.data.Status != \"\" {\n\t\trows = append(rows, p.renderStatusRow(\"status\", p.data.Status))\n\t}\n\tif p.data.Branch != \"\" {\n\t\trows = append(rows, p.renderRow(\"branch\", p.data.Branch))\n\t}\n\tif p.data.Path != \"\" {\n\t\trows = append(rows, p.renderRow(\"path\", p.data.Path))\n\t}\n\tif p.data.Created != \"\" {\n\t\trows = append(rows, p.renderRow(\"created\", p.data.Created))\n\t}\n\tif p.data.WaveNumber > 0 {\n\t\trows = append(rows, p.renderRow(\"wave\", fmt.Sprintf(\"%d/%d\", p.data.WaveNumber, p.data.TotalWaves)))\n\t}\n\tif p.data.TaskNumber > 0 {\n\t\trows = append(rows, p.renderRow(\"task\", fmt.Sprintf(\"%d of %d\", p.data.TaskNumber, p.data.TotalTasks)))\n\t}\n\tif p.data.CPUPercent > 0 || p.data.MemMB > 0 {\n\t\trows = append(rows, p.renderRow(\"cpu\", fmt.Sprintf(\"%.0f%%\", math.Round(p.data.CPUPercent))))\n\t\trows = append(rows, p.renderRow(\"memory\", fmt.Sprintf(\"%.0fM\", p.data.MemMB)))\n\t}\n\treturn strings.Join(rows, \"\\n\")\n}\n\n// renderPlanSummary renders the plan header view: metadata, instance counts,\n// line-change totals, and a \"view plan doc\" action button.\nfunc (p *InfoPane) renderPlanSummary() string {\n\trows := []string{\n\t\tinfoSectionStyle.Render(\"plan\"),\n\t\tp.renderDivider(),\n\t}\n\tif p.data.PlanName != \"\" {\n\t\trows = append(rows, p.renderRow(\"name\", p.data.PlanName))\n\t}\n\tif p.data.PlanStatus != \"\" {\n\t\trows = append(rows, p.renderStatusRow(\"status\", p.data.PlanStatus))\n\t}\n\tif p.data.PlanTopic != \"\" {\n\t\trows = append(rows, p.renderRow(\"topic\", p.data.PlanTopic))\n\t}\n\tif p.data.PlanBranch != \"\" {\n\t\trows = append(rows, p.renderRow(\"branch\", p.data.PlanBranch))\n\t}\n\tif p.data.PlanCreated != \"\" {\n\t\trows = append(rows, p.renderRow(\"created\", p.data.PlanCreated))\n\t}\n\n\tif p.data.PlanInstanceCount > 0 {\n\t\tsummary := fmt.Sprintf(\"%d\", p.data.PlanInstanceCount)\n\t\tvar parts []string\n\t\tif p.data.PlanRunningCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d running\", p.data.PlanRunningCount))\n\t\t}\n\t\tif p.data.PlanReadyCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d ready\", p.data.PlanReadyCount))\n\t\t}\n\t\tif p.data.PlanPausedCount > 0 {\n\t\t\tparts = append(parts, fmt.Sprintf(\"%d paused\", p.data.PlanPausedCount))\n\t\t}\n\t\tif len(parts) > 0 {\n\t\t\tsummary += \" (\" + strings.Join(parts, \", \") + \")\"\n\t\t}\n\t\trows = append(rows, p.renderRow(\"instances\", summary))\n\t}\n\n\tif p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {\n\t\trows = append(rows, p.renderRow(\"lines changed\",\n\t\t\tfmt.Sprintf(\"+%d -%d\", p.data.PlanAddedLines, p.data.PlanRemovedLines)))\n\t}\n\n\tbtnStyle := lipgloss.NewStyle().\n\t\tForeground(ColorFoam).\n\t\tBorder(lipgloss.RoundedBorder()).\n\t\tBorderForeground(ColorOverlay).\n\t\tPadding(0, 2)\n\trows = append(rows, \"\")\n\trows = append(rows, zone.Mark(ZoneViewPlan, btnStyle.Render(\"view plan doc\")))\n\n\treturn strings.Join(rows, \"\\n\")\n}\n\n// renderWaveSection renders the task-state grid for the current wave.\nfunc (p *InfoPane) renderWaveSection() string {\n\trows := []string{\n\t\tinfoSectionStyle.Render(\"wave progress\"),\n\t\tp.renderDivider(),\n\t}\n\tfor _, t := range p.data.WaveTasks {\n\t\tvar glyph string\n\t\tvar col lipgloss.TerminalColor\n\t\tswitch t.State {\n\t\tcase \"complete\":\n\t\t\tglyph, col = \"✓\", ColorFoam\n\t\tcase \"running\":\n\t\t\tglyph, col = \"●\", ColorIris\n\t\tcase \"failed\":\n\t\t\tglyph, col = \"✗\", ColorLove\n\t\tdefault:\n\t\t\tglyph, col = \"○\", ColorMuted\n\t\t}\n\t\ticon := lipgloss.NewStyle().Foreground(col).Render(glyph)\n\t\trows = append(rows, infoLabelStyle.Render(fmt.Sprintf(\"task %d\", t.Number))+icon+\" \"+t.State)\n\t}\n\treturn strings.Join(rows, \"\\n\")\n}\n\n// render assembles the full content string placed into the viewport.\nfunc (p *InfoPane) render() string {\n\tif !p.data.HasInstance && !p.data.IsPlanHeaderSelected {\n\t\treturn \"no instance selected\"\n\t}\n\n\tvar sections []string\n\tswitch {\n\tcase p.data.IsPlanHeaderSelected:\n\t\tsections = append(sections, p.renderPlanSummary())\n\t\tif len(p.data.WaveTasks) > 0 {\n\t\t\tsections = append(sections, p.renderWaveSection())\n\t\t}\n\tdefault:\n\t\tif p.data.HasPlan {\n\t\t\tsections = append(sections, p.renderPlanSection())\n\t\t}\n\t\tsections = append(sections, p.renderInstanceSection())\n\t\tif len(p.data.WaveTasks) > 0 {\n\t\t\tsections = append(sections, p.renderWaveSection())\n\t\t}\n\t}\n\n\treturn strings.Join(sections, \"\\n\\n\")\n}\n",
+              "additions": 88,
+              "deletions": 85,
               "status": "modified"
             },
             {
@@ -921,7 +929,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772564277328
+          "created": 1772564277328,
+          "completed": 1772564293068
         },
         "parentID": "REDACTED",
         "modelID": "claude-sonnet-4-6",
@@ -934,15 +943,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 58689,
+          "input": 1,
+          "output": 204,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 57887,
+            "write": 597
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb5106850001i2ZHh66lwfvuy4",
         "sessionID": "ses_34af05e4dffez9gayii215Ex6K"
       },
@@ -970,23 +981,129 @@
           "callID": "toolu_01N5ig9tJjpP5ZC9EiiX7YmP",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "rm -f ui/list_styles.go.bak && git add ui/gradient.go ui/consts.go && git rm -f ui/list_styles.go.bak 2>/dev/null || true && git commit -m \"feat(clean-room): rewrite gradient.go and consts.go from scratch\"",
               "description": "Delete dead file and commit rewritten files",
               "workdir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
             },
+            "output": "[plan/03-rewrite-ui-panels 912c57d] feat(clean-room): rewrite gradient.go and consts.go from scratch\n 2 files changed, 30 insertions(+), 24 deletions(-)\n",
+            "title": "Delete dead file and commit rewritten files",
             "metadata": {
-              "output": "",
-              "description": "Delete dead file and commit rewritten files"
+              "output": "[plan/03-rewrite-ui-panels 912c57d] feat(clean-room): rewrite gradient.go and consts.go from scratch\n 2 files changed, 30 insertions(+), 24 deletions(-)\n",
+              "exit": 0,
+              "description": "Delete dead file and commit rewritten files",
+              "truncated": false
             },
             "time": {
-              "start": 1772564282607
+              "start": 1772564282605,
+              "end": 1772564293060
             }
           },
           "id": "REDACTED",
           "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
           "messageID": "msg_cb5106850001i2ZHh66lwfvuy4"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c700020d6b72a17fe1bcdeda05f17b393043c827",
+          "cost": 0,
+          "tokens": {
+            "total": 58689,
+            "input": 1,
+            "output": 204,
+            "reasoning": 0,
+            "cache": {
+              "read": 57887,
+              "write": 597
+            }
+          },
+          "id": "prt_cb510a5c4001EyeC754Bk5FPSC",
+          "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
+          "messageID": "msg_cb5106850001i2ZHh66lwfvuy4"
+        },
+        {
+          "type": "patch",
+          "hash": "e74565e1cd7dbb70e41aff2eed08c9bb05831e97",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/info_pane.go"
+          ],
+          "id": "prt_cb510a5ca001tTyx1Of27Zf4RJ",
+          "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
+          "messageID": "msg_cb5106850001i2ZHh66lwfvuy4"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564293069,
+          "completed": 1772564298860
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58975,
+          "input": 1,
+          "output": 217,
+          "reasoning": 0,
+          "cache": {
+            "read": 58484,
+            "write": 273
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb510a5cd001DndjXKeg3xaay4",
+        "sessionID": "ses_34af05e4dffez9gayii215Ex6K"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c700020d6b72a17fe1bcdeda05f17b393043c827",
+          "id": "prt_cb510ac2b001kxxGtotuhNo7By",
+          "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
+          "messageID": "msg_cb510a5cd001DndjXKeg3xaay4"
+        },
+        {
+          "type": "text",
+          "text": "Task 1 complete. All 10 tests pass (green throughout):\n\n- **`ui/gradient.go`** — rewritten from scratch with `parseHex`, `lerpByte`, `GradientText`, `GradientBar`. Uses `fmt.Sscanf` with `%02x%02x%02x` parsing, ANSI `\\033[38;2;R;G;Bm` truecolor sequences, and dim gray `rgb(60,60,60)` for unfilled bar characters.\n- **`ui/consts.go`** — rewritten from scratch with `fallbackBannerRaw`, `blockPeriod`, `bannerFrames` (init-style func literal with 4 suffix frames), `FallBackText`, and `BannerLines`.\n- **`ui/list_styles.go.bak`** — deleted (dead backup file, not imported anywhere).",
+          "time": {
+            "start": 1772564298828,
+            "end": 1772564298828
+          },
+          "id": "prt_cb510ac2b002TjfRa5J8QMdM4k",
+          "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
+          "messageID": "msg_cb510a5cd001DndjXKeg3xaay4"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "c700020d6b72a17fe1bcdeda05f17b393043c827",
+          "cost": 0,
+          "tokens": {
+            "total": 58975,
+            "input": 1,
+            "output": 217,
+            "reasoning": 0,
+            "cache": {
+              "read": 58484,
+              "write": 273
+            }
+          },
+          "id": "prt_cb510bc640017CnwBXoUjHijwE",
+          "sessionID": "ses_34af05e4dffez9gayii215Ex6K",
+          "messageID": "msg_cb510a5cd001DndjXKeg3xaay4"
         }
       ]
     }
