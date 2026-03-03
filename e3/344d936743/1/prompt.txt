@@ -1,0 +1,81 @@
+Implement Task 2: Increment ReviewCycle on FSM transition and thread to spawners
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Include review cycle numbers in instance titles, tmux session names, and opencode session labels (e.g. `-review-1`, `-fix-1`, `-review-2`) so each review/fix cycle gets unique identifiers, preventing tmux session clashes, stale caches, and opencode DB collisions.
+**Architecture:** Add a `ReviewCycle` counter to `PlanEntry` (persisted via `review_cycle` column in planstore SQLite). The counter starts at 0 and increments on each `ReviewChangesRequested` FSM transition. The three spawning functions (`spawnReviewer`, `spawnCoderWithFeedback`, `spawnPlanAgent` review case) read the cycle count and append it to instance titles. `BuildTitle` in `opencodesession` gains an optional `ReviewCycle` field for human-readable labels like `review #2`. The first review cycle (cycle 0) uses suffix `-review-1` / displays `review #1` (1-indexed for humans).
+**Tech Stack:** Go, SQLite (planstore), bubbletea TUI, tmux session management
+
+## Wave 1 of 2
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `app/app.go` (ReviewChangesRequested handler)
+- Modify: `app/app_state.go` (spawnReviewer, spawnCoderWithFeedback, spawnPlanAgent)
+- Test: `app/app_plan_completion_test.go`
+
+**Step 1: write the failing test**
+
+In `app/app_plan_completion_test.go`, extend the existing `TestReviewChangesRequested_SpawnsCoderWithFeedback` (or add a new test) to verify that after a `ReviewChangesRequested` signal, the spawned coder instance title includes the cycle number, and a subsequent reviewer spawn also includes it:
+
+```go
+func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
+	// Setup: plan in reviewing state, reviewer instance exists.
+	// Fire ReviewChangesRequested signal.
+	// Assert: spawned coder title is "feature-fix-1" (not "feature-implement").
+	// Fire ImplementFinished → spawns reviewer.
+	// Assert: spawned reviewer title is "feature-review-2" (not "feature-review").
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./app/... -run TestReviewCycle_InstanceTitlesIncludeCycleNumber -v
+```
+
+expected: FAIL — titles still use old format without cycle numbers
+
+**Step 3: write minimal implementation**
+
+1. **`app/app.go`** — In the `ReviewChangesRequested` signal handler (around line 902), after storing feedback, call `m.planState.IncrementReviewCycle(sig.PlanFile)` to bump the counter. This must happen before `spawnCoderWithFeedback` is called.
+
+2. **`app/app_state.go` — `spawnReviewer`** (line ~724): Read the review cycle from planstate. Change the title from `planName + "-review"` to `fmt.Sprintf("%s-review-%d", planName, cycle+1)` where cycle is the current ReviewCycle value (0-indexed in storage, 1-indexed in display).
+
+3. **`app/app_state.go` — `spawnCoderWithFeedback`** (line ~916): Read the review cycle. Change the title from `planName + "-implement"` to `fmt.Sprintf("%s-fix-%d", planName, cycle)` where cycle is the current ReviewCycle value (already incremented by the signal handler).
+
+4. **`app/app_state.go` — `spawnPlanAgent` review case** (line ~1451): When `action == "review"`, read the review cycle and use `fmt.Sprintf("%s-review-%d", planName, cycle+1)` for the title. For the first review (cycle 0), this produces `-review-1`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./app/... -run TestReviewCycle_InstanceTitlesIncludeCycleNumber -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add app/app.go app/app_state.go app/app_plan_completion_test.go
+git commit -m "feat: include review cycle number in instance titles"
+```
