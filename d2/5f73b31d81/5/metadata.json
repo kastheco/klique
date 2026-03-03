@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d25f73b31d81",
+  "session_id": "ses_34eff496bffe5NDcdgdJkxTC9m",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T02:13:39.641072688Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".opencode/agents/manager.md",
+    ".opencode/agents/release.md",
+    "internal/initcmd/scaffold/templates/claude/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/coder.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/fixer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/planner.md",
+    "main.go",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/claude/agents/coder.md",
+    "internal/initcmd/scaffold/templates/claude/agents/planner.md",
+    "internal/initcmd/scaffold/templates/claude/agents/reviewer.md",
+    "internal/initcmd/scaffold/templates/opencode/agents/reviewer.md",
+    "internal/initcmd/scaffold/templates/skills/cli-tools/resources/rg.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c34dd5e57520",
+  "checkpoint_transcript_start": 74,
+  "transcript_lines_at_start": 74,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T02:13:39.236450324Z",
+    "agent_lines": 188,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 189,
+    "agent_percentage": 99.47089947089947
+  }
+}
