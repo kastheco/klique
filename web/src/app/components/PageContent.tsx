@@ -161,7 +161,7 @@ export default function PageContent() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              GNU AGPL v3.0
+              MIT License
             </a>
           </p>
         </footer>

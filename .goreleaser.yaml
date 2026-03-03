@@ -25,7 +25,7 @@ homebrew_casks:
     name: kasmos
     homepage: "https://github.com/kastheco/kasmos"
     description: "kas - A TUI-based agent-driven IDE for managing multiple AI agents"
-    license: "AGPL-3.0"
+    license: "MIT"
     binaries:
       - kasmos
 
