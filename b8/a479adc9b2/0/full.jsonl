@@ -740,7 +740,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772558770497
+          "created": 1772558770497,
+          "completed": 1772558776291
         },
         "parentID": "msg_cb4bbc18a0011czyVnVDCe9Nz5",
         "modelID": "claude-sonnet-4-6",
@@ -753,15 +754,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 54612,
+          "input": 1,
+          "output": 174,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 54245,
+            "write": 192
           }
         },
         "variant": "medium",
+        "finish": "stop",
         "id": "msg_cb4bc6141001nnNmMSQN15DJd2",
         "sessionID": "ses_34b443e90ffep3OmwikNNB7yh0"
       },
@@ -775,11 +778,41 @@
         },
         {
           "type": "text",
-          "text": "",
+          "text": "Task 2 complete. All 6 tests pass on the fresh rewrite of `session/permission_prompt.go`. The implementation:\n\n- Returns `nil` immediately for non-opencode programs (case-insensitive check)\n- Strips ANSI codes via `ansi.Strip()`\n- Limits scanning to the last 25 lines to avoid false-positives from conversation text\n- Two structural checks: `△ Permission required` header + `Allow once`/`Allow always` button bar both present\n- Extracts `Description` from the first non-empty line after the header, stripping `←`/`→` arrow prefixes\n- Extracts `Pattern` from the first `- ` prefixed line after the `Patterns` header",
           "time": {
-            "start": 1772558771985
+            "start": 1772558776242,
+            "end": 1772558776242
           },
           "id": "REDACTED",
+          "sessionID": "ses_34b443e90ffep3OmwikNNB7yh0",
+          "messageID": "msg_cb4bc6141001nnNmMSQN15DJd2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 54612,
+            "input": 1,
+            "output": 174,
+            "reasoning": 0,
+            "cache": {
+              "read": 54245,
+              "write": 192
+            }
+          },
+          "id": "prt_cb4bc77db001lfPln0deeT5OFw",
+          "sessionID": "ses_34b443e90ffep3OmwikNNB7yh0",
+          "messageID": "msg_cb4bc6141001nnNmMSQN15DJd2"
+        },
+        {
+          "type": "patch",
+          "hash": "816c0863867263e7297f6641b61995ddaf8815ba",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go"
+          ],
+          "id": "prt_cb4bc77e2001PObSu3vGCYMcYS",
           "sessionID": "ses_34b443e90ffep3OmwikNNB7yh0",
           "messageID": "msg_cb4bc6141001nnNmMSQN15DJd2"
         }
