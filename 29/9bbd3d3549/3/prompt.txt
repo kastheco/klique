@@ -1,0 +1,81 @@
+Implement Task 4: Rewrite diff.go — Diff Pane with File Sidebar
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 4 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/diff.go`
+- Test: (no dedicated diff_test.go — tested through `tabbed_window_test.go` and app integration tests)
+
+**Step 1: write the failing test**
+
+No new tests needed. The diff pane is exercised through `tabbed_window_test.go` and app-layer integration tests. The `parseFileChunks` and `colorizeDiff` functions are pure and deterministic — the rewrite spec below is sufficient.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/diff.go` and rewrite from scratch:
+
+- **Styles** — exported: `AdditionStyle` (fg=`ColorDiffAdd`), `DeletionStyle` (fg=`ColorDiffDelete`), `HunkStyle` (fg=`ColorDiffHunk`). Unexported: `fileItemStyle` (fg=`ColorIris`), `fileItemSelectedStyle` (bg=`ColorIris`, fg=`ColorBase`, bold), `fileItemDimStyle` (fg=`ColorMuted`), `filePanelBorderStyle` (rounded border, fg=`ColorOverlay`), `filePanelBorderFocusedStyle` (rounded border, fg=`ColorIris`), `diffHeaderStyle` (fg=`ColorIris`, bold), `diffHintStyle` (fg=`ColorMuted`).
+- **`fileChunk` struct** — fields: `path string`, `added int`, `removed int`, `diff string`.
+- **`DiffPane` struct** — fields: `viewport viewport.Model`, `width int`, `height int`, `files []fileChunk`, `totalAdded int`, `totalRemoved int`, `fullDiff string`, `selectedFile int` (-1=all, 0..N=specific), `sidebarWidth int`.
+- **`NewDiffPane() *DiffPane`** — returns pane with fresh viewport, `selectedFile: 0`.
+- **`SetSize(width, height int)`** — stores dimensions, recomputes sidebar width, updates viewport width/height, rebuilds viewport content.
+- **`computeSidebarWidth()`** — computes inner width needed from file names (base name + stats + padding), caps at 35% of total width, adds border frame size.
+- **`updateViewportWidth()`** — sets viewport width to `width - sidebarWidth - 1`, minimum 10.
+- **`SetDiff(instance *session.Instance)`** — returns early if nil/not-started. Gets diff stats from instance. If empty/error, clears state. Otherwise: stores totals, parses file chunks, colorizes full diff, clamps selected file, recomputes layout.
+- **`rebuildViewport()`** — sets viewport content to full diff (if selectedFile < 0) or selected file's colorized diff.
+- **`String() string`** — if no files: centers "No changes" or error message. Otherwise: joins sidebar + " " + viewport view horizontally.
+- **`renderSidebar() string`** — renders bordered file list: header with colored +N -N totals, "All" entry (selected style if selectedFile==-1), per-file entries showing `dir/`(dimmed) + `filename`(accent) + colored stats. Selected file gets full-width highlight. Fills remaining height, adds "shift+↑↓" hint at bottom. Wraps in border style.
+- **Navigation** — `FileUp()`/`FileDown()`: cycle selectedFile with wrap-around (-1 ↔ len-1), rebuild viewport, go to top. `ScrollUp()`/`ScrollDown()`: viewport line up/down by 3. `HasFiles() bool`.
+- **`parseFileChunks(content string) []fileChunk`** — splits unified diff on `"diff --git "` boundaries. For each chunk: extracts path from `" b/"` portion, counts `+`/`-` lines (excluding `+++`/`---` headers).
+- **`colorizeDiff(diff string) string`** — line-by-line colorization: `@@` lines → `HunkStyle`, `+` lines (not `++`) → `AdditionStyle`, `-` lines (not `--`) → `DeletionStyle`, others pass through.
+
+Imports: `fmt`, `path/filepath`, `strings`, `github.com/charmbracelet/bubbles/viewport`, `github.com/charmbracelet/lipgloss`, `github.com/mattn/go-runewidth`, `github.com/kastheco/kasmos/session`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/diff.go
+git commit -m "feat(clean-room): rewrite diff.go from scratch"
+```
