@@ -867,6 +867,16 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	for _, title := range titles {
 		inst := m.nav.RemoveByTitle(title)
 		m.removeFromAllInstances(title)
+		// Invalidate the preview terminal cache so that a replacement instance
+		// with the same title (e.g. a new "applying fixes" coder) gets a fresh
+		// terminal instead of showing stale output from the killed session.
+		if title == m.previewTerminalInstance {
+			if m.previewTerminal != nil {
+				m.previewTerminal.Close()
+			}
+			m.previewTerminal = nil
+			m.previewTerminalInstance = ""
+		}
 		if inst != nil {
 			if err := inst.Kill(); err != nil {
 				log.WarningLog.Printf("could not kill old %s for %q: %v", agentType, planFile, err)
@@ -889,6 +899,10 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	// Kill any previous coder for this plan so the new session gets a fresh
 	// tmux session instead of reattaching to a stale/errored one.
 	m.killExistingPlanAgent(planFile, session.AgentTypeCoder)
+
+	// Clear the push-prompt dedup flag so this new coder round can trigger
+	// the push dialog when it finishes.
+	delete(m.coderPushPrompted, planFile)
 
 	// Resolve the plan's branch for the shared worktree.
 	branch := m.planBranch(planFile)
@@ -1248,6 +1262,12 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 	capturedPlanFile := inst.PlanFile
 	capturedTitle := inst.Title
+	// Mark as prompted so the metadata tick doesn't re-trigger the dialog
+	// while the user is deciding or after they dismiss it.
+	if m.coderPushPrompted == nil {
+		m.coderPushPrompted = make(map[string]bool)
+	}
+	m.coderPushPrompted[capturedPlanFile] = true
 	message := fmt.Sprintf("[!] implementation finished for '%s'. push branch now?", planstate.DisplayName(capturedPlanFile))
 	pushAction := func() tea.Msg {
 		worktree, err := inst.GetGitWorktree()

@@ -378,6 +378,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
@@ -452,6 +453,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 		activeRepoPath:        dir,
 		program:               "claude",
 	}
@@ -532,6 +534,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 		activeRepoPath:        dir,
 		program:               "claude",
 	}
@@ -614,6 +617,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 		fsm:                   newPlanFSMForTest(t, plansDir),
 		pendingReviewFeedback: make(map[string]string),
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 	}
 
 	msg := metadataResultMsg{

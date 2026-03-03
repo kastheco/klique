@@ -60,6 +60,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *planstate.PlanSta
 		planStoreProject:      "test",
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
 		waveOrchestrators:     make(map[string]*WaveOrchestrator),
 		instanceFinalizers:    make(map[*session.Instance]func()),
