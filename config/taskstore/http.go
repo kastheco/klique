@@ -1,4 +1,4 @@
-package planstore
+package taskstore
 
 import (
 	"bytes"
@@ -32,17 +32,17 @@ func NewHTTPStore(baseURL, project string) *HTTPStore {
 }
 
 // planURL builds the base URL for a project's plans endpoint.
-func (s *HTTPStore) planURL(project string) string {
+func (s *HTTPStore) taskURL(project string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/plans", s.baseURL, url.PathEscape(project))
 }
 
 // planItemURL builds the URL for a specific plan entry.
-func (s *HTTPStore) planItemURL(project, filename string) string {
+func (s *HTTPStore) taskItemURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/plans/%s", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
 // planContentURL builds the URL for a specific plan's content endpoint.
-func (s *HTTPStore) planContentURL(project, filename string) string {
+func (s *HTTPStore) taskContentURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/plans/%s/content", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
@@ -80,7 +80,7 @@ func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 	if err != nil {
 		return fmt.Errorf("plan store: marshal entry: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, s.planURL(project), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, s.taskURL(project), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -100,7 +100,7 @@ func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 
 // Get retrieves a single plan entry by filename.
 func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
-	req, err := http.NewRequest(http.MethodGet, s.planItemURL(project, filename), nil)
+	req, err := http.NewRequest(http.MethodGet, s.taskItemURL(project, filename), nil)
 	if err != nil {
 		return TaskEntry{}, fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -131,7 +131,7 @@ func (s *HTTPStore) Update(project, filename string, entry TaskEntry) error {
 	if err != nil {
 		return fmt.Errorf("plan store: marshal entry: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPut, s.planItemURL(project, filename), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPut, s.taskItemURL(project, filename), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -159,7 +159,7 @@ func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 	if err != nil {
 		return fmt.Errorf("plan store: marshal rename payload: %w", err)
 	}
-	renameURL := fmt.Sprintf("%s/rename", s.planItemURL(project, oldFilename))
+	renameURL := fmt.Sprintf("%s/rename", s.taskItemURL(project, oldFilename))
 	req, err := http.NewRequest(http.MethodPost, renameURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)
@@ -180,7 +180,7 @@ func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 
 // GetContent retrieves the raw markdown content for a plan.
 func (s *HTTPStore) GetContent(project, filename string) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, s.planContentURL(project, filename), nil)
+	req, err := http.NewRequest(http.MethodGet, s.taskContentURL(project, filename), nil)
 	if err != nil {
 		return "", fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -207,7 +207,7 @@ func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 
 // SetContent replaces the raw markdown content for a plan.
 func (s *HTTPStore) SetContent(project, filename, content string) error {
-	req, err := http.NewRequest(http.MethodPut, s.planContentURL(project, filename), strings.NewReader(content))
+	req, err := http.NewRequest(http.MethodPut, s.taskContentURL(project, filename), strings.NewReader(content))
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -229,7 +229,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 
 // List returns all plan entries for the given project.
 func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
-	req, err := http.NewRequest(http.MethodGet, s.planURL(project), nil)
+	req, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build request: %w", err)
 	}
@@ -253,7 +253,7 @@ func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 
 // ListByStatus returns plan entries filtered by one or more statuses.
 func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
-	u, err := url.Parse(s.planURL(project))
+	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build URL: %w", err)
 	}
@@ -288,7 +288,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntr
 
 // ListByTopic returns plan entries for a specific topic.
 func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
-	u, err := url.Parse(s.planURL(project))
+	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
 		return nil, fmt.Errorf("plan store: build URL: %w", err)
 	}
@@ -377,7 +377,7 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 	if err != nil {
 		return fmt.Errorf("plan store: marshal clickup task id: %w", err)
 	}
-	u := fmt.Sprintf("%s/clickup-task-id", s.planItemURL(project, filename))
+	u := fmt.Sprintf("%s/clickup-task-id", s.taskItemURL(project, filename))
 	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)
@@ -401,7 +401,7 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 
 // IncrementReviewCycle increments the review cycle counter for an existing plan entry.
 func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
-	u := fmt.Sprintf("%s/increment-review-cycle", s.planItemURL(project, filename))
+	u := fmt.Sprintf("%s/increment-review-cycle", s.taskItemURL(project, filename))
 	req, err := http.NewRequest(http.MethodPost, u, nil)
 	if err != nil {
 		return fmt.Errorf("plan store: build request: %w", err)

@@ -1,7 +1,7 @@
 // Package planstore provides a Store interface for plan state persistence,
 // with a SQLite implementation for direct DB access and an HTTP implementation
 // for client-server communication.
-package planstore
+package taskstore
 
 import "time"
 

@@ -1,4 +1,4 @@
-package planstore_test
+package taskstore_test
 
 import (
 	"encoding/json"
