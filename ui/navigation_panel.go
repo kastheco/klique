@@ -14,6 +14,7 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// Sidebar ID prefixes used for row IDs and zone marking.
 const (
 	SidebarPlanPrefix        = "__plan__"
 	SidebarTopicPrefix       = "__topic__"
@@ -21,6 +22,7 @@ const (
 	SidebarImportClickUp     = "__import_clickup__"
 )
 
+// PlanDisplay holds display metadata for a single plan entry in the sidebar.
 type PlanDisplay struct {
 	Filename    string
 	Status      string
@@ -29,11 +31,19 @@ type PlanDisplay struct {
 	Topic       string
 }
 
+// TopicStatus captures aggregate run/notification state for a plan.
 type TopicStatus struct {
 	HasRunning      bool
 	HasNotification bool
 }
 
+// TopicDisplay groups plans under a named topic header.
+type TopicDisplay struct {
+	Name  string
+	Plans []PlanDisplay
+}
+
+// navRowKind enumerates the distinct row types rendered in the nav panel.
 type navRowKind int
 
 const (
@@ -49,20 +59,22 @@ const (
 	navRowCancelled
 )
 
+// navRow holds the data for a single rendered row in the navigation panel.
 type navRow struct {
 	Kind            navRowKind
 	ID              string
 	Label           string
 	TaskFile        string
-	PlanStatus      string // plan lifecycle status (e.g. "implementing", "reviewing")
+	PlanStatus      string
 	Instance        *session.Instance
 	Collapsed       bool
 	HasRunning      bool
 	HasNotification bool
-	Indent          int // indentation level in spaces (0 = top-level)
+	Indent          int
 }
 
-// Navigation panel styles
+// ---------- styles ----------
+
 var (
 	navItemStyle          = lipgloss.NewStyle().Foreground(ColorText).Padding(0, 1)
 	navSelectedRowStyle   = lipgloss.NewStyle().Background(ColorIris).Foreground(ColorBase).Padding(0, 1)
@@ -84,6 +96,9 @@ var (
 	navSearchActiveStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorFoam).Padding(0, 1)
 )
 
+// ---------- NavigationPanel ----------
+
+// NavigationPanel is the sidebar showing the plan/instance tree.
 type NavigationPanel struct {
 	spinner *spinner.Model
 
@@ -91,14 +106,18 @@ type NavigationPanel struct {
 	selectedIdx  int
 	scrollOffset int
 
-	plans          []PlanDisplay
-	topics         []TopicDisplay
-	instances      []*session.Instance
-	deadPlans      []PlanDisplay
-	historyPlans   []PlanDisplay
-	promotedPlans  []PlanDisplay // finished plans promoted to active (have running instances)
-	cancelled      []PlanDisplay
-	planStatuses   map[string]TopicStatus
+	// Data sources
+	plans         []PlanDisplay
+	topics        []TopicDisplay
+	instances     []*session.Instance
+	deadPlans     []PlanDisplay
+	historyPlans  []PlanDisplay
+	promotedPlans []PlanDisplay
+	cancelled     []PlanDisplay
+	planStatuses  map[string]TopicStatus
+
+	// Collapse state: collapsed holds the current collapsed/expanded value;
+	// userOverrides tracks which plan files have been manually toggled.
 	collapsed      map[string]bool
 	userOverrides  map[string]bool
 	inspectedPlans map[string]bool
@@ -109,7 +128,7 @@ type NavigationPanel struct {
 	searchQuery     string
 	clickUpAvail    bool
 
-	// Audit section rendered by the AuditPane and displayed inside the border.
+	// Embedded audit view rendered below the legend.
 	auditView   string
 	auditHeight int
 
@@ -117,11 +136,7 @@ type NavigationPanel struct {
 	focused       bool
 }
 
-type TopicDisplay struct {
-	Name  string
-	Plans []PlanDisplay
-}
-
+// NewNavigationPanel creates a NavigationPanel with an attached spinner model.
 func NewNavigationPanel(sp *spinner.Model) *NavigationPanel {
 	return &NavigationPanel{
 		spinner:        sp,
@@ -134,7 +149,16 @@ func NewNavigationPanel(sp *spinner.Model) *NavigationPanel {
 	}
 }
 
-func (n *NavigationPanel) SetData(plans []PlanDisplay, instances []*session.Instance, history []PlanDisplay, cancelled []PlanDisplay, planStatuses map[string]TopicStatus) {
+// ---------- data setters ----------
+
+// SetData is the primary data update path. It replaces all state and rebuilds rows.
+func (n *NavigationPanel) SetData(
+	plans []PlanDisplay,
+	instances []*session.Instance,
+	history []PlanDisplay,
+	cancelled []PlanDisplay,
+	planStatuses map[string]TopicStatus,
+) {
 	n.plans = plans
 	n.instances = instances
 	n.cancelled = cancelled
@@ -143,41 +167,46 @@ func (n *NavigationPanel) SetData(plans []PlanDisplay, instances []*session.Inst
 	} else {
 		n.planStatuses = planStatuses
 	}
-	// Split history into dead (has instances or manually inspected) and history.
 	n.splitDeadFromHistory(history)
 	n.rebuildRows()
 }
 
+// SetPlans replaces the plan list and rebuilds rows.
 func (n *NavigationPanel) SetPlans(plans []PlanDisplay) {
 	n.plans = plans
 	n.rebuildRows()
 }
 
-func (n *NavigationPanel) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {
+// SetTopicsAndPlans replaces topics, ungrouped plans, history, and optionally
+// cancelled plans, then rebuilds rows.
+func (n *NavigationPanel) SetTopicsAndPlans(
+	topics []TopicDisplay,
+	ungrouped []PlanDisplay,
+	history []PlanDisplay,
+	cancelled ...[]PlanDisplay,
+) {
 	n.topics = topics
 	if len(cancelled) > 0 {
 		n.cancelled = cancelled[0]
 	}
-	plans := make([]PlanDisplay, 0, len(ungrouped))
-	plans = append(plans, ungrouped...)
+	all := make([]PlanDisplay, 0, len(ungrouped))
+	all = append(all, ungrouped...)
 	for _, t := range topics {
-		plans = append(plans, t.Plans...)
+		all = append(all, t.Plans...)
 	}
-	n.plans = plans
-	// Split history into dead (has instances or manually inspected) and history.
+	n.plans = all
 	n.splitDeadFromHistory(history)
 	n.rebuildRows()
 }
 
-// SetPlanStatuses updates plan-level status flags (running/notification)
-// without triggering a row rebuild. Call this before SetTopicsAndPlans so
-// the subsequent rebuild uses correct statuses.
+// SetPlanStatuses stores plan-level status flags without triggering a rebuild.
 func (n *NavigationPanel) SetPlanStatuses(statuses map[string]TopicStatus) {
 	if statuses != nil {
 		n.planStatuses = statuses
 	}
 }
 
+// SetItems is a legacy-compat shim — updates plan statuses and rebuilds.
 func (n *NavigationPanel) SetItems(_ []string, _ map[string]int, _ int, _ map[string]bool, _ map[string]TopicStatus, planStatuses map[string]TopicStatus) {
 	if planStatuses != nil {
 		n.planStatuses = planStatuses
@@ -185,58 +214,67 @@ func (n *NavigationPanel) SetItems(_ []string, _ map[string]int, _ int, _ map[st
 	n.rebuildRows()
 }
 
-// splitDeadFromHistory partitions finished plans into three buckets:
-//   - promoted (appended to n.plans): has running/loading instances
-//   - dead: has only non-running instances or was manually inspected
-//   - history: no instances at all
+// ---------- dead/history partitioning ----------
+
+// splitDeadFromHistory partitions a finished plan list into three buckets:
+//   - promoted (added to n.plans): plan has at least one running/loading instance
+//   - dead:     plan has only non-running instances, or was manually inspected
+//   - history:  plan has no instances at all
+//
+// Previously promoted plans are removed from n.plans before re-partitioning.
 func (n *NavigationPanel) splitDeadFromHistory(finished []PlanDisplay) {
-	type planInfo struct {
-		hasInstances bool
-		hasRunning   bool
-	}
-	infoByPlan := make(map[string]planInfo, len(n.instances))
+	// Build per-plan instance info from current instance list.
+	type info struct{ hasAny, hasRunning bool }
+	byPlan := make(map[string]info, len(n.instances))
 	for _, inst := range n.instances {
-		if inst.TaskFile != "" {
-			info := infoByPlan[inst.TaskFile]
-			info.hasInstances = true
-			if inst.Status == session.Running || inst.Status == session.Loading {
-				info.hasRunning = true
-			}
-			infoByPlan[inst.TaskFile] = info
+		if inst.TaskFile == "" {
+			continue
 		}
+		entry := byPlan[inst.TaskFile]
+		entry.hasAny = true
+		if inst.Status == session.Running || inst.Status == session.Loading {
+			entry.hasRunning = true
+		}
+		byPlan[inst.TaskFile] = entry
 	}
-	// Remove any previously promoted plans from n.plans before re-partitioning.
+
+	// Strip previously promoted plans from n.plans to avoid duplicates.
 	if len(n.promotedPlans) > 0 {
 		promoted := make(map[string]bool, len(n.promotedPlans))
 		for _, p := range n.promotedPlans {
 			promoted[p.Filename] = true
 		}
-		filtered := n.plans[:0]
+		kept := n.plans[:0]
 		for _, p := range n.plans {
 			if !promoted[p.Filename] {
-				filtered = append(filtered, p)
+				kept = append(kept, p)
 			}
 		}
-		n.plans = filtered
+		n.plans = kept
 	}
+
 	n.deadPlans = nil
 	n.historyPlans = nil
 	n.promotedPlans = nil
+
 	for _, p := range finished {
-		info := infoByPlan[p.Filename]
-		if info.hasRunning {
-			// Running instances → promote to active plans list.
+		inf := byPlan[p.Filename]
+		switch {
+		case inf.hasRunning:
+			// Running instances → promote into active plans.
 			n.promotedPlans = append(n.promotedPlans, p)
 			n.plans = append(n.plans, p)
-		} else if info.hasInstances || n.inspectedPlans[p.Filename] {
+		case inf.hasAny || n.inspectedPlans[p.Filename]:
+			// Non-running instances or manually inspected → dead section.
 			n.deadPlans = append(n.deadPlans, p)
-		} else {
+		default:
+			// No instances → history.
 			n.historyPlans = append(n.historyPlans, p)
 		}
 	}
 }
 
-// resplitDead re-partitions dead, promoted, and history plans based on current instances.
+// resplitDead recombines all finished plan buckets and re-partitions them.
 func (n *NavigationPanel) resplitDead() {
 	all := make([]PlanDisplay, 0, len(n.deadPlans)+len(n.promotedPlans)+len(n.historyPlans))
 	all = append(all, n.deadPlans...)
@@ -245,7 +283,7 @@ func (n *NavigationPanel) resplitDead() {
 	n.splitDeadFromHistory(all)
 }
 
-// InspectPlan moves a history plan into the dead section for manual inspection.
+// InspectPlan marks a history plan for manual inspection and moves it to dead.
 func (n *NavigationPanel) InspectPlan(planFile string) {
 	if n.inspectedPlans == nil {
 		n.inspectedPlans = make(map[string]bool)
@@ -256,57 +294,64 @@ func (n *NavigationPanel) InspectPlan(planFile string) {
 	n.rebuildRows()
 }
 
+// ---------- row building ----------
+
+// rebuildRows reconstructs the rows slice from current state. Selection is
+// preserved by ID where possible, or clamped to the previous numeric position.
 func (n *NavigationPanel) rebuildRows() {
+	// Capture previous selection ID for restore.
 	prevID := ""
 	prevIdx := n.selectedIdx
 	if prevIdx >= 0 && prevIdx < len(n.rows) {
 		prevID = n.rows[prevIdx].ID
 	}
 
-	instancesByPlan := make(map[string][]*session.Instance)
+	// Partition instances into plan-attached and solo.
+	byPlan := make(map[string][]*session.Instance)
 	var solo []*session.Instance
 	for _, inst := range n.instances {
 		if inst.TaskFile == "" {
 			solo = append(solo, inst)
-			continue
+		} else {
+			byPlan[inst.TaskFile] = append(byPlan[inst.TaskFile], inst)
 		}
-		instancesByPlan[inst.TaskFile] = append(instancesByPlan[inst.TaskFile], inst)
 	}
 
-	sortInstances := func(list []*session.Instance) {
+	// Sort helpers
+	sortInsts := func(list []*session.Instance) {
 		sort.SliceStable(list, func(i, j int) bool {
-			ki := navInstanceSortKey(list[i])
-			kj := navInstanceSortKey(list[j])
+			ki, kj := navInstanceSortKey(list[i]), navInstanceSortKey(list[j])
 			if ki != kj {
 				return ki < kj
 			}
 			return strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)
 		})
 	}
-	for _, list := range instancesByPlan {
-		sortInstances(list)
+	for _, list := range byPlan {
+		sortInsts(list)
 	}
-	sortInstances(solo)
+	sortInsts(solo)
 
-	plans := append([]PlanDisplay(nil), n.plans...)
-	sort.SliceStable(plans, func(i, j int) bool {
-		pi, pj := plans[i], plans[j]
-		ki := navPlanSortKey(pi, instancesByPlan[pi.Filename], n.planStatuses[pi.Filename])
-		kj := navPlanSortKey(pj, instancesByPlan[pj.Filename], n.planStatuses[pj.Filename])
+	// Sort plans: notification (0) < running/active-status (1) < idle (2), then alpha.
+	sorted := append([]PlanDisplay(nil), n.plans...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		pi, pj := sorted[i], sorted[j]
+		ki := navPlanSortKey(pi, byPlan[pi.Filename], n.planStatuses[pi.Filename])
+		kj := navPlanSortKey(pj, byPlan[pj.Filename], n.planStatuses[pj.Filename])
 		if ki != kj {
 			return ki < kj
 		}
 		return strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))
 	})
 
-	rows := make([]navRow, 0, len(plans)+len(n.instances)+len(n.deadPlans)+len(n.historyPlans)+len(n.cancelled)+6)
+	capacity := len(sorted) + len(n.instances) + len(n.deadPlans) + len(n.historyPlans) + len(n.cancelled) + 8
+	rows := make([]navRow, 0, capacity)
 
-	// Helper to append a plan header + its child instances.
-	// indent is the indentation level in spaces for the plan row.
+	// appendPlan emits a plan header row and optionally its child instance rows.
 	appendPlan := func(p PlanDisplay, indent int) {
-		insts := instancesByPlan[p.Filename]
-		hasRunning, hasNotification := aggregateNavPlanStatus(insts, n.planStatuses[p.Filename])
-		collapsed := n.isPlanCollapsed(p.Filename, hasRunning, hasNotification)
+		insts := byPlan[p.Filename]
+		hasRunning, hasNotif := aggregateNavPlanStatus(insts, n.planStatuses[p.Filename])
+		collapsed := n.isPlanCollapsed(p.Filename, hasRunning, hasNotif)
 		rows = append(rows, navRow{
 			Kind:            navRowPlanHeader,
 			ID:              SidebarPlanPrefix + p.Filename,
@@ -315,7 +360,7 @@ func (n *NavigationPanel) rebuildRows() {
 			PlanStatus:      p.Status,
 			Collapsed:       collapsed,
 			HasRunning:      hasRunning,
-			HasNotification: hasNotification,
+			HasNotification: hasNotif,
 			Indent:          indent,
 		})
 		if !collapsed {
@@ -332,15 +377,23 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Import action pinned at the top of the list, below the search bar.
+	// ClickUp import action (pinned at top when available).
 	if n.clickUpAvail {
-		rows = append(rows, navRow{Kind: navRowImportAction, ID: SidebarImportClickUp, Label: "+ import from clickup"})
+		rows = append(rows, navRow{
+			Kind:  navRowImportAction,
+			ID:    SidebarImportClickUp,
+			Label: "+ import from clickup",
+		})
 	}
 
-	// Dead section: done plans with instances or manually inspected.
-	// Shown above active plans so they're accessible for cleanup.
+	// Dead section: plans with non-running instances or manually inspected.
 	if len(n.deadPlans) > 0 {
-		rows = append(rows, navRow{Kind: navRowDeadToggle, ID: "__dead_toggle__", Label: "dead", Collapsed: !n.deadExpanded})
+		rows = append(rows, navRow{
+			Kind:      navRowDeadToggle,
+			ID:        "__dead_toggle__",
+			Label:     "dead",
+			Collapsed: !n.deadExpanded,
+		})
 		if n.deadExpanded {
 			for _, p := range n.deadPlans {
 				appendPlan(p, 2)
@@ -348,47 +401,49 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Split plans into active (sort key 0,1) and idle (sort key 2).
+	// Split sorted plans into active (key < 2) and idle (key == 2).
 	var activePlans, idlePlans []PlanDisplay
-	for _, p := range plans {
-		sk := navPlanSortKey(p, instancesByPlan[p.Filename], n.planStatuses[p.Filename])
-		if sk < 2 {
+	for _, p := range sorted {
+		if navPlanSortKey(p, byPlan[p.Filename], n.planStatuses[p.Filename]) < 2 {
 			activePlans = append(activePlans, p)
 		} else {
 			idlePlans = append(idlePlans, p)
 		}
 	}
 
-	// Emit active plans flat.
+	// Active plans (running, notified, implementing, reviewing).
 	for _, p := range activePlans {
 		appendPlan(p, 0)
 	}
 
-	// Solo instances between active and idle.
+	// Solo instances section (between active plans and idle plans).
 	if len(solo) > 0 {
 		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "agents"})
 		for _, inst := range solo {
-			rows = append(rows, navRow{Kind: navRowInstance, ID: "inst:" + inst.Title, Label: inst.Title, Instance: inst})
+			rows = append(rows, navRow{
+				Kind:     navRowInstance,
+				ID:       "inst:" + inst.Title,
+				Label:    inst.Title,
+				Instance: inst,
+			})
 		}
 	}
 
-	// Idle plans grouped by topic.
-	// Build a set of idle filenames for quick lookup.
+	// Idle plans grouped by topic, then ungrouped remainder.
 	idleSet := make(map[string]bool, len(idlePlans))
 	for _, p := range idlePlans {
 		idleSet[p.Filename] = true
 	}
 
-	// Emit topics that contain idle plans.
 	emitted := make(map[string]bool)
 	for _, t := range n.topics {
-		var topicIdlePlans []PlanDisplay
+		var planGroup []PlanDisplay
 		for _, p := range t.Plans {
 			if idleSet[p.Filename] {
-				topicIdlePlans = append(topicIdlePlans, p)
+				planGroup = append(planGroup, p)
 			}
 		}
-		if len(topicIdlePlans) == 0 {
+		if len(planGroup) == 0 {
 			continue
 		}
 		topicID := SidebarTopicPrefix + t.Name
@@ -399,44 +454,60 @@ func (n *NavigationPanel) rebuildRows() {
 			Label:     t.Name,
 			Collapsed: collapsed,
 		})
-		if !collapsed {
-			for _, p := range topicIdlePlans {
+		for _, p := range planGroup {
+			emitted[p.Filename] = true
+			if !collapsed {
 				appendPlan(p, 2)
-				emitted[p.Filename] = true
-			}
-		} else {
-			for _, p := range topicIdlePlans {
-				emitted[p.Filename] = true
 			}
 		}
 	}
 
-	// Emit ungrouped idle plans (no topic).
+	// Ungrouped idle plans.
 	for _, p := range idlePlans {
 		if !emitted[p.Filename] {
 			appendPlan(p, 0)
 		}
 	}
 
+	// History section (collapsed toggle, expands to list).
 	if len(n.historyPlans) > 0 {
-		rows = append(rows, navRow{Kind: navRowHistoryToggle, ID: SidebarPlanHistoryToggle, Label: "history", Collapsed: !n.historyExpanded})
+		rows = append(rows, navRow{
+			Kind:      navRowHistoryToggle,
+			ID:        SidebarPlanHistoryToggle,
+			Label:     "history",
+			Collapsed: !n.historyExpanded,
+		})
 		if n.historyExpanded {
 			for _, p := range n.historyPlans {
-				rows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})
+				rows = append(rows, navRow{
+					Kind:     navRowHistoryPlan,
+					ID:       SidebarPlanPrefix + p.Filename,
+					Label:    taskstate.DisplayName(p.Filename),
+					TaskFile: p.Filename,
+				})
 			}
 		}
 	}
 
+	// Cancelled plans (always shown, no toggle).
 	for _, p := range n.cancelled {
-		rows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})
+		rows = append(rows, navRow{
+			Kind:     navRowCancelled,
+			ID:       SidebarPlanPrefix + p.Filename,
+			Label:    taskstate.DisplayName(p.Filename),
+			TaskFile: p.Filename,
+		})
 	}
 
 	n.rows = rows
+
 	if len(rows) == 0 {
 		n.selectedIdx = 0
 		n.scrollOffset = 0
 		return
 	}
+
+	// Restore selection by ID.
 	if prevID != "" {
 		for i, row := range rows {
 			if row.ID == prevID {
@@ -445,37 +516,30 @@ func (n *NavigationPanel) rebuildRows() {
 				return
 			}
 		}
-		// prevID not found — the selected plan may have been transiently
-		// absent from an async remote-store reload. Clamp to the same
-		// numeric position so the selection doesn't jump to a random row.
-		// Skip non-selectable divider rows.
-		if prevIdx >= len(rows) {
-			prevIdx = len(rows) - 1
-		}
-		if prevIdx < 0 {
-			prevIdx = 0
-		}
-		n.selectedIdx = prevIdx
-		// If we landed on a non-selectable divider, nudge down then up.
-		if n.selectedIdx < len(rows) && rows[n.selectedIdx].Kind == navRowSoloHeader {
-			if n.selectedIdx+1 < len(rows) {
-				n.selectedIdx++
-			} else if n.selectedIdx > 0 {
-				n.selectedIdx--
-			}
-		}
-		n.clampScroll()
-		return
 	}
-	if n.selectedIdx >= len(rows) {
-		n.selectedIdx = len(rows) - 1
+
+	// ID not found — clamp to previous numeric position, skipping dividers.
+	if prevIdx >= len(rows) {
+		prevIdx = len(rows) - 1
 	}
-	if n.selectedIdx < 0 {
-		n.selectedIdx = 0
+	if prevIdx < 0 {
+		prevIdx = 0
+	}
+	n.selectedIdx = prevIdx
+	if n.selectedIdx < len(rows) && rows[n.selectedIdx].Kind == navRowSoloHeader {
+		if n.selectedIdx+1 < len(rows) {
+			n.selectedIdx++
+		} else if n.selectedIdx > 0 {
+			n.selectedIdx--
+		}
 	}
 	n.clampScroll()
 }
 
+// ---------- sort key helpers ----------
+
+// navInstanceSortKey returns the sort priority for an instance within a plan.
+// Lower values sort first: running (0) < notified (1) < paused (2) < done (3).
 func navInstanceSortKey(inst *session.Instance) int {
 	if inst.ImplementationComplete {
 		return 3
@@ -489,63 +553,64 @@ func navInstanceSortKey(inst *session.Instance) int {
 	if inst.Notified {
 		return 1
 	}
-	// Ready / unknown
 	return 3
 }
 
+// navPlanSortKey returns the sort priority for a plan.
+// 0 = has notification, 1 = running or active lifecycle, 2 = idle.
 func navPlanSortKey(p PlanDisplay, insts []*session.Instance, st TopicStatus) int {
-	hasNotification := st.HasNotification
+	hasNotif := st.HasNotification
 	hasRunning := st.HasRunning
 	for _, inst := range insts {
 		if inst.Notified {
-			hasNotification = true
+			hasNotif = true
 		}
 		if inst.Status == session.Running || inst.Status == session.Loading {
 			hasRunning = true
 		}
 	}
-	if hasNotification {
+	switch {
+	case hasNotif:
 		return 0
-	}
-	if hasRunning {
+	case hasRunning, p.Status == "implementing", p.Status == "reviewing":
 		return 1
+	default:
+		return 2
 	}
-	// Plans in active lifecycle states (implementing, reviewing) should
-	// appear in the "active" section even without running instances —
-	// e.g. after a restart when the agent's tmux session is gone.
-	if p.Status == "implementing" || p.Status == "reviewing" {
-		return 1
-	}
-	return 2
 }
 
-func aggregateNavPlanStatus(insts []*session.Instance, st TopicStatus) (bool, bool) {
-	hasRunning := st.HasRunning
-	hasNotification := st.HasNotification
+// aggregateNavPlanStatus derives combined running/notification flags from
+// instance state and stored plan status flags.
+func aggregateNavPlanStatus(insts []*session.Instance, st TopicStatus) (hasRunning, hasNotif bool) {
+	hasRunning = st.HasRunning
+	hasNotif = st.HasNotification
 	for _, inst := range insts {
 		if inst.Notified {
-			hasNotification = true
+			hasNotif = true
 		}
 		if inst.Status == session.Running || inst.Status == session.Loading {
 			hasRunning = true
 		}
 	}
-	return hasRunning, hasNotification
+	return
 }
 
-func (n *NavigationPanel) isPlanCollapsed(planFile string, hasRunning, hasNotification bool) bool {
+// isPlanCollapsed returns whether a plan should be shown collapsed.
+// User overrides always win; otherwise collapse unless running or notified.
+func (n *NavigationPanel) isPlanCollapsed(planFile string, hasRunning, hasNotif bool) bool {
 	if _, ok := n.userOverrides[planFile]; ok {
 		return n.collapsed[planFile]
 	}
-	return !hasRunning && !hasNotification
+	return !hasRunning && !hasNotif
 }
+
+// ---------- layout ----------
 
 func (n *NavigationPanel) SetSize(width, height int) {
 	n.width, n.height = width, height
 	n.clampScroll()
 }
 
-// SetAuditView sets pre-rendered audit pane content to display inside the border.
 func (n *NavigationPanel) SetAuditView(view string, h int) {
 	n.auditView = view
 	n.auditHeight = h
@@ -555,13 +620,43 @@ func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }
 func (n *NavigationPanel) IsFocused() bool            { return n.focused }
 func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.rebuildRows() }
 
+// availRows returns the number of rows the scroll window can display.
+func (n *NavigationPanel) availRows() int {
+	v := n.height - 8
+	if v < 1 {
+		return 1
+	}
+	return v
+}
+
+// clampScroll ensures scrollOffset keeps selectedIdx visible.
+func (n *NavigationPanel) clampScroll() {
+	if len(n.rows) == 0 {
+		n.scrollOffset = 0
+		return
+	}
+	avail := n.availRows()
+	if n.selectedIdx < n.scrollOffset {
+		n.scrollOffset = n.selectedIdx
+	}
+	if n.selectedIdx >= n.scrollOffset+avail {
+		n.scrollOffset = n.selectedIdx - avail + 1
+	}
+	if n.scrollOffset < 0 {
+		n.scrollOffset = 0
+	}
+}
+
+// ---------- search ----------
+
 func (n *NavigationPanel) ActivateSearch()        { n.searchActive = true; n.searchQuery = "" }
 func (n *NavigationPanel) DeactivateSearch()      { n.searchActive = false; n.searchQuery = "" }
 func (n *NavigationPanel) IsSearchActive() bool   { return n.searchActive }
 func (n *NavigationPanel) GetSearchQuery() string { return n.searchQuery }
+
+// SetSearchQuery updates the search filter and snaps selection to the first matching row.
 func (n *NavigationPanel) SetSearchQuery(q string) {
 	n.searchQuery = q
-	// If the current selection is hidden by the new filter, snap to the first visible row.
 	if q != "" && len(n.rows) > 0 && !n.rowMatchesSearch(n.selectedIdx) {
 		for i := range n.rows {
 			if n.rows[i].Kind != navRowSoloHeader && n.rowMatchesSearch(i) {
@@ -573,6 +668,21 @@ func (n *NavigationPanel) SetSearchQuery(q string) {
 	}
 }
 
+// rowMatchesSearch returns true if the row at idx passes the current search filter.
+func (n *NavigationPanel) rowMatchesSearch(idx int) bool {
+	if !n.searchActive || n.searchQuery == "" {
+		return true
+	}
+	q := strings.ToLower(n.searchQuery)
+	row := n.rows[idx]
+	return strings.Contains(strings.ToLower(row.Label), q) ||
+		strings.Contains(strings.ToLower(row.TaskFile), q)
+}
+
+// ---------- expand/collapse ----------
+
+// ToggleSelectedExpand toggles the expand/collapse state of the selected row.
+// Returns true if the row supports toggling.
 func (n *NavigationPanel) ToggleSelectedExpand() bool {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return false
@@ -601,23 +711,26 @@ func (n *NavigationPanel) ToggleSelectedExpand() bool {
 	}
 }
 
+// ---------- navigation ----------
+
+// Up moves the selection up one visible, selectable row.
 func (n *NavigationPanel) Up() {
 	orig := n.selectedIdx
 	for n.selectedIdx > 0 {
 		n.selectedIdx--
 		if n.rows[n.selectedIdx].Kind == navRowSoloHeader {
-			continue // skip non-selectable divider
+			continue
 		}
 		if !n.rowMatchesSearch(n.selectedIdx) {
-			continue // skip rows hidden by search filter
+			continue
 		}
 		n.clampScroll()
 		return
 	}
-	// No valid row found above — revert.
 	n.selectedIdx = orig
 }
 
+// Down moves the selection down one visible, selectable row.
 func (n *NavigationPanel) Down() {
 	orig := n.selectedIdx
 	for n.selectedIdx+1 < len(n.rows) {
@@ -634,18 +747,7 @@ func (n *NavigationPanel) Down() {
 	n.selectedIdx = orig
 }
 
-// rowMatchesSearch returns true if the row at idx is visible under the current
-// search filter. Always true when search is inactive or query is empty.
-func (n *NavigationPanel) rowMatchesSearch(idx int) bool {
-	if !n.searchActive || n.searchQuery == "" {
-		return true
-	}
-	row := n.rows[idx]
-	q := strings.ToLower(n.searchQuery)
-	return strings.Contains(strings.ToLower(row.Label), q) ||
-		strings.Contains(strings.ToLower(row.TaskFile), q)
-}
-
+// Left collapses an expanded plan header, or jumps to the parent header when on an instance.
 func (n *NavigationPanel) Left() {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return
@@ -667,6 +769,7 @@ func (n *NavigationPanel) Left() {
 	}
 }
 
+// Right expands a collapsed header, or descends into the first child row.
 func (n *NavigationPanel) Right() {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return
@@ -692,6 +795,8 @@ func (n *NavigationPanel) Right() {
 	}
 }
 
+// ---------- selection API ----------
+
 func (n *NavigationPanel) GetSelectedInstance() *session.Instance {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return nil
@@ -714,7 +819,6 @@ func (n *NavigationPanel) IsSelectedPlanHeader() bool {
 	return k == navRowPlanHeader || k == navRowHistoryPlan || k == navRowCancelled
 }
 
-// IsSelectedHistoryPlan returns true if the selected row is a history plan entry.
 func (n *NavigationPanel) IsSelectedHistoryPlan() bool {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return false
@@ -732,6 +836,7 @@ func (n *NavigationPanel) GetSelectedID() string {
 func (n *NavigationPanel) GetSelectedIdx() int  { return n.selectedIdx }
 func (n *NavigationPanel) GetScrollOffset() int { return n.scrollOffset }
 
+// ClickItem selects a row by its raw index.
 func (n *NavigationPanel) ClickItem(row int) {
 	if row >= 0 && row < len(n.rows) {
 		n.selectedIdx = row
@@ -739,6 +844,7 @@ func (n *NavigationPanel) ClickItem(row int) {
 	}
 }
 
+// SelectByID moves selection to the row with the given ID. Returns false if not found.
 func (n *NavigationPanel) SelectByID(id string) bool {
 	for i, row := range n.rows {
 		if row.ID == id {
@@ -750,6 +856,7 @@ func (n *NavigationPanel) SelectByID(id string) bool {
 	return false
 }
 
+// SelectInstance moves selection to the given instance, auto-expanding its plan if needed.
 func (n *NavigationPanel) SelectInstance(inst *session.Instance) bool {
 	for i, row := range n.rows {
 		if row.Instance == inst {
@@ -758,7 +865,7 @@ func (n *NavigationPanel) SelectInstance(inst *session.Instance) bool {
 			return true
 		}
 	}
-	// Instance not visible — may be under a collapsed plan. Expand it.
+	// Instance is under a collapsed plan — expand and retry.
 	if inst.TaskFile != "" {
 		n.collapsed[inst.TaskFile] = false
 		n.userOverrides[inst.TaskFile] = true
@@ -794,136 +901,19 @@ func (n *NavigationPanel) SelectedIndex() int {
 	return 0
 }
 
-func (n *NavigationPanel) CycleNextActive() {
-	n.cycleActive(1)
-}
-
-func (n *NavigationPanel) CyclePrevActive() {
-	n.cycleActive(-1)
-}
-
-func (n *NavigationPanel) cycleActive(step int) {
-	// Build the cycle list in visual (top-to-bottom) order so Ctrl+Up/Down
-	// follows the on-screen layout across active/solo sections.
-	// For collapsed plan headers, insert their hidden instances at the
-	// header's position so cycling can auto-expand them.
-	var ordered []*session.Instance
-	for _, row := range n.rows {
-		switch {
-		case row.Kind == navRowInstance && row.Instance != nil:
-			if !row.Instance.Paused() {
-				ordered = append(ordered, row.Instance)
-			}
-		case row.Kind == navRowPlanHeader && row.Collapsed:
-			// Plan is collapsed — its instances aren't in rows.
-			// Insert them here so they appear at the right visual position.
-			for _, inst := range n.instances {
-				if inst.TaskFile == row.TaskFile && !inst.Paused() {
-					ordered = append(ordered, inst)
-				}
-			}
-		}
-	}
-	if len(ordered) == 0 {
+// SelectFirst selects the first selectable row (skips solo-header dividers).
+func (n *NavigationPanel) SelectFirst() {
+	if len(n.rows) == 0 {
 		return
 	}
-
-	// Find current position. Match by instance pointer from the selected row.
-	cur := -1
-	sel := n.GetSelectedInstance()
-	if sel != nil {
-		for i, inst := range ordered {
-			if inst == sel {
-				cur = i
-				break
-			}
-		}
-	}
-	if cur < 0 {
-		cur = 0
-	}
-
-	next := (cur + step + len(ordered)) % len(ordered)
-	n.SelectInstance(ordered[next])
-}
-
-func (n *NavigationPanel) GetInstances() []*session.Instance { return n.instances }
-func (n *NavigationPanel) TotalInstances() int               { return len(n.instances) }
-func (n *NavigationPanel) NumInstances() int                 { return len(n.instances) }
-
-func (n *NavigationPanel) AddInstance(inst *session.Instance) func() {
-	n.instances = append(n.instances, inst)
-	n.resplitDead()
-	n.rebuildRows()
-	return func() {}
-}
-
-func (n *NavigationPanel) RemoveByTitle(title string) *session.Instance {
-	for i, inst := range n.instances {
-		if inst.Title == title {
-			n.instances = append(n.instances[:i], n.instances[i+1:]...)
-			n.resplitDead()
-			n.rebuildRows()
-			return inst
-		}
-	}
-	return nil
-}
-
-func (n *NavigationPanel) Remove() {
-	inst := n.GetSelectedInstance()
-	if inst != nil {
-		n.RemoveByTitle(inst.Title)
-	}
-}
-
-func (n *NavigationPanel) Kill() {
-	inst := n.GetSelectedInstance()
-	if inst != nil {
-		_ = inst.Kill()
-		n.RemoveByTitle(inst.Title)
-	}
-}
-
-func (n *NavigationPanel) Attach() (chan struct{}, error) {
-	inst := n.GetSelectedInstance()
-	if inst == nil {
-		return nil, fmt.Errorf("no instance selected")
-	}
-	return inst.Attach()
-}
-
-func (n *NavigationPanel) Clear() {
-	n.instances = nil
-	n.rows = nil
 	n.selectedIdx = 0
-	n.scrollOffset = 0
-}
-
-func (n *NavigationPanel) SetSessionPreviewSize(width, height int) error {
-	var err error
-	for _, item := range n.instances {
-		if !item.Started() || item.Paused() {
-			continue
-		}
-		if innerErr := item.SetPreviewSize(width, height); innerErr != nil {
-			err = innerErr
-		}
+	if n.rows[0].Kind == navRowSoloHeader && len(n.rows) > 1 {
+		n.selectedIdx = 1
 	}
-	return err
+	n.clampScroll()
 }
 
-func (n *NavigationPanel) SelectFirst() {
-	if len(n.rows) > 0 {
-		n.selectedIdx = 0
-		// Skip non-selectable divider rows.
-		if n.rows[0].Kind == navRowSoloHeader && len(n.rows) > 1 {
-			n.selectedIdx = 1
-		}
-		n.clampScroll()
-	}
-}
-
+// SelectedSpaceAction returns the label for the space-key action on the current row.
 func (n *NavigationPanel) SelectedSpaceAction() string {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return "toggle"
@@ -939,51 +929,147 @@ func (n *NavigationPanel) SelectedSpaceAction() string {
 	}
 }
 
-func (n *NavigationPanel) availRows() int {
-	avail := n.height - 8
-	if avail < 1 {
-		return 1
-	}
-	return avail
-}
+// ---------- cycle ----------
 
-func (n *NavigationPanel) clampScroll() {
-	if len(n.rows) == 0 {
-		n.scrollOffset = 0
+// CycleNextActive moves selection to the next non-paused instance in visual order.
+func (n *NavigationPanel) CycleNextActive() { n.cycleActive(1) }
+
+// CyclePrevActive moves selection to the previous non-paused instance in visual order.
+func (n *NavigationPanel) CyclePrevActive() { n.cycleActive(-1) }
+
+// cycleActive builds an ordered list of non-paused instances (including those
+// hidden under collapsed plans at their header position), then advances by step.
+func (n *NavigationPanel) cycleActive(step int) {
+	var ordered []*session.Instance
+	for _, row := range n.rows {
+		switch {
+		case row.Kind == navRowInstance && row.Instance != nil && !row.Instance.Paused():
+			ordered = append(ordered, row.Instance)
+		case row.Kind == navRowPlanHeader && row.Collapsed:
+			for _, inst := range n.instances {
+				if inst.TaskFile == row.TaskFile && !inst.Paused() {
+					ordered = append(ordered, inst)
+				}
+			}
+		}
+	}
+	if len(ordered) == 0 {
 		return
 	}
-	avail := n.availRows()
-	if n.selectedIdx < n.scrollOffset {
-		n.scrollOffset = n.selectedIdx
+
+	cur := -1
+	if sel := n.GetSelectedInstance(); sel != nil {
+		for i, inst := range ordered {
+			if inst == sel {
+				cur = i
+				break
+			}
+		}
 	}
-	if n.selectedIdx >= n.scrollOffset+avail {
-		n.scrollOffset = n.selectedIdx - avail + 1
+	if cur < 0 {
+		cur = 0
 	}
-	if n.scrollOffset < 0 {
-		n.scrollOffset = 0
+	next := (cur + step + len(ordered)) % len(ordered)
+	n.SelectInstance(ordered[next])
+}
+
+// ---------- instance management ----------
+
+func (n *NavigationPanel) GetInstances() []*session.Instance { return n.instances }
+func (n *NavigationPanel) TotalInstances() int               { return len(n.instances) }
+func (n *NavigationPanel) NumInstances() int                 { return len(n.instances) }
+
+// AddInstance appends an instance and returns a no-op cleanup function.
+func (n *NavigationPanel) AddInstance(inst *session.Instance) func() {
+	n.instances = append(n.instances, inst)
+	n.resplitDead()
+	n.rebuildRows()
+	return func() {}
+}
+
+// RemoveByTitle removes the instance with the given title and returns it (nil if not found).
+func (n *NavigationPanel) RemoveByTitle(title string) *session.Instance {
+	for i, inst := range n.instances {
+		if inst.Title == title {
+			n.instances = append(n.instances[:i], n.instances[i+1:]...)
+			n.resplitDead()
+			n.rebuildRows()
+			return inst
+		}
+	}
+	return nil
+}
+
+// Remove removes the currently selected instance.
+func (n *NavigationPanel) Remove() {
+	if inst := n.GetSelectedInstance(); inst != nil {
+		n.RemoveByTitle(inst.Title)
 	}
 }
 
-// FindPlanInstance returns the best interactive candidate for a plan.
-// Priority: running > any non-paused instance. The caller should check
-// Started()/Paused() on the returned instance before entering focus mode.
+// Kill sends SIGKILL to the selected instance and removes it.
+func (n *NavigationPanel) Kill() {
+	if inst := n.GetSelectedInstance(); inst != nil {
+		_ = inst.Kill()
+		n.RemoveByTitle(inst.Title)
+	}
+}
+
+// Attach opens an interactive terminal session for the selected instance.
+func (n *NavigationPanel) Attach() (chan struct{}, error) {
+	inst := n.GetSelectedInstance()
+	if inst == nil {
+		return nil, fmt.Errorf("no instance selected")
+	}
+	return inst.Attach()
+}
+
+// Clear removes all instances and resets the row list.
+func (n *NavigationPanel) Clear() {
+	n.instances = nil
+	n.rows = nil
+	n.selectedIdx = 0
+	n.scrollOffset = 0
+}
+
+// SetSessionPreviewSize resizes all active (non-paused) instance preview panes.
+func (n *NavigationPanel) SetSessionPreviewSize(width, height int) error {
+	var firstErr error
+	for _, inst := range n.instances {
+		if !inst.Started() || inst.Paused() {
+			continue
+		}
+		if err := inst.SetPreviewSize(width, height); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// FindPlanInstance returns the best candidate instance for a plan: prefers
+// running/loading over ready. Returns nil if only paused instances exist.
 func (n *NavigationPanel) FindPlanInstance(planFile string) *session.Instance {
-	var best *session.Instance
+	var candidate *session.Instance
 	for _, inst := range n.instances {
 		if inst.TaskFile != planFile || inst.Paused() {
 			continue
 		}
 		if inst.Status == session.Running || inst.Status == session.Loading {
-			return inst
+			return inst // running wins immediately
 		}
-		if best == nil {
-			best = inst
+		if candidate == nil {
+			candidate = inst
 		}
 	}
-	return best
+	return candidate
 }
 
-// navInstanceTitle returns a clean display title for an instance in the sidebar.
+// RowCount returns the total number of rows in the panel.
+func (n *NavigationPanel) RowCount() int { return len(n.rows) }
+
+// ---------- display helpers ----------
+
+// navInstanceTitle returns the human-readable display label for an instance.
 func navInstanceTitle(inst *session.Instance) string {
 	switch {
 	case inst.WaveNumber > 0 && inst.TaskNumber > 0:
@@ -1001,7 +1087,7 @@ func navInstanceTitle(inst *session.Instance) string {
 	}
 }
 
-// navInstanceStatusIcon returns a styled status glyph for an instance.
+// navInstanceStatusIcon returns a styled status glyph for an instance row.
 func (n *NavigationPanel) navInstanceStatusIcon(inst *session.Instance) string {
 	if inst.Exited {
 		return navCancelledLblStyle.Render("✕")
@@ -1029,23 +1115,21 @@ func (n *NavigationPanel) navInstanceStatusIcon(inst *session.Instance) string {
 
 // navPlanStatusIcon returns a styled status glyph for a plan header row.
 func navPlanStatusIcon(row navRow) string {
-	if row.HasNotification {
+	switch {
+	case row.HasNotification:
 		return navNotifyIconStyle.Render("◉")
-	}
-	if row.HasRunning {
+	case row.HasRunning:
 		return navRunningIconStyle.Render("●")
-	}
-	// Reflect plan lifecycle status when no instances are active.
-	switch row.PlanStatus {
-	case "planning":
+	case row.PlanStatus == "planning":
 		return navRunningIconStyle.Render("●")
-	case "reviewing":
+	case row.PlanStatus == "reviewing":
 		return navNotifyIconStyle.Render("◉")
+	default:
+		return navIdleIconStyle.Render("○")
 	}
-	return navIdleIconStyle.Render("○")
 }
 
-// navSectionLabel returns a lowercase section label for a plan sort key.
+// navSectionLabel maps a plan sort key to a section label string.
 func navSectionLabel(key int) string {
 	if key < 2 {
 		return "active"
@@ -1053,7 +1137,7 @@ func navSectionLabel(key int) string {
 	return "plans"
 }
 
-// navDividerLine builds a full-width rule like "──── label ────" spanning w cells.
+// navDividerLine renders a full-width divider: "──── label ────".
 func navDividerLine(label string, w int) string {
 	inner := " " + label + " "
 	innerW := runewidth.StringWidth(inner)
@@ -1063,12 +1147,16 @@ func navDividerLine(label string, w int) string {
 	}
 	left := remaining / 2
 	right := remaining - left
-	return navHistoryDivStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
+	line := strings.Repeat("─", left) + inner + strings.Repeat("─", right)
+	return navHistoryDivStyle.Render(line)
 }
 
-// renderNavRow renders a single row's content (without selection styling).
+// ---------- row rendering ----------
+
+// renderNavRow produces the unstyled (pre-selection) text for a single row.
 func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 	switch row.Kind {
+
 	case navRowPlanHeader:
 		chevron := "▸"
 		if !row.Collapsed {
@@ -1080,7 +1168,6 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		indentW := row.Indent
 
 		label := row.Label
-		// Layout: indent + chevron(1) + space(1) + label + gap + space(1) + status
 		maxLabel := contentWidth - indentW - 3 - statusW
 		if maxLabel < 3 {
 			maxLabel = 3
@@ -1088,29 +1175,27 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		if runewidth.StringWidth(label) > maxLabel {
 			label = runewidth.Truncate(label, maxLabel-1, "…")
 		}
-
 		usedW := indentW + 2 + runewidth.StringWidth(label) + 1 + statusW
 		gap := contentWidth - usedW
 		if gap < 0 {
 			gap = 0
 		}
-		// Plans under topics use normal weight; top-level plans use bold.
-		labelStyle := navPlanLabelStyle
+		lblStyle := navPlanLabelStyle
 		if row.Indent > 0 {
-			labelStyle = navPlanLabelStyle.Bold(false)
+			lblStyle = navPlanLabelStyle.Bold(false)
 		}
-		return indent + chevron + " " + labelStyle.Render(label) + strings.Repeat(" ", gap) + " " + statusIcon
+		return indent + chevron + " " + lblStyle.Render(label) + strings.Repeat(" ", gap) + " " + statusIcon
 
 	case navRowInstance:
 		inst := row.Instance
 		isSolo := row.TaskFile == ""
-
 		if inst == nil {
 			if isSolo {
 				return row.Label
 			}
 			return "    " + row.Label
 		}
+
 		title := navInstanceTitle(inst)
 		statusIcon := n.navInstanceStatusIcon(inst)
 		statusW := lipgloss.Width(statusIcon)
@@ -1119,7 +1204,6 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		if isSolo {
 			indentW = 0
 		}
-		// Layout: indent + title + gap + space(1) + status
 		maxLabel := contentWidth - indentW - 1 - statusW
 		if maxLabel < 3 {
 			maxLabel = 3
@@ -1127,32 +1211,28 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 		if runewidth.StringWidth(title) > maxLabel {
 			title = runewidth.Truncate(title, maxLabel-1, "…")
 		}
-
 		usedW := indentW + runewidth.StringWidth(title) + 1 + statusW
 		gap := contentWidth - usedW
 		if gap < 0 {
 			gap = 0
 		}
-
 		indent := strings.Repeat(" ", indentW)
-		labelStyle := navInstanceLabelStyle
+		lblStyle := navInstanceLabelStyle
 		if isSolo {
 			indent = ""
-			labelStyle = navPlanLabelStyle
+			lblStyle = navPlanLabelStyle
 		}
-		// Dead instances: grey + strikethrough.
 		if inst.Exited {
-			labelStyle = navCancelledLblStyle
+			lblStyle = navCancelledLblStyle
 			statusIcon = navCancelledLblStyle.Render("✕")
 			statusW = lipgloss.Width(statusIcon)
-			// Recompute gap with updated status width.
 			usedW = indentW + runewidth.StringWidth(title) + 1 + statusW
 			gap = contentWidth - usedW
 			if gap < 0 {
 				gap = 0
 			}
 		}
-		return indent + labelStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
+		return indent + lblStyle.Render(title) + strings.Repeat(" ", gap) + " " + statusIcon
 
 	case navRowSoloHeader:
 		return navDividerLine("agents", contentWidth)
@@ -1163,7 +1243,7 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 			chevron = "▾"
 		}
 		label := row.Label
-		maxLabel := contentWidth - 2 // chevron + space
+		maxLabel := contentWidth - 2
 		if maxLabel < 3 {
 			maxLabel = 3
 		}
@@ -1230,11 +1310,16 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 	}
 }
 
+// ---------- String ----------
+
+// String renders the full navigation panel as a bordered, scrollable string.
 func (n *NavigationPanel) String() string {
+	// Border style changes based on focus.
 	border := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorOverlay).Padding(0, 1)
 	if n.focused {
 		border = border.Border(lipgloss.DoubleBorder()).BorderForeground(ColorIris)
 	}
+
 	innerWidth := n.width - 4
 	if innerWidth < 8 {
 		innerWidth = 8
@@ -1244,32 +1329,33 @@ func (n *NavigationPanel) String() string {
 		height = 4
 	}
 
-	itemWidth := innerWidth - 2   // border has Padding(0,1) → content area is 2 chars narrower
-	contentWidth := itemWidth - 2 // account for Padding(0,1) in row styles
+	// Content widths: border padding adds 2 chars, row style padding adds 2 more.
+	itemWidth := innerWidth - 2
+	contentWidth := itemWidth - 2
 	if contentWidth < 4 {
 		contentWidth = 4
 	}
 
-	// Search bar
+	// Search bar.
 	searchWidth := innerWidth - 4
 	if searchWidth < 4 {
 		searchWidth = 4
 	}
 	var searchBox string
 	if n.searchActive {
-		searchText := n.searchQuery
-		if searchText == "" {
-			searchText = " "
+		text := n.searchQuery
+		if text == "" {
+			text = " "
 		}
-		searchBox = zone.Mark(ZoneNavSearch, navSearchActiveStyle.Width(searchWidth).Render(searchText))
+		searchBox = zone.Mark(ZoneNavSearch, navSearchActiveStyle.Width(searchWidth).Render(text))
 	} else {
 		searchBox = zone.Mark(ZoneNavSearch, navSearchBoxStyle.Width(searchWidth).Render("\uf002 search"))
 	}
 
-	// Build visible items, including section dividers between plan sort-key groups.
+	// Build visible items, tracking which row each item maps to.
 	type visItem struct {
 		line   string
-		rowIdx int // -1 for section dividers
+		rowIdx int // -1 for injected section dividers
 	}
 	items := make([]visItem, 0, len(n.rows)+4)
 	selectedDisplayIdx := 0
@@ -1277,7 +1363,7 @@ func (n *NavigationPanel) String() string {
 	inDeadSection := false
 
 	for i, row := range n.rows {
-		// Search filter
+		// Apply search filter.
 		if n.searchActive && n.searchQuery != "" {
 			q := strings.ToLower(n.searchQuery)
 			if !strings.Contains(strings.ToLower(row.Label), q) &&
@@ -1286,33 +1372,28 @@ func (n *NavigationPanel) String() string {
 			}
 		}
 
-		// Track dead section boundaries to suppress plan-group dividers.
+		// Track dead section to suppress plan-group dividers inside it.
 		if row.Kind == navRowDeadToggle {
 			inDeadSection = true
 		} else if row.Kind != navRowPlanHeader && row.Kind != navRowInstance {
 			inDeadSection = false
 		}
 
-		// Insert section dividers between plan sort-key groups.
-		// Sort keys 0 (notification) and 1 (running) are merged into a single
-		// "active" section so the list doesn't jump between attention/active.
+		// Inject section dividers before plan header groups.
 		if row.Kind == navRowPlanHeader && !inDeadSection {
 			sk := 2
 			if row.HasNotification || row.HasRunning ||
 				row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
-				sk = 0 // unified active group
+				sk = 0 // unified "active" group
 			}
 			if sk != lastPlanKey {
-				label := navSectionLabel(sk)
-				divLine := navDividerLine(label, itemWidth)
-				items = append(items, visItem{line: divLine, rowIdx: -1})
+				items = append(items, visItem{line: navDividerLine(navSectionLabel(sk), itemWidth), rowIdx: -1})
 				lastPlanKey = sk
 			}
 		}
-		// Topic headers are always idle — ensure the idle divider appears.
+		// Topic headers always belong to the idle group.
 		if row.Kind == navRowTopicHeader && lastPlanKey != 2 {
-			divLine := navDividerLine(navSectionLabel(2), itemWidth)
-			items = append(items, visItem{line: divLine, rowIdx: -1})
+			items = append(items, visItem{line: navDividerLine(navSectionLabel(2), itemWidth), rowIdx: -1})
 			lastPlanKey = 2
 		}
 
@@ -1320,26 +1401,24 @@ func (n *NavigationPanel) String() string {
 			selectedDisplayIdx = len(items)
 		}
 
-		// Render the row content
 		rawLine := n.renderNavRow(row, contentWidth)
 
-		// Apply selection highlighting
-		isSelected := i == n.selectedIdx
+		// Apply selection / import styling.
 		var styledLine string
-		if isSelected && n.focused {
+		switch {
+		case i == n.selectedIdx && n.focused:
 			styledLine = navSelectedRowStyle.Width(itemWidth).Render(ansi.Strip(rawLine))
-		} else if isSelected {
+		case i == n.selectedIdx:
 			styledLine = navActiveRowStyle.Width(itemWidth).Render(ansi.Strip(rawLine))
-		} else if row.Kind == navRowImportAction {
+		case row.Kind == navRowImportAction:
 			styledLine = navImportStyle.Width(itemWidth).Render(rawLine)
-		} else {
+		default:
 			styledLine = navItemStyle.Width(itemWidth).Render(rawLine)
 		}
-
 		items = append(items, visItem{line: styledLine, rowIdx: i})
 	}
 
-	// Scroll window — keep the selected item visible
+	// Scroll window centred on the selected item.
 	avail := n.availRows()
 	start := selectedDisplayIdx - avail/2
 	if start < 0 {
@@ -1367,71 +1446,60 @@ func (n *NavigationPanel) String() string {
 		body += "\n"
 	}
 
-	// Legend — plan status icon key, centered in the pane
+	// Legend — icon key centred in the pane.
 	legendContent := navIdleIconStyle.Render("○") + navLegendLabelStyle.Render(" idle") +
 		"  " + navRunningIconStyle.Render("●") + navLegendLabelStyle.Render(" planning") +
 		"  " + navRunningIconStyle.Render("●") + navLegendLabelStyle.Render(" running") +
 		"  " + navNotifyIconStyle.Render("◉") + navLegendLabelStyle.Render(" review")
 	legend := lipgloss.NewStyle().Width(innerWidth).Align(lipgloss.Center).Render(legendContent)
 
-	// Assemble content: list on top, legend + log pinned to bottom.
 	topContent := searchBox + "\n" + body
 
-	// Legend sits between history and the log divider.
-	legendSection := legend
-
 	topLines := strings.Count(topContent, "\n") + 1
-	legendLines := strings.Count(legendSection, "\n") + 1
+	legendLines := strings.Count(legend, "\n") + 1
 
-	// Determine how many lines the audit section can use without overflowing.
-	// lipgloss .Height() doesn't truncate overflow, so we must never exceed height.
-	maxAudit := height - topLines - legendLines // leaves gap=1 at this limit
+	// Compute optional audit section (bottom-pinned).
+	maxAudit := height - topLines - legendLines
 	auditSection := ""
 	auditLines := 0
 	if n.auditView != "" && n.auditHeight > 0 && maxAudit >= 3 {
-		cap := maxAudit
-		// Split into header (── log ──) and event body lines.
 		vlines := strings.Split(n.auditView, "\n")
 		header := ""
-		var body []string
+		var bodyAudit []string
 		if len(vlines) > 0 {
 			header = vlines[0]
-			body = vlines[1:]
+			bodyAudit = vlines[1:]
 		}
-		// Strip trailing blank lines the viewport may have appended.
-		for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
-			body = body[:len(body)-1]
+		// Strip trailing blank lines.
+		for len(bodyAudit) > 0 && strings.TrimSpace(bodyAudit[len(bodyAudit)-1]) == "" {
+			bodyAudit = bodyAudit[:len(bodyAudit)-1]
 		}
-		maxBody := cap - 1 // lines available after header
+		maxBody := maxAudit - 1
 		if maxBody < 0 {
 			maxBody = 0
 		}
-		if len(body) > maxBody {
-			body = body[len(body)-maxBody:]
-			// Drop leading continuation lines (word-wrap fragments without a
-			// timestamp) so we never show an orphaned tail of a wrapped message.
-			for len(body) > 0 && isAuditContinuationLine(body[0]) {
-				body = body[1:]
+		if len(bodyAudit) > maxBody {
+			bodyAudit = bodyAudit[len(bodyAudit)-maxBody:]
+			for len(bodyAudit) > 0 && isAuditContinuationLine(bodyAudit[0]) {
+				bodyAudit = bodyAudit[1:]
 			}
 		}
-		// Bottom-align: pad between header and body so events grow upward.
-		padCount := maxBody - len(body)
-		lines := make([]string, 0, 1+padCount+len(body))
+		padCount := maxBody - len(bodyAudit)
+		lines := make([]string, 0, 1+padCount+len(bodyAudit))
 		lines = append(lines, header)
 		for i := 0; i < padCount; i++ {
 			lines = append(lines, "")
 		}
-		lines = append(lines, body...)
+		lines = append(lines, bodyAudit...)
 		auditSection = strings.Join(lines, "\n")
 		auditLines = len(lines)
 	}
 
+	// Distribute gap evenly above and below the legend.
 	gap := height - topLines - legendLines - auditLines + 1
 	if gap < 1 {
 		gap = 1
 	}
-
-	// Split gap evenly so legend is centered between the list and log sections.
 	gapAbove := gap / 2
 	gapBelow := gap - gapAbove
 	if gapAbove < 1 {
@@ -1441,8 +1509,7 @@ func (n *NavigationPanel) String() string {
 		gapBelow = 1
 	}
 
-	// Order: list … gap-above … legend … gap-below … log (bottom-pinned)
-	innerContent := topContent + strings.Repeat("\n", gapAbove) + legendSection
+	innerContent := topContent + strings.Repeat("\n", gapAbove) + legend
 	if auditSection != "" {
 		innerContent += strings.Repeat("\n", gapBelow) + auditSection
 	}
@@ -1452,10 +1519,8 @@ func (n *NavigationPanel) String() string {
 	return zone.Mark(ZoneNavPanel, placed)
 }
 
-// isAuditContinuationLine returns true if the line is a word-wrap continuation
-// (indented text without a timestamp), not a primary event line.
-// Primary lines look like " HH:MM  ◆  message" — after stripping ANSI and
-// trimming whitespace, they start with a digit (the timestamp hour).
+// isAuditContinuationLine returns true if the line is a word-wrap fragment
+// without a leading timestamp (i.e. not a primary event line).
 func isAuditContinuationLine(line string) bool {
 	stripped := strings.TrimLeft(ansi.Strip(line), " ")
 	if stripped == "" {
@@ -1463,7 +1528,3 @@ func isAuditContinuationLine(line string) bool {
 	}
 	return stripped[0] < '0' || stripped[0] > '9'
 }
-
-// RowCount returns the number of rows in the navigation panel rows slice.
-// Used by zone-based mouse hit detection to iterate row zones.
-func (n *NavigationPanel) RowCount() int { return len(n.rows) }

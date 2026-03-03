@@ -17,10 +17,10 @@ var (
 	infoValueStyle   = lipgloss.NewStyle().Foreground(ColorText)
 )
 
-// InfoData holds the data to render in the info pane.
-// Built by the app layer from instance + plan + wave state.
+// InfoData carries display data for the info pane.
+// Populated by the app layer from instance + plan + wave state.
 type InfoData struct {
-	// Instance fields.
+	// Instance fields
 	Title   string
 	Program string
 	Branch  string
@@ -28,7 +28,7 @@ type InfoData struct {
 	Created string
 	Status  string
 
-	// Plan fields (empty for ad-hoc).
+	// Plan fields (empty when no plan is associated)
 	PlanName        string
 	PlanDescription string
 	PlanStatus      string
@@ -36,7 +36,7 @@ type InfoData struct {
 	PlanBranch      string
 	PlanCreated     string
 
-	// Plan summary fields (shown when plan header is selected, no instance).
+	// Plan summary fields (rendered when plan header row is selected)
 	PlanInstanceCount int
 	PlanRunningCount  int
 	PlanReadyCount    int
@@ -44,11 +44,11 @@ type InfoData struct {
 	PlanAddedLines    int
 	PlanRemovedLines  int
 
-	// Resource fields (shown when instance is selected).
+	// Resource utilisation
 	CPUPercent float64
 	MemMB      float64
 
-	// Wave fields (zero values = no wave).
+	// Wave / task context (zero values mean no wave info)
 	AgentType  string
 	WaveNumber int
 	TotalWaves int
@@ -56,34 +56,31 @@ type InfoData struct {
 	TotalTasks int
 	WaveTasks  []WaveTaskInfo
 
-	// HasPlan is true when the instance is bound to a plan.
-	HasPlan bool
-	// HasInstance is true when an instance is selected.
-	HasInstance bool
-	// IsPlanHeaderSelected distinguishes plan header vs instance selection.
+	// Selection state flags
+	HasPlan              bool
+	HasInstance          bool
 	IsPlanHeaderSelected bool
 }
 
-// WaveTaskInfo describes a single task in the current wave.
+// WaveTaskInfo describes a single task slot in the current wave.
 type WaveTaskInfo struct {
 	Number int
-	State  string // "complete", "running", "failed", "pending"
+	State  string // "complete", "running", "failed", or "pending"
 }
 
-// InfoPane renders instance and plan metadata in the info tab.
+// InfoPane renders instance and plan metadata inside a scrollable viewport.
 type InfoPane struct {
 	width, height int
 	data          InfoData
 	viewport      viewport.Model
 }
 
-// NewInfoPane creates a new InfoPane.
+// NewInfoPane returns a zero-sized InfoPane ready for use.
 func NewInfoPane() *InfoPane {
-	vp := viewport.New(0, 0)
-	return &InfoPane{viewport: vp}
+	return &InfoPane{viewport: viewport.New(0, 0)}
 }
 
-// SetSize updates the pane dimensions.
+// SetSize stores dimensions and refreshes the viewport.
 func (p *InfoPane) SetSize(width, height int) {
 	p.width = width
 	p.height = height
@@ -92,24 +89,25 @@ func (p *InfoPane) SetSize(width, height int) {
 	p.viewport.SetContent(p.render())
 }
 
-// SetData updates the data to render.
+// SetData replaces the current data and re-renders from the top.
 func (p *InfoPane) SetData(data InfoData) {
 	p.data = data
 	p.viewport.SetContent(p.render())
 	p.viewport.GotoTop()
 }
 
-// ScrollUp scrolls the viewport up.
+// ScrollUp moves the viewport one line toward the top.
 func (p *InfoPane) ScrollUp() {
 	p.viewport.LineUp(1)
 }
 
-// ScrollDown scrolls the viewport down.
+// ScrollDown moves the viewport one line toward the bottom.
 func (p *InfoPane) ScrollDown() {
 	p.viewport.LineDown(1)
 }
 
-// String renders the info pane content.
+// String returns the visible portion of the pane, or a placeholder when
+// neither an instance nor a plan header is selected.
 func (p *InfoPane) String() string {
 	if !p.data.HasInstance && !p.data.IsPlanHeaderSelected {
 		return "no instance selected"
@@ -117,6 +115,7 @@ func (p *InfoPane) String() string {
 	return p.viewport.View()
 }
 
+// statusColor maps known status strings to palette colors.
 func statusColor(status string) lipgloss.TerminalColor {
 	switch status {
 	case "implementing":
@@ -134,28 +133,31 @@ func statusColor(status string) lipgloss.TerminalColor {
 	}
 }
 
+// renderRow renders a single label+value row.
 func (p *InfoPane) renderRow(label, value string) string {
-	valueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))
-	if valueWidth < 10 {
-		valueWidth = 10
+	valW := p.width - lipgloss.Width(infoLabelStyle.Render(label))
+	if valW < 10 {
+		valW = 10
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		infoLabelStyle.Render(label),
-		infoValueStyle.Width(valueWidth).Render(value),
+		infoValueStyle.Width(valW).Render(value),
 	)
 }
 
+// renderStatusRow renders a label+value row where the value is coloured by status.
 func (p *InfoPane) renderStatusRow(label, value string) string {
-	valueWidth := p.width - lipgloss.Width(infoLabelStyle.Render(label))
-	if valueWidth < 10 {
-		valueWidth = 10
+	valW := p.width - lipgloss.Width(infoLabelStyle.Render(label))
+	if valW < 10 {
+		valW = 10
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		infoLabelStyle.Render(label),
-		lipgloss.NewStyle().Foreground(statusColor(value)).Width(valueWidth).Render(value),
+		lipgloss.NewStyle().Foreground(statusColor(value)).Width(valW).Render(value),
 	)
 }
 
+// renderDivider renders a horizontal rule sized to the pane width.
 func (p *InfoPane) renderDivider() string {
 	w := p.width - 4
 	if w < 10 {
@@ -164,95 +166,99 @@ func (p *InfoPane) renderDivider() string {
 	return infoDividerStyle.Render(strings.Repeat("-", w))
 }
 
+// renderPlanSection renders the plan metadata block for instance-bound views.
 func (p *InfoPane) renderPlanSection() string {
-	lines := []string{
+	rows := []string{
 		infoSectionStyle.Render("plan"),
 		p.renderDivider(),
 	}
 	if p.data.PlanName != "" {
-		lines = append(lines, p.renderRow("name", p.data.PlanName))
+		rows = append(rows, p.renderRow("name", p.data.PlanName))
 	}
 	if p.data.PlanDescription != "" {
-		lines = append(lines, p.renderRow("description", p.data.PlanDescription))
+		rows = append(rows, p.renderRow("description", p.data.PlanDescription))
 	}
 	if p.data.PlanStatus != "" {
-		lines = append(lines, p.renderStatusRow("status", p.data.PlanStatus))
+		rows = append(rows, p.renderStatusRow("status", p.data.PlanStatus))
 	}
 	if p.data.PlanTopic != "" {
-		lines = append(lines, p.renderRow("topic", p.data.PlanTopic))
+		rows = append(rows, p.renderRow("topic", p.data.PlanTopic))
 	}
 	if p.data.PlanBranch != "" {
-		lines = append(lines, p.renderRow("branch", p.data.PlanBranch))
+		rows = append(rows, p.renderRow("branch", p.data.PlanBranch))
 	}
 	if p.data.PlanCreated != "" {
-		lines = append(lines, p.renderRow("created", p.data.PlanCreated))
+		rows = append(rows, p.renderRow("created", p.data.PlanCreated))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(rows, "\n")
 }
 
+// renderInstanceSection renders the instance metadata block.
 func (p *InfoPane) renderInstanceSection() string {
-	lines := []string{
+	rows := []string{
 		infoSectionStyle.Render("instance"),
 		p.renderDivider(),
 	}
 	if p.data.Title != "" {
-		lines = append(lines, p.renderRow("title", p.data.Title))
+		rows = append(rows, p.renderRow("title", p.data.Title))
 	}
 	if p.data.AgentType != "" {
-		lines = append(lines, p.renderRow("role", p.data.AgentType))
+		rows = append(rows, p.renderRow("role", p.data.AgentType))
 	}
 	if p.data.Program != "" {
-		lines = append(lines, p.renderRow("program", p.data.Program))
+		rows = append(rows, p.renderRow("program", p.data.Program))
 	}
 	if p.data.Status != "" {
-		lines = append(lines, p.renderStatusRow("status", p.data.Status))
+		rows = append(rows, p.renderStatusRow("status", p.data.Status))
 	}
 	if p.data.Branch != "" {
-		lines = append(lines, p.renderRow("branch", p.data.Branch))
+		rows = append(rows, p.renderRow("branch", p.data.Branch))
 	}
 	if p.data.Path != "" {
-		lines = append(lines, p.renderRow("path", p.data.Path))
+		rows = append(rows, p.renderRow("path", p.data.Path))
 	}
 	if p.data.Created != "" {
-		lines = append(lines, p.renderRow("created", p.data.Created))
+		rows = append(rows, p.renderRow("created", p.data.Created))
 	}
 	if p.data.WaveNumber > 0 {
-		lines = append(lines, p.renderRow("wave", fmt.Sprintf("%d/%d", p.data.WaveNumber, p.data.TotalWaves)))
+		rows = append(rows, p.renderRow("wave", fmt.Sprintf("%d/%d", p.data.WaveNumber, p.data.TotalWaves)))
 	}
 	if p.data.TaskNumber > 0 {
-		lines = append(lines, p.renderRow("task", fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)))
+		rows = append(rows, p.renderRow("task", fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)))
 	}
 	if p.data.CPUPercent > 0 || p.data.MemMB > 0 {
-		lines = append(lines, p.renderRow("cpu", fmt.Sprintf("%.0f%%", math.Round(p.data.CPUPercent))))
-		lines = append(lines, p.renderRow("memory", fmt.Sprintf("%.0fM", p.data.MemMB)))
+		rows = append(rows, p.renderRow("cpu", fmt.Sprintf("%.0f%%", math.Round(p.data.CPUPercent))))
+		rows = append(rows, p.renderRow("memory", fmt.Sprintf("%.0fM", p.data.MemMB)))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(rows, "\n")
 }
 
+// renderPlanSummary renders the plan header view: metadata, instance counts,
+// line-change totals, and a "view plan doc" action button.
 func (p *InfoPane) renderPlanSummary() string {
-	lines := []string{
+	rows := []string{
 		infoSectionStyle.Render("plan"),
 		p.renderDivider(),
 	}
 	if p.data.PlanName != "" {
-		lines = append(lines, p.renderRow("name", p.data.PlanName))
+		rows = append(rows, p.renderRow("name", p.data.PlanName))
 	}
 	if p.data.PlanStatus != "" {
-		lines = append(lines, p.renderStatusRow("status", p.data.PlanStatus))
+		rows = append(rows, p.renderStatusRow("status", p.data.PlanStatus))
 	}
 	if p.data.PlanTopic != "" {
-		lines = append(lines, p.renderRow("topic", p.data.PlanTopic))
+		rows = append(rows, p.renderRow("topic", p.data.PlanTopic))
 	}
 	if p.data.PlanBranch != "" {
-		lines = append(lines, p.renderRow("branch", p.data.PlanBranch))
+		rows = append(rows, p.renderRow("branch", p.data.PlanBranch))
 	}
 	if p.data.PlanCreated != "" {
-		lines = append(lines, p.renderRow("created", p.data.PlanCreated))
+		rows = append(rows, p.renderRow("created", p.data.PlanCreated))
 	}
 
 	if p.data.PlanInstanceCount > 0 {
 		summary := fmt.Sprintf("%d", p.data.PlanInstanceCount)
-		parts := []string{}
+		var parts []string
 		if p.data.PlanRunningCount > 0 {
 			parts = append(parts, fmt.Sprintf("%d running", p.data.PlanRunningCount))
 		}
@@ -265,67 +271,64 @@ func (p *InfoPane) renderPlanSummary() string {
 		if len(parts) > 0 {
 			summary += " (" + strings.Join(parts, ", ") + ")"
 		}
-		lines = append(lines, p.renderRow("instances", summary))
+		rows = append(rows, p.renderRow("instances", summary))
 	}
 
 	if p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {
-		diff := fmt.Sprintf("+%d -%d", p.data.PlanAddedLines, p.data.PlanRemovedLines)
-		lines = append(lines, p.renderRow("lines changed", diff))
+		rows = append(rows, p.renderRow("lines changed",
+			fmt.Sprintf("+%d -%d", p.data.PlanAddedLines, p.data.PlanRemovedLines)))
 	}
 
-	lines = append(lines, "")
-	viewDocStyle := lipgloss.NewStyle().
+	btnStyle := lipgloss.NewStyle().
 		Foreground(ColorFoam).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorOverlay).
 		Padding(0, 2)
-	lines = append(lines, zone.Mark(ZoneViewPlan, viewDocStyle.Render("view plan doc")))
+	rows = append(rows, "")
+	rows = append(rows, zone.Mark(ZoneViewPlan, btnStyle.Render("view plan doc")))
 
-	return strings.Join(lines, "\n")
+	return strings.Join(rows, "\n")
 }
 
+// renderWaveSection renders the task-state grid for the current wave.
 func (p *InfoPane) renderWaveSection() string {
-	lines := []string{
+	rows := []string{
 		infoSectionStyle.Render("wave progress"),
 		p.renderDivider(),
 	}
-	for _, task := range p.data.WaveTasks {
+	for _, t := range p.data.WaveTasks {
 		var glyph string
-		var glyphColor lipgloss.TerminalColor
-		switch task.State {
+		var col lipgloss.TerminalColor
+		switch t.State {
 		case "complete":
-			glyph = "✓"
-			glyphColor = ColorFoam
+			glyph, col = "✓", ColorFoam
 		case "running":
-			glyph = "●"
-			glyphColor = ColorIris
+			glyph, col = "●", ColorIris
 		case "failed":
-			glyph = "✗"
-			glyphColor = ColorLove
+			glyph, col = "✗", ColorLove
 		default:
-			glyph = "○"
-			glyphColor = ColorMuted
+			glyph, col = "○", ColorMuted
 		}
-		label := fmt.Sprintf("task %d", task.Number)
-		value := lipgloss.NewStyle().Foreground(glyphColor).Render(glyph) + " " + task.State
-		lines = append(lines, infoLabelStyle.Render(label)+value)
+		icon := lipgloss.NewStyle().Foreground(col).Render(glyph)
+		rows = append(rows, infoLabelStyle.Render(fmt.Sprintf("task %d", t.Number))+icon+" "+t.State)
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(rows, "\n")
 }
 
-// render builds the content string. Called internally when data changes.
+// render assembles the full content string placed into the viewport.
 func (p *InfoPane) render() string {
 	if !p.data.HasInstance && !p.data.IsPlanHeaderSelected {
 		return "no instance selected"
 	}
 
 	var sections []string
-	if p.data.IsPlanHeaderSelected {
+	switch {
+	case p.data.IsPlanHeaderSelected:
 		sections = append(sections, p.renderPlanSummary())
 		if len(p.data.WaveTasks) > 0 {
 			sections = append(sections, p.renderWaveSection())
 		}
-	} else {
+	default:
 		if p.data.HasPlan {
 			sections = append(sections, p.renderPlanSection())
 		}

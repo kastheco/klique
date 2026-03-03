@@ -5,9 +5,12 @@ import (
 	"strings"
 )
 
-// parseHex converts "#RRGGBB" to (r, g, b) uint8 values.
+// parseHex converts a "#RRGGBB" hex string to (r, g, b) uint8 components.
+// Returns (0, 0, 0) if the input (after stripping leading '#') is not exactly 6 chars.
 func parseHex(hex string) (uint8, uint8, uint8) {
-	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) > 0 && hex[0] == '#' {
+		hex = hex[1:]
+	}
 	if len(hex) != 6 {
 		return 0, 0, 0
 	}
@@ -16,13 +19,14 @@ func parseHex(hex string) (uint8, uint8, uint8) {
 	return r, g, b
 }
 
-// lerpByte linearly interpolates between two bytes.
+// lerpByte linearly interpolates between byte a and byte b at position t ∈ [0,1].
 func lerpByte(a, b uint8, t float64) uint8 {
 	return uint8(float64(a) + (float64(b)-float64(a))*t)
 }
 
-// GradientText renders a string with a left-to-right truecolor gradient
-// from startHex to endHex. Newlines are preserved; ANSI reset appended.
+// GradientText renders text with a left-to-right truecolor gradient from startHex to endHex.
+// Newline characters are passed through unchanged. An ANSI reset sequence is appended at the end.
+// Returns an empty string when text is empty. Returns text unchanged when it has no visible runes.
 func GradientText(text, startHex, endHex string) string {
 	if text == "" {
 		return ""
@@ -33,8 +37,8 @@ func GradientText(text, startHex, endHex string) string {
 
 	runes := []rune(text)
 	visible := 0
-	for _, r := range runes {
-		if r != '\n' {
+	for _, ch := range runes {
+		if ch != '\n' {
 			visible++
 		}
 	}
@@ -44,8 +48,8 @@ func GradientText(text, startHex, endHex string) string {
 
 	var sb strings.Builder
 	idx := 0
-	for _, r := range runes {
-		if r == '\n' {
+	for _, ch := range runes {
+		if ch == '\n' {
 			sb.WriteRune('\n')
 			continue
 		}
@@ -56,24 +60,26 @@ func GradientText(text, startHex, endHex string) string {
 		cr := lerpByte(r1, r2, t)
 		cg := lerpByte(g1, g2, t)
 		cb := lerpByte(b1, b2, t)
-		sb.WriteString(fmt.Sprintf("\033[38;2;%d;%d;%dm%c", cr, cg, cb, r))
+		sb.WriteString(fmt.Sprintf("\033[38;2;%d;%d;%dm%c", cr, cg, cb, ch))
 		idx++
 	}
 	sb.WriteString("\033[0m")
 	return sb.String()
 }
 
-// GradientBar renders a progress bar of `width` characters with `filled` filled blocks.
-// Filled portion uses a gradient from startHex to endHex; unfilled uses dim blocks.
+// GradientBar renders a horizontal progress bar of `width` characters.
+// The `filled` portion uses full-block (█) characters colored with the gradient from
+// startHex to endHex. The remainder uses light-shade (░) characters in dim gray.
+// Returns empty string when width <= 0. Clamps filled to [0, width].
 func GradientBar(width, filled int, startHex, endHex string) string {
 	if width <= 0 {
 		return ""
 	}
-	if filled > width {
-		filled = width
-	}
 	if filled < 0 {
 		filled = 0
+	}
+	if filled > width {
+		filled = width
 	}
 
 	r1, g1, b1 := parseHex(startHex)
