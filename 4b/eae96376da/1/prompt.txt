@@ -1,0 +1,152 @@
+Implement Task 1: Define Overlay Interface and Result Type
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 1 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `ui/overlay/iface.go`
+- Test: `ui/overlay/iface_test.go`
+
+**Step 1: write the failing test**
+
+```go
+// iface_test.go
+package overlay
+
+import (
+    "testing"
+
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/stretchr/testify/assert"
+)
+
+// stubOverlay is a minimal Overlay implementation for testing the interface contract.
+type stubOverlay struct {
+    dismissed bool
+    rendered  string
+    w, h      int
+}
+
+func (s *stubOverlay) HandleKey(msg tea.KeyMsg) Result {
+    if msg.Type == tea.KeyEsc {
+        s.dismissed = true
+        return Result{Dismissed: true}
+    }
+    if msg.Type == tea.KeyEnter {
+        return Result{Dismissed: true, Submitted: true, Value: "test-value"}
+    }
+    return Result{}
+}
+
+func (s *stubOverlay) View() string   { return s.rendered }
+func (s *stubOverlay) SetSize(w, h int) { s.w = w; s.h = h }
+
+func TestOverlayInterface_Dismiss(t *testing.T) {
+    var o Overlay = &stubOverlay{rendered: "hello"}
+    result := o.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+
+func TestOverlayInterface_Submit(t *testing.T) {
+    var o Overlay = &stubOverlay{rendered: "hello"}
+    result := o.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "test-value", result.Value)
+}
+
+func TestOverlayInterface_SetSize(t *testing.T) {
+    s := &stubOverlay{}
+    var o Overlay = s
+    o.SetSize(80, 24)
+    assert.Equal(t, 80, s.w)
+    assert.Equal(t, 24, s.h)
+}
+
+func TestResult_ActionField(t *testing.T) {
+    r := Result{Dismissed: true, Action: "kill"}
+    assert.Equal(t, "kill", r.Action)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run TestOverlayInterface -v
+```
+
+expected: FAIL — `Overlay` and `Result` types undefined
+
+**Step 3: write minimal implementation**
+
+Define the `Overlay` interface and `Result` struct in `ui/overlay/iface.go`:
+
+```go
+package overlay
+
+import tea "github.com/charmbracelet/bubbletea"
+
+// Result is returned by Overlay.HandleKey to signal what happened.
+type Result struct {
+    // Dismissed is true when the overlay should be closed.
+    Dismissed bool
+    // Submitted is true when the user confirmed/submitted (not just dismissed).
+    Submitted bool
+    // Value carries the primary return value (text input content, selected item, etc.).
+    Value string
+    // Action carries a secondary action identifier (context menu action, browser action, etc.).
+    Action string
+}
+
+// Overlay is the common interface for all modal overlay components.
+// Every overlay type in the package implements this interface.
+type Overlay interface {
+    // HandleKey processes a key event and returns the result.
+    HandleKey(msg tea.KeyMsg) Result
+    // View renders the overlay content (without the PlaceOverlay compositing).
+    View() string
+    // SetSize updates the available dimensions for the overlay.
+    SetSize(w, h int)
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run TestOverlayInterface -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/iface.go ui/overlay/iface_test.go
+git commit -m "feat(overlay): define Overlay interface and Result type"
+```
