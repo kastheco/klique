@@ -205,6 +205,13 @@
       "context": "/28/e552c6024a/8/context.md",
       "content_hash": "/28/e552c6024a/8/content_hash.txt",
       "prompt": "/28/e552c6024a/8/prompt.txt"
+    },
+    {
+      "metadata": "/28/e552c6024a/9/metadata.json",
+      "transcript": "/28/e552c6024a/9/full.jsonl",
+      "context": "/28/e552c6024a/9/context.md",
+      "content_hash": "/28/e552c6024a/9/content_hash.txt",
+      "prompt": "/28/e552c6024a/9/prompt.txt"
     }
   ],
   "token_usage": {
