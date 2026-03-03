@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f574595ce235",
+  "session_id": "ses_34de0b9daffeWMxv1d3vdjboge",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T05:16:19.585867966Z",
+  "branch": "plan/plan-cli-repo-flag-and-templates",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/initcmd/scaffold/scaffold_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "35eaf552d998",
+  "token_usage": {
+    "input_tokens": 13,
+    "cache_creation_tokens": 68536,
+    "cache_read_tokens": 662748,
+    "output_tokens": 2181,
+    "api_call_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T05:16:19.50432886Z",
+    "agent_lines": 16,
+    "human_added": 4,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 20,
+    "agent_percentage": 80
+  }
+}

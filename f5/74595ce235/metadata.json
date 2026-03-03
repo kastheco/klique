@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f574595ce235",
+  "strategy": "manual-commit",
+  "branch": "plan/plan-cli-repo-flag-and-templates",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "internal/initcmd/scaffold/scaffold_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f5/74595ce235/0/metadata.json",
+      "transcript": "/f5/74595ce235/0/full.jsonl",
+      "context": "/f5/74595ce235/0/context.md",
+      "content_hash": "/f5/74595ce235/0/content_hash.txt",
+      "prompt": "/f5/74595ce235/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13,
+    "cache_creation_tokens": 68536,
+    "cache_read_tokens": 662748,
+    "output_tokens": 2181,
+    "api_call_count": 13
+  }
+}
