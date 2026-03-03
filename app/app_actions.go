@@ -855,8 +855,6 @@ func (m *home) executePlanStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return m, m.handleError(err)
 		}
-		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → implementing",
-			auditlog.WithPlan(planFile))
 		m.loadPlanState()
 		m.updateSidebarPlans()
 		return m.startNextWave(orch, entry)

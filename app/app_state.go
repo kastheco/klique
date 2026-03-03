@@ -1681,14 +1681,6 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 		// AddInstance registers in the list immediately; finalizer sets repo name after start.
 		m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 
-		m.audit(auditlog.EventAgentSpawned,
-			fmt.Sprintf("spawned coder for wave %d task %d", orch.CurrentWaveNumber(), task.Number),
-			auditlog.WithPlan(planFile),
-			auditlog.WithInstance(inst.Title),
-			auditlog.WithAgent(session.AgentTypeCoder),
-			auditlog.WithWave(orch.CurrentWaveNumber(), task.Number),
-		)
-
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
 			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
