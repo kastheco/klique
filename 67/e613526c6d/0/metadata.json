@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "67e613526c6d",
+  "session_id": "ses_34af05e4dffez9gayii215Ex6K",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T18:58:07.548583685Z",
+  "branch": "plan/03-rewrite-ui-panels",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/gradient.go",
+    "ui/consts.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "774e9188b557",
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 57887,
+    "cache_read_tokens": 258451,
+    "output_tokens": 3267,
+    "api_call_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T18:58:07.527047767Z",
+    "agent_lines": 30,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 30,
+    "agent_percentage": 100
+  }
+}
