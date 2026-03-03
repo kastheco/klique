@@ -21,7 +21,7 @@ func NewHandler(store Store) http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// List plans (with optional ?status= and ?topic= filters)
+	// List tasks (with optional ?status= and ?topic= filters)
 	mux.HandleFunc("GET /v1/projects/{project}/tasks", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		statusFilters := r.URL.Query()["status"]
@@ -50,7 +50,7 @@ func NewHandler(store Store) http.Handler {
 		writeJSON(w, http.StatusOK, plans)
 	})
 
-	// Create plan
+	// Create task
 	mux.HandleFunc("POST /v1/projects/{project}/tasks", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		var entry TaskEntry
@@ -65,7 +65,7 @@ func NewHandler(store Store) http.Handler {
 		writeJSON(w, http.StatusCreated, entry)
 	})
 
-	// Get plan
+	// Get task
 	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
@@ -81,7 +81,7 @@ func NewHandler(store Store) http.Handler {
 		writeJSON(w, http.StatusOK, entry)
 	})
 
-	// Update plan
+	// Update task
 	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
@@ -101,7 +101,7 @@ func NewHandler(store Store) http.Handler {
 		writeJSON(w, http.StatusOK, entry)
 	})
 
-	// Get plan content
+	// Get task content
 	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
@@ -119,7 +119,7 @@ func NewHandler(store Store) http.Handler {
 		w.Write([]byte(content))
 	})
 
-	// Set plan content
+	// Set task content
 	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
@@ -176,7 +176,7 @@ func NewHandler(store Store) http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Rename plan
+	// Rename task
 	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/rename", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
@@ -244,7 +244,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 // isNotFound returns true if the error indicates a missing resource.
-// Store implementations return errors containing "not found" for missing plans.
+// Store implementations return errors containing "not found" for missing tasks.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false

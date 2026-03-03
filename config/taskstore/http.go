@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// HTTPStore is a Store implementation that talks to a remote plan store server
+// HTTPStore is a Store implementation that talks to a remote task store server
 // over HTTP. Connection errors are wrapped with "plan store unreachable" so
 // callers can detect and surface them gracefully.
 type HTTPStore struct {
@@ -36,12 +36,12 @@ func (s *HTTPStore) taskURL(project string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks", s.baseURL, url.PathEscape(project))
 }
 
-// planItemURL builds the URL for a specific plan entry.
+// taskItemURL builds the URL for a specific task entry.
 func (s *HTTPStore) taskItemURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
-// planContentURL builds the URL for a specific plan's content endpoint.
+// taskContentURL builds the URL for a specific task's content endpoint.
 func (s *HTTPStore) taskContentURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/content", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
@@ -52,7 +52,7 @@ func (s *HTTPStore) topicURL(project string) string {
 }
 
 // do executes an HTTP request and returns the response body.
-// It wraps connection errors with "plan store unreachable".
+// It wraps connection errors with "task store unreachable".
 func (s *HTTPStore) do(req *http.Request) (*http.Response, error) {
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -74,7 +74,7 @@ func decodeError(resp *http.Response) error {
 	return fmt.Errorf("plan store: unexpected status %d", resp.StatusCode)
 }
 
-// Create adds a new plan entry to the remote store.
+// Create adds a new task entry to the remote store.
 func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
@@ -98,7 +98,7 @@ func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 	return nil
 }
 
-// Get retrieves a single plan entry by filename.
+// Get retrieves a single task entry by filename.
 func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskItemURL(project, filename), nil)
 	if err != nil {
@@ -125,7 +125,7 @@ func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 	return entry, nil
 }
 
-// Update replaces an existing plan entry.
+// Update replaces an existing task entry.
 func (s *HTTPStore) Update(project, filename string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
@@ -149,7 +149,7 @@ func (s *HTTPStore) Update(project, filename string, entry TaskEntry) error {
 	return nil
 }
 
-// Rename renames a plan entry from oldFilename to newFilename.
+// Rename renames a task entry from oldFilename to newFilename.
 func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 	payload := struct {
 		NewFilename string `json:"new_filename"`
@@ -178,7 +178,7 @@ func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 	return nil
 }
 
-// GetContent retrieves the raw markdown content for a plan.
+// GetContent retrieves the raw markdown content for a task.
 func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskContentURL(project, filename), nil)
 	if err != nil {
@@ -205,7 +205,7 @@ func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 	return string(body), nil
 }
 
-// SetContent replaces the raw markdown content for a plan.
+// SetContent replaces the raw markdown content for a task.
 func (s *HTTPStore) SetContent(project, filename, content string) error {
 	req, err := http.NewRequest(http.MethodPut, s.taskContentURL(project, filename), strings.NewReader(content))
 	if err != nil {
@@ -227,7 +227,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 	return nil
 }
 
-// List returns all plan entries for the given project.
+// List returns all task entries for the given project.
 func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)
 	if err != nil {
@@ -251,7 +251,7 @@ func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 	return plans, nil
 }
 
-// ListByStatus returns plan entries filtered by one or more statuses.
+// ListByStatus returns task entries filtered by one or more statuses.
 func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
 	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
@@ -286,7 +286,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntr
 	return plans, nil
 }
 
-// ListByTopic returns plan entries for a specific topic.
+// ListByTopic returns task entries for a specific topic.
 func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
@@ -367,7 +367,7 @@ func (s *HTTPStore) CreateTopic(project string, entry TopicEntry) error {
 	return nil
 }
 
-// SetClickUpTaskID sets the ClickUp task ID for an existing plan entry.
+// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.
 func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 	payload := struct {
 		ClickUpTaskID string `json:"clickup_task_id"`
@@ -399,7 +399,7 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 	return nil
 }
 
-// IncrementReviewCycle increments the review cycle counter for an existing plan entry.
+// IncrementReviewCycle increments the review cycle counter for an existing task entry.
 func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 	u := fmt.Sprintf("%s/increment-review-cycle", s.taskItemURL(project, filename))
 	req, err := http.NewRequest(http.MethodPost, u, nil)

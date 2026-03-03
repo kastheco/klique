@@ -68,13 +68,16 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
+	// Migrate: rename plans → tasks (if old table exists).
+	// This MUST run before the schema CREATE TABLE so that existing data in the
+	// plans table is preserved. If we create an empty tasks table first, the
+	// rename migration sees tasks already exists and skips, orphaning old data.
+	migrateRenameTable(db, "plans", "tasks")
+
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run schema migrations: %w", err)
 	}
-
-	// Migrate: rename plans → tasks (if old table exists).
-	migrateRenameTable(db, "plans", "tasks")
 
 	// Add content column if it doesn't exist (upgrade existing databases).
 	if err := migrateAddContentColumn(db); err != nil {
@@ -97,14 +100,14 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	return &SQLiteStore{db: db}, nil
 }
 
-// migrateAddContentColumn adds the content column to the plans table if it
+// migrateAddContentColumn adds the content column to the tasks table if it
 // doesn't already exist. This upgrades databases created before the column
 // was introduced.
 func migrateAddContentColumn(db *sql.DB) error {
 	return migrateAddColumn(db, "content", contentMigration)
 }
 
-// migrateAddColumn adds a column to the plans table if it doesn't already
+// migrateAddColumn adds a column to the tasks table if it doesn't already
 // exist, running the provided ALTER TABLE statement when needed.
 func migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {
 	rows, err := db.Query("PRAGMA table_info(tasks)")
@@ -164,8 +167,8 @@ func (s *SQLiteStore) Ping() error {
 	return s.db.Ping()
 }
 
-// Create inserts a new plan entry for the given project.
-// Returns an error if a plan with the same filename already exists in the project.
+// Create inserts a new task entry for the given project.
+// Returns an error if a task with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	const q = `
 		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
@@ -193,8 +196,8 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	return nil
 }
 
-// Get retrieves a plan entry by project and filename.
-// Returns an error if the plan is not found.
+// Get retrieves a task entry by project and filename.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
@@ -205,8 +208,8 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	return scanTaskEntry(row)
 }
 
-// Update replaces all fields of an existing plan entry.
-// Returns an error if the plan is not found.
+// Update replaces all fields of an existing task entry.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	const q = `
 		UPDATE tasks
@@ -239,7 +242,7 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	return nil
 }
 
-// Rename changes the filename of an existing plan entry.
+// Rename changes the filename of an existing task entry.
 // Returns an error if the old filename is not found or the new filename already exists.
 func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 	const q = `
@@ -264,7 +267,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 	return nil
 }
 
-// List returns all plan entries for the given project, sorted by filename.
+// List returns all task entries for the given project, sorted by filename.
 func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	const q = `
 		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
@@ -280,7 +283,7 @@ func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	return scanTaskEntries(rows)
 }
 
-// ListByStatus returns all plan entries for the given project matching any of
+// ListByStatus returns all task entries for the given project matching any of
 // the provided statuses, sorted by filename.
 func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
 	if len(statuses) == 0 {
@@ -310,7 +313,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 	return scanTaskEntries(rows)
 }
 
-// ListByTopic returns all plan entries for the given project and topic,
+// ListByTopic returns all task entries for the given project and topic,
 // sorted by filename.
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	const q = `
@@ -375,8 +378,8 @@ func (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {
 	return nil
 }
 
-// GetContent retrieves only the content field for a plan entry.
-// Returns an error if the plan is not found.
+// GetContent retrieves only the content field for a task entry.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) GetContent(project, filename string) (string, error) {
 	const q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`
 	var content string
@@ -390,8 +393,8 @@ func (s *SQLiteStore) GetContent(project, filename string) (string, error) {
 	return content, nil
 }
 
-// SetContent updates only the content field for an existing plan entry.
-// Returns an error if the plan is not found.
+// SetContent updates only the content field for an existing task entry.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) SetContent(project, filename, content string) error {
 	const q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, content, project, filename)
@@ -408,8 +411,8 @@ func (s *SQLiteStore) SetContent(project, filename, content string) error {
 	return nil
 }
 
-// SetClickUpTaskID sets the ClickUp task ID for an existing plan entry.
-// Returns an error if the plan is not found.
+// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
 	const q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, taskID, project, filename)
@@ -426,8 +429,8 @@ func (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {
 	return nil
 }
 
-// IncrementReviewCycle atomically increments the review_cycle counter for an existing plan entry.
-// Returns an error if the plan is not found.
+// IncrementReviewCycle atomically increments the review_cycle counter for an existing task entry.
+// Returns an error if the task is not found.
 func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {
 	const q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`
 	result, err := s.db.Exec(q, project, filename)
