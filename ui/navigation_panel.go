@@ -635,13 +635,14 @@ func (n *NavigationPanel) availRows() int {
 	if n.auditView != "" && n.auditContentLines > 0 {
 		// Reserve: 1 gap below legend + 1 audit header + contentLines body
 		auditReserve := 2 + n.auditContentLines
-		// Cap so nav items keep at least minNavRows
-		maxReserve := n.height - baseOverhead - minNavRows
-		if maxReserve < 3 {
-			maxReserve = 3 // minimum viable audit (header + 2 lines)
+		// Cap at 50% of inner height so the task list isn't squished.
+		innerHeight := n.height - baseOverhead
+		halfPanel := innerHeight / 2
+		if halfPanel < 3 {
+			halfPanel = 3 // minimum viable audit (header + 2 lines)
 		}
-		if auditReserve > maxReserve {
-			auditReserve = maxReserve
+		if auditReserve > halfPanel {
+			auditReserve = halfPanel
 		}
 		overhead += auditReserve
 	}
@@ -1494,6 +1495,11 @@ func (n *NavigationPanel) String() string {
 		desiredAudit := 1 + n.auditContentLines
 		// Available space: total height minus nav items, search, legend, and minimum gaps (2).
 		availForAudit := height - topLines - legendLines - 2
+		// Cap at 50% of inner height so the task list isn't squished.
+		halfPanel := height / 2
+		if availForAudit > halfPanel {
+			availForAudit = halfPanel
+		}
 		if availForAudit < 3 {
 			availForAudit = 0 // too small, hide audit entirely
 		}
