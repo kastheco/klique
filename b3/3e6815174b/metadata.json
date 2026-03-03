@@ -3,7 +3,7 @@
   "checkpoint_id": "b33e6815174b",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 0,
+  "checkpoints_count": 2,
   "files_touched": [
     "docs/plans/extract-orchestrator.md"
   ],
@@ -21,13 +21,20 @@
       "context": "/b3/3e6815174b/1/context.md",
       "content_hash": "/b3/3e6815174b/1/content_hash.txt",
       "prompt": "/b3/3e6815174b/1/prompt.txt"
+    },
+    {
+      "metadata": "/b3/3e6815174b/2/metadata.json",
+      "transcript": "/b3/3e6815174b/2/full.jsonl",
+      "context": "/b3/3e6815174b/2/context.md",
+      "content_hash": "/b3/3e6815174b/2/content_hash.txt",
+      "prompt": "/b3/3e6815174b/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 7,
-    "cache_creation_tokens": 65347,
-    "cache_read_tokens": 199313,
-    "output_tokens": 6757,
-    "api_call_count": 6
+    "input_tokens": 45,
+    "cache_creation_tokens": 188491,
+    "cache_read_tokens": 3070614,
+    "output_tokens": 39371,
+    "api_call_count": 40
   }
 }

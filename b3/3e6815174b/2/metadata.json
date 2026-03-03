@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "b33e6815174b",
+  "session_id": "ses_34a36422bffeAvW2HqXg6jxItf",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T22:54:29.064091658Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/plans/extract-orchestrator.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "9460640f7954",
+  "token_usage": {
+    "input_tokens": 38,
+    "cache_creation_tokens": 123144,
+    "cache_read_tokens": 2871301,
+    "output_tokens": 32614,
+    "api_call_count": 34
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T22:54:28.947689945Z",
+    "agent_lines": 0,
+    "human_added": 318,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 318,
+    "agent_percentage": 0
+  }
+}

@@ -1,0 +1,12 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan extract-orchestrator. Goal: Extract Orchestration Engine. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
+### Prompt 2
+
+b
+
