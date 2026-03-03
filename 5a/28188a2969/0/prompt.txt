@@ -1,0 +1,101 @@
+Implement Task 2: Fix Stale Date-Prefix References in Planner Scaffold Templates
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add a persistent `--repo` flag to all `kas plan` subcommands so they can target any repo without relying on CWD, and fix stale date-prefix references in planner scaffold templates.
+**Architecture:** Add a `--repo` flag to the `plan` parent command that propagates to all subcommands. When set, `resolvePlansDir` uses it directly instead of CWD-based detection. Update the 4 planner agent templates (2 claude, 2 opencode) to remove stale `<date>-<name>` sentinel naming references, replacing them with the current dateless `<name>` convention.
+**Tech Stack:** Go 1.24+, cobra (CLI flags), `internal/initcmd/scaffold/templates/` (embedded templates), testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `internal/initcmd/scaffold/templates/claude/agents/planner.md`
+- Modify: `internal/initcmd/scaffold/templates/opencode/agents/planner.md`
+
+**Step 1: write the failing test**
+
+Add a test in `scaffold_test.go` that verifies planner templates do not contain the stale `<date>-<name>` pattern:
+
+```go
+func TestPlannerTemplates_NoDatedSentinelReferences(t *testing.T) {
+	for _, harnessName := range []string{"claude", "opencode"} {
+		t.Run(harnessName, func(t *testing.T) {
+			content, err := templates.ReadFile(
+				fmt.Sprintf("templates/%s/agents/planner.md", harnessName))
+			require.NoError(t, err)
+			s := string(content)
+			assert.NotContains(t, s, "<date>-<name>",
+				"planner template should use dateless slug convention")
+			assert.NotContains(t, s, "planner-finished-<date>",
+				"sentinel naming should not reference date prefix")
+		})
+	}
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./internal/initcmd/scaffold/... -run TestPlannerTemplates_NoDatedSentinelReferences -v
+```
+
+expected: FAIL — both templates contain `<date>-<name>` references
+
+**Step 3: write minimal implementation**
+
+In both `claude/agents/planner.md` and `opencode/agents/planner.md`, update the Plan Registration section:
+
+Replace:
+```
+`.kasmos/signals/planner-finished-<date>-<name>.md`
+```
+with:
+```
+`.kasmos/signals/planner-finished-<name>.md`
+```
+
+Replace:
+```
+`kas plan register <date>-<name>.md`
+```
+with:
+```
+`kas plan register <name>.md`
+```
+
+These changes align the templates with the dateless slug convention adopted in commit `19e8f5e`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./internal/initcmd/scaffold/... -run TestPlannerTemplates_NoDatedSentinelReferences -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add internal/initcmd/scaffold/templates/claude/agents/planner.md internal/initcmd/scaffold/templates/opencode/agents/planner.md internal/initcmd/scaffold/scaffold_test.go
+git commit -m "fix: remove stale date-prefix references from planner scaffold templates"
+```
