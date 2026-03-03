@@ -220,7 +220,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		currentName := taskstate.DisplayName(planFile)
 		m.state = stateRenameTask
-		m.textInputOverlay = overlay.NewTextInputOverlay("rename plan", currentName)
+		m.textInputOverlay = overlay.NewTextInputOverlay("rename task", currentName)
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
@@ -231,7 +231,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.pendingChatAboutTask = planFile
 		m.state = stateChatAboutTask
-		m.textInputOverlay = overlay.NewTextInputOverlay("ask about this plan", "")
+		m.textInputOverlay = overlay.NewTextInputOverlay("ask about this task", "")
 		m.textInputOverlay.SetSize(60, 5)
 		m.textInputOverlay.SetMultiline(true)
 		m.textInputOverlay.SetPlaceholder("what would you like to know?")
@@ -279,7 +279,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		entry, ok := m.taskState.Entry(planFile)
 		if !ok {
-			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+			return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 		}
 		if entry.Branch == "" {
 			return m, m.handleError(fmt.Errorf("plan has no branch to merge"))
@@ -307,7 +307,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 					return err
 				}
 			}
-			m.audit(auditlog.EventPlanMerged, "plan merged to main: "+planName,
+			m.audit(auditlog.EventPlanMerged, "task merged to main: "+planName,
 				auditlog.WithPlan(planFile))
 			_ = m.saveAllInstances()
 			m.loadTaskState()
@@ -323,7 +323,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		entry, ok := m.taskState.Entry(planFile)
 		if !ok {
-			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+			return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 		}
 		if entry.Status != taskstate.StatusDone {
 			// Walk through any missing lifecycle stages before approval so mark-done
@@ -380,11 +380,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := m.fsm.Transition(planFile, taskfsm.Cancel); err != nil {
 				return err
 			}
-			m.audit(auditlog.EventPlanCancelled, "plan cancelled by user: "+planName,
+			m.audit(auditlog.EventPlanCancelled, "task cancelled by user: "+planName,
 				auditlog.WithPlan(planFile))
 			return taskRefreshMsg{}
 		}
-		return m, m.confirmAction(fmt.Sprintf("cancel plan '%s'?", planName), cancelAction)
+		return m, m.confirmAction(fmt.Sprintf("cancel task '%s'?", planName), cancelAction)
 
 	case "modify_plan":
 		planFile := m.nav.GetSelectedPlanFile()
@@ -405,7 +405,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		entry, ok := m.taskState.Entry(planFile)
 		if !ok {
-			return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+			return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 		}
 		planName := taskstate.DisplayName(planFile)
 		startOverAction := func() tea.Msg {
@@ -430,7 +430,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.updateSidebarTasks()
 			return taskRefreshMsg{}
 		}
-		return m, m.confirmAction(fmt.Sprintf("start over plan '%s'? this resets the branch.", planName), startOverAction)
+		return m, m.confirmAction(fmt.Sprintf("start over task '%s'? this resets the branch.", planName), startOverAction)
 
 	case "restart_instance":
 		selected := m.nav.GetSelectedInstance()
@@ -480,7 +480,7 @@ func (m *home) fsmSetImplementing(planFile string) error {
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return fmt.Errorf("plan not found: %s", planFile)
+		return fmt.Errorf("task not found: %s", planFile)
 	}
 	current := taskfsm.Status(entry.Status)
 	if current == taskfsm.StatusImplementing {
@@ -510,7 +510,7 @@ func (m *home) fsmSetReviewing(planFile string) error {
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return fmt.Errorf("plan not found: %s", planFile)
+		return fmt.Errorf("task not found: %s", planFile)
 	}
 	current := taskfsm.Status(entry.Status)
 	if current == taskfsm.StatusReviewing {
@@ -538,7 +538,7 @@ func (m *home) fsmRevertToPlanning(planFile string) error {
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return fmt.Errorf("plan not found: %s", planFile)
+		return fmt.Errorf("task not found: %s", planFile)
 	}
 	if taskfsm.Status(entry.Status) == taskfsm.StatusPlanning {
 		return nil // already there
@@ -557,7 +557,7 @@ func (m *home) fsmForceToPlanning(planFile string) error {
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return fmt.Errorf("plan not found: %s", planFile)
+		return fmt.Errorf("task not found: %s", planFile)
 	}
 	switch taskfsm.Status(entry.Status) {
 	case taskfsm.StatusPlanning:
@@ -654,7 +654,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 			switch entry.Status {
 			case taskstate.StatusReady, taskstate.StatusPlanning:
 				items = append(items,
-					overlay.ContextMenuItem{Label: "start plan", Action: "start_plan"},
+					overlay.ContextMenuItem{Label: "start planning", Action: "start_plan"},
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
@@ -678,10 +678,10 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	// History plans get an "inspect plan" option to move them to the dead section.
+	// History plans get an "inspect task" option to move them to the dead section.
 	if m.nav.IsSelectedHistoryPlan() {
 		items = append(items,
-			overlay.ContextMenuItem{Label: "inspect plan", Action: "inspect_plan"},
+			overlay.ContextMenuItem{Label: "inspect task", Action: "inspect_plan"},
 		)
 	}
 	autoAdvanceLabel := "auto-advance waves: off"
@@ -690,15 +690,15 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 	}
 	items = append(items,
 		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
-		overlay.ContextMenuItem{Label: "view plan", Action: "view_plan"},
-		overlay.ContextMenuItem{Label: "rename plan", Action: "rename_plan"},
+		overlay.ContextMenuItem{Label: "view task", Action: "view_plan"},
+		overlay.ContextMenuItem{Label: "rename task", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
 		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
 		overlay.ContextMenuItem{Label: "set status", Action: "set_status"},
 		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},
 		overlay.ContextMenuItem{Label: "mark done", Action: "mark_plan_done"},
 		overlay.ContextMenuItem{Label: "start over", Action: "start_over_plan"},
-		overlay.ContextMenuItem{Label: "cancel plan", Action: "cancel_plan"},
+		overlay.ContextMenuItem{Label: "cancel task", Action: "cancel_plan"},
 	)
 
 	x := m.navWidth
@@ -739,11 +739,11 @@ func (m *home) pushSelectedInstance() (tea.Model, tea.Cmd) {
 // implement stage, and then executes the stage transition.
 func (m *home) triggerTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	if m.taskState == nil {
-		return m, m.handleError(fmt.Errorf("no plan state loaded"))
+		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}
 	entry, ok := m.taskState.Plans[planFile]
 	if !ok {
-		return m, m.handleError(fmt.Errorf("missing plan state for %s", planFile))
+		return m, m.handleError(fmt.Errorf("missing task state for %s", planFile))
 	}
 
 	// Backfill branch name for plans created before the branch field existed.
@@ -786,11 +786,11 @@ func (m *home) triggerTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 // user confirms past the topic-concurrency gate.
 func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	if m.taskState == nil {
-		return m, m.handleError(fmt.Errorf("no plan state loaded"))
+		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}
 	entry, ok := m.taskState.Plans[planFile]
 	if !ok {
-		return m, m.handleError(fmt.Errorf("missing plan state for %s", planFile))
+		return m, m.handleError(fmt.Errorf("missing task state for %s", planFile))
 	}
 
 	// Backfill branch name for plans created before the branch field existed.
@@ -844,7 +844,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			}
 			m.loadTaskState()
 			m.updateSidebarTasks()
-			m.toastManager.Info("plan needs ## Wave headers — respawning planner to annotate.")
+			m.toastManager.Info("task needs ## Wave headers — respawning planner to annotate.")
 			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildWaveAnnotationPrompt(planFile))
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}

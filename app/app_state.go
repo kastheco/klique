@@ -1433,7 +1433,7 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+		return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 	}
 
 	agentType, ok := agentTypeForSubItem(action)
@@ -1786,11 +1786,11 @@ func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, questi
 // spawnChatAboutTask spawns a custodian agent pre-loaded with the plan context and user question.
 func (m *home) spawnChatAboutTask(planFile, question string) (tea.Model, tea.Cmd) {
 	if m.taskState == nil {
-		return m, m.handleError(fmt.Errorf("no plan state loaded"))
+		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+		return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 	}
 	prompt := buildChatAboutTaskPrompt(planFile, entry, question)
 	planName := taskstate.DisplayName(planFile)
