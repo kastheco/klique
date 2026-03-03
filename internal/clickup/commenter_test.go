@@ -75,3 +75,62 @@ func TestCommenterNilSafe(t *testing.T) {
 	err := c.PostComment("abc123", "test")
 	assert.NoError(t, err)
 }
+
+// TestCommenterWorkspaceIDPropagation verifies that SetWorkspaceID causes the
+// workspace_id to be included in the MCP tool call arguments.
+func TestCommenterWorkspaceIDPropagation(t *testing.T) {
+	mock := &mockMCPCaller{
+		tools: []mcpclient.Tool{{Name: "clickup_create_task_comment"}},
+	}
+	c := clickup.NewCommenter(mock)
+	c.SetWorkspaceID("ws-99")
+
+	err := c.PostComment("task-abc", "progress update")
+	require.NoError(t, err)
+	assert.Equal(t, "ws-99", mock.lastArgs["workspace_id"],
+		"workspace_id must be present in tool call args after SetWorkspaceID")
+}
+
+// TestCommenterNoWorkspaceIDByDefault verifies that workspace_id is absent from
+// tool call args when SetWorkspaceID has not been called.
+func TestCommenterNoWorkspaceIDByDefault(t *testing.T) {
+	mock := &mockMCPCaller{
+		tools: []mcpclient.Tool{{Name: "clickup_create_task_comment"}},
+	}
+	c := clickup.NewCommenter(mock)
+
+	err := c.PostComment("task-abc", "no ws")
+	require.NoError(t, err)
+	_, hasWS := mock.lastArgs["workspace_id"]
+	assert.False(t, hasWS, "workspace_id must not appear when SetWorkspaceID was not called")
+}
+
+// TestCommenterToolNotFoundError verifies that PostComment returns an error
+// when the clickup_create_task_comment MCP tool is not available.
+func TestCommenterToolNotFoundError(t *testing.T) {
+	mock := &mockMCPCaller{
+		tools: []mcpclient.Tool{}, // no tools registered
+	}
+	c := clickup.NewCommenter(mock)
+
+	err := c.PostComment("task-xyz", "some comment")
+	require.Error(t, err, "PostComment must return an error when MCP tool is not found")
+	assert.Contains(t, err.Error(), "create_task_comment",
+		"error message should mention the missing tool name")
+}
+
+// TestCommenterEmptyCommentText verifies that PostComment passes through an
+// empty comment text to the MCP tool without short-circuiting.
+func TestCommenterEmptyCommentText(t *testing.T) {
+	mock := &mockMCPCaller{
+		tools: []mcpclient.Tool{{Name: "clickup_create_task_comment"}},
+	}
+	c := clickup.NewCommenter(mock)
+
+	err := c.PostComment("task-abc", "")
+	require.NoError(t, err)
+	assert.Equal(t, "clickup_create_task_comment", mock.lastToolName,
+		"tool must be called even with an empty comment")
+	assert.Equal(t, "", mock.lastArgs["comment_text"],
+		"empty comment text must be forwarded to the tool")
+}
