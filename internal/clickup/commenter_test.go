@@ -47,6 +47,11 @@ func TestParseClickUpTaskID(t *testing.T) {
 	}{
 		{"standard", "**Source:** ClickUp abc123 (https://app.clickup.com/t/abc123)", "abc123"},
 		{"no url", "**Source:** ClickUp xyz789", "xyz789"},
+		{"clickup url format", "**ClickUp:** https://app.clickup.com/t/86dzfbqz9", "86dzfbqz9"},
+		{"clickup url with trailing", "**ClickUp:** https://app.clickup.com/t/86dzfbqz9\n**Workspace:** 123", "86dzfbqz9"},
+		{"cu prefix source", "**Source:** ClickUp CU-abc123", "abc123"},
+		{"cu prefix url", "**ClickUp:** https://app.clickup.com/t/CU-86dzfbqz9", "86dzfbqz9"},
+		{"source preferred over url", "**Source:** ClickUp src123\n**ClickUp:** https://app.clickup.com/t/url456", "src123"},
 		{"missing", "# Plan\n\nNo clickup here", ""},
 		{"empty", "", ""},
 	}

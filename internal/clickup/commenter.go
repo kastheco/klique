@@ -3,21 +3,39 @@ package clickup
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
-// clickUpTaskIDRe matches "**Source:** ClickUp <ID>" optionally followed by a URL.
-var clickUpTaskIDRe = regexp.MustCompile(`\*\*Source:\*\*\s+ClickUp\s+(\S+)`)
+var (
+	// sourceLineRe matches "**Source:** ClickUp <ID>" optionally followed by a URL.
+	sourceLineRe = regexp.MustCompile(`\*\*Source:\*\*\s+ClickUp\s+(\S+)`)
+	// clickUpURLRe matches "**ClickUp:** https://app.clickup.com/t/<ID>".
+	clickUpURLRe = regexp.MustCompile(`\*\*ClickUp:\*\*\s+https://app\.clickup\.com/t/(\S+)`)
+)
 
-// ParseClickUpTaskID extracts the ClickUp task ID from plan content that
-// contains a "**Source:** ClickUp <ID>" line. Returns "" if not found.
+// ParseClickUpTaskID extracts the ClickUp task ID from plan content.
+// Supports two formats:
+//   - "**Source:** ClickUp <ID>" (kasmos native)
+//   - "**ClickUp:** https://app.clickup.com/t/<ID>" (stub plans)
+//
+// If the extracted ID has a "CU-" prefix it is stripped — ClickUp custom task
+// IDs use this prefix but the API expects the raw alphanumeric ID.
+// Returns "" if no task ID is found.
 func ParseClickUpTaskID(content string) string {
-	m := clickUpTaskIDRe.FindStringSubmatch(content)
-	if m == nil {
-		return ""
+	// Try the Source line first (original format).
+	if m := sourceLineRe.FindStringSubmatch(content); m != nil {
+		return stripCUPrefix(m[1])
 	}
-	// The regex captures up to the first whitespace, so the ID is already
-	// clean even when followed by a parenthesised URL like "abc123 (https://...)".
-	return m[1]
+	// Fall back to the ClickUp URL format.
+	if m := clickUpURLRe.FindStringSubmatch(content); m != nil {
+		return stripCUPrefix(m[1])
+	}
+	return ""
+}
+
+// stripCUPrefix removes the "CU-" prefix from a ClickUp task ID if present.
+func stripCUPrefix(id string) string {
+	return strings.TrimPrefix(id, "CU-")
 }
 
 // Commenter posts markdown progress comments to a ClickUp task via MCP.
