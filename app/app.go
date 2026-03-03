@@ -863,6 +863,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
+				// If this coder was spawned to apply reviewer feedback, post fixer_complete.
+				// pendingReviewFeedback is set when ReviewChangesRequested fires and
+				// cleared here once the fix-coder delivers its implement-finished signal.
+				if _, hasFeedback := m.pendingReviewFeedback[sig.PlanFile]; hasFeedback {
+					delete(m.pendingReviewFeedback, sig.PlanFile)
+					if cmd := m.postClickUpProgress(sig.PlanFile, "fixer_complete", ""); cmd != nil {
+						signalCmds = append(signalCmds, cmd)
+					}
+				}
 				if cmd := m.spawnReviewer(sig.PlanFile); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
@@ -1060,6 +1069,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if md.Updated {
 					inst.SetStatus(session.Running)
 					inst.PromptDetected = false
+					// Mark that the agent has produced real work. Wave task
+					// completion requires this to avoid permission prompts or
+					// early prompt returns from prematurely finishing a wave.
+					if inst.TaskNumber > 0 && !inst.AwaitingWork {
+						inst.HasWorked = true
+					}
 					if md.Content != "" {
 						inst.LastActivity = session.ParseActivity(md.Content, inst.Program)
 					}
@@ -1265,7 +1280,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if !collected {
 							continue
 						}
-						if inst.PromptDetected && !inst.AwaitingWork {
+						if inst.PromptDetected && !inst.AwaitingWork && inst.HasWorked {
 							orch.MarkTaskComplete(task.Number)
 							inst.SetStatus(session.Ready)
 						} else if !alive {
@@ -1295,7 +1310,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.audit(auditlog.EventWaveCompleted, "all waves complete: "+planName,
 						auditlog.WithPlan(capturedPlanFile))
 					// Post wave complete comment to ClickUp for multi-wave plans.
-					if totalWaves > 1 {
+					if shouldPostWaveCompleteComment(orch) {
 						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNumFinal, totalWaves, completedFinal, totalFinal)
 						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
 							asyncCmds = append(asyncCmds, cmd)
@@ -1336,7 +1351,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Post intermediate wave complete comment to ClickUp for
 					// multi-wave plans with no failures.
-					if failed == 0 && orch.TotalWaves() > 1 {
+					if failed == 0 && shouldPostWaveCompleteComment(orch) {
 						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNum, orch.TotalWaves(), completed, total)
 						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
 							asyncCmds = append(asyncCmds, cmd)

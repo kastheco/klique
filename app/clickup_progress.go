@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/kastheco/kasmos/config/planstate"
 	"github.com/kastheco/kasmos/internal/clickup"
+	"github.com/kastheco/kasmos/log"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -29,13 +30,15 @@ func shouldPostWaveCompleteComment(orch *WaveOrchestrator) bool {
 // postClickUpProgress creates a fire-and-forget tea.Cmd that posts a markdown
 // progress comment to the ClickUp task linked to the given taskID.
 // Returns nil (no-op) when taskID is empty or commenter is nil.
-// The command silently discards any PostComment error — ClickUp is best-effort.
+// Any PostComment error is logged as a warning — ClickUp is best-effort.
 func postClickUpProgress(commenter *clickup.Commenter, taskID, comment string) tea.Cmd {
 	if taskID == "" || commenter == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		_ = commenter.PostComment(taskID, comment)
+		if err := commenter.PostComment(taskID, comment); err != nil {
+			log.WarningLog.Printf("postClickUpProgress: %v", err)
+		}
 		return nil
 	}
 }

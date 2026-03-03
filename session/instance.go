@@ -107,6 +107,12 @@ type Instance struct {
 	// this to avoid treating the initial idle prompt as task completion.
 	AwaitingWork bool
 
+	// HasWorked is set to true when the agent produces at least one content
+	// update (md.Updated) after receiving its task prompt. The wave orchestrator
+	// requires this before treating PromptDetected as task completion — prevents
+	// permission prompts or early returns from prematurely completing a wave.
+	HasWorked bool
+
 	// CPUPercent is the current CPU usage of the instance's process.
 	CPUPercent float64
 	// MemMB is the current memory usage in megabytes.

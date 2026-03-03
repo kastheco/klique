@@ -189,3 +189,35 @@ func TestSQLiteStore_SetContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# Updated", content)
 }
+
+func TestClickUpTaskIDRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	entry := planstore.PlanEntry{Filename: "2026-02-28-clickup-test.md", Status: planstore.StatusReady}
+	require.NoError(t, store.Create("proj", entry))
+
+	// Initially no task ID
+	got, err := store.Get("proj", "2026-02-28-clickup-test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "", got.ClickUpTaskID, "task ID must be empty before set")
+
+	// Set the task ID
+	require.NoError(t, store.SetClickUpTaskID("proj", "2026-02-28-clickup-test.md", "CU-abc123"))
+
+	// Verify it round-trips through Get
+	got, err = store.Get("proj", "2026-02-28-clickup-test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "CU-abc123", got.ClickUpTaskID, "task ID must be persisted after SetClickUpTaskID")
+
+	// Verify it appears in List
+	plans, err := store.List("proj")
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.Equal(t, "CU-abc123", plans[0].ClickUpTaskID, "task ID must appear in List results")
+}
+
+func TestClickUpTaskIDRoundTrip_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	err := store.SetClickUpTaskID("proj", "nonexistent.md", "CU-xyz")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

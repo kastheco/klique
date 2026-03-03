@@ -1985,70 +1985,36 @@ func (m *home) postClickUpProgress(planFile, event, detail string) tea.Cmd {
 		return nil
 	}
 
-	taskID := entry.ClickUpTaskID
-	if taskID == "" {
-		// Fall back to parsing from plan content.
-		if m.planStore != nil {
-			content, err := m.planStore.GetContent(m.planStoreProject, planFile)
-			if err == nil {
-				taskID = clickup.ParseClickUpTaskID(content)
-			}
-		}
+	// Fetch content for fallback task ID resolution only when the field is empty.
+	var content string
+	if entry.ClickUpTaskID == "" && m.planStore != nil {
+		content, _ = m.planStore.GetContent(m.planStoreProject, planFile)
 	}
-	if taskID == "" {
-		return nil
-	}
+	taskID := resolveClickUpTaskID(entry, content)
 
 	planName := planstate.DisplayName(planFile)
 	comment := buildClickUpProgressComment(event, planName, detail)
 
 	commenter := m.getOrCreateCommenter(m.ctx)
-	if commenter == nil {
-		return nil
-	}
-
-	capturedTaskID := taskID
-	capturedComment := comment
-	capturedCommenter := commenter
-	return func() tea.Msg {
-		if err := capturedCommenter.PostComment(capturedTaskID, capturedComment); err != nil {
-			log.WarningLog.Printf("postClickUpProgress: %v", err)
-		}
-		return nil
-	}
+	return postClickUpProgress(commenter, taskID, comment)
 }
 
 // getOrCreateCommenter returns a Commenter backed by the same MCP client as
-// the Importer if it already exists, or initializes a new MCP connection.
-// Returns nil on any error (fail-open).
-func (m *home) getOrCreateCommenter(ctx context.Context) *clickup.Commenter {
+// the Importer if it already exists. Returns nil when no MCP client has been
+// initialized yet — progress comments are best-effort and the importer is
+// always initialized before plans acquire ClickUp task IDs, so this fallback
+// path is never hit in practice. Lazy initialization via getOrCreateImporter
+// is deliberately avoided: that call does blocking I/O (MCP subprocess spawn)
+// and must not run inside the synchronous Update() path.
+func (m *home) getOrCreateCommenter(_ context.Context) *clickup.Commenter {
 	if m.clickUpCommenter != nil {
 		return m.clickUpCommenter
 	}
-	if m.clickUpConfig == nil {
+	if m.clickUpConfig == nil || m.clickUpMCPClient == nil {
 		return nil
 	}
 
-	// Reuse the shared MCP client if the importer already initialized it.
-	if m.clickUpMCPClient != nil {
-		m.clickUpCommenter = clickup.NewCommenter(m.clickUpMCPClient)
-		if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
-			m.clickUpCommenter.SetWorkspaceID(projCfg.WorkspaceID)
-		}
-		return m.clickUpCommenter
-	}
-
-	// No MCP client yet — try to get one via getOrCreateImporter (initializes
-	// the shared transport and stores clickUpMCPClient as a side-effect).
-	if _, err := m.getOrCreateImporter(ctx); err != nil {
-		log.WarningLog.Printf("getOrCreateCommenter: importer init failed: %v", err)
-		return nil
-	}
-
-	// clickUpMCPClient is now set by getOrCreateImporter.
-	if m.clickUpMCPClient == nil {
-		return nil
-	}
+	// Reuse the shared MCP client initialized by the importer.
 	m.clickUpCommenter = clickup.NewCommenter(m.clickUpMCPClient)
 	if projCfg := clickup.LoadProjectConfig(m.activeRepoPath); projCfg.WorkspaceID != "" {
 		m.clickUpCommenter.SetWorkspaceID(projCfg.WorkspaceID)

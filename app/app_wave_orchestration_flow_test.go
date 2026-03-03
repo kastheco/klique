@@ -321,6 +321,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
+	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -416,6 +417,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
+	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -681,6 +683,7 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 	}
 	taskInst.MarkStartedForTest()
 	taskInst.PromptDetected = true
+	taskInst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	_ = h.nav.AddInstance(otherInst)
@@ -855,6 +858,7 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
+	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -965,6 +969,7 @@ func TestAutoAdvanceWaves_ShowsConfirmOnFailure(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst1.PromptDetected = true
+	inst1.HasWorked = true
 
 	inst2, err := session.NewInstance(session.InstanceOptions{
 		Title:      "auto-advance-failure-W1-T2",
@@ -1035,6 +1040,7 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
+	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
 	// Enable auto-advance
@@ -1056,6 +1062,69 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 
 	// The cmd must be non-nil (it contains the waveAdvanceMsg)
 	assert.NotNil(t, cmd, "auto-advance must emit a tea.Cmd containing waveAdvanceMsg")
+}
+
+// TestWaveTaskCompletion_RequiresHasWorked verifies that a wave task is NOT
+// marked complete when PromptDetected is true but HasWorked is false. This
+// prevents permission prompts and early prompt returns from prematurely
+// completing a wave (especially dangerous with auto-advance enabled).
+func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
+	const planFile = "2026-03-02-has-worked-guard.md"
+
+	plan := &planparser.Plan{
+		Waves: []planparser.Wave{
+			{Number: 1, Tasks: []planparser.Task{{Number: 1, Title: "do work"}}},
+		},
+	}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "has-worked guard test", "plan/has-worked-guard", time.Now()))
+	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "has-worked-guard-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		PlanFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+	inst.HasWorked = false // agent returned to prompt without doing real work
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(inst)
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "has-worked-guard-W1-T1", TmuxAlive: true}},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Task must NOT be marked complete — orchestrator stays running.
+	assert.Len(t, updated.waveOrchestrators, 1,
+		"orchestrator must still exist when HasWorked is false")
+	assert.Equal(t, WaveStateRunning, orch.State(),
+		"wave must remain running when task has not done real work")
+	assert.NotEqual(t, stateConfirm, updated.state,
+		"no completion dialog should appear")
+
+	// Now simulate the agent doing real work and returning to prompt again.
+	inst.HasWorked = true
+	model2, _ := updated.Update(msg)
+	updated2 := model2.(*home)
+
+	// Now it should complete.
+	assert.Empty(t, updated2.waveOrchestrators,
+		"orchestrator must be deleted after HasWorked is set and task completes")
 }
 
 // TestCoderExit_FocusesCoderInstance_BeforePushConfirm verifies that when a

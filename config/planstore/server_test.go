@@ -62,6 +62,51 @@ func TestServer_Ping(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+func TestServer_SetClickUpTaskID(t *testing.T) {
+	store := newTestStore(t)
+	srv := httptest.NewServer(planstore.NewHandler(store))
+	defer srv.Close()
+
+	// Create a plan first
+	body := `{"filename":"plan.md","status":"ready"}`
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/plans", "application/json", strings.NewReader(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	// PUT clickup-task-id
+	req, err := http.NewRequest(http.MethodPut,
+		srv.URL+"/v1/projects/kasmos/plans/plan.md/clickup-task-id",
+		strings.NewReader(`{"clickup_task_id":"CU-abc123"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Verify it was stored
+	got, err := store.Get("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, "CU-abc123", got.ClickUpTaskID)
+}
+
+func TestServer_SetClickUpTaskID_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	srv := httptest.NewServer(planstore.NewHandler(store))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPut,
+		srv.URL+"/v1/projects/kasmos/plans/nonexistent.md/clickup-task-id",
+		strings.NewReader(`{"clickup_task_id":"CU-xyz"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp.Body.Close()
+}
+
 func TestServer_ContentEndpoints(t *testing.T) {
 	store := newTestStore(t)
 	srv := httptest.NewServer(planstore.NewHandler(store))
