@@ -564,7 +564,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 			m.auditBootstrapped = true
 		}
 		m.auditPane.SetSize(auditInnerW, auditH)
-		m.nav.SetAuditView(m.auditPane.String(), auditH)
+		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.ContentLines())
 	} else {
 		m.nav.SetAuditView("", 0)
 		if m.auditPane != nil {

@@ -129,8 +129,8 @@ type NavigationPanel struct {
 	clickUpAvail    bool
 
 	// Embedded audit view rendered below the legend.
-	auditView   string
-	auditHeight int
+	auditView         string
+	auditContentLines int // actual rendered body lines (events + minute headers)
 
 	width, height int
 	focused       bool
@@ -611,9 +611,9 @@ func (n *NavigationPanel) SetSize(width, height int) {
 	n.clampScroll()
 }
 
-func (n *NavigationPanel) SetAuditView(view string, h int) {
+func (n *NavigationPanel) SetAuditView(view string, contentLines int) {
 	n.auditView = view
-	n.auditHeight = h
+	n.auditContentLines = contentLines
 }
 
 func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }
@@ -623,13 +623,27 @@ func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.re
 // availRows returns the number of rows the scroll window can display.
 // Overhead accounts for border (2), search box (3), blank line (1),
 // legend (1), and gap above legend (1) = 8.  When the audit pane is
-// active, an additional 6 lines are reserved (1 gap below legend +
-// 1 audit header + 4 minimum body lines) so the log section never
-// flickers in and out as the window resizes.
+// active, additional lines are reserved dynamically based on actual
+// content lines (events + minute headers) so the log height stays
+// stable regardless of window size.
 func (n *NavigationPanel) availRows() int {
-	overhead := 8
-	if n.auditView != "" && n.auditHeight > 0 {
-		overhead += 6
+	const (
+		baseOverhead = 8 // border(2) + search(3) + blank(1) + legend(1) + gap(1)
+		minNavRows   = 5 // always keep at least 5 nav item rows
+	)
+	overhead := baseOverhead
+	if n.auditView != "" && n.auditContentLines > 0 {
+		// Reserve: 1 gap below legend + 1 audit header + contentLines body
+		auditReserve := 2 + n.auditContentLines
+		// Cap so nav items keep at least minNavRows
+		maxReserve := n.height - baseOverhead - minNavRows
+		if maxReserve < 3 {
+			maxReserve = 3 // minimum viable audit (header + 2 lines)
+		}
+		if auditReserve > maxReserve {
+			auditReserve = maxReserve
+		}
+		overhead += auditReserve
 	}
 	v := n.height - overhead
 	if v < 1 {
@@ -1084,6 +1098,9 @@ func navInstanceTitle(inst *session.Instance) string {
 	case inst.WaveNumber > 0 && inst.TaskNumber > 0:
 		return fmt.Sprintf("wave %d · task %d", inst.WaveNumber, inst.TaskNumber)
 	case inst.AgentType == session.AgentTypeReviewer && inst.TaskFile != "":
+		if inst.ReviewCycle > 0 {
+			return fmt.Sprintf("review #%d", inst.ReviewCycle)
+		}
 		return "review"
 	case inst.AgentType == session.AgentTypePlanner && inst.TaskFile != "":
 		return "planning"
@@ -1468,40 +1485,51 @@ func (n *NavigationPanel) String() string {
 	legendLines := strings.Count(legend, "\n") + 1
 
 	// Compute optional audit section (bottom-pinned).
-	maxAudit := height - topLines - legendLines
+	// Size audit FIRST based on actual content, then gaps absorb remainder.
+	// This prevents the audit height from changing by ±1 per terminal resize row.
 	auditSection := ""
 	auditLines := 0
-	if n.auditView != "" && n.auditHeight > 0 && maxAudit >= 3 {
-		vlines := strings.Split(n.auditView, "\n")
-		header := ""
-		var bodyAudit []string
-		if len(vlines) > 0 {
-			header = vlines[0]
-			bodyAudit = vlines[1:]
+	if n.auditView != "" && n.auditContentLines > 0 {
+		// Desired audit: 1 header + all content body lines.
+		desiredAudit := 1 + n.auditContentLines
+		// Available space: total height minus nav items, search, legend, and minimum gaps (2).
+		availForAudit := height - topLines - legendLines - 2
+		if availForAudit < 3 {
+			availForAudit = 0 // too small, hide audit entirely
 		}
-		// Strip trailing blank lines.
-		for len(bodyAudit) > 0 && strings.TrimSpace(bodyAudit[len(bodyAudit)-1]) == "" {
-			bodyAudit = bodyAudit[:len(bodyAudit)-1]
+		maxAudit := desiredAudit
+		if maxAudit > availForAudit {
+			maxAudit = availForAudit
 		}
-		maxBody := maxAudit - 1
-		if maxBody < 0 {
-			maxBody = 0
-		}
-		if len(bodyAudit) > maxBody {
-			bodyAudit = bodyAudit[len(bodyAudit)-maxBody:]
-			for len(bodyAudit) > 0 && isAuditContinuationLine(bodyAudit[0]) {
-				bodyAudit = bodyAudit[1:]
+		if maxAudit >= 3 {
+			vlines := strings.Split(n.auditView, "\n")
+			header := ""
+			var bodyAudit []string
+			if len(vlines) > 0 {
+				header = vlines[0]
+				bodyAudit = vlines[1:]
 			}
+			// Strip trailing blank lines.
+			for len(bodyAudit) > 0 && strings.TrimSpace(bodyAudit[len(bodyAudit)-1]) == "" {
+				bodyAudit = bodyAudit[:len(bodyAudit)-1]
+			}
+			maxBody := maxAudit - 1
+			if maxBody < 0 {
+				maxBody = 0
+			}
+			if len(bodyAudit) > maxBody {
+				bodyAudit = bodyAudit[len(bodyAudit)-maxBody:]
+				for len(bodyAudit) > 0 && isAuditContinuationLine(bodyAudit[0]) {
+					bodyAudit = bodyAudit[1:]
+				}
+			}
+			// No blank padding — show exactly what content exists.
+			lines := make([]string, 0, 1+len(bodyAudit))
+			lines = append(lines, header)
+			lines = append(lines, bodyAudit...)
+			auditSection = strings.Join(lines, "\n")
+			auditLines = len(lines)
 		}
-		padCount := maxBody - len(bodyAudit)
-		lines := make([]string, 0, 1+padCount+len(bodyAudit))
-		lines = append(lines, header)
-		for i := 0; i < padCount; i++ {
-			lines = append(lines, "")
-		}
-		lines = append(lines, bodyAudit...)
-		auditSection = strings.Join(lines, "\n")
-		auditLines = len(lines)
 	}
 
 	// Distribute gap evenly above and below the legend.

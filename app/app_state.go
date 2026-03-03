@@ -1959,7 +1959,7 @@ func (m *home) refreshAuditPane() {
 
 	// Push updated audit view into the nav panel.
 	if m.nav != nil && m.auditPane.Visible() {
-		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.Height())
+		m.nav.SetAuditView(m.auditPane.String(), m.auditPane.ContentLines())
 	}
 }
 

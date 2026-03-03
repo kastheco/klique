@@ -20,11 +20,12 @@ type AuditEventDisplay struct {
 
 // AuditPane renders a chronological, scrollable activity feed.
 type AuditPane struct {
-	events   []AuditEventDisplay
-	viewport viewport.Model
-	width    int
-	height   int
-	visible  bool
+	events    []AuditEventDisplay
+	viewport  viewport.Model
+	width     int
+	height    int
+	visible   bool
+	bodyLines int // rendered body line count (events + minute headers, excluding padding)
 }
 
 // NewAuditPane returns an AuditPane that is visible by default.
@@ -77,6 +78,10 @@ func (p *AuditPane) Visible() bool { return p.visible }
 
 // Height returns the total height (header + body) set by SetSize.
 func (p *AuditPane) Height() int { return p.height }
+
+// ContentLines returns the number of rendered body lines (events + minute
+// headers) excluding blank padding.  This is cached on every SetSize/SetEvents.
+func (p *AuditPane) ContentLines() int { return p.bodyLines }
 
 // ToggleVisible flips the visibility flag.
 func (p *AuditPane) ToggleVisible() { p.visible = !p.visible }
@@ -136,6 +141,7 @@ func (p *AuditPane) renderMinuteHeader(minute string) string {
 // overhead so they align under the first character of the message text.
 func (p *AuditPane) renderBody() string {
 	if len(p.events) == 0 {
+		p.bodyLines = 1
 		return auditRowPad.Render(auditEmptyStyle.Render("· no events"))
 	}
 
@@ -184,6 +190,7 @@ func (p *AuditPane) renderBody() string {
 		}
 	}
 
+	p.bodyLines = len(lines)
 	return strings.Join(lines, "\n")
 }
 
