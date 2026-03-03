@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "6e904c6bd545",
+  "session_id": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T06:34:16.075373089Z",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/02a-rewrite-session-core.md",
+    "docs/plans/02b-rewrite-overlay-ui.md",
+    "docs/plans/03-rewrite-ui-panels.md",
+    "docs/plans/04-rewrite-plumbing.md",
+    "docs/plans/extract-orchestrator.md",
+    "docs/plans/rename-plan-to-task.md",
+    "docs/plans/01a-rewrite-tmux-layer.md",
+    "docs/plans/01b-rewrite-git-layer.md",
+    "docs/plans/instance-management-cli.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c18f0df064b8",
+  "checkpoint_transcript_start": 34,
+  "transcript_lines_at_start": 34,
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 1069,
+    "cache_read_tokens": 432569,
+    "output_tokens": 706,
+    "api_call_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T06:34:15.869872004Z",
+    "agent_lines": 3149,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 3149,
+    "agent_percentage": 100
+  }
+}
