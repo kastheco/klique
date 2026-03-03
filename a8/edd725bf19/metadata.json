@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "a8edd725bf19",
+  "strategy": "manual-commit",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_input.go",
+    "app/app_permission_test.go",
+    "app/app_planner_signal_test.go",
+    "app/app_solo_agent_test.go",
+    "app/app_statusbar_integration_test.go",
+    "app/app_task_actions_test.go",
+    "app/app_task_completion_test.go",
+    "app/app_task_creation_test.go",
+    "app/app_test.go",
+    "app/app_wave_orchestration_flow_test.go",
+    "app/help.go",
+    "app/task_cancel_rename_delay_test.go",
+    "ui/overlay/confirmationOverlay.go",
+    "ui/overlay/contextMenu.go",
+    "ui/overlay/formOverlay.go",
+    "ui/overlay/formOverlay_test.go",
+    "ui/overlay/manager.go",
+    "ui/overlay/permissionOverlay.go",
+    "ui/overlay/pickerOverlay.go",
+    "ui/overlay/textInput.go",
+    "ui/overlay/textInput_test.go",
+    "ui/overlay/textOverlay.go",
+    "ui/overlay/tmuxBrowserOverlay.go",
+    "ui/overlay/tmuxBrowserOverlay_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a8/edd725bf19/0/metadata.json",
+      "transcript": "/a8/edd725bf19/0/full.jsonl",
+      "context": "",
+      "content_hash": "/a8/edd725bf19/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
