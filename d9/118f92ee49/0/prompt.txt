@@ -1,0 +1,160 @@
+Implement Task 1: Create orchestration package with engine and prompt builders
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.
+**Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.
+**Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)
+
+## Wave 1 of 2
+
+## Task Instructions
+
+**Files:**
+- Create: `orchestration/engine.go`
+- Create: `orchestration/prompt.go`
+- Create: `orchestration/engine_test.go`
+- Create: `orchestration/prompt_test.go`
+
+**Step 1: Write failing tests**
+
+Create `orchestration/engine_test.go` — adapt all orchestrator tests from `app/wave_orchestrator_test.go` into `package orchestration` (do NOT copy `TestBuildClickUpComment` — that tests ClickUp formatting and stays in `app/`). The adapted tests are:
+
+- `TestNewWaveOrchestrator` — verify State, TotalWaves, TotalTasks after construction.
+- `TestWaveOrchestrator_StartWave` — start wave 1, check Running state and task list.
+- `TestWaveOrchestrator_TaskCompleted` — mark tasks complete, verify wave completion.
+- `TestWaveOrchestrator_TaskFailed` — mark task failed, verify counts.
+- `TestWaveOrchestrator_MultiWaveProgression` — two-wave lifecycle.
+- `TestWaveOrchestrator_AllComplete` — single-wave plan completes to AllComplete.
+- `TestWaveOrchestrator_ResetConfirmAllowsReprompt` — NeedsConfirm one-shot latch + reset.
+- `TestIsTaskRunning` — verify running/complete/unknown task queries.
+- `TestWaveOrchestrator_TaskStatusQueries` — IsTaskComplete, IsTaskFailed, IsTaskRunning.
+- `TestWaveOrchestrator_RetryFailedTasksRestoresRunning` — retry transitions and state.
+
+Add new tests for the three new methods:
+
+```go
+func TestRestoreToWave(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.RestoreToWave(2, []int{3})
+	assert.Equal(t, WaveStateAllComplete, orch.State())
+	assert.Equal(t, 2, orch.CurrentWaveNumber())
+}
+
+func TestRestoreToWave_PartialCompletion(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+			{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.RestoreToWave(2, []int{2}) // task 3 still running
+	assert.Equal(t, WaveStateRunning, orch.State())
+	assert.True(t, orch.IsTaskComplete(2))
+	assert.True(t, orch.IsTaskRunning(3))
+}
+
+func TestShouldPostWaveCompleteComment(t *testing.T) {
+	single := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+	}}
+	multi := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+		{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},
+	}}
+	assert.False(t, NewWaveOrchestrator("s.md", single).ShouldPostWaveCompleteComment())
+	assert.True(t, NewWaveOrchestrator("m.md", multi).ShouldPostWaveCompleteComment())
+
+	// nil receiver safety
+	var nilOrch *WaveOrchestrator
+	assert.False(t, nilOrch.ShouldPostWaveCompleteComment())
+}
+
+func TestBuildTaskPrompt_Method(t *testing.T) {
+	plan := &taskparser.Plan{
+		Goal: "Test goal",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+				{Number: 2, Title: "Second", Body: "do second"},
+			}},
+		},
+	}
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.StartNextWave()
+	prompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)
+	assert.Contains(t, prompt, "Task 1")
+	assert.Contains(t, prompt, "Test goal")
+	assert.Contains(t, prompt, "Wave 1 of 1")
+	assert.Contains(t, prompt, "parallel") // peerCount > 1
+}
+```
+
+Create `orchestration/prompt_test.go` — adapt the two tests from `app/wave_prompt_test.go` (`TestBuildTaskPrompt`, `TestBuildTaskPrompt_SingleTask`) into `package orchestration`. Add:
+
+```go
+func TestBuildWaveAnnotationPrompt(t *testing.T) {
+	prompt := BuildWaveAnnotationPrompt("my-feature.md")
+	assert.Contains(t, prompt, "## Wave")
+	assert.Contains(t, prompt, "my-feature.md")
+	assert.Contains(t, prompt, "planner-finished-my-feature.md")
+}
+```
+
+**Step 2: Run tests to verify they fail**
+
+```bash
+go test ./orchestration/... -v
+```
+
+Expected: FAIL — package `orchestration` doesn't exist yet.
+
+**Step 3: Write implementation**
+
+Create `orchestration/engine.go`:
+- Export `WaveState` type with 4 constants: `WaveStateIdle`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`.
+- Keep `taskStatus` type and constants unexported (only used internally by the engine).
+- `WaveOrchestrator` struct — same fields as current `app/wave_orchestrator.go`, all unexported.
+- `NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator` constructor.
+- All existing methods verbatim from `app/wave_orchestrator.go`: `State`, `TaskFile`, `TotalWaves`, `TotalTasks`, `CurrentWaveNumber`, `CurrentWaveTasks`, `StartNextWave`, `MarkTaskComplete`, `MarkTaskFailed`, `NeedsConfirm`, `ResetConfirm`, `RetryFailedTasks`, `IsCurrentWaveComplete`, `CompletedTaskCount`, `FailedTaskCount`, `IsTaskRunning`, `IsTaskComplete`, `IsTaskFailed`, `HeaderContext`, `checkWaveComplete`, `countCurrentWaveByStatus`.
+- New method `ShouldPostWaveCompleteComment() bool` — nil-receiver safe, returns `o != nil && o.TotalWaves() > 1`. Extracted from `app/clickup_progress.go:shouldPostWaveCompleteComment`.
+- New method `RestoreToWave(targetWave int, completedTasks []int)` — fast-forwards wave-by-wave to `targetWave`, auto-completing all tasks in earlier waves via `StartNextWave` + `MarkTaskComplete` loops, then marks the specified task numbers as complete in the target wave. Extracted from the manual fast-forward loop in `app/app_state.go:rebuildOrphanedOrchestrators` (lines 1637–1657).
+- New method `BuildTaskPrompt(task taskparser.Task, peerCount int) string` — convenience wrapper: `return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)`.
+
+Create `orchestration/prompt.go`:
+- `BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` — moved verbatim from `app/wave_prompt.go:buildTaskPrompt`.
+- `BuildWaveAnnotationPrompt(planFile string) string` — moved from `app/app_state.go:buildWaveAnnotationPrompt` (lines 1341–1353).
+
+**Step 4: Run tests to verify they pass**
+
+```bash
+go test ./orchestration/... -v
+```
+
+Expected: PASS — all engine and prompt tests green.
+
+Also verify the existing app tests still pass (old code untouched):
+
+```bash
+go test ./app/... -count=1
+```
+
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add orchestration/
+git commit -m "feat: extract orchestration engine into standalone package"
+```
+
+---
