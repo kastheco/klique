@@ -1,0 +1,76 @@
+Implement Task 1: Rewrite activity.go — Agent Activity Parsing
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all files in `session/` (excluding the already-rewritten `session/tmux/` and `session/git/` subdirectories) to remove AGPL-tainted lines. The rewrite preserves the identical public API so all callers (`app/`, `ui/`, `daemon/`, `main.go`) compile without changes, while replacing every line of implementation.
+**Architecture:** Eight files rewritten in-place across the session core: `instance.go` (struct, constructors, accessors, serialization), `instance_lifecycle.go` (Start variants, Kill, Pause, Resume, Restart, Adopt), `instance_session.go` (pane I/O, metadata collection, resource monitoring, diff stats), `storage.go` (JSON persistence via `config.StateManager`), `activity.go` (agent activity parsing from pane content), `permission_prompt.go` (opencode permission dialog detection), `cli_prompt.go` (program CLI prompt support detection), and `notify.go` (desktop notifications). The `terminal.go` file (EmbeddedTerminal) is 100% original code (written post-fork for the live-preview feature) and is untouched. All existing test files are preserved as the regression suite — they must pass after each task. The public API (exported types, method signatures, constants) stays identical.
+**Tech Stack:** Go 1.24, testify, `session/tmux` (rewritten), `session/git` (rewritten), `config.StateManager`, `charmbracelet/x/ansi`, `charmbracelet/x/vt`, `creack/pty`, `atotto/clipboard`
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 1 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/activity.go`
+- Test: `session/activity_test.go` (existing — 230 LOC, 11 test functions)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `activity_test.go` covers: Claude editing/writing/reading/running/searching/shell-command patterns, Aider editing, no-match case, 30-line scan window, bottom-up scanning priority, ANSI stripping, detail truncation, and `cleanFilename`/`truncateDetail` helpers. These tests ARE the regression gate.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./session/... -run "TestParseActivity|TestTruncateDetail|TestCleanFilename" -v -count=1
+```
+
+expected: PASS — all existing tests green before rewrite
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `session/activity.go` and rewrite from scratch based on this functional spec:
+
+- **`Activity` struct** — three fields: `Action string` (e.g. "editing", "running", "reading", "searching"), `Detail string` (e.g. filename or command), `Timestamp time.Time`.
+- **`ansiRegex`** — compiled `regexp.Regexp` matching ANSI escape sequences `\x1b\[[0-9;]*[a-zA-Z]`.
+- **Agent-specific regexes** — compiled patterns for Claude (editing/writing, reading, running, searching, shell `$` prefix) and Aider (editing). Each regex captures the detail portion.
+- **`ParseActivity(content string, program string) *Activity`** — strips ANSI codes from content, splits into lines, takes last 30 lines, scans bottom-up. For each non-empty trimmed line: dispatches to agent-specific parser based on program name (case-insensitive substring match for "claude" or "aider"), then falls back to generic parser. Returns first match or nil.
+- **`parseClaudeLine(line string) *Activity`** — matches against Claude regexes in order: editing/writing → reading → running → searching → shell command. Returns `Activity` with appropriate action, cleaned/truncated detail, and `time.Now()` timestamp.
+- **`parseAiderLine(line string) *Activity`** — matches Aider editing regex. Returns `Activity` or nil.
+- **`parseGenericLine(line string) *Activity`** — matches shell command pattern (`$ <cmd>`). Returns `Activity` or nil.
+- **`cleanFilename(s string) string`** — trims whitespace, returns `filepath.Base(s)` if path contains `/`, otherwise returns trimmed string.
+- **`truncateDetail(s string, maxLen int) string`** — returns `s` if `len(s) <= maxLen`. If `maxLen <= 3`, returns `s[:maxLen]`. Otherwise returns `s[:maxLen-3] + "..."`.
+
+Imports: `path/filepath`, `regexp`, `strings`, `time`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/... -run "TestParseActivity|TestTruncateDetail|TestCleanFilename" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/activity.go
+git commit -m "feat(clean-room): rewrite session/activity.go from scratch"
+```
