@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "e8e5e9eeb584",
+  "session_id": "ses_34a80e0c5ffeuBaAOiHiDkS7Lx",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T20:59:20.607151425Z",
+  "branch": "plan/fix-kas-task-usage",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "app/app_state.go",
+    "cmd/serve.go",
+    "cmd/task.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "1d915730ce32",
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 53085,
+    "cache_read_tokens": 249639,
+    "output_tokens": 1203,
+    "api_call_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T20:59:20.409708995Z",
+    "agent_lines": 32,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 32,
+    "agent_percentage": 100
+  }
+}
