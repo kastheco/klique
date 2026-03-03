@@ -1,0 +1,21 @@
+[Image 1] new error
+
+---
+
+The following tool was executed by the user
+
+---
+
+[Image 1]
+
+---
+
+can you review the whole clickup mcp integration to make sure it adheres to clickup mcp docs and doesn't have more issues?
+
+---
+
+yes
+
+---
+
+commit these fixes, push as new release
