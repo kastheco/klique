@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
@@ -27,7 +27,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenamePlan || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutPlan {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -147,7 +147,7 @@ func (m *home) handleRightClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-			return m.openPlanContextMenu()
+			return m.openTaskContextMenu()
 		}
 		return m, nil
 	}
@@ -418,7 +418,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	// Handle plan rename state
-	if m.state == stateRenamePlan {
+	if m.state == stateRenameTask {
 		if m.textInputOverlay == nil {
 			m.state = stateDefault
 			return m, nil
@@ -428,9 +428,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.textInputOverlay.IsSubmitted() {
 				newName := strings.TrimSpace(m.textInputOverlay.GetValue())
 				planFile := m.nav.GetSelectedPlanFile()
-				if planFile != "" && newName != "" && m.planState != nil {
+				if planFile != "" && newName != "" && m.taskState != nil {
 					oldFile := planFile
-					newFile, err := m.planState.Rename(oldFile, newName)
+					newFile, err := m.taskState.Rename(oldFile, newName)
 					if err != nil {
 						m.textInputOverlay = nil
 						m.state = stateDefault
@@ -439,17 +439,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					}
 					// Update any instances that referenced the old plan file.
 					for _, inst := range m.nav.GetInstances() {
-						if inst.PlanFile == oldFile {
-							inst.PlanFile = newFile
+						if inst.TaskFile == oldFile {
+							inst.TaskFile = newFile
 						}
 					}
 					for _, inst := range m.allInstances {
-						if inst.PlanFile == oldFile {
-							inst.PlanFile = newFile
+						if inst.TaskFile == oldFile {
+							inst.TaskFile = newFile
 						}
 					}
 					_ = m.saveAllInstances()
-					m.updateSidebarPlans()
+					m.updateSidebarTasks()
 					m.nav.SelectByID(ui.SidebarPlanPrefix + newFile)
 				}
 			}
@@ -462,7 +462,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	// Handle chat-about-plan question input
-	if m.state == stateChatAboutPlan {
+	if m.state == stateChatAboutTask {
 		if m.textInputOverlay == nil {
 			m.state = stateDefault
 			return m, nil
@@ -471,18 +471,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			if m.textInputOverlay.IsSubmitted() {
 				question := m.textInputOverlay.GetValue()
-				planFile := m.pendingChatAboutPlan
+				planFile := m.pendingChatAboutTask
 				m.textInputOverlay = nil
-				m.pendingChatAboutPlan = ""
+				m.pendingChatAboutTask = ""
 				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
 				if planFile != "" && question != "" {
-					return m.spawnChatAboutPlan(planFile, question)
+					return m.spawnChatAboutTask(planFile, question)
 				}
 				return m, tea.WindowSize()
 			}
 			m.textInputOverlay = nil
-			m.pendingChatAboutPlan = ""
+			m.pendingChatAboutTask = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -595,7 +595,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
-			m.pendingWaveConfirmPlanFile = ""
+			m.pendingWaveConfirmTaskFile = ""
 			// Return the action as a tea.Cmd so bubbletea runs it asynchronously.
 			// This prevents blocking the UI during I/O (git push, etc.).
 			return m, action
@@ -610,7 +610,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingConfirmAction = nil
 			m.pendingWaveAbortAction = nil
 			m.pendingWaveNextAction = nil
-			m.pendingWaveConfirmPlanFile = ""
+			m.pendingWaveConfirmTaskFile = ""
 			return m, abortAction
 		case m.confirmationOverlay.CancelKey:
 			// If this is the failed-wave dialog and 'n' (next wave) is the cancel key,
@@ -622,26 +622,26 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.pendingConfirmAction = nil
 				m.pendingWaveAbortAction = nil
 				m.pendingWaveNextAction = nil
-				m.pendingWaveConfirmPlanFile = ""
+				m.pendingWaveConfirmTaskFile = ""
 				return m, nextAction
 			}
 			// "No" — user explicitly declined.
 			// Reset the orchestrator confirm latch when the user cancels a wave prompt,
 			// so the prompt can reappear on the next metadata tick (fixes deadlock).
-			if m.pendingWaveConfirmPlanFile != "" {
-				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmPlanFile]; ok {
+			if m.pendingWaveConfirmTaskFile != "" {
+				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmTaskFile]; ok {
 					orch.ResetConfirm()
 				}
-				m.pendingWaveConfirmPlanFile = ""
+				m.pendingWaveConfirmTaskFile = ""
 			}
 			// Planner signal "no": kill planner instance, mark prompted, leave plan ready.
-			if m.pendingPlannerPlanFile != "" {
-				m.plannerPrompted[m.pendingPlannerPlanFile] = true
-				m.killExistingPlanAgent(m.pendingPlannerPlanFile, session.AgentTypePlanner)
+			if m.pendingPlannerTaskFile != "" {
+				m.plannerPrompted[m.pendingPlannerTaskFile] = true
+				m.killExistingPlanAgent(m.pendingPlannerTaskFile, session.AgentTypePlanner)
 				_ = m.saveAllInstances()
 				m.updateNavPanelStatus()
 				m.pendingPlannerInstanceTitle = ""
-				m.pendingPlannerPlanFile = ""
+				m.pendingPlannerTaskFile = ""
 			}
 			m.state = stateDefault
 			m.confirmationOverlay = nil
@@ -651,21 +651,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		case "esc":
 			// Esc — preserve everything, allow re-prompt on next tick (after cooldown).
-			if m.pendingWaveConfirmPlanFile != "" {
-				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmPlanFile]; ok {
+			if m.pendingWaveConfirmTaskFile != "" {
+				if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmTaskFile]; ok {
 					orch.ResetConfirm()
 				}
-				m.pendingWaveConfirmPlanFile = ""
+				m.pendingWaveConfirmTaskFile = ""
 				m.waveConfirmDismissedAt = time.Now()
 			}
 			// Planner signal esc: same as cancel — signal is consumed, can't re-trigger.
-			if m.pendingPlannerPlanFile != "" {
-				m.plannerPrompted[m.pendingPlannerPlanFile] = true
-				m.killExistingPlanAgent(m.pendingPlannerPlanFile, session.AgentTypePlanner)
+			if m.pendingPlannerTaskFile != "" {
+				m.plannerPrompted[m.pendingPlannerTaskFile] = true
+				m.killExistingPlanAgent(m.pendingPlannerTaskFile, session.AgentTypePlanner)
 				_ = m.saveAllInstances()
 				m.updateNavPanelStatus()
 				m.pendingPlannerInstanceTitle = ""
-				m.pendingPlannerPlanFile = ""
+				m.pendingPlannerTaskFile = ""
 			}
 			m.state = stateDefault
 			m.confirmationOverlay = nil
@@ -826,7 +826,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					topic = picked
 				}
 			}
-			if err := m.createPlanEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
+			if err := m.createTaskEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
 				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
 				m.pickerOverlay = nil
@@ -834,8 +834,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.pendingPlanDesc = ""
 				return m, m.handleError(err)
 			}
-			m.loadPlanState()
-			m.updateSidebarPlans()
+			m.loadTaskState()
+			m.updateSidebarTasks()
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
@@ -880,28 +880,28 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateChangeTopic {
 		if m.pickerOverlay == nil {
 			m.state = stateDefault
-			m.pendingChangeTopicPlan = ""
+			m.pendingChangeTopicTask = ""
 			return m, nil
 		}
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
 		if shouldClose {
-			if m.pickerOverlay.IsSubmitted() && m.planState != nil && m.pendingChangeTopicPlan != "" {
+			if m.pickerOverlay.IsSubmitted() && m.taskState != nil && m.pendingChangeTopicTask != "" {
 				picked := m.pickerOverlay.Value()
 				newTopic := ""
 				if picked != "(No topic)" {
 					newTopic = picked
 				}
-				if err := m.planState.SetTopic(m.pendingChangeTopicPlan, newTopic); err != nil {
+				if err := m.taskState.SetTopic(m.pendingChangeTopicTask, newTopic); err != nil {
 					m.state = stateDefault
 					m.pickerOverlay = nil
-					m.pendingChangeTopicPlan = ""
+					m.pendingChangeTopicTask = ""
 					return m, m.handleError(err)
 				}
-				m.updateSidebarPlans()
+				m.updateSidebarTasks()
 			}
 			m.state = stateDefault
 			m.pickerOverlay = nil
-			m.pendingChangeTopicPlan = ""
+			m.pendingChangeTopicTask = ""
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -911,35 +911,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateSetStatus {
 		if m.pickerOverlay == nil {
 			m.state = stateDefault
-			m.pendingSetStatusPlan = ""
+			m.pendingSetStatusTask = ""
 			return m, nil
 		}
 		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
 		if shouldClose {
-			if m.pickerOverlay.IsSubmitted() && m.planState != nil && m.pendingSetStatusPlan != "" {
+			if m.pickerOverlay.IsSubmitted() && m.taskState != nil && m.pendingSetStatusTask != "" {
 				picked := m.pickerOverlay.Value()
 				if picked != "" {
-					if err := m.planState.ForceSetStatus(m.pendingSetStatusPlan, planstate.Status(picked)); err != nil {
+					if err := m.taskState.ForceSetStatus(m.pendingSetStatusTask, taskstate.Status(picked)); err != nil {
 						m.state = stateDefault
 						m.pickerOverlay = nil
-						m.pendingSetStatusPlan = ""
+						m.pendingSetStatusTask = ""
 						return m, m.handleError(err)
 					}
 					m.audit(auditlog.EventPlanTransition, "manual override → "+picked,
-						auditlog.WithPlan(m.pendingSetStatusPlan),
+						auditlog.WithPlan(m.pendingSetStatusTask),
 						auditlog.WithDetail("manual override"))
-					m.loadPlanState()
-					m.updateSidebarPlans()
+					m.loadTaskState()
+					m.updateSidebarTasks()
 					m.toastManager.Success(fmt.Sprintf("status → %s", picked))
 					m.state = stateDefault
 					m.pickerOverlay = nil
-					m.pendingSetStatusPlan = ""
+					m.pendingSetStatusTask = ""
 					return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
 			m.pickerOverlay = nil
-			m.pendingSetStatusPlan = ""
+			m.pendingSetStatusTask = ""
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -1291,7 +1291,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.audit(auditlog.EventAgentKilled, "killed instance",
 			auditlog.WithInstance(selected.Title),
 			auditlog.WithAgent(selected.AgentType),
-			auditlog.WithPlan(selected.PlanFile),
+			auditlog.WithPlan(selected.TaskFile),
 		)
 		inst := selected
 		return m, func() tea.Msg {
@@ -1391,10 +1391,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		// Plan header or plan file: open plan context menu
 		if m.nav.IsSelectedPlanHeader() {
-			return m.openPlanContextMenu()
+			return m.openTaskContextMenu()
 		}
 		if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-			return m.openPlanContextMenu()
+			return m.openTaskContextMenu()
 		}
 		if m.nav.NumInstances() == 0 {
 			return m, nil
@@ -1580,8 +1580,8 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 
 // waveStandardConfirmAction shows the wave-advance confirmation for a wave with no failures.
 // Stores the plan file so the cancel path can reset the orchestrator confirm latch.
-func (m *home) waveStandardConfirmAction(message, planFile string, entry planstate.PlanEntry) {
-	m.pendingWaveConfirmPlanFile = planFile
+func (m *home) waveStandardConfirmAction(message, planFile string, entry taskstate.TaskEntry) {
+	m.pendingWaveConfirmTaskFile = planFile
 	capturedPlanFile := planFile
 	capturedEntry := entry
 	m.confirmAction(message, func() tea.Msg {
@@ -1592,8 +1592,8 @@ func (m *home) waveStandardConfirmAction(message, planFile string, entry plansta
 // waveFailedConfirmAction shows a three-choice dialog for a wave that has failed tasks.
 // Keys: r=retry, n=next wave/advance, a=abort. The abort action is stored separately so the
 // stateConfirm key handler can dispatch it on 'a'.
-func (m *home) waveFailedConfirmAction(message, planFile string, entry planstate.PlanEntry) {
-	m.pendingWaveConfirmPlanFile = planFile
+func (m *home) waveFailedConfirmAction(message, planFile string, entry taskstate.TaskEntry) {
+	m.pendingWaveConfirmTaskFile = planFile
 	capturedPlanFile := planFile
 	capturedEntry := entry
 

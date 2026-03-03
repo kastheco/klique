@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ func TestSQLiteLogger_EmitAndQuery(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:          auditlog.EventAgentSpawned,
 		Project:       "testproj",
-		PlanFile:      "plan.md",
+		TaskFile:      "plan.md",
 		InstanceTitle: "plan-coder",
 		AgentType:     "coder",
 		Message:       "spawned coder agent",
@@ -38,10 +38,10 @@ func TestSQLiteLogger_QueryFilterByPlan(t *testing.T) {
 	require.NoError(t, err)
 	defer logger.Close()
 
-	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", PlanFile: "a.md"})
-	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", PlanFile: "b.md"})
+	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", TaskFile: "a.md"})
+	logger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Project: "p", TaskFile: "b.md"})
 
-	events, err := logger.Query(auditlog.QueryFilter{Project: "p", PlanFile: "a.md", Limit: 10})
+	events, err := logger.Query(auditlog.QueryFilter{Project: "p", TaskFile: "a.md", Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 }
@@ -85,7 +85,7 @@ func TestSQLiteLogger_SharedDB(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "store.db")
 
-	store, err := planstore.NewSQLiteStore(dbPath)
+	store, err := taskstore.NewSQLiteStore(dbPath)
 	require.NoError(t, err)
 	defer store.Close()
 

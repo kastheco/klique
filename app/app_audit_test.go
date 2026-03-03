@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planstore"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +40,7 @@ func TestAuditEmit_PlanTransition(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:     auditlog.EventPlanTransition,
 		Project:  "test",
-		PlanFile: "plan.md",
+		TaskFile: "plan.md",
 		Message:  "ready → implementing",
 	})
 
@@ -62,7 +62,7 @@ func TestAuditEmit_WaveStarted(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:       auditlog.EventWaveStarted,
 		Project:    "test",
-		PlanFile:   "plan.md",
+		TaskFile:   "plan.md",
 		WaveNumber: 1,
 		Message:    "wave 1 started: 3 task(s)",
 	})
@@ -86,7 +86,7 @@ func TestAuditEmit_WaveCompleted(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:       auditlog.EventWaveCompleted,
 		Project:    "test",
-		PlanFile:   "plan.md",
+		TaskFile:   "plan.md",
 		WaveNumber: 2,
 		Message:    "wave 2 complete: 3/3 tasks",
 	})
@@ -109,7 +109,7 @@ func TestAuditEmit_WaveFailed(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:       auditlog.EventWaveFailed,
 		Project:    "test",
-		PlanFile:   "plan.md",
+		TaskFile:   "plan.md",
 		WaveNumber: 1,
 		Message:    "wave 1: 1/2 tasks failed",
 	})
@@ -132,7 +132,7 @@ func TestAuditEmit_PlanMerged(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:     auditlog.EventPlanMerged,
 		Project:  "test",
-		PlanFile: "plan.md",
+		TaskFile: "plan.md",
 		Message:  "plan merged to main",
 	})
 
@@ -154,7 +154,7 @@ func TestAuditEmit_PlanCancelled(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:     auditlog.EventPlanCancelled,
 		Project:  "test",
-		PlanFile: "plan.md",
+		TaskFile: "plan.md",
 		Message:  "plan cancelled by user",
 	})
 
@@ -177,7 +177,7 @@ func TestAuditHomeEmit_PlanTransition(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	h.audit(auditlog.EventPlanTransition, "ready → implementing",
 		auditlog.WithPlan("my-plan.md"),
@@ -191,7 +191,7 @@ func TestAuditHomeEmit_PlanTransition(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "myproject", events[0].Project)
-	assert.Equal(t, "my-plan.md", events[0].PlanFile)
+	assert.Equal(t, "my-plan.md", events[0].TaskFile)
 	assert.Contains(t, events[0].Message, "implementing")
 }
 
@@ -202,11 +202,11 @@ func TestAuditEmit_AgentSpawned(t *testing.T) {
 	require.NoError(t, err)
 	defer logger.Close()
 
-	// Simulate what spawnPlanAgent does
+	// Simulate what spawnTaskAgent does
 	logger.Emit(auditlog.Event{
 		Kind:          auditlog.EventAgentSpawned,
 		Project:       "test",
-		PlanFile:      "plan.md",
+		TaskFile:      "plan.md",
 		InstanceTitle: "plan-coder",
 		AgentType:     "coder",
 		WaveNumber:    1,
@@ -229,7 +229,7 @@ func TestAuditHomeEmit_AgentSpawned(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	// spawnAdHocAgent should emit EventAgentSpawned
 	h.spawnAdHocAgent("my-fixer", "", "")
@@ -254,7 +254,7 @@ func TestAuditHomeEmit_AgentKilled(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	// Add an instance to kill and select it
 	inst, err := newTestInstance("my-agent")
@@ -285,7 +285,7 @@ func TestAuditHomeEmit_AgentKilled_KeybindK(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	// Simulate the audit call that the k keybind handler makes after the
 	// started/paused guard passes.
@@ -306,7 +306,7 @@ func TestAuditHomeEmit_AgentKilled_KeybindK(t *testing.T) {
 	assert.Contains(t, events[0].Message, "killed instance")
 }
 
-// TestAuditHomeEmit_PlanCreated verifies that createPlanEntry emits
+// TestAuditHomeEmit_PlanCreated verifies that createTaskEntry emits
 // EventPlanCreated after successfully creating a plan in the store.
 func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 	logger, err := auditlog.NewSQLiteLogger(":memory:")
@@ -317,15 +317,15 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	store := planstore.NewTestSQLiteStore(t)
+	store := taskstore.NewTestSQLiteStore(t)
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
-	h.planStateDir = plansDir
-	h.planStore = store
+	h.taskStoreProject = "myproject"
+	h.taskStateDir = plansDir
+	h.taskStore = store
 
-	err = h.createPlanEntry("my cool plan", "description", "")
+	err = h.createTaskEntry("my cool plan", "description", "")
 	require.NoError(t, err)
 
 	events, err := logger.Query(auditlog.QueryFilter{
@@ -334,9 +334,9 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 		Limit:   10,
 	})
 	require.NoError(t, err)
-	require.Len(t, events, 1, "createPlanEntry must emit EventPlanCreated")
+	require.Len(t, events, 1, "createTaskEntry must emit EventPlanCreated")
 	assert.Contains(t, events[0].Message, "created plan")
-	assert.NotEmpty(t, events[0].PlanFile)
+	assert.NotEmpty(t, events[0].TaskFile)
 }
 
 // TestAuditHomeEmit_AgentPaused verifies that the audit helper correctly emits
@@ -349,7 +349,7 @@ func TestAuditHomeEmit_AgentPaused(t *testing.T) {
 
 	h := newTestHomeWithToast()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	h.audit(auditlog.EventAgentPaused, "agent paused",
 		auditlog.WithInstance("my-agent"),
@@ -377,7 +377,7 @@ func TestAuditHomeEmit_AgentResumed(t *testing.T) {
 
 	h := newTestHomeWithToast()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	h.audit(auditlog.EventAgentResumed, "agent resumed",
 		auditlog.WithInstance("my-agent"),
@@ -544,7 +544,7 @@ func TestAuditEmit_FSMError(t *testing.T) {
 	logger.Emit(auditlog.Event{
 		Kind:     auditlog.EventFSMError,
 		Project:  "test",
-		PlanFile: "plan.md",
+		TaskFile: "plan.md",
 		Message:  "invalid transition: ready → done",
 		Level:    "error",
 	})
@@ -567,7 +567,7 @@ func TestAuditHomeEmit_WaveStarted(t *testing.T) {
 
 	h := newTestHome()
 	h.auditLogger = logger
-	h.planStoreProject = "myproject"
+	h.taskStoreProject = "myproject"
 
 	h.audit(auditlog.EventWaveStarted, "wave 1 started: 2 task(s)",
 		auditlog.WithPlan("my-plan.md"),

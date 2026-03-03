@@ -159,7 +159,7 @@ func TestTmuxBrowserOverlay_OrphanItemAllowsAdopt(t *testing.T) {
 
 func TestTmuxBrowserOverlay_ManagedItemRendersAgentType(t *testing.T) {
 	items := []TmuxBrowserItem{
-		{Name: "kas_auth", Title: "auth", Created: time.Now(), Managed: true, AgentType: "coder", PlanFile: "auth-plan"},
+		{Name: "kas_auth", Title: "auth", Created: time.Now(), Managed: true, AgentType: "coder", TaskFile: "auth-plan"},
 	}
 	b := NewTmuxBrowserOverlay(items)
 	rendered := b.Render()

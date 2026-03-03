@@ -9,7 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -28,13 +28,13 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 
 	_, ps, fsm := newSharedStoreForTest(t, plansDir)
 	require.NoError(t, ps.Register(planFile, "solo test", "plan/solo-test", time.Now()))
-	seedPlanStatus(t, ps, planFile, planstate.StatusImplementing)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "solo-test-solo",
 		Path:      t.TempDir(),
 		Program:   "claude",
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeCoder,
 	})
 	require.NoError(t, err)
@@ -52,8 +52,8 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
-		planState:         ps,
-		planStateDir:      plansDir,
+		taskState:         ps,
+		taskStateDir:      plansDir,
 		fsm:               fsm,
 		waveOrchestrators: make(map[string]*WaveOrchestrator),
 	}

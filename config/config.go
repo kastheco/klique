@@ -83,9 +83,9 @@ type Config struct {
 	// TelemetryEnabled controls whether crash reporting via Sentry is active.
 	// Defaults to true when not set.
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
-	// PlanStore is the URL of the remote plan store server (e.g. "http://athena:7433").
+	// DatabaseURL is the URL of the remote kasmos store server (e.g. "http://athena:7433").
 	// When empty, the legacy plan-state.json file is used.
-	PlanStore string `json:"plan_store,omitempty"`
+	DatabaseURL string `json:"database_url,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -247,8 +247,8 @@ func LoadConfig() *Config {
 		if tomlResult.TelemetryEnabled != nil {
 			config.TelemetryEnabled = tomlResult.TelemetryEnabled
 		}
-		if tomlResult.PlanStore != "" {
-			config.PlanStore = tomlResult.PlanStore
+		if tomlResult.DatabaseURL != "" {
+			config.DatabaseURL = tomlResult.DatabaseURL
 		}
 	}
 

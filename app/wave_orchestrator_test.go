@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/kastheco/kasmos/config/planparser"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,14 +29,14 @@ func TestBuildClickUpComment(t *testing.T) {
 }
 
 func TestNewWaveOrchestrator(t *testing.T) {
-	plan := &planparser.Plan{
+	plan := &taskparser.Plan{
 		Goal: "test",
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
-			{Number: 2, Tasks: []planparser.Task{
+			{Number: 2, Tasks: []taskparser.Task{
 				{Number: 3, Title: "Third", Body: "do third"},
 			}},
 		},
@@ -49,9 +49,9 @@ func TestNewWaveOrchestrator(t *testing.T) {
 }
 
 func TestWaveOrchestrator_StartWave(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 			}},
 		},
@@ -67,9 +67,9 @@ func TestWaveOrchestrator_StartWave(t *testing.T) {
 }
 
 func TestWaveOrchestrator_TaskCompleted(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
@@ -90,9 +90,9 @@ func TestWaveOrchestrator_TaskCompleted(t *testing.T) {
 }
 
 func TestWaveOrchestrator_TaskFailed(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
@@ -111,12 +111,12 @@ func TestWaveOrchestrator_TaskFailed(t *testing.T) {
 }
 
 func TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 			}},
-			{Number: 2, Tasks: []planparser.Task{
+			{Number: 2, Tasks: []taskparser.Task{
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
 		},
@@ -141,9 +141,9 @@ func TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {
 }
 
 func TestWaveOrchestrator_AllComplete(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "Only", Body: "do it"},
 			}},
 		},
@@ -158,12 +158,12 @@ func TestWaveOrchestrator_AllComplete(t *testing.T) {
 }
 
 func TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 			}},
-			{Number: 2, Tasks: []planparser.Task{
+			{Number: 2, Tasks: []taskparser.Task{
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
 		},
@@ -183,9 +183,9 @@ func TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {
 }
 
 func TestIsTaskRunning(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{{Number: 1}, {Number: 2}}},
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
 		},
 	}
 	orch := NewWaveOrchestrator("test.md", plan)
@@ -202,9 +202,9 @@ func TestIsTaskRunning(t *testing.T) {
 }
 
 func TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "Task 1"},
 				{Number: 2, Title: "Task 2"},
 				{Number: 3, Title: "Task 3"},
@@ -232,13 +232,13 @@ func TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {
 }
 
 func TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {
-	plan := &planparser.Plan{
-		Waves: []planparser.Wave{
-			{Number: 1, Tasks: []planparser.Task{
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
 				{Number: 1, Title: "First", Body: "do first"},
 				{Number: 2, Title: "Second", Body: "do second"},
 			}},
-			{Number: 2, Tasks: []planparser.Task{
+			{Number: 2, Tasks: []taskparser.Task{
 				{Number: 3, Title: "Third", Body: "do third"},
 			}},
 		},

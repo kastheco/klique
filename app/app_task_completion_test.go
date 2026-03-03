@@ -1,0 +1,806 @@
+package app
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/ui"
+	"github.com/kastheco/kasmos/ui/overlay"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestShouldPromptPushAfterCoderExit(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder}
+
+	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
+		t.Fatal("expected push prompt for exited coder")
+	}
+}
+
+func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:       "p.md",
+		AgentType:      session.AgentTypeCoder,
+		PromptDetected: true,
+		AwaitingWork:   false,
+	}
+
+	// Tmux is still alive but the coder returned to prompt after finishing
+	// its queued work — this is the "applying fixes" coder completion path.
+	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+		"expected push prompt for coder at prompt (PromptDetected && !AwaitingWork)")
+}
+
+func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:       "p.md",
+		AgentType:      session.AgentTypeCoder,
+		PromptDetected: true,
+		AwaitingWork:   true,
+	}
+
+	// Coder is at prompt but still waiting for its queued prompt to be
+	// delivered — must NOT trigger push prompt yet.
+	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+		"must not trigger push prompt while AwaitingWork is true")
+}
+
+func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
+
+	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, false),
+		"solo agents must not trigger automatic push prompt")
+}
+
+func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeReviewer}
+
+	if shouldPromptPushAfterCoderExit(entry, inst, false) {
+		t.Fatal("did not expect push prompt for reviewer")
+	}
+}
+
+// TestMetadataTickHandler_CoderExitTriggersPrompt verifies that when the metadata
+// tick handler processes a coder instance with TmuxAlive=false and plan status
+// StatusImplementing, it wires through to promptPushBranchThenAdvance and sets
+// the confirmation overlay (proving the push-prompt lifecycle path is connected).
+func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
+	const planFile = "test-feature.md"
+
+	// Build a planState with the plan in StatusImplementing.
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	// Build a coder instance (not started — we inject metadata directly).
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "test-feature-implement",
+		Path:      t.TempDir(),
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          list,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	// Inject a metadataResultMsg with TmuxAlive=false for the coder instance.
+	// This simulates the coder's tmux session having exited.
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{
+				Title:     inst.Title,
+				TmuxAlive: false,
+			},
+		},
+		PlanState: ps,
+	}
+
+	model, _ := h.Update(msg)
+	updated, ok := model.(*home)
+	require.True(t, ok)
+
+	// The push-prompt confirmation overlay must have been set.
+	assert.Equal(t, stateConfirm, updated.state,
+		"expected stateConfirm after coder exit with StatusImplementing")
+	assert.NotNil(t, updated.confirmationOverlay,
+		"expected confirmation overlay to be set for push-prompt")
+}
+
+// TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt verifies that when
+// a "fix coder" (spawned by spawnCoderWithFeedback) finishes its work and returns
+// to prompt (PromptDetected=true, AwaitingWork=false) while tmux is still alive,
+// the push-prompt confirmation overlay is shown. This is the key path that enables
+// the review→fix→re-review automation cycle.
+func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
+	const planFile = "test-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	// Build a coder instance that has finished its queued work and returned to prompt.
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "test-feature-implement",
+		Path:      t.TempDir(),
+		Program:   "opencode",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+	inst.AwaitingWork = false
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          list,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	// Tmux is still alive — the coder is at its prompt, not exited.
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{
+				Title:     inst.Title,
+				TmuxAlive: true,
+			},
+		},
+		PlanState: ps,
+	}
+
+	model, _ := h.Update(msg)
+	updated, ok := model.(*home)
+	require.True(t, ok)
+
+	assert.Equal(t, stateConfirm, updated.state,
+		"expected stateConfirm when coder is at prompt (PromptDetected && !AwaitingWork)")
+	assert.NotNil(t, updated.confirmationOverlay,
+		"expected confirmation overlay for push-prompt on prompt-detected coder")
+}
+
+// TestPromptPushBranchThenAdvance_SetStatusErrorPropagates verifies that when
+// SetStatus fails inside the push-action closure, the error is returned as a
+// tea.Msg rather than being silently swallowed with _ =.
+//
+// TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg verifies that the
+// confirm action returns a coderCompleteMsg so the Update handler can perform
+// the FSM transition and spawn a reviewer.
+func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
+	const planFile = "test-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	inst := &session.Instance{
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	}
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+		toastManager: overlay.NewToastManager(&sp),
+	}
+
+	// Call promptPushBranchThenAdvance — this sets pendingConfirmAction.
+	_ = h.promptPushBranchThenAdvance(inst)
+
+	require.NotNil(t, h.pendingConfirmAction,
+		"pendingConfirmAction must be set after promptPushBranchThenAdvance")
+
+	msg := h.pendingConfirmAction()
+
+	ccMsg, ok := msg.(coderCompleteMsg)
+	assert.True(t, ok,
+		"push action must return coderCompleteMsg, got %T: %v", msg, msg)
+	assert.Equal(t, planFile, ccMsg.planFile,
+		"coderCompleteMsg must carry the correct plan file")
+}
+
+// TestMetadataTickHandler_NoRepromptWhenConfirmPending verifies that when the
+// app is already in stateConfirm (a confirmation overlay is showing), a second
+// metadata tick does NOT re-trigger promptPushBranchThenAdvance and overwrite
+// the existing overlay. Without this guard the modal re-appears every tick.
+func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
+	const planFile = "test-feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "test-feature-implement",
+		Path:      t.TempDir(),
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          list,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: inst.Title, TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+
+	// First tick: should set stateConfirm and the overlay.
+	model1, _ := h.Update(msg)
+	updated1, ok := model1.(*home)
+	require.True(t, ok)
+	require.Equal(t, stateConfirm, updated1.state, "first tick must set stateConfirm")
+	firstOverlay := updated1.confirmationOverlay
+	require.NotNil(t, firstOverlay)
+
+	// Second tick while stateConfirm is active: must NOT overwrite the overlay.
+	model2, _ := updated1.Update(msg)
+	updated2, ok := model2.(*home)
+	require.True(t, ok)
+	assert.Equal(t, stateConfirm, updated2.state, "state must remain stateConfirm")
+	assert.Same(t, firstOverlay, updated2.confirmationOverlay,
+		"second tick must not replace the existing confirmation overlay")
+}
+
+func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(`{}`), 0o644))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(
+		"auth-refactor.md",
+		"Refactor JWT auth",
+		"plan/auth-refactor",
+		time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC),
+	))
+
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusPlanning)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusImplementing)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusReviewing)
+	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusDone)
+
+	entry, ok := ps.Entry("auth-refactor.md")
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
+	assert.Equal(t, "plan/auth-refactor", entry.Branch)
+}
+
+// TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState verifies that when
+// signals are present in a metadataResultMsg, the stale msg.PlanState (loaded
+// by the goroutine before signals were scanned) does not overwrite the fresh
+// planState that loadTaskState() sets after FSM transitions are applied.
+//
+// Regression test for: sentinel processed → disk updated → loadTaskState() →
+// m.taskState="ready", then m.taskState=msg.PlanState → m.taskState="planning"
+// (stale), causing the sidebar to show the wrong status for ~500ms.
+func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	const planFile = "feature.md"
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	// Planner is running — status is "planning"
+	seedPlanStatus(t, ps, planFile, taskstate.StatusPlanning)
+
+	// Simulate the goroutine snapshot: loaded "planning" before sentinel was seen.
+	stalePlanState, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	assert.Equal(t, taskstate.StatusPlanning, stalePlanState.Plans[planFile].Status)
+
+	// Build a minimal home with FSM wired up.
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:             stalePlanState, // starts with stale state
+		taskStateDir:          plansDir,
+		taskStore:             storeForDir(t, plansDir),
+		taskStoreProject:      "test",
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		nav:                   ui.NewNavigationPanel(&sp),
+	}
+
+	// Construct a metadataResultMsg as the goroutine would: stale PlanState +
+	// a PlannerFinished signal (sentinel written after the goroutine loaded state).
+	signal := taskfsm.Signal{
+		Event:    taskfsm.PlannerFinished,
+		TaskFile: planFile,
+	}
+	// We can't set the private filePath, so we pre-delete the sentinel file
+	// (ConsumeSignal would normally delete it — safe to skip deletion here).
+
+	msg := metadataResultMsg{
+		PlanState: stalePlanState, // goroutine's stale snapshot
+		Signals:   []taskfsm.Signal{signal},
+	}
+
+	// Feed the message through Update.
+	_, _ = h.Update(msg)
+
+	// After Update, h.taskState must reflect the FSM transition (planning→ready),
+	// NOT the stale msg.PlanState snapshot.
+	require.NotNil(t, h.taskState)
+	entry, ok := h.taskState.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReady, entry.Status,
+		"planState must show 'ready' after PlannerFinished signal — stale msg.PlanState must not overwrite it")
+}
+
+// TestImplementFinishedSignal_SpawnsReviewer verifies that when an
+// implement-finished sentinel is processed, a reviewer instance is added to the
+// list and a start cmd is returned. This is the sentinel-driven equivalent of
+// the old checkPlanCompletion → transitionToReview path.
+func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	// Create a coder instance bound to this plan.
+	coderInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-implement",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(coderInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	signal := taskfsm.Signal{
+		Event:    taskfsm.ImplementFinished,
+		TaskFile: planFile,
+	}
+	msg := metadataResultMsg{
+		PlanState: ps,
+		Signals:   []taskfsm.Signal{signal},
+	}
+
+	_, _ = h.Update(msg)
+
+	// A reviewer instance must have been added to the list.
+	var foundReviewer bool
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			foundReviewer = true
+			break
+		}
+	}
+	assert.True(t, foundReviewer,
+		"implement-finished signal must spawn a reviewer instance")
+
+	// Plan status must be "reviewing" on disk.
+	reloaded, _ := newTestPlanState(t, plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status)
+}
+
+// TestReviewChangesSignal_RespawnsCoder verifies that when a review-changes
+// sentinel is processed, the plan transitions back to implementing and a new
+// coder instance is added with the reviewer's feedback in its prompt.
+func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
+	const planFile = "feature.md"
+	const feedback = "Fix the error handling in auth.go"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	// Write a minimal plan file so spawnTaskAgent can read it.
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	// Create a reviewer instance bound to this plan.
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	signal := taskfsm.Signal{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: planFile,
+		Body:     feedback,
+	}
+	msg := metadataResultMsg{
+		PlanState: ps,
+		Signals:   []taskfsm.Signal{signal},
+	}
+
+	_, _ = h.Update(msg)
+
+	// A coder instance must have been added with feedback in its prompt.
+	var foundCoder bool
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
+			foundCoder = true
+			assert.Contains(t, inst.QueuedPrompt, feedback,
+				"coder prompt must contain reviewer feedback")
+			break
+		}
+	}
+	assert.True(t, foundCoder,
+		"review-changes signal must spawn a coder instance")
+
+	// Plan status must be "implementing" on disk.
+	reloaded, _ := newTestPlanState(t, plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
+}
+
+// TestReviewerTmuxDeath_DoesNotAutoApprove verifies that when a reviewer's tmux
+// session dies (e.g. killed manually), the plan is NOT automatically transitioned
+// to done. Approval must come exclusively from an explicit review-approved sentinel.
+//
+// Note: session.Instance.Started() is not settable from outside the session package
+// without real tmux, so this test uses a non-started instance. The guard catches any
+// reimplementation that drops the started check — a started instance would require
+// an integration test. The behavioral contract is: no auto-approve on reviewer death.
+func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+	}
+
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: reviewerInst.Title, TmuxAlive: false},
+		},
+		PlanState: ps,
+	}
+
+	_, _ = h.Update(msg)
+
+	// Plan must remain in reviewing — tmux death is not an approval signal.
+	reloaded, _ := newTestPlanState(t, plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status,
+		"reviewer tmux death must not auto-approve — plan must stay reviewing")
+}
+
+// TestReviewCycle_InstanceTitlesIncludeCycleNumber verifies that review cycle
+// numbers are embedded in instance titles. After the first ReviewChangesRequested
+// signal the spawned coder gets title "feature-fix-1"; after the subsequent
+// ImplementFinished the spawned reviewer gets "feature-review-2".
+func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
+	const planFile = "feature.md"
+	const feedback = "Fix the error handling in auth.go"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	// Write a minimal plan file so spawnTaskAgent helpers can read it.
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	// Create a reviewer instance — title uses the old format (no cycle suffix).
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// === Part 1: ReviewChangesRequested → coder with cycle suffix ===
+	signal1 := taskfsm.Signal{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: planFile,
+		Body:     feedback,
+	}
+	_, _ = h.Update(metadataResultMsg{
+		PlanState: ps,
+		Signals:   []taskfsm.Signal{signal1},
+	})
+
+	var coderTitle string
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
+			coderTitle = inst.Title
+			break
+		}
+	}
+	assert.Equal(t, "feature-fix-1", coderTitle,
+		"coder spawned after first ReviewChangesRequested must have title 'feature-fix-1'")
+
+	// === Part 2: ImplementFinished → reviewer with next cycle suffix ===
+	// At this point m.taskState has ReviewCycle=1 in-memory (incremented by part 1).
+	// The FSM store has status=implementing (transitioned by part 1).
+	signal2 := taskfsm.Signal{
+		Event:    taskfsm.ImplementFinished,
+		TaskFile: planFile,
+	}
+	_, _ = h.Update(metadataResultMsg{
+		PlanState: h.taskState,
+		Signals:   []taskfsm.Signal{signal2},
+	})
+
+	// Find the newly spawned reviewer (the old one was killed and removed).
+	var reviewerTitle string
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			reviewerTitle = inst.Title
+		}
+	}
+	assert.Equal(t, "feature-review-2", reviewerTitle,
+		"reviewer spawned after ImplementFinished with ReviewCycle=1 must have title 'feature-review-2'")
+}
+
+// TestReviewCycle_InstanceStructHasCycleSet verifies that the spawned reviewer
+// instance has ReviewCycle set from planstate so the field is available for
+// display in instance titles and opencode session labels.
+// With review_cycle=0 in planstate (initial), the first reviewer gets ReviewCycle=1
+// (1-indexed for humans: display value = stored cycle + 1).
+func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	// review_cycle starts at 0 for a new plan — no IncrementReviewCycle call needed.
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	// Transition to reviewing so spawnReviewer can run.
+	require.NoError(t, h.fsm.Transition(planFile, taskfsm.ImplementFinished))
+
+	// Call spawnReviewer directly to obtain the created instance.
+	_ = h.spawnReviewer(planFile)
+
+	// Find the reviewer instance.
+	var reviewerInst *session.Instance
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			reviewerInst = inst
+			break
+		}
+	}
+	require.NotNil(t, reviewerInst, "spawnReviewer must create a reviewer instance")
+
+	// ReviewCycle must be set to cycle+1 (1-indexed display value).
+	// With review_cycle=0 in planstate, the first reviewer gets ReviewCycle=1.
+	assert.Equal(t, 1, reviewerInst.ReviewCycle,
+		"reviewer instance must have ReviewCycle=1 for first review cycle (cycle=0 → display=1)")
+}
+
+// TestIsLocked_FinishedLockedWhenDone verifies that the "finished" stage is
+// locked when the plan is already done, preventing a spurious FSM error.
+func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
+	assert.True(t, isLocked(taskstate.StatusDone, "finished"),
+		"finished stage must be locked when plan is already done")
+	// Still unlocked for reviewing (the valid trigger).
+	assert.False(t, isLocked(taskstate.StatusReviewing, "finished"),
+		"finished stage must be unlocked when plan is reviewing")
+}

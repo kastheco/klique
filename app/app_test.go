@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -135,7 +135,7 @@ func TestSpawnAgent_SubmitCreatesInstance(t *testing.T) {
 	require.NotEmpty(t, instances)
 	last := instances[len(instances)-1]
 	assert.Equal(t, "test-agent", last.Title)
-	assert.Equal(t, "", last.PlanFile, "ad-hoc instance must have no PlanFile")
+	assert.Equal(t, "", last.TaskFile, "ad-hoc instance must have no PlanFile")
 	assert.Equal(t, session.AgentTypeFixer, last.AgentType, "spawned instance must be fixer")
 	assert.Equal(t, session.Loading, last.Status)
 }
@@ -1222,7 +1222,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 			Path:    "/tmp",
 			Program: "claude",
 		})
-		inst.PlanFile = "auth.md"
+		inst.TaskFile = "auth.md"
 		inst.AgentType = session.AgentTypeCoder
 		inst.MarkStartedForTest()
 		inst.SetTmuxSession(tmux.NewTmuxSession("auth-impl", "claude", false))
@@ -1239,7 +1239,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 		item := hm.tmuxBrowser.SelectedItem()
 		assert.True(t, item.Managed)
 		assert.Equal(t, "coder", item.AgentType)
-		assert.Equal(t, "auth.md", item.PlanFile)
+		assert.Equal(t, "auth.md", item.TaskFile)
 	})
 
 	t.Run("dismiss returns to default state", func(t *testing.T) {
@@ -1365,30 +1365,30 @@ func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
 // setupPlanState sets up an in-memory plan state on h for test use.
 // It creates a temp directory, registers the plan, seeds the status, and
 // refreshes the nav panel so SelectByID works immediately afterward.
-func (h *home) setupPlanState(t *testing.T, planFile string, status planstate.Status, topic string) {
+func (h *home) setupPlanState(t *testing.T, planFile string, status taskstate.Status, topic string) {
 	t.Helper()
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	name := planstate.DisplayName(planFile)
+	name := taskstate.DisplayName(planFile)
 	require.NoError(t, ps.Create(planFile, name, "plan/"+name, topic, time.Now()))
 	// Seed the status directly (bypass FSM).
 	entry := ps.Plans[planFile]
 	entry.Status = status
 	ps.Plans[planFile] = entry
 	require.NoError(t, ps.Save())
-	h.planState = ps
-	h.planStateDir = plansDir
+	h.taskState = ps
+	h.taskStateDir = plansDir
 	h.fsm = newPlanFSMForTest(t, plansDir)
 	h.activeRepoPath = dir
-	h.updateSidebarPlans()
+	h.updateSidebarTasks()
 }
 
 func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "test topic")
+	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "test topic")
 
 	// Select the plan in the nav panel
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
@@ -1397,18 +1397,18 @@ func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	model, _ := h.executeContextAction("chat_about_plan")
 	updated := model.(*home)
 
-	require.Equal(t, stateChatAboutPlan, updated.state)
+	require.Equal(t, stateChatAboutTask, updated.state)
 	require.NotNil(t, updated.textInputOverlay, "text input overlay must be set for question")
 }
 
 func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", planstate.StatusImplementing, "")
+	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "")
 
 	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
 
-	model, _ := h.openPlanContextMenu()
+	model, _ := h.openTaskContextMenu()
 	updated := model.(*home)
 
 	require.Equal(t, stateContextMenu, updated.state)

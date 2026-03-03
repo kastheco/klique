@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mattn/go-runewidth"
@@ -53,7 +53,7 @@ type navRow struct {
 	Kind            navRowKind
 	ID              string
 	Label           string
-	PlanFile        string
+	TaskFile        string
 	PlanStatus      string // plan lifecycle status (e.g. "implementing", "reviewing")
 	Instance        *session.Instance
 	Collapsed       bool
@@ -196,13 +196,13 @@ func (n *NavigationPanel) splitDeadFromHistory(finished []PlanDisplay) {
 	}
 	infoByPlan := make(map[string]planInfo, len(n.instances))
 	for _, inst := range n.instances {
-		if inst.PlanFile != "" {
-			info := infoByPlan[inst.PlanFile]
+		if inst.TaskFile != "" {
+			info := infoByPlan[inst.TaskFile]
 			info.hasInstances = true
 			if inst.Status == session.Running || inst.Status == session.Loading {
 				info.hasRunning = true
 			}
-			infoByPlan[inst.PlanFile] = info
+			infoByPlan[inst.TaskFile] = info
 		}
 	}
 	// Remove any previously promoted plans from n.plans before re-partitioning.
@@ -266,11 +266,11 @@ func (n *NavigationPanel) rebuildRows() {
 	instancesByPlan := make(map[string][]*session.Instance)
 	var solo []*session.Instance
 	for _, inst := range n.instances {
-		if inst.PlanFile == "" {
+		if inst.TaskFile == "" {
 			solo = append(solo, inst)
 			continue
 		}
-		instancesByPlan[inst.PlanFile] = append(instancesByPlan[inst.PlanFile], inst)
+		instancesByPlan[inst.TaskFile] = append(instancesByPlan[inst.TaskFile], inst)
 	}
 
 	sortInstances := func(list []*session.Instance) {
@@ -296,7 +296,7 @@ func (n *NavigationPanel) rebuildRows() {
 		if ki != kj {
 			return ki < kj
 		}
-		return strings.ToLower(planstate.DisplayName(pi.Filename)) < strings.ToLower(planstate.DisplayName(pj.Filename))
+		return strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))
 	})
 
 	rows := make([]navRow, 0, len(plans)+len(n.instances)+len(n.deadPlans)+len(n.historyPlans)+len(n.cancelled)+6)
@@ -310,8 +310,8 @@ func (n *NavigationPanel) rebuildRows() {
 		rows = append(rows, navRow{
 			Kind:            navRowPlanHeader,
 			ID:              SidebarPlanPrefix + p.Filename,
-			Label:           planstate.DisplayName(p.Filename),
-			PlanFile:        p.Filename,
+			Label:           taskstate.DisplayName(p.Filename),
+			TaskFile:        p.Filename,
 			PlanStatus:      p.Status,
 			Collapsed:       collapsed,
 			HasRunning:      hasRunning,
@@ -324,7 +324,7 @@ func (n *NavigationPanel) rebuildRows() {
 					Kind:     navRowInstance,
 					ID:       "inst:" + inst.Title,
 					Label:    inst.Title,
-					PlanFile: inst.PlanFile,
+					TaskFile: inst.TaskFile,
 					Instance: inst,
 					Indent:   indent,
 				})
@@ -422,13 +422,13 @@ func (n *NavigationPanel) rebuildRows() {
 		rows = append(rows, navRow{Kind: navRowHistoryToggle, ID: SidebarPlanHistoryToggle, Label: "history", Collapsed: !n.historyExpanded})
 		if n.historyExpanded {
 			for _, p := range n.historyPlans {
-				rows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: planstate.DisplayName(p.Filename), PlanFile: p.Filename})
+				rows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})
 			}
 		}
 	}
 
 	for _, p := range n.cancelled {
-		rows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: planstate.DisplayName(p.Filename), PlanFile: p.Filename})
+		rows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})
 	}
 
 	n.rows = rows
@@ -580,8 +580,8 @@ func (n *NavigationPanel) ToggleSelectedExpand() bool {
 	row := n.rows[n.selectedIdx]
 	switch row.Kind {
 	case navRowPlanHeader:
-		n.collapsed[row.PlanFile] = !row.Collapsed
-		n.userOverrides[row.PlanFile] = true
+		n.collapsed[row.TaskFile] = !row.Collapsed
+		n.userOverrides[row.TaskFile] = true
 		n.rebuildRows()
 		return true
 	case navRowTopicHeader:
@@ -643,7 +643,7 @@ func (n *NavigationPanel) rowMatchesSearch(idx int) bool {
 	row := n.rows[idx]
 	q := strings.ToLower(n.searchQuery)
 	return strings.Contains(strings.ToLower(row.Label), q) ||
-		strings.Contains(strings.ToLower(row.PlanFile), q)
+		strings.Contains(strings.ToLower(row.TaskFile), q)
 }
 
 func (n *NavigationPanel) Left() {
@@ -703,7 +703,7 @@ func (n *NavigationPanel) GetSelectedPlanFile() string {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return ""
 	}
-	return n.rows[n.selectedIdx].PlanFile
+	return n.rows[n.selectedIdx].TaskFile
 }
 
 func (n *NavigationPanel) IsSelectedPlanHeader() bool {
@@ -759,9 +759,9 @@ func (n *NavigationPanel) SelectInstance(inst *session.Instance) bool {
 		}
 	}
 	// Instance not visible — may be under a collapsed plan. Expand it.
-	if inst.PlanFile != "" {
-		n.collapsed[inst.PlanFile] = false
-		n.userOverrides[inst.PlanFile] = true
+	if inst.TaskFile != "" {
+		n.collapsed[inst.TaskFile] = false
+		n.userOverrides[inst.TaskFile] = true
 		n.rebuildRows()
 		for i, row := range n.rows {
 			if row.Instance == inst {
@@ -818,7 +818,7 @@ func (n *NavigationPanel) cycleActive(step int) {
 			// Plan is collapsed — its instances aren't in rows.
 			// Insert them here so they appear at the right visual position.
 			for _, inst := range n.instances {
-				if inst.PlanFile == row.PlanFile && !inst.Paused() {
+				if inst.TaskFile == row.TaskFile && !inst.Paused() {
 					ordered = append(ordered, inst)
 				}
 			}
@@ -970,7 +970,7 @@ func (n *NavigationPanel) clampScroll() {
 func (n *NavigationPanel) FindPlanInstance(planFile string) *session.Instance {
 	var best *session.Instance
 	for _, inst := range n.instances {
-		if inst.PlanFile != planFile || inst.Paused() {
+		if inst.TaskFile != planFile || inst.Paused() {
 			continue
 		}
 		if inst.Status == session.Running || inst.Status == session.Loading {
@@ -988,13 +988,13 @@ func navInstanceTitle(inst *session.Instance) string {
 	switch {
 	case inst.WaveNumber > 0 && inst.TaskNumber > 0:
 		return fmt.Sprintf("wave %d · task %d", inst.WaveNumber, inst.TaskNumber)
-	case inst.AgentType == session.AgentTypeReviewer && inst.PlanFile != "":
+	case inst.AgentType == session.AgentTypeReviewer && inst.TaskFile != "":
 		return "review"
-	case inst.AgentType == session.AgentTypePlanner && inst.PlanFile != "":
+	case inst.AgentType == session.AgentTypePlanner && inst.TaskFile != "":
 		return "planning"
-	case inst.SoloAgent && inst.PlanFile != "":
-		return planstate.DisplayName(inst.PlanFile)
-	case inst.AgentType == session.AgentTypeCoder && inst.PlanFile != "" && inst.WaveNumber == 0:
+	case inst.SoloAgent && inst.TaskFile != "":
+		return taskstate.DisplayName(inst.TaskFile)
+	case inst.AgentType == session.AgentTypeCoder && inst.TaskFile != "" && inst.WaveNumber == 0:
 		return "applying fixes"
 	default:
 		return inst.Title
@@ -1103,7 +1103,7 @@ func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {
 
 	case navRowInstance:
 		inst := row.Instance
-		isSolo := row.PlanFile == ""
+		isSolo := row.TaskFile == ""
 
 		if inst == nil {
 			if isSolo {
@@ -1281,7 +1281,7 @@ func (n *NavigationPanel) String() string {
 		if n.searchActive && n.searchQuery != "" {
 			q := strings.ToLower(n.searchQuery)
 			if !strings.Contains(strings.ToLower(row.Label), q) &&
-				!strings.Contains(strings.ToLower(row.PlanFile), q) {
+				!strings.Contains(strings.ToLower(row.TaskFile), q) {
 				continue
 			}
 		}

@@ -76,7 +76,7 @@ func (l *SQLiteLogger) Emit(e Event) {
 		string(e.Kind),
 		auditFormatTime(e.Timestamp),
 		e.Project,
-		e.PlanFile,
+		e.TaskFile,
 		e.InstanceTitle,
 		e.AgentType,
 		e.WaveNumber,
@@ -102,9 +102,9 @@ func (l *SQLiteLogger) Query(f QueryFilter) ([]Event, error) {
 		conditions = append(conditions, "project = ?")
 		args = append(args, f.Project)
 	}
-	if f.PlanFile != "" {
+	if f.TaskFile != "" {
 		conditions = append(conditions, "plan_file = ?")
-		args = append(args, f.PlanFile)
+		args = append(args, f.TaskFile)
 	}
 	if f.InstanceTitle != "" {
 		conditions = append(conditions, "instance_title = ?")
@@ -152,7 +152,7 @@ func (l *SQLiteLogger) Query(f QueryFilter) ([]Event, error) {
 			(*string)(&e.Kind),
 			&ts,
 			&e.Project,
-			&e.PlanFile,
+			&e.TaskFile,
 			&e.InstanceTitle,
 			&e.AgentType,
 			&e.WaveNumber,

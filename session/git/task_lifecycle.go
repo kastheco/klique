@@ -1,0 +1,124 @@
+package git
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/kastheco/kasmos/config/taskstate"
+)
+
+// TaskBranchFromFile derives the git branch name from a plan filename.
+// "auth-refactor.md" → "plan/auth-refactor"
+func TaskBranchFromFile(planFile string) string {
+	name := taskstate.DisplayName(planFile)
+	name = sanitizeBranchName(name)
+	if name == "" {
+		name = "plan"
+	}
+	return "plan/" + name
+}
+
+// TaskWorktreePath returns the worktree path for a plan branch.
+// The branch separator "/" is replaced with "-" to form a valid directory name.
+func TaskWorktreePath(repoPath, branch string) string {
+	safe := strings.ReplaceAll(branch, "/", "-")
+	return filepath.Join(repoPath, ".worktrees", safe)
+}
+
+// NewSharedTaskWorktree constructs a GitWorktree for the shared plan worktree
+// (used by coder and reviewer sessions that share the same branch).
+func NewSharedTaskWorktree(repoPath, branch string) *GitWorktree {
+	return NewGitWorktreeFromStorage(
+		repoPath,
+		TaskWorktreePath(repoPath, branch),
+		"plan-shared",
+		branch,
+		"",
+	)
+}
+
+// CommitTaskScaffoldOnMain stages the plan stub file and plan-state.json on the
+// main branch (repoPath is the main worktree) and creates a commit.
+func CommitTaskScaffoldOnMain(repoPath, planFile string) error {
+	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
+	planPath := filepath.Join("docs", "plans", planFile)
+	statePath := filepath.Join("docs", "plans", "plan-state.json")
+	if _, err := gt.runGitCommand(repoPath, "add", planPath, statePath); err != nil {
+		return fmt.Errorf("stage plan scaffold: %w", err)
+	}
+	if _, err := gt.runGitCommand(repoPath, "commit", "-m", "feat(plan): add "+taskstate.DisplayName(planFile)+" scaffold"); err != nil {
+		if strings.Contains(err.Error(), "nothing to commit") {
+			return nil
+		}
+		return fmt.Errorf("commit plan scaffold: %w", err)
+	}
+	return nil
+}
+
+// EnsureTaskBranch creates the plan branch off the current HEAD if it doesn't
+// already exist. It is idempotent.
+func EnsureTaskBranch(repoPath, branch string) error {
+	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
+	if _, err := gt.runGitCommand(repoPath, "rev-parse", "--verify", branch); err == nil {
+		return nil // already exists
+	}
+	if _, err := gt.runGitCommand(repoPath, "branch", branch); err != nil {
+		return fmt.Errorf("create plan branch %s: %w", branch, err)
+	}
+	return nil
+}
+
+// MergeTaskBranch merges the plan branch into the current branch (typically main),
+// removes the worktree, and deletes the plan branch.
+func MergeTaskBranch(repoPath, branch string) error {
+	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
+	worktreePath := TaskWorktreePath(repoPath, branch)
+
+	// Remove worktree first so the branch isn't "checked out" elsewhere.
+	_, _ = gt.runGitCommand(repoPath, "worktree", "remove", "-f", worktreePath)
+	_, _ = gt.runGitCommand(repoPath, "worktree", "prune")
+
+	// Ensure the local branch exists — worktree removal may have deleted it.
+	// If a remote tracking branch exists, recreate the local one from it.
+	if _, err := gt.runGitCommand(repoPath, "rev-parse", "--verify", branch); err != nil {
+		remote := "origin/" + branch
+		if _, remoteErr := gt.runGitCommand(repoPath, "rev-parse", "--verify", remote); remoteErr == nil {
+			if _, brErr := gt.runGitCommand(repoPath, "branch", branch, remote); brErr != nil {
+				return fmt.Errorf("recreate local branch %s from remote: %w", branch, brErr)
+			}
+		} else {
+			return fmt.Errorf("branch %s not found locally or on remote", branch)
+		}
+	}
+
+	// Merge the plan branch into the current branch.
+	if _, err := gt.runGitCommand(repoPath, "merge", branch, "--no-ff", "-m",
+		fmt.Sprintf("merge plan branch %s", branch)); err != nil {
+		return fmt.Errorf("merge %s: %w", branch, err)
+	}
+
+	// Delete the plan branch after successful merge.
+	if _, err := gt.runGitCommand(repoPath, "branch", "-d", branch); err != nil {
+		// Non-fatal: merge succeeded, branch cleanup is best-effort.
+		_ = err
+	}
+
+	return nil
+}
+
+// ResetTaskBranch removes the plan worktree (if any), deletes the branch, and
+// recreates it from the current HEAD. Used by "start over".
+func ResetTaskBranch(repoPath, branch string) error {
+	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
+	worktreePath := TaskWorktreePath(repoPath, branch)
+	_, _ = gt.runGitCommand(repoPath, "worktree", "remove", "-f", worktreePath)
+	_, _ = gt.runGitCommand(repoPath, "branch", "-D", branch)
+	if _, err := gt.runGitCommand(repoPath, "branch", branch); err != nil {
+		return fmt.Errorf("recreate plan branch %s: %w", branch, err)
+	}
+	if _, err := gt.runGitCommand(repoPath, "worktree", "prune"); err != nil {
+		return fmt.Errorf("prune worktrees: %w", err)
+	}
+	return nil
+}

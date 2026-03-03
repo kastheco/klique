@@ -13,9 +13,9 @@ import (
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
-	"github.com/kastheco/kasmos/config/planfsm"
-	"github.com/kastheco/kasmos/config/planparser"
-	"github.com/kastheco/kasmos/config/planstate"
+	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/keys"
@@ -40,7 +40,7 @@ func mergeTopicStatus(status ui.TopicStatus, inst *session.Instance, started boo
 }
 
 func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool) ui.TopicStatus {
-	if inst.PlanFile == "" {
+	if inst.TaskFile == "" {
 		return status
 	}
 	if started && !inst.Paused() {
@@ -74,11 +74,11 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 	selected := m.nav.GetSelectedInstance()
 
 	switch {
-	case planFile != "" && m.planState != nil:
-		entry, ok := m.planState.Entry(planFile)
+	case planFile != "" && m.taskState != nil:
+		entry, ok := m.taskState.Entry(planFile)
 		if ok {
 			data.Branch = entry.Branch
-			data.PlanName = planstate.DisplayName(planFile)
+			data.PlanName = taskstate.DisplayName(planFile)
 			data.PlanStatus = string(entry.Status)
 
 			if orch, orchOK := m.waveOrchestrators[planFile]; orchOK {
@@ -105,10 +105,10 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 		}
 	case selected != nil && selected.Branch != "":
 		data.Branch = selected.Branch
-		if selected.PlanFile != "" && m.planState != nil {
-			entry, ok := m.planState.Entry(selected.PlanFile)
+		if selected.TaskFile != "" && m.taskState != nil {
+			entry, ok := m.taskState.Entry(selected.TaskFile)
 			if ok {
-				data.PlanName = planstate.DisplayName(selected.PlanFile)
+				data.PlanName = taskstate.DisplayName(selected.TaskFile)
 				data.PlanStatus = string(entry.Status)
 			}
 		}
@@ -126,19 +126,19 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 func (m *home) computePlanStatuses() map[string]ui.TopicStatus {
 	planStatuses := make(map[string]ui.TopicStatus)
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile == "" {
+		if inst.TaskFile == "" {
 			continue
 		}
-		planSt := planStatuses[inst.PlanFile]
-		planStatuses[inst.PlanFile] = mergePlanStatus(planSt, inst, inst.Started())
+		planSt := planStatuses[inst.TaskFile]
+		planStatuses[inst.TaskFile] = mergePlanStatus(planSt, inst, inst.Started())
 	}
 	return planStatuses
 }
 
 // updateNavPanelStatus recomputes plan instance statuses and triggers a row
 // rebuild. Use this after instance mutations (kill, remove, pause) where the
-// plan list itself hasn't changed. When updateSidebarPlans is also called,
-// skip this — updateSidebarPlans already includes plan statuses in its rebuild.
+// plan list itself hasn't changed. When updateSidebarTasks is also called,
+// skip this — updateSidebarTasks already includes plan statuses in its rebuild.
 func (m *home) updateNavPanelStatus() {
 	m.nav.SetItems(nil, nil, 0, nil, nil, m.computePlanStatuses())
 }
@@ -389,7 +389,7 @@ func (m *home) focusInstanceForOverlay(inst *session.Instance) tea.Cmd {
 func (m *home) focusPlanInstanceForOverlay(planFile string) tea.Cmd {
 	var best *session.Instance
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile != planFile {
+		if inst.TaskFile != planFile {
 			continue
 		}
 		if best == nil {
@@ -422,18 +422,18 @@ func statusString(s session.Status) string {
 // (no instance). Shows plan metadata and instance summary counts.
 func (m *home) updateInfoPaneForPlanHeader() {
 	planFile := m.nav.GetSelectedPlanFile()
-	if planFile == "" || m.planState == nil {
+	if planFile == "" || m.taskState == nil {
 		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
 		return
 	}
-	entry, ok := m.planState.Entry(planFile)
+	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
 		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
 		return
 	}
 	data := ui.InfoData{
 		IsPlanHeaderSelected: true,
-		PlanName:             planstate.DisplayName(planFile),
+		PlanName:             taskstate.DisplayName(planFile),
 		PlanStatus:           string(entry.Status),
 		PlanTopic:            entry.Topic,
 		PlanBranch:           entry.Branch,
@@ -443,7 +443,7 @@ func (m *home) updateInfoPaneForPlanHeader() {
 	}
 	// Count instances belonging to this plan.
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile != planFile {
+		if inst.TaskFile != planFile {
 			continue
 		}
 		data.PlanInstanceCount++
@@ -506,12 +506,12 @@ func (m *home) updateInfoPane() {
 		data.Created = selected.CreatedAt.Format("2006-01-02 15:04")
 	}
 
-	if selected.PlanFile != "" {
-		if m.planState != nil {
-			entry, ok := m.planState.Entry(selected.PlanFile)
+	if selected.TaskFile != "" {
+		if m.taskState != nil {
+			entry, ok := m.taskState.Entry(selected.TaskFile)
 			if ok {
 				data.HasPlan = true
-				data.PlanName = planstate.DisplayName(selected.PlanFile)
+				data.PlanName = taskstate.DisplayName(selected.TaskFile)
 				data.PlanDescription = entry.Description
 				data.PlanStatus = string(entry.Status)
 				data.PlanTopic = entry.Topic
@@ -522,7 +522,7 @@ func (m *home) updateInfoPane() {
 			}
 		}
 
-		if orch, ok := m.waveOrchestrators[selected.PlanFile]; ok {
+		if orch, ok := m.waveOrchestrators[selected.TaskFile]; ok {
 			data.TotalWaves = orch.TotalWaves()
 			data.TotalTasks = orch.TotalTasks()
 			tasks := orch.CurrentWaveTasks()
@@ -544,15 +544,15 @@ func (m *home) updateInfoPane() {
 	m.tabbedWindow.SetInfoData(data)
 }
 
-// loadPlanState reads plan state from the store for the active repo.
+// loadTaskState reads plan state from the store for the active repo.
 // Called on user-triggered events (plan creation, repo switch, etc.). The periodic
 // metadata tick loads plan state in its goroutine instead.
 // Silently no-ops if the store is not configured.
-func (m *home) loadPlanState() {
-	if m.planStateDir == "" || m.planStore == nil {
+func (m *home) loadTaskState() {
+	if m.taskStateDir == "" || m.taskStore == nil {
 		return
 	}
-	ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
+	ps, err := taskstate.Load(m.taskStore, m.taskStoreProject, m.taskStateDir)
 	if err != nil {
 		log.WarningLog.Printf("could not load plan state: %v", err)
 		if m.toastManager != nil {
@@ -560,24 +560,24 @@ func (m *home) loadPlanState() {
 		}
 		return
 	}
-	m.planState = ps
+	m.taskState = ps
 }
 
-// updateSidebarPlans pushes the current plans into the sidebar using the three-level tree API.
-func (m *home) updateSidebarPlans() {
-	if m.planState == nil {
+// updateSidebarTasks pushes the current plans into the sidebar using the three-level tree API.
+func (m *home) updateSidebarTasks() {
+	if m.taskState == nil {
 		m.nav.SetTopicsAndPlans(nil, nil, nil)
 		return
 	}
 
 	// Build topic displays
-	topicInfos := m.planState.Topics()
+	topicInfos := m.taskState.Topics()
 	topics := make([]ui.TopicDisplay, 0, len(topicInfos))
 	for _, t := range topicInfos {
-		plans := m.planState.PlansByTopic(t.Name)
+		plans := m.taskState.TasksByTopic(t.Name)
 		planDisplays := make([]ui.PlanDisplay, 0, len(plans))
 		for _, p := range plans {
-			if p.Status == planstate.StatusDone || p.Status == planstate.StatusCancelled {
+			if p.Status == taskstate.StatusDone || p.Status == taskstate.StatusCancelled {
 				continue // finished/cancelled plans handled separately
 			}
 			planDisplays = append(planDisplays, ui.PlanDisplay{
@@ -594,7 +594,7 @@ func (m *home) updateSidebarPlans() {
 	}
 
 	// Build ungrouped plans
-	ungroupedInfos := m.planState.UngroupedPlans()
+	ungroupedInfos := m.taskState.UngroupedTasks()
 	ungrouped := make([]ui.PlanDisplay, 0, len(ungroupedInfos))
 	for _, p := range ungroupedInfos {
 		ungrouped = append(ungrouped, ui.PlanDisplay{
@@ -609,7 +609,7 @@ func (m *home) updateSidebarPlans() {
 	// These don't benefit from a topic header — show the plan directly as ungrouped.
 	filtered := topics[:0]
 	for _, t := range topics {
-		if len(t.Plans) == 1 && t.Name == planstate.DisplayName(t.Plans[0].Filename) {
+		if len(t.Plans) == 1 && t.Name == taskstate.DisplayName(t.Plans[0].Filename) {
 			ungrouped = append(ungrouped, t.Plans[0])
 		} else {
 			filtered = append(filtered, t)
@@ -618,7 +618,7 @@ func (m *home) updateSidebarPlans() {
 	topics = filtered
 
 	// Build history
-	finishedInfos := m.planState.Finished()
+	finishedInfos := m.taskState.Finished()
 	history := make([]ui.PlanDisplay, 0, len(finishedInfos))
 	for _, p := range finishedInfos {
 		history = append(history, ui.PlanDisplay{
@@ -642,30 +642,30 @@ func (m *home) updateSidebarPlans() {
 // marked "done" by the agent and, if found, transitions them to reviewer sessions.
 // Returns a cmd to start the reviewer (may be nil).
 func (m *home) checkPlanCompletion() tea.Cmd {
-	if m.planState == nil {
+	if m.taskState == nil {
 		return nil
 	}
 	// Guard: if a reviewer already exists for a plan, do not spawn another.
-	// The async metadata tick can overwrite m.planState with a stale snapshot
+	// The async metadata tick can overwrite m.taskState with a stale snapshot
 	// that still shows StatusDone after transitionToReview already ran and set
 	// StatusReviewing. Without this guard, a second reviewer is spawned.
 	reviewerPlans := make(map[string]bool)
 	for _, inst := range m.nav.GetInstances() {
-		if inst.IsReviewer && inst.PlanFile != "" {
-			reviewerPlans[inst.PlanFile] = true
+		if inst.IsReviewer && inst.TaskFile != "" {
+			reviewerPlans[inst.TaskFile] = true
 		}
 	}
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile == "" || inst.IsReviewer {
+		if inst.TaskFile == "" || inst.IsReviewer {
 			continue
 		}
 		if inst.ImplementationComplete {
 			continue // already went through review cycle — don't re-trigger
 		}
-		if reviewerPlans[inst.PlanFile] {
+		if reviewerPlans[inst.TaskFile] {
 			continue // reviewer already spawned; skip regardless of stale plan state
 		}
-		if !m.planState.IsDone(inst.PlanFile) {
+		if !m.taskState.IsDone(inst.TaskFile) {
 			continue
 		}
 		return m.transitionToReview(inst)
@@ -677,8 +677,8 @@ func (m *home) checkPlanCompletion() tea.Cmd {
 // spawns a reviewer session with the reviewer profile, and returns the start cmd.
 func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 	// Guard: transition via FSM before next tick re-reads disk, preventing double-spawn.
-	planFile := coderInst.PlanFile
-	if err := m.fsm.Transition(planFile, planfsm.ImplementFinished); err != nil {
+	planFile := coderInst.TaskFile
+	if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
 		log.WarningLog.Printf("could not set plan %q to reviewing: %v", planFile, err)
 		// Mark complete to break the retry loop — checkPlanCompletion fires
 		// every tick and would re-attempt this transition indefinitely.
@@ -701,11 +701,11 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 // Solo agent plans are excluded — the user ends those manually.
 func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile == planFile && inst.SoloAgent {
+		if inst.TaskFile == planFile && inst.SoloAgent {
 			return nil
 		}
 	}
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 	planPath := "docs/plans/" + planFile
 	prompt := scaffold.LoadReviewPrompt(planPath, planName)
 
@@ -714,18 +714,18 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	m.killExistingPlanAgent(planFile, session.AgentTypeReviewer)
 
 	// Resolve the plan's branch for the shared worktree.
-	branch := m.planBranch(planFile)
+	branch := m.taskBranch(planFile)
 	if branch == "" {
 		log.WarningLog.Printf("could not resolve branch for plan %q", planFile)
 		return nil
 	}
 
-	cycle, _ := m.planState.ReviewCycle(planFile)
+	cycle, _ := m.taskState.ReviewCycle(planFile)
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:       fmt.Sprintf("%s-review-%d", planName, cycle+1),
 		Path:        m.activeRepoPath,
 		Program:     m.programForAgent(session.AgentTypeReviewer),
-		PlanFile:    planFile,
+		TaskFile:    planFile,
 		AgentType:   session.AgentTypeReviewer,
 		ReviewCycle: cycle + 1,
 	})
@@ -748,12 +748,12 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 
 	m.toastManager.Success(fmt.Sprintf("implementation complete → review started for %s", planName))
 
-	shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, branch)
+	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
 	return func() tea.Msg {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: reviewerInst, err: err}
 		}
-		if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+		if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
 			return instanceStartedMsg{instance: reviewerInst, err: err}
 		}
 		err := reviewerInst.StartInSharedWorktree(shared, branch)
@@ -852,7 +852,7 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	// First pass: identify matching instances by title.
 	var titles []string
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile != planFile {
+		if inst.TaskFile != planFile {
 			continue
 		}
 		match := inst.AgentType == agentType
@@ -893,7 +893,7 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 // shared worktree so fixes are applied to the actual implementation branch.
 // Does NOT perform any FSM transition — the caller is responsible for that.
 func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 	prompt := buildImplementPrompt(planFile)
 	if feedback != "" {
 		prompt += fmt.Sprintf("\n\nReviewer feedback from previous round:\n%s", feedback)
@@ -908,18 +908,18 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	delete(m.coderPushPrompted, planFile)
 
 	// Resolve the plan's branch for the shared worktree.
-	branch := m.planBranch(planFile)
+	branch := m.taskBranch(planFile)
 	if branch == "" {
 		log.WarningLog.Printf("could not resolve branch for plan %q", planFile)
 		return nil
 	}
 
-	cycle, _ := m.planState.ReviewCycle(planFile)
+	cycle, _ := m.taskState.ReviewCycle(planFile)
 	coderInst, err := session.NewInstance(session.InstanceOptions{
 		Title:       fmt.Sprintf("%s-fix-%d", planName, cycle),
 		Path:        m.activeRepoPath,
 		Program:     m.programForAgent(session.AgentTypeCoder),
-		PlanFile:    planFile,
+		TaskFile:    planFile,
 		AgentType:   session.AgentTypeCoder,
 		ReviewCycle: cycle,
 	})
@@ -950,12 +950,12 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 
 	m.toastManager.Info(fmt.Sprintf("review changes requested → re-implementing %s", planName))
 
-	shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, branch)
+	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
 	return func() tea.Msg {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: coderInst, err: err}
 		}
-		if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+		if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
 			return instanceStartedMsg{instance: coderInst, err: err}
 		}
 		err := coderInst.StartInSharedWorktree(shared, branch)
@@ -963,11 +963,11 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	}
 }
 
-func (m *home) materializePlanFile(planFile, repoPath string) error {
-	if m.planStore == nil {
+func (m *home) materializeTaskFile(planFile, repoPath string) error {
+	if m.taskStore == nil {
 		return nil
 	}
-	content, err := m.planStore.GetContent(m.planStoreProject, planFile)
+	content, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
 	if err != nil {
 		return fmt.Errorf("get plan content %s: %w", planFile, err)
 	}
@@ -982,22 +982,22 @@ func (m *home) materializePlanFile(planFile, repoPath string) error {
 	return nil
 }
 
-// ingestPlanContent reads the plan markdown file from the given repo path and
+// ingestTaskContent reads the plan markdown file from the given repo path and
 // stores its content in the DB via the plan store. This bridges the gap between
 // agents writing plan files to their worktree and the DB being the source of truth.
 // Called when a PlannerFinished signal is processed.
-func (m *home) ingestPlanContent(planFile, repoPath string) {
-	if m.planStore == nil || m.planState == nil {
+func (m *home) ingestTaskContent(planFile, repoPath string) {
+	if m.taskStore == nil || m.taskState == nil {
 		return
 	}
 	planPath := filepath.Join(repoPath, "docs", "plans", planFile)
 	data, err := os.ReadFile(planPath)
 	if err != nil {
-		log.WarningLog.Printf("ingestPlanContent: cannot read %s: %v", planPath, err)
+		log.WarningLog.Printf("ingestTaskContent: cannot read %s: %v", planPath, err)
 		return
 	}
-	if err := m.planState.SetContent(planFile, string(data)); err != nil {
-		log.WarningLog.Printf("ingestPlanContent: cannot store content for %s: %v", planFile, err)
+	if err := m.taskState.SetContent(planFile, string(data)); err != nil {
+		log.WarningLog.Printf("ingestTaskContent: cannot store content for %s: %v", planFile, err)
 	}
 }
 
@@ -1025,7 +1025,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 
 	return m, func() tea.Msg {
-		data, err := m.planStore.GetContent(m.planStoreProject, planFile)
+		data, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
 		if err != nil {
 			return planRenderedMsg{err: fmt.Errorf("could not read plan %s: %w", planFile, err)}
 		}
@@ -1047,30 +1047,30 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	}
 }
 
-// createPlanEntry creates a new plan entry in the store.
-func (m *home) createPlanEntry(name, description, topic string) error {
-	if m.planState == nil {
-		if m.planStore == nil {
+// createTaskEntry creates a new plan entry in the store.
+func (m *home) createTaskEntry(name, description, topic string) error {
+	if m.taskState == nil {
+		if m.taskStore == nil {
 			return fmt.Errorf("plan store not configured")
 		}
-		ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
+		ps, err := taskstate.Load(m.taskStore, m.taskStoreProject, m.taskStateDir)
 		if err != nil {
 			return err
 		}
-		m.planState = ps
+		m.taskState = ps
 	}
 
 	slug := slugifyPlanName(name)
 	filename := slug + ".md"
 	branch := "plan/" + slug
-	if err := m.planState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
+	if err := m.taskState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
 		if m.toastManager != nil {
 			m.toastManager.Error("plan store error: " + err.Error())
 		}
 		return err
 	}
 	m.audit(auditlog.EventPlanCreated, "created plan", auditlog.WithPlan(filename))
-	m.updateSidebarPlans()
+	m.updateSidebarTasks()
 	return nil
 }
 
@@ -1098,17 +1098,17 @@ func renderPlanStub(name, description, filename string) string {
 
 // createPlanRecord registers the plan in the store.
 func (m *home) createPlanRecord(planFile, description, branch string, now time.Time) error {
-	if m.planState == nil {
-		if m.planStore == nil {
+	if m.taskState == nil {
+		if m.taskStore == nil {
 			return fmt.Errorf("plan store not configured")
 		}
-		ps, err := planstate.Load(m.planStore, m.planStoreProject, m.planStateDir)
+		ps, err := taskstate.Load(m.taskStore, m.taskStoreProject, m.taskStateDir)
 		if err != nil {
 			return err
 		}
-		m.planState = ps
+		m.taskState = ps
 	}
-	if err := m.planState.Register(planFile, description, branch, now); err != nil {
+	if err := m.taskState.Register(planFile, description, branch, now); err != nil {
 		if m.toastManager != nil {
 			m.toastManager.Error("plan store error: " + err.Error())
 		}
@@ -1122,20 +1122,20 @@ func (m *home) createPlanRecord(planFile, description, branch string, now time.T
 func (m *home) finalizePlanCreation(name, description string) error {
 	now := time.Now().UTC()
 	planFile := buildPlanFilename(name, now)
-	branch := gitpkg.PlanBranchFromFile(planFile)
+	branch := gitpkg.TaskBranchFromFile(planFile)
 	content := renderPlanStub(name, description, planFile)
 	if err := m.createPlanRecord(planFile, description, branch, now); err != nil {
 		return err
 	}
-	if err := m.planState.SetContent(planFile, content); err != nil {
+	if err := m.taskState.SetContent(planFile, content); err != nil {
 		return err
 	}
-	if err := gitpkg.EnsurePlanBranch(m.activeRepoPath, branch); err != nil {
+	if err := gitpkg.EnsureTaskBranch(m.activeRepoPath, branch); err != nil {
 		return err
 	}
 
-	m.loadPlanState()
-	m.updateSidebarPlans()
+	m.loadTaskState()
+	m.updateSidebarTasks()
 	return nil
 }
 
@@ -1147,39 +1147,39 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 
 	filename := clickup.ScaffoldFilename(task.Name)
 
-	if m.planState == nil {
-		m.loadPlanState()
+	if m.taskState == nil {
+		m.loadTaskState()
 	}
-	if m.planState == nil {
+	if m.taskState == nil {
 		m.toastManager.Error("failed to register imported plan: plan state unavailable")
 		return m, m.toastTickCmd()
 	}
 
-	filename = dedupePlanFilenameInState(m.planState, filename)
+	filename = dedupePlanFilenameInState(m.taskState, filename)
 
 	scaffold := clickup.ScaffoldPlan(*task)
 
-	branch := gitpkg.PlanBranchFromFile(filename)
-	if err := m.planState.Register(filename, task.Name, branch, time.Now()); err != nil {
+	branch := gitpkg.TaskBranchFromFile(filename)
+	if err := m.taskState.Register(filename, task.Name, branch, time.Now()); err != nil {
 		m.toastManager.Error("failed to register imported plan: " + err.Error())
 		return m, m.toastTickCmd()
 	}
-	if err := m.planState.SetContent(filename, scaffold); err != nil {
+	if err := m.taskState.SetContent(filename, scaffold); err != nil {
 		m.toastManager.Error("failed to save imported plan content: " + err.Error())
 		return m, m.toastTickCmd()
 	}
 	if task.ID != "" {
-		if err := m.planState.SetClickUpTaskID(filename, task.ID); err != nil {
+		if err := m.taskState.SetClickUpTaskID(filename, task.ID); err != nil {
 			log.WarningLog.Printf("importClickUpTask: failed to set clickup task id for %q: %v", filename, err)
 		}
 	}
 
-	if err := m.fsm.Transition(filename, planfsm.PlanStart); err != nil {
+	if err := m.fsm.Transition(filename, taskfsm.PlanStart); err != nil {
 		log.WarningLog.Printf("clickup import transition failed for %q: %v", filename, err)
 	}
 
-	m.loadPlanState()
-	m.updateSidebarPlans()
+	m.loadTaskState()
+	m.updateSidebarTasks()
 
 	prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan file.
 
@@ -1188,7 +1188,7 @@ Determine if the task is well-specified enough for implementation or needs furth
 The plan file is at: docs/plans/%s`, filename)
 
 	m.toastManager.Success("imported! spawning planner...")
-	model, cmd := m.spawnPlanAgent(filename, "plan", prompt)
+	model, cmd := m.spawnTaskAgent(filename, "plan", prompt)
 	if cmd == nil {
 		return model, m.toastTickCmd()
 	}
@@ -1212,7 +1212,7 @@ func dedupePlanFilename(plansDir, filename string) string {
 	return filename
 }
 
-func dedupePlanFilenameInState(ps *planstate.PlanState, filename string) string {
+func dedupePlanFilenameInState(ps *taskstate.TaskState, filename string) string {
 	if ps == nil {
 		return filename
 	}
@@ -1237,11 +1237,11 @@ func dedupePlanFilenameInState(ps *planstate.PlanState, filename string) string 
 // to a prompt after completing its queued work (PromptDetected && !AwaitingWork).
 // The latter covers "applying fixes" coders spawned by spawnCoderWithFeedback,
 // which finish their work and return to prompt rather than exiting tmux.
-func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Instance, tmuxAlive bool) bool {
+func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Instance, tmuxAlive bool) bool {
 	if inst == nil {
 		return false
 	}
-	if inst.PlanFile == "" {
+	if inst.TaskFile == "" {
 		return false
 	}
 	if inst.AgentType != session.AgentTypeCoder {
@@ -1250,7 +1250,7 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 	if inst.SoloAgent {
 		return false
 	}
-	if entry.Status != planstate.StatusImplementing {
+	if entry.Status != taskstate.StatusImplementing {
 		return false
 	}
 	// Tmux exited — original single-coder completion path.
@@ -1269,14 +1269,14 @@ func shouldPromptPushAfterCoderExit(entry planstate.PlanEntry, inst *session.Ins
 // push the implementation branch, then advances the plan to reviewing and
 // spawns a reviewer agent via coderCompleteMsg.
 func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
-	capturedPlanFile := inst.PlanFile
+	capturedPlanFile := inst.TaskFile
 	// Mark as prompted so the metadata tick doesn't re-trigger the dialog
 	// while the user is deciding or after they dismiss it.
 	if m.coderPushPrompted == nil {
 		m.coderPushPrompted = make(map[string]bool)
 	}
 	m.coderPushPrompted[capturedPlanFile] = true
-	message := fmt.Sprintf("[!] implementation finished for '%s'. push branch now?", planstate.DisplayName(capturedPlanFile))
+	message := fmt.Sprintf("[!] implementation finished for '%s'. push branch now?", taskstate.DisplayName(capturedPlanFile))
 	pushAction := func() tea.Msg {
 		worktree, err := inst.GetGitWorktree()
 		if err == nil {
@@ -1287,26 +1287,26 @@ func (m *home) promptPushBranchThenAdvance(inst *session.Instance) tea.Cmd {
 	return m.confirmAction(message, func() tea.Msg { return pushAction() })
 }
 
-// planBranch resolves the branch name for a plan, backfilling if needed.
-func (m *home) planBranch(planFile string) string {
-	if m.planState == nil {
+// taskBranch resolves the branch name for a plan, backfilling if needed.
+func (m *home) taskBranch(planFile string) string {
+	if m.taskState == nil {
 		return ""
 	}
-	entry, ok := m.planState.Entry(planFile)
+	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
 		return ""
 	}
 	if entry.Branch == "" {
-		entry.Branch = gitpkg.PlanBranchFromFile(planFile)
-		_ = m.planState.SetBranch(planFile, entry.Branch)
+		entry.Branch = gitpkg.TaskBranchFromFile(planFile)
+		_ = m.taskState.SetBranch(planFile, entry.Branch)
 	}
 	return entry.Branch
 }
 
-// buildPlanPrompt returns the initial prompt for a planner agent session.
+// buildPlanningPrompt returns the initial prompt for a planner agent session.
 // The prompt explicitly requires ## Wave N headers because kasmos uses them
 // for wave orchestration — without them, implementation cannot start.
-func buildPlanPrompt(planName, description string) string {
+func buildPlanningPrompt(planName, description string) string {
 	return fmt.Sprintf(
 		"Plan %s. Goal: %s. "+
 			"Use the `kasmos-planner` skill. "+
@@ -1354,8 +1354,8 @@ func buildSoloPrompt(planName, description, planFile string) string {
 	return fmt.Sprintf("Implement %s. Goal: %s.", planName, description)
 }
 
-// buildModifyPlanPrompt returns the prompt for modifying an existing plan.
-func buildModifyPlanPrompt(planFile string) string {
+// buildModifyTaskPrompt returns the prompt for modifying an existing plan.
+func buildModifyTaskPrompt(planFile string) string {
 	return fmt.Sprintf("Modify existing plan at docs/plans/%s. Keep the same filename and update only what changed.", planFile)
 }
 
@@ -1429,11 +1429,11 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 	return m, tea.Batch(tea.WindowSize(), startCmd)
 }
 
-// spawnPlanAgent creates and starts an agent session for the given plan and action.
-func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
-	entry, ok := m.planState.Entry(planFile)
+// spawnTaskAgent creates and starts an agent session for the given plan and action.
+func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
+	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+		return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 	}
 
 	agentType, ok := agentTypeForSubItem(action)
@@ -1447,7 +1447,7 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 		m.killExistingPlanAgent(planFile, agentType)
 	}
 
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 	title := planName + "-" + action
 	// reviewCycle is resolved once and reused for both the title and the instance field.
 	var reviewCycle int
@@ -1457,14 +1457,14 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 		title = planName + "-solo"
 	} else if action == "review" {
 		// Use cycle-suffixed title so each review round gets a unique tmux session name.
-		reviewCycle, _ = m.planState.ReviewCycle(planFile)
+		reviewCycle, _ = m.taskState.ReviewCycle(planFile)
 		title = fmt.Sprintf("%s-review-%d", planName, reviewCycle+1)
 	}
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     title,
 		Path:      m.activeRepoPath,
 		Program:   m.programForAgent(agentType),
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: agentType,
 	})
 	if err != nil {
@@ -1493,7 +1493,7 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	if action == "plan" || action == "solo" {
 		// Planner and solo agent run on main branch — no worktree created.
 		startCmd = func() tea.Msg {
-			if err := m.materializePlanFile(planFile, m.activeRepoPath); err != nil {
+			if err := m.materializeTaskFile(planFile, m.activeRepoPath); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
 			err := inst.StartOnMainBranch()
@@ -1502,19 +1502,19 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 	} else {
 		// Backfill branch name for plans created before the branch field was introduced.
 		if entry.Branch == "" {
-			entry.Branch = gitpkg.PlanBranchFromFile(planFile)
-			if err := m.planState.SetBranch(planFile, entry.Branch); err != nil {
+			entry.Branch = gitpkg.TaskBranchFromFile(planFile)
+			if err := m.taskState.SetBranch(planFile, entry.Branch); err != nil {
 				return m, m.handleError(fmt.Errorf("failed to assign branch for plan: %w", err))
 			}
 		}
 
 		// Coder and reviewer share the plan's feature branch worktree
-		shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, entry.Branch)
+		shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
 		if err := shared.Setup(); err != nil {
 			return m, m.handleError(err)
 		}
 		startCmd = func() tea.Msg {
-			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
 			err := inst.StartInSharedWorktree(shared, entry.Branch)
@@ -1522,7 +1522,7 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 		}
 	}
 
-	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned %s for plan %s", agentType, planstate.DisplayName(planFile)),
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned %s for plan %s", agentType, taskstate.DisplayName(planFile)),
 		auditlog.WithPlan(planFile),
 		auditlog.WithInstance(title),
 		auditlog.WithAgent(agentType),
@@ -1535,10 +1535,10 @@ func (m *home) spawnPlanAgent(planFile, action, prompt string) (tea.Model, tea.C
 
 // getTopicNames returns existing topic names for the picker.
 func (m *home) getTopicNames() []string {
-	if m.planState == nil {
+	if m.taskState == nil {
 		return nil
 	}
-	topics := m.planState.Topics()
+	topics := m.taskState.Topics()
 	names := make([]string, len(topics))
 	for i, t := range topics {
 		names[i] = t.Name
@@ -1559,7 +1559,7 @@ func (m *home) getTopicNames() []string {
 // Tasks that are still running remain in taskRunning state so the metadata tick can
 // detect their completion normally (or the user can mark them complete manually).
 func (m *home) rebuildOrphanedOrchestrators() {
-	if m.planState == nil || m.planStateDir == "" {
+	if m.taskState == nil || m.taskStateDir == "" {
 		return
 	}
 
@@ -1571,10 +1571,10 @@ func (m *home) rebuildOrphanedOrchestrators() {
 	}
 	byPlan := make(map[string][]taskInst)
 	for _, inst := range m.nav.GetInstances() {
-		if inst.TaskNumber == 0 || inst.PlanFile == "" {
+		if inst.TaskNumber == 0 || inst.TaskFile == "" {
 			continue
 		}
-		byPlan[inst.PlanFile] = append(byPlan[inst.PlanFile], taskInst{
+		byPlan[inst.TaskFile] = append(byPlan[inst.TaskFile], taskInst{
 			taskNumber: inst.TaskNumber,
 			waveNumber: inst.WaveNumber,
 			paused:     inst.Paused(),
@@ -1587,18 +1587,18 @@ func (m *home) rebuildOrphanedOrchestrators() {
 			continue
 		}
 		// Only reconstruct for implementing plans.
-		entry, ok := m.planState.Entry(planFile)
-		if !ok || entry.Status != planstate.StatusImplementing {
+		entry, ok := m.taskState.Entry(planFile)
+		if !ok || entry.Status != taskstate.StatusImplementing {
 			continue
 		}
 
 		// Parse the plan content from store.
-		content, err := m.planStore.GetContent(m.planStoreProject, planFile)
+		content, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
 		if err != nil {
 			log.WarningLog.Printf("rebuildOrphanedOrchestrators: cannot read %s: %v", planFile, err)
 			continue
 		}
-		plan, err := planparser.Parse(content)
+		plan, err := taskparser.Parse(content)
 		if err != nil {
 			log.WarningLog.Printf("rebuildOrphanedOrchestrators: cannot parse %s: %v", planFile, err)
 			continue
@@ -1646,12 +1646,12 @@ func (m *home) rebuildOrphanedOrchestrators() {
 
 // spawnWaveTasks creates and starts instances for the given task list within an orchestrator.
 // Used by both startNextWave (initial spawn) and retryFailedWaveTasks (re-spawn failed tasks).
-func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
-	planFile := orch.PlanFile()
-	planName := planstate.DisplayName(planFile)
+func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+	planFile := orch.TaskFile()
+	planName := taskstate.DisplayName(planFile)
 
 	// Set up shared worktree for all tasks in this batch.
-	shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, entry.Branch)
+	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
 	if err := shared.Setup(); err != nil {
 		return m, m.handleError(err)
 	}
@@ -1664,7 +1664,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
 			Path:       m.activeRepoPath,
 			Program:    m.programForAgent(session.AgentTypeCoder),
-			PlanFile:   planFile,
+			TaskFile:   planFile,
 			AgentType:  session.AgentTypeCoder,
 			TaskNumber: task.Number,
 			WaveNumber: orch.CurrentWaveNumber(),
@@ -1683,7 +1683,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
-			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
 				return instanceStartedMsg{instance: taskInst, err: err}
 			}
 			err := taskInst.StartInSharedWorktree(shared, entry.Branch)
@@ -1697,7 +1697,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []planparser.Task, e
 }
 
 // startNextWave advances the orchestrator to the next wave and spawns its task instances.
-func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
+func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.StartNextWave()
 	if tasks == nil {
 		return m, nil
@@ -1707,7 +1707,7 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 	m.toastManager.Info(fmt.Sprintf("wave %d started: %d task(s) running", waveNum, len(tasks)))
 	m.audit(auditlog.EventWaveStarted,
 		fmt.Sprintf("wave %d started: %d task(s)", waveNum, len(tasks)),
-		auditlog.WithPlan(orch.PlanFile()),
+		auditlog.WithPlan(orch.TaskFile()),
 		auditlog.WithWave(waveNum, 0))
 	return m.spawnWaveTasks(orch, tasks, entry)
 }
@@ -1715,7 +1715,7 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry planstate.PlanEntry) 
 // retryFailedWaveTasks retries all failed tasks in the current wave by re-spawning them.
 // Old failed instances are removed first to prevent ghost duplicates that accumulate
 // across retries and all get marked ImplementationComplete when waves finish.
-func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.PlanEntry) (tea.Model, tea.Cmd) {
+func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.RetryFailedTasks()
 	if len(tasks) == 0 {
 		return m, nil
@@ -1729,10 +1729,10 @@ func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry planstate.Plan
 
 	// Remove old failed instances for the tasks being retried.
 	// Collect first to avoid mutating the list while iterating.
-	planFile := orch.PlanFile()
+	planFile := orch.TaskFile()
 	var staleInsts []*session.Instance
 	for _, inst := range m.nav.GetInstances() {
-		if inst.PlanFile == planFile && retryingTasks[inst.TaskNumber] {
+		if inst.TaskFile == planFile && retryingTasks[inst.TaskNumber] {
 			staleInsts = append(staleInsts, inst)
 		}
 	}
@@ -1760,9 +1760,9 @@ func (m *home) discoverTmuxSessions() tea.Cmd {
 	}
 }
 
-// buildChatAboutPlanPrompt builds the custodian prompt for a chat-about-plan session.
-func buildChatAboutPlanPrompt(planFile string, entry planstate.PlanEntry, question string) string {
-	name := planstate.DisplayName(planFile)
+// buildChatAboutTaskPrompt builds the custodian prompt for a chat-about-plan session.
+func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, question string) string {
+	name := taskstate.DisplayName(planFile)
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("You are answering a question about the plan '%s'.\n\n", name))
 	sb.WriteString("## Plan Context\n\n")
@@ -1783,24 +1783,24 @@ func buildChatAboutPlanPrompt(planFile string, entry planstate.PlanEntry, questi
 	return sb.String()
 }
 
-// spawnChatAboutPlan spawns a custodian agent pre-loaded with the plan context and user question.
-func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd) {
-	if m.planState == nil {
-		return m, m.handleError(fmt.Errorf("no plan state loaded"))
+// spawnChatAboutTask spawns a custodian agent pre-loaded with the plan context and user question.
+func (m *home) spawnChatAboutTask(planFile, question string) (tea.Model, tea.Cmd) {
+	if m.taskState == nil {
+		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}
-	entry, ok := m.planState.Entry(planFile)
+	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		return m, m.handleError(fmt.Errorf("plan not found: %s", planFile))
+		return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
 	}
-	prompt := buildChatAboutPlanPrompt(planFile, entry, question)
-	planName := planstate.DisplayName(planFile)
+	prompt := buildChatAboutTaskPrompt(planFile, entry, question)
+	planName := taskstate.DisplayName(planFile)
 	title := planName + "-chat"
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     title,
 		Path:      m.activeRepoPath,
 		Program:   m.programForAgent(session.AgentTypeFixer),
-		PlanFile:  planFile,
+		TaskFile:  planFile,
 		AgentType: session.AgentTypeFixer,
 	})
 	if err != nil {
@@ -1813,14 +1813,14 @@ func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd
 
 	// Use the plan's branch worktree if available, otherwise main.
 	var startCmd tea.Cmd
-	branch := m.planBranch(planFile)
+	branch := m.taskBranch(planFile)
 	if branch != "" {
-		shared := gitpkg.NewSharedPlanWorktree(m.activeRepoPath, branch)
+		shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
 		startCmd = func() tea.Msg {
 			if err := shared.Setup(); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
-			if err := m.materializePlanFile(planFile, shared.GetWorktreePath()); err != nil {
+			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
 			err := inst.StartInSharedWorktree(shared, branch)
@@ -1828,14 +1828,14 @@ func (m *home) spawnChatAboutPlan(planFile, question string) (tea.Model, tea.Cmd
 		}
 	} else {
 		startCmd = func() tea.Msg {
-			if err := m.materializePlanFile(planFile, m.activeRepoPath); err != nil {
+			if err := m.materializeTaskFile(planFile, m.activeRepoPath); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
 			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
 		}
 	}
 
-	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned custodian chat for %s", planstate.DisplayName(planFile)),
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned custodian chat for %s", taskstate.DisplayName(planFile)),
 		auditlog.WithPlan(planFile),
 		auditlog.WithInstance(title),
 		auditlog.WithAgent(session.AgentTypeFixer),
@@ -1873,7 +1873,7 @@ func (m *home) adoptOrphanSession(item overlay.TmuxBrowserItem) (tea.Model, tea.
 }
 
 // audit emits a structured audit event, automatically filling in the Project
-// field from m.planStoreProject. Optional fields (PlanFile, InstanceTitle,
+// field from m.taskStoreProject. Optional fields (PlanFile, InstanceTitle,
 // AgentType, WaveNumber, TaskNumber, Detail, Level) can be set via EventOption
 // functional options: WithPlan, WithInstance, WithAgent, WithWave, WithDetail,
 // WithLevel.
@@ -1883,7 +1883,7 @@ func (m *home) audit(kind auditlog.EventKind, msg string, opts ...auditlog.Event
 	}
 	e := auditlog.Event{
 		Kind:    kind,
-		Project: m.planStoreProject,
+		Project: m.taskStoreProject,
 		Message: msg,
 	}
 	for _, opt := range opts {
@@ -1901,7 +1901,7 @@ func (m *home) refreshAuditPane() {
 	}
 
 	filter := auditlog.QueryFilter{
-		Project: m.planStoreProject,
+		Project: m.taskStoreProject,
 		Limit:   200,
 	}
 
@@ -1917,8 +1917,8 @@ func (m *home) refreshAuditPane() {
 		msg := e.Message
 		// Prepend [plan-name] when the event has a plan context and the message
 		// doesn't already embed the plan name (some messages include it inline).
-		if e.PlanFile != "" {
-			label := planstate.DisplayName(e.PlanFile)
+		if e.TaskFile != "" {
+			label := taskstate.DisplayName(e.TaskFile)
 			if !strings.Contains(msg, label) {
 				msg = "[" + label + "] " + msg
 			}
@@ -1997,22 +1997,22 @@ func buildClickUpProgressComment(event, planName, detail string) string {
 // ID is associated with the plan or the commenter is unavailable. All errors
 // are logged, never surfaced to the user.
 func (m *home) postClickUpProgress(planFile, event, detail string) tea.Cmd {
-	if m.planState == nil {
+	if m.taskState == nil {
 		return nil
 	}
-	entry, ok := m.planState.Entry(planFile)
+	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
 		return nil
 	}
 
 	// Fetch content for fallback task ID resolution only when the field is empty.
 	var content string
-	if entry.ClickUpTaskID == "" && m.planStore != nil {
-		content, _ = m.planStore.GetContent(m.planStoreProject, planFile)
+	if entry.ClickUpTaskID == "" && m.taskStore != nil {
+		content, _ = m.taskStore.GetContent(m.taskStoreProject, planFile)
 	}
 	taskID := resolveClickUpTaskID(entry, content)
 
-	planName := planstate.DisplayName(planFile)
+	planName := taskstate.DisplayName(planFile)
 	comment := buildClickUpProgressComment(event, planName, detail)
 
 	commenter := m.getOrCreateCommenter(m.ctx)

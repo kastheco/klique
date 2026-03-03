@@ -1,0 +1,264 @@
+package taskstore_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func newTestStore(t *testing.T) taskstore.Store {
+	t.Helper()
+	store, err := taskstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { store.Close() })
+	return store
+}
+
+func TestSQLiteStore_CreateAndGet(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename:    "test-plan.md",
+		Status:      taskstore.StatusReady,
+		Description: "test plan",
+		Branch:      "plan/test-plan",
+		CreatedAt:   time.Now().UTC(),
+	}
+	require.NoError(t, store.Create("kasmos", entry))
+
+	got, err := store.Get("kasmos", "test-plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusReady, got.Status)
+	assert.Equal(t, "test plan", got.Description)
+}
+
+func TestSQLiteStore_ListByStatus(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusDone}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady}))
+
+	plans, err := store.ListByStatus("kasmos", taskstore.StatusReady)
+	require.NoError(t, err)
+	assert.Len(t, plans, 2)
+}
+
+func TestSQLiteStore_ProjectIsolation(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("project-a", taskstore.TaskEntry{Filename: "x.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("project-b", taskstore.TaskEntry{Filename: "y.md", Status: taskstore.StatusReady}))
+
+	plans, err := store.List("project-a")
+	require.NoError(t, err)
+	assert.Len(t, plans, 1)
+	assert.Equal(t, "x.md", plans[0].Filename)
+}
+
+func TestSQLiteStore_Update(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename:    "update-test.md",
+		Status:      taskstore.StatusReady,
+		Description: "original description",
+		Branch:      "plan/update-test",
+		CreatedAt:   time.Now().UTC(),
+	}
+	require.NoError(t, store.Create("kasmos", entry))
+
+	entry.Status = taskstore.StatusImplementing
+	entry.Description = "updated description"
+	require.NoError(t, store.Update("kasmos", "update-test.md", entry))
+
+	got, err := store.Get("kasmos", "update-test.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusImplementing, got.Status)
+	assert.Equal(t, "updated description", got.Description)
+}
+
+func TestSQLiteStore_Rename(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename:  "old-name.md",
+		Status:    taskstore.StatusReady,
+		CreatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, store.Create("kasmos", entry))
+
+	require.NoError(t, store.Rename("kasmos", "old-name.md", "new-name.md"))
+
+	_, err := store.Get("kasmos", "old-name.md")
+	assert.Error(t, err)
+
+	got, err := store.Get("kasmos", "new-name.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusReady, got.Status)
+}
+
+func TestSQLiteStore_ListByTopic(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady, Topic: "auth"}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusReady, Topic: "auth"}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady, Topic: "storage"}))
+
+	plans, err := store.ListByTopic("kasmos", "auth")
+	require.NoError(t, err)
+	assert.Len(t, plans, 2)
+}
+
+func TestSQLiteStore_Topics(t *testing.T) {
+	store := newTestStore(t)
+	topic := taskstore.TopicEntry{
+		Name:      "auth",
+		CreatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, store.CreateTopic("kasmos", topic))
+
+	topics, err := store.ListTopics("kasmos")
+	require.NoError(t, err)
+	assert.Len(t, topics, 1)
+	assert.Equal(t, "auth", topics[0].Name)
+}
+
+func TestSQLiteStore_Ping(t *testing.T) {
+	store := newTestStore(t)
+	assert.NoError(t, store.Ping())
+}
+
+func TestSQLiteStore_GetNotFound(t *testing.T) {
+	store := newTestStore(t)
+	_, err := store.Get("kasmos", "nonexistent.md")
+	assert.Error(t, err)
+}
+
+func TestSQLiteStore_CreateDuplicate(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{Filename: "dup.md", Status: taskstore.StatusReady}
+	require.NoError(t, store.Create("kasmos", entry))
+	err := store.Create("kasmos", entry)
+	assert.Error(t, err)
+}
+
+func TestSQLiteStore_ListSortedByFilename(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusReady}))
+
+	plans, err := store.List("kasmos")
+	require.NoError(t, err)
+	require.Len(t, plans, 3)
+	assert.Equal(t, "a.md", plans[0].Filename)
+	assert.Equal(t, "b.md", plans[1].Filename)
+	assert.Equal(t, "c.md", plans[2].Filename)
+}
+
+func TestSQLiteStore_CreateWithContent(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename: "test.md",
+		Status:   taskstore.StatusReady,
+		Content:  "# Test Plan\n\n## Wave 1\n\n### Task 1: Do thing\n",
+	}
+	require.NoError(t, store.Create("proj", entry))
+	got, err := store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, entry.Content, got.Content)
+}
+
+func TestSQLiteStore_GetContent(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename: "test.md",
+		Status:   taskstore.StatusReady,
+		Content:  "# Full Plan Content",
+	}
+	require.NoError(t, store.Create("proj", entry))
+	content, err := store.GetContent("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "# Full Plan Content", content)
+}
+
+func TestSQLiteStore_SetContent(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady}
+	require.NoError(t, store.Create("proj", entry))
+	require.NoError(t, store.SetContent("proj", "test.md", "# Updated"))
+	content, err := store.GetContent("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "# Updated", content)
+}
+
+func TestClickUpTaskIDRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{Filename: "clickup-test.md", Status: taskstore.StatusReady}
+	require.NoError(t, store.Create("proj", entry))
+
+	// Initially no task ID
+	got, err := store.Get("proj", "clickup-test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "", got.ClickUpTaskID, "task ID must be empty before set")
+
+	// Set the task ID
+	require.NoError(t, store.SetClickUpTaskID("proj", "clickup-test.md", "CU-abc123"))
+
+	// Verify it round-trips through Get
+	got, err = store.Get("proj", "clickup-test.md")
+	require.NoError(t, err)
+	assert.Equal(t, "CU-abc123", got.ClickUpTaskID, "task ID must be persisted after SetClickUpTaskID")
+
+	// Verify it appears in List
+	plans, err := store.List("proj")
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.Equal(t, "CU-abc123", plans[0].ClickUpTaskID, "task ID must appear in List results")
+}
+
+func TestClickUpTaskIDRoundTrip_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	err := store.SetClickUpTaskID("proj", "nonexistent.md", "CU-xyz")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestSQLiteMigration_PlansTableToTasks(t *testing.T) {
+	store, err := taskstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Store should work — the migration creates the tasks table
+	err = store.Create("proj", taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady})
+	require.NoError(t, err)
+
+	entries, err := store.List("proj")
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "test.md", entries[0].Filename)
+}
+
+func TestSQLiteStore_ReviewCycle(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename: "test.md",
+		Status:   taskstore.StatusReady,
+	}
+	require.NoError(t, store.Create("proj", entry))
+
+	// Default review cycle is 0.
+	got, err := store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.ReviewCycle)
+
+	// Increment and verify.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.ReviewCycle)
+
+	// Increment again.
+	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
+	got, err = store.Get("proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, 2, got.ReviewCycle)
+}
