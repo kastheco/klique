@@ -1,0 +1,548 @@
+{
+  "info": {
+    "id": "ses_34e257196ffekIWRAnk67E6pfp",
+    "slug": "proud-moon",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Add Wave headers to cleanup-prompts plan",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 1,
+      "deletions": 0,
+      "files": 1
+    },
+    "time": {
+      "created": 1772510416489,
+      "updated": 1772510433472
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772510416519
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "id": "msg_cb1da8e7a001lrm5aiRsVpCON3",
+        "sessionID": "ses_34e257196ffekIWRAnk67E6pfp"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "The plan at docs/plans/2026-03-03-cleanup-prompts.md is missing ## Wave N headers required for kasmos wave orchestration. Please annotate the plan by wrapping all tasks under ## Wave N sections. Every plan needs at least ## Wave 1 — even single-task trivial plans. Keep all existing task content intact; only add the ## Wave headers.\n\nAfter annotating:\n1. Commit: git add docs/plans/2026-03-03-cleanup-prompts.md && git commit -m \"plan: add wave headers to 2026-03-03-cleanup-prompts.md\"\n2. Signal completion: touch .kasmos/signals/planner-finished-2026-03-03-cleanup-prompts.md\nDo not edit plan-state.json directly.",
+          "id": "prt_cb1da8e7a00226xmtGGGivcdp3",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e7a001lrm5aiRsVpCON3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772510416527,
+          "completed": 1772510421577
+        },
+        "parentID": "msg_cb1da8e7a001lrm5aiRsVpCON3",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40222,
+          "input": 3,
+          "output": 177,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 40042
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1da8e8f001UBFmrg8zp7ihli",
+        "sessionID": "ses_34e257196ffekIWRAnk67E6pfp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "2d367478aa1cc6cbb61417577954212d81530778",
+          "id": "prt_cb1da9a59001HdtGbdeHZPtLIq",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        },
+        {
+          "type": "text",
+          "text": "\n\nI'll load the required skills first, then read the plan file.",
+          "time": {
+            "start": 1772510420232,
+            "end": 1772510420232
+          },
+          "id": "prt_cb1da9a5a0015Qrb2zpDy1dEWH",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the plan status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `YYYY-MM-DD-<feature-name>.md`\n\nPlans are stored in the **plan store** (SQLite database or HTTP API), not as files on disk.\nUse `kas plan register` to register plans after writing content.\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the plan content is passed to kasmos via sentinel — kasmos registers it\nin the plan store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas plan register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-YYYY-MM-DD-<feature-name>.md\n```\n\nthe filename must match the plan filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify plan state directly** — kasmos manages the plan store.\n\nannounce completion and stop:\n\n> \"plan complete: `YYYY-MM-DD-<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the plan store using the CLI:\n\n```bash\nkas plan register YYYY-MM-DD-<feature-name>.md\n```\n\nthis creates an entry in the plan store with status `ready`. the plan content should be\nwritten to the store via `kas plan` or committed as a `.md` file in `docs/plans/` for\n`kas plan register` to pick up.\n\nthen offer execution choices:\n\n> \"plan complete: `YYYY-MM-DD-<feature-name>.md` (registered in plan store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510420557,
+              "end": 1772510420562
+            }
+          },
+          "id": "prt_cb1da9d0d001RGfXHLvCzdxYMj",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510420947,
+              "end": 1772510420952
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01593csZ6yWpzU46sfJ13sKy",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/2026-03-03-cleanup-prompts.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/docs/plans/2026-03-03-cleanup-prompts.md</path>\n<type>file</type>\n<content>\n\n(End of file - total 0 lines)\n</content>",
+            "title": "docs/plans/2026-03-03-cleanup-prompts.md",
+            "metadata": {
+              "preview": "",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772510421525,
+              "end": 1772510421527
+            }
+          },
+          "id": "prt_cb1da9fd5001JFhs6da0RINNeV",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "2d367478aa1cc6cbb61417577954212d81530778",
+          "cost": 0,
+          "tokens": {
+            "total": 40222,
+            "input": 3,
+            "output": 177,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 40042
+            }
+          },
+          "id": "prt_cb1daa238001LkbC8g1481p4vL",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1da8e8f001UBFmrg8zp7ihli"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772510421578,
+          "completed": 1772510427308
+        },
+        "parentID": "msg_cb1da8e7a001lrm5aiRsVpCON3",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48495,
+          "input": 1,
+          "output": 238,
+          "reasoning": 0,
+          "cache": {
+            "read": 40042,
+            "write": 8214
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1daa24a0011Q4lDxRi3XXN7T",
+        "sessionID": "ses_34e257196ffekIWRAnk67E6pfp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "2d367478aa1cc6cbb61417577954212d81530778",
+          "id": "prt_cb1daab84001fTphj79MtWm34t",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        },
+        {
+          "type": "text",
+          "text": "The file is empty. Let me check if it exists and look for the actual plan content — it might be stored elsewhere or have a different path.",
+          "time": {
+            "start": 1772510425301,
+            "end": 1772510425301
+          },
+          "id": "prt_cb1daab840027RGCU0WSaBf6Tc",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "docs/plans/*cleanup*"
+            },
+            "output": "/home/kas/dev/kasmos/docs/plans/2026-03-03-cleanup-prompts.md\n/home/kas/dev/kasmos/docs/plans/2026-03-02-cleanup-prompts.md\n/home/kas/dev/kasmos/docs/plans/2026-02-26-cleanup-superpowers-cmds.md",
+            "title": "",
+            "metadata": {
+              "count": 3,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510425751,
+              "end": 1772510425757
+            }
+          },
+          "id": "prt_cb1dab0d5001940D9ohp3p8WVx",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01C6o6WHNjtXL9q2ddVZUVCr",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/*cleanup-prompts*"
+            },
+            "output": "/home/kas/dev/kasmos/docs/plans/2026-03-03-cleanup-prompts.md\n/home/kas/dev/kasmos/docs/plans/2026-03-02-cleanup-prompts.md",
+            "title": "",
+            "metadata": {
+              "count": 2,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510426253,
+              "end": 1772510426258
+            }
+          },
+          "id": "prt_cb1dab298001MWZfflvQb3rfZm",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline --all -- 'docs/plans/2026-03-03-cleanup-prompts.md' 2>/dev/null; echo \"---\"; git log --oneline -5",
+              "description": "Check git history for the plan file"
+            },
+            "output": "5c4bd20 The plan at docs/plans/2026-03-03-have-to-kill-twice.md is missing ## Wa\n---\n2f7abd1 plan: add wave headers to 2026-03-03-have-to-kill-twice.md\nc57276b fix: auto-commit dirty worktrees on Kill() to prevent data loss\n7d7d690 fix: merge attention and active sidebar sections into single unified list\n4d28e54 fix: purge stale plan-state.json and spec-kitty refs from skills and agents\n8b9534a fix: preserve injected deps in Restart() to fix CI test failures\n",
+            "title": "Check git history for the plan file",
+            "metadata": {
+              "output": "5c4bd20 The plan at docs/plans/2026-03-03-have-to-kill-twice.md is missing ## Wa\n---\n2f7abd1 plan: add wave headers to 2026-03-03-have-to-kill-twice.md\nc57276b fix: auto-commit dirty worktrees on Kill() to prevent data loss\n7d7d690 fix: merge attention and active sidebar sections into single unified list\n4d28e54 fix: purge stale plan-state.json and spec-kitty refs from skills and agents\n8b9534a fix: preserve injected deps in Restart() to fix CI test failures\n",
+              "exit": 0,
+              "description": "Check git history for the plan file",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510427266,
+              "end": 1772510427300
+            }
+          },
+          "id": "prt_cb1dab48e001YK5JDjG9sb2seL",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "2d367478aa1cc6cbb61417577954212d81530778",
+          "cost": 0,
+          "tokens": {
+            "total": 48495,
+            "input": 1,
+            "output": 238,
+            "reasoning": 0,
+            "cache": {
+              "read": 40042,
+              "write": 8214
+            }
+          },
+          "id": "prt_cb1dab8a4001Y90OSpQEPKJDcf",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1daa24a0011Q4lDxRi3XXN7T"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772510427309,
+          "completed": 1772510433463
+        },
+        "parentID": "msg_cb1da8e7a001lrm5aiRsVpCON3",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49180,
+          "input": 1,
+          "output": 298,
+          "reasoning": 0,
+          "cache": {
+            "read": 48256,
+            "write": 625
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb1dab8ad00105E81P3S3D94NM",
+        "sessionID": "ses_34e257196ffekIWRAnk67E6pfp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "2d367478aa1cc6cbb61417577954212d81530778",
+          "id": "prt_cb1dac41d001hGRuyKZ4LTBF4T",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "text",
+          "text": "The `2026-03-03` version is empty. Let me check the `2026-03-02` version — that likely has the actual plan content that should be the basis.",
+          "time": {
+            "start": 1772510431132,
+            "end": 1772510431132
+          },
+          "id": "prt_cb1dac41e001IzVMeuOpPUTMYW",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EivS4wjzuv134QCfSStiSQ",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/2026-03-02-cleanup-prompts.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/docs/plans/2026-03-02-cleanup-prompts.md</path>\n<type>file</type>\n<content>1: # Cleanup Prompts Implementation Plan\n2: \n3: **Goal:** Strip the user-provided slug from the stored plan description when the first line is used as the plan name, preventing the slug from appearing twice in generated prompts (once in `Plan <name>` and again at the start of `Goal: <description>`).\n4: \n5: **Architecture:** Add a `stripSlugPrefix` helper in `app/plan_title.go` that removes the first line and leading newlines from a multiline description when `firstLineIsViableSlug` is true. Call it in `app/app_input.go` at the point where `m.pendingPlanDesc` is assigned, so the stored description never contains the redundant slug. All downstream consumers (`buildPlanPrompt`, `buildSoloPrompt`) automatically benefit.\n6: \n7: **Tech Stack:** Go, bubbletea (existing app code), testify (tests)\n8: \n9: **Size:** Trivial (estimated ~20 min, 1 task, 1 wave)\n10: \n11: ---\n12: \n13: ## Wave 1: Fix slug duplication in plan descriptions\n14: \n15: ### Task 1: Strip slug prefix from description when first line is viable slug\n16: \n17: **Files:**\n18: - Modify: `app/plan_title.go`\n19: - Modify: `app/plan_title_test.go`\n20: - Modify: `app/app_input.go`\n21: - Modify: `app/app_plan_actions_test.go`\n22: \n23: **Step 1: write the failing test**\n24: \n25: Add tests in `app/plan_title_test.go` for a new `stripSlugPrefix` function:\n26: \n27: ```go\n28: func TestStripSlugPrefix_RemovesFirstLine(t *testing.T) {\n29: \tdesc := \"have-to-kill-twice\\nThe planner agent needs to be killed twice\"\n30: \tgot := stripSlugPrefix(desc)\n31: \tassert.Equal(t, \"The planner agent needs to be killed twice\", got)\n32: }\n33: \n34: func TestStripSlugPrefix_TrimsLeadingNewlines(t *testing.T) {\n35: \tdesc := \"fix-auth-bug\\n\\n\\nActual description starts here\"\n36: \tgot := stripSlugPrefix(desc)\n37: \tassert.Equal(t, \"Actual description starts here\", got)\n38: }\n39: \n40: func TestStripSlugPrefix_SingleLineReturnsAsIs(t *testing.T) {\n41: \tdesc := \"just a single line\"\n42: \tgot := stripSlugPrefix(desc)\n43: \tassert.Equal(t, \"just a single line\", got)\n44: }\n45: \n46: func TestStripSlugPrefix_EmptyReturnsEmpty(t *testing.T) {\n47: \tgot := stripSlugPrefix(\"\")\n48: \tassert.Equal(t, \"\", got)\n49: }\n50: ```\n51: \n52: Also add an integration-level test in `app/app_plan_actions_test.go`:\n53: \n54: ```go\n55: func TestBuildPlanPrompt_NoSlugDuplication(t *testing.T) {\n56: \t// When the plan name IS the slug and the description still contains it,\n57: \t// the prompt should not repeat the slug in the Goal field.\n58: \tprompt := buildPlanPrompt(\"have-to-kill-twice\", \"The planner agent needs to be killed twice\")\n59: \tassert.Contains(t, prompt, \"Plan have-to-kill-twice\")\n60: \tassert.Contains(t, prompt, \"Goal: The planner agent needs to be killed twice\")\n61: \tassert.NotContains(t, prompt, \"Goal: have-to-kill-twice\")\n62: }\n63: ```\n64: \n65: **Step 2: run test to verify it fails**\n66: \n67: ```bash\n68: go test ./app/... -run 'TestStripSlugPrefix|TestBuildPlanPrompt_NoSlugDuplication' -v\n69: ```\n70: \n71: expected: FAIL — `stripSlugPrefix` undefined\n72: \n73: **Step 3: write minimal implementation**\n74: \n75: In `app/plan_title.go`, add:\n76: \n77: ```go\n78: // stripSlugPrefix removes the first line (and any trailing newlines after it)\n79: // from a multiline description. Used when the first line was extracted as the\n80: // plan name slug, so the stored description doesn't redundantly repeat it.\n81: // Returns the input unchanged if it's single-line or empty.\n82: func stripSlugPrefix(description string) string {\n83: \ttext := strings.TrimSpace(description)\n84: \tidx := strings.IndexByte(text, '\\n')\n85: \tif idx < 0 {\n86: \t\treturn text\n87: \t}\n88: \treturn strings.TrimSpace(text[idx+1:])\n89: }\n90: ```\n91: \n92: In `app/app_input.go`, at line 772 inside the `if firstLineIsViableSlug(description)` block, change:\n93: \n94: ```go\n95: m.pendingPlanDesc = description\n96: ```\n97: \n98: to:\n99: \n100: ```go\n101: m.pendingPlanDesc = stripSlugPrefix(description)\n102: ```\n103: \n104: Move the assignment inside the `if firstLineIsViableSlug` branch so only slug-prefixed descriptions get stripped. The else path (AI derivation) keeps the full description since the AI-derived title won't match the first line.\n105: \n106: Specifically, restructure lines 771-784 to:\n107: \n108: ```go\n109: m.pendingPlanName = heuristicPlanTitle(description)\n110: m.textInputOverlay = nil\n111: \n112: if firstLineIsViableSlug(description) {\n113:     m.pendingPlanDesc = stripSlugPrefix(description)\n114:     // ... rest of topic picker setup\n115: } else {\n116:     m.pendingPlanDesc = description\n117:     // ... AI derivation path\n118: }\n119: ```\n120: \n121: **Step 4: run test to verify it passes**\n122: \n123: ```bash\n124: go test ./app/... -run 'TestStripSlugPrefix|TestBuildPlanPrompt_NoSlugDuplication' -v\n125: ```\n126: \n127: expected: PASS\n128: \n129: Also run the full test suite to verify no regressions:\n130: \n131: ```bash\n132: go test ./app/... ./config/... ./contracts/...\n133: ```\n134: \n135: **Step 5: commit**\n136: \n137: ```bash\n138: git add app/plan_title.go app/plan_title_test.go app/app_input.go app/app_plan_actions_test.go\n139: git commit -m \"fix: strip slug prefix from plan description to prevent duplication in prompts\"\n140: ```\n\n(End of file - total 140 lines)\n</content>",
+            "title": "docs/plans/2026-03-02-cleanup-prompts.md",
+            "metadata": {
+              "preview": "# Cleanup Prompts Implementation Plan\n\n**Goal:** Strip the user-provided slug from the stored plan description when the first line is used as the plan name, preventing the slug from appearing twice in generated prompts (once in `Plan <name>` and again at the start of `Goal: <description>`).\n\n**Architecture:** Add a `stripSlugPrefix` helper in `app/plan_title.go` that removes the first line and leading newlines from a multiline description when `firstLineIsViableSlug` is true. Call it in `app/app_input.go` at the point where `m.pendingPlanDesc` is assigned, so the stored description never contains the redundant slug. All downstream consumers (`buildPlanPrompt`, `buildSoloPrompt`) automatically benefit.\n\n**Tech Stack:** Go, bubbletea (existing app code), testify (tests)\n\n**Size:** Trivial (estimated ~20 min, 1 task, 1 wave)\n\n---\n\n## Wave 1: Fix slug duplication in plan descriptions\n\n### Task 1: Strip slug prefix from description when first line is viable slug\n\n**Files:**\n- Modify: `app/plan_title.go`\n- Modify: `app/plan_title_test.go`\n- Modify: `app/app_input.go`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772510432035,
+              "end": 1772510432038
+            }
+          },
+          "id": "prt_cb1dac79d001V0luCwqWbPZD5B",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01D8QvKJtkeME6j5b8R45oDx",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline --all -- 'docs/plans/2026-03-02-cleanup-prompts.md' 2>/dev/null | head -5",
+              "description": "Check git history for the 03-02 plan"
+            },
+            "output": "44e94cd Claude Code session updates\n",
+            "title": "Check git history for the 03-02 plan",
+            "metadata": {
+              "output": "44e94cd Claude Code session updates\n",
+              "exit": 0,
+              "description": "Check git history for the 03-02 plan",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510432974,
+              "end": 1772510432997
+            }
+          },
+          "id": "prt_cb1dacb2400194tu1gpU3uf6f2",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas plan list 2>/dev/null || echo \"kas plan list not available\"",
+              "description": "List plans in plan store"
+            },
+            "output": "done           2026-02-20-kq-init-design.md\ndone           2026-02-20-plan-orchestration-design.md\ndone           2026-02-20-plan-orchestration.md\ndone           2026-02-20-project-skills-distribution.md\ndone           2026-02-20-task-orchestration-design.md\ndone           2026-02-20-task-orchestration.md\ndone           2026-02-20-tool-discovery-design.md\ndone           2026-02-20-wizard-ux-design.md\ndone           2026-02-20-wizard-ux.md\ndone           2026-02-21-agent-customize-gate.md\ndone           2026-02-21-fix-naming-and-toast-wrap.md\ndone           2026-02-21-fix-plan-state-machine.md\ndone           2026-02-21-generate-opencode-jsonc-design.md\ndone           2026-02-21-generate-opencode-jsonc.md\ndone           2026-02-21-global-skill-sync.md\ndone           2026-02-21-init-wizard-refinements.md\ndone           2026-02-21-osc11-terminal-bg-design.md\ndone           2026-02-21-osc11-terminal-bg.md\ncancelled      2026-02-21-plan-centric-sidebar.md\ndone           2026-02-21-plan-instance-grouping.md\ndone           2026-02-21-plan-lifecycle-sessions.md\ndone           2026-02-21-rose-pine-moon-design.md\ndone           2026-02-21-rose-pine-moon.md\ndone           2026-02-21-sidebar-nav-showhide.md\ndone           2026-02-21-sidebar-toggle-design.md\ndone           2026-02-21-sidebar-toggle.md\ndone           2026-02-21-topics-as-collision-domains-design.md\ndone           2026-02-21-topics-collision-domains.md\ndone           2026-02-22-1a-tree-renderer.md                     kas/1a-tree-renderer-plan\ndone           2026-02-22-1b-tree-navigation.md                   kas/1b-tree-navigation-plan\ndone           2026-02-22-1c-highlight-boost-list.md              plan/1c-highlight-boost-list\ndone           2026-02-22-2-tree-mode-wiring.md                   plan/2-tree-mode-wiring\ndone           2026-02-22-async-metadata-tick.md\ndone           2026-02-22-center-col-v-align.md                   plan/center-col-v-align\ncancelled      2026-02-22-center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\ndone           2026-02-22-customize-superpowers.md                plan/customize-superpowers\ncancelled      2026-02-22-detect-permissions-needed.md            plan/detect-permissions-needed\ndone           2026-02-22-disable-cache-focused.md                plan/disable-cache-focused\ndone           2026-02-22-dupe-task-after-plan-change.md          plan/dupe-task-after-plan-change\ndone           2026-02-22-kq-check.md\ncancelled      2026-02-22-parallelize-superpowers.md              plan/parallelize-superpowers\ndone           2026-02-22-planner-exit-prompt.md\ndone           2026-02-22-remove-right-sidbar-right-to-focus-session.md plan/remove-right-sidbar-right-to-focus-session\ndone           2026-02-22-rename-to-kasmos.md                     plan/rename-to-kasmos\ndone           2026-02-22-shorten-cta.md                          plan/shorten-cta\ndone           2026-02-22-tab-focus-ring.md\ndone           2026-02-22-update-shortcut-hints.md                plan/update-shortcut-hints\ndone           2026-02-22-wave-orchestration.md                   plan/wave-orchestration\ndone           2026-02-23-plan-state-machine.md                   plan/plan-state-machine\ndone           2026-02-23-update-ascii-art.md                     plan/update-ascii-art\ncancelled      2026-02-24-add-episodic-memory.md                  plan/add-episodic-memory\ndone           2026-02-24-clickup-import.md                       plan/clickup-import\ndone           2026-02-24-live-preview-terminal.md                plan/live-preview-terminal\ncancelled      2026-02-24-orphan-session-recovery.md              plan/orphan-session-recovery\ncancelled      2026-02-24-parallel-fix-agents.md                  plan/parallel-fix-agents\ndone           2026-02-24-review-approval-gate.md                 plan/review-approval-gate\ndone           2026-02-24-sentry-integration.md                   plan/sentry-integration\ndone           2026-02-24-spring.md                               plan/spring\ndone           2026-02-24-wizard-tui-redesign.md                  plan/wizard-tui-redesign\ndone           2026-02-25-alt-v-not-working.md                    plan/alt-v-not-working\ndone           2026-02-25-contextual-status-bar.md                plan/contextual-status-bar\ndone           2026-02-25-enforce-cli-tools.md                    plan/enforce-cli-tools\ndone           2026-02-25-fix-planner-missing-waves.md            plan/fix-planner-missing-waves\ndone           2026-02-25-improve-cli-tools.md                    plan/improve-cli-tools\ndone           2026-02-25-new-plan-tab-cycle.md                   plan/new-plan-tab-cycle\ndone           2026-02-25-opencode-default-harness.md             plan/opencode-default-harness\ndone           2026-02-25-prompt-via-cli.md                       plan/prompt-via-cli\nready          2026-02-25-reintegrate-auto-accept.md              plan/reintegrate-auto-accept\ndone           2026-02-25-scroll-overflow.md                      plan/scroll-overflow\ndone           2026-02-25-show-plan-name-for-topics.md            plan/show-plan-name-for-topics\ndone           2026-02-25-simplify-plan-creation.md               plan/simplify-plan-creation\ndone           2026-02-25-solo-agent-mode.md                      plan/solo-agent-mode\ndone           2026-02-26-bubblezone-mouse.md                     plan/bubblezone\ndone           2026-02-26-cleanup-superpowers-cmds.md             plan/cleanup-superpowers-cmds\ndone           2026-02-26-details-tab.md                          plan/details-tab\ndone           2026-02-26-detect-allow-perms.md                   plan/detect-allow-perms\ndone           2026-02-26-enter-not-reachable.md                  plan/enter-not-reachable\ndone           2026-02-26-kas-verify-loop.md                      plan/kas-verify-loop\ncancelled      2026-02-26-new-plan-cli-command.md                 plan/new-cli-command\ncancelled      2026-02-26-no-plan-to-implement-prompt.md          plan/no-plan-to-implement-prompt\ndone           2026-02-26-redesign-instance-list.md\ndone           2026-02-26-release-v1-0-0.md                       plan/release-v1-0-0\nready          2026-02-26-sentry-analysis.md                      plan/sentry-analysis\ndone           2026-02-26-spawn-agent.md                          plan/spawn-agent\ndone           2026-02-26-stepthrough-worktrees.md                plan/stepthrough-worktrees\ndone           2026-02-26-tmux-session-browser.md                 plan/tmux-session-browser\ncancelled      2026-02-26-validate-recent-merges.md               plan/validate-recent-merges\ndone           2026-02-26-yes-keybind.md                          plan/yes-keybind\ndone           2026-02-27-ai-slugs-not-working.md                 plan/ai-slugs-not-working\ndone           2026-02-27-always-focus-sidebar.md                 plan/always-focus-sidebar\ndone           2026-02-27-audit-log.md                            plan/audit-log\ncancelled      2026-02-27-build-custom-skills-replaced.md         plan/build-custom-skills\ndone           2026-02-27-canceled-plans-delay-removal.md         plan/canceled-plans-delay-removal\ndone           2026-02-27-chat-about-this-menu-option-that-opens-up.md plan/chat-about-this-menu-option-that-opens-up\ndone           2026-02-27-chat-and-custodial-customizations.md    plan/chat-and-custodial-customizations\nready          2026-02-27-cleanup-tracked-state.md                plan/cleanup-tracked-state\ndone           2026-02-27-create-fix-agent-and-skill.md           plan/create-a-debugging-skill-and-agent-type-should\ndone           2026-02-27-create-kasmos-custodial-agent.md        plan/create-kasmos-custodial-agent\ncancelled      2026-02-27-ctrl-ud-pagination.md                   plan/ctrl-ud-pagination\ndone           2026-02-27-custodian-version-bump.md\ndone           2026-02-27-disable-cla-for-prs.md                  plan/disable-cla-for-prs\ndone           2026-02-27-fix-wave-header-generation.md           plan/fix-wave-header-generation\ncancelled      2026-02-27-implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\ncancelled      2026-02-27-improve-planner-to-implementation.md    plan/improve-planner-to-implementation\ndone           2026-02-27-kasmos-custom-skills.md                 plan/kasmos-custom-skills\ndone           2026-02-27-kasmos-native-skills-design.md\ndone           2026-02-27-kasmos-native-skills.md\ndone           2026-02-27-new-plan-issues.md                      plan/new-plan-issues\ndone           2026-02-27-plan-review.md                          plan/plan-review\ndone           2026-02-27-quit-confirmation-dialog.md             plan/quit-confirmation-dialog\ndone           2026-02-27-release-1-0-0-failures.md               plan/release-1-0-0-failures\ndone           2026-02-27-release-v1-1.md                         plan/release-v1-1\ndone           2026-02-27-reliable-planner-completion.md          plan/reliable-planner-completion\ndone           2026-02-27-rename-plan-menu.md                     plan/rename-plan-menu\nready          2026-02-27-review-use-kas-verify.md                plan/review-use-kas-verify\ndone           2026-02-27-simplify-new-plan.md                    plan/simplify-new-plan\ndone           2026-02-27-tmux-session-summary.md                 plan/tmux-session-summary\ndone           2026-02-28-auto-advance-waves.md                   plan/auto-advance-waves\ndone           2026-02-28-improve-plan-storage-system.md          plan/improve-plan-storage-system\ndone           2026-02-28-review-didnt-autostart.md               plan/review-didnt-autostart\ndone           2026-02-28-set-status-context-menu.md              plan/set-status-context-menu\ndone           2026-02-28-skip-plan-slug-ai-generation.md         plan/skip-plan-slug-ai-generation\nready          2026-02-28-web-ui.md                               plan/web-ui\ndone           2026-03-02-automatic-session-naming.md             plan/automatic-session-naming\ndone           2026-03-02-update-clickup-with-progress.md         plan/update-clickup-with-progress\nplanning       2026-03-03-cleanup-prompts.md                      plan/cleanup-prompts\nimplementing   2026-03-03-have-to-kill-twice.md                   plan/have-to-kill-twice\nready          2026-03-03-improved-info-tab.md                    plan/improved-info-tab\ncancelled      2026-03-03-kas-cli-plans.md                        plan/kas-cli-plans\nplanning       2026-03-03-plan-status-cli-bugs.md                 plan/plan-status-cli-bugs\nready          2026-03-03-preview-plan-broken.md                  plan/preview-plan-broken\ndone           2026-03-03-restart-agent.md                        plan/restart-agent\n",
+            "title": "List plans in plan store",
+            "metadata": {
+              "output": "done           2026-02-20-kq-init-design.md\ndone           2026-02-20-plan-orchestration-design.md\ndone           2026-02-20-plan-orchestration.md\ndone           2026-02-20-project-skills-distribution.md\ndone           2026-02-20-task-orchestration-design.md\ndone           2026-02-20-task-orchestration.md\ndone           2026-02-20-tool-discovery-design.md\ndone           2026-02-20-wizard-ux-design.md\ndone           2026-02-20-wizard-ux.md\ndone           2026-02-21-agent-customize-gate.md\ndone           2026-02-21-fix-naming-and-toast-wrap.md\ndone           2026-02-21-fix-plan-state-machine.md\ndone           2026-02-21-generate-opencode-jsonc-design.md\ndone           2026-02-21-generate-opencode-jsonc.md\ndone           2026-02-21-global-skill-sync.md\ndone           2026-02-21-init-wizard-refinements.md\ndone           2026-02-21-osc11-terminal-bg-design.md\ndone           2026-02-21-osc11-terminal-bg.md\ncancelled      2026-02-21-plan-centric-sidebar.md\ndone           2026-02-21-plan-instance-grouping.md\ndone           2026-02-21-plan-lifecycle-sessions.md\ndone           2026-02-21-rose-pine-moon-design.md\ndone           2026-02-21-rose-pine-moon.md\ndone           2026-02-21-sidebar-nav-showhide.md\ndone           2026-02-21-sidebar-toggle-design.md\ndone           2026-02-21-sidebar-toggle.md\ndone           2026-02-21-topics-as-collision-domains-design.md\ndone           2026-02-21-topics-collision-domains.md\ndone           2026-02-22-1a-tree-renderer.md                     kas/1a-tree-renderer-plan\ndone           2026-02-22-1b-tree-navigation.md                   kas/1b-tree-navigation-plan\ndone           2026-02-22-1c-highlight-boost-list.md              plan/1c-highlight-boost-list\ndone           2026-02-22-2-tree-mode-wiring.md                   plan/2-tree-mode-wiring\ndone           2026-02-22-async-metadata-tick.md\ndone           2026-02-22-center-col-v-align.md                   plan/center-col-v-align\ncancelled      2026-02-22-center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\ndone           2026-02-22-customize-superpowers.md                plan/customize-superpowers\ncancelled      2026-02-22-detect-permissions-needed.md            plan/detect-permissions-needed\ndone           2026-02-22-disable-cache-focused.md                plan/disable-cache-focused\ndone           2026-02-22-dupe-task-after-plan-change.md          plan/dupe-task-after-plan-change\ndone           2026-02-22-kq-check.md\ncancelled      2026-02-22-parallelize-superpowers.md              plan/parallelize-superpowers\ndone           2026-02-22-planner-exit-prompt.md\ndone           2026-02-22-remove-right-sidbar-right-to-focus-session.md plan/remove-right-sidbar-right-to-focus-session\ndone           2026-02-22-rename-to-kasmos.md                     plan/rename-to-kasmos\ndone           2026-02-22-shorten-cta.md                          plan/shorten-cta\ndone           2026-02-22-tab-focus-ring.md\ndone           2026-02-22-update-shortcut-hints.md                plan/update-shortcut-hints\ndone           2026-02-22-wave-orchestration.md                   plan/wave-orchestration\ndone           2026-02-23-plan-state-machine.md                   plan/plan-state-machine\ndone           2026-02-23-update-ascii-art.md                     plan/update-ascii-art\ncancelled      2026-02-24-add-episodic-memory.md                  plan/add-episodic-memory\ndone           2026-02-24-clickup-import.md                       plan/clickup-import\ndone           2026-02-24-live-preview-terminal.md                plan/live-preview-terminal\ncancelled      2026-02-24-orphan-session-recovery.md              plan/orphan-session-recovery\ncancelled      2026-02-24-parallel-fix-agents.md                  plan/parallel-fix-agents\ndone           2026-02-24-review-approval-gate.md                 plan/review-approval-gate\ndone           2026-02-24-sentry-integration.md                   plan/sentry-integration\ndone           2026-02-24-spring.md                               plan/spring\ndone           2026-02-24-wizard-tui-redesign.md                  plan/wizard-tui-redesign\ndone           2026-02-25-alt-v-not-working.md                    plan/alt-v-not-working\ndone           2026-02-25-contextual-status-bar.md                plan/contextual-status-bar\ndone           2026-02-25-enforce-cli-tools.md                    plan/enforce-cli-tools\ndone           2026-02-25-fix-planner-missing-waves.md            plan/fix-planner-missing-waves\ndone           2026-02-25-improve-cli-tools.md                    plan/improve-cli-tools\ndone           2026-02-25-new-plan-tab-cycle.md                   plan/new-plan-tab-cycle\ndone           2026-02-25-opencode-default-harness.md             plan/opencode-default-harness\ndone           2026-02-25-prompt-via-cli.md                       plan/prompt-via-cli\nready          2026-02-25-reintegrate-auto-accept.md              plan/reintegrate-auto-accept\ndone           2026-02-25-scroll-overflow.md                      plan/scroll-overflow\ndone           2026-02-25-show-plan-name-for-topics.md            plan/show-plan-name-for-topics\ndone           2026-02-25-simplify-plan-creation.md               plan/simplify-plan-creation\ndone           2026-02-25-solo-agent-mode.md                      plan/solo-agent-mode\ndone           2026-02-26-bubblezone-mouse.md                     plan/bubblezone\ndone           2026-02-26-cleanup-superpowers-cmds.md             plan/cleanup-superpowers-cmds\ndone           2026-02-26-details-tab.md                          plan/details-tab\ndone           2026-02-26-detect-allow-perms.md                   plan/detect-allow-perms\ndone           2026-02-26-enter-not-reachable.md                  plan/enter-not-reachable\ndone           2026-02-26-kas-verify-loop.md                      plan/kas-verify-loop\ncancelled      2026-02-26-new-plan-cli-command.md                 plan/new-cli-command\ncancelled      2026-02-26-no-plan-to-implement-prompt.md          plan/no-plan-to-implement-prompt\ndone           2026-02-26-redesign-instance-list.md\ndone           2026-02-26-release-v1-0-0.md                       plan/release-v1-0-0\nready          2026-02-26-sentry-analysis.md                      plan/sentry-analysis\ndone           2026-02-26-spawn-agent.md                          plan/spawn-agent\ndone           2026-02-26-stepthrough-worktrees.md                plan/stepthrough-worktrees\ndone           2026-02-26-tmux-session-browser.md                 plan/tmux-session-browser\ncancelled      2026-02-26-validate-recent-merges.md               plan/validate-recent-merges\ndone           2026-02-26-yes-keybind.md                          plan/yes-keybind\ndone           2026-02-27-ai-slugs-not-working.md                 plan/ai-slugs-not-working\ndone           2026-02-27-always-focus-sidebar.md                 plan/always-focus-sidebar\ndone           2026-02-27-audit-log.md                            plan/audit-log\ncancelled      2026-02-27-build-custom-skills-replaced.md         plan/build-custom-skills\ndone           2026-02-27-canceled-plans-delay-removal.md         plan/canceled-plans-delay-removal\ndone           2026-02-27-chat-about-this-menu-option-that-opens-up.md plan/chat-about-this-menu-option-that-opens-up\ndone           2026-02-27-chat-and-custodial-customizations.md    plan/chat-and-custodial-customizations\nready          2026-02-27-cleanup-tracked-state.md                plan/cleanup-tracked-state\ndone           2026-02-27-create-fix-agent-and-skill.md           plan/create-a-debugging-skill-and-agent-type-should\ndone           2026-02-27-create-kasmos-custodial-agent.md        plan/create-kasmos-custodial-agent\ncancelled      2026-02-27-ctrl-ud-pagination.md                   plan/ctrl-ud-pagination\ndone           2026-02-27-custodian-version-bump.md\ndone           2026-02-27-disable-cla-for-prs.md                  plan/disable-cla-for-prs\ndone           2026-02-27-fix-wave-header-generation.md           plan/fix-wave-header-generation\ncancelled      2026-02-27-implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\ncancelled      2026-02-27-improve-planner-to-implementation.md    plan/improve-planner-to-implementation\ndone           2026-02-27-kasmos-custom-skills.md                 plan/kasmos-custom-skills\ndone           2026-02-27-kasmos-native-skills-design.md\ndone           2026-02-27-kasmos-native-skills.md\ndone           2026-02-27-new-plan-issues.md                      plan/new-plan-issues\ndone           2026-02-27-plan-review.md                          plan/plan-review\ndone           2026-02-27-quit-confirmation-dialog.md             plan/quit-confirmation-dialog\ndone           2026-02-27-release-1-0-0-failures.md               plan/release-1-0-0-failures\ndone           2026-02-27-release-v1-1.md                         plan/release-v1-1\ndone           2026-02-27-reliable-planner-completion.md          plan/reliable-planner-completion\ndone           2026-02-27-rename-plan-menu.md                     plan/rename-plan-menu\nready          2026-02-27-review-use-kas-verify.md                plan/review-use-kas-verify\ndone           2026-02-27-simplify-new-plan.md                    plan/simplify-new-plan\ndone           2026-02-27-tmux-session-summary.md                 plan/tmux-session-summary\ndone           2026-02-28-auto-advance-waves.md                   plan/auto-advance-waves\ndone           2026-02-28-improve-plan-storage-system.md          plan/improve-plan-storage-system\ndone           2026-02-28-review-didnt-autostart.md               plan/review-didnt-autostart\ndone           2026-02-28-set-status-context-menu.md              plan/set-status-context-menu\ndone           2026-02-28-skip-plan-slug-ai-generation.md         plan/skip-plan-slug-ai-generation\nready          2026-02-28-web-ui.md                               plan/web-ui\ndone           2026-03-02-automatic-session-naming.md             plan/automatic-session-naming\ndone           2026-03-02-update-clickup-with-progress.md         plan/update-clickup-with-progress\nplanning       2026-03-03-cleanup-prompts.md                      plan/cleanup-prompts\nimplementing   2026-03-03-have-to-kill-twice.md                   plan/have-to-kill-twice\nready          2026-03-03-improved-info-tab.md                    plan/improved-info-tab\ncancelled      2026-03-03-kas-cli-plans.md                        plan/kas-cli-plans\nplanning       2026-03-03-plan-status-cli-bugs.md                 plan/plan-status-cli-bugs\nready          2026-03-03-preview-plan-broken.md                  plan/preview-plan-broken\ndone           2026-03-03-restart-agent.md                        plan/restart-agent\n",
+              "exit": 0,
+              "description": "List plans in plan store",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772510433437,
+              "end": 1772510433450
+            }
+          },
+          "id": "prt_cb1daced0001bOo3FWqkkdf0EP",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7b4f2218845c6502c1f385f1c5d235575f4cb41f",
+          "cost": 0,
+          "tokens": {
+            "total": 49180,
+            "input": 1,
+            "output": 298,
+            "reasoning": 0,
+            "cache": {
+              "read": 48256,
+              "write": 625
+            }
+          },
+          "id": "prt_cb1dad0ab0016601cJS6Qj0KhH",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        },
+        {
+          "type": "patch",
+          "hash": "2d367478aa1cc6cbb61417577954212d81530778",
+          "files": [
+            "/home/kas/dev/kasmos/.entire/logs/entire.log"
+          ],
+          "id": "prt_cb1dad0b5001WElqAnlS37ejuc",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dab8ad00105E81P3S3D94NM"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772510433464
+        },
+        "parentID": "msg_cb1da8e7a001lrm5aiRsVpCON3",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "id": "msg_cb1dad0b7001sl9WLw74mTL8X7",
+        "sessionID": "ses_34e257196ffekIWRAnk67E6pfp"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7b4f2218845c6502c1f385f1c5d235575f4cb41f",
+          "id": "prt_cb1dadd76001PmshhzkBJa0vcE",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dad0b7001sl9WLw74mTL8X7"
+        },
+        {
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1772510436726
+          },
+          "id": "prt_cb1dadd76002qXCnGOb7nGPGjw",
+          "sessionID": "ses_34e257196ffekIWRAnk67E6pfp",
+          "messageID": "msg_cb1dad0b7001sl9WLw74mTL8X7"
+        }
+      ]
+    }
+  ]
+}
