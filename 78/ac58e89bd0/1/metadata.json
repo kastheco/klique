@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "78ac58e89bd0",
+  "session_id": "ses_34e2ad203ffe3M88Uzc8Ea6STT",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T03:55:37.162708804Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-03-03-have-to-kill-twice.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "d9a40a5d069e",
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 66527,
+    "cache_read_tokens": 623400,
+    "output_tokens": 2375,
+    "api_call_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T03:55:37.046127621Z",
+    "agent_lines": 0,
+    "human_added": 155,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 155,
+    "agent_percentage": 0
+  }
+}
