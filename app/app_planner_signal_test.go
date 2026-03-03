@@ -94,7 +94,7 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 	assert.Equal(t, stateConfirm, updated.state,
 		"PlannerFinished signal must set stateConfirm")
 	assert.True(t, updated.overlays.IsActive(),
-		"PlannerFinished signal must set confirmationOverlay")
+		"PlannerFinished signal must show confirmation overlay")
 	assert.Equal(t, planFile, updated.pendingPlannerTaskFile,
 		"pendingPlannerTaskFile must be set to the plan file from the signal")
 }
@@ -237,7 +237,7 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"tmux death without sentinel must NOT show a confirm dialog")
 	assert.False(t, updated.overlays.IsActive(),
-		"tmux death without sentinel must NOT set confirmationOverlay")
+		"tmux death without sentinel must NOT show confirmation overlay")
 
 	// Plan must remain in StatusPlanning (not advanced).
 	entry, ok := updated.taskState.Entry(planFile)
