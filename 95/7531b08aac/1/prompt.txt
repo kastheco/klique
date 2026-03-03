@@ -1,0 +1,13 @@
+I just saw the coder agent use the skill executing plans. that should be from superpowers, I believe, and that was supposed to be fully removed. can you figure out where that's coming from? I'm guessing it might be my global configuration that I need to drop it.
+
+---
+
+yes
+
+---
+
+remove every superpowers skill
+
+---
+
+all except for brainstorming
