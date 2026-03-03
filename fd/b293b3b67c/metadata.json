@@ -5,7 +5,10 @@
   "branch": "plan/rename-plan-to-task",
   "checkpoints_count": 0,
   "files_touched": [
-    "config/taskstore/sqlite.go"
+    "config/taskstore/http.go",
+    "config/taskstore/server.go",
+    "config/taskstore/sqlite.go",
+    "docs/plans/rename-plan-to-task.md"
   ],
   "sessions": [
     {
@@ -14,6 +17,13 @@
       "context": "/fd/b293b3b67c/0/context.md",
       "content_hash": "/fd/b293b3b67c/0/content_hash.txt",
       "prompt": "/fd/b293b3b67c/0/prompt.txt"
+    },
+    {
+      "metadata": "/fd/b293b3b67c/1/metadata.json",
+      "transcript": "/fd/b293b3b67c/1/full.jsonl",
+      "context": "/fd/b293b3b67c/1/context.md",
+      "content_hash": "/fd/b293b3b67c/1/content_hash.txt",
+      "prompt": "/fd/b293b3b67c/1/prompt.txt"
     }
   ],
   "token_usage": {
