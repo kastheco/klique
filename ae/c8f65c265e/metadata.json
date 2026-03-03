@@ -2,8 +2,7 @@
   "cli_version": "0.4.8",
   "checkpoint_id": "aec8f65c265e",
   "strategy": "manual-commit",
-  "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     ".claude/settings.json",
     ".entire/.gitignore",
@@ -69,13 +68,20 @@
       "context": "/ae/c8f65c265e/7/context.md",
       "content_hash": "/ae/c8f65c265e/7/content_hash.txt",
       "prompt": "/ae/c8f65c265e/7/prompt.txt"
+    },
+    {
+      "metadata": "/ae/c8f65c265e/8/metadata.json",
+      "transcript": "/ae/c8f65c265e/8/full.jsonl",
+      "context": "/ae/c8f65c265e/8/context.md",
+      "content_hash": "/ae/c8f65c265e/8/content_hash.txt",
+      "prompt": "/ae/c8f65c265e/8/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 93,
-    "cache_creation_tokens": 270852,
-    "cache_read_tokens": 6209388,
-    "output_tokens": 18117,
-    "api_call_count": 89
+    "input_tokens": 122,
+    "cache_creation_tokens": 355561,
+    "cache_read_tokens": 7965270,
+    "output_tokens": 29184,
+    "api_call_count": 116
   }
 }
