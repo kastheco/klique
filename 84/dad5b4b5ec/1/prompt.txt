@@ -1,0 +1,110 @@
+Implement Task 6: Update CLI command names and user-facing strings
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rename the "plan" lifecycle entity to "task" throughout the codebase to eliminate the terminology collision between "plan" (the lifecycle entity) and "planning" (the FSM status). Instances belong to tasks which optionally belong to topics — "a task awaiting planning" is clearer than "a plan awaiting planning."
+**Architecture:** Four-phase mechanical rename: (1) rename Go package directories and update import paths, (2) rename exported types and struct fields, (3) rename CLI commands, user-facing strings, and internal variables, (4) update HTTP API paths, SQL schema, and JSON serialization with backwards compatibility. Each phase uses `sd`/`comby` for batch replacements. The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.
+**Tech Stack:** Go 1.24, cobra CLI, SQLite, HTTP API, `sd` for batch string replacement, `mv` for file/directory renames
+
+## Wave 3 of 3
+
+## Parallel Execution
+
+You are Task 6 of 2 in Wave 3. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/task.go` — change cobra `Use: "plan"` to `Use: "task"`, update help text
+- Modify: `app/app_actions.go` — update context menu labels and toast messages
+- Modify: `app/app_state.go` — update toast messages and audit log messages
+- Modify: `app/app.go` — update toast messages and confirmation dialogs
+- Modify: `app/app_input.go` — update overlay titles
+
+**Step 1: write the failing test**
+
+No new tests — string updates only.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./cmd/... ./app/... -count=1 2>&1 | tail -10
+```
+
+expected: PASS (baseline)
+
+**Step 3: update CLI and user-facing strings**
+
+```bash
+# --- cmd/task.go cobra command names ---
+sd 'Use:   "plan"' 'Use:   "task"' cmd/task.go
+sd 'Short: "manage plan lifecycle' 'Short: "manage task lifecycle' cmd/task.go
+sd '"list all plans with status"' '"list all tasks with status"' cmd/task.go
+sd '"register an untracked plan file' '"register an untracked task file' cmd/task.go
+sd '"force-override a plan' '"force-override a task' cmd/task.go
+sd '"apply an FSM event to a plan"' '"apply an FSM event to a task"' cmd/task.go
+sd '"trigger implementation of a specific wave"' '"trigger implementation of a specific wave"' cmd/task.go  # fine as-is
+sd 'registered: %s' 'registered: %s' cmd/task.go  # fine as-is
+sd 'implementation triggered: %s' 'implementation triggered: %s' cmd/task.go  # fine as-is
+sd '"backfill ClickUp task IDs from plan content' '"backfill ClickUp task IDs from task content' cmd/task.go
+
+# --- app/ context menu labels (lowercase per project convention) ---
+sd '"start plan"' '"start planning"' app/app_actions.go
+sd '"view plan"' '"view task"' app/app_actions.go
+sd '"rename plan"' '"rename task"' app/app_actions.go
+sd '"cancel plan"' '"cancel task"' app/app_actions.go
+sd '"start over plan"' '"start over task"' app/app_actions.go
+sd '"chat about this"' '"chat about this"' app/app_actions.go  # fine as-is
+sd '"set topic"' '"set topic"' app/app_actions.go  # fine as-is
+sd '"merge to main"' '"merge to main"' app/app_actions.go  # fine as-is
+sd '"inspect plan"' '"inspect task"' app/app_actions.go
+
+# --- app/ toast messages and confirmation dialogs ---
+sd "plan '%s' is ready" "task '%s' is ready" app/app.go
+sd "cancel plan '%s'?" "cancel task '%s'?" app/app_actions.go
+sd "start over plan '%s'" "start over task '%s'" app/app_actions.go
+sd 'plan cancelled by user' 'task cancelled by user' app/app_actions.go
+sd 'plan merged to main' 'task merged to main' app/app_actions.go
+sd 'plan needs ## Wave headers' 'task needs ## Wave headers' app/app_actions.go
+sd 'plan not found' 'task not found' app/app_actions.go app/app_state.go
+sd 'no plan state loaded' 'no task state loaded' app/app_actions.go app/app_state.go
+sd 'missing plan state' 'missing task state' app/app_actions.go
+
+# --- app/ audit log messages ---
+sd 'plan merged to main:' 'task merged to main:' app/app_actions.go
+sd 'plan cancelled by user:' 'task cancelled by user:' app/app_actions.go
+
+# --- overlay titles ---
+sd '"rename instance"' '"rename instance"' app/app_actions.go  # fine
+sd '"ask about this plan"' '"ask about this task"' app/app_actions.go
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./...
+go test ./cmd/... ./app/... -count=1 2>&1 | tail -10
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "refactor: update CLI command from kas plan to kas task and user-facing strings"
+```
