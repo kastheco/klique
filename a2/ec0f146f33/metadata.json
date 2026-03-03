@@ -3,7 +3,7 @@
   "checkpoint_id": "a2ec0f146f33",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "ui/overlay/contextMenu.go"
   ],
@@ -14,13 +14,20 @@
       "context": "",
       "content_hash": "/a2/ec0f146f33/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/a2/ec0f146f33/1/metadata.json",
+      "transcript": "/a2/ec0f146f33/1/full.jsonl",
+      "context": "/a2/ec0f146f33/1/context.md",
+      "content_hash": "/a2/ec0f146f33/1/content_hash.txt",
+      "prompt": "/a2/ec0f146f33/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 0
+    "input_tokens": 23,
+    "cache_creation_tokens": 89760,
+    "cache_read_tokens": 1374633,
+    "output_tokens": 5521,
+    "api_call_count": 21
   }
 }
