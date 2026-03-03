@@ -30,4 +30,8 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 			t.Fatalf("planner prompt missing required policy text: %q", needle)
 		}
 	}
+
+	if strings.Contains(text, "YYYY-MM-DD") {
+		t.Fatalf("planner prompt still references date prefix convention YYYY-MM-DD")
+	}
 }

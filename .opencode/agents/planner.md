@@ -34,11 +34,11 @@ Registration steps (do both, never skip step 2):
 2. Register the plan — check `$KASMOS_MANAGED` to determine method:
 
 **If `KASMOS_MANAGED=1` (running inside kasmos):** Create a sentinel file:
-`.kasmos/signals/planner-finished-<date>-<name>.md` (empty file — just `touch` it).
+`.kasmos/signals/planner-finished-<name>.md` (empty file — just `touch` it).
 kasmos will detect this and register the plan. **Do not modify plan state directly.**
 
 **If `KASMOS_MANAGED` is unset (raw terminal):** Use the CLI to register:
-`kas plan register <date>-<name>.md`
+`kas plan register <name>.md`
 
 **Never modify plan statuses directly.** Only register NEW plans. Status transitions (`ready` →
 `implementing` → `reviewing` → `done`) are managed by kasmos or the relevant workflow skill.
