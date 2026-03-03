@@ -5,6 +5,7 @@
   "branch": "plan/01a-rewrite-tmux-layer",
   "checkpoints_count": 1,
   "files_touched": [
+    "session/tmux/tmux_session.go",
     "session/tmux/tmux_session_test.go"
   ],
   "sessions": [
@@ -14,13 +15,20 @@
       "context": "/37/6649c463d1/0/context.md",
       "content_hash": "/37/6649c463d1/0/content_hash.txt",
       "prompt": "/37/6649c463d1/0/prompt.txt"
+    },
+    {
+      "metadata": "/37/6649c463d1/1/metadata.json",
+      "transcript": "/37/6649c463d1/1/full.jsonl",
+      "context": "/37/6649c463d1/1/context.md",
+      "content_hash": "/37/6649c463d1/1/content_hash.txt",
+      "prompt": "/37/6649c463d1/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 10,
-    "cache_creation_tokens": 100581,
-    "cache_read_tokens": 278517,
-    "output_tokens": 33464,
-    "api_call_count": 7
+    "input_tokens": 38,
+    "cache_creation_tokens": 220661,
+    "cache_read_tokens": 2752454,
+    "output_tokens": 71315,
+    "api_call_count": 35
   }
 }

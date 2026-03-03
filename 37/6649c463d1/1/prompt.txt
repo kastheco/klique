@@ -1,0 +1,115 @@
+Implement Task 2: Implement TmuxSession Core — Constructor, Name Sanitization, Setters
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `session/tmux/tmux_session.go`
+- Modify: `session/tmux/tmux_session_test.go` (new file, replaces relevant parts of old tmux_test.go)
+
+**Step 1: write the failing test**
+
+```go
+// tmux_session_test.go
+func TestToKasTmuxName(t *testing.T) {
+    assert.Equal(t, "kas_asdf", toKasTmuxName("asdf"))
+    assert.Equal(t, "kas_asdf__asdf", toKasTmuxName("a sd f . . asdf"))
+}
+
+func TestNewTmuxSession_SanitizesName(t *testing.T) {
+    s := NewTmuxSession("my.session", "claude", false)
+    assert.Equal(t, "kas_my_session", s.GetSanitizedName())
+}
+
+func TestSetAgentType(t *testing.T) {
+    s := NewTmuxSession("test", "opencode", false)
+    s.SetAgentType("  planner  ")
+    // agentType should be trimmed — verified indirectly via Start command construction
+}
+
+func TestSetTaskEnv(t *testing.T) {
+    s := NewTmuxSession("test", "claude", false)
+    s.SetTaskEnv(3, 2, 4)
+    // Verified via Start command construction in integration tests
+}
+
+func TestNewReset_PreservesDeps(t *testing.T) {
+    pty := NewMockPtyFactory(t)
+    exec := cmd_test.NewMockExecutor()
+    s := NewTmuxSessionWithDeps("orig", "claude", false, pty, exec)
+    reset := s.NewReset("new", "opencode", true)
+    assert.Equal(t, "kas_new", reset.GetSanitizedName())
+}
+
+func TestNewTmuxSessionFromExisting(t *testing.T) {
+    s := NewTmuxSessionFromExisting("kas_orphan", "claude", false)
+    assert.Equal(t, "kas_orphan", s.GetSanitizedName())
+}
+
+func TestToKasTmuxNamePublic(t *testing.T) {
+    assert.Equal(t, "kas_foo", ToKasTmuxNamePublic("foo"))
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestToKasTmuxName|TestNewTmuxSession|TestSetAgentType|TestSetTaskEnv|TestNewReset|TestNewTmuxSessionFromExisting|TestToKasTmuxNamePublic" -v
+```
+
+expected: FAIL — `TmuxSession` struct doesn't exist yet
+
+**Step 3: write minimal implementation**
+
+Create `session/tmux/tmux_session.go` with:
+- `TmuxSession` struct implementing `Session` interface (stub methods for now, real implementations in later tasks)
+- All constructors: `NewTmuxSession`, `NewTmuxSessionWithDeps`, `newTmuxSession`, `NewTmuxSessionFromExisting`
+- `NewReset` method
+- All setters: `SetAgentType`, `SetInitialPrompt`, `SetTaskEnv`, `SetSessionTitle`, `SetTitleFunc`
+- `toKasTmuxName` and `ToKasTmuxNamePublic`
+- `GetSanitizedName`, `GetPTY` accessors
+- `ProgressFunc` field and `reportProgress` helper
+- `isClaudeProgram(program)` and `isOpenCodeProgram(program)` helpers
+- `cleanupSessionsRe` regex for kas_/klique_/hivemind_ session matching
+
+The struct fields: `sanitizedName`, `program`, `ptyFactory`, `cmdExec`, `skipPermissions`, `agentType`, `initialPrompt`, `taskNumber`, `waveNumber`, `peerCount`, `ProgressFunc`, `promptFile`, `sessionTitle`, `titleFunc`, `ptmx`, `monitor`, `attachCh`, `ctx`, `cancel`, `wg`, `outerMouseWasEnabled`, `adapter` (new — `ProgramAdapter`).
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -run "TestToKasTmuxName|TestNewTmuxSession|TestSetAgentType|TestSetTaskEnv|TestNewReset|TestNewTmuxSessionFromExisting|TestToKasTmuxNamePublic" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/tmux_session.go session/tmux/tmux_session_test.go
+git commit -m "feat(clean-room): implement TmuxSession constructors, setters, and name sanitization"
+```
