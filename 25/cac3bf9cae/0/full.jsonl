@@ -7,13 +7,13 @@
     "title": "Rewrite session/instance.go struct and serialization",
     "version": "1.2.15",
     "summary": {
-      "additions": 0,
-      "deletions": 0,
-      "files": 0
+      "additions": 171,
+      "deletions": 163,
+      "files": 2
     },
     "time": {
       "created": 1772558872741,
-      "updated": 1772558905017
+      "updated": 1772558990166
     }
   },
   "messages": [
@@ -24,7 +24,24 @@
           "created": 1772558872762
         },
         "summary": {
-          "diffs": []
+          "diffs": [
+            {
+              "file": "session/instance.go",
+              "before": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\ntype Status int\n\nconst (\n\t// Running is the status when the instance is running and claude is working.\n\tRunning Status = iota\n\t// Ready is if the claude instance is ready to be interacted with (waiting for user input).\n\tReady\n\t// Loading is if the instance is loading (if we are starting it up or something).\n\tLoading\n\t// Paused is if the instance is paused (worktree removed but branch preserved).\n\tPaused\n)\n\n// AgentType constants identify the role of an agent session within a plan lifecycle.\nconst (\n\tAgentTypePlanner  = \"planner\"\n\tAgentTypeCoder    = \"coder\"\n\tAgentTypeReviewer = \"reviewer\"\n\tAgentTypeFixer    = \"fixer\"\n)\n\n// Instance is a running instance of claude code.\ntype Instance struct {\n\t// Title is the title of the instance.\n\tTitle string\n\t// Path is the path to the workspace.\n\tPath string\n\t// Branch is the branch of the instance.\n\tBranch string\n\t// Status is the status of the instance.\n\tStatus Status\n\t// Program is the program to run in the instance.\n\tProgram string\n\t// Height is the height of the instance.\n\tHeight int\n\t// Width is the width of the instance.\n\tWidth int\n\t// CreatedAt is the time the instance was created.\n\tCreatedAt time.Time\n\t// UpdatedAt is the time the instance was last updated.\n\tUpdatedAt time.Time\n\t// AutoYes is true if the instance should automatically press enter when prompted.\n\tAutoYes bool\n\t// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.\n\tSkipPermissions bool\n\t// PlanFile is the plan filename this instance is implementing (empty = no plan).\n\tTaskFile string\n\t// Topic is the topic/group this instance belongs to (from plan-state).\n\tTopic string\n\t// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.\n\tAgentType string\n\t// TaskNumber is the task number within a plan (1-indexed). 0 = not a wave task.\n\tTaskNumber int\n\t// WaveNumber is the wave number this task belongs to (1-indexed). 0 = not a wave task.\n\tWaveNumber int\n\t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n\tPeerCount int\n\t// IsReviewer is true when this instance is a reviewer session for a plan.\n\t// Deprecated: use AgentType == AgentTypeReviewer instead.\n\tIsReviewer bool\n\t// ImplementationComplete is true when the coder finished and the plan transitioned to review.\n\t// The instance is auto-paused and rendered with a dim/completed visual style.\n\tImplementationComplete bool\n\t// SoloAgent is true when this instance was spawned via \"start solo agent\" — no\n\t// automatic lifecycle transitions (push prompt, review spawning) apply.\n\tSoloAgent bool\n\t// Exited is true when the instance's tmux session has died. Used by the UI\n\t// to render dead instances with greyed-out strikethrough styling.\n\tExited bool\n\t// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.\n\tQueuedPrompt string\n\n\t// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).\n\tsharedWorktree bool\n\t// LoadingStage tracks the current startup progress. Exported so the UI can read it.\n\tLoadingStage int\n\t// LoadingTotal is the total number of startup stages.\n\tLoadingTotal int\n\t// LoadingMessage describes the current loading step.\n\tLoadingMessage string\n\n\t// Notified is true when the instance finished (Running→Ready) and the user\n\t// hasn't selected it yet. Cleared when the user selects this instance.\n\tNotified bool\n\n\t// LastActiveAt is set whenever the instance is marked as Running.\n\tLastActiveAt time.Time\n\n\t// PromptDetected is true when the instance's program is waiting for user input.\n\t// Reset to false when the instance resumes running. Used by the sidebar to\n\t// persistently show a running indicator without flickering.\n\tPromptDetected bool\n\n\t// AwaitingWork is set when a QueuedPrompt is delivered to the agent, and\n\t// cleared when the agent transitions to Running. The wave orchestrator uses\n\t// this to avoid treating the initial idle prompt as task completion.\n\tAwaitingWork bool\n\n\t// ReviewCycle is the 1-indexed review/fix cycle counter for this instance.\n\t// 0 means not a review cycle instance. Incremented on each ReviewChangesRequested transition.\n\tReviewCycle int\n\n\t// HasWorked is set to true when the agent produces at least one content\n\t// update (md.Updated) after receiving its task prompt. The wave orchestrator\n\t// requires this before treating PromptDetected as task completion — prevents\n\t// permission prompts or early returns from prematurely completing a wave.\n\tHasWorked bool\n\n\t// CPUPercent is the current CPU usage of the instance's process.\n\tCPUPercent float64\n\t// MemMB is the current memory usage in megabytes.\n\tMemMB float64\n\n\t// LastActivity is the most recently detected agent activity (ephemeral, not persisted).\n\tLastActivity *Activity\n\n\t// CachedContent is the last tmux capture-pane output, set in app.Update from metadata results.\n\t// Used by the preview tick to avoid redundant subprocess calls.\n\tCachedContent string\n\t// CachedContentSet tracks whether CachedContent has been initialized.\n\t// This distinguishes \"no cache yet\" from a valid empty pane capture.\n\tCachedContentSet bool\n\n\t// DiffStats stores the current git diff statistics\n\tdiffStats *git.DiffStats\n\n\t// The below fields are initialized upon calling Start().\n\n\tstarted bool\n\t// tmuxSession is the tmux session for the instance.\n\ttmuxSession *tmux.TmuxSession\n\t// gitWorktree is the git worktree for the instance.\n\tgitWorktree *git.GitWorktree\n}\n\n// ToInstanceData converts an Instance to its serializable form\nfunc (i *Instance) ToInstanceData() InstanceData {\n\tdata := InstanceData{\n\t\tTitle:                  i.Title,\n\t\tPath:                   i.Path,\n\t\tBranch:                 i.Branch,\n\t\tStatus:                 i.Status,\n\t\tHeight:                 i.Height,\n\t\tWidth:                  i.Width,\n\t\tCreatedAt:              i.CreatedAt,\n\t\tUpdatedAt:              time.Now(),\n\t\tProgram:                i.Program,\n\t\tAutoYes:                i.AutoYes,\n\t\tSkipPermissions:        i.SkipPermissions,\n\t\tTaskFile:               i.TaskFile,\n\t\tAgentType:              i.AgentType,\n\t\tTaskNumber:             i.TaskNumber,\n\t\tWaveNumber:             i.WaveNumber,\n\t\tPeerCount:              i.PeerCount,\n\t\tIsReviewer:             i.IsReviewer,\n\t\tImplementationComplete: i.ImplementationComplete,\n\t\tSoloAgent:              i.SoloAgent,\n\t\tQueuedPrompt:           i.QueuedPrompt,\n\t\tReviewCycle:            i.ReviewCycle,\n\t}\n\n\t// Only include worktree data if gitWorktree is initialized\n\tif i.gitWorktree != nil {\n\t\tdata.Worktree = GitWorktreeData{\n\t\t\tRepoPath:      i.gitWorktree.GetRepoPath(),\n\t\t\tWorktreePath:  i.gitWorktree.GetWorktreePath(),\n\t\t\tSessionName:   i.Title,\n\t\t\tBranchName:    i.gitWorktree.GetBranchName(),\n\t\t\tBaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),\n\t\t}\n\t}\n\n\t// Only include diff stats if they exist\n\tif i.diffStats != nil {\n\t\tdata.DiffStats = DiffStatsData{\n\t\t\tAdded:   i.diffStats.Added,\n\t\t\tRemoved: i.diffStats.Removed,\n\t\t\tContent: i.diffStats.Content,\n\t\t}\n\t}\n\n\treturn data\n}\n\n// FromInstanceData creates a new Instance from serialized data\nfunc FromInstanceData(data InstanceData) (*Instance, error) {\n\tinstance := &Instance{\n\t\tTitle:                  data.Title,\n\t\tPath:                   data.Path,\n\t\tBranch:                 data.Branch,\n\t\tStatus:                 data.Status,\n\t\tHeight:                 data.Height,\n\t\tWidth:                  data.Width,\n\t\tCreatedAt:              data.CreatedAt,\n\t\tUpdatedAt:              data.UpdatedAt,\n\t\tProgram:                data.Program,\n\t\tSkipPermissions:        data.SkipPermissions,\n\t\tTaskFile:               data.TaskFile,\n\t\tAgentType:              data.AgentType,\n\t\tTaskNumber:             data.TaskNumber,\n\t\tWaveNumber:             data.WaveNumber,\n\t\tPeerCount:              data.PeerCount,\n\t\tIsReviewer:             data.IsReviewer,\n\t\tImplementationComplete: data.ImplementationComplete,\n\t\tSoloAgent:              data.SoloAgent,\n\t\tQueuedPrompt:           data.QueuedPrompt,\n\t\tReviewCycle:            data.ReviewCycle,\n\t\tgitWorktree: git.NewGitWorktreeFromStorage(\n\t\t\tdata.Worktree.RepoPath,\n\t\t\tdata.Worktree.WorktreePath,\n\t\t\tdata.Worktree.SessionName,\n\t\t\tdata.Worktree.BranchName,\n\t\t\tdata.Worktree.BaseCommitSHA,\n\t\t),\n\t\tdiffStats: &git.DiffStats{\n\t\t\tAdded:   data.DiffStats.Added,\n\t\t\tRemoved: data.DiffStats.Removed,\n\t\t\tContent: data.DiffStats.Content,\n\t\t},\n\t}\n\n\tif instance.Paused() {\n\t\tinstance.started = true\n\t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t} else {\n\t\t// Non-destructive restore: check if the tmux session still exists\n\t\t// before attempting to attach. Start(false) calls Kill() on failure\n\t\t// which would destroy a live tmux session — use a gentler path instead.\n\t\tts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t\tts.SetAgentType(instance.AgentType)\n\t\tinstance.tmuxSession = ts\n\n\t\tif !ts.DoesSessionExist() {\n\t\t\t// Tmux session is gone — mark as exited so the UI can render it\n\t\t\t// as dead and allow cleanup, rather than silently dropping it.\n\t\t\tinstance.started = true\n\t\t\tinstance.Exited = true\n\t\t\tinstance.SetStatus(Ready)\n\t\t} else {\n\t\t\t// Session exists — do the full restore via Start(false) which\n\t\t\t// attaches the PTY. The tmuxSession is already set so Start()\n\t\t\t// will reuse it.\n\t\t\tif err := instance.Start(false); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t}\n\t}\n\n\treturn instance, nil\n}\n\n// Options for creating a new instance\ntype InstanceOptions struct {\n\t// Title is the title of the instance.\n\tTitle string\n\t// Path is the path to the workspace.\n\tPath string\n\t// Program is the program to run in the instance (e.g. \"claude\", \"aider --model ollama_chat/gemma3:1b\")\n\tProgram string\n\t// If AutoYes is true, then\n\tAutoYes bool\n\t// SkipPermissions enables --dangerously-skip-permissions for Claude instances.\n\tSkipPermissions bool\n\t// PlanFile binds this instance to a plan from plan-state.json.\n\tTaskFile string\n\t// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.\n\tAgentType string\n\t// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).\n\tTaskNumber int\n\t// WaveNumber is the wave this task belongs to (1-indexed, 0 = not a wave task).\n\tWaveNumber int\n\t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n\tPeerCount int\n\t// ReviewCycle is the 1-indexed review cycle number (0 = not a review cycle instance).\n\tReviewCycle int\n}\n\nfunc NewInstance(opts InstanceOptions) (*Instance, error) {\n\tt := time.Now()\n\n\t// Convert path to absolute\n\tabsPath, err := filepath.Abs(opts.Path)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to get absolute path: %w\", err)\n\t}\n\n\treturn &Instance{\n\t\tTitle:           opts.Title,\n\t\tStatus:          Ready,\n\t\tPath:            absPath,\n\t\tProgram:         opts.Program,\n\t\tHeight:          0,\n\t\tWidth:           0,\n\t\tCreatedAt:       t,\n\t\tUpdatedAt:       t,\n\t\tAutoYes:         opts.AutoYes,\n\t\tSkipPermissions: opts.SkipPermissions,\n\t\tTaskFile:        opts.TaskFile,\n\t\tAgentType:       opts.AgentType,\n\t\tTaskNumber:      opts.TaskNumber,\n\t\tWaveNumber:      opts.WaveNumber,\n\t\tPeerCount:       opts.PeerCount,\n\t\tReviewCycle:     opts.ReviewCycle,\n\t}, nil\n}\n\nfunc (i *Instance) RepoName() (string, error) {\n\tif !i.started {\n\t\treturn \"\", fmt.Errorf(\"cannot get repo name for instance that has not been started\")\n\t}\n\tif i.gitWorktree == nil {\n\t\t// Planner instances run on the main branch without a worktree —\n\t\t// derive the repo name from the instance path instead.\n\t\treturn filepath.Base(i.Path), nil\n\t}\n\treturn i.gitWorktree.GetRepoName(), nil\n}\n\n// GetRepoPath returns the repo path for this instance, or empty string if not started.\nfunc (i *Instance) GetRepoPath() string {\n\tif !i.started || i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetRepoPath()\n}\n\n// GetWorktreePath returns the worktree path for this instance, or empty string if unavailable.\nfunc (i *Instance) GetWorktreePath() string {\n\tif i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetWorktreePath()\n}\n\nfunc (i *Instance) SetStatus(status Status) {\n\tif i.Status == Running && status == Ready {\n\t\ti.Notified = true\n\t\t// Wave task instances are managed by the orchestrator — suppress\n\t\t// per-task desktop notifications; the user gets a toast when the\n\t\t// wave completes instead.\n\t\tif i.TaskNumber == 0 {\n\t\t\tSendNotification(\"kas\", fmt.Sprintf(\"'%s' has finished\", i.Title))\n\t\t}\n\t}\n\tif status == Running || status == Loading {\n\t\ti.LastActiveAt = time.Now()\n\t\ti.PromptDetected = false\n\t\ti.Notified = false\n\t}\n\tif status == Running {\n\t\ti.AwaitingWork = false\n\t}\n\ti.Status = status\n}\n\nfunc (i *Instance) setLoadingProgress(stage int, message string) {\n\ti.LoadingStage = stage\n\ti.LoadingMessage = message\n}\n\nfunc (i *Instance) Started() bool {\n\treturn i.started\n}\n\n// SetTitle sets the title of the instance. Returns an error if the instance has started.\n// We cant change the title once it's been used for a tmux session etc.\nfunc (i *Instance) SetTitle(title string) error {\n\tif i.started {\n\t\treturn fmt.Errorf(\"cannot change title of a started instance\")\n\t}\n\ti.Title = title\n\treturn nil\n}\n\nfunc (i *Instance) Paused() bool {\n\treturn i.Status == Paused\n}\n\n// TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.\nfunc (i *Instance) TmuxAlive() bool {\n\tif i.tmuxSession == nil {\n\t\treturn false\n\t}\n\treturn i.tmuxSession.DoesSessionExist()\n}\n",
+              "after": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\n// Status represents the current state of an instance.\ntype Status int\n\nconst (\n\t// Running indicates the instance is active and the agent is working.\n\tRunning Status = iota\n\t// Ready indicates the instance is idle and waiting for user input.\n\tReady\n\t// Loading indicates the instance is starting up or initialising.\n\tLoading\n\t// Paused indicates the instance is paused — the worktree has been removed but the branch is preserved.\n\tPaused\n)\n\n// AgentType constants identify the role of an agent session within a plan lifecycle.\nconst (\n\tAgentTypePlanner  = \"planner\"\n\tAgentTypeCoder    = \"coder\"\n\tAgentTypeReviewer = \"reviewer\"\n\tAgentTypeFixer    = \"fixer\"\n)\n\n// Instance represents a managed agent session with its associated tmux and git state.\ntype Instance struct {\n\t// Title is the display name and tmux session identifier for this instance.\n\tTitle string\n\t// Path is the workspace directory for the instance.\n\tPath string\n\t// Branch is the git branch associated with this instance.\n\tBranch string\n\t// Status is the current lifecycle state of the instance.\n\tStatus Status\n\t// Program is the agent command to execute within the tmux session.\n\tProgram string\n\t// Height is the terminal height in rows.\n\tHeight int\n\t// Width is the terminal width in columns.\n\tWidth int\n\t// CreatedAt records when the instance was first created.\n\tCreatedAt time.Time\n\t// UpdatedAt records the most recent update timestamp.\n\tUpdatedAt time.Time\n\t// AutoYes causes the instance to auto-confirm prompts.\n\tAutoYes bool\n\t// SkipPermissions enables the --dangerously-skip-permissions flag for Claude.\n\tSkipPermissions bool\n\t// TaskFile is the plan file this instance is implementing (empty for ad-hoc sessions).\n\tTaskFile string\n\t// Topic is the plan-state group this instance belongs to.\n\tTopic string\n\t// AgentType identifies the role within a plan lifecycle: planner, coder, reviewer, fixer, or empty.\n\tAgentType string\n\t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n\tTaskNumber int\n\t// WaveNumber is the 1-indexed wave number this task belongs to (0 = not a wave task).\n\tWaveNumber int\n\t// PeerCount is the number of concurrent sibling tasks in the same wave (0 = not a wave task).\n\tPeerCount int\n\t// IsReviewer indicates a reviewer session.\n\t// Deprecated: check AgentType == AgentTypeReviewer instead.\n\tIsReviewer bool\n\t// ImplementationComplete is set when the coder finishes and the plan transitions to review.\n\tImplementationComplete bool\n\t// SoloAgent is true for instances launched as standalone agents outside the orchestration lifecycle.\n\tSoloAgent bool\n\t// Exited is true when the instance's tmux session has terminated unexpectedly.\n\tExited bool\n\t// QueuedPrompt is delivered to the session on first transition to Ready. Cleared after delivery.\n\tQueuedPrompt string\n\n\t// sharedWorktree indicates the instance shares a topic worktree and should not clean it up.\n\tsharedWorktree bool\n\t// LoadingStage tracks the current startup progress step for the UI.\n\tLoadingStage int\n\t// LoadingTotal is the total count of startup stages.\n\tLoadingTotal int\n\t// LoadingMessage describes the current startup step shown in the UI.\n\tLoadingMessage string\n\n\t// Notified is true after the instance completes (Running→Ready) until the user selects it.\n\tNotified bool\n\n\t// LastActiveAt records the most recent time the instance entered Running or Loading state.\n\tLastActiveAt time.Time\n\n\t// PromptDetected is true when the agent program is waiting for user input.\n\t// Persists across status transitions to prevent UI flicker.\n\tPromptDetected bool\n\n\t// AwaitingWork is set when a QueuedPrompt is dispatched and cleared when the agent goes Running.\n\t// The wave orchestrator uses this to avoid treating early idle prompts as task completion.\n\tAwaitingWork bool\n\n\t// ReviewCycle is the 1-indexed count of review/fix cycles for this instance (0 = not a cycle instance).\n\tReviewCycle int\n\n\t// HasWorked is true once the agent produces at least one content update after receiving its task.\n\t// Prevents permission prompts or early returns from prematurely completing a wave.\n\tHasWorked bool\n\n\t// CPUPercent is the last sampled CPU utilisation of the agent process.\n\tCPUPercent float64\n\t// MemMB is the last sampled memory usage of the agent process in megabytes.\n\tMemMB float64\n\n\t// LastActivity is the most recently detected agent activity event (ephemeral, not persisted).\n\tLastActivity *Activity\n\n\t// CachedContent is the last tmux pane capture, kept to avoid redundant subprocess calls.\n\tCachedContent string\n\t// CachedContentSet is true once CachedContent has been populated for the first time.\n\tCachedContentSet bool\n\n\t// diffStats holds the current git diff statistics for this instance.\n\tdiffStats *git.DiffStats\n\n\t// started is true once Start() has been called successfully.\n\tstarted bool\n\t// tmuxSession manages the underlying tmux session for this instance.\n\ttmuxSession *tmux.TmuxSession\n\t// gitWorktree manages the git worktree associated with this instance.\n\tgitWorktree *git.GitWorktree\n}\n\n// ToInstanceData converts an Instance to its JSON-serialisable form for persistence.\n// UpdatedAt is always refreshed to the current time.\nfunc (i *Instance) ToInstanceData() InstanceData {\n\tdata := InstanceData{\n\t\tTitle:                  i.Title,\n\t\tPath:                   i.Path,\n\t\tBranch:                 i.Branch,\n\t\tStatus:                 i.Status,\n\t\tHeight:                 i.Height,\n\t\tWidth:                  i.Width,\n\t\tCreatedAt:              i.CreatedAt,\n\t\tUpdatedAt:              time.Now(),\n\t\tProgram:                i.Program,\n\t\tAutoYes:                i.AutoYes,\n\t\tSkipPermissions:        i.SkipPermissions,\n\t\tTaskFile:               i.TaskFile,\n\t\tAgentType:              i.AgentType,\n\t\tTaskNumber:             i.TaskNumber,\n\t\tWaveNumber:             i.WaveNumber,\n\t\tPeerCount:              i.PeerCount,\n\t\tIsReviewer:             i.IsReviewer,\n\t\tImplementationComplete: i.ImplementationComplete,\n\t\tSoloAgent:              i.SoloAgent,\n\t\tQueuedPrompt:           i.QueuedPrompt,\n\t\tReviewCycle:            i.ReviewCycle,\n\t}\n\n\tif i.gitWorktree != nil {\n\t\tdata.Worktree = GitWorktreeData{\n\t\t\tRepoPath:      i.gitWorktree.GetRepoPath(),\n\t\t\tWorktreePath:  i.gitWorktree.GetWorktreePath(),\n\t\t\tSessionName:   i.Title,\n\t\t\tBranchName:    i.gitWorktree.GetBranchName(),\n\t\t\tBaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),\n\t\t}\n\t}\n\n\tif i.diffStats != nil {\n\t\tdata.DiffStats = DiffStatsData{\n\t\t\tAdded:   i.diffStats.Added,\n\t\t\tRemoved: i.diffStats.Removed,\n\t\t\tContent: i.diffStats.Content,\n\t\t}\n\t}\n\n\treturn data\n}\n\n// FromInstanceData reconstructs an Instance from its serialised form.\n// For paused instances the tmux session is prepared but not started.\n// For live instances the tmux session is reattached; dead sessions are marked Exited.\nfunc FromInstanceData(data InstanceData) (*Instance, error) {\n\tinstance := &Instance{\n\t\tTitle:                  data.Title,\n\t\tPath:                   data.Path,\n\t\tBranch:                 data.Branch,\n\t\tStatus:                 data.Status,\n\t\tHeight:                 data.Height,\n\t\tWidth:                  data.Width,\n\t\tCreatedAt:              data.CreatedAt,\n\t\tUpdatedAt:              data.UpdatedAt,\n\t\tProgram:                data.Program,\n\t\tSkipPermissions:        data.SkipPermissions,\n\t\tTaskFile:               data.TaskFile,\n\t\tAgentType:              data.AgentType,\n\t\tTaskNumber:             data.TaskNumber,\n\t\tWaveNumber:             data.WaveNumber,\n\t\tPeerCount:              data.PeerCount,\n\t\tIsReviewer:             data.IsReviewer,\n\t\tImplementationComplete: data.ImplementationComplete,\n\t\tSoloAgent:              data.SoloAgent,\n\t\tQueuedPrompt:           data.QueuedPrompt,\n\t\tReviewCycle:            data.ReviewCycle,\n\t\tgitWorktree: git.NewGitWorktreeFromStorage(\n\t\t\tdata.Worktree.RepoPath,\n\t\t\tdata.Worktree.WorktreePath,\n\t\t\tdata.Worktree.SessionName,\n\t\t\tdata.Worktree.BranchName,\n\t\t\tdata.Worktree.BaseCommitSHA,\n\t\t),\n\t\tdiffStats: &git.DiffStats{\n\t\t\tAdded:   data.DiffStats.Added,\n\t\t\tRemoved: data.DiffStats.Removed,\n\t\t\tContent: data.DiffStats.Content,\n\t\t},\n\t}\n\n\tif instance.Paused() {\n\t\t// Paused instances keep the session struct ready but do not reattach.\n\t\tinstance.started = true\n\t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t\treturn instance, nil\n\t}\n\n\t// Build the tmux session handle and check liveness before attempting a full restore.\n\tts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\tts.SetAgentType(instance.AgentType)\n\tinstance.tmuxSession = ts\n\n\tif !ts.DoesSessionExist() {\n\t\t// The tmux session is gone — mark as exited so the UI can display it as dead.\n\t\tinstance.started = true\n\t\tinstance.Exited = true\n\t\tinstance.SetStatus(Ready)\n\t\treturn instance, nil\n\t}\n\n\t// Session is alive — restore the full attachment via Start(false).\n\tif err := instance.Start(false); err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn instance, nil\n}\n\n// InstanceOptions holds the configuration values for creating a new Instance.\ntype InstanceOptions struct {\n\t// Title is the display name and tmux session identifier.\n\tTitle string\n\t// Path is the workspace directory.\n\tPath string\n\t// Program is the agent command to run (e.g. \"claude\", \"opencode\").\n\tProgram string\n\t// AutoYes enables automatic confirmation of agent prompts.\n\tAutoYes bool\n\t// SkipPermissions enables --dangerously-skip-permissions for Claude.\n\tSkipPermissions bool\n\t// TaskFile binds this instance to a plan from plan-state.\n\tTaskFile string\n\t// AgentType is the role of this instance within a plan: planner, coder, reviewer, fixer, or empty.\n\tAgentType string\n\t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n\tTaskNumber int\n\t// WaveNumber is the 1-indexed wave this task belongs to (0 = not a wave task).\n\tWaveNumber int\n\t// PeerCount is the number of concurrent sibling tasks in the same wave.\n\tPeerCount int\n\t// ReviewCycle is the 1-indexed review/fix cycle number (0 = not a cycle instance).\n\tReviewCycle int\n}\n\n// NewInstance constructs a new unstarted Instance from the given options.\n// The workspace path is resolved to an absolute path before storage.\nfunc NewInstance(opts InstanceOptions) (*Instance, error) {\n\tnow := time.Now()\n\n\tabsPath, err := filepath.Abs(opts.Path)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to get absolute path: %w\", err)\n\t}\n\n\treturn &Instance{\n\t\tTitle:           opts.Title,\n\t\tStatus:          Ready,\n\t\tPath:            absPath,\n\t\tProgram:         opts.Program,\n\t\tHeight:          0,\n\t\tWidth:           0,\n\t\tCreatedAt:       now,\n\t\tUpdatedAt:       now,\n\t\tAutoYes:         opts.AutoYes,\n\t\tSkipPermissions: opts.SkipPermissions,\n\t\tTaskFile:        opts.TaskFile,\n\t\tAgentType:       opts.AgentType,\n\t\tTaskNumber:      opts.TaskNumber,\n\t\tWaveNumber:      opts.WaveNumber,\n\t\tPeerCount:       opts.PeerCount,\n\t\tReviewCycle:     opts.ReviewCycle,\n\t}, nil\n}\n\n// RepoName returns the repository name for this instance.\n// For instances without a git worktree (e.g. planner sessions on the main branch),\n// the repo name is derived from the workspace path.\nfunc (i *Instance) RepoName() (string, error) {\n\tif !i.started {\n\t\treturn \"\", fmt.Errorf(\"cannot get repo name for instance that has not been started\")\n\t}\n\tif i.gitWorktree == nil {\n\t\treturn filepath.Base(i.Path), nil\n\t}\n\treturn i.gitWorktree.GetRepoName(), nil\n}\n\n// GetRepoPath returns the repository root path, or empty string if the instance is not started\n// or has no git worktree.\nfunc (i *Instance) GetRepoPath() string {\n\tif !i.started || i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetRepoPath()\n}\n\n// GetWorktreePath returns the worktree directory path, or empty string if unavailable.\nfunc (i *Instance) GetWorktreePath() string {\n\tif i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetWorktreePath()\n}\n\n// SetStatus transitions the instance to the given status and triggers associated side-effects:\n// desktop notification on Running→Ready, timestamp refresh on Running/Loading, and\n// AwaitingWork clear on Running.\nfunc (i *Instance) SetStatus(status Status) {\n\tif i.Status == Running && status == Ready {\n\t\ti.Notified = true\n\t\t// Wave task instances are managed collectively by the orchestrator.\n\t\t// Only send per-instance notifications for standalone (non-wave) sessions.\n\t\tif i.TaskNumber == 0 {\n\t\t\tSendNotification(\"kas\", fmt.Sprintf(\"'%s' has finished\", i.Title))\n\t\t}\n\t}\n\n\tif status == Running || status == Loading {\n\t\ti.LastActiveAt = time.Now()\n\t\ti.PromptDetected = false\n\t\ti.Notified = false\n\t}\n\n\tif status == Running {\n\t\ti.AwaitingWork = false\n\t}\n\n\ti.Status = status\n}\n\n// setLoadingProgress updates the loading stage and message shown during startup.\nfunc (i *Instance) setLoadingProgress(stage int, message string) {\n\ti.LoadingStage = stage\n\ti.LoadingMessage = message\n}\n\n// Started reports whether the instance has been started via Start().\nfunc (i *Instance) Started() bool {\n\treturn i.started\n}\n\n// SetTitle updates the instance title. Returns an error if the instance has already started,\n// since the title is used as the tmux session name and cannot be changed after creation.\nfunc (i *Instance) SetTitle(title string) error {\n\tif i.started {\n\t\treturn fmt.Errorf(\"cannot change title of a started instance\")\n\t}\n\ti.Title = title\n\treturn nil\n}\n\n// Paused reports whether the instance is in the Paused state.\nfunc (i *Instance) Paused() bool {\n\treturn i.Status == Paused\n}\n\n// TmuxAlive reports whether the underlying tmux session is still running.\nfunc (i *Instance) TmuxAlive() bool {\n\tif i.tmuxSession == nil {\n\t\treturn false\n\t}\n\treturn i.tmuxSession.DoesSessionExist()\n}\n",
+              "additions": 113,
+              "deletions": 114,
+              "status": "modified"
+            },
+            {
+              "file": "session/instance_session.go",
+              "before": "package session\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"strconv\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\nfunc (i *Instance) Preview() (string, error) {\n\tif !i.started || i.Status == Paused {\n\t\treturn \"\", nil\n\t}\n\treturn i.tmuxSession.CapturePaneContent()\n}\n\nfunc (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {\n\tif !i.started {\n\t\treturn false, false\n\t}\n\treturn i.tmuxSession.HasUpdated()\n}\n\n// NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected\n// to this instance's tmux PTY for zero-latency interactive focus mode.\nfunc (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn nil, fmt.Errorf(\"instance not started\")\n\t}\n\tsessionName := i.tmuxSession.GetSanitizedName()\n\treturn NewEmbeddedTerminal(sessionName, cols, rows)\n}\n\n// TapEnter sends an enter key press to the tmux session if AutoYes is enabled.\nfunc (i *Instance) TapEnter() {\n\tif !i.started || !i.AutoYes {\n\t\treturn\n\t}\n\tif err := i.tmuxSession.TapEnter(); err != nil {\n\t\tlog.ErrorLog.Printf(\"error tapping enter: %v\", err)\n\t}\n}\n\nfunc (i *Instance) Attach() (chan struct{}, error) {\n\tif !i.started {\n\t\treturn nil, fmt.Errorf(\"cannot attach instance that has not been started\")\n\t}\n\treturn i.tmuxSession.Attach()\n}\n\nfunc (i *Instance) SetPreviewSize(width, height int) error {\n\tif !i.started || i.Status == Paused {\n\t\treturn fmt.Errorf(\"cannot set preview size for instance that has not been started or \" +\n\t\t\t\"is paused\")\n\t}\n\treturn i.tmuxSession.SetDetachedSize(width, height)\n}\n\n// GetGitWorktree returns the git worktree for the instance\nfunc (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {\n\tif !i.started {\n\t\treturn nil, fmt.Errorf(\"cannot get git worktree for instance that has not been started\")\n\t}\n\treturn i.gitWorktree, nil\n}\n\n// SendPrompt sends a prompt to the tmux session\nfunc (i *Instance) SendPrompt(prompt string) error {\n\tif !i.started {\n\t\treturn fmt.Errorf(\"instance not started\")\n\t}\n\tif i.tmuxSession == nil {\n\t\treturn fmt.Errorf(\"tmux session not initialized\")\n\t}\n\tif err := i.tmuxSession.SendKeys(prompt); err != nil {\n\t\treturn fmt.Errorf(\"error sending keys to tmux session: %w\", err)\n\t}\n\n\t// Brief pause to prevent carriage return from being interpreted as newline\n\ttime.Sleep(100 * time.Millisecond)\n\tif err := i.tmuxSession.TapEnter(); err != nil {\n\t\treturn fmt.Errorf(\"error tapping enter: %w\", err)\n\t}\n\n\treturn nil\n}\n\n// PreviewFullHistory captures the entire tmux pane output including full scrollback history\nfunc (i *Instance) PreviewFullHistory() (string, error) {\n\tif !i.started || i.Status == Paused {\n\t\treturn \"\", nil\n\t}\n\treturn i.tmuxSession.CapturePaneContentWithOptions(\"-\", \"-\")\n}\n\n// SetTmuxSession sets the tmux session for testing purposes\nfunc (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {\n\ti.tmuxSession = session\n}\n\n// MarkStartedForTest sets the started flag without spawning a real tmux session.\n// Use only in tests that need to simulate a running instance.\nfunc (i *Instance) MarkStartedForTest() {\n\ti.started = true\n}\n\n// SendKeys sends keys to the tmux session\nfunc (i *Instance) SendKeys(keys string) error {\n\tif !i.started || i.Status == Paused {\n\t\treturn fmt.Errorf(\"cannot send keys to instance that has not been started or is paused\")\n\t}\n\treturn i.tmuxSession.SendKeys(keys)\n}\n\n// InstanceMetadata holds the results of polling a single instance.\n// Collected in a goroutine — all fields are values, no pointers into the model.\ntype InstanceMetadata struct {\n\tContent            string // raw tmux capture-pane output\n\tContentCaptured    bool\n\tUpdated            bool\n\tHasPrompt          bool\n\tDiffStats          *git.DiffStats\n\tCPUPercent         float64\n\tMemMB              float64\n\tResourceUsageValid bool\n\tTmuxAlive          bool              // tmux has-session result (for reviewer completion check)\n\tPermissionPrompt   *PermissionPrompt // non-nil when opencode shows a permission dialog\n}\n\n// CollectMetadata gathers all per-tick data for this instance via subprocess calls.\n// Safe to call from a goroutine — reads only, no model mutations.\n// Combines HasUpdated + UpdateDiffStats + UpdateResourceUsage data collection\n// into a single method, eliminating redundant capture-pane calls.\nfunc (i *Instance) CollectMetadata() InstanceMetadata {\n\tvar m InstanceMetadata\n\n\tif !i.started || i.Status == Paused {\n\t\treturn m\n\t}\n\n\t// Single capture-pane call — reused for hash check, activity parsing, and preview.\n\tm.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()\n\n\t// Git diff stats\n\tif i.gitWorktree != nil {\n\t\tstats := i.gitWorktree.Diff()\n\t\tif stats.Error != nil {\n\t\t\tif !strings.Contains(stats.Error.Error(), \"base commit SHA not set\") &&\n\t\t\t\t!strings.Contains(stats.Error.Error(), \"worktree path gone\") {\n\t\t\t\tlog.WarningLog.Printf(\"diff stats error: %v\", stats.Error)\n\t\t\t}\n\t\t\t// On error, return nil stats (caller keeps previous)\n\t\t} else {\n\t\t\tm.DiffStats = stats\n\t\t}\n\t}\n\n\t// Permission prompt detection\n\tif m.ContentCaptured && m.Content != \"\" {\n\t\tm.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)\n\t}\n\n\t// Resource usage (pgrep + ps)\n\tm.CPUPercent, m.MemMB, m.ResourceUsageValid = i.collectResourceUsage()\n\n\t// Session liveness (tmux has-session) — used by reviewer completion check.\n\tm.TmuxAlive = i.TmuxAlive()\n\n\treturn m\n}\n\n// SetDiffStats sets the diff stats from externally collected data.\nfunc (i *Instance) SetDiffStats(stats *git.DiffStats) {\n\ti.diffStats = stats\n}\n\n// UpdateDiffStats updates the git diff statistics for this instance\nfunc (i *Instance) UpdateDiffStats() error {\n\tif !i.started {\n\t\ti.diffStats = nil\n\t\treturn nil\n\t}\n\n\tif i.Status == Paused {\n\t\t// Keep the previous diff stats if the instance is paused\n\t\treturn nil\n\t}\n\n\tstats := i.gitWorktree.Diff()\n\tif stats.Error != nil {\n\t\tif strings.Contains(stats.Error.Error(), \"base commit SHA not set\") {\n\t\t\t// Worktree is not fully set up yet, not an error\n\t\t\ti.diffStats = nil\n\t\t\treturn nil\n\t\t}\n\t\tif strings.Contains(stats.Error.Error(), \"worktree path gone\") {\n\t\t\t// Worktree was cleaned up (pause, merge, external deletion).\n\t\t\t// Clear stats silently — don't spam logs every tick.\n\t\t\ti.diffStats = nil\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to get diff stats: %w\", stats.Error)\n\t}\n\n\ti.diffStats = stats\n\treturn nil\n}\n\n// collectResourceUsage queries CPU and memory usage via subprocess calls.\n// Returns (cpu%, memMB, ok). Safe to call from a goroutine.\nfunc (i *Instance) collectResourceUsage() (float64, float64, bool) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn 0, 0, false\n\t}\n\n\tpid, err := i.tmuxSession.GetPanePID()\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\n\ttargetPid := strconv.Itoa(pid)\n\tchildCmd := exec.Command(\"pgrep\", \"-P\", strconv.Itoa(pid))\n\tif childOutput, err := childCmd.Output(); err == nil {\n\t\tif children := strings.Fields(strings.TrimSpace(string(childOutput))); len(children) > 0 {\n\t\t\ttargetPid = children[0]\n\t\t}\n\t}\n\n\tpsCmd := exec.Command(\"ps\", \"-o\", \"%cpu=,rss=\", \"-p\", targetPid)\n\toutput, err := psCmd.Output()\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\n\tfields := strings.Fields(strings.TrimSpace(string(output)))\n\tif len(fields) < 2 {\n\t\treturn 0, 0, false\n\t}\n\n\tcpu, err := strconv.ParseFloat(fields[0], 64)\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\trssKB, err := strconv.ParseFloat(fields[1], 64)\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\treturn cpu, rssKB / 1024, true\n}\n\n// UpdateResourceUsage queries the process tree for CPU and memory usage.\n// Kept for backward compat but now delegates to collectResourceUsage.\nfunc (i *Instance) UpdateResourceUsage() {\n\tif cpu, mem, ok := i.collectResourceUsage(); ok {\n\t\ti.CPUPercent, i.MemMB = cpu, mem\n\t}\n}\n\n// GetDiffStats returns the current git diff statistics\nfunc (i *Instance) GetDiffStats() *git.DiffStats {\n\treturn i.diffStats\n}\n\n// SendPermissionResponse sends the key sequence for the given permission choice to the agent pane.\nfunc (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn\n\t}\n\tif err := i.tmuxSession.SendPermissionResponse(choice); err != nil {\n\t\tlog.ErrorLog.Printf(\"error sending permission response: %v\", err)\n\t}\n}\n",
+              "after": "package session\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"strconv\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\n// Preview returns the current pane content as a string.\n// Returns an empty string if the instance has not been started or is paused.\nfunc (i *Instance) Preview() (string, error) {\n\tif !i.started || i.Status == Paused {\n\t\treturn \"\", nil\n\t}\n\treturn i.tmuxSession.CapturePaneContent()\n}\n\n// HasUpdated reports whether the pane content has changed since the last check.\n// Returns (false, false) if the instance has not been started.\nfunc (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {\n\tif !i.started {\n\t\treturn false, false\n\t}\n\treturn i.tmuxSession.HasUpdated()\n}\n\n// NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected\n// to this instance's tmux PTY for zero-latency interactive focus mode.\nfunc (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn nil, fmt.Errorf(\"instance not started\")\n\t}\n\tsessionName := i.tmuxSession.GetSanitizedName()\n\treturn NewEmbeddedTerminal(sessionName, cols, rows)\n}\n\n// TapEnter sends an enter keypress to the pane when AutoYes is enabled.\n// No-op if the instance is not started or AutoYes is false.\nfunc (i *Instance) TapEnter() {\n\tif !i.started || !i.AutoYes {\n\t\treturn\n\t}\n\tif err := i.tmuxSession.TapEnter(); err != nil {\n\t\tlog.ErrorLog.Printf(\"error tapping enter: %v\", err)\n\t}\n}\n\n// Attach connects the caller to the instance's tmux session.\n// Returns an error if the instance has not been started.\nfunc (i *Instance) Attach() (chan struct{}, error) {\n\tif !i.started {\n\t\treturn nil, fmt.Errorf(\"cannot attach instance that has not been started\")\n\t}\n\treturn i.tmuxSession.Attach()\n}\n\n// SetPreviewSize resizes the detached pane to the given dimensions.\n// Returns an error if the instance is not started or is paused.\nfunc (i *Instance) SetPreviewSize(width, height int) error {\n\tif !i.started || i.Status == Paused {\n\t\treturn fmt.Errorf(\"cannot set preview size for instance that has not been started or \" +\n\t\t\t\"is paused\")\n\t}\n\treturn i.tmuxSession.SetDetachedSize(width, height)\n}\n\n// GetGitWorktree returns the git worktree associated with this instance.\n// Returns an error if the instance has not been started.\nfunc (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {\n\tif !i.started {\n\t\treturn nil, fmt.Errorf(\"cannot get git worktree for instance that has not been started\")\n\t}\n\treturn i.gitWorktree, nil\n}\n\n// SendPrompt sends a text prompt followed by an enter keypress to the agent pane.\n// Returns an error if the instance is not started or the tmux session is nil.\nfunc (i *Instance) SendPrompt(prompt string) error {\n\tif !i.started {\n\t\treturn fmt.Errorf(\"instance not started\")\n\t}\n\tif i.tmuxSession == nil {\n\t\treturn fmt.Errorf(\"tmux session not initialized\")\n\t}\n\tif err := i.tmuxSession.SendKeys(prompt); err != nil {\n\t\treturn fmt.Errorf(\"error sending keys to tmux session: %w\", err)\n\t}\n\t// Brief pause to prevent the carriage return from being misinterpreted.\n\ttime.Sleep(100 * time.Millisecond)\n\tif err := i.tmuxSession.TapEnter(); err != nil {\n\t\treturn fmt.Errorf(\"error tapping enter: %w\", err)\n\t}\n\treturn nil\n}\n\n// PreviewFullHistory captures the complete tmux pane output including the full scrollback buffer.\n// Returns an empty string if the instance is not started or is paused.\nfunc (i *Instance) PreviewFullHistory() (string, error) {\n\tif !i.started || i.Status == Paused {\n\t\treturn \"\", nil\n\t}\n\treturn i.tmuxSession.CapturePaneContentWithOptions(\"-\", \"-\")\n}\n\n// SetTmuxSession replaces the tmux session handle. Intended for use in tests only.\nfunc (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {\n\ti.tmuxSession = session\n}\n\n// MarkStartedForTest sets the started flag without spawning a real tmux session.\n// Use only in tests that need to simulate a running instance.\nfunc (i *Instance) MarkStartedForTest() {\n\ti.started = true\n}\n\n// SendKeys sends raw key sequences to the pane.\n// Returns an error if the instance is not started or is paused.\nfunc (i *Instance) SendKeys(keys string) error {\n\tif !i.started || i.Status == Paused {\n\t\treturn fmt.Errorf(\"cannot send keys to instance that has not been started or is paused\")\n\t}\n\treturn i.tmuxSession.SendKeys(keys)\n}\n\n// InstanceMetadata holds the results of a single per-tick poll for one instance.\n// All fields are value types — safe to pass between goroutines without synchronization.\ntype InstanceMetadata struct {\n\t// Content is the raw tmux capture-pane output.\n\tContent         string\n\tContentCaptured bool\n\tUpdated         bool\n\tHasPrompt       bool\n\tDiffStats       *git.DiffStats\n\tCPUPercent      float64\n\tMemMB           float64\n\t// ResourceUsageValid is true when CPU/memory data was successfully collected.\n\tResourceUsageValid bool\n\t// TmuxAlive reflects the result of tmux has-session (used by the reviewer completion check).\n\tTmuxAlive        bool\n\tPermissionPrompt *PermissionPrompt\n}\n\n// CollectMetadata gathers all per-tick data for this instance via subprocess calls.\n// Safe to call from a goroutine — does not mutate the instance's cached preview fields.\nfunc (i *Instance) CollectMetadata() InstanceMetadata {\n\tvar m InstanceMetadata\n\n\tif !i.started || i.Status == Paused {\n\t\treturn m\n\t}\n\n\t// Single capture-pane call shared by hash check, activity parsing, and preview.\n\tm.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()\n\n\t// Git diff statistics.\n\tif i.gitWorktree != nil {\n\t\tstats := i.gitWorktree.Diff()\n\t\tif stats.Error != nil {\n\t\t\terrMsg := stats.Error.Error()\n\t\t\tif !strings.Contains(errMsg, \"base commit SHA not set\") &&\n\t\t\t\t!strings.Contains(errMsg, \"worktree path gone\") {\n\t\t\t\tlog.WarningLog.Printf(\"diff stats error: %v\", stats.Error)\n\t\t\t}\n\t\t\t// On error leave m.DiffStats nil so the caller preserves its previous value.\n\t\t} else {\n\t\t\tm.DiffStats = stats\n\t\t}\n\t}\n\n\t// Permission prompt detection — only meaningful when content was actually captured.\n\tif m.ContentCaptured && m.Content != \"\" {\n\t\tm.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)\n\t}\n\n\t// Resource usage via pgrep + ps.\n\tm.CPUPercent, m.MemMB, m.ResourceUsageValid = i.collectResourceUsage()\n\n\t// Session liveness check for the reviewer completion logic.\n\tm.TmuxAlive = i.TmuxAlive()\n\n\treturn m\n}\n\n// SetDiffStats stores externally collected diff statistics on the instance.\nfunc (i *Instance) SetDiffStats(stats *git.DiffStats) {\n\ti.diffStats = stats\n}\n\n// UpdateDiffStats refreshes the cached git diff statistics.\n// Clears stats when not started; preserves existing stats when paused.\nfunc (i *Instance) UpdateDiffStats() error {\n\tif !i.started {\n\t\ti.diffStats = nil\n\t\treturn nil\n\t}\n\tif i.Status == Paused {\n\t\treturn nil\n\t}\n\n\tstats := i.gitWorktree.Diff()\n\tif stats.Error != nil {\n\t\tif strings.Contains(stats.Error.Error(), \"base commit SHA not set\") {\n\t\t\ti.diffStats = nil\n\t\t\treturn nil\n\t\t}\n\t\tif strings.Contains(stats.Error.Error(), \"worktree path gone\") {\n\t\t\ti.diffStats = nil\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to get diff stats: %w\", stats.Error)\n\t}\n\n\ti.diffStats = stats\n\treturn nil\n}\n\n// collectResourceUsage samples CPU and RSS memory for the agent process via pgrep and ps.\n// Returns (cpu%, memMB, ok). Safe to call from a goroutine.\nfunc (i *Instance) collectResourceUsage() (float64, float64, bool) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn 0, 0, false\n\t}\n\n\tpid, err := i.tmuxSession.GetPanePID()\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\n\t// Prefer the first child process of the pane's shell so we measure the agent binary, not the shell.\n\ttargetPid := strconv.Itoa(pid)\n\tchildOut, err := exec.Command(\"pgrep\", \"-P\", strconv.Itoa(pid)).Output()\n\tif err == nil {\n\t\tif children := strings.Fields(strings.TrimSpace(string(childOut))); len(children) > 0 {\n\t\t\ttargetPid = children[0]\n\t\t}\n\t}\n\n\tpsOut, err := exec.Command(\"ps\", \"-o\", \"%cpu=,rss=\", \"-p\", targetPid).Output()\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\n\tfields := strings.Fields(strings.TrimSpace(string(psOut)))\n\tif len(fields) < 2 {\n\t\treturn 0, 0, false\n\t}\n\n\tcpu, err := strconv.ParseFloat(fields[0], 64)\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\trssKB, err := strconv.ParseFloat(fields[1], 64)\n\tif err != nil {\n\t\treturn 0, 0, false\n\t}\n\treturn cpu, rssKB / 1024, true\n}\n\n// UpdateResourceUsage refreshes the instance's CPU and memory fields.\nfunc (i *Instance) UpdateResourceUsage() {\n\tif cpu, mem, ok := i.collectResourceUsage(); ok {\n\t\ti.CPUPercent, i.MemMB = cpu, mem\n\t}\n}\n\n// GetDiffStats returns the cached git diff statistics, or nil if unavailable.\nfunc (i *Instance) GetDiffStats() *git.DiffStats {\n\treturn i.diffStats\n}\n\n// SendPermissionResponse forwards a permission dialog choice to the agent pane.\n// No-op if the instance is not started or the tmux session is nil.\nfunc (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {\n\tif !i.started || i.tmuxSession == nil {\n\t\treturn\n\t}\n\tif err := i.tmuxSession.SendPermissionResponse(choice); err != nil {\n\t\tlog.ErrorLog.Printf(\"error sending permission response: %v\", err)\n\t}\n}\n",
+              "additions": 58,
+              "deletions": 49,
+              "status": "modified"
+            }
+          ]
         },
         "agent": "coder",
         "model": {
@@ -846,7 +863,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772558905013
+          "created": 1772558905013,
+          "completed": 1772558970540
         },
         "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
         "modelID": "claude-sonnet-4-6",
@@ -859,15 +877,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 70083,
+          "input": 1,
+          "output": 4699,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 62300,
+            "write": 3083
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb4be6eb5001HTliiYzi7H0Axp",
         "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
       },
@@ -911,13 +931,435 @@
           "callID": "toolu_01NdVTqRvTwE1swGcMaXb8Ta",
           "tool": "write",
           "state": {
-            "status": "pending",
-            "input": {},
-            "raw": ""
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go",
+              "content": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\n// Status represents the current state of an instance.\ntype Status int\n\nconst (\n\t// Running indicates the instance is active and the agent is working.\n\tRunning Status = iota\n\t// Ready indicates the instance is idle and waiting for user input.\n\tReady\n\t// Loading indicates the instance is starting up or initialising.\n\tLoading\n\t// Paused indicates the instance is paused — the worktree has been removed but the branch is preserved.\n\tPaused\n)\n\n// AgentType constants identify the role of an agent session within a plan lifecycle.\nconst (\n\tAgentTypePlanner  = \"planner\"\n\tAgentTypeCoder    = \"coder\"\n\tAgentTypeReviewer = \"reviewer\"\n\tAgentTypeFixer    = \"fixer\"\n)\n\n// Instance represents a managed agent session with its associated tmux and git state.\ntype Instance struct {\n\t// Title is the display name and tmux session identifier for this instance.\n\tTitle string\n\t// Path is the workspace directory for the instance.\n\tPath string\n\t// Branch is the git branch associated with this instance.\n\tBranch string\n\t// Status is the current lifecycle state of the instance.\n\tStatus Status\n\t// Program is the agent command to execute within the tmux session.\n\tProgram string\n\t// Height is the terminal height in rows.\n\tHeight int\n\t// Width is the terminal width in columns.\n\tWidth int\n\t// CreatedAt records when the instance was first created.\n\tCreatedAt time.Time\n\t// UpdatedAt records the most recent update timestamp.\n\tUpdatedAt time.Time\n\t// AutoYes causes the instance to auto-confirm prompts.\n\tAutoYes bool\n\t// SkipPermissions enables the --dangerously-skip-permissions flag for Claude.\n\tSkipPermissions bool\n\t// TaskFile is the plan file this instance is implementing (empty for ad-hoc sessions).\n\tTaskFile string\n\t// Topic is the plan-state group this instance belongs to.\n\tTopic string\n\t// AgentType identifies the role within a plan lifecycle: planner, coder, reviewer, fixer, or empty.\n\tAgentType string\n\t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n\tTaskNumber int\n\t// WaveNumber is the 1-indexed wave number this task belongs to (0 = not a wave task).\n\tWaveNumber int\n\t// PeerCount is the number of concurrent sibling tasks in the same wave (0 = not a wave task).\n\tPeerCount int\n\t// IsReviewer indicates a reviewer session.\n\t// Deprecated: check AgentType == AgentTypeReviewer instead.\n\tIsReviewer bool\n\t// ImplementationComplete is set when the coder finishes and the plan transitions to review.\n\tImplementationComplete bool\n\t// SoloAgent is true for instances launched as standalone agents outside the orchestration lifecycle.\n\tSoloAgent bool\n\t// Exited is true when the instance's tmux session has terminated unexpectedly.\n\tExited bool\n\t// QueuedPrompt is delivered to the session on first transition to Ready. Cleared after delivery.\n\tQueuedPrompt string\n\n\t// sharedWorktree indicates the instance shares a topic worktree and should not clean it up.\n\tsharedWorktree bool\n\t// LoadingStage tracks the current startup progress step for the UI.\n\tLoadingStage int\n\t// LoadingTotal is the total count of startup stages.\n\tLoadingTotal int\n\t// LoadingMessage describes the current startup step shown in the UI.\n\tLoadingMessage string\n\n\t// Notified is true after the instance completes (Running→Ready) until the user selects it.\n\tNotified bool\n\n\t// LastActiveAt records the most recent time the instance entered Running or Loading state.\n\tLastActiveAt time.Time\n\n\t// PromptDetected is true when the agent program is waiting for user input.\n\t// Persists across status transitions to prevent UI flicker.\n\tPromptDetected bool\n\n\t// AwaitingWork is set when a QueuedPrompt is dispatched and cleared when the agent goes Running.\n\t// The wave orchestrator uses this to avoid treating early idle prompts as task completion.\n\tAwaitingWork bool\n\n\t// ReviewCycle is the 1-indexed count of review/fix cycles for this instance (0 = not a cycle instance).\n\tReviewCycle int\n\n\t// HasWorked is true once the agent produces at least one content update after receiving its task.\n\t// Prevents permission prompts or early returns from prematurely completing a wave.\n\tHasWorked bool\n\n\t// CPUPercent is the last sampled CPU utilisation of the agent process.\n\tCPUPercent float64\n\t// MemMB is the last sampled memory usage of the agent process in megabytes.\n\tMemMB float64\n\n\t// LastActivity is the most recently detected agent activity event (ephemeral, not persisted).\n\tLastActivity *Activity\n\n\t// CachedContent is the last tmux pane capture, kept to avoid redundant subprocess calls.\n\tCachedContent string\n\t// CachedContentSet is true once CachedContent has been populated for the first time.\n\tCachedContentSet bool\n\n\t// diffStats holds the current git diff statistics for this instance.\n\tdiffStats *git.DiffStats\n\n\t// started is true once Start() has been called successfully.\n\tstarted bool\n\t// tmuxSession manages the underlying tmux session for this instance.\n\ttmuxSession *tmux.TmuxSession\n\t// gitWorktree manages the git worktree associated with this instance.\n\tgitWorktree *git.GitWorktree\n}\n\n// ToInstanceData converts an Instance to its JSON-serialisable form for persistence.\n// UpdatedAt is always refreshed to the current time.\nfunc (i *Instance) ToInstanceData() InstanceData {\n\tdata := InstanceData{\n\t\tTitle:                  i.Title,\n\t\tPath:                   i.Path,\n\t\tBranch:                 i.Branch,\n\t\tStatus:                 i.Status,\n\t\tHeight:                 i.Height,\n\t\tWidth:                  i.Width,\n\t\tCreatedAt:              i.CreatedAt,\n\t\tUpdatedAt:              time.Now(),\n\t\tProgram:                i.Program,\n\t\tAutoYes:                i.AutoYes,\n\t\tSkipPermissions:        i.SkipPermissions,\n\t\tTaskFile:               i.TaskFile,\n\t\tAgentType:              i.AgentType,\n\t\tTaskNumber:             i.TaskNumber,\n\t\tWaveNumber:             i.WaveNumber,\n\t\tPeerCount:              i.PeerCount,\n\t\tIsReviewer:             i.IsReviewer,\n\t\tImplementationComplete: i.ImplementationComplete,\n\t\tSoloAgent:              i.SoloAgent,\n\t\tQueuedPrompt:           i.QueuedPrompt,\n\t\tReviewCycle:            i.ReviewCycle,\n\t}\n\n\tif i.gitWorktree != nil {\n\t\tdata.Worktree = GitWorktreeData{\n\t\t\tRepoPath:      i.gitWorktree.GetRepoPath(),\n\t\t\tWorktreePath:  i.gitWorktree.GetWorktreePath(),\n\t\t\tSessionName:   i.Title,\n\t\t\tBranchName:    i.gitWorktree.GetBranchName(),\n\t\t\tBaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),\n\t\t}\n\t}\n\n\tif i.diffStats != nil {\n\t\tdata.DiffStats = DiffStatsData{\n\t\t\tAdded:   i.diffStats.Added,\n\t\t\tRemoved: i.diffStats.Removed,\n\t\t\tContent: i.diffStats.Content,\n\t\t}\n\t}\n\n\treturn data\n}\n\n// FromInstanceData reconstructs an Instance from its serialised form.\n// For paused instances the tmux session is prepared but not started.\n// For live instances the tmux session is reattached; dead sessions are marked Exited.\nfunc FromInstanceData(data InstanceData) (*Instance, error) {\n\tinstance := &Instance{\n\t\tTitle:                  data.Title,\n\t\tPath:                   data.Path,\n\t\tBranch:                 data.Branch,\n\t\tStatus:                 data.Status,\n\t\tHeight:                 data.Height,\n\t\tWidth:                  data.Width,\n\t\tCreatedAt:              data.CreatedAt,\n\t\tUpdatedAt:              data.UpdatedAt,\n\t\tProgram:                data.Program,\n\t\tSkipPermissions:        data.SkipPermissions,\n\t\tTaskFile:               data.TaskFile,\n\t\tAgentType:              data.AgentType,\n\t\tTaskNumber:             data.TaskNumber,\n\t\tWaveNumber:             data.WaveNumber,\n\t\tPeerCount:              data.PeerCount,\n\t\tIsReviewer:             data.IsReviewer,\n\t\tImplementationComplete: data.ImplementationComplete,\n\t\tSoloAgent:              data.SoloAgent,\n\t\tQueuedPrompt:           data.QueuedPrompt,\n\t\tReviewCycle:            data.ReviewCycle,\n\t\tgitWorktree: git.NewGitWorktreeFromStorage(\n\t\t\tdata.Worktree.RepoPath,\n\t\t\tdata.Worktree.WorktreePath,\n\t\t\tdata.Worktree.SessionName,\n\t\t\tdata.Worktree.BranchName,\n\t\t\tdata.Worktree.BaseCommitSHA,\n\t\t),\n\t\tdiffStats: &git.DiffStats{\n\t\t\tAdded:   data.DiffStats.Added,\n\t\t\tRemoved: data.DiffStats.Removed,\n\t\t\tContent: data.DiffStats.Content,\n\t\t},\n\t}\n\n\tif instance.Paused() {\n\t\t// Paused instances keep the session struct ready but do not reattach.\n\t\tinstance.started = true\n\t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\t\treturn instance, nil\n\t}\n\n\t// Build the tmux session handle and check liveness before attempting a full restore.\n\tts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n\tts.SetAgentType(instance.AgentType)\n\tinstance.tmuxSession = ts\n\n\tif !ts.DoesSessionExist() {\n\t\t// The tmux session is gone — mark as exited so the UI can display it as dead.\n\t\tinstance.started = true\n\t\tinstance.Exited = true\n\t\tinstance.SetStatus(Ready)\n\t\treturn instance, nil\n\t}\n\n\t// Session is alive — restore the full attachment via Start(false).\n\tif err := instance.Start(false); err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn instance, nil\n}\n\n// InstanceOptions holds the configuration values for creating a new Instance.\ntype InstanceOptions struct {\n\t// Title is the display name and tmux session identifier.\n\tTitle string\n\t// Path is the workspace directory.\n\tPath string\n\t// Program is the agent command to run (e.g. \"claude\", \"opencode\").\n\tProgram string\n\t// AutoYes enables automatic confirmation of agent prompts.\n\tAutoYes bool\n\t// SkipPermissions enables --dangerously-skip-permissions for Claude.\n\tSkipPermissions bool\n\t// TaskFile binds this instance to a plan from plan-state.\n\tTaskFile string\n\t// AgentType is the role of this instance within a plan: planner, coder, reviewer, fixer, or empty.\n\tAgentType string\n\t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n\tTaskNumber int\n\t// WaveNumber is the 1-indexed wave this task belongs to (0 = not a wave task).\n\tWaveNumber int\n\t// PeerCount is the number of concurrent sibling tasks in the same wave.\n\tPeerCount int\n\t// ReviewCycle is the 1-indexed review/fix cycle number (0 = not a cycle instance).\n\tReviewCycle int\n}\n\n// NewInstance constructs a new unstarted Instance from the given options.\n// The workspace path is resolved to an absolute path before storage.\nfunc NewInstance(opts InstanceOptions) (*Instance, error) {\n\tnow := time.Now()\n\n\tabsPath, err := filepath.Abs(opts.Path)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to get absolute path: %w\", err)\n\t}\n\n\treturn &Instance{\n\t\tTitle:           opts.Title,\n\t\tStatus:          Ready,\n\t\tPath:            absPath,\n\t\tProgram:         opts.Program,\n\t\tHeight:          0,\n\t\tWidth:           0,\n\t\tCreatedAt:       now,\n\t\tUpdatedAt:       now,\n\t\tAutoYes:         opts.AutoYes,\n\t\tSkipPermissions: opts.SkipPermissions,\n\t\tTaskFile:        opts.TaskFile,\n\t\tAgentType:       opts.AgentType,\n\t\tTaskNumber:      opts.TaskNumber,\n\t\tWaveNumber:      opts.WaveNumber,\n\t\tPeerCount:       opts.PeerCount,\n\t\tReviewCycle:     opts.ReviewCycle,\n\t}, nil\n}\n\n// RepoName returns the repository name for this instance.\n// For instances without a git worktree (e.g. planner sessions on the main branch),\n// the repo name is derived from the workspace path.\nfunc (i *Instance) RepoName() (string, error) {\n\tif !i.started {\n\t\treturn \"\", fmt.Errorf(\"cannot get repo name for instance that has not been started\")\n\t}\n\tif i.gitWorktree == nil {\n\t\treturn filepath.Base(i.Path), nil\n\t}\n\treturn i.gitWorktree.GetRepoName(), nil\n}\n\n// GetRepoPath returns the repository root path, or empty string if the instance is not started\n// or has no git worktree.\nfunc (i *Instance) GetRepoPath() string {\n\tif !i.started || i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetRepoPath()\n}\n\n// GetWorktreePath returns the worktree directory path, or empty string if unavailable.\nfunc (i *Instance) GetWorktreePath() string {\n\tif i.gitWorktree == nil {\n\t\treturn \"\"\n\t}\n\treturn i.gitWorktree.GetWorktreePath()\n}\n\n// SetStatus transitions the instance to the given status and triggers associated side-effects:\n// desktop notification on Running→Ready, timestamp refresh on Running/Loading, and\n// AwaitingWork clear on Running.\nfunc (i *Instance) SetStatus(status Status) {\n\tif i.Status == Running && status == Ready {\n\t\ti.Notified = true\n\t\t// Wave task instances are managed collectively by the orchestrator.\n\t\t// Only send per-instance notifications for standalone (non-wave) sessions.\n\t\tif i.TaskNumber == 0 {\n\t\t\tSendNotification(\"kas\", fmt.Sprintf(\"'%s' has finished\", i.Title))\n\t\t}\n\t}\n\n\tif status == Running || status == Loading {\n\t\ti.LastActiveAt = time.Now()\n\t\ti.PromptDetected = false\n\t\ti.Notified = false\n\t}\n\n\tif status == Running {\n\t\ti.AwaitingWork = false\n\t}\n\n\ti.Status = status\n}\n\n// setLoadingProgress updates the loading stage and message shown during startup.\nfunc (i *Instance) setLoadingProgress(stage int, message string) {\n\ti.LoadingStage = stage\n\ti.LoadingMessage = message\n}\n\n// Started reports whether the instance has been started via Start().\nfunc (i *Instance) Started() bool {\n\treturn i.started\n}\n\n// SetTitle updates the instance title. Returns an error if the instance has already started,\n// since the title is used as the tmux session name and cannot be changed after creation.\nfunc (i *Instance) SetTitle(title string) error {\n\tif i.started {\n\t\treturn fmt.Errorf(\"cannot change title of a started instance\")\n\t}\n\ti.Title = title\n\treturn nil\n}\n\n// Paused reports whether the instance is in the Paused state.\nfunc (i *Instance) Paused() bool {\n\treturn i.Status == Paused\n}\n\n// TmuxAlive reports whether the underlying tmux session is still running.\nfunc (i *Instance) TmuxAlive() bool {\n\tif i.tmuxSession == nil {\n\t\treturn false\n\t}\n\treturn i.tmuxSession.DoesSessionExist()\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "session/instance.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_taskfile_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_wave_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_title_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558970337,
+              "end": 1772558970517
+            }
           },
           "id": "prt_cb4be9c61001d6yW55Mk8nS2Pn",
           "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
           "messageID": "msg_cb4be6eb5001HTliiYzi7H0Axp"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 70083,
+            "input": 1,
+            "output": 4699,
+            "reasoning": 0,
+            "cache": {
+              "read": 62300,
+              "write": 3083
+            }
+          },
+          "id": "prt_cb4bf6e96001cLJzultvhVe1AJ",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4be6eb5001HTliiYzi7H0Axp"
+        },
+        {
+          "type": "patch",
+          "hash": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_session.go"
+          ],
+          "id": "prt_cb4bf6eaa00182DypeFcRL33kl",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4be6eb5001HTliiYzi7H0Axp"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558970542,
+          "completed": 1772558975883
+        },
+        "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 70257,
+          "input": 1,
+          "output": 168,
+          "reasoning": 0,
+          "cache": {
+            "read": 65383,
+            "write": 4705
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bf6eae0017B85eZF7CnL60Q",
+        "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "id": "prt_cb4bf7505001Dvg7v8jI1ugtnK",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf6eae0017B85eZF7CnL60Q"
+        },
+        {
+          "type": "text",
+          "text": "Now let me run the tests to verify the rewrite passes:",
+          "time": {
+            "start": 1772558973003,
+            "end": 1772558973003
+          },
+          "id": "prt_cb4bf7505002Hi7Q99cxeMo4NF",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf6eae0017B85eZF7CnL60Q"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01UX2RNe2JAHm3P2oPgZu1zd",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core && go test ./session/... -run \"TestNewInstance|TestInstanceData|TestBuildTitleOpts\" -v -count=1 2>&1",
+              "description": "Run tests after rewrite",
+              "timeout": 60000
+            },
+            "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SoloAgentDefaultsFalse\n--- PASS: TestNewInstance_SoloAgentDefaultsFalse (0.00s)\n=== RUN   TestBuildTitleOptsFromInstance\n=== RUN   TestBuildTitleOptsFromInstance/planner_with_plan_file\n=== RUN   TestBuildTitleOptsFromInstance/coder_wave_task\n=== RUN   TestBuildTitleOptsFromInstance/reviewer\n=== RUN   TestBuildTitleOptsFromInstance/fixer_ad-hoc\n=== RUN   TestBuildTitleOptsFromInstance/ad-hoc_no_agent_type\n=== RUN   TestBuildTitleOptsFromInstance/reviewer_with_review_cycle\n--- PASS: TestBuildTitleOptsFromInstance (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/planner_with_plan_file (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/coder_wave_task (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/reviewer (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/fixer_ad-hoc (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/ad-hoc_no_agent_type (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/reviewer_with_review_cycle (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+            "title": "Run tests after rewrite",
+            "metadata": {
+              "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SoloAgentDefaultsFalse\n--- PASS: TestNewInstance_SoloAgentDefaultsFalse (0.00s)\n=== RUN   TestBuildTitleOptsFromInstance\n=== RUN   TestBuildTitleOptsFromInstance/planner_with_plan_file\n=== RUN   TestBuildTitleOptsFromInstance/coder_wave_task\n=== RUN   TestBuildTitleOptsFromInstance/reviewer\n=== RUN   TestBuildTitleOptsFromInstance/fixer_ad-hoc\n=== RUN   TestBuildTitleOptsFromInstance/ad-hoc_no_agent_type\n=== RUN   TestBuildTitleOptsFromInstance/reviewer_with_review_cycle\n--- PASS: TestBuildTitleOptsFromInstance (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/planner_with_plan_file (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/coder_wave_task (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/reviewer (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/fixer_ad-hoc (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/ad-hoc_no_agent_type (0.00s)\n    --- PASS: TestBuildTitleOptsFromInstance/reviewer_with_review_cycle (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run tests after rewrite",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558975511,
+              "end": 1772558975875
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf6eae0017B85eZF7CnL60Q"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 70257,
+            "input": 1,
+            "output": 168,
+            "reasoning": 0,
+            "cache": {
+              "read": 65383,
+              "write": 4705
+            }
+          },
+          "id": "prt_cb4bf8383001dXvxsy0n7ZLdF9",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf6eae0017B85eZF7CnL60Q"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558975885,
+          "completed": 1772558979703
+        },
+        "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 71272,
+          "input": 1,
+          "output": 144,
+          "reasoning": 0,
+          "cache": {
+            "read": 70088,
+            "write": 1039
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bf838d001g4XGCIvr0otZV0",
+        "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "id": "prt_cb4bf8bf5001J2WjIW0SAT31Eq",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf838d001g4XGCIvr0otZV0"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass. Now let me also verify the build compiles cleanly:",
+          "time": {
+            "start": 1772558978844,
+            "end": 1772558978844
+          },
+          "id": "prt_cb4bf8bf5002dtaSYXfxn2L0Ha",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf838d001g4XGCIvr0otZV0"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core && go build ./session/... 2>&1",
+              "description": "Build session package",
+              "timeout": 60000
+            },
+            "output": "",
+            "title": "Build session package",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Build session package",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558979607,
+              "end": 1772558979694
+            }
+          },
+          "id": "prt_cb4bf8f1c001RwCcJWzyM6bxSn",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf838d001g4XGCIvr0otZV0"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 71272,
+            "input": 1,
+            "output": 144,
+            "reasoning": 0,
+            "cache": {
+              "read": 70088,
+              "write": 1039
+            }
+          },
+          "id": "prt_cb4bf926f001LAN7QG4O56rsCr",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf838d001g4XGCIvr0otZV0"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558979705,
+          "completed": 1772558990155
+        },
+        "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 71438,
+          "input": 1,
+          "output": 140,
+          "reasoning": 0,
+          "cache": {
+            "read": 71127,
+            "write": 170
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bf927900183qXlkl2S00WUZ",
+        "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "id": "prt_cb4bf981a001hVu4pNP6jaPRw0",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        },
+        {
+          "type": "text",
+          "text": "Clean build. Now commit:",
+          "time": {
+            "start": 1772558981579,
+            "end": 1772558981579
+          },
+          "id": "prt_cb4bf981b001Fa8thOrJJikA7R",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01H8qzE8tjRmkb2Csgjok6PB",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core && git add session/instance.go && git commit -m \"feat(clean-room): rewrite session/instance.go from scratch\"",
+              "description": "Commit the rewritten instance.go"
+            },
+            "output": "[plan/02a-rewrite-session-core fd1a2f1] feat(clean-room): rewrite session/instance.go from scratch\n 1 file changed, 113 insertions(+), 114 deletions(-)\n",
+            "title": "Commit the rewritten instance.go",
+            "metadata": {
+              "output": "[plan/02a-rewrite-session-core fd1a2f1] feat(clean-room): rewrite session/instance.go from scratch\n 1 file changed, 113 insertions(+), 114 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the rewritten instance.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558983117,
+              "end": 1772558990142
+            }
+          },
+          "id": "prt_cb4bf99cb001Siybu4lBng6EK4",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 71438,
+            "input": 1,
+            "output": 140,
+            "reasoning": 0,
+            "cache": {
+              "read": 71127,
+              "write": 170
+            }
+          },
+          "id": "prt_cb4bfbb3e001w4oHDIC7QaNAi1",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558990156,
+          "completed": 1772558997315
+        },
+        "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 71745,
+          "input": 1,
+          "output": 239,
+          "reasoning": 0,
+          "cache": {
+            "read": 71297,
+            "write": 208
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb4bfbb4c0014si039ywKNsJ6D",
+        "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "id": "prt_cb4bfbf81001UvewexiwSONpI0",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
+        },
+        {
+          "type": "text",
+          "text": "Task 5 complete. All 12 tests pass (`TestNewInstance*`, `TestInstanceData*`, `TestBuildTitleOpts*`), the package builds cleanly, and the commit is in.\n\nThe rewrite of `session/instance.go`:\n- Preserves identical public API: all exported types, method signatures, and constants unchanged\n- Rewrites every line of implementation from scratch (clean-room)\n- `Status` type with `iota` starting at `Running(0)`, `Ready(1)`, `Loading(2)`, `Paused(3)`\n- Agent type constants: `planner`, `coder`, `reviewer`, `fixer`\n- All ~40 `Instance` struct fields in correct order with same types and export status\n- `ToInstanceData()`/`FromInstanceData()` round-trip with proper worktree and diff stats handling\n- Paused vs live instance restoration logic in `FromInstanceData()`\n- All accessor methods with correct side-effects (`SetStatus` notification logic, etc.)",
+          "time": {
+            "start": 1772558997276,
+            "end": 1772558997276
+          },
+          "id": "prt_cb4bfbf810022VWxZv61qJ89kW",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 71745,
+            "input": 1,
+            "output": 239,
+            "reasoning": 0,
+            "cache": {
+              "read": 71297,
+              "write": 208
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
         }
       ]
     }
