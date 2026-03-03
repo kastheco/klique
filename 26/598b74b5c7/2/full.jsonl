@@ -1,0 +1,880 @@
+{
+  "info": {
+    "id": "ses_34b443f21ffevL6GmFOG7DLzIF",
+    "slug": "kind-forest",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+    "title": "Storage persistence rewrite",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 149,
+      "deletions": 142,
+      "files": 3
+    },
+    "time": {
+      "created": 1772558729439,
+      "updated": 1772558796609
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772558729471
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "session/activity.go",
+              "before": "package session\n\nimport (\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\t\"time\"\n)\n\n// Activity represents what an agent is currently doing.\ntype Activity struct {\n\t// Action is the type of activity (e.g. \"editing\", \"running\", \"reading\", \"searching\", \"working\").\n\tAction string\n\t// Detail provides additional context (e.g. filename or command).\n\tDetail string\n\t// Timestamp is when this activity was detected.\n\tTimestamp time.Time\n}\n\n// ansiRegex strips ANSI escape codes from terminal output.\nvar ansiRegex = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n\n// claudeSpinnerAction matches Claude's spinner lines like \"⠙ Editing src/auth.go\"\n// The spinner character varies, so we match any single character before the action word.\nvar claudeEditingRegex = regexp.MustCompile(`(?:Editing|Writing)\\s+(.+)`)\nvar claudeReadingRegex = regexp.MustCompile(`Reading\\s+(.+)`)\nvar claudeRunningRegex = regexp.MustCompile(`Running\\s+(.+)`)\nvar claudeSearchingRegex = regexp.MustCompile(`Searching`)\nvar claudeShellCmdRegex = regexp.MustCompile(`\\$\\s+(.+)`)\n\n// aiderEditingRegex matches Aider's editing pattern.\nvar aiderEditingRegex = regexp.MustCompile(`Editing\\s+(.+)`)\n\n// ParseActivity parses the pane content to extract the current activity.\n// It scans the last ~30 lines for known patterns. program is the agent name\n// (e.g. \"claude\", \"aider\"). Returns nil if no activity is detected.\nfunc ParseActivity(content string, program string) *Activity {\n\tclean := ansiRegex.ReplaceAllString(content, \"\")\n\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only scan the last 30 lines for performance.\n\tstart := len(lines) - 30\n\tif start < 0 {\n\t\tstart = 0\n\t}\n\ttail := lines[start:]\n\n\t// Scan from the bottom up so we find the most recent activity first.\n\tfor i := len(tail) - 1; i >= 0; i-- {\n\t\tline := strings.TrimSpace(tail[i])\n\t\tif line == \"\" {\n\t\t\tcontinue\n\t\t}\n\n\t\tif strings.Contains(strings.ToLower(program), \"claude\") {\n\t\t\tif a := parseClaudeLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t} else if strings.Contains(strings.ToLower(program), \"aider\") {\n\t\t\tif a := parseAiderLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t}\n\n\t\t// Generic patterns that work for any agent.\n\t\tif a := parseGenericLine(line); a != nil {\n\t\t\treturn a\n\t\t}\n\t}\n\n\treturn nil\n}\n\nfunc parseClaudeLine(line string) *Activity {\n\tif m := claudeEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeReadingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"reading\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeRunningRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif claudeSearchingRegex.MatchString(line) {\n\t\treturn &Activity{\n\t\t\tAction:    \"searching\",\n\t\t\tDetail:    \"\",\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeShellCmdRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc parseAiderLine(line string) *Activity {\n\tif m := aiderEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc parseGenericLine(line string) *Activity {\n\t// Try to detect shell commands from common prompt patterns.\n\tif m := claudeShellCmdRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// cleanFilename extracts just the basename if the detail looks like a file path.\nfunc cleanFilename(s string) string {\n\ts = strings.TrimSpace(s)\n\t// If it contains path separators, use only the base name for brevity.\n\tif strings.Contains(s, \"/\") {\n\t\treturn filepath.Base(s)\n\t}\n\treturn s\n}\n\n// truncateDetail truncates a string to maxLen characters, appending \"...\" if truncated.\nfunc truncateDetail(s string, maxLen int) string {\n\tif len(s) <= maxLen {\n\t\treturn s\n\t}\n\tif maxLen <= 3 {\n\t\treturn s[:maxLen]\n\t}\n\treturn s[:maxLen-3] + \"...\"\n}\n",
+              "after": "package session\n\nimport (\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\t\"time\"\n)\n\n// Activity represents what an agent is currently doing.\ntype Activity struct {\n\t// Action is the type of activity (e.g. \"editing\", \"running\", \"reading\", \"searching\").\n\tAction string\n\t// Detail provides additional context (e.g. filename or command).\n\tDetail string\n\t// Timestamp is when this activity was detected.\n\tTimestamp time.Time\n}\n\n// ansiRegex matches ANSI escape sequences so they can be stripped from terminal output.\nvar ansiRegex = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n\n// Claude-specific patterns.\nvar (\n\tclaudeEditingRegex   = regexp.MustCompile(`(?:Editing|Writing)\\s+(.+)`)\n\tclaudeReadingRegex   = regexp.MustCompile(`Reading\\s+(.+)`)\n\tclaudeRunningRegex   = regexp.MustCompile(`Running\\s+(.+)`)\n\tclaudeSearchingRegex = regexp.MustCompile(`Searching`)\n\tclaudeShellRegex     = regexp.MustCompile(`\\$\\s+(.+)`)\n)\n\n// Aider-specific patterns.\nvar aiderEditingRegex = regexp.MustCompile(`Editing\\s+(.+)`)\n\n// ParseActivity scans the last 30 lines of content (bottom-up) and returns the\n// most recent recognisable agent activity. program is compared case-insensitively\n// against known agent names (\"claude\", \"aider\"). Returns nil when nothing matches.\nfunc ParseActivity(content string, program string) *Activity {\n\tstripped := ansiRegex.ReplaceAllString(content, \"\")\n\tlines := strings.Split(stripped, \"\\n\")\n\n\t// Restrict scan window to the last 30 lines.\n\tstart := len(lines) - 30\n\tif start < 0 {\n\t\tstart = 0\n\t}\n\ttail := lines[start:]\n\n\tprog := strings.ToLower(program)\n\n\t// Scan from bottom to top so the most recent match wins.\n\tfor i := len(tail) - 1; i >= 0; i-- {\n\t\tline := strings.TrimSpace(tail[i])\n\t\tif line == \"\" {\n\t\t\tcontinue\n\t\t}\n\n\t\tif strings.Contains(prog, \"claude\") {\n\t\t\tif a := parseClaudeLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t} else if strings.Contains(prog, \"aider\") {\n\t\t\tif a := parseAiderLine(line); a != nil {\n\t\t\t\treturn a\n\t\t\t}\n\t\t}\n\n\t\tif a := parseGenericLine(line); a != nil {\n\t\t\treturn a\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// parseClaudeLine attempts to match a line against Claude-specific patterns.\nfunc parseClaudeLine(line string) *Activity {\n\tif m := claudeEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeReadingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"reading\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeRunningRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif claudeSearchingRegex.MatchString(line) {\n\t\treturn &Activity{\n\t\t\tAction:    \"searching\",\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\tif m := claudeShellRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// parseAiderLine attempts to match a line against Aider-specific patterns.\nfunc parseAiderLine(line string) *Activity {\n\tif m := aiderEditingRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"editing\",\n\t\t\tDetail:    truncateDetail(cleanFilename(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// parseGenericLine matches patterns common to any agent (e.g. shell prompt lines).\nfunc parseGenericLine(line string) *Activity {\n\tif m := claudeShellRegex.FindStringSubmatch(line); m != nil {\n\t\treturn &Activity{\n\t\t\tAction:    \"running\",\n\t\t\tDetail:    truncateDetail(strings.TrimSpace(m[1]), 40),\n\t\t\tTimestamp: time.Now(),\n\t\t}\n\t}\n\treturn nil\n}\n\n// cleanFilename returns filepath.Base(s) when s contains a path separator,\n// otherwise the trimmed string itself.\nfunc cleanFilename(s string) string {\n\ts = strings.TrimSpace(s)\n\tif strings.Contains(s, \"/\") {\n\t\treturn filepath.Base(s)\n\t}\n\treturn s\n}\n\n// truncateDetail shortens s to at most maxLen characters. When truncation is\n// needed and maxLen > 3, the result ends with \"...\".\nfunc truncateDetail(s string, maxLen int) string {\n\tif len(s) <= maxLen {\n\t\treturn s\n\t}\n\tif maxLen <= 3 {\n\t\treturn s[:maxLen]\n\t}\n\treturn s[:maxLen-3] + \"...\"\n}\n",
+              "additions": 31,
+              "deletions": 28,
+              "status": "modified"
+            },
+            {
+              "file": "session/permission_prompt.go",
+              "before": "package session\n\nimport (\n\t\"strings\"\n\n\t\"github.com/charmbracelet/x/ansi\"\n)\n\n// PermissionPrompt represents a detected permission request from an agent.\ntype PermissionPrompt struct {\n\t// Description is the human-readable description, e.g. \"Access external directory /opt\".\n\tDescription string\n\t// Pattern is the permission pattern, e.g. \"/opt/*\".\n\tPattern string\n}\n\n// ParsePermissionPrompt scans pane content for an opencode \"Permission required\" dialog.\n// Returns nil if no permission prompt is detected or if the program is not opencode.\nfunc ParsePermissionPrompt(content string, program string) *PermissionPrompt {\n\tif !strings.Contains(strings.ToLower(program), \"opencode\") {\n\t\treturn nil\n\t}\n\n\tclean := ansi.Strip(content)\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only scan the bottom 25 lines of the pane. The permission dialog is\n\t// rendered at the bottom of opencode's TUI (~10 lines for the dialog\n\t// plus status bar). Scanning the full pane false-positives on\n\t// conversation text that discusses permissions.\n\tconst tailLines = 25\n\tstartLine := len(lines) - tailLines\n\tif startLine < 0 {\n\t\tstartLine = 0\n\t}\n\tlines = lines[startLine:]\n\n\t// Two structural checks to avoid false-positives from conversation text:\n\t//  1. \"△ Permission required\" header (the △ glyph is opencode UI chrome)\n\t//  2. Button bar with \"Allow once\" + \"Allow always\" on the same line\n\t// Both must appear within the tail window.\n\tpermIdx := -1\n\tfor i, line := range lines {\n\t\ttrimmed := strings.TrimSpace(line)\n\t\tif strings.Contains(trimmed, \"△\") && strings.Contains(trimmed, \"Permission required\") {\n\t\t\tpermIdx = i\n\t\t\tbreak\n\t\t}\n\t}\n\tif permIdx < 0 {\n\t\treturn nil\n\t}\n\n\thasButtons := false\n\tfor _, line := range lines[permIdx:] {\n\t\tif strings.Contains(line, \"Allow once\") && strings.Contains(line, \"Allow always\") {\n\t\t\thasButtons = true\n\t\t\tbreak\n\t\t}\n\t}\n\tif !hasButtons {\n\t\treturn nil\n\t}\n\n\tprompt := &PermissionPrompt{}\n\n\t// Description is on the next non-empty line after \"Permission required\".\n\t// Strip leading arrow prefixes — opencode uses both \"← \" and \"→ \".\n\tfor i := permIdx + 1; i < len(lines); i++ {\n\t\ttrimmed := strings.TrimSpace(lines[i])\n\t\tif trimmed == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"← \")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"←\")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"→ \")\n\t\ttrimmed = strings.TrimPrefix(trimmed, \"→\")\n\t\ttrimmed = strings.TrimSpace(trimmed)\n\t\tprompt.Description = trimmed\n\t\tbreak\n\t}\n\n\t// Pattern: find \"Patterns\" header, then first line starting with \"- \".\n\tfor i := permIdx; i < len(lines); i++ {\n\t\tif strings.TrimSpace(lines[i]) == \"Patterns\" {\n\t\t\tfor j := i + 1; j < len(lines); j++ {\n\t\t\t\ttrimmed := strings.TrimSpace(lines[j])\n\t\t\t\tif trimmed == \"\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tif strings.HasPrefix(trimmed, \"- \") {\n\t\t\t\t\tprompt.Pattern = strings.TrimPrefix(trimmed, \"- \")\n\t\t\t\t\tbreak\n\t\t\t\t}\n\t\t\t\tbreak // non-empty, non-pattern line — stop\n\t\t\t}\n\t\t\tbreak\n\t\t}\n\t}\n\n\treturn prompt\n}\n",
+              "after": "package session\n\nimport (\n\t\"strings\"\n\n\t\"github.com/charmbracelet/x/ansi\"\n)\n\n// PermissionPrompt represents a detected permission request from an agent.\ntype PermissionPrompt struct {\n\t// Description is the human-readable description, e.g. \"Access external directory /opt\".\n\tDescription string\n\t// Pattern is the permission pattern, e.g. \"/opt/*\".\n\tPattern string\n}\n\n// ParsePermissionPrompt scans pane content for an opencode \"Permission required\" dialog.\n// Returns nil if no permission prompt is detected or if the program is not opencode.\nfunc ParsePermissionPrompt(content string, program string) *PermissionPrompt {\n\tif !strings.Contains(strings.ToLower(program), \"opencode\") {\n\t\treturn nil\n\t}\n\n\tclean := ansi.Strip(content)\n\tlines := strings.Split(clean, \"\\n\")\n\n\t// Only examine the last 25 lines — the permission dialog renders at the\n\t// bottom of opencode's TUI. Limiting the scan window avoids false-positives\n\t// from conversation text that may mention \"Permission required\".\n\tconst tailLines = 25\n\tif start := len(lines) - tailLines; start > 0 {\n\t\tlines = lines[start:]\n\t}\n\n\t// Structural check 1: locate the \"△ Permission required\" header line.\n\t// The △ glyph is unique to opencode's UI chrome; its presence on the same\n\t// line as \"Permission required\" is the primary signal.\n\tpermIdx := -1\n\tfor i, line := range lines {\n\t\tt := strings.TrimSpace(line)\n\t\tif strings.Contains(t, \"△\") && strings.Contains(t, \"Permission required\") {\n\t\t\tpermIdx = i\n\t\t\tbreak\n\t\t}\n\t}\n\tif permIdx < 0 {\n\t\treturn nil\n\t}\n\n\t// Structural check 2: button bar with both \"Allow once\" and \"Allow always\"\n\t// must appear after the header line. Without this guard a bare mention of\n\t// \"Permission required\" in conversation text would create false-positives.\n\tbuttonFound := false\n\tfor _, line := range lines[permIdx:] {\n\t\tif strings.Contains(line, \"Allow once\") && strings.Contains(line, \"Allow always\") {\n\t\t\tbuttonFound = true\n\t\t\tbreak\n\t\t}\n\t}\n\tif !buttonFound {\n\t\treturn nil\n\t}\n\n\tprompt := &PermissionPrompt{}\n\n\t// Description: first non-empty line after the header.\n\t// opencode prefixes the description with \"← \" or \"→ \" arrow glyphs.\n\tfor i := permIdx + 1; i < len(lines); i++ {\n\t\tt := strings.TrimSpace(lines[i])\n\t\tif t == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tt = strings.TrimPrefix(t, \"← \")\n\t\tt = strings.TrimPrefix(t, \"←\")\n\t\tt = strings.TrimPrefix(t, \"→ \")\n\t\tt = strings.TrimPrefix(t, \"→\")\n\t\tprompt.Description = strings.TrimSpace(t)\n\t\tbreak\n\t}\n\n\t// Pattern: locate \"Patterns\" header, then take the first non-empty line\n\t// that starts with \"- \".\n\tfor i := permIdx; i < len(lines); i++ {\n\t\tif strings.TrimSpace(lines[i]) != \"Patterns\" {\n\t\t\tcontinue\n\t\t}\n\t\tfor j := i + 1; j < len(lines); j++ {\n\t\t\tt := strings.TrimSpace(lines[j])\n\t\t\tif t == \"\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif strings.HasPrefix(t, \"- \") {\n\t\t\t\tprompt.Pattern = strings.TrimPrefix(t, \"- \")\n\t\t\t}\n\t\t\tbreak\n\t\t}\n\t\tbreak\n\t}\n\n\treturn prompt\n}\n",
+              "additions": 38,
+              "deletions": 39,
+              "status": "modified"
+            },
+            {
+              "file": "session/storage.go",
+              "before": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData represents the serializable data of an Instance\ntype InstanceData struct {\n\tTitle                  string    `json:\"title\"`\n\tPath                   string    `json:\"path\"`\n\tBranch                 string    `json:\"branch\"`\n\tStatus                 Status    `json:\"status\"`\n\tHeight                 int       `json:\"height\"`\n\tWidth                  int       `json:\"width\"`\n\tCreatedAt              time.Time `json:\"created_at\"`\n\tUpdatedAt              time.Time `json:\"updated_at\"`\n\tAutoYes                bool      `json:\"auto_yes\"`\n\tSkipPermissions        bool      `json:\"skip_permissions\"`\n\tTaskFile               string    `json:\"task_file,omitempty\"`\n\tAgentType              string    `json:\"agent_type,omitempty\"`\n\tTaskNumber             int       `json:\"task_number,omitempty\"`\n\tWaveNumber             int       `json:\"wave_number,omitempty\"`\n\tPeerCount              int       `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool      `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool      `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool      `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string    `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int       `json:\"review_cycle,omitempty\"`\n\n\tProgram   string          `json:\"program\"`\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements custom JSON unmarshaling to handle the rename from\n// plan_file to task_file. Existing state.json files may use the old field name.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{Alias: (*Alias)(d)}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData represents the serializable data of a GitWorktree\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData represents the serializable data of a DiffStats\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage handles saving and loading instances using the state interface\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage creates a new storage instance\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{\n\t\tstate: state,\n\t}, nil\n}\n\n// SaveInstances saves the list of instances to disk\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\t// Convert instances to InstanceData\n\tdata := make([]InstanceData, 0)\n\tfor _, instance := range instances {\n\t\tif instance.Started() {\n\t\t\tdata = append(data, instance.ToInstanceData())\n\t\t}\n\t}\n\n\t// Marshal to JSON\n\tjsonData, err := json.Marshal(data)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(jsonData)\n}\n\n// LoadInstances loads the list of instances from disk\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\tjsonData := s.state.GetInstances()\n\n\tvar instancesData []InstanceData\n\tif err := json.Unmarshal(jsonData, &instancesData); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(instancesData))\n\tfor _, data := range instancesData {\n\t\t// Skip non-paused instances whose worktree no longer exists on disk.\n\t\t// This cleans up stale state from old sessions or config migrations\n\t\t// (e.g. worktree path was moved from ~/.config/kasmos/worktrees/ to <repo>/.worktrees/).\n\t\tif data.Status != Paused && data.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(data.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\tdata.Title, data.Worktree.WorktreePath)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\t\tinstance, err := FromInstanceData(data)\n\t\tif err != nil {\n\t\t\t// Log and skip instances that fail to restore (e.g. dead tmux session)\n\t\t\t// instead of hard-failing, which would prevent ALL instances from loading.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", data.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, instance)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes an instance from storage\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tfound := false\n\tnewInstances := make([]*Instance, 0)\n\tfor _, instance := range instances {\n\t\tdata := instance.ToInstanceData()\n\t\tif data.Title != title {\n\t\t\tnewInstances = append(newInstances, instance)\n\t\t} else {\n\t\t\tfound = true\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(newInstances)\n}\n\n// UpdateInstance updates an existing instance in storage\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tdata := instance.ToInstanceData()\n\tfound := false\n\tfor i, existing := range instances {\n\t\texistingData := existing.ToInstanceData()\n\t\tif existingData.Title == data.Title {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", data.Title)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes all stored instances\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n",
+              "after": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData is the JSON-serializable mirror of Instance fields used for persistence.\ntype InstanceData struct {\n\tTitle           string    `json:\"title\"`\n\tPath            string    `json:\"path\"`\n\tBranch          string    `json:\"branch\"`\n\tStatus          Status    `json:\"status\"`\n\tHeight          int       `json:\"height\"`\n\tWidth           int       `json:\"width\"`\n\tCreatedAt       time.Time `json:\"created_at\"`\n\tUpdatedAt       time.Time `json:\"updated_at\"`\n\tAutoYes         bool      `json:\"auto_yes\"`\n\tSkipPermissions bool      `json:\"skip_permissions\"`\n\tProgram         string    `json:\"program\"`\n\n\t// Optional plan/orchestration fields.\n\tTaskFile               string `json:\"task_file,omitempty\"`\n\tAgentType              string `json:\"agent_type,omitempty\"`\n\tTaskNumber             int    `json:\"task_number,omitempty\"`\n\tWaveNumber             int    `json:\"wave_number,omitempty\"`\n\tPeerCount              int    `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool   `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool   `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool   `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int    `json:\"review_cycle,omitempty\"`\n\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements a custom unmarshaler that handles the historical rename from\n// the \"plan_file\" JSON key to \"task_file\". State files written before the rename used\n// \"plan_file\"; if that field is present and \"task_file\" is empty, the value is migrated.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\t// Use an alias to avoid infinite recursion when calling json.Unmarshal.\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{\n\t\tAlias: (*Alias)(d),\n\t}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\t// Migrate legacy field.\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData is the serializable form of a git.GitWorktree.\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData is the serializable form of a git.DiffStats.\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage persists instances via a config.StateManager.\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage constructs a Storage backed by the given state manager.\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{state: state}, nil\n}\n\n// SaveInstances serialises all started instances and writes them to the state store.\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\trecords := make([]InstanceData, 0, len(instances))\n\tfor _, inst := range instances {\n\t\tif inst.Started() {\n\t\t\trecords = append(records, inst.ToInstanceData())\n\t\t}\n\t}\n\n\traw, err := json.Marshal(records)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(raw)\n}\n\n// LoadInstances reads instances from the state store and restores them.\n// Stale entries (non-paused instances whose worktree directory no longer exists)\n// are dropped with a warning instead of causing a hard failure.\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\traw := s.state.GetInstances()\n\n\tvar records []InstanceData\n\tif err := json.Unmarshal(raw, &records); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(records))\n\tfor _, rec := range records {\n\t\t// Drop non-paused instances whose worktree path has disappeared from disk.\n\t\tif rec.Status != Paused && rec.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(rec.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\n\t\t\t\t\t\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\trec.Title, rec.Worktree.WorktreePath,\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tinst, err := FromInstanceData(rec)\n\t\tif err != nil {\n\t\t\t// Log and skip rather than failing the entire load.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", rec.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, inst)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes the instance with the given title from persistent storage.\n// Returns an error when no matching instance is found.\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tremaining := instances[:0]\n\tfound := false\n\tfor _, inst := range instances {\n\t\tif inst.ToInstanceData().Title == title {\n\t\t\tfound = true\n\t\t} else {\n\t\t\tremaining = append(remaining, inst)\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(remaining)\n}\n\n// UpdateInstance replaces the stored record for the instance (matched by title).\n// Returns an error when no matching instance is found.\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\ttarget := instance.ToInstanceData().Title\n\tfound := false\n\tfor i, inst := range instances {\n\t\tif inst.ToInstanceData().Title == target {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", target)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes every stored instance from the state store.\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n",
+              "additions": 80,
+              "deletions": 75,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 4: Rewrite storage.go — Instance Persistence\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite all files in `session/` (excluding the already-rewritten `session/tmux/` and `session/git/` subdirectories) to remove AGPL-tainted lines. The rewrite preserves the identical public API so all callers (`app/`, `ui/`, `daemon/`, `main.go`) compile without changes, while replacing every line of implementation.\n**Architecture:** Eight files rewritten in-place across the session core: `instance.go` (struct, constructors, accessors, serialization), `instance_lifecycle.go` (Start variants, Kill, Pause, Resume, Restart, Adopt), `instance_session.go` (pane I/O, metadata collection, resource monitoring, diff stats), `storage.go` (JSON persistence via `config.StateManager`), `activity.go` (agent activity parsing from pane content), `permission_prompt.go` (opencode permission dialog detection), `cli_prompt.go` (program CLI prompt support detection), and `notify.go` (desktop notifications). The `terminal.go` file (EmbeddedTerminal) is 100% original code (written post-fork for the live-preview feature) and is untouched. All existing test files are preserved as the regression suite — they must pass after each task. The public API (exported types, method signatures, constants) stays identical.\n**Tech Stack:** Go 1.24, testify, `session/tmux` (rewritten), `session/git` (rewritten), `config.StateManager`, `charmbracelet/x/ansi`, `charmbracelet/x/vt`, `creack/pty`, `atotto/clipboard`\n\n## Wave 1 of 3\n\n## Parallel Execution\n\nYou are Task 4 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `session/storage.go`\n- Test: `session/instance_taskfile_test.go` (existing — exercises `ToInstanceData`/`FromInstanceData` round-trips)\n\n**Step 1: write the failing test**\n\nNo new tests needed. Existing tests exercise `InstanceData` JSON marshaling/unmarshaling (including the `plan_file` → `task_file` migration), `ToInstanceData`/`FromInstanceData` round-trips for TaskFile, AgentType, ImplementationComplete, SoloAgent, and wave fields. The `Storage` type's `SaveInstances`/`LoadInstances`/`DeleteInstance`/`UpdateInstance`/`DeleteAllInstances` methods are integration-tested through the app layer.\n\n**Step 2: run test to verify baseline passes**\n\n```bash\ngo test ./session/... -run \"TestInstanceData|TestNewInstance_Sets\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 3: rewrite implementation**\n\nDelete the contents of `session/storage.go` and rewrite from scratch:\n\n- **`InstanceData` struct** — JSON-serializable mirror of `Instance` fields: Title, Path, Branch, Status, Height, Width, CreatedAt, UpdatedAt, AutoYes, SkipPermissions, TaskFile, AgentType, TaskNumber, WaveNumber, PeerCount, IsReviewer, ImplementationComplete, SoloAgent, QueuedPrompt, ReviewCycle, Program, Worktree (`GitWorktreeData`), DiffStats (`DiffStatsData`). JSON tags must match exactly (including `omitempty` on optional fields).\n- **`InstanceData.UnmarshalJSON(data []byte) error`** — custom unmarshaler for backward compatibility: defines an alias type to avoid recursion, adds a `PlanFile string` field with `json:\"plan_file,omitempty\"` tag. If `TaskFile` is empty after unmarshal but `PlanFile` is set, copies `PlanFile` to `TaskFile`.\n- **`GitWorktreeData` struct** — five string fields: RepoPath, WorktreePath, SessionName, BranchName, BaseCommitSHA. All with JSON tags.\n- **`DiffStatsData` struct** — three fields: Added (int), Removed (int), Content (string). All with JSON tags.\n- **`Storage` struct** — holds a `config.StateManager` reference.\n- **`NewStorage(state config.StateManager) (*Storage, error)`** — constructor, returns `&Storage{state: state}, nil`.\n- **`SaveInstances(instances []*Instance) error`** — iterates instances, calls `ToInstanceData()` on each started instance, marshals the slice to JSON, calls `state.SaveInstances()`.\n- **`LoadInstances() ([]*Instance, error)`** — calls `state.GetInstances()`, unmarshals JSON into `[]InstanceData`. For each entry: skips non-paused instances whose worktree path no longer exists on disk (logs warning). Calls `FromInstanceData()` on each — logs and skips entries that fail to restore (instead of hard-failing all instances).\n- **`DeleteInstance(title string) error`** — loads all instances, filters out the one matching `title`, saves the rest. Returns error if not found.\n- **`UpdateInstance(instance *Instance) error`** — loads all instances, replaces the one matching by title, saves. Returns error if not found.\n- **`DeleteAllInstances() error`** — delegates to `state.DeleteAllInstances()`.\n\nImports: `encoding/json`, `fmt`, `os`, `time`, `github.com/kastheco/kasmos/config`, `github.com/kastheco/kasmos/log`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./session/... -run \"TestInstanceData|TestNewInstance_Sets\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add session/storage.go\ngit commit -m \"feat(clean-room): rewrite session/storage.go from scratch\"\n```\n",
+          "id": "prt_cb4bbc0f3002IoVT8uDlaytDsa",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc0f3001bWo30zmI4eNJMH"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558729483,
+          "completed": 1772558733313
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41568,
+          "input": 2,
+          "output": 134,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41432
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bbc10b001QtCcpbPDY3jKSQ",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "id": "prt_cb4bbc96a001msVNAbez62v6NL",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc10b001QtCcpbPDY3jKSQ"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then examining the existing code to understand what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqECCkYICxgCKkAQaGnzy8v0deOeLu/DAgZ1VKq4X16Ny0w/REDACTED/V1ihAaDL6m7jl+YzLHh/KurCIwlH/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772558731627,
+            "end": 1772558732438
+          },
+          "id": "prt_cb4bbc96b001it96oqzu7MJTIj",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc10b001QtCcpbPDY3jKSQ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Un6ALF9dXXM3FoNsho812n",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558732946,
+              "end": 1772558732951
+            }
+          },
+          "id": "prt_cb4bbcc97001ddfTUlOvb5qCpn",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc10b001QtCcpbPDY3jKSQ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01UonUnP3LkW58Z6wEsotNVU",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558733267,
+              "end": 1772558733271
+            }
+          },
+          "id": "prt_cb4bbce93001ijeVHjk1jgoRtr",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc10b001QtCcpbPDY3jKSQ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "cost": 0,
+          "tokens": {
+            "total": 41568,
+            "input": 2,
+            "output": 134,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41432
+            }
+          },
+          "id": "prt_cb4bbcfee001gw7Dk1Uln1QKCN",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbc10b001QtCcpbPDY3jKSQ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558733313,
+          "completed": 1772558737230
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49905,
+          "input": 1,
+          "output": 201,
+          "reasoning": 0,
+          "cache": {
+            "read": 41432,
+            "write": 8271
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bbd001001PtsC61iQ54wucN",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "id": "prt_cb4bbd5be001q9N4LQAzhdQwc8",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me examine the existing code to understand what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EvQBCkYICxgCKkDqfPfj/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772558734782,
+            "end": 1772558735176
+          },
+          "id": "prt_cb4bbd5be002oAetGNBiiEWjmI",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        },
+        {
+          "type": "text",
+          "text": "Now let me examine the existing code to understand the structure:",
+          "time": {
+            "start": 1772558736020,
+            "end": 1772558736020
+          },
+          "id": "prt_cb4bbd748001KTadbxBY72RtnR",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012NNy4XMi9PA9uT1stG2zXe",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"encoding/json\"\n5: \t\"fmt\"\n6: \t\"os\"\n7: \t\"time\"\n8: \n9: \t\"github.com/kastheco/kasmos/config\"\n10: \t\"github.com/kastheco/kasmos/log\"\n11: )\n12: \n13: // InstanceData represents the serializable data of an Instance\n14: type InstanceData struct {\n15: \tTitle                  string    `json:\"title\"`\n16: \tPath                   string    `json:\"path\"`\n17: \tBranch                 string    `json:\"branch\"`\n18: \tStatus                 Status    `json:\"status\"`\n19: \tHeight                 int       `json:\"height\"`\n20: \tWidth                  int       `json:\"width\"`\n21: \tCreatedAt              time.Time `json:\"created_at\"`\n22: \tUpdatedAt              time.Time `json:\"updated_at\"`\n23: \tAutoYes                bool      `json:\"auto_yes\"`\n24: \tSkipPermissions        bool      `json:\"skip_permissions\"`\n25: \tTaskFile               string    `json:\"task_file,omitempty\"`\n26: \tAgentType              string    `json:\"agent_type,omitempty\"`\n27: \tTaskNumber             int       `json:\"task_number,omitempty\"`\n28: \tWaveNumber             int       `json:\"wave_number,omitempty\"`\n29: \tPeerCount              int       `json:\"peer_count,omitempty\"`\n30: \tIsReviewer             bool      `json:\"is_reviewer,omitempty\"`\n31: \tImplementationComplete bool      `json:\"implementation_complete,omitempty\"`\n32: \tSoloAgent              bool      `json:\"solo_agent,omitempty\"`\n33: \tQueuedPrompt           string    `json:\"queued_prompt,omitempty\"`\n34: \tReviewCycle            int       `json:\"review_cycle,omitempty\"`\n35: \n36: \tProgram   string          `json:\"program\"`\n37: \tWorktree  GitWorktreeData `json:\"worktree\"`\n38: \tDiffStats DiffStatsData   `json:\"diff_stats\"`\n39: }\n40: \n41: // UnmarshalJSON implements custom JSON unmarshaling to handle the rename from\n42: // plan_file to task_file. Existing state.json files may use the old field name.\n43: func (d *InstanceData) UnmarshalJSON(data []byte) error {\n44: \ttype Alias InstanceData\n45: \taux := &struct {\n46: \t\t*Alias\n47: \t\tPlanFile string `json:\"plan_file,omitempty\"`\n48: \t}{Alias: (*Alias)(d)}\n49: \tif err := json.Unmarshal(data, aux); err != nil {\n50: \t\treturn err\n51: \t}\n52: \tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n53: \t\td.TaskFile = aux.PlanFile\n54: \t}\n55: \treturn nil\n56: }\n57: \n58: // GitWorktreeData represents the serializable data of a GitWorktree\n59: type GitWorktreeData struct {\n60: \tRepoPath      string `json:\"repo_path\"`\n61: \tWorktreePath  string `json:\"worktree_path\"`\n62: \tSessionName   string `json:\"session_name\"`\n63: \tBranchName    string `json:\"branch_name\"`\n64: \tBaseCommitSHA string `json:\"base_commit_sha\"`\n65: }\n66: \n67: // DiffStatsData represents the serializable data of a DiffStats\n68: type DiffStatsData struct {\n69: \tAdded   int    `json:\"added\"`\n70: \tRemoved int    `json:\"removed\"`\n71: \tContent string `json:\"content\"`\n72: }\n73: \n74: // Storage handles saving and loading instances using the state interface\n75: type Storage struct {\n76: \tstate config.StateManager\n77: }\n78: \n79: // NewStorage creates a new storage instance\n80: func NewStorage(state config.StateManager) (*Storage, error) {\n81: \treturn &Storage{\n82: \t\tstate: state,\n83: \t}, nil\n84: }\n85: \n86: // SaveInstances saves the list of instances to disk\n87: func (s *Storage) SaveInstances(instances []*Instance) error {\n88: \t// Convert instances to InstanceData\n89: \tdata := make([]InstanceData, 0)\n90: \tfor _, instance := range instances {\n91: \t\tif instance.Started() {\n92: \t\t\tdata = append(data, instance.ToInstanceData())\n93: \t\t}\n94: \t}\n95: \n96: \t// Marshal to JSON\n97: \tjsonData, err := json.Marshal(data)\n98: \tif err != nil {\n99: \t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n100: \t}\n101: \n102: \treturn s.state.SaveInstances(jsonData)\n103: }\n104: \n105: // LoadInstances loads the list of instances from disk\n106: func (s *Storage) LoadInstances() ([]*Instance, error) {\n107: \tjsonData := s.state.GetInstances()\n108: \n109: \tvar instancesData []InstanceData\n110: \tif err := json.Unmarshal(jsonData, &instancesData); err != nil {\n111: \t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n112: \t}\n113: \n114: \tinstances := make([]*Instance, 0, len(instancesData))\n115: \tfor _, data := range instancesData {\n116: \t\t// Skip non-paused instances whose worktree no longer exists on disk.\n117: \t\t// This cleans up stale state from old sessions or config migrations\n118: \t\t// (e.g. worktree path was moved from ~/.config/kasmos/worktrees/ to <repo>/.worktrees/).\n119: \t\tif data.Status != Paused && data.Worktree.WorktreePath != \"\" {\n120: \t\t\tif _, err := os.Stat(data.Worktree.WorktreePath); err != nil {\n121: \t\t\t\tlog.WarningLog.Printf(\"skipping stale instance %q: worktree path gone: %s\",\n122: \t\t\t\t\tdata.Title, data.Worktree.WorktreePath)\n123: \t\t\t\tcontinue\n124: \t\t\t}\n125: \t\t}\n126: \t\tinstance, err := FromInstanceData(data)\n127: \t\tif err != nil {\n128: \t\t\t// Log and skip instances that fail to restore (e.g. dead tmux session)\n129: \t\t\t// instead of hard-failing, which would prevent ALL instances from loading.\n130: \t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", data.Title, err)\n131: \t\t\tcontinue\n132: \t\t}\n133: \t\tinstances = append(instances, instance)\n134: \t}\n135: \n136: \treturn instances, nil\n137: }\n138: \n139: // DeleteInstance removes an instance from storage\n140: func (s *Storage) DeleteInstance(title string) error {\n141: \tinstances, err := s.LoadInstances()\n142: \tif err != nil {\n143: \t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n144: \t}\n145: \n146: \tfound := false\n147: \tnewInstances := make([]*Instance, 0)\n148: \tfor _, instance := range instances {\n149: \t\tdata := instance.ToInstanceData()\n150: \t\tif data.Title != title {\n151: \t\t\tnewInstances = append(newInstances, instance)\n152: \t\t} else {\n153: \t\t\tfound = true\n154: \t\t}\n155: \t}\n156: \n157: \tif !found {\n158: \t\treturn fmt.Errorf(\"instance not found: %s\", title)\n159: \t}\n160: \n161: \treturn s.SaveInstances(newInstances)\n162: }\n163: \n164: // UpdateInstance updates an existing instance in storage\n165: func (s *Storage) UpdateInstance(instance *Instance) error {\n166: \tinstances, err := s.LoadInstances()\n167: \tif err != nil {\n168: \t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n169: \t}\n170: \n171: \tdata := instance.ToInstanceData()\n172: \tfound := false\n173: \tfor i, existing := range instances {\n174: \t\texistingData := existing.ToInstanceData()\n175: \t\tif existingData.Title == data.Title {\n176: \t\t\tinstances[i] = instance\n177: \t\t\tfound = true\n178: \t\t\tbreak\n179: \t\t}\n180: \t}\n181: \n182: \tif !found {\n183: \t\treturn fmt.Errorf(\"instance not found: %s\", data.Title)\n184: \t}\n185: \n186: \treturn s.SaveInstances(instances)\n187: }\n188: \n189: // DeleteAllInstances removes all stored instances\n190: func (s *Storage) DeleteAllInstances() error {\n191: \treturn s.state.DeleteAllInstances()\n192: }\n\n(End of file - total 192 lines)\n</content>",
+            "title": "session/storage.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData represents the serializable data of an Instance\ntype InstanceData struct {\n\tTitle                  string    `json:\"title\"`\n\tPath                   string    `json:\"path\"`\n\tBranch                 string    `json:\"branch\"`\n\tStatus                 Status    `json:\"status\"`\n\tHeight                 int       `json:\"height\"`\n\tWidth                  int       `json:\"width\"`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772558736887,
+              "end": 1772558736894
+            }
+          },
+          "id": "prt_cb4bbda95001KjKHNJOC7ffhp6",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_taskfile_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_taskfile_test.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"testing\"\n5: )\n6: \n7: func TestNewInstance_SetsPlanFile(t *testing.T) {\n8: \tinst, err := NewInstance(InstanceOptions{\n9: \t\tTitle:    \"plan-worker\",\n10: \t\tPath:     \".\",\n11: \t\tProgram:  \"claude\",\n12: \t\tTaskFile: \"plan-orchestration.md\",\n13: \t})\n14: \tif err != nil {\n15: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n16: \t}\n17: \tif inst.TaskFile != \"plan-orchestration.md\" {\n18: \t\tt.Fatalf(\"PlanFile = %q, want %q\", inst.TaskFile, \"plan-orchestration.md\")\n19: \t}\n20: }\n21: \n22: func TestInstanceData_RoundTripPlanFile(t *testing.T) {\n23: \tdata := InstanceData{\n24: \t\tTitle:    \"persisted\",\n25: \t\tPath:     \"/tmp/repo\",\n26: \t\tBranch:   \"feature/test\",\n27: \t\tStatus:   Paused,\n28: \t\tProgram:  \"claude\",\n29: \t\tTaskFile: \"plan.md\",\n30: \t\tWorktree: GitWorktreeData{\n31: \t\t\tRepoPath:      \"/tmp/repo\",\n32: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/persisted\",\n33: \t\t\tSessionName:   \"persisted\",\n34: \t\t\tBranchName:    \"feature/test\",\n35: \t\t\tBaseCommitSHA: \"abc123\",\n36: \t\t},\n37: \t}\n38: \n39: \tinst, err := FromInstanceData(data)\n40: \tif err != nil {\n41: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n42: \t}\n43: \tif inst.TaskFile != \"plan.md\" {\n44: \t\tt.Fatalf(\"instance PlanFile = %q, want %q\", inst.TaskFile, \"plan.md\")\n45: \t}\n46: \n47: \troundTrip := inst.ToInstanceData()\n48: \tif roundTrip.TaskFile != \"plan.md\" {\n49: \t\tt.Fatalf(\"ToInstanceData PlanFile = %q, want %q\", roundTrip.TaskFile, \"plan.md\")\n50: \t}\n51: }\n52: \n53: func TestInstanceData_RoundTripImplementationComplete(t *testing.T) {\n54: \tdata := InstanceData{\n55: \t\tTitle:                  \"coder-done\",\n56: \t\tPath:                   \"/tmp/repo\",\n57: \t\tBranch:                 \"feature/impl\",\n58: \t\tStatus:                 Paused,\n59: \t\tProgram:                \"opencode\",\n60: \t\tTaskFile:               \"plan.md\",\n61: \t\tImplementationComplete: true,\n62: \t\tWorktree: GitWorktreeData{\n63: \t\t\tRepoPath:      \"/tmp/repo\",\n64: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/coder-done\",\n65: \t\t\tSessionName:   \"coder-done\",\n66: \t\t\tBranchName:    \"feature/impl\",\n67: \t\t\tBaseCommitSHA: \"def456\",\n68: \t\t},\n69: \t}\n70: \n71: \tinst, err := FromInstanceData(data)\n72: \tif err != nil {\n73: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n74: \t}\n75: \tif !inst.ImplementationComplete {\n76: \t\tt.Fatal(\"expected ImplementationComplete = true after FromInstanceData\")\n77: \t}\n78: \n79: \troundTrip := inst.ToInstanceData()\n80: \tif !roundTrip.ImplementationComplete {\n81: \t\tt.Fatal(\"expected ImplementationComplete = true after ToInstanceData round-trip\")\n82: \t}\n83: }\n84: \n85: func TestNewInstance_SetsAgentType(t *testing.T) {\n86: \tinst, err := NewInstance(InstanceOptions{\n87: \t\tTitle:     \"planner-worker\",\n88: \t\tPath:      \".\",\n89: \t\tProgram:   \"opencode\",\n90: \t\tTaskFile:  \"auth-refactor.md\",\n91: \t\tAgentType: AgentTypePlanner,\n92: \t})\n93: \tif err != nil {\n94: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n95: \t}\n96: \tif inst.AgentType != AgentTypePlanner {\n97: \t\tt.Fatalf(\"AgentType = %q, want %q\", inst.AgentType, AgentTypePlanner)\n98: \t}\n99: }\n100: \n101: func TestInstanceData_RoundTripAgentType(t *testing.T) {\n102: \tdata := InstanceData{\n103: \t\tTitle:     \"persisted\",\n104: \t\tPath:      \"/tmp/repo\",\n105: \t\tBranch:    \"plan/auth-refactor\",\n106: \t\tStatus:    Paused,\n107: \t\tProgram:   \"opencode\",\n108: \t\tTaskFile:  \"auth-refactor.md\",\n109: \t\tAgentType: AgentTypeReviewer,\n110: \t\tWorktree: GitWorktreeData{\n111: \t\t\tRepoPath:      \"/tmp/repo\",\n112: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/plan-auth-refactor\",\n113: \t\t\tSessionName:   \"persisted\",\n114: \t\t\tBranchName:    \"plan/auth-refactor\",\n115: \t\t\tBaseCommitSHA: \"abc123\",\n116: \t\t},\n117: \t}\n118: \n119: \tinst, err := FromInstanceData(data)\n120: \tif err != nil {\n121: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n122: \t}\n123: \tif inst.AgentType != AgentTypeReviewer {\n124: \t\tt.Fatalf(\"instance AgentType = %q, want %q\", inst.AgentType, AgentTypeReviewer)\n125: \t}\n126: \n127: \troundTrip := inst.ToInstanceData()\n128: \tif roundTrip.AgentType != AgentTypeReviewer {\n129: \t\tt.Fatalf(\"ToInstanceData AgentType = %q, want %q\", roundTrip.AgentType, AgentTypeReviewer)\n130: \t}\n131: }\n132: \n133: func TestInstanceData_ImplementationCompleteFalseByDefault(t *testing.T) {\n134: \tdata := InstanceData{\n135: \t\tTitle:   \"normal-session\",\n136: \t\tPath:    \"/tmp/repo\",\n137: \t\tBranch:  \"feature/x\",\n138: \t\tStatus:  Paused,\n139: \t\tProgram: \"claude\",\n140: \t\tWorktree: GitWorktreeData{\n141: \t\t\tRepoPath:      \"/tmp/repo\",\n142: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/normal-session\",\n143: \t\t\tSessionName:   \"normal-session\",\n144: \t\t\tBranchName:    \"feature/x\",\n145: \t\t\tBaseCommitSHA: \"aaa111\",\n146: \t\t},\n147: \t}\n148: \n149: \tinst, err := FromInstanceData(data)\n150: \tif err != nil {\n151: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n152: \t}\n153: \tif inst.ImplementationComplete {\n154: \t\tt.Fatal(\"expected ImplementationComplete = false for a normal instance\")\n155: \t}\n156: }\n157: \n158: func TestInstanceData_RoundTripSoloAgent(t *testing.T) {\n159: \tinst, err := NewInstance(InstanceOptions{\n160: \t\tTitle:   \"solo-worker\",\n161: \t\tPath:    \"/tmp/repo\",\n162: \t\tProgram: \"opencode\",\n163: \t})\n164: \tif err != nil {\n165: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n166: \t}\n167: \tinst.SoloAgent = true\n168: \n169: \tdata := inst.ToInstanceData()\n170: \trestored, err := FromInstanceData(data)\n171: \tif err != nil {\n172: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n173: \t}\n174: \tif !restored.SoloAgent {\n175: \t\tt.Fatal(\"expected SoloAgent = true after InstanceData round-trip\")\n176: \t}\n177: }\n\n(End of file - total 177 lines)\n</content>",
+            "title": "session/instance_taskfile_test.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"testing\"\n)\n\nfunc TestNewInstance_SetsPlanFile(t *testing.T) {\n\tinst, err := NewInstance(InstanceOptions{\n\t\tTitle:    \"plan-worker\",\n\t\tPath:     \".\",\n\t\tProgram:  \"claude\",\n\t\tTaskFile: \"plan-orchestration.md\",\n\t})\n\tif err != nil {\n\t\tt.Fatalf(\"NewInstance() error = %v\", err)\n\t}\n\tif inst.TaskFile != \"plan-orchestration.md\" {\n\t\tt.Fatalf(\"PlanFile = %q, want %q\", inst.TaskFile, \"plan-orchestration.md\")\n\t}\n}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772558737204,
+              "end": 1772558737206
+            }
+          },
+          "id": "prt_cb4bbddfa001AUG4XK6TpgBMad",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "cost": 0,
+          "tokens": {
+            "total": 49905,
+            "input": 1,
+            "output": 201,
+            "reasoning": 0,
+            "cache": {
+              "read": 41432,
+              "write": 8271
+            }
+          },
+          "id": "prt_cb4bbdf45001pTef7QD2poCb2W",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbd001001PtsC61iQ54wucN"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558737231,
+          "completed": 1772558744256
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55135,
+          "input": 1,
+          "output": 320,
+          "reasoning": 0,
+          "cache": {
+            "read": 49703,
+            "write": 5111
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bbdf4f001wphzb961Hk1hbJ",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "id": "prt_cb4bbe389001hrMJ4d9Em4aEq9",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        },
+        {
+          "type": "reasoning",
+          "text": "The existing `storage.go` file already looks like a proper implementation. Let me understand what I need to do:\n\n1. The task says to \"delete the contents and rewrite from scratch\"\n2. I need to look at the existing implementation to understand what fields are needed\n3. I need to check what `Instance` fields look like and what `ToInstanceData`/`FromInstanceData` methods need to have\n\nLet me first run the baseline tests to make sure they pass, then look at the other relevant files to understand the full picture.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqgFCkYICxgCKkDBiEl3R+76XBkndB/x3eD9FxTLlDXiEc+7vmHyHxb5/REDACTED/REDACTED/REDACTED/hYhZpUnm24D4a+ImCYr/REDACTED/REDACTED/+P7lc7pXpmP1NMexX9BSPOBSiYOiuB/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772558738314,
+            "end": 1772558740778
+          },
+          "id": "prt_cb4bbe38a001KnUYJmTwhGrLtm",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        },
+        {
+          "type": "text",
+          "text": "Let me first run the baseline tests and examine the instance.go file:",
+          "time": {
+            "start": 1772558741431,
+            "end": 1772558741431
+          },
+          "id": "prt_cb4bbed2d001Z33uYfj4pgWCpv",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./session/... -run \"TestInstanceData|TestNewInstance_Sets\" -v -count=1 2>&1",
+              "description": "Run baseline tests to verify starting state"
+            },
+            "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.005s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+            "title": "Run baseline tests to verify starting state",
+            "metadata": {
+              "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.005s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run baseline tests to verify starting state",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558742883,
+              "end": 1772558743458
+            }
+          },
+          "id": "prt_cb4bbefb80011YspyP7G1UEoEU",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"path/filepath\"\n6: \t\"time\"\n7: \n8: \t\"github.com/kastheco/kasmos/session/git\"\n9: \t\"github.com/kastheco/kasmos/session/tmux\"\n10: )\n11: \n12: type Status int\n13: \n14: const (\n15: \t// Running is the status when the instance is running and claude is working.\n16: \tRunning Status = iota\n17: \t// Ready is if the claude instance is ready to be interacted with (waiting for user input).\n18: \tReady\n19: \t// Loading is if the instance is loading (if we are starting it up or something).\n20: \tLoading\n21: \t// Paused is if the instance is paused (worktree removed but branch preserved).\n22: \tPaused\n23: )\n24: \n25: // AgentType constants identify the role of an agent session within a plan lifecycle.\n26: const (\n27: \tAgentTypePlanner  = \"planner\"\n28: \tAgentTypeCoder    = \"coder\"\n29: \tAgentTypeReviewer = \"reviewer\"\n30: \tAgentTypeFixer    = \"fixer\"\n31: )\n32: \n33: // Instance is a running instance of claude code.\n34: type Instance struct {\n35: \t// Title is the title of the instance.\n36: \tTitle string\n37: \t// Path is the path to the workspace.\n38: \tPath string\n39: \t// Branch is the branch of the instance.\n40: \tBranch string\n41: \t// Status is the status of the instance.\n42: \tStatus Status\n43: \t// Program is the program to run in the instance.\n44: \tProgram string\n45: \t// Height is the height of the instance.\n46: \tHeight int\n47: \t// Width is the width of the instance.\n48: \tWidth int\n49: \t// CreatedAt is the time the instance was created.\n50: \tCreatedAt time.Time\n51: \t// UpdatedAt is the time the instance was last updated.\n52: \tUpdatedAt time.Time\n53: \t// AutoYes is true if the instance should automatically press enter when prompted.\n54: \tAutoYes bool\n55: \t// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.\n56: \tSkipPermissions bool\n57: \t// PlanFile is the plan filename this instance is implementing (empty = no plan).\n58: \tTaskFile string\n59: \t// Topic is the topic/group this instance belongs to (from plan-state).\n60: \tTopic string\n61: \t// AgentType is the role of this instance within a plan lifecycle: planner/coder/reviewer or empty for ad-hoc.\n62: \tAgentType string\n63: \t// TaskNumber is the task number within a plan (1-indexed). 0 = not a wave task.\n64: \tTaskNumber int\n65: \t// WaveNumber is the wave number this task belongs to (1-indexed). 0 = not a wave task.\n66: \tWaveNumber int\n67: \t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n68: \tPeerCount int\n69: \t// IsReviewer is true when this instance is a reviewer session for a plan.\n70: \t// Deprecated: use AgentType == AgentTypeReviewer instead.\n71: \tIsReviewer bool\n72: \t// ImplementationComplete is true when the coder finished and the plan transitioned to review.\n73: \t// The instance is auto-paused and rendered with a dim/completed visual style.\n74: \tImplementationComplete bool\n75: \t// SoloAgent is true when this instance was spawned via \"start solo agent\" — no\n76: \t// automatic lifecycle transitions (push prompt, review spawning) apply.\n77: \tSoloAgent bool\n78: \t// Exited is true when the instance's tmux session has died. Used by the UI\n79: \t// to render dead instances with greyed-out strikethrough styling.\n80: \tExited bool\n81: \t// QueuedPrompt is sent to the session once it becomes ready for the first time. Cleared after send.\n82: \tQueuedPrompt string\n83: \n84: \t// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).\n85: \tsharedWorktree bool\n86: \t// LoadingStage tracks the current startup progress. Exported so the UI can read it.\n87: \tLoadingStage int\n88: \t// LoadingTotal is the total number of startup stages.\n89: \tLoadingTotal int\n90: \t// LoadingMessage describes the current loading step.\n91: \tLoadingMessage string\n92: \n93: \t// Notified is true when the instance finished (Running→Ready) and the user\n94: \t// hasn't selected it yet. Cleared when the user selects this instance.\n95: \tNotified bool\n96: \n97: \t// LastActiveAt is set whenever the instance is marked as Running.\n98: \tLastActiveAt time.Time\n99: \n100: \t// PromptDetected is true when the instance's program is waiting for user input.\n101: \t// Reset to false when the instance resumes running. Used by the sidebar to\n102: \t// persistently show a running indicator without flickering.\n103: \tPromptDetected bool\n104: \n105: \t// AwaitingWork is set when a QueuedPrompt is delivered to the agent, and\n106: \t// cleared when the agent transitions to Running. The wave orchestrator uses\n107: \t// this to avoid treating the initial idle prompt as task completion.\n108: \tAwaitingWork bool\n109: \n110: \t// ReviewCycle is the 1-indexed review/fix cycle counter for this instance.\n111: \t// 0 means not a review cycle instance. Incremented on each ReviewChangesRequested transition.\n112: \tReviewCycle int\n113: \n114: \t// HasWorked is set to true when the agent produces at least one content\n115: \t// update (md.Updated) after receiving its task prompt. The wave orchestrator\n116: \t// requires this before treating PromptDetected as task completion — prevents\n117: \t// permission prompts or early returns from prematurely completing a wave.\n118: \tHasWorked bool\n119: \n120: \t// CPUPercent is the current CPU usage of the instance's process.\n121: \tCPUPercent float64\n122: \t// MemMB is the current memory usage in megabytes.\n123: \tMemMB float64\n124: \n125: \t// LastActivity is the most recently detected agent activity (ephemeral, not persisted).\n126: \tLastActivity *Activity\n127: \n128: \t// CachedContent is the last tmux capture-pane output, set in app.Update from metadata results.\n129: \t// Used by the preview tick to avoid redundant subprocess calls.\n130: \tCachedContent string\n131: \t// CachedContentSet tracks whether CachedContent has been initialized.\n132: \t// This distinguishes \"no cache yet\" from a valid empty pane capture.\n133: \tCachedContentSet bool\n134: \n135: \t// DiffStats stores the current git diff statistics\n136: \tdiffStats *git.DiffStats\n137: \n138: \t// The below fields are initialized upon calling Start().\n139: \n140: \tstarted bool\n141: \t// tmuxSession is the tmux session for the instance.\n142: \ttmuxSession *tmux.TmuxSession\n143: \t// gitWorktree is the git worktree for the instance.\n144: \tgitWorktree *git.GitWorktree\n145: }\n146: \n147: // ToInstanceData converts an Instance to its serializable form\n148: func (i *Instance) ToInstanceData() InstanceData {\n149: \tdata := InstanceData{\n150: \t\tTitle:                  i.Title,\n151: \t\tPath:                   i.Path,\n152: \t\tBranch:                 i.Branch,\n153: \t\tStatus:                 i.Status,\n154: \t\tHeight:                 i.Height,\n155: \t\tWidth:                  i.Width,\n156: \t\tCreatedAt:              i.CreatedAt,\n157: \t\tUpdatedAt:              time.Now(),\n158: \t\tProgram:                i.Program,\n159: \t\tAutoYes:                i.AutoYes,\n160: \t\tSkipPermissions:        i.SkipPermissions,\n161: \t\tTaskFile:               i.TaskFile,\n162: \t\tAgentType:              i.AgentType,\n163: \t\tTaskNumber:             i.TaskNumber,\n164: \t\tWaveNumber:             i.WaveNumber,\n165: \t\tPeerCount:              i.PeerCount,\n166: \t\tIsReviewer:             i.IsReviewer,\n167: \t\tImplementationComplete: i.ImplementationComplete,\n168: \t\tSoloAgent:              i.SoloAgent,\n169: \t\tQueuedPrompt:           i.QueuedPrompt,\n170: \t\tReviewCycle:            i.ReviewCycle,\n171: \t}\n172: \n173: \t// Only include worktree data if gitWorktree is initialized\n174: \tif i.gitWorktree != nil {\n175: \t\tdata.Worktree = GitWorktreeData{\n176: \t\t\tRepoPath:      i.gitWorktree.GetRepoPath(),\n177: \t\t\tWorktreePath:  i.gitWorktree.GetWorktreePath(),\n178: \t\t\tSessionName:   i.Title,\n179: \t\t\tBranchName:    i.gitWorktree.GetBranchName(),\n180: \t\t\tBaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),\n181: \t\t}\n182: \t}\n183: \n184: \t// Only include diff stats if they exist\n185: \tif i.diffStats != nil {\n186: \t\tdata.DiffStats = DiffStatsData{\n187: \t\t\tAdded:   i.diffStats.Added,\n188: \t\t\tRemoved: i.diffStats.Removed,\n189: \t\t\tContent: i.diffStats.Content,\n190: \t\t}\n191: \t}\n192: \n193: \treturn data\n194: }\n195: \n196: // FromInstanceData creates a new Instance from serialized data\n197: func FromInstanceData(data InstanceData) (*Instance, error) {\n198: \tinstance := &Instance{\n199: \t\tTitle:                  data.Title,\n200: \t\tPath:                   data.Path,\n201: \t\tBranch:                 data.Branch,\n202: \t\tStatus:                 data.Status,\n203: \t\tHeight:                 data.Height,\n204: \t\tWidth:                  data.Width,\n205: \t\tCreatedAt:              data.CreatedAt,\n206: \t\tUpdatedAt:              data.UpdatedAt,\n207: \t\tProgram:                data.Program,\n208: \t\tSkipPermissions:        data.SkipPermissions,\n209: \t\tTaskFile:               data.TaskFile,\n210: \t\tAgentType:              data.AgentType,\n211: \t\tTaskNumber:             data.TaskNumber,\n212: \t\tWaveNumber:             data.WaveNumber,\n213: \t\tPeerCount:              data.PeerCount,\n214: \t\tIsReviewer:             data.IsReviewer,\n215: \t\tImplementationComplete: data.ImplementationComplete,\n216: \t\tSoloAgent:              data.SoloAgent,\n217: \t\tQueuedPrompt:           data.QueuedPrompt,\n218: \t\tReviewCycle:            data.ReviewCycle,\n219: \t\tgitWorktree: git.NewGitWorktreeFromStorage(\n220: \t\t\tdata.Worktree.RepoPath,\n221: \t\t\tdata.Worktree.WorktreePath,\n222: \t\t\tdata.Worktree.SessionName,\n223: \t\t\tdata.Worktree.BranchName,\n224: \t\t\tdata.Worktree.BaseCommitSHA,\n225: \t\t),\n226: \t\tdiffStats: &git.DiffStats{\n227: \t\t\tAdded:   data.DiffStats.Added,\n228: \t\t\tRemoved: data.DiffStats.Removed,\n229: \t\t\tContent: data.DiffStats.Content,\n230: \t\t},\n231: \t}\n232: \n233: \tif instance.Paused() {\n234: \t\tinstance.started = true\n235: \t\tinstance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n236: \t} else {\n237: \t\t// Non-destructive restore: check if the tmux session still exists\n238: \t\t// before attempting to attach. Start(false) calls Kill() on failure\n239: \t\t// which would destroy a live tmux session — use a gentler path instead.\n240: \t\tts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)\n241: \t\tts.SetAgentType(instance.AgentType)\n242: \t\tinstance.tmuxSession = ts\n243: \n244: \t\tif !ts.DoesSessionExist() {\n245: \t\t\t// Tmux session is gone — mark as exited so the UI can render it\n246: \t\t\t// as dead and allow cleanup, rather than silently dropping it.\n247: \t\t\tinstance.started = true\n248: \t\t\tinstance.Exited = true\n249: \t\t\tinstance.SetStatus(Ready)\n250: \t\t} else {\n251: \t\t\t// Session exists — do the full restore via Start(false) which\n252: \t\t\t// attaches the PTY. The tmuxSession is already set so Start()\n253: \t\t\t// will reuse it.\n254: \t\t\tif err := instance.Start(false); err != nil {\n255: \t\t\t\treturn nil, err\n256: \t\t\t}\n257: \t\t}\n258: \t}\n259: \n260: \treturn instance, nil\n261: }\n262: \n263: // Options for creating a new instance\n264: type InstanceOptions struct {\n265: \t// Title is the title of the instance.\n266: \tTitle string\n267: \t// Path is the path to the workspace.\n268: \tPath string\n269: \t// Program is the program to run in the instance (e.g. \"claude\", \"aider --model ollama_chat/gemma3:1b\")\n270: \tProgram string\n271: \t// If AutoYes is true, then\n272: \tAutoYes bool\n273: \t// SkipPermissions enables --dangerously-skip-permissions for Claude instances.\n274: \tSkipPermissions bool\n275: \t// PlanFile binds this instance to a plan from plan-state.json.\n276: \tTaskFile string\n277: \t// AgentType is the role of this instance: planner/coder/reviewer or empty for ad-hoc.\n278: \tAgentType string\n279: \t// TaskNumber is the task number within a plan (1-indexed, 0 = not a wave task).\n280: \tTaskNumber int\n281: \t// WaveNumber is the wave this task belongs to (1-indexed, 0 = not a wave task).\n282: \tWaveNumber int\n283: \t// PeerCount is the number of sibling tasks in the same wave (0 = not a wave task).\n284: \tPeerCount int\n285: \t// ReviewCycle is the 1-indexed review cycle number (0 = not a review cycle instance).\n286: \tReviewCycle int\n287: }\n288: \n289: func NewInstance(opts InstanceOptions) (*Instance, error) {\n290: \tt := time.Now()\n291: \n292: \t// Convert path to absolute\n293: \tabsPath, err := filepath.Abs(opts.Path)\n294: \tif err != nil {\n295: \t\treturn nil, fmt.Errorf(\"failed to get absolute path: %w\", err)\n296: \t}\n297: \n298: \treturn &Instance{\n299: \t\tTitle:           opts.Title,\n300: \t\tStatus:          Ready,\n301: \t\tPath:            absPath,\n302: \t\tProgram:         opts.Program,\n303: \t\tHeight:          0,\n304: \t\tWidth:           0,\n305: \t\tCreatedAt:       t,\n306: \t\tUpdatedAt:       t,\n307: \t\tAutoYes:         opts.AutoYes,\n308: \t\tSkipPermissions: opts.SkipPermissions,\n309: \t\tTaskFile:        opts.TaskFile,\n310: \t\tAgentType:       opts.AgentType,\n311: \t\tTaskNumber:      opts.TaskNumber,\n312: \t\tWaveNumber:      opts.WaveNumber,\n313: \t\tPeerCount:       opts.PeerCount,\n314: \t\tReviewCycle:     opts.ReviewCycle,\n315: \t}, nil\n316: }\n317: \n318: func (i *Instance) RepoName() (string, error) {\n319: \tif !i.started {\n320: \t\treturn \"\", fmt.Errorf(\"cannot get repo name for instance that has not been started\")\n321: \t}\n322: \tif i.gitWorktree == nil {\n323: \t\t// Planner instances run on the main branch without a worktree —\n324: \t\t// derive the repo name from the instance path instead.\n325: \t\treturn filepath.Base(i.Path), nil\n326: \t}\n327: \treturn i.gitWorktree.GetRepoName(), nil\n328: }\n329: \n330: // GetRepoPath returns the repo path for this instance, or empty string if not started.\n331: func (i *Instance) GetRepoPath() string {\n332: \tif !i.started || i.gitWorktree == nil {\n333: \t\treturn \"\"\n334: \t}\n335: \treturn i.gitWorktree.GetRepoPath()\n336: }\n337: \n338: // GetWorktreePath returns the worktree path for this instance, or empty string if unavailable.\n339: func (i *Instance) GetWorktreePath() string {\n340: \tif i.gitWorktree == nil {\n341: \t\treturn \"\"\n342: \t}\n343: \treturn i.gitWorktree.GetWorktreePath()\n344: }\n345: \n346: func (i *Instance) SetStatus(status Status) {\n347: \tif i.Status == Running && status == Ready {\n348: \t\ti.Notified = true\n349: \t\t// Wave task instances are managed by the orchestrator — suppress\n350: \t\t// per-task desktop notifications; the user gets a toast when the\n351: \t\t// wave completes instead.\n352: \t\tif i.TaskNumber == 0 {\n353: \t\t\tSendNotification(\"kas\", fmt.Sprintf(\"'%s' has finished\", i.Title))\n354: \t\t}\n355: \t}\n356: \tif status == Running || status == Loading {\n357: \t\ti.LastActiveAt = time.Now()\n358: \t\ti.PromptDetected = false\n359: \t\ti.Notified = false\n360: \t}\n361: \tif status == Running {\n362: \t\ti.AwaitingWork = false\n363: \t}\n364: \ti.Status = status\n365: }\n366: \n367: func (i *Instance) setLoadingProgress(stage int, message string) {\n368: \ti.LoadingStage = stage\n369: \ti.LoadingMessage = message\n370: }\n371: \n372: func (i *Instance) Started() bool {\n373: \treturn i.started\n374: }\n375: \n376: // SetTitle sets the title of the instance. Returns an error if the instance has started.\n377: // We cant change the title once it's been used for a tmux session etc.\n378: func (i *Instance) SetTitle(title string) error {\n379: \tif i.started {\n380: \t\treturn fmt.Errorf(\"cannot change title of a started instance\")\n381: \t}\n382: \ti.Title = title\n383: \treturn nil\n384: }\n385: \n386: func (i *Instance) Paused() bool {\n387: \treturn i.Status == Paused\n388: }\n389: \n390: // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.\n391: func (i *Instance) TmuxAlive() bool {\n392: \tif i.tmuxSession == nil {\n393: \t\treturn false\n394: \t}\n395: \treturn i.tmuxSession.DoesSessionExist()\n396: }\n\n(End of file - total 396 lines)\n</content>",
+            "title": "session/instance.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\ntype Status int\n\nconst (\n\t// Running is the status when the instance is running and claude is working.\n\tRunning Status = iota\n\t// Ready is if the claude instance is ready to be interacted with (waiting for user input).\n\tReady\n\t// Loading is if the instance is loading (if we are starting it up or something).\n\tLoading",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772558744158,
+              "end": 1772558744162
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "cost": 0,
+          "tokens": {
+            "total": 55135,
+            "input": 1,
+            "output": 320,
+            "reasoning": 0,
+            "cache": {
+              "read": 49703,
+              "write": 5111
+            }
+          },
+          "id": "prt_cb4bbfaad0018C1Nt682Qg4tgW",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbdf4f001wphzb961Hk1hbJ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558744257,
+          "completed": 1772558775062
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63302,
+          "input": 1,
+          "output": 2241,
+          "reasoning": 0,
+          "cache": {
+            "read": 54814,
+            "write": 6246
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bbfac1001EO5WLHK6L2uDop",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "id": "prt_cb4bbfff0001Oa05gUaUbfsvbY",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "reasoning",
+          "text": "The baseline tests pass. Now I need to understand the current state of the storage.go file and see if it is the original AGPL code or a new clean-room implementation.\n\nLooking at the current `storage.go`, it seems to already be well-structured. The task says I need to \"rewrite from scratch\" which means creating a new clean-room implementation that replaces every line. The current implementation might have AGPL-tainted lines.\n\nSince the task requires me to delete the contents and rewrite from scratch, I need to write a completely new implementation that:\n1. Has the same `InstanceData` struct with all the required JSON fields\n\n\n2. Implements `UnmarshalJSON` for backward compatibility to handle the plan_file → task_file migration\n3. Defines the `GitWorktreeData` and `DiffStatsData` structs\n4. Creates the main `Storage` struct\n5. Implements all the required methods\n\nNow I'm writing the clean-room implementation...",
+          "metadata": {
+            "anthropic": {
+              "signature": "EokICkYICxgCKkDTKNzxYp4Gt8+/REDACTED/62cmtbvT9BTJYKvAGrVs/Be7tW7gzoFvlR8e1aYNfygx/REDACTED/REDACTED/Sv43sxcVomgXqb/REDACTED/5QrSEj+w6g2JvVVvOQq0LiNg63d/REDACTED/REDACTED/wL8JhO2rO/REDACTED/REDACTED/REDACTED/qR351uQ+ILuuw/REDACTED/REDACTED/gCH+RARIRblNwTuIpj4Men//REDACTED/yuLaHo5X8QdQj7bLpNQgMuTNyBN+/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772558745585,
+            "end": 1772558751336
+          },
+          "id": "prt_cb4bbfff1001JtQ1x4ezc2R3dy",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "text",
+          "text": "The baseline tests pass. Now I'll write the clean-room implementation of `storage.go`:",
+          "time": {
+            "start": 1772558751358,
+            "end": 1772558751358
+          },
+          "id": "prt_cb4bc166a001YqBAXBxhcMi3A3",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01AX2BhMTwoqZQnh6KjJtZh2",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go",
+              "content": "package session\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// InstanceData is the JSON-serializable mirror of Instance fields used for persistence.\ntype InstanceData struct {\n\tTitle           string    `json:\"title\"`\n\tPath            string    `json:\"path\"`\n\tBranch          string    `json:\"branch\"`\n\tStatus          Status    `json:\"status\"`\n\tHeight          int       `json:\"height\"`\n\tWidth           int       `json:\"width\"`\n\tCreatedAt       time.Time `json:\"created_at\"`\n\tUpdatedAt       time.Time `json:\"updated_at\"`\n\tAutoYes         bool      `json:\"auto_yes\"`\n\tSkipPermissions bool      `json:\"skip_permissions\"`\n\tProgram         string    `json:\"program\"`\n\n\t// Optional plan/orchestration fields.\n\tTaskFile               string `json:\"task_file,omitempty\"`\n\tAgentType              string `json:\"agent_type,omitempty\"`\n\tTaskNumber             int    `json:\"task_number,omitempty\"`\n\tWaveNumber             int    `json:\"wave_number,omitempty\"`\n\tPeerCount              int    `json:\"peer_count,omitempty\"`\n\tIsReviewer             bool   `json:\"is_reviewer,omitempty\"`\n\tImplementationComplete bool   `json:\"implementation_complete,omitempty\"`\n\tSoloAgent              bool   `json:\"solo_agent,omitempty\"`\n\tQueuedPrompt           string `json:\"queued_prompt,omitempty\"`\n\tReviewCycle            int    `json:\"review_cycle,omitempty\"`\n\n\tWorktree  GitWorktreeData `json:\"worktree\"`\n\tDiffStats DiffStatsData   `json:\"diff_stats\"`\n}\n\n// UnmarshalJSON implements a custom unmarshaler that handles the historical rename from\n// the \"plan_file\" JSON key to \"task_file\". State files written before the rename used\n// \"plan_file\"; if that field is present and \"task_file\" is empty, the value is migrated.\nfunc (d *InstanceData) UnmarshalJSON(data []byte) error {\n\t// Use an alias to avoid infinite recursion when calling json.Unmarshal.\n\ttype Alias InstanceData\n\taux := &struct {\n\t\t*Alias\n\t\tPlanFile string `json:\"plan_file,omitempty\"`\n\t}{\n\t\tAlias: (*Alias)(d),\n\t}\n\tif err := json.Unmarshal(data, aux); err != nil {\n\t\treturn err\n\t}\n\t// Migrate legacy field.\n\tif d.TaskFile == \"\" && aux.PlanFile != \"\" {\n\t\td.TaskFile = aux.PlanFile\n\t}\n\treturn nil\n}\n\n// GitWorktreeData is the serializable form of a git.GitWorktree.\ntype GitWorktreeData struct {\n\tRepoPath      string `json:\"repo_path\"`\n\tWorktreePath  string `json:\"worktree_path\"`\n\tSessionName   string `json:\"session_name\"`\n\tBranchName    string `json:\"branch_name\"`\n\tBaseCommitSHA string `json:\"base_commit_sha\"`\n}\n\n// DiffStatsData is the serializable form of a git.DiffStats.\ntype DiffStatsData struct {\n\tAdded   int    `json:\"added\"`\n\tRemoved int    `json:\"removed\"`\n\tContent string `json:\"content\"`\n}\n\n// Storage persists instances via a config.StateManager.\ntype Storage struct {\n\tstate config.StateManager\n}\n\n// NewStorage constructs a Storage backed by the given state manager.\nfunc NewStorage(state config.StateManager) (*Storage, error) {\n\treturn &Storage{state: state}, nil\n}\n\n// SaveInstances serialises all started instances and writes them to the state store.\nfunc (s *Storage) SaveInstances(instances []*Instance) error {\n\trecords := make([]InstanceData, 0, len(instances))\n\tfor _, inst := range instances {\n\t\tif inst.Started() {\n\t\t\trecords = append(records, inst.ToInstanceData())\n\t\t}\n\t}\n\n\traw, err := json.Marshal(records)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal instances: %w\", err)\n\t}\n\n\treturn s.state.SaveInstances(raw)\n}\n\n// LoadInstances reads instances from the state store and restores them.\n// Stale entries (non-paused instances whose worktree directory no longer exists)\n// are dropped with a warning instead of causing a hard failure.\nfunc (s *Storage) LoadInstances() ([]*Instance, error) {\n\traw := s.state.GetInstances()\n\n\tvar records []InstanceData\n\tif err := json.Unmarshal(raw, &records); err != nil {\n\t\treturn nil, fmt.Errorf(\"failed to unmarshal instances: %w\", err)\n\t}\n\n\tinstances := make([]*Instance, 0, len(records))\n\tfor _, rec := range records {\n\t\t// Drop non-paused instances whose worktree path has disappeared from disk.\n\t\tif rec.Status != Paused && rec.Worktree.WorktreePath != \"\" {\n\t\t\tif _, err := os.Stat(rec.Worktree.WorktreePath); err != nil {\n\t\t\t\tlog.WarningLog.Printf(\n\t\t\t\t\t\"skipping stale instance %q: worktree path gone: %s\",\n\t\t\t\t\trec.Title, rec.Worktree.WorktreePath,\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tinst, err := FromInstanceData(rec)\n\t\tif err != nil {\n\t\t\t// Log and skip rather than failing the entire load.\n\t\t\tlog.WarningLog.Printf(\"skipping unrestorable instance %q: %v\", rec.Title, err)\n\t\t\tcontinue\n\t\t}\n\t\tinstances = append(instances, inst)\n\t}\n\n\treturn instances, nil\n}\n\n// DeleteInstance removes the instance with the given title from persistent storage.\n// Returns an error when no matching instance is found.\nfunc (s *Storage) DeleteInstance(title string) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\tremaining := instances[:0]\n\tfound := false\n\tfor _, inst := range instances {\n\t\tif inst.ToInstanceData().Title == title {\n\t\t\tfound = true\n\t\t} else {\n\t\t\tremaining = append(remaining, inst)\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", title)\n\t}\n\n\treturn s.SaveInstances(remaining)\n}\n\n// UpdateInstance replaces the stored record for the instance (matched by title).\n// Returns an error when no matching instance is found.\nfunc (s *Storage) UpdateInstance(instance *Instance) error {\n\tinstances, err := s.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\n\ttarget := instance.ToInstanceData().Title\n\tfound := false\n\tfor i, inst := range instances {\n\t\tif inst.ToInstanceData().Title == target {\n\t\t\tinstances[i] = instance\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\tif !found {\n\t\treturn fmt.Errorf(\"instance not found: %s\", target)\n\t}\n\n\treturn s.SaveInstances(instances)\n}\n\n// DeleteAllInstances removes every stored instance from the state store.\nfunc (s *Storage) DeleteAllInstances() error {\n\treturn s.state.DeleteAllInstances()\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "session/storage.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance_taskfile_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/instance.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558774876,
+              "end": 1772558775051
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 63302,
+            "input": 1,
+            "output": 2241,
+            "reasoning": 0,
+            "cache": {
+              "read": 54814,
+              "write": 6246
+            }
+          },
+          "id": "prt_cb4bc730c001R5hsTqVLNsmI36",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        },
+        {
+          "type": "patch",
+          "hash": "9de8b4397e5e1f44991cfbeea959f4b38ff31736",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/activity.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/permission_prompt.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core/session/storage.go"
+          ],
+          "id": "prt_cb4bc7314001mxkM4JdpcBmH4k",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bbfac1001EO5WLHK6L2uDop"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558775063,
+          "completed": 1772558778942
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63436,
+          "input": 1,
+          "output": 120,
+          "reasoning": 0,
+          "cache": {
+            "read": 61060,
+            "write": 2255
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bc731700115SLOWSi2FalqQ",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "prt_cb4bc787f001wQX8cBEDLsMPOk",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "text",
+          "text": "Now let's run the tests to verify they pass:",
+          "time": {
+            "start": 1772558777170,
+            "end": 1772558777170
+          },
+          "id": "prt_cb4bc7880001P3SyjL8jPea8Yz",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./session/... -run \"TestInstanceData|TestNewInstance_Sets\" -v -count=1 2>&1",
+              "description": "Run tests to verify rewritten storage.go passes"
+            },
+            "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+            "title": "Run tests to verify rewritten storage.go passes",
+            "metadata": {
+              "output": "=== RUN   TestNewInstance_SetsPlanFile\n--- PASS: TestNewInstance_SetsPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripPlanFile\n--- PASS: TestInstanceData_RoundTripPlanFile (0.00s)\n=== RUN   TestInstanceData_RoundTripImplementationComplete\n--- PASS: TestInstanceData_RoundTripImplementationComplete (0.00s)\n=== RUN   TestNewInstance_SetsAgentType\n--- PASS: TestNewInstance_SetsAgentType (0.00s)\n=== RUN   TestInstanceData_RoundTripAgentType\n--- PASS: TestInstanceData_RoundTripAgentType (0.00s)\n=== RUN   TestInstanceData_ImplementationCompleteFalseByDefault\n--- PASS: TestInstanceData_ImplementationCompleteFalseByDefault (0.00s)\n=== RUN   TestInstanceData_RoundTripSoloAgent\n--- PASS: TestInstanceData_RoundTripSoloAgent (0.00s)\n=== RUN   TestNewInstance_SetsWaveAndTaskNumber\n--- PASS: TestNewInstance_SetsWaveAndTaskNumber (0.00s)\n=== RUN   TestInstanceData_RoundTripWaveFields\n--- PASS: TestInstanceData_RoundTripWaveFields (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session\t0.004s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/session/tmux\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run tests to verify rewritten storage.go passes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558778584,
+              "end": 1772558778933
+            }
+          },
+          "id": "prt_cb4bc7b5300164WW7HAiv0I6Ch",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 63436,
+            "input": 1,
+            "output": 120,
+            "reasoning": 0,
+            "cache": {
+              "read": 61060,
+              "write": 2255
+            }
+          },
+          "id": "prt_cb4bc8236001iW06L5cnAvrzE3",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc731700115SLOWSi2FalqQ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558778943,
+          "completed": 1772558784238
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64040,
+          "input": 1,
+          "output": 117,
+          "reasoning": 0,
+          "cache": {
+            "read": 63315,
+            "write": 607
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4bc823f001zfFiAFMGhnTbCw",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "text",
+          "text": "All 9 tests pass. Now commit:",
+          "time": {
+            "start": 1772558780707,
+            "end": 1772558780707
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add session/storage.go && git commit -m \"feat(clean-room): rewrite session/storage.go from scratch\"",
+              "description": "Commit the rewritten storage.go"
+            },
+            "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+            "title": "Commit the rewritten storage.go",
+            "metadata": {
+              "output": "[plan/02a-rewrite-session-core 935ca9e] feat(clean-room): rewrite session/storage.go from scratch\n 1 file changed, 80 insertions(+), 75 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the rewritten storage.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772558781865,
+              "end": 1772558784230
+            }
+          },
+          "id": "prt_cb4bc892a001KFlNxHoW3t3qx4",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64040,
+            "input": 1,
+            "output": 117,
+            "reasoning": 0,
+            "cache": {
+              "read": 63315,
+              "write": 607
+            }
+          },
+          "id": "prt_cb4bc96e7001zH9CPm8IbFjN1d",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "msg_cb4bc823f001zfFiAFMGhnTbCw"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558784239,
+          "completed": 1772558794977
+        },
+        "parentID": "msg_cb4bbc0f3001bWo30zmI4eNJMH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 64516,
+          "input": 1,
+          "output": 409,
+          "reasoning": 0,
+          "cache": {
+            "read": 63922,
+            "write": 184
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "REDACTED",
+        "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "id": "prt_cb4bc9d74001pRToFzYhu8cvmP",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass and the commit is done. Here's a summary of what was implemented:\n\n**`session/storage.go` — clean-room rewrite:**\n\n- **`InstanceData` struct** — JSON-serializable mirror of `Instance` with all required fields and correct `omitempty` tags on optional plan/orchestration fields\n- **`InstanceData.UnmarshalJSON`** — custom unmarshaler using an alias type (avoids recursion) with a legacy `plan_file` migration: if `task_file` is empty but `plan_file` is set, copies it over\n- **`GitWorktreeData` struct** — five string fields (RepoPath, WorktreePath, SessionName, BranchName, BaseCommitSHA) with JSON tags\n- **`DiffStatsData` struct** — Added, Removed (int), Content (string) with JSON tags\n- **`Storage` struct** — holds `config.StateManager`\n- **`NewStorage`** — simple constructor returning `&Storage{state: state}, nil`\n- **`SaveInstances`** — iterates started instances, calls `ToInstanceData()`, marshals to JSON, delegates to `state.SaveInstances()`\n- **`LoadInstances`** — unmarshals from `state.GetInstances()`, drops stale non-paused instances whose worktree path is gone (with warning), logs and skips instances that fail `FromInstanceData()` instead of hard-failing\n- **`DeleteInstance`** — loads all, filters out matching title, saves remainder; errors if not found\n- **`UpdateInstance`** — loads all, replaces matching title, saves; errors if not found\n- **`DeleteAllInstances`** — delegates to `state.DeleteAllInstances()`",
+          "time": {
+            "start": 1772558794938,
+            "end": 1772558794938
+          },
+          "id": "prt_cb4bc9d74002wVHsGggicGk7dO",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8a713371a6a81d6e1c22d74ea4da43d675a2a624",
+          "cost": 0,
+          "tokens": {
+            "total": 64516,
+            "input": 1,
+            "output": 409,
+            "reasoning": 0,
+            "cache": {
+              "read": 63922,
+              "write": 184
+            }
+          },
+          "id": "prt_cb4bcc0d8001gt2D1qqs0EPQP5",
+          "sessionID": "ses_34b443f21ffevL6GmFOG7DLzIF",
+          "messageID": "REDACTED"
+        }
+      ]
+    }
+  ]
+}
