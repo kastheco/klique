@@ -1,0 +1,79 @@
+Implement Task 2: Rewrite statusbar.go — Top Status Bar
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 2 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/statusbar.go`
+- Test: `ui/statusbar_test.go` (existing — 269 LOC, covers data model, rendering, plan status styles, task glyphs, layout)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `statusbar_test.go` covers: `NewStatusBar` defaults, `SetSize`/`SetData` state changes, `String` output containing app name gradient, branch display, plan status coloring, wave label + task glyph rendering, tmux session count display, project directory right-alignment, narrow-width graceful degradation, and focus mode indicator.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestStatusBar" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/statusbar.go` and rewrite from scratch:
+
+- **`TaskGlyph` type** — `int` enum with constants: `TaskGlyphComplete`, `TaskGlyphRunning`, `TaskGlyphFailed`, `TaskGlyphPending` (iota 0–3).
+- **`StatusBarData` struct** — fields: `Branch string`, `PlanName string`, `PlanStatus string`, `WaveLabel string`, `TaskGlyphs []TaskGlyph`, `FocusMode bool`, `TmuxSessionCount int`, `ProjectDir string`.
+- **`StatusBar` struct** — fields: `width int`, `data StatusBarData`.
+- **`NewStatusBar() *StatusBar`** — returns `&StatusBar{}`.
+- **`SetSize(width int)`** — stores width.
+- **`SetData(data StatusBarData)`** — stores data.
+- **Styles** — package-level `lipgloss.Style` vars: `statusBarStyle` (bg=`ColorSurface`, fg=`ColorText`, horizontal padding 1), `statusBarAppNameStyle` (bg=`ColorSurface`, bold), `statusBarSepStyle` (fg=`ColorOverlay`, bg=`ColorSurface`), `statusBarBranchStyle` (fg=`ColorFoam`, bg=`ColorSurface`), `statusBarWaveLabelStyle` (fg=`ColorSubtle`, bg=`ColorSurface`), `statusBarTmuxCountStyle` (fg=`ColorMuted`, bg=`ColorSurface`), `statusBarProjectDirStyle` (fg=`ColorMuted`, bg=`ColorSurface`).
+- **`planStatusStyle(status string) string`** — returns styled status string with color based on status: "implementing"/"planning" → `ColorFoam`, "reviewing"/"done" → `ColorRose`, default → `ColorMuted`. All with `ColorSurface` background.
+- **`taskGlyphStr(g TaskGlyph) string`** — renders single glyph: Complete→`✓` in `ColorFoam`, Running→`●` in `ColorIris`, Failed→`✕` in `ColorLove`, Pending→`○` in `ColorMuted`. All with `ColorSurface` background.
+- **`centerBranchGroup() string`** — returns empty if no branch. Otherwise renders git icon `\ue725` + branch name in branch style.
+- **`leftStatusGroup() string`** — if wave label + task glyphs present: joins glyph strings with spaces, appends wave label. Else if plan status present: renders plan status. Returns joined with ` · ` separator.
+- **`String() string`** — returns empty if width < 10. Computes content width (width - 2 for padding). Builds left group (app name gradient + left status), center group (branch), right group (project dir). Uses cursor-based positioning: left at 0, center at `(contentWidth - centerWidth) / 2` (clamped after left), right at `contentWidth - rightWidth`. Drops center/right if they overlap. Pads remaining width with spaces. Wraps in `statusBarStyle.Width(width)`.
+
+Imports: `strings`, `github.com/charmbracelet/lipgloss`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "TestStatusBar" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/statusbar.go
+git commit -m "feat(clean-room): rewrite statusbar.go from scratch"
+```
