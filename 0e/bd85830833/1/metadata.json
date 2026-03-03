@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "0ebd85830833",
+  "session_id": "ses_34ed870bfffe5tEKLY12qPzn6k",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T02:00:42.516184257Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-02-28-improve-plan-storage-system.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md",
+    "README.md",
+    "cmd/plan.go",
+    "cmd/serve.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "936d0ff48a15",
+  "checkpoint_transcript_start": 11,
+  "transcript_lines_at_start": 11,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T02:00:42.442796597Z",
+    "agent_lines": 83,
+    "human_added": 971,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1054,
+    "agent_percentage": 7.874762808349146
+  }
+}
