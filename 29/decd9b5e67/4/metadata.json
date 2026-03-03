@@ -3,33 +3,31 @@
   "checkpoint_id": "29decd9b5e67",
   "session_id": "ses_34e22f556ffeb1QhWA2b7KXjDn",
   "strategy": "manual-commit",
-  "created_at": "2026-03-03T04:25:22.149830673Z",
+  "created_at": "2026-03-03T04:26:48.423647735Z",
   "branch": "main",
   "checkpoints_count": 0,
   "files_touched": [
     "cmd/plan.go",
-    "cmd/plan_test.go",
-    "docs/plans/2026-03-02-review-cycle-count-should-be-included.md",
-    "docs/plans/2026-03-03-review-cycle-count-should-be-included.md"
+    "cmd/plan_test.go"
   ],
   "agent": "OpenCode",
   "turn_id": "4d4d3dd75703",
-  "checkpoint_transcript_start": 44,
-  "transcript_lines_at_start": 44,
+  "checkpoint_transcript_start": 56,
+  "transcript_lines_at_start": 56,
   "token_usage": {
-    "input_tokens": 13,
-    "cache_creation_tokens": 5559,
-    "cache_read_tokens": 1011376,
-    "output_tokens": 2182,
-    "api_call_count": 11
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
   },
   "initial_attribution": {
-    "calculated_at": "2026-03-03T04:25:18.577286898Z",
-    "agent_lines": 411,
-    "human_added": 62,
+    "calculated_at": "2026-03-03T04:26:44.829932065Z",
+    "agent_lines": 0,
+    "human_added": 0,
     "human_modified": 0,
     "human_removed": 0,
-    "total_committed": 473,
-    "agent_percentage": 86.89217758985201
+    "total_committed": 0,
+    "agent_percentage": 0
   }
 }
