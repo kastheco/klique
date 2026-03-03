@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "345c4186402d",
+  "strategy": "manual-commit",
+  "branch": "plan/02a-rewrite-session-core",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/storage.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/34/5c4186402d/0/metadata.json",
+      "transcript": "/34/5c4186402d/0/full.jsonl",
+      "context": "/34/5c4186402d/0/context.md",
+      "content_hash": "/34/5c4186402d/0/content_hash.txt",
+      "prompt": "/34/5c4186402d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 2255,
+    "cache_read_tokens": 61060,
+    "output_tokens": 120,
+    "api_call_count": 2
+  }
+}
