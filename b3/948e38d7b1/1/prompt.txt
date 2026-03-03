@@ -1,0 +1,104 @@
+Implement Task 6: Implement Attach/Detach and Platform-Specific Window Monitoring
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 6 of 4 in Wave 2. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `session/tmux/attach.go`
+- Create: `session/tmux/winsize_unix.go`
+- Create: `session/tmux/winsize_windows.go`
+- Test: `session/tmux/attach_test.go`
+
+**Step 1: write the failing test**
+
+```go
+// attach_test.go
+func TestDetachSafely_WhenNotAttached(t *testing.T) {
+    s := NewTmuxSessionWithDeps("test-detach", "opencode", false, NewMockPtyFactory(t), cmd_test.NewMockExecutor())
+    // Not attached — should be a no-op
+    err := s.DetachSafely()
+    assert.NoError(t, err)
+}
+
+func TestSetDetachedSize(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc:    func(cmd *exec.Cmd) error { return nil },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+    }
+    s := NewTmuxSessionWithDeps("test-size", "opencode", false, ptyFactory, cmdExec)
+    // Restore to get a PTY
+    err := s.Restore()
+    require.NoError(t, err)
+    // SetDetachedSize should not error with a valid PTY
+    err = s.SetDetachedSize(120, 40)
+    // May error on mock PTY (not a real terminal) — that's OK for unit test
+    // The important thing is it doesn't panic
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestDetachSafely|TestSetDetachedSize" -v
+```
+
+expected: FAIL
+
+**Step 3: write minimal implementation**
+
+**`session/tmux/attach.go`:**
+- `Attach()` — disable outer tmux mouse, create attach channel, spawn stdout→os.Stdout goroutine (io.Copy), spawn stdin reader goroutine (50ms initial nuke window, Ctrl+Q/Ctrl+Space detach), call `monitorWindowSize()`, return channel.
+- `Detach()` — restore outer mouse, close PTY, call Restore(), cancel context, wait goroutines, close channel.
+- `DetachSafely()` — safe version: nil-checks, no panic on error.
+- `SetDetachedSize(w, h)` — delegate to `updateWindowSize`.
+- `updateWindowSize(cols, rows)` — `pty.Setsize`.
+- `outerTmuxSession()` — detect enclosing tmux via `$TMUX` env + `tmux display-message`.
+- `outerMouseEnabled(session)` — check mouse option.
+- `restoreOuterMouse()` — re-enable if was disabled.
+
+**`session/tmux/winsize_unix.go`** (build tag `!windows`):
+- `monitorWindowSize()` — SIGWINCH listener, debounce (50ms), two goroutines, respect `t.ctx.Done()`.
+
+**`session/tmux/winsize_windows.go`** (build tag `windows`):
+- `monitorWindowSize()` — 250ms ticker polling, track last size, one goroutine.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/attach.go session/tmux/attach_test.go session/tmux/winsize_unix.go session/tmux/winsize_windows.go
+git commit -m "feat(clean-room): implement attach/detach lifecycle and platform window monitoring"
+```

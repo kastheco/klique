@@ -1,0 +1,1295 @@
+{
+  "info": {
+    "id": "REDACTED",
+    "slug": "sunny-tiger",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+    "title": "Attach/detach and window monitoring",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772552598822,
+      "updated": 1772552709614
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772552598847
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 6: Implement Attach/Detach and Platform-Specific Window Monitoring\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.\n**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.\n**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify\n\n## Wave 2 of 3\n\n## Parallel Execution\n\nYou are Task 6 of 4 in Wave 2. 3 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Create: `session/tmux/attach.go`\n- Create: `session/tmux/winsize_unix.go`\n- Create: `session/tmux/winsize_windows.go`\n- Test: `session/tmux/attach_test.go`\n\n**Step 1: write the failing test**\n\n```go\n// attach_test.go\nfunc TestDetachSafely_WhenNotAttached(t *testing.T) {\n    s := NewTmuxSessionWithDeps(\"test-detach\", \"opencode\", false, NewMockPtyFactory(t), cmd_test.NewMockExecutor())\n    // Not attached — should be a no-op\n    err := s.DetachSafely()\n    assert.NoError(t, err)\n}\n\nfunc TestSetDetachedSize(t *testing.T) {\n    ptyFactory := NewMockPtyFactory(t)\n    cmdExec := cmd_test.MockCmdExec{\n        RunFunc:    func(cmd *exec.Cmd) error { return nil },\n        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(\"\"), nil },\n    }\n    s := NewTmuxSessionWithDeps(\"test-size\", \"opencode\", false, ptyFactory, cmdExec)\n    // Restore to get a PTY\n    err := s.Restore()\n    require.NoError(t, err)\n    // SetDetachedSize should not error with a valid PTY\n    err = s.SetDetachedSize(120, 40)\n    // May error on mock PTY (not a real terminal) — that's OK for unit test\n    // The important thing is it doesn't panic\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./session/tmux/... -run \"TestDetachSafely|TestSetDetachedSize\" -v\n```\n\nexpected: FAIL\n\n**Step 3: write minimal implementation**\n\n**`session/tmux/attach.go`:**\n- `Attach()` — disable outer tmux mouse, create attach channel, spawn stdout→os.Stdout goroutine (io.Copy), spawn stdin reader goroutine (50ms initial nuke window, Ctrl+Q/Ctrl+Space detach), call `monitorWindowSize()`, return channel.\n- `Detach()` — restore outer mouse, close PTY, call Restore(), cancel context, wait goroutines, close channel.\n- `DetachSafely()` — safe version: nil-checks, no panic on error.\n- `SetDetachedSize(w, h)` — delegate to `updateWindowSize`.\n- `updateWindowSize(cols, rows)` — `pty.Setsize`.\n- `outerTmuxSession()` — detect enclosing tmux via `$TMUX` env + `tmux display-message`.\n- `outerMouseEnabled(session)` — check mouse option.\n- `restoreOuterMouse()` — re-enable if was disabled.\n\n**`session/tmux/winsize_unix.go`** (build tag `!windows`):\n- `monitorWindowSize()` — SIGWINCH listener, debounce (50ms), two goroutines, respect `t.ctx.Done()`.\n\n**`session/tmux/winsize_windows.go`** (build tag `windows`):\n- `monitorWindowSize()` — 250ms ticker polling, track last size, one goroutine.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./session/tmux/... -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add session/tmux/attach.go session/tmux/attach_test.go session/tmux/winsize_unix.go session/tmux/winsize_windows.go\ngit commit -m \"feat(clean-room): implement attach/detach lifecycle and platform window monitoring\"\n```\n",
+          "id": "prt_cb45e3539002Vhpj7ztW0jIvAF",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e3539001jAvA4UF3IWuITz"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552598858,
+          "completed": 1772552605469
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41455,
+          "input": 2,
+          "output": 132,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41321
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e48490011xeyjO5qj5KQQV",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then understanding the codebase before implementing the task.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EpUCCkYICxgCKkBFDyxiYMu/OC8OYhNK/REDACTED/REDACTED/REDACTED/aku6BYgo3YYlbAkx92tSD087+xgB"
+            }
+          },
+          "time": {
+            "start": 1772552603722,
+            "end": 1772552604586
+          },
+          "id": "prt_cb45e484a001XSIkr4XT0svCFg",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DoExz3Avomi4t25jGxWR1o",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552605424,
+              "end": 1772552605434
+            }
+          },
+          "id": "prt_cb45e4bab0011DkbzR04GxjANL",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552605442,
+              "end": 1772552605449
+            }
+          },
+          "id": "prt_cb45e4ef5001rtqIgonTqCY6zM",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 41455,
+            "input": 2,
+            "output": 132,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41321
+            }
+          },
+          "id": "prt_cb45e4f0b001YneYo5CrvI6BHm",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552605470,
+          "completed": 1772552610306
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49717,
+          "input": 1,
+          "output": 116,
+          "reasoning": 0,
+          "cache": {
+            "read": 41321,
+            "write": 8279
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45e4f1e001GrYFHHtr6Lqhd0",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e5af0001YYtKjlCXjuDg3p",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e4f1e001GrYFHHtr6Lqhd0"
+        },
+        {
+          "type": "reasoning",
+          "text": "Good. Now let me understand the existing codebase structure before implementing anything.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772552608497,
+            "end": 1772552609800
+          },
+          "id": "prt_cb45e5af1001y1IZMBPO6I6Lrd",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e4f1e001GrYFHHtr6Lqhd0"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux</path>\n<type>directory</type>\n<entries>\nadapter_test.go\nadapter.go\nenv_vars_test.go\nmonitor_test.go\nmonitor.go\npty.go\nsession_title_test.go\nsession.go\nshell_test.go\nshell.go\ntmux_permission_test.go\ntmux_session_test.go\ntmux_session.go\ntmux_test.go\n\n(14 entries)\n</entries>",
+            "title": "session/tmux",
+            "metadata": {
+              "preview": "adapter_test.go\nadapter.go\nenv_vars_test.go\nmonitor_test.go\nmonitor.go\npty.go\nsession_title_test.go\nsession.go\nshell_test.go\nshell.go\ntmux_permission_test.go\ntmux_session_test.go\ntmux_session.go\ntmux_test.go",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552610277,
+              "end": 1772552610278
+            }
+          },
+          "id": "prt_cb45e6009001RvGvZJUWx899xS",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e4f1e001GrYFHHtr6Lqhd0"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 49717,
+            "input": 1,
+            "output": 116,
+            "reasoning": 0,
+            "cache": {
+              "read": 41321,
+              "write": 8279
+            }
+          },
+          "id": "prt_cb45e61fa001ZWWzrE2B01LEDQ",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e4f1e001GrYFHHtr6Lqhd0"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552610307,
+          "completed": 1772552613848
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50036,
+          "input": 1,
+          "output": 164,
+          "reasoning": 0,
+          "cache": {
+            "read": 49600,
+            "write": 271
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45e6203001zuGo61k32BLnRn",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e6bbe001p9ovZBjoLHopmp",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6203001zuGo61k32BLnRn"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"context\"\n5: \t\"crypto/sha256\"\n6: \t\"errors\"\n7: \t\"fmt\"\n8: \t\"os\"\n9: \t\"os/exec\"\n10: \t\"path/filepath\"\n11: \t\"regexp\"\n12: \t\"strconv\"\n13: \t\"strings\"\n14: \t\"sync\"\n15: \t\"time\"\n16: \n17: \t\"github.com/kastheco/kasmos/cmd\"\n18: \t\"github.com/kastheco/kasmos/log\"\n19: )\n20: \n21: const ProgramClaude = \"claude\"\n22: \n23: const ProgramAider = \"aider\"\n24: const ProgramGemini = \"gemini\"\n25: const ProgramOpenCode = \"opencode\"\n26: \n27: // ansiRe strips ANSI escape sequences (SGR, cursor movement, etc.) so that\n28: // content hashing is not affected by cursor blink, color resets, or other\n29: // terminal control codes that change between captures of an otherwise-idle pane.\n30: var ansiRe = regexp.MustCompile(`\\x1b\\[[0-9;]*[a-zA-Z]`)\n31: \n32: // TmuxSession represents a managed tmux session.\n33: // It implements the Session interface (defined in session.go, created in Wave 1 Task 1).\n34: // The adapter field will hold the ProgramAdapter once that interface is defined.\n35: type TmuxSession struct {\n36: \t// Initialized by NewTmuxSession\n37: \t//\n38: \t// sanitizedName is the kas_-prefixed, whitespace-free tmux session name.\n39: \tsanitizedName string\n40: \tprogram       string\n41: \t// ptyFactory is used to create a PTY for the tmux session.\n42: \tptyFactory PtyFactory\n43: \t// cmdExec is used to execute commands in the tmux session.\n44: \tcmdExec cmd.Executor\n45: \t// skipPermissions appends --dangerously-skip-permissions to Claude commands.\n46: \tskipPermissions bool\n47: \t// agentType, when non-empty, appends --agent <type> to the program command.\n48: \tagentType string\n49: \t// initialPrompt, when non-empty, is baked into the CLI command at Start()\n50: \t// using per-program syntax (--prompt for opencode, positional for claude).\n51: \tinitialPrompt string\n52: \t// taskNumber, waveNumber, peerCount are set for wave task instances.\n53: \t// When non-zero, they are prepended as KASMOS_TASK, KASMOS_WAVE, KASMOS_PEERS\n54: \t// env vars to the program command string.\n55: \ttaskNumber int\n56: \twaveNumber int\n57: \tpeerCount  int\n58: \t// ProgressFunc is called with (stage, description) during Start() to report progress.\n59: \tProgressFunc func(stage int, desc string)\n60: \t// promptFile is the path to a temporary file containing the initial prompt.\n61: \t// Set during Start() when the prompt exceeds maxInlinePromptLen. Cleaned up by Close().\n62: \tpromptFile string\n63: \t// sessionTitle is the desired human-readable title for the opencode session.\n64: \t// When non-empty and titleFunc is set, the title is applied after the session\n65: \t// reports ready (after \"Ask anything\" is detected).\n66: \tsessionTitle string\n67: \t// titleFunc is a callback that performs the actual DB title update for opencode sessions.\n68: \t// It is injected by the instance layer to avoid a direct dependency from tmux → opencodesession.\n69: \t// Called as a goroutine (best-effort, non-blocking) after session startup.\n70: \ttitleFunc func(workDir string, beforeStart time.Time, title string)\n71: \n72: \t// Initialized by Start or Restore\n73: \t//\n74: \t// ptmx is a PTY running the tmux attach command. This can be resized to change the\n75: \t// stdout dimensions of the tmux pane. On detach, we close it and set a new one.\n76: \t// This should never be nil after a successful Start or Restore.\n77: \tptmx *os.File\n78: \t// monitor monitors the tmux pane content and sends signals to the UI when its status changes.\n79: \tmonitor *statusMonitor\n80: \n81: \t// Initialized by Attach; deinitialized by Detach.\n82: \t//\n83: \t// attachCh is closed at the very end of detaching. Used to signal callers.\n84: \tattachCh chan struct{}\n85: \t// ctx, cancel, wg manage goroutines launched by Attach.\n86: \tctx    context.Context\n87: \tcancel func()\n88: \twg     *sync.WaitGroup\n89: \t// outerMouseWasEnabled is set when Attach() disables mouse on the outer tmux\n90: \t// session so Detach() can restore it.\n91: \touterMouseWasEnabled bool\n92: \n93: \t// adapter holds the program-specific behavior implementation (ProgramAdapter).\n94: \t// Defined as any until the ProgramAdapter interface is committed by Task 1.\n95: \t// Will be typed as ProgramAdapter once session.go is available.\n96: \tadapter any\n97: }\n98: \n99: // TmuxPrefix is the prefix added to all kas-managed tmux session names.\n100: const TmuxPrefix = \"kas_\"\n101: \n102: var whiteSpaceRegex = regexp.MustCompile(`\\s+`)\n103: \n104: // cleanupSessionsRe matches current kas_ sessions and legacy klique_/hivemind_ sessions.\n105: var cleanupSessionsRe = regexp.MustCompile(`(?:kas_|klique_|hivemind_).*:`)\n106: \n107: // toKasTmuxName converts a human-readable name to a kas_-prefixed tmux session name.\n108: // Whitespace is removed and dots are replaced with underscores (tmux does this natively).\n109: func toKasTmuxName(str string) string {\n110: \tstr = whiteSpaceRegex.ReplaceAllString(str, \"\")\n111: \tstr = strings.ReplaceAll(str, \".\", \"_\") // tmux replaces all . with _\n112: \treturn fmt.Sprintf(\"%s%s\", TmuxPrefix, str)\n113: }\n114: \n115: // ToKasTmuxNamePublic is the exported version of toKasTmuxName for use by the app layer.\n116: func ToKasTmuxNamePublic(name string) string {\n117: \treturn toKasTmuxName(name)\n118: }\n119: \n120: // NewTmuxSession creates a new TmuxSession with the given name and program.\n121: func NewTmuxSession(name string, program string, skipPermissions bool) *TmuxSession {\n122: \treturn newTmuxSession(name, program, skipPermissions, MakePtyFactory(), cmd.MakeExecutor())\n123: }\n124: \n125: // NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.\n126: func NewTmuxSessionWithDeps(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {\n127: \treturn newTmuxSession(name, program, skipPermissions, ptyFactory, cmdExec)\n128: }\n129: \n130: func newTmuxSession(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {\n131: \treturn &TmuxSession{\n132: \t\tsanitizedName:   toKasTmuxName(name),\n133: \t\tprogram:         program,\n134: \t\tskipPermissions: skipPermissions,\n135: \t\tptyFactory:      ptyFactory,\n136: \t\tcmdExec:         cmdExec,\n137: \t}\n138: }\n139: \n140: // NewReset creates a fresh TmuxSession preserving the ptyFactory and cmdExec\n141: // from the receiver. Used by Instance.Restart() to avoid replacing injected\n142: // test dependencies with real implementations.\n143: func (t *TmuxSession) NewReset(name string, program string, skipPermissions bool) *TmuxSession {\n144: \treturn newTmuxSession(name, program, skipPermissions, t.ptyFactory, t.cmdExec)\n145: }\n146: \n147: // NewTmuxSessionFromExisting creates a TmuxSession that wraps an already-running\n148: // tmux session identified by its raw sanitized name. Used for adopting orphans.\n149: func NewTmuxSessionFromExisting(sanitizedName string, program string, skipPermissions bool) *TmuxSession {\n150: \treturn &TmuxSession{\n151: \t\tsanitizedName:   sanitizedName,\n152: \t\tprogram:         program,\n153: \t\tskipPermissions: skipPermissions,\n154: \t\tptyFactory:      MakePtyFactory(),\n155: \t\tcmdExec:         cmd.MakeExecutor(),\n156: \t}\n157: }\n158: \n159: // SetAgentType sets the agent type flag to inject at startup (planner/coder/reviewer).\n160: // The value is trimmed of surrounding whitespace.\n161: func (t *TmuxSession) SetAgentType(agentType string) {\n162: \tt.agentType = strings.TrimSpace(agentType)\n163: }\n164: \n165: // SetInitialPrompt sets the initial prompt to bake into the CLI command at launch.\n166: // Supported programs: opencode (--prompt), claude (positional arg).\n167: // For unsupported programs the prompt is ignored; callers should keep\n168: // QueuedPrompt set so the send-keys fallback fires.\n169: func (t *TmuxSession) SetInitialPrompt(prompt string) {\n170: \tt.initialPrompt = prompt\n171: }\n172: \n173: // SetTaskEnv sets the task identity env vars for parallel wave execution.\n174: // When set, KASMOS_TASK, KASMOS_WAVE, and KASMOS_PEERS are prepended to the\n175: // program command string at Start() time.\n176: func (t *TmuxSession) SetTaskEnv(taskNumber, waveNumber, peerCount int) {\n177: \tt.taskNumber = taskNumber\n178: \tt.waveNumber = waveNumber\n179: \tt.peerCount = peerCount\n180: }\n181: \n182: // SetSessionTitle sets the desired title for the opencode session.\n183: // When non-empty and a titleFunc is also set, the title is applied after\n184: // the session reports ready. The \"kas: \" prefix is expected to already be\n185: // included by the caller (e.g. from BuildTitle in the opencodesession package).\n186: func (t *TmuxSession) SetSessionTitle(title string) {\n187: \tt.sessionTitle = title\n188: }\n189: \n190: // SetTitleFunc sets the callback used to apply the session title after startup.\n191: // The callback receives the work directory, a timestamp taken just before the\n192: // tmux session was created, and the desired title string. It runs in a goroutine\n193: // (fire-and-forget) so title setting never blocks or delays session startup.\n194: func (t *TmuxSession) SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string)) {\n195: \tt.titleFunc = fn\n196: }\n197: \n198: // reportProgress calls ProgressFunc if set.\n199: func (t *TmuxSession) reportProgress(stage int, desc string) {\n200: \tif t.ProgressFunc != nil {\n201: \t\tt.ProgressFunc(stage, desc)\n202: \t}\n203: }\n204: \n205: // isClaudeProgram returns true if the program string refers to Claude Code.\n206: func isClaudeProgram(program string) bool {\n207: \treturn strings.HasSuffix(program, ProgramClaude)\n208: }\n209: \n210: // isAiderProgram returns true if the program string refers to Aider.\n211: // Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.\n212: // Will be removed when aider support is fully dropped.\n213: func isAiderProgram(program string) bool {\n214: \treturn strings.HasPrefix(program, ProgramAider)\n215: }\n216: \n217: // isGeminiProgram returns true if the program string refers to Gemini.\n218: // Kept for compatibility with existing tmux_io.go references during the clean-room rewrite.\n219: // Will be removed when gemini support is fully dropped.\n220: func isGeminiProgram(program string) bool {\n221: \treturn strings.HasPrefix(program, ProgramGemini)\n222: }\n223: \n224: // isOpenCodeProgram returns true if the program string refers to OpenCode.\n225: func isOpenCodeProgram(program string) bool {\n226: \treturn strings.HasSuffix(program, ProgramOpenCode)\n227: }\n228: \n229: // statusMonitor tracks changes to tmux pane content using hash-based comparison.\n230: // It is used by HasUpdated to detect when the agent is active vs idle.\n231: type statusMonitor struct {\n232: \t// Store hashes to save memory.\n233: \tprevOutputHash []byte\n234: \t// captureFailures counts consecutive capture-pane failures.\n235: \t// After a threshold we stop logging every tick to avoid spam.\n236: \tcaptureFailures int\n237: \t// unchangedTicks counts consecutive ticks where the pane content hash is identical.\n238: \t// HasUpdated only reports !updated after the count exceeds the debounce threshold,\n239: \t// preventing false Running→Ready transitions during brief pauses (API waits, thinking).\n240: \tunchangedTicks int\n241: }\n242: \n243: func newStatusMonitor() *statusMonitor {\n244: \treturn &statusMonitor{}\n245: }\n246: \n247: // hash hashes the string after stripping ANSI escape sequences.\n248: // Stripping ANSI ensures that cursor blink, color resets, and other\n249: // terminal control codes don't cause false \"content changed\" detections\n250: // when the semantic content is actually stable.\n251: func (m *statusMonitor) hash(s string) []byte {\n252: \th := sha256.New()\n253: \tstripped := ansiRe.ReplaceAllString(s, \"\")\n254: \th.Write([]byte(stripped))\n255: \treturn h.Sum(nil)\n256: }\n257: \n258: // Start creates and starts a new tmux session, then attaches to it.\n259: // program is the command to run in the session. workDir is the git worktree directory.\n260: func (t *TmuxSession) Start(workDir string) error {\n261: \t// Reattach to a surviving session from a previous crash/interrupt\n262: \t// instead of killing it — the agent may still be running.\n263: \tif t.DoesSessionExist() {\n264: \t\treturn t.Restore()\n265: \t}\n266: \n267: \t// Append --dangerously-skip-permissions for Claude programs if enabled.\n268: \tprogram := t.program\n269: \tif t.skipPermissions && isClaudeProgram(program) {\n270: \t\tprogram = program + \" --dangerously-skip-permissions\"\n271: \t}\n272: \tif t.agentType != \"\" && !strings.Contains(program, \"--agent\") {\n273: \t\tprogram = program + \" --agent \" + t.agentType\n274: \t}\n275: \tif t.initialPrompt != \"\" {\n276: \t\tswitch {\n277: \t\tcase isOpenCodeProgram(t.program):\n278: \t\t\tprogram = program + \" --prompt \" + t.promptArgOpenCode(workDir)\n279: \t\tcase isClaudeProgram(t.program):\n280: \t\t\tprogram = program + \" \" + t.promptArgClaude(workDir)\n281: \t\t}\n282: \t\t// aider/gemini: no CLI prompt support — callers keep QueuedPrompt\n283: \t\t// set so the send-keys fallback fires from the app tick handler.\n284: \t}\n285: \n286: \t// Append --print-logs and redirect stderr to a per-session log file so\n287: \t// kasmos-spawned opencode agents always have debug logs available.\n288: \tif isOpenCodeProgram(t.program) {\n289: \t\tlogDir := filepath.Join(workDir, promptDir, \"logs\")\n290: \t\tif err := os.MkdirAll(logDir, 0o755); err == nil {\n291: \t\t\tlogFile := filepath.Join(logDir, t.sanitizedName+\".log\")\n292: \t\t\tprogram = program + \" --print-logs 2>>\" + shellEscapeSingleQuote(logFile)\n293: \t\t}\n294: \t}\n295: \n296: \t// Prepend KASMOS_MANAGED=1 so the agent process sees it from startup.\n297: \tprogram = \"KASMOS_MANAGED=1 \" + program\n298: \n299: \t// Prepend task identity env vars for parallel wave execution.\n300: \tif t.taskNumber > 0 {\n301: \t\tprogram = fmt.Sprintf(\"KASMOS_TASK=%d KASMOS_WAVE=%d KASMOS_PEERS=%d %s\",\n302: \t\t\tt.taskNumber, t.waveNumber, t.peerCount, program)\n303: \t}\n304: \n305: \tt.reportProgress(1, \"Creating tmux session...\")\n306: \n307: \t// Record the timestamp immediately before launching the tmux session.\n308: \t// This is passed to titleFunc so it can find the opencode DB session\n309: \t// that was created at or after this moment.\n310: \tbeforeStart := time.Now()\n311: \n312: \t// Create a new detached tmux session and start the program in it.\n313: \tcmd := exec.Command(\"tmux\", \"new-session\", \"-d\", \"-s\", t.sanitizedName, \"-c\", workDir, program)\n314: \n315: \tptmx, err := t.ptyFactory.Start(cmd)\n316: \tif err != nil {\n317: \t\t// Cleanup any partially created session if any exists.\n318: \t\tif t.DoesSessionExist() {\n319: \t\t\tcleanupCmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", t.sanitizedName)\n320: \t\t\tif cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {\n321: \t\t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n322: \t\t\t}\n323: \t\t}\n324: \t\treturn fmt.Errorf(\"error starting tmux session: %w\", err)\n325: \t}\n326: \n327: \tt.reportProgress(2, \"Waiting for session to start...\")\n328: \n329: \t// Poll for session existence with exponential backoff.\n330: \ttimeout := time.After(2 * time.Second)\n331: \tsleepDuration := 5 * time.Millisecond\n332: \tfor !t.DoesSessionExist() {\n333: \t\tselect {\n334: \t\tcase <-timeout:\n335: \t\t\tif cleanupErr := t.Close(); cleanupErr != nil {\n336: \t\t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n337: \t\t\t}\n338: \t\t\treturn fmt.Errorf(\"timed out waiting for tmux session %s: %v\", t.sanitizedName, err)\n339: \t\tdefault:\n340: \t\t\ttime.Sleep(sleepDuration)\n341: \t\t\t// Exponential backoff up to 50ms max.\n342: \t\t\tif sleepDuration < 50*time.Millisecond {\n343: \t\t\t\tsleepDuration *= 2\n344: \t\t\t}\n345: \t\t}\n346: \t}\n347: \tptmx.Close()\n348: \n349: \t// Set history limit to enable scrollback (default is 2000, we use 10000 for more history).\n350: \thistoryCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"history-limit\", \"10000\")\n351: \tif err := t.cmdExec.Run(historyCmd); err != nil {\n352: \t\tlog.InfoLog.Printf(\"Warning: failed to set history-limit for session %s: %v\", t.sanitizedName, err)\n353: \t}\n354: \n355: \t// Hide the tmux status bar — the kasmos TUI provides its own chrome.\n356: \tstatusCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"status\", \"off\")\n357: \tif err := t.cmdExec.Run(statusCmd); err != nil {\n358: \t\tlog.InfoLog.Printf(\"Warning: failed to hide status bar for session %s: %v\", t.sanitizedName, err)\n359: \t}\n360: \n361: \t// Inject KASMOS_MANAGED=1 so agents can detect they're running under kasmos orchestration.\n362: \tenvCmd := exec.Command(\"tmux\", \"set-environment\", \"-t\", t.sanitizedName, \"KASMOS_MANAGED\", \"1\")\n363: \tif err := t.cmdExec.Run(envCmd); err != nil {\n364: \t\tlog.InfoLog.Printf(\"Warning: failed to set KASMOS_MANAGED env for session %s: %v\", t.sanitizedName, err)\n365: \t}\n366: \n367: \tt.reportProgress(3, \"Configuring session...\")\n368: \n369: \terr = t.Restore()\n370: \tif err != nil {\n371: \t\tif cleanupErr := t.Close(); cleanupErr != nil {\n372: \t\t\terr = fmt.Errorf(\"%v (cleanup error: %v)\", err, cleanupErr)\n373: \t\t}\n374: \t\treturn fmt.Errorf(\"error restoring tmux session: %w\", err)\n375: \t}\n376: \n377: \tif isClaudeProgram(t.program) || isAiderProgram(t.program) || isGeminiProgram(t.program) || isOpenCodeProgram(t.program) {\n378: \t\tt.reportProgress(4, \"Waiting for program to start...\")\n379: \n380: \t\tvar searchString string\n381: \t\tvar tapFunc func() error // nil means no key tap needed (e.g. opencode)\n382: \t\tmaxWaitTime := 30 * time.Second\n383: \n384: \t\tswitch {\n385: \t\tcase isClaudeProgram(t.program):\n386: \t\t\tsearchString = \"Do you trust the files in this folder?\"\n387: \t\t\ttapFunc = t.TapEnter\n388: \t\tcase isOpenCodeProgram(t.program):\n389: \t\t\t// opencode shows its input placeholder once the TUI is ready; no tap needed.\n390: \t\t\tsearchString = \"Ask anything\"\n391: \t\t\ttapFunc = nil\n392: \t\tdefault: // aider / gemini\n393: \t\t\tsearchString = \"Open documentation url for more info\"\n394: \t\t\ttapFunc = t.TapDAndEnter\n395: \t\t\tmaxWaitTime = 45 * time.Second\n396: \t\t}\n397: \n398: \t\t// Poll with exponential backoff until the ready string appears or we time out.\n399: \t\tstartTime := time.Now()\n400: \t\tsleepDuration := 100 * time.Millisecond\n401: \n402: \t\tfor time.Since(startTime) < maxWaitTime {\n403: \t\t\ttime.Sleep(sleepDuration)\n404: \t\t\tcontent, err := t.CapturePaneContent()\n405: \t\t\tif err == nil && strings.Contains(content, searchString) {\n406: \t\t\t\tif tapFunc != nil {\n407: \t\t\t\t\tif err := tapFunc(); err != nil {\n408: \t\t\t\t\t\tlog.ErrorLog.Printf(\"could not tap enter on trust screen: %v\", err)\n409: \t\t\t\t\t}\n410: \t\t\t\t}\n411: \t\t\t\tbreak\n412: \t\t\t}\n413: \n414: \t\t\t// Exponential backoff with cap at 1 second.\n415: \t\t\tsleepDuration = time.Duration(float64(sleepDuration) * 1.2)\n416: \t\t\tif sleepDuration > time.Second {\n417: \t\t\t\tsleepDuration = time.Second\n418: \t\t\t}\n419: \t\t}\n420: \n421: \t\t// After the session is ready, set the opencode session title (best-effort, non-blocking).\n422: \t\t// Only fires for opencode programs with a title and callback configured.\n423: \t\tif isOpenCodeProgram(t.program) && t.sessionTitle != \"\" && t.titleFunc != nil {\n424: \t\t\tgo t.titleFunc(workDir, beforeStart, t.sessionTitle)\n425: \t\t}\n426: \t}\n427: \treturn nil\n428: }\n429: \n430: // Restore attaches to an existing session and restores the window size.\n431: func (t *TmuxSession) Restore() error {\n432: \tptmx, err := t.ptyFactory.Start(exec.Command(\"tmux\", \"attach-session\", \"-t\", t.sanitizedName))\n433: \tif err != nil {\n434: \t\treturn fmt.Errorf(\"error opening PTY: %w\", err)\n435: \t}\n436: \tt.ptmx = ptmx\n437: \tt.monitor = newStatusMonitor()\n438: \t// Idempotently hide the status bar — also covers sessions restored from crash\n439: \t// that were created before this option was set.\n440: \tstatusCmd := exec.Command(\"tmux\", \"set-option\", \"-t\", t.sanitizedName, \"status\", \"off\")\n441: \tif err := t.cmdExec.Run(statusCmd); err != nil {\n442: \t\tlog.InfoLog.Printf(\"Warning: failed to hide status bar for restored session %s: %v\", t.sanitizedName, err)\n443: \t}\n444: \treturn nil\n445: }\n446: \n447: // outerTmuxSession returns the name of the enclosing tmux session (the one\n448: // running kasmos), or \"\" if we are not inside tmux.\n449: func outerTmuxSession() string {\n450: \tif os.Getenv(\"TMUX\") == \"\" {\n451: \t\treturn \"\"\n452: \t}\n453: \tout, err := exec.Command(\"tmux\", \"display-message\", \"-p\", \"#{session_name}\").Output()\n454: \tif err != nil {\n455: \t\treturn \"\"\n456: \t}\n457: \treturn strings.TrimSpace(string(out))\n458: }\n459: \n460: // outerMouseEnabled reports whether mouse is currently on in the given tmux session.\n461: func outerMouseEnabled(session string) bool {\n462: \tout, err := exec.Command(\"tmux\", \"show-options\", \"-t\", session, \"mouse\").Output()\n463: \tif err != nil {\n464: \t\treturn false\n465: \t}\n466: \treturn strings.Contains(string(out), \"on\")\n467: }\n468: \n469: // Close terminates the tmux session and cleans up resources.\n470: func (t *TmuxSession) Close() error {\n471: \tvar errs []error\n472: \n473: \tif t.ptmx != nil {\n474: \t\tif err := t.ptmx.Close(); err != nil {\n475: \t\t\terrs = append(errs, fmt.Errorf(\"error closing PTY: %w\", err))\n476: \t\t}\n477: \t\tt.ptmx = nil\n478: \t}\n479: \n480: \tcmd := exec.Command(\"tmux\", \"kill-session\", \"-t\", t.sanitizedName)\n481: \tif err := t.cmdExec.Run(cmd); err != nil {\n482: \t\terrs = append(errs, fmt.Errorf(\"error killing tmux session: %w\", err))\n483: \t}\n484: \n485: \tif t.promptFile != \"\" {\n486: \t\tos.Remove(t.promptFile)\n487: \t\tt.promptFile = \"\"\n488: \t}\n489: \n490: \treturn errors.Join(errs...)\n491: }\n492: \n493: // DoesSessionExist returns true if the tmux session is currently running.\n494: func (t *TmuxSession) DoesSessionExist() bool {\n495: \t// Using \"-t name\" does a prefix match, which is wrong. `-t=` does an exact match.\n496: \texistsCmd := exec.Command(\"tmux\", \"has-session\", fmt.Sprintf(\"-t=%s\", t.sanitizedName))\n497: \treturn t.cmdExec.Run(existsCmd) == nil\n498: }\n499: \n500: // CleanupSessions kills all tmux sessions that start with the kas prefix.\n501: // Also cleans up legacy \"hivemind_\" and \"klique_\" sessions from before the rename.\n502: func CleanupSessions(cmdExec cmd.Executor) error {\n503: \t// First try to list sessions.\n504: \tcmd := exec.Command(\"tmux\", \"ls\")\n505: \toutput, err := cmdExec.Output(cmd)\n506: \n507: \t// If there's an error and it's because no server is running, that's fine.\n508: \t// Exit code 1 typically means no sessions exist.\n509: \tif err != nil {\n510: \t\tif exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {\n511: \t\t\treturn nil // No sessions to clean up.\n512: \t\t}\n513: \t\treturn fmt.Errorf(\"failed to list tmux sessions: %v\", err)\n514: \t}\n515: \n516: \tmatches := cleanupSessionsRe.FindAllString(string(output), -1)\n517: \tfor i, match := range matches {\n518: \t\tmatches[i] = match[:strings.Index(match, \":\")]\n519: \t}\n520: \n521: \tfor _, match := range matches {\n522: \t\tlog.InfoLog.Printf(\"cleaning up session: %s\", match)\n523: \t\tif err := cmdExec.Run(exec.Command(\"tmux\", \"kill-session\", \"-t\", match)); err != nil {\n524: \t\t\treturn fmt.Errorf(\"failed to kill tmux session %s: %v\", match, err)\n525: \t\t}\n526: \t}\n527: \treturn nil\n528: }\n529: \n530: // OrphanSession represents a kas_ tmux session not tracked by any kasmos Instance.\n531: type OrphanSession struct {\n532: \tName     string    // raw tmux session name, e.g. \"kas_auth-refactor-implement\"\n533: \tTitle    string    // human name with \"kas_\" prefix stripped\n534: \tCreated  time.Time // session creation time\n535: \tWindows  int       // window count\n536: \tAttached bool      // whether another client is attached\n537: \tWidth    int       // pane columns\n538: \tHeight   int       // pane rows\n539: }\n540: \n541: // DiscoverOrphans lists kas_-prefixed tmux sessions that are NOT in knownNames.\n542: // knownNames should contain the sanitized tmux names of all current Instances.\n543: func DiscoverOrphans(cmdExec cmd.Executor, knownNames []string) ([]OrphanSession, error) {\n544: \tlsCmd := exec.Command(\"tmux\", \"ls\", \"-F\",\n545: \t\t\"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}\")\n546: \toutput, err := cmdExec.Output(lsCmd)\n547: \tif err != nil {\n548: \t\tif _, ok := err.(*exec.ExitError); ok {\n549: \t\t\treturn nil, nil // no tmux server running or no sessions\n550: \t\t}\n551: \t\treturn nil, fmt.Errorf(\"failed to list tmux sessions: %w\", err)\n552: \t}\n553: \n554: \tknown := make(map[string]bool, len(knownNames))\n555: \tfor _, n := range knownNames {\n556: \t\tknown[n] = true\n557: \t}\n558: \n559: \tvar orphans []OrphanSession\n560: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n561: \t\tif line == \"\" {\n562: \t\t\tcontinue\n563: \t\t}\n564: \t\tparts := strings.SplitN(line, \"|\", 6)\n565: \t\tif len(parts) < 6 {\n566: \t\t\tcontinue\n567: \t\t}\n568: \t\tname := parts[0]\n569: \t\tif !strings.HasPrefix(name, TmuxPrefix) {\n570: \t\t\tcontinue\n571: \t\t}\n572: \t\tif known[name] {\n573: \t\t\tcontinue\n574: \t\t}\n575: \n576: \t\tvar created time.Time\n577: \t\tif epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {\n578: \t\t\tcreated = time.Unix(epoch, 0)\n579: \t\t}\n580: \t\twindows, _ := strconv.Atoi(parts[2])\n581: \t\tattached := parts[3] != \"0\"\n582: \t\twidth, _ := strconv.Atoi(parts[4])\n583: \t\theight, _ := strconv.Atoi(parts[5])\n584: \n585: \t\ttitle := strings.TrimPrefix(name, TmuxPrefix)\n586: \t\torphans = append(orphans, OrphanSession{\n587: \t\t\tName:     name,\n588: \t\t\tTitle:    title,\n589: \t\t\tCreated:  created,\n590: \t\t\tWindows:  windows,\n591: \t\t\tAttached: attached,\n592: \t\t\tWidth:    width,\n593: \t\t\tHeight:   height,\n594: \t\t})\n595: \t}\n596: \treturn orphans, nil\n597: }\n598: \n599: // SessionInfo represents any kas_ tmux session (managed or orphaned).\n600: type SessionInfo struct {\n601: \tName     string    // raw tmux session name, e.g. \"kas_auth-refactor-implement\"\n602: \tTitle    string    // human name with \"kas_\" prefix stripped\n603: \tCreated  time.Time // session creation time\n604: \tWindows  int       // window count\n605: \tAttached bool      // whether another client is attached\n606: \tWidth    int       // pane columns\n607: \tHeight   int       // pane rows\n608: \tManaged  bool      // true if matched a known instance name\n609: }\n610: \n611: // DiscoverAll lists all kas_-prefixed tmux sessions, marking each as Managed\n612: // if its name appears in knownNames. knownNames should contain the sanitized\n613: // tmux names of all current Instances (e.g. from ToKasTmuxNamePublic).\n614: func DiscoverAll(cmdExec cmd.Executor, knownNames []string) ([]SessionInfo, error) {\n615: \tlsCmd := exec.Command(\"tmux\", \"ls\", \"-F\",\n616: \t\t\"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}\")\n617: \toutput, err := cmdExec.Output(lsCmd)\n618: \tif err != nil {\n619: \t\tif _, ok := err.(*exec.ExitError); ok {\n620: \t\t\treturn nil, nil\n621: \t\t}\n622: \t\treturn nil, fmt.Errorf(\"failed to list tmux sessions: %w\", err)\n623: \t}\n624: \n625: \tknown := make(map[string]bool, len(knownNames))\n626: \tfor _, n := range knownNames {\n627: \t\tknown[n] = true\n628: \t}\n629: \n630: \tvar sessions []SessionInfo\n631: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n632: \t\tif line == \"\" {\n633: \t\t\tcontinue\n634: \t\t}\n635: \t\tparts := strings.SplitN(line, \"|\", 6)\n636: \t\tif len(parts) < 6 {\n637: \t\t\tcontinue\n638: \t\t}\n639: \t\tname := parts[0]\n640: \t\tif !strings.HasPrefix(name, TmuxPrefix) {\n641: \t\t\tcontinue\n642: \t\t}\n643: \n644: \t\tvar created time.Time\n645: \t\tif epoch, err := strconv.ParseInt(parts[1], 10, 64); err == nil {\n646: \t\t\tcreated = time.Unix(epoch, 0)\n647: \t\t}\n648: \t\twindows, _ := strconv.Atoi(parts[2])\n649: \t\tattached := parts[3] != \"0\"\n650: \t\twidth, _ := strconv.Atoi(parts[4])\n651: \t\theight, _ := strconv.Atoi(parts[5])\n652: \n653: \t\tsessions = append(sessions, SessionInfo{\n654: \t\t\tName:     name,\n655: \t\t\tTitle:    strings.TrimPrefix(name, TmuxPrefix),\n656: \t\t\tCreated:  created,\n657: \t\t\tWindows:  windows,\n658: \t\t\tAttached: attached,\n659: \t\t\tWidth:    width,\n660: \t\t\tHeight:   height,\n661: \t\t\tManaged:  known[name],\n662: \t\t})\n663: \t}\n664: \treturn sessions, nil\n665: }\n666: \n667: // CountKasSessions returns the number of kas_-prefixed tmux sessions.\n668: // Returns 0 if no tmux server is running or on any error.\n669: func CountKasSessions(cmdExec cmd.Executor) int {\n670: \tlsCmd := exec.Command(\"tmux\", \"ls\")\n671: \toutput, err := cmdExec.Output(lsCmd)\n672: \tif err != nil {\n673: \t\treturn 0\n674: \t}\n675: \tcount := 0\n676: \tfor _, line := range strings.Split(strings.TrimSpace(string(output)), \"\\n\") {\n677: \t\tif strings.HasPrefix(line, TmuxPrefix) {\n678: \t\t\tcount++\n679: \t\t}\n680: \t}\n681: \treturn count\n682: }\n\n(End of file - total 682 lines)\n</content>",
+            "title": "session/tmux/tmux_session.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"context\"\n\t\"crypto/sha256\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strconv\"\n\t\"strings\"\n\t\"sync\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552613576,
+              "end": 1772552613590
+            }
+          },
+          "id": "prt_cb45e6bc3001p4c6BxkuXomyHt",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6203001zuGo61k32BLnRn"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/session.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"os\"\n5: \t\"time\"\n6: )\n7: \n8: // Session defines the contract for a managed terminal multiplexer session.\n9: // The instance layer depends on this interface, not the concrete TmuxSession.\n10: type Session interface {\n11: \t// Lifecycle\n12: \tStart(workDir string) error\n13: \tRestore() error\n14: \tClose() error\n15: \tDoesSessionExist() bool\n16: \n17: \t// I/O\n18: \tSendKeys(keys string) error\n19: \tTapEnter() error\n20: \tTapRight() error\n21: \tSendPermissionResponse(choice PermissionChoice) error\n22: \tCapturePaneContent() (string, error)\n23: \tCapturePaneContentWithOptions(start, end string) (string, error)\n24: \tHasUpdated() (updated bool, hasPrompt bool)\n25: \tHasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)\n26: \tGetPanePID() (int, error)\n27: \n28: \t// Attach/Detach\n29: \tAttach() (chan struct{}, error)\n30: \tDetach()\n31: \tDetachSafely() error\n32: \tSetDetachedSize(width, height int) error\n33: \n34: \t// Accessors\n35: \tGetPTY() *os.File\n36: \tGetSanitizedName() string\n37: \n38: \t// Configuration (builder-style, called before Start)\n39: \tSetAgentType(agentType string)\n40: \tSetInitialPrompt(prompt string)\n41: \tSetTaskEnv(taskNumber, waveNumber, peerCount int)\n42: \tSetSessionTitle(title string)\n43: \tSetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))\n44: \tNewReset(name, program string, skipPermissions bool) Session\n45: }\n46: \n47: // PermissionChoice represents the user's response to a permission prompt.\n48: type PermissionChoice int\n49: \n50: const (\n51: \tPermissionAllowOnce PermissionChoice = iota\n52: \tPermissionAllowAlways\n53: \tPermissionReject\n54: )\n\n(End of file - total 54 lines)\n</content>",
+            "title": "session/tmux/session.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"os\"\n\t\"time\"\n)\n\n// Session defines the contract for a managed terminal multiplexer session.\n// The instance layer depends on this interface, not the concrete TmuxSession.\ntype Session interface {\n\t// Lifecycle\n\tStart(workDir string) error\n\tRestore() error\n\tClose() error\n\tDoesSessionExist() bool\n\n\t// I/O\n\tSendKeys(keys string) error\n\tTapEnter() error\n\tTapRight() error",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552613806,
+              "end": 1772552613809
+            }
+          },
+          "id": "prt_cb45e6ec9001ftrQUlexBp9xOS",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6203001zuGo61k32BLnRn"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 50036,
+            "input": 1,
+            "output": 164,
+            "reasoning": 0,
+            "cache": {
+              "read": 49600,
+              "write": 271
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6203001zuGo61k32BLnRn"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552613850,
+          "completed": 1772552618510
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61113,
+          "input": 1,
+          "output": 196,
+          "reasoning": 0,
+          "cache": {
+            "read": 49871,
+            "write": 11045
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45e6fda001izkdPKU52iCdZC",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e7aea0018416VQNlwbG3Gq",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6fda001izkdPKU52iCdZC"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me look at the other relevant files to understand the existing implementation.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772552616683,
+            "end": 1772552617554
+          },
+          "id": "prt_cb45e7aeb0016b2Fctu4S8NnZn",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6fda001izkdPKU52iCdZC"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/pty.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/pty.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"os\"\n5: \t\"os/exec\"\n6: \n7: \t\"github.com/creack/pty\"\n8: )\n9: \n10: type PtyFactory interface {\n11: \tStart(cmd *exec.Cmd) (*os.File, error)\n12: \tClose()\n13: }\n14: \n15: // Pty starts a \"real\" pseudo-terminal (PTY) using the creack/pty package.\n16: type Pty struct{}\n17: \n18: func (pt Pty) Start(cmd *exec.Cmd) (*os.File, error) {\n19: \treturn pty.Start(cmd)\n20: }\n21: \n22: func (pt Pty) Close() {}\n23: \n24: func MakePtyFactory() PtyFactory {\n25: \treturn Pty{}\n26: }\n\n(End of file - total 26 lines)\n</content>",
+            "title": "session/tmux/pty.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"os\"\n\t\"os/exec\"\n\n\t\"github.com/creack/pty\"\n)\n\ntype PtyFactory interface {\n\tStart(cmd *exec.Cmd) (*os.File, error)\n\tClose()\n}\n\n// Pty starts a \"real\" pseudo-terminal (PTY) using the creack/pty package.\ntype Pty struct{}\n\nfunc (pt Pty) Start(cmd *exec.Cmd) (*os.File, error) {\n\treturn pty.Start(cmd)\n}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552617944,
+              "end": 1772552617952
+            }
+          },
+          "id": "prt_cb45e7e530015WF0D21XvwPZzT",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6fda001izkdPKU52iCdZC"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Nnazx6tMZtDQVxfR3MUFZ1",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_session_test.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n7: \t\"github.com/stretchr/testify/assert\"\n8: )\n9: \n10: func TestToKasTmuxName(t *testing.T) {\n11: \tassert.Equal(t, \"kas_asdf\", toKasTmuxName(\"asdf\"))\n12: \tassert.Equal(t, \"kas_asdf__asdf\", toKasTmuxName(\"a sd f . . asdf\"))\n13: }\n14: \n15: func TestNewTmuxSession_SanitizesName(t *testing.T) {\n16: \ts := NewTmuxSession(\"my.session\", \"claude\", false)\n17: \tassert.Equal(t, \"kas_my_session\", s.GetSanitizedName())\n18: }\n19: \n20: func TestSetAgentType(t *testing.T) {\n21: \ts := NewTmuxSession(\"test\", \"opencode\", false)\n22: \ts.SetAgentType(\"  planner  \")\n23: \t// agentType should be trimmed — verified indirectly via Start command construction\n24: \tassert.Equal(t, \"planner\", s.agentType)\n25: }\n26: \n27: func TestSetTaskEnv(t *testing.T) {\n28: \ts := NewTmuxSession(\"test\", \"claude\", false)\n29: \ts.SetTaskEnv(3, 2, 4)\n30: \tassert.Equal(t, 3, s.taskNumber)\n31: \tassert.Equal(t, 2, s.waveNumber)\n32: \tassert.Equal(t, 4, s.peerCount)\n33: }\n34: \n35: func TestNewReset_PreservesDeps(t *testing.T) {\n36: \tpty := NewMockPtyFactory(t)\n37: \texec := cmd_test.NewMockExecutor()\n38: \ts := NewTmuxSessionWithDeps(\"orig\", \"claude\", false, pty, exec)\n39: \treset := s.NewReset(\"new\", \"opencode\", true)\n40: \tassert.Equal(t, \"kas_new\", reset.GetSanitizedName())\n41: }\n42: \n43: func TestNewTmuxSessionFromExisting(t *testing.T) {\n44: \ts := NewTmuxSessionFromExisting(\"kas_orphan\", \"claude\", false)\n45: \tassert.Equal(t, \"kas_orphan\", s.GetSanitizedName())\n46: }\n47: \n48: func TestToKasTmuxNamePublic(t *testing.T) {\n49: \tassert.Equal(t, \"kas_foo\", ToKasTmuxNamePublic(\"foo\"))\n50: }\n\n(End of file - total 50 lines)\n</content>",
+            "title": "session/tmux/tmux_session_test.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestToKasTmuxName(t *testing.T) {\n\tassert.Equal(t, \"kas_asdf\", toKasTmuxName(\"asdf\"))\n\tassert.Equal(t, \"kas_asdf__asdf\", toKasTmuxName(\"a sd f . . asdf\"))\n}\n\nfunc TestNewTmuxSession_SanitizesName(t *testing.T) {\n\ts := NewTmuxSession(\"my.session\", \"claude\", false)\n\tassert.Equal(t, \"kas_my_session\", s.GetSanitizedName())\n}\n\nfunc TestSetAgentType(t *testing.T) {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552618484,
+              "end": 1772552618490
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6fda001izkdPKU52iCdZC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 61113,
+            "input": 1,
+            "output": 196,
+            "reasoning": 0,
+            "cache": {
+              "read": 49871,
+              "write": 11045
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e6fda001izkdPKU52iCdZC"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552618510,
+          "completed": 1772552621514
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 62472,
+          "input": 1,
+          "output": 164,
+          "reasoning": 0,
+          "cache": {
+            "read": 60916,
+            "write": 1391
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45e820e001DVv4CPfNlvj3t1",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e8aee001JDFsWFX2RAnwcs",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e820e001DVv4CPfNlvj3t1"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/tmux_test.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"fmt\"\n5: \tcmd2 \"github.com/kastheco/kasmos/cmd\"\n6: \t\"github.com/kastheco/kasmos/log\"\n7: \t\"math/rand\"\n8: \t\"os\"\n9: \t\"os/exec\"\n10: \t\"path/filepath\"\n11: \t\"strings\"\n12: \t\"testing\"\n13: \n14: \t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n15: \n16: \t\"github.com/stretchr/testify/assert\"\n17: \t\"github.com/stretchr/testify/require\"\n18: )\n19: \n20: func TestMain(m *testing.M) {\n21: \tlog.Initialize(false)\n22: \tcode := m.Run()\n23: \tlog.Close()\n24: \tos.Exit(code)\n25: }\n26: \n27: type MockPtyFactory struct {\n28: \tt *testing.T\n29: \n30: \t// Array of commands and the corresponding file handles representing PTYs.\n31: \tcmds  []*exec.Cmd\n32: \tfiles []*os.File\n33: }\n34: \n35: func (pt *MockPtyFactory) Start(cmd *exec.Cmd) (*os.File, error) {\n36: \tfilePath := filepath.Join(pt.t.TempDir(), fmt.Sprintf(\"pty-%s-%d\", pt.t.Name(), rand.Int31()))\n37: \tf, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0644)\n38: \tif err == nil {\n39: \t\tpt.cmds = append(pt.cmds, cmd)\n40: \t\tpt.files = append(pt.files, f)\n41: \t}\n42: \treturn f, err\n43: }\n44: \n45: func (pt *MockPtyFactory) Close() {}\n46: \n47: func NewMockPtyFactory(t *testing.T) *MockPtyFactory {\n48: \treturn &MockPtyFactory{\n49: \t\tt: t,\n50: \t}\n51: }\n52: \n53: func TestSanitizeName(t *testing.T) {\n54: \tsession := NewTmuxSession(\"asdf\", \"program\", false)\n55: \trequire.Equal(t, TmuxPrefix+\"asdf\", session.sanitizedName)\n56: \n57: \tsession = NewTmuxSession(\"a sd f . . asdf\", \"program\", false)\n58: \trequire.Equal(t, TmuxPrefix+\"asdf__asdf\", session.sanitizedName)\n59: }\n60: \n61: func TestStartTmuxSession(t *testing.T) {\n62: \tptyFactory := NewMockPtyFactory(t)\n63: \n64: \tcreated := false\n65: \tcmdExec := cmd_test.MockCmdExec{\n66: \t\tRunFunc: func(cmd *exec.Cmd) error {\n67: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n68: \t\t\t\tcreated = true\n69: \t\t\t\treturn fmt.Errorf(\"session already exists\")\n70: \t\t\t}\n71: \t\t\treturn nil\n72: \t\t},\n73: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n74: \t\t\t// Return the trust-screen string so the startup wait exits fast.\n75: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n76: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n77: \t\t\t}\n78: \t\t\treturn []byte(\"output\"), nil\n79: \t\t},\n80: \t}\n81: \n82: \tworkdir := t.TempDir()\n83: \tsession := newTmuxSession(\"test-session\", \"claude\", false, ptyFactory, cmdExec)\n84: \n85: \terr := session.Start(workdir)\n86: \trequire.NoError(t, err)\n87: \trequire.Equal(t, 2, len(ptyFactory.cmds))\n88: \trequire.Equal(t, fmt.Sprintf(\"tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 claude\", workdir),\n89: \t\tcmd2.ToString(ptyFactory.cmds[0]))\n90: \trequire.Equal(t, \"tmux attach-session -t kas_test-session\",\n91: \t\tcmd2.ToString(ptyFactory.cmds[1]))\n92: \n93: \trequire.Equal(t, 2, len(ptyFactory.files))\n94: \n95: \t// File should be closed.\n96: \t_, err = ptyFactory.files[0].Stat()\n97: \trequire.Error(t, err)\n98: \t// File should be open\n99: \t_, err = ptyFactory.files[1].Stat()\n100: \trequire.NoError(t, err)\n101: }\n102: \n103: func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {\n104: \tptyFactory := NewMockPtyFactory(t)\n105: \n106: \tcreated := false\n107: \tcmdExec := cmd_test.MockCmdExec{\n108: \t\tRunFunc: func(cmd *exec.Cmd) error {\n109: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n110: \t\t\t\tcreated = true\n111: \t\t\t\treturn fmt.Errorf(\"session already exists\")\n112: \t\t\t}\n113: \t\t\treturn nil\n114: \t\t},\n115: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n116: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n117: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n118: \t\t\t}\n119: \t\t\treturn []byte(\"output\"), nil\n120: \t\t},\n121: \t}\n122: \n123: \tworkdir := t.TempDir()\n124: \tsession := newTmuxSession(\"test-session\", \"claude\", true, ptyFactory, cmdExec)\n125: \n126: \terr := session.Start(workdir)\n127: \trequire.NoError(t, err)\n128: \trequire.Equal(t, 2, len(ptyFactory.cmds))\n129: \trequire.Equal(t, fmt.Sprintf(\"tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 claude --dangerously-skip-permissions\", workdir),\n130: \t\tcmd2.ToString(ptyFactory.cmds[0]))\n131: }\n132: \n133: func recordKilledSessions(killedSessions *[]string) func(cmd *exec.Cmd) error {\n134: \treturn func(cmd *exec.Cmd) error {\n135: \t\targs := cmd.Args\n136: \t\t// Only record sessions killed by kill-session, not other tmux subcommands\n137: \t\tif len(args) >= 2 && args[1] == \"kill-session\" {\n138: \t\t\tfor i, arg := range args {\n139: \t\t\t\tif arg == \"-t\" && i+1 < len(args) {\n140: \t\t\t\t\t*killedSessions = append(*killedSessions, args[i+1])\n141: \t\t\t\t}\n142: \t\t\t}\n143: \t\t}\n144: \t\treturn nil\n145: \t}\n146: }\n147: \n148: func TestCleanupSessions(t *testing.T) {\n149: \tt.Run(\"kills kas and legacy klique/hivemind sessions\", func(t *testing.T) {\n150: \t\tvar killedSessions []string\n151: \t\tcmdExec := cmd_test.MockCmdExec{\n152: \t\t\tRunFunc: recordKilledSessions(&killedSessions),\n153: \t\t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n154: \t\t\t\toutput := \"kas_session1: 1 windows (created Thu Feb 20 10:00:00 2026)\\n\" +\n155: \t\t\t\t\t\"kas_lazygit_session1: 1 windows (created Thu Feb 20 10:00:01 2026)\\n\" +\n156: \t\t\t\t\t\"klique_legacy_session: 1 windows (created Thu Feb 20 09:30:00 2026)\\n\" +\n157: \t\t\t\t\t\"hivemind_legacy: 1 windows (created Thu Feb 20 09:00:00 2026)\\n\" +\n158: \t\t\t\t\t\"unrelated_session: 1 windows (created Thu Feb 20 08:00:00 2026)\\n\"\n159: \t\t\t\treturn []byte(output), nil\n160: \t\t\t},\n161: \t\t}\n162: \n163: \t\terr := CleanupSessions(cmdExec)\n164: \t\trequire.NoError(t, err)\n165: \t\trequire.Len(t, killedSessions, 4)\n166: \t\trequire.Contains(t, killedSessions, \"kas_session1\")\n167: \t\trequire.Contains(t, killedSessions, \"kas_lazygit_session1\")\n168: \t\trequire.Contains(t, killedSessions, \"klique_legacy_session\")\n169: \t\trequire.Contains(t, killedSessions, \"hivemind_legacy\")\n170: \t})\n171: \n172: \tt.Run(\"leaves unrelated sessions alone\", func(t *testing.T) {\n173: \t\tvar killedSessions []string\n174: \t\tcmdExec := cmd_test.MockCmdExec{\n175: \t\t\tRunFunc: recordKilledSessions(&killedSessions),\n176: \t\t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n177: \t\t\t\toutput := \"unrelated_session: 1 windows (created Thu Feb 20 08:00:00 2026)\\n\"\n178: \t\t\t\treturn []byte(output), nil\n179: \t\t\t},\n180: \t\t}\n181: \n182: \t\terr := CleanupSessions(cmdExec)\n183: \t\trequire.NoError(t, err)\n184: \t\trequire.Len(t, killedSessions, 0)\n185: \t})\n186: }\n187: \n188: func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {\n189: \tptyFactory := NewMockPtyFactory(t)\n190: \n191: \tcreated := false\n192: \tcmdExec := cmd_test.MockCmdExec{\n193: \t\tRunFunc: func(cmd *exec.Cmd) error {\n194: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n195: \t\t\t\tcreated = true\n196: \t\t\t\treturn fmt.Errorf(\"session already exists\")\n197: \t\t\t}\n198: \t\t\treturn nil\n199: \t\t},\n200: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n201: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n202: \t\t\t\treturn []byte(\"Open documentation url for more info\"), nil\n203: \t\t\t}\n204: \t\t\treturn []byte(\"output\"), nil\n205: \t\t},\n206: \t}\n207: \n208: \tworkdir := t.TempDir()\n209: \tsession := newTmuxSession(\"test-session\", \"aider --model gpt-4\", true, ptyFactory, cmdExec)\n210: \n211: \terr := session.Start(workdir)\n212: \trequire.NoError(t, err)\n213: \trequire.Equal(t, 2, len(ptyFactory.cmds))\n214: \trequire.Equal(t, fmt.Sprintf(\"tmux new-session -d -s kas_test-session -c %s KASMOS_MANAGED=1 aider --model gpt-4\", workdir),\n215: \t\tcmd2.ToString(ptyFactory.cmds[0]))\n216: }\n217: \n218: func TestStartTmuxSessionOpenCode(t *testing.T) {\n219: \tptyFactory := NewMockPtyFactory(t)\n220: \n221: \tcreated := false\n222: \tvar ranCmds []string\n223: \tcmdExec := cmd_test.MockCmdExec{\n224: \t\tRunFunc: func(cmd *exec.Cmd) error {\n225: \t\t\tranCmds = append(ranCmds, cmd2.ToString(cmd))\n226: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n227: \t\t\t\tcreated = true\n228: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n229: \t\t\t}\n230: \t\t\treturn nil\n231: \t\t},\n232: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n233: \t\t\t// Return \"Ask anything\" immediately so the startup wait exits fast.\n234: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n235: \t\t\t\treturn []byte(\"Ask anything\"), nil\n236: \t\t\t}\n237: \t\t\treturn []byte(\"output\"), nil\n238: \t\t},\n239: \t}\n240: \n241: \tworkdir := t.TempDir()\n242: \tsession := newTmuxSession(\"oc-session\", \"opencode\", false, ptyFactory, cmdExec)\n243: \n244: \terr := session.Start(workdir)\n245: \trequire.NoError(t, err)\n246: \n247: \t// Verify new-session used the right program.\n248: \trequire.Equal(t, fmt.Sprintf(\"tmux new-session -d -s kas_oc-session -c %s KASMOS_MANAGED=1 opencode --print-logs 2>>'%s/.kasmos/logs/kas_oc-session.log'\", workdir, workdir),\n249: \t\tcmd2.ToString(ptyFactory.cmds[0]))\n250: \n251: \t// Verify no send-keys tap was issued (opencode needs no trust-screen tap).\n252: \tfor _, c := range ranCmds {\n253: \t\trequire.NotContains(t, c, \"send-keys\", \"opencode startup should not send any keys\")\n254: \t}\n255: }\n256: \n257: func TestSendKeys(t *testing.T) {\n258: \tptyFactory := NewMockPtyFactory(t)\n259: \n260: \tvar ranCmds []string\n261: \tcmdExec := cmd_test.MockCmdExec{\n262: \t\tRunFunc: func(cmd *exec.Cmd) error {\n263: \t\t\tranCmds = append(ranCmds, cmd2.ToString(cmd))\n264: \t\t\treturn nil\n265: \t\t},\n266: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n267: \t\t\treturn []byte(\"output\"), nil\n268: \t\t},\n269: \t}\n270: \n271: \tsession := newTmuxSession(\"test-session\", \"opencode\", false, ptyFactory, cmdExec)\n272: \t// Manually set sanitizedName by creating via the constructor (already done).\n273: \n274: \terr := session.SendKeys(\"hello world\")\n275: \trequire.NoError(t, err)\n276: \trequire.Len(t, ranCmds, 1)\n277: \trequire.Equal(t, \"tmux send-keys -l -t kas_test-session hello world\", ranCmds[0])\n278: }\n279: \n280: func TestTapEnter(t *testing.T) {\n281: \tptyFactory := NewMockPtyFactory(t)\n282: \n283: \tvar ranCmds []string\n284: \tcmdExec := cmd_test.MockCmdExec{\n285: \t\tRunFunc: func(cmd *exec.Cmd) error {\n286: \t\t\tranCmds = append(ranCmds, cmd2.ToString(cmd))\n287: \t\t\treturn nil\n288: \t\t},\n289: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n290: \t\t\treturn []byte(\"output\"), nil\n291: \t\t},\n292: \t}\n293: \n294: \tsession := newTmuxSession(\"test-session\", \"opencode\", false, ptyFactory, cmdExec)\n295: \n296: \terr := session.TapEnter()\n297: \trequire.NoError(t, err)\n298: \trequire.Len(t, ranCmds, 1)\n299: \trequire.Equal(t, \"tmux send-keys -t kas_test-session Enter\", ranCmds[0])\n300: }\n301: \n302: func TestStartTmuxSessionInjectsAgentFlag(t *testing.T) {\n303: \tptyFactory := NewMockPtyFactory(t)\n304: \n305: \tcreated := false\n306: \tcmdExec := cmd_test.MockCmdExec{\n307: \t\tRunFunc: func(cmd *exec.Cmd) error {\n308: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n309: \t\t\t\tcreated = true\n310: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n311: \t\t\t}\n312: \t\t\treturn nil\n313: \t\t},\n314: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n315: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n316: \t\t\t\treturn []byte(\"Ask anything\"), nil\n317: \t\t\t}\n318: \t\t\treturn []byte(\"output\"), nil\n319: \t\t},\n320: \t}\n321: \n322: \tworkdir := t.TempDir()\n323: \ts := newTmuxSession(\"agent-test\", \"opencode\", false, ptyFactory, cmdExec)\n324: \ts.SetAgentType(\"planner\")\n325: \n326: \terr := s.Start(workdir)\n327: \trequire.NoError(t, err)\n328: \trequire.Equal(\n329: \t\tt,\n330: \t\tfmt.Sprintf(\"tmux new-session -d -s kas_agent-test -c %s KASMOS_MANAGED=1 opencode --agent planner --print-logs 2>>'%s/.kasmos/logs/kas_agent-test.log'\", workdir, workdir),\n331: \t\tcmd2.ToString(ptyFactory.cmds[0]),\n332: \t)\n333: }\n334: \n335: func TestTapDAndEnter(t *testing.T) {\n336: \tptyFactory := NewMockPtyFactory(t)\n337: \n338: \tvar ranCmds []string\n339: \tcmdExec := cmd_test.MockCmdExec{\n340: \t\tRunFunc: func(cmd *exec.Cmd) error {\n341: \t\t\tranCmds = append(ranCmds, cmd2.ToString(cmd))\n342: \t\t\treturn nil\n343: \t\t},\n344: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n345: \t\t\treturn []byte(\"output\"), nil\n346: \t\t},\n347: \t}\n348: \n349: \tsession := newTmuxSession(\"test-session\", \"aider\", false, ptyFactory, cmdExec)\n350: \n351: \terr := session.TapDAndEnter()\n352: \trequire.NoError(t, err)\n353: \trequire.Len(t, ranCmds, 1)\n354: \trequire.Equal(t, \"tmux send-keys -t kas_test-session D Enter\", ranCmds[0])\n355: }\n356: \n357: func TestSetInitialPrompt(t *testing.T) {\n358: \tptyFactory := NewMockPtyFactory(t)\n359: \tcmdExec := cmd_test.MockCmdExec{\n360: \t\tRunFunc:    func(cmd *exec.Cmd) error { return nil },\n361: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(\"output\"), nil },\n362: \t}\n363: \n364: \ts := newTmuxSession(\"prompt-test\", \"opencode\", false, ptyFactory, cmdExec)\n365: \ts.SetInitialPrompt(\"hello world\")\n366: \n367: \t// Verify the field is set (accessed via the Start command construction).\n368: \tassert.Equal(t, \"hello world\", s.initialPrompt)\n369: }\n370: \n371: func TestStartOpenCodeWithInitialPrompt(t *testing.T) {\n372: \tptyFactory := NewMockPtyFactory(t)\n373: \n374: \tcreated := false\n375: \tcmdExec := cmd_test.MockCmdExec{\n376: \t\tRunFunc: func(cmd *exec.Cmd) error {\n377: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n378: \t\t\t\tcreated = true\n379: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n380: \t\t\t}\n381: \t\t\treturn nil\n382: \t\t},\n383: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n384: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n385: \t\t\t\treturn []byte(\"Ask anything\"), nil\n386: \t\t\t}\n387: \t\t\treturn []byte(\"output\"), nil\n388: \t\t},\n389: \t}\n390: \n391: \tworkdir := t.TempDir()\n392: \ts := newTmuxSession(\"oc-prompt\", \"opencode\", false, ptyFactory, cmdExec)\n393: \ts.SetAgentType(\"planner\")\n394: \ts.SetInitialPrompt(\"Plan auth. Goal: JWT tokens.\")\n395: \n396: \terr := s.Start(workdir)\n397: \trequire.NoError(t, err)\n398: \trequire.Equal(\n399: \t\tt,\n400: \t\tfmt.Sprintf(\"tmux new-session -d -s kas_oc-prompt -c %s KASMOS_MANAGED=1 opencode --agent planner --prompt 'Plan auth. Goal: JWT tokens.' --print-logs 2>>'%s/.kasmos/logs/kas_oc-prompt.log'\", workdir, workdir),\n401: \t\tcmd2.ToString(ptyFactory.cmds[0]),\n402: \t)\n403: }\n404: \n405: func TestStartClaudeWithInitialPrompt(t *testing.T) {\n406: \tptyFactory := NewMockPtyFactory(t)\n407: \n408: \tcreated := false\n409: \tcmdExec := cmd_test.MockCmdExec{\n410: \t\tRunFunc: func(cmd *exec.Cmd) error {\n411: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n412: \t\t\t\tcreated = true\n413: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n414: \t\t\t}\n415: \t\t\treturn nil\n416: \t\t},\n417: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n418: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n419: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n420: \t\t\t}\n421: \t\t\treturn []byte(\"output\"), nil\n422: \t\t},\n423: \t}\n424: \n425: \tworkdir := t.TempDir()\n426: \ts := newTmuxSession(\"claude-prompt\", \"claude\", false, ptyFactory, cmdExec)\n427: \ts.SetInitialPrompt(\"Implement the auth module.\")\n428: \n429: \terr := s.Start(workdir)\n430: \trequire.NoError(t, err)\n431: \trequire.Equal(\n432: \t\tt,\n433: \t\tfmt.Sprintf(\"tmux new-session -d -s kas_claude-prompt -c %s KASMOS_MANAGED=1 claude 'Implement the auth module.'\", workdir),\n434: \t\tcmd2.ToString(ptyFactory.cmds[0]),\n435: \t)\n436: }\n437: \n438: func TestStartClaudeWithLongPromptUsesFile(t *testing.T) {\n439: \tptyFactory := NewMockPtyFactory(t)\n440: \n441: \tcreated := false\n442: \tcmdExec := cmd_test.MockCmdExec{\n443: \t\tRunFunc: func(cmd *exec.Cmd) error {\n444: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n445: \t\t\t\tcreated = true\n446: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n447: \t\t\t}\n448: \t\t\treturn nil\n449: \t\t},\n450: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n451: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n452: \t\t\t\treturn []byte(\"Do you trust the files in this folder?\"), nil\n453: \t\t\t}\n454: \t\t\treturn []byte(\"output\"), nil\n455: \t\t},\n456: \t}\n457: \n458: \tworkdir := t.TempDir()\n459: \ts := newTmuxSession(\"claude-long\", \"claude\", false, ptyFactory, cmdExec)\n460: \tlongPrompt := strings.Repeat(\"x\", MaxInlinePromptLen+1)\n461: \ts.SetInitialPrompt(longPrompt)\n462: \n463: \terr := s.Start(workdir)\n464: \trequire.NoError(t, err)\n465: \n466: \t// The command should reference a @.kasmos/prompt-*.md instead of inlining.\n467: \tcmdStr := cmd2.ToString(ptyFactory.cmds[0])\n468: \trequire.Contains(t, cmdStr, \"@.kasmos/prompt-\")\n469: \trequire.NotContains(t, cmdStr, longPrompt, \"long prompt must not be inlined\")\n470: \n471: \t// The prompt file should live under workdir/.kasmos/ and contain the prompt.\n472: \trequire.NotEmpty(t, s.promptFile)\n473: \tassert.True(t, strings.HasPrefix(s.promptFile, filepath.Join(workdir, \".kasmos\")),\n474: \t\t\"prompt file should be under workdir/.kasmos/\")\n475: \tcontent, err := os.ReadFile(s.promptFile)\n476: \trequire.NoError(t, err)\n477: \tassert.Equal(t, longPrompt, string(content))\n478: \n479: \t// Close should clean up the temp file.\n480: \ts.Close()\n481: \t_, err = os.Stat(s.promptFile)\n482: \tassert.True(t, os.IsNotExist(err), \"prompt file should be removed after Close\")\n483: }\n484: \n485: func TestDiscoverOrphans(t *testing.T) {\n486: \ttests := []struct {\n487: \t\tname       string\n488: \t\ttmuxOutput string\n489: \t\ttmuxErr    error\n490: \t\tknownNames []string\n491: \t\twantCount  int\n492: \t\twantErr    bool\n493: \t}{\n494: \t\t{\n495: \t\t\tname:       \"no sessions running\",\n496: \t\t\ttmuxErr:    &exec.ExitError{},\n497: \t\t\tknownNames: nil,\n498: \t\t\twantCount:  0,\n499: \t\t},\n500: \t\t{\n501: \t\t\tname:       \"all sessions tracked\",\n502: \t\t\ttmuxOutput: \"kas_foo|1740000000|1|0|80|24\\nkas_bar|1740000000|1|0|120|40\\n\",\n503: \t\t\tknownNames: []string{\"kas_foo\", \"kas_bar\"},\n504: \t\t\twantCount:  0,\n505: \t\t},\n506: \t\t{\n507: \t\t\tname:       \"one orphan among tracked\",\n508: \t\t\ttmuxOutput: \"kas_foo|1740000000|1|0|80|24\\nkas_orphan|1740000000|1|0|80|24\\n\",\n509: \t\t\tknownNames: []string{\"kas_foo\"},\n510: \t\t\twantCount:  1,\n511: \t\t},\n512: \t\t{\n513: \t\t\tname:       \"non-kas sessions ignored\",\n514: \t\t\ttmuxOutput: \"myshell|1740000000|1|0|80|24\\nkas_orphan|1740000000|1|0|80|24\\n\",\n515: \t\t\tknownNames: nil,\n516: \t\t\twantCount:  1,\n517: \t\t},\n518: \t\t{\n519: \t\t\tname:       \"attached session detected\",\n520: \t\t\ttmuxOutput: \"kas_orphan|1740000000|1|1|80|24\\n\",\n521: \t\t\tknownNames: nil,\n522: \t\t\twantCount:  1,\n523: \t\t},\n524: \t}\n525: \n526: \tfor _, tt := range tests {\n527: \t\tt.Run(tt.name, func(t *testing.T) {\n528: \t\t\tcmdExec := cmd_test.NewMockExecutor()\n529: \t\t\tif tt.tmuxErr != nil {\n530: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n531: \t\t\t\t\treturn nil, tt.tmuxErr\n532: \t\t\t\t}\n533: \t\t\t} else {\n534: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n535: \t\t\t\t\treturn []byte(tt.tmuxOutput), nil\n536: \t\t\t\t}\n537: \t\t\t}\n538: \n539: \t\t\torphans, err := DiscoverOrphans(cmdExec, tt.knownNames)\n540: \t\t\tif tt.wantErr {\n541: \t\t\t\tassert.Error(t, err)\n542: \t\t\t\treturn\n543: \t\t\t}\n544: \t\t\tassert.NoError(t, err)\n545: \t\t\tassert.Len(t, orphans, tt.wantCount)\n546: \t\t})\n547: \t}\n548: }\n549: \n550: func TestDiscoverAll(t *testing.T) {\n551: \ttests := []struct {\n552: \t\tname        string\n553: \t\ttmuxOutput  string\n554: \t\ttmuxErr     error\n555: \t\tknownNames  []string\n556: \t\twantTotal   int\n557: \t\twantManaged int\n558: \t\twantErr     bool\n559: \t}{\n560: \t\t{\n561: \t\t\tname:        \"no sessions running\",\n562: \t\t\ttmuxErr:     &exec.ExitError{},\n563: \t\t\tknownNames:  nil,\n564: \t\t\twantTotal:   0,\n565: \t\t\twantManaged: 0,\n566: \t\t},\n567: \t\t{\n568: \t\t\tname:        \"all sessions managed\",\n569: \t\t\ttmuxOutput:  \"kas_foo|1740000000|1|0|80|24\\nkas_bar|1740000000|1|0|120|40\\n\",\n570: \t\t\tknownNames:  []string{\"kas_foo\", \"kas_bar\"},\n571: \t\t\twantTotal:   2,\n572: \t\t\twantManaged: 2,\n573: \t\t},\n574: \t\t{\n575: \t\t\tname:        \"mix of managed and orphaned\",\n576: \t\t\ttmuxOutput:  \"kas_foo|1740000000|1|0|80|24\\nkas_orphan|1740000000|1|0|80|24\\n\",\n577: \t\t\tknownNames:  []string{\"kas_foo\"},\n578: \t\t\twantTotal:   2,\n579: \t\t\twantManaged: 1,\n580: \t\t},\n581: \t\t{\n582: \t\t\tname:        \"non-kas sessions ignored\",\n583: \t\t\ttmuxOutput:  \"myshell|1740000000|1|0|80|24\\nkas_orphan|1740000000|1|0|80|24\\n\",\n584: \t\t\tknownNames:  nil,\n585: \t\t\twantTotal:   1,\n586: \t\t\twantManaged: 0,\n587: \t\t},\n588: \t}\n589: \n590: \tfor _, tt := range tests {\n591: \t\tt.Run(tt.name, func(t *testing.T) {\n592: \t\t\tcmdExec := cmd_test.NewMockExecutor()\n593: \t\t\tif tt.tmuxErr != nil {\n594: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n595: \t\t\t\t\treturn nil, tt.tmuxErr\n596: \t\t\t\t}\n597: \t\t\t} else {\n598: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n599: \t\t\t\t\treturn []byte(tt.tmuxOutput), nil\n600: \t\t\t\t}\n601: \t\t\t}\n602: \n603: \t\t\tsessions, err := DiscoverAll(cmdExec, tt.knownNames)\n604: \t\t\tif tt.wantErr {\n605: \t\t\t\tassert.Error(t, err)\n606: \t\t\t\treturn\n607: \t\t\t}\n608: \t\t\tassert.NoError(t, err)\n609: \t\t\tassert.Len(t, sessions, tt.wantTotal)\n610: \n611: \t\t\tmanagedCount := 0\n612: \t\t\tfor _, s := range sessions {\n613: \t\t\t\tif s.Managed {\n614: \t\t\t\t\tmanagedCount++\n615: \t\t\t\t}\n616: \t\t\t}\n617: \t\t\tassert.Equal(t, tt.wantManaged, managedCount)\n618: \t\t})\n619: \t}\n620: }\n621: \n622: func TestCountKasSessions(t *testing.T) {\n623: \ttests := []struct {\n624: \t\tname       string\n625: \t\ttmuxOutput string\n626: \t\ttmuxErr    error\n627: \t\twant       int\n628: \t}{\n629: \t\t{\n630: \t\t\tname:    \"no tmux server\",\n631: \t\t\ttmuxErr: &exec.ExitError{},\n632: \t\t\twant:    0,\n633: \t\t},\n634: \t\t{\n635: \t\t\tname:       \"two kas sessions one foreign\",\n636: \t\t\ttmuxOutput: \"kas_foo:1 windows\\nkas_bar:1 windows\\nmyshell:2 windows\\n\",\n637: \t\t\twant:       2,\n638: \t\t},\n639: \t\t{\n640: \t\t\tname:       \"no kas sessions\",\n641: \t\t\ttmuxOutput: \"myshell:1 windows\\n\",\n642: \t\t\twant:       0,\n643: \t\t},\n644: \t}\n645: \n646: \tfor _, tt := range tests {\n647: \t\tt.Run(tt.name, func(t *testing.T) {\n648: \t\t\tcmdExec := cmd_test.NewMockExecutor()\n649: \t\t\tif tt.tmuxErr != nil {\n650: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n651: \t\t\t\t\treturn nil, tt.tmuxErr\n652: \t\t\t\t}\n653: \t\t\t} else {\n654: \t\t\t\tcmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {\n655: \t\t\t\t\treturn []byte(tt.tmuxOutput), nil\n656: \t\t\t\t}\n657: \t\t\t}\n658: \n659: \t\t\tcount := CountKasSessions(cmdExec)\n660: \t\t\tassert.Equal(t, tt.want, count)\n661: \t\t})\n662: \t}\n663: }\n664: \n665: func TestStartOpenCodeWithLongPromptUsesCommandSubstitution(t *testing.T) {\n666: \tptyFactory := NewMockPtyFactory(t)\n667: \n668: \tcreated := false\n669: \tcmdExec := cmd_test.MockCmdExec{\n670: \t\tRunFunc: func(cmd *exec.Cmd) error {\n671: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n672: \t\t\t\tcreated = true\n673: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n674: \t\t\t}\n675: \t\t\treturn nil\n676: \t\t},\n677: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n678: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n679: \t\t\t\treturn []byte(\"Ask anything\"), nil\n680: \t\t\t}\n681: \t\t\treturn []byte(\"output\"), nil\n682: \t\t},\n683: \t}\n684: \n685: \tworkdir := t.TempDir()\n686: \ts := newTmuxSession(\"oc-long\", \"opencode\", false, ptyFactory, cmdExec)\n687: \tlongPrompt := strings.Repeat(\"x\", MaxInlinePromptLen+1)\n688: \ts.SetInitialPrompt(longPrompt)\n689: \n690: \terr := s.Start(workdir)\n691: \trequire.NoError(t, err)\n692: \n693: \t// opencode should use $(cat ...) not @file syntax.\n694: \tcmdStr := cmd2.ToString(ptyFactory.cmds[0])\n695: \trequire.Contains(t, cmdStr, \"$(cat \")\n696: \trequire.Contains(t, cmdStr, \".kasmos/prompt-\")\n697: \trequire.NotContains(t, cmdStr, \"@.kasmos/prompt-\", \"opencode must not use Claude's @file syntax\")\n698: \trequire.NotContains(t, cmdStr, longPrompt, \"long prompt must not be inlined\")\n699: \n700: \t// The prompt file should contain the full prompt.\n701: \trequire.NotEmpty(t, s.promptFile)\n702: \tcontent, err := os.ReadFile(s.promptFile)\n703: \trequire.NoError(t, err)\n704: \tassert.Equal(t, longPrompt, string(content))\n705: \n706: \t// Close should clean up the temp file.\n707: \ts.Close()\n708: \t_, err = os.Stat(s.promptFile)\n709: \tassert.True(t, os.IsNotExist(err), \"prompt file should be removed after Close\")\n710: }\n711: \n712: func TestStartOpenCodeWithPromptContainingSingleQuotes(t *testing.T) {\n713: \tptyFactory := NewMockPtyFactory(t)\n714: \n715: \tcreated := false\n716: \tcmdExec := cmd_test.MockCmdExec{\n717: \t\tRunFunc: func(cmd *exec.Cmd) error {\n718: \t\t\tif strings.Contains(cmd.String(), \"has-session\") && !created {\n719: \t\t\t\tcreated = true\n720: \t\t\t\treturn fmt.Errorf(\"session does not exist yet\")\n721: \t\t\t}\n722: \t\t\treturn nil\n723: \t\t},\n724: \t\tOutputFunc: func(cmd *exec.Cmd) ([]byte, error) {\n725: \t\t\tif strings.Contains(cmd.String(), \"capture-pane\") {\n726: \t\t\t\treturn []byte(\"Ask anything\"), nil\n727: \t\t\t}\n728: \t\t\treturn []byte(\"output\"), nil\n729: \t\t},\n730: \t}\n731: \n732: \tworkdir := t.TempDir()\n733: \ts := newTmuxSession(\"oc-quote\", \"opencode\", false, ptyFactory, cmdExec)\n734: \ts.SetInitialPrompt(\"it's a test\")\n735: \n736: \terr := s.Start(workdir)\n737: \trequire.NoError(t, err)\n738: \trequire.Equal(\n739: \t\tt,\n740: \t\tfmt.Sprintf(\"tmux new-session -d -s kas_oc-quote -c %s KASMOS_MANAGED=1 opencode --prompt 'it'\\\\''s a test' --print-logs 2>>'%s/.kasmos/logs/kas_oc-quote.log'\", workdir, workdir),\n741: \t\tcmd2.ToString(ptyFactory.cmds[0]),\n742: \t)\n743: }\n\n(End of file - total 743 lines)\n</content>",
+            "title": "session/tmux/tmux_test.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"fmt\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"math/rand\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/cmd/cmd_test\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestMain(m *testing.M) {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552621166,
+              "end": 1772552621168
+            }
+          },
+          "id": "prt_cb45e8aef001JTgWHNj1Wlc83J",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e820e001DVv4CPfNlvj3t1"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_013ad4CES1dfXhD5XcjfXjwh",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/monitor.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/monitor.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"bytes\"\n5: \t\"crypto/sha256\"\n6: \n7: \t\"github.com/charmbracelet/x/ansi\"\n8: )\n9: \n10: const debounceThreshold = 15\n11: \n12: // StatusMonitor tracks pane content changes via SHA-256 hashing with ANSI\n13: // stripping, plus debounce logic to prevent false Running→Ready transitions\n14: // during brief pauses (API waits, tool calls, thinking time).\n15: //\n16: // Callers feed raw pane content to RecordContent on each tick; RecordContent\n17: // returns true while the session is considered \"active\" (content changed or\n18: // still within the debounce window after the last change).\n19: type StatusMonitor struct {\n20: \t// prevOutputHash is the hash of the last observed (ANSI-stripped) content.\n21: \tprevOutputHash []byte\n22: \t// captureFailures counts consecutive capture-pane errors.\n23: \tcaptureFailures int\n24: \t// unchangedTicks counts consecutive ticks where content hash is identical.\n25: \t// Once this reaches debounceThreshold, RecordContent reports not-updated.\n26: \tunchangedTicks int\n27: }\n28: \n29: // NewStatusMonitor returns a fresh StatusMonitor ready for use.\n30: func NewStatusMonitor() *StatusMonitor {\n31: \treturn &StatusMonitor{}\n32: }\n33: \n34: // RecordContent hashes content (after ANSI stripping) and updates internal state.\n35: // Returns true if the session is considered \"updated\" — either the content\n36: // changed since the last call, or unchanged ticks are still within the debounce\n37: // window (~15 ticks × 200 ms ≈ 3 s of stability required before reporting idle).\n38: func (m *StatusMonitor) RecordContent(content string) bool {\n39: \th := m.hash(content)\n40: \tif !bytes.Equal(h, m.prevOutputHash) {\n41: \t\t// Content changed — reset debounce window and report updated.\n42: \t\tm.prevOutputHash = h\n43: \t\tm.unchangedTicks = 0\n44: \t\treturn true\n45: \t}\n46: \t// Content unchanged — increment the stable-tick counter.\n47: \tm.unchangedTicks++\n48: \t// Return true while still within the debounce window.\n49: \treturn m.unchangedTicks < debounceThreshold\n50: }\n51: \n52: // RecordFailure increments the consecutive capture failure counter.\n53: // Returns true if the failure should be logged: on the first failure, then\n54: // every 75th, to avoid flooding logs for a permanently-gone pane.\n55: func (m *StatusMonitor) RecordFailure() bool {\n56: \tm.captureFailures++\n57: \treturn m.captureFailures == 1 || m.captureFailures%75 == 0\n58: }\n59: \n60: // ResetFailures resets the failure counter after a successful capture.\n61: func (m *StatusMonitor) ResetFailures() {\n62: \tm.captureFailures = 0\n63: }\n64: \n65: // hash returns the SHA-256 of s after stripping ANSI escape sequences.\n66: // Stripping ANSI ensures cursor blink, SGR resets, and other terminal control\n67: // codes don't create false \"content changed\" signals when semantic content is stable.\n68: func (m *StatusMonitor) hash(s string) []byte {\n69: \tstripped := ansi.Strip(s)\n70: \th := sha256.Sum256([]byte(stripped))\n71: \treturn h[:]\n72: }\n\n(End of file - total 72 lines)\n</content>",
+            "title": "session/tmux/monitor.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"bytes\"\n\t\"crypto/sha256\"\n\n\t\"github.com/charmbracelet/x/ansi\"\n)\n\nconst debounceThreshold = 15\n\n// StatusMonitor tracks pane content changes via SHA-256 hashing with ANSI\n// stripping, plus debounce logic to prevent false Running→Ready transitions\n// during brief pauses (API waits, tool calls, thinking time).\n//\n// Callers feed raw pane content to RecordContent on each tick; RecordContent\n// returns true while the session is considered \"active\" (content changed or\n// still within the debounce window after the last change).\ntype StatusMonitor struct {\n\t// prevOutputHash is the hash of the last observed (ANSI-stripped) content.",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552621488,
+              "end": 1772552621489
+            }
+          },
+          "id": "prt_cb45e8c6f001QigtRIUqBh0fVq",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e820e001DVv4CPfNlvj3t1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 62472,
+            "input": 1,
+            "output": 164,
+            "reasoning": 0,
+            "cache": {
+              "read": 60916,
+              "write": 1391
+            }
+          },
+          "id": "prt_cb45e8dc2001vw4275I4HkYadO",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e820e001DVv4CPfNlvj3t1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552621515,
+          "completed": 1772552627646
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 74346,
+          "input": 1,
+          "output": 270,
+          "reasoning": 0,
+          "cache": {
+            "read": 62307,
+            "write": 11768
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45e8dcb001lBvnCB5JQFjR35",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45e94dc001UUDzTOsZ05LYZ4",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e8dcb001lBvnCB5JQFjR35"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me look at more files to understand what already exists and what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/yMUgGSCsRR2eiY/REDACTED/REDACTED//REDACTED/REDACTED/t7IYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772552623325,
+            "end": 1772552624118
+          },
+          "id": "prt_cb45e94dd001C5hltSm6yax4y3",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e8dcb001lBvnCB5JQFjR35"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/shell.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/shell.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"os\"\n5: \t\"path/filepath\"\n6: \t\"strings\"\n7: )\n8: \n9: // MaxInlinePromptLen is the threshold above which prompts should not be\n10: // inlined as shell arguments. Long prompts can exceed tmux/exec argument\n11: // limits and silently fail session creation. Callers should fall back to\n12: // send-keys delivery for prompts exceeding this length.\n13: const MaxInlinePromptLen = 8192\n14: \n15: // promptDir is the subdirectory within the workdir where prompt files are stored.\n16: // Lives inside the project so Claude Code can read @file references without\n17: // extra permissions.\n18: const promptDir = \".kasmos\"\n19: \n20: // shellEscapeSingleQuote wraps s in POSIX single quotes, escaping any\n21: // embedded single quotes with the '\\\" idiom. This is safe for all content\n22: // (newlines, $, backticks, double quotes) except NUL bytes.\n23: func shellEscapeSingleQuote(s string) string {\n24: \treturn \"'\" + strings.ReplaceAll(s, \"'\", \"'\\\\''\") + \"'\"\n25: }\n26: \n27: // writePromptFile writes the prompt to a temp file under <workDir>/.kasmos/\n28: // and stores the path in t.promptFile for cleanup by Close().\n29: // Returns the absolute path, or \"\" on error.\n30: func (t *TmuxSession) writePromptFile(workDir string) string {\n31: \tdir := filepath.Join(workDir, promptDir)\n32: \tif err := os.MkdirAll(dir, 0o755); err != nil {\n33: \t\treturn \"\"\n34: \t}\n35: \n36: \tf, err := os.CreateTemp(dir, \"prompt-*.md\")\n37: \tif err != nil {\n38: \t\treturn \"\"\n39: \t}\n40: \n41: \tif _, err := f.WriteString(t.initialPrompt); err != nil {\n42: \t\tf.Close()\n43: \t\tos.Remove(f.Name())\n44: \t\treturn \"\"\n45: \t}\n46: \tf.Close()\n47: \tt.promptFile = f.Name()\n48: \treturn t.promptFile\n49: }\n50: \n51: // promptArgClaude returns the shell argument for Claude Code's initial prompt.\n52: // Short prompts are shell-escaped inline; long prompts are written to a file\n53: // and referenced via Claude Code's @file syntax.\n54: func (t *TmuxSession) promptArgClaude(workDir string) string {\n55: \tif len(t.initialPrompt) <= MaxInlinePromptLen {\n56: \t\treturn shellEscapeSingleQuote(t.initialPrompt)\n57: \t}\n58: \tabsPath := t.writePromptFile(workDir)\n59: \tif absPath == \"\" {\n60: \t\treturn shellEscapeSingleQuote(t.initialPrompt)\n61: \t}\n62: \t// Claude Code's @file syntax reads the file contents as the prompt.\n63: \trel, err := filepath.Rel(workDir, absPath)\n64: \tif err != nil {\n65: \t\trel = absPath\n66: \t}\n67: \treturn \"@\" + rel\n68: }\n69: \n70: // promptArgOpenCode returns the shell argument for opencode's --prompt flag.\n71: // Short prompts are shell-escaped inline; long prompts are written to a file\n72: // and read back via shell command substitution since opencode doesn't support\n73: // file references.\n74: func (t *TmuxSession) promptArgOpenCode(workDir string) string {\n75: \tif len(t.initialPrompt) <= MaxInlinePromptLen {\n76: \t\treturn shellEscapeSingleQuote(t.initialPrompt)\n77: \t}\n78: \tabsPath := t.writePromptFile(workDir)\n79: \tif absPath == \"\" {\n80: \t\treturn shellEscapeSingleQuote(t.initialPrompt)\n81: \t}\n82: \t// opencode --prompt expects a string value. Use command substitution\n83: \t// to read the file contents since opencode has no @file syntax.\n84: \treturn \"\\\"$(cat \" + shellEscapeSingleQuote(absPath) + \")\\\"\"\n85: }\n\n(End of file - total 85 lines)\n</content>",
+            "title": "session/tmux/shell.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n)\n\n// MaxInlinePromptLen is the threshold above which prompts should not be\n// inlined as shell arguments. Long prompts can exceed tmux/exec argument\n// limits and silently fail session creation. Callers should fall back to\n// send-keys delivery for prompts exceeding this length.\nconst MaxInlinePromptLen = 8192\n\n// promptDir is the subdirectory within the workdir where prompt files are stored.\n// Lives inside the project so Claude Code can read @file references without\n// extra permissions.\nconst promptDir = \".kasmos\"\n\n// shellEscapeSingleQuote wraps s in POSIX single quotes, escaping any",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552625682,
+              "end": 1772552625684
+            }
+          },
+          "id": "prt_cb45e97f7001scECJQ43j7fX2A",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e8dcb001lBvnCB5JQFjR35"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_0112oTgKhvYDufz9tnPs1u8K",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -l \"GetSanitizedName\\|GetPTY\\|Attach\\|Detach\\|SetDetachedSize\\|updateWindowSize\\|monitorWindowSize\" /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/ --type go 2>/dev/null",
+              "description": "Find files with attach/detach/window methods"
+            },
+            "output": "",
+            "title": "Find files with attach/detach/window methods",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find files with attach/detach/window methods",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552627613,
+              "end": 1772552627627
+            }
+          },
+          "id": "prt_cb45e9e13001pITidef07iv11X",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e8dcb001lBvnCB5JQFjR35"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 74346,
+            "input": 1,
+            "output": 270,
+            "reasoning": 0,
+            "cache": {
+              "read": 62307,
+              "write": 11768
+            }
+          },
+          "id": "prt_cb45ea5b0001b0nA59kP4sHjCi",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45e8dcb001lBvnCB5JQFjR35"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552627648,
+          "completed": 1772552633182
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 75864,
+          "input": 1,
+          "output": 238,
+          "reasoning": 0,
+          "cache": {
+            "read": 74075,
+            "write": 1550
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45ea5c0001g3uY5ZhShLgv3F",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ea5c0001g3uY5ZhShLgv3F"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"GetSanitizedName\\|GetPTY\\|Attach\\b\\|Detach\\b\\|SetDetachedSize\\|updateWindowSize\" /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/ 2>/dev/null",
+              "description": "Find existing Attach/Detach/GetPTY method implementations"
+            },
+            "output": "",
+            "title": "Find existing Attach/Detach/GetPTY method implementations",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find existing Attach/Detach/GetPTY method implementations",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552632573,
+              "end": 1772552632583
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ea5c0001g3uY5ZhShLgv3F"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01P7DVuR1i6uPdDSuXWB11nR",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/adapter.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/adapter.go</path>\n<type>file</type>\n<content>1: package tmux\n2: \n3: import (\n4: \t\"path/filepath\"\n5: \t\"strings\"\n6: \t\"time\"\n7: )\n8: \n9: // ProgramAdapter encapsulates program-specific behavior for readiness detection,\n10: // prompt detection, trust-screen handling, and CLI prompt syntax.\n11: // Implementations exist for claude and opencode; aider/gemini support is dropped.\n12: type ProgramAdapter interface {\n13: \t// ReadyString returns the substring to look for in pane content that signals\n14: \t// the program has fully started and is ready for input.\n15: \tReadyString() string\n16: \n17: \t// NeedsTrustTap returns true if the program shows a trust/confirmation screen\n18: \t// on first launch that requires an Enter keystroke to dismiss.\n19: \tNeedsTrustTap() bool\n20: \n21: \t// DetectPrompt returns true when the plain (ANSI-stripped) pane content\n22: \t// indicates the program is idle and waiting for user input.\n23: \tDetectPrompt(plainContent string) bool\n24: \n25: \t// MaxWaitTime returns the maximum time to wait for the program to reach the\n26: \t// ready state before giving up.\n27: \tMaxWaitTime() time.Duration\n28: \n29: \t// BuildPromptArg returns the shell argument for the program's initial-prompt flag.\n30: \t// Short prompts are inlined (shell-escaped). Long prompts are written to a temp file\n31: \t// via writeFile (which receives the prompt text and returns the absolute path), then\n32: \t// referenced using the program's file-argument syntax.\n33: \tBuildPromptArg(prompt, workDir string, writeFile func(string) string) string\n34: \n35: \t// SupportsCliPrompt reports whether this program supports receiving a prompt\n36: \t// directly from the CLI (as opposed to via send-keys after startup).\n37: \tSupportsCliPrompt() bool\n38: }\n39: \n40: // AdapterFor returns the ProgramAdapter for the given program string, or nil\n41: // if the program has no special adapter (unknown/unsupported program).\n42: func AdapterFor(program string) ProgramAdapter {\n43: \tswitch {\n44: \tcase strings.HasSuffix(program, \"claude\"):\n45: \t\treturn claudeAdapter{}\n46: \tcase strings.HasSuffix(program, \"opencode\"):\n47: \t\treturn opencodeAdapter{}\n48: \tdefault:\n49: \t\treturn nil\n50: \t}\n51: }\n52: \n53: // claudeAdapter implements ProgramAdapter for Claude Code.\n54: type claudeAdapter struct{}\n55: \n56: func (a claudeAdapter) ReadyString() string {\n57: \treturn \"Do you trust the files in this folder?\"\n58: }\n59: \n60: func (a claudeAdapter) NeedsTrustTap() bool {\n61: \treturn true\n62: }\n63: \n64: // DetectPrompt returns true when Claude is idle at its input prompt.\n65: // The idle indicator is the text \"No, and tell Claude what to do differently\"\n66: // appearing in the plain (ANSI-stripped) pane content.\n67: func (a claudeAdapter) DetectPrompt(plainContent string) bool {\n68: \treturn strings.Contains(plainContent, \"No, and tell Claude what to do differently\")\n69: }\n70: \n71: func (a claudeAdapter) MaxWaitTime() time.Duration {\n72: \treturn 30 * time.Second\n73: }\n74: \n75: // BuildPromptArg returns the shell argument for Claude's positional prompt.\n76: // Short prompts are single-quote escaped inline; long prompts are written to a\n77: // file under .kasmos/ and referenced via Claude Code's @file syntax.\n78: func (a claudeAdapter) BuildPromptArg(prompt, workDir string, writeFile func(string) string) string {\n79: \tif len(prompt) <= MaxInlinePromptLen {\n80: \t\treturn shellEscapeSingleQuote(prompt)\n81: \t}\n82: \tpath := writeFile(prompt)\n83: \tif path == \"\" {\n84: \t\treturn shellEscapeSingleQuote(prompt)\n85: \t}\n86: \trel, err := filepath.Rel(workDir, path)\n87: \tif err != nil {\n88: \t\trel = path\n89: \t}\n90: \treturn \"@\" + rel\n91: }\n92: \n93: func (a claudeAdapter) SupportsCliPrompt() bool {\n94: \treturn true\n95: }\n96: \n97: // opencodeAdapter implements ProgramAdapter for OpenCode.\n98: type opencodeAdapter struct{}\n99: \n100: func (a opencodeAdapter) ReadyString() string {\n101: \treturn \"Ask anything\"\n102: }\n103: \n104: func (a opencodeAdapter) NeedsTrustTap() bool {\n105: \treturn false\n106: }\n107: \n108: // DetectPrompt returns true when opencode is idle and waiting for input.\n109: // opencode shows \"esc interrupt\" in its bottom bar only while a task is running.\n110: // When idle the bar disappears, so absence of \"esc interrupt\" signals idle state.\n111: // The caller must pass plain (ANSI-stripped) content.\n112: func (a opencodeAdapter) DetectPrompt(plainContent string) bool {\n113: \treturn !strings.Contains(plainContent, \"esc interrupt\")\n114: }\n115: \n116: func (a opencodeAdapter) MaxWaitTime() time.Duration {\n117: \treturn 30 * time.Second\n118: }\n119: \n120: // BuildPromptArg returns the shell argument for opencode's --prompt flag.\n121: // Short prompts are single-quote escaped inline; long prompts are written to a\n122: // file and read back via shell command substitution ($(cat ...)) since opencode\n123: // has no @file syntax.\n124: func (a opencodeAdapter) BuildPromptArg(prompt, workDir string, writeFile func(string) string) string {\n125: \tif len(prompt) <= MaxInlinePromptLen {\n126: \t\treturn shellEscapeSingleQuote(prompt)\n127: \t}\n128: \tpath := writeFile(prompt)\n129: \tif path == \"\" {\n130: \t\treturn shellEscapeSingleQuote(prompt)\n131: \t}\n132: \treturn \"\\\"$(cat \" + shellEscapeSingleQuote(path) + \")\\\"\"\n133: }\n134: \n135: func (a opencodeAdapter) SupportsCliPrompt() bool {\n136: \treturn true\n137: }\n\n(End of file - total 137 lines)\n</content>",
+            "title": "session/tmux/adapter.go",
+            "metadata": {
+              "preview": "package tmux\n\nimport (\n\t\"path/filepath\"\n\t\"strings\"\n\t\"time\"\n)\n\n// ProgramAdapter encapsulates program-specific behavior for readiness detection,\n// prompt detection, trust-screen handling, and CLI prompt syntax.\n// Implementations exist for claude and opencode; aider/gemini support is dropped.\ntype ProgramAdapter interface {\n\t// ReadyString returns the substring to look for in pane content that signals\n\t// the program has fully started and is ready for input.\n\tReadyString() string\n\n\t// NeedsTrustTap returns true if the program shows a trust/confirmation screen\n\t// on first launch that requires an Enter keystroke to dismiss.\n\tNeedsTrustTap() bool\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772552633143,
+              "end": 1772552633150
+            }
+          },
+          "id": "prt_cb45eb904001hQ0at5cPehiEqd",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ea5c0001g3uY5ZhShLgv3F"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 75864,
+            "input": 1,
+            "output": 238,
+            "reasoning": 0,
+            "cache": {
+              "read": 74075,
+              "write": 1550
+            }
+          },
+          "id": "prt_cb45ebb55001qUyqEqZMtbvvqw",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ea5c0001g3uY5ZhShLgv3F"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552633183,
+          "completed": 1772552639725
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 77958,
+          "input": 1,
+          "output": 238,
+          "reasoning": 0,
+          "cache": {
+            "read": 75625,
+            "write": 2094
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01697sptb6AggSePEhSta2zj",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && go test ./session/tmux/... -run \"TestDetachSafely|TestSetDetachedSize\" -v 2>&1 | head -50",
+              "description": "Run tests to verify they fail (RED phase)"
+            },
+            "output": "# github.com/kastheco/kasmos/session/tmux [github.com/kastheco/kasmos/session/tmux.test]\nsession/tmux/tmux_session.go:387:16: t.TapEnter undefined (type *TmuxSession has no field or method TapEnter)\nsession/tmux/tmux_session.go:394:16: t.TapDAndEnter undefined (type *TmuxSession has no field or method TapDAndEnter)\nsession/tmux/tmux_session.go:404:22: t.CapturePaneContent undefined (type *TmuxSession has no field or method CapturePaneContent)\nsession/tmux/tmux_permission_test.go:25:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_permission_test.go:45:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_permission_test.go:65:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_session_test.go:17:38: s.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_session_test.go:40:35: reset.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_session_test.go:45:34: s.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_test.go:274:17: session.SendKeys undefined (type *TmuxSession has no field or method SendKeys)\nsession/tmux/tmux_test.go:274:17: too many errors\nFAIL\tgithub.com/kastheco/kasmos/session/tmux [build failed]\nFAIL\n",
+            "title": "Run tests to verify they fail (RED phase)",
+            "metadata": {
+              "output": "# github.com/kastheco/kasmos/session/tmux [github.com/kastheco/kasmos/session/tmux.test]\nsession/tmux/tmux_session.go:387:16: t.TapEnter undefined (type *TmuxSession has no field or method TapEnter)\nsession/tmux/tmux_session.go:394:16: t.TapDAndEnter undefined (type *TmuxSession has no field or method TapDAndEnter)\nsession/tmux/tmux_session.go:404:22: t.CapturePaneContent undefined (type *TmuxSession has no field or method CapturePaneContent)\nsession/tmux/tmux_permission_test.go:25:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_permission_test.go:45:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_permission_test.go:65:17: session.SendPermissionResponse undefined (type *TmuxSession has no field or method SendPermissionResponse)\nsession/tmux/tmux_session_test.go:17:38: s.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_session_test.go:40:35: reset.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_session_test.go:45:34: s.GetSanitizedName undefined (type *TmuxSession has no field or method GetSanitizedName)\nsession/tmux/tmux_test.go:274:17: session.SendKeys undefined (type *TmuxSession has no field or method SendKeys)\nsession/tmux/tmux_test.go:274:17: too many errors\nFAIL\tgithub.com/kastheco/kasmos/session/tmux [build failed]\nFAIL\n",
+              "exit": 0,
+              "description": "Run tests to verify they fail (RED phase)",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552638682,
+              "end": 1772552638745
+            }
+          },
+          "id": "prt_cb45ec5db001WHrej2f7H35g0b",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cat /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/go.mod | head -20",
+              "description": "Check go.mod for module and dependencies"
+            },
+            "output": "module github.com/kastheco/kasmos\n\ngo 1.24.4\n\nrequire (\n\tgithub.com/BurntSushi/toml v1.6.0\n\tgithub.com/atotto/clipboard v0.1.4\n\tgithub.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7\n\tgithub.com/charmbracelet/bubbletea v1.3.10\n\tgithub.com/charmbracelet/glamour v0.10.0\n\tgithub.com/charmbracelet/harmonica v0.2.0\n\tgithub.com/charmbracelet/huh v0.8.0\n\tgithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834\n\tgithub.com/charmbracelet/x/ansi v0.11.6\n\tgithub.com/charmbracelet/x/vt v0.0.0-20260216111343-536eb63c1f4c\n\tgithub.com/creack/pty v1.1.24\n\tgithub.com/getsentry/sentry-go v0.43.0\n\tgithub.com/go-git/go-git/v5 v5.14.0\n\tgithub.com/lrstanley/bubblezone v1.0.0\n\tgithub.com/mattn/go-runewidth v0.0.19\n",
+            "title": "Check go.mod for module and dependencies",
+            "metadata": {
+              "output": "module github.com/kastheco/kasmos\n\ngo 1.24.4\n\nrequire (\n\tgithub.com/BurntSushi/toml v1.6.0\n\tgithub.com/atotto/clipboard v0.1.4\n\tgithub.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7\n\tgithub.com/charmbracelet/bubbletea v1.3.10\n\tgithub.com/charmbracelet/glamour v0.10.0\n\tgithub.com/charmbracelet/harmonica v0.2.0\n\tgithub.com/charmbracelet/huh v0.8.0\n\tgithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834\n\tgithub.com/charmbracelet/x/ansi v0.11.6\n\tgithub.com/charmbracelet/x/vt v0.0.0-20260216111343-536eb63c1f4c\n\tgithub.com/creack/pty v1.1.24\n\tgithub.com/getsentry/sentry-go v0.43.0\n\tgithub.com/go-git/go-git/v5 v5.14.0\n\tgithub.com/lrstanley/bubblezone v1.0.0\n\tgithub.com/mattn/go-runewidth v0.0.19\n",
+              "exit": 0,
+              "description": "Check go.mod for module and dependencies",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552639681,
+              "end": 1772552639684
+            }
+          },
+          "id": "prt_cb45ed0db001ADa8xl5ecf321s",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 77958,
+            "input": 1,
+            "output": 238,
+            "reasoning": 0,
+            "cache": {
+              "read": 75625,
+              "write": 2094
+            }
+          },
+          "id": "prt_cb45ed4e6001PPlBdD8tqHBTZd",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552639726,
+          "completed": 1772552703465
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 82426,
+          "input": 1,
+          "output": 3520,
+          "reasoning": 0,
+          "cache": {
+            "read": 77719,
+            "write": 1186
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45ed4ee001vTOKjIWmAHC7eB",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45edd30001pmfPQPhb3plG7m",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ed4ee001vTOKjIWmAHC7eB"
+        },
+        {
+          "type": "reasoning",
+          "text": "The build is failing because many methods are missing from TmuxSession. These are being implemented by the parallel agents (Task 1 through 5 likely). I need to:\n\n1. Understand what methods already exist in the files so I know what's missing that is NOT my responsibility (other agents' work)\n2. Focus only on my assigned files: `attach.go`, `winsize_unix.go`, `winsize_windows.go`, and `attach_test.go`\n\nThe missing methods that are causing failures:\n- `TapEnter`, `TapDAndEnter` - these are I/O methods that are likely in another agent's task\n\n\n- `CapturePaneContent`, `SendPermissionResponse`, `GetSanitizedName`, `SendKeys` - all other agents' responsibilities\n\nFor my task (Task 6), I need to implement `Attach()`, `Detach()`, `DetachSafely()`, `SetDetachedSize()`, and `updateWindowSize()`. I also notice that `outerTmuxSession()` and `outerMouseEnabled()` already exist in tmux_session.go, so I don't need to create those.\n\nI also need to implement `restoreOuterMouse()` and handle the platform-specific `monitorWindowSize()`. Looking at the Session interface, I see `GetPTY()` returns an `*os.File`, and I need to write the attach/detach functionality along with platform-specific window size handling. My plan is to start with tests in `session/tmux/attach_test.go`, then implement the core logic in `session/tmux/attach.go`, followed by the Unix and Windows-specific window size code.\n\nFor the tests, I'll use `NewTmuxSessionWithDeps` and focus only on what I'm implementing—testing that `DetachSafely` is a no-op when not attached, and that `SetDetachedSize` works after restore. Since `outerTmuxSession()` and `outerMouseEnabled()` already exist in `tmux_session.go`, I'll reuse those rather than duplicating them. I see these functions already exist in `tmux_session.go` from a previous task, so I should just import and use them from `attach.go` rather than re-implementing them. The only new function I need to write is `restoreOuterMouse()`. I'm checking whether `GetSanitizedName` and `GetPTY` are already defined in the interface—the build error shows `GetSanitizedName` is missing, but since these accessor methods logically belong in `tmux_session.go` rather than my assigned files, another agent might be implementing them, so I'll focus on what's in my scope.\n\nThe real issue is that the package won't compile without those methods, which blocks my tests from running. In a parallel worktree setup, this is expected—other agents' work is incomplete. My best approach is to write my implementation and tests using only the methods I'm responsible for, then attempt to run them and see what happens.\n\nLet me review which missing methods are actually my responsibility versus others'. Looking at the build errors, most of them belong to other agents, but I should double-check the task boundaries to see what Wave 1 versus Wave 2 covers.\n\nSince this is Task 6 of 4 in Wave 2, that means tasks 3-6 are in this wave with tasks 1-2 in Wave 1. The missing I/O methods like SendKeys and TapEnter probably belong to Task 3 or 4, while accessors and permissions likely fall to Task 5. My task is focused on the Attach functionality.\n\nThe compilation errors from missing sibling methods mean my tests can't run yet, but that's fine—the task expects a FAIL state initially, and compilation errors count as failure. I'll write the test file and implementation now, trusting that when all the agents' work merges together, the full test suite will pass.\n\nLet me examine what's already in the codebase to see what's missing, then focus on implementing the attach functionality correctly and writing the corresponding tests. I need to be careful about how I handle the implementation details, particularly around window sizing across different platforms. The accessor methods might be someone else's responsibility, but since the build errors are showing they're missing, I should implement them if they're needed for my code to compile. Looking at the test case, `DetachSafely()` should work as a no-op when the session isn't attached, which aligns with what I'm building.\n\nThe real issue is that compilation errors from other agents' incomplete work will block the test from running at all—but that's still technically a FAIL for the RED phase, which is acceptable. My implementation alone won't resolve those external dependencies, so the GREEN phase verification might also fail to compile unless those other pieces get committed first.\n\nLet me take a pragmatic approach: write my test and implementation, attempt to compile and test while acknowledging the parallel work situation, then commit what I have. But first, I should check the git log to see if the other agents have already committed their code.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/JpyYO/73ecpkEmwrv95XPVVg/REDACTED/b9SIzVdedSUQz2oPRFythg/REDACTED/m7jrJyXJxEsYcBPzYxJLXK/Zly0aYomKuMYaiouXsgdAZR+eBBk/REDACTED/REDACTED/4/VCW/REDACTED/REDACTED/E2YlK/REDACTED/REDACTED/REDACTED/REDACTED/tXjy2Yd/ZTIApbgUmluTOhkW/7IKt63TMndvaUl/REDACTED/REDACTED/TbrqIJdpGMrOK35p/REDACTED/REDACTED/nLNg6c8ex4HnneyhZ1/REDACTED/REDACTED/mECR/REDACTED/wX7Bjm+fEN0U+720ttlO/j7DVG/REDACTED/AY/REDACTED/REDACTED/REDACTED/GDThYOqCBkjjd1/REDACTED/REDACTED/REDACTED/REDACTED/BHtMIcfhKJutWQY/REDACTED/HWH9/REDACTED/REDACTED/REDACTED/f9vWCemSfJtuSLnTanf/REDACTED/REDACTED/REDACTED/MzEKprE4d4DN+X/X/ooaMv3+0YvG9khKhTpPk3iZsT6vPSr/Pi66HLjA6k8ktX5/REDACTED/Gyicj2m/4NbMkrW/REDACTED/5n/sgyvZwD4Pjr7586E1pKyh/REDACTED/NtXOi6wH//REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/KGijRX1BR0DG0mRcZCu6Gmic0GYC5e/REDACTED/REDACTED/z/REDACTED/REDACTED/REDACTED/cbJvlyyfUUVmjkRm0zXM2mCzRlO4vuwq/REDACTED/F1/REDACTED/REDACTED/OkQMKQte0392Nge/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED//75Z0bxdfEi/+1VY933EG7Ju2zYtpj/REDACTED/REDACTED/+IpANtpjXa4qg51l/REDACTED/REDACTED/REDACTED/Tyu5Gs1o/REDACTED//REDACTED/jXJWDrAg51IZBZEjs/REDACTED/REDACTED/ta2s/IvGxOEA5eI/REDACTED/BE7ra8LacenOa9/REDACTED/V8uWJx+pdgkieZqKbQALQGW+KNH/rvypwKXKD4tD8/REDACTED/wb7gbRKboy3LJu6/Mf2fKe00immzUGBQtKFNe5tuvJSS/REDACTED/xnmuKZPg9FL4hdnHDY6eVJ7jdtJjJK/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/d/REDACTED/REDACTED/REDACTED/REDACTED/Dk7clBFhqPRV012/REDACTED/REDACTED/fVtR7DNuSjFTIJ/REDACTED/VL9FLB/REDACTED/REDACTED/WAUw8zgMBZ/REDACTED/BqpMewTsCRYWqH80zhl2wshp7CBbm8lgfC/dhlFU0BzvqHdu1a/cu4LumvCzUm0n6PprCtnmHZ3CNL4c9lO991M/aSzA7vcJyGG/5Ep1wcJ/REDACTED/i4sy6kf4r1hLmaSwaA3KVEX/REDACTED/REDACTED/REDACTED/HdSBJ6EgUnf/bDc7fezdZTYwttvP/+kv//a+7FQ1sLin7Bx9OXzoz6oljcbsG/8ITHGnqkcm/REDACTED/REDACTED/REDACTED/CPaxl2qqxgqwF1/REDACTED/REDACTED/93pT6Maf1OVY/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/5dHTzpSDQwmnWIk/REDACTED/Qdx4N7Z/REDACTED/N/REDACTED/REDACTED/REDACTED/REDACTED//eW/REDACTED/REDACTED/REDACTED/PNxcZFgbxnukFB8NAIXX5OhshFTGf/REDACTED/REDACTED/UDWceBIha2y6/OAGB2rgEj3HxiMUdpq3sL/REDACTED/REDACTED//REDACTED/REDACTED/USHdoA7pMN6/REDACTED/REDACTED/REDACTED/REDACTED/BZV7bRWXbPMs7xWb/REDACTED/REDACTED/REDACTED/REDACTED/kFuJJtAGx/HMXa1fM2PwsVXtbH3rwDQcR+KsNrDrLY/Whwuz9tA93MH2/REDACTED/REDACTED/REDACTED/REDACTED/XK/JsW/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/qACI6PRwDo6ZNlKqum/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/7iQgHKB3/AcLeSQoMlBuHQZiB0Z5+K/XQeMoA6xc6p1/REDACTED//1JcRz444tLApYI/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/Ng//REDACTED/ehRFCB7PWk+C6tsFjJYLZP/J4WQfpCHJxorJZ/Yzr7O3OEszD70/pARSgA+5Xce/0OhonFJ4gT1L67oxgB"
+            }
+          },
+          "time": {
+            "start": 1772552641840,
+            "end": 1772552702576
+          },
+          "id": "prt_cb45edd30002VIs3zQOt1PZF95",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ed4ee001vTOKjIWmAHC7eB"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && git log --oneline -15 2>&1",
+              "description": "Check recent git commits"
+            },
+            "output": "1a602f7 feat(task-1/clean-room): define Session interface, program adapters, and status monitor\ndc68db0 feat(clean-room): implement TmuxSession constructors, setters, and name sanitization\n85595ca plan: write 01b-rewrite-git-layer implementation plan\n9388654 Merge branch 'main' into release/2.0\n733161d chore: bump version to 1.4.1\n83366bf feat: show project directory name in status bar right side\na921e0c fix: migrate planstore.db data on upgrade and show actual branch in status bar\nbf64c6b chore: bump version to 1.4.1\n0e157a8 fix: migrate planstore.db data on upgrade and show actual branch in status bar\nf2e9b34 merge plan branch plan/rename-plan-to-task\n968d934 fix: migration ordering and stale doc comments (reviewer self-fix)\nef3de0d refactor(task-6): update CLI command from kas plan to kas task and user-facing strings\n89bbefd refactor(task-7): rename HTTP API paths /plans→/tasks and migrate SQLite schema\nee8afed refactor: rename PlanFile→TaskFile, plan-prefixed vars/methods, and file renames\n29db502 refactor(task-3): rename config/planfsm package to config/taskfsm\n",
+            "title": "Check recent git commits",
+            "metadata": {
+              "output": "1a602f7 feat(task-1/clean-room): define Session interface, program adapters, and status monitor\ndc68db0 feat(clean-room): implement TmuxSession constructors, setters, and name sanitization\n85595ca plan: write 01b-rewrite-git-layer implementation plan\n9388654 Merge branch 'main' into release/2.0\n733161d chore: bump version to 1.4.1\n83366bf feat: show project directory name in status bar right side\na921e0c fix: migrate planstore.db data on upgrade and show actual branch in status bar\nbf64c6b chore: bump version to 1.4.1\n0e157a8 fix: migrate planstore.db data on upgrade and show actual branch in status bar\nf2e9b34 merge plan branch plan/rename-plan-to-task\n968d934 fix: migration ordering and stale doc comments (reviewer self-fix)\nef3de0d refactor(task-6): update CLI command from kas plan to kas task and user-facing strings\n89bbefd refactor(task-7): rename HTTP API paths /plans→/tasks and migrate SQLite schema\nee8afed refactor: rename PlanFile→TaskFile, plan-prefixed vars/methods, and file renames\n29db502 refactor(task-3): rename config/planfsm package to config/taskfsm\n",
+              "exit": 0,
+              "description": "Check recent git commits",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552702863,
+              "end": 1772552702869
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ed4ee001vTOKjIWmAHC7eB"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && git status --short 2>&1",
+              "description": "Check git status for uncommitted changes"
+            },
+            "output": " M docs/plans/01a-rewrite-tmux-layer.md\n",
+            "title": "Check git status for uncommitted changes",
+            "metadata": {
+              "output": " M docs/plans/01a-rewrite-tmux-layer.md\n",
+              "exit": 0,
+              "description": "Check git status for uncommitted changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552703433,
+              "end": 1772552703442
+            }
+          },
+          "id": "prt_cb45fcb90001FV7p6HMsfKPdKs",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ed4ee001vTOKjIWmAHC7eB"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 82426,
+            "input": 1,
+            "output": 3520,
+            "reasoning": 0,
+            "cache": {
+              "read": 77719,
+              "write": 1186
+            }
+          },
+          "id": "prt_cb45fcde1001mNzAM3z0LHLgK3",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45ed4ee001vTOKjIWmAHC7eB"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552703467,
+          "completed": 1772552709609
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 83089,
+          "input": 1,
+          "output": 315,
+          "reasoning": 0,
+          "cache": {
+            "read": 78905,
+            "write": 3868
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb45fcdeb001ATlWA19WexZq3L",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "prt_cb45fd5cb001Un6R8Me2RRJ7SL",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fcdeb001ATlWA19WexZq3L"
+        },
+        {
+          "type": "reasoning",
+          "text": "The other agents haven't committed their work yet (just one commit from task 1). Looking at the build errors, there are missing methods like `SendKeys`, `TapEnter`, `TapDAndEnter`, `CapturePaneContent`, `GetSanitizedName`, `SendPermissionResponse`.\n\nLet me check what has already been committed in the Wave 1/2 work:",
+          "metadata": {
+            "anthropic": {
+              "signature": "EuMDCkYICxgCKkAYr7tzMrbvqvrwZ3GY/iTV8Pa03f/REDACTED/ItwI/REDACTED/oBAKsoCn1Y/REDACTED/REDACTED/l/7bzxfrsr6dCoa9+/REDACTED//mevJ/wNskiuExPOjaV18/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772552705484,
+            "end": 1772552707908
+          },
+          "id": "prt_cb45fd5cc001I2S605DjLM9YEV",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fcdeb001ATlWA19WexZq3L"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer && git show --stat 1a602f7 2>&1",
+              "description": "Show what was committed in task-1 commit"
+            },
+            "output": "commit 1a602f7763464e0192badb8fd0fe50cd0c81b835\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 09:12:29 2026 -0600\n\n    feat(task-1/clean-room): define Session interface, program adapters, and status monitor\n    \n    - session.go: Session interface contract for the instance layer + PermissionChoice type\n    - adapter.go: ProgramAdapter interface with claudeAdapter and opencodeAdapter implementations\n    - monitor.go: exported StatusMonitor with hash-based change detection and 15-tick debounce\n    - adapter_test.go, monitor_test.go: TDD tests covering all adapter and monitor behaviors\n    - Delete tmux_io.go, tmux_attach.go, tmux_unix.go, tmux_windows.go (AGPL-tainted files)\n    \n    Note: package build blocked on Task 2 completing TmuxSession I/O methods (TapEnter,\n    CapturePaneContent, SendKeys, GetSanitizedName, SendPermissionResponse)\n    \n    Entire-Checkpoint: 8acf2f3db1dc\n\n session/tmux/adapter.go      | 137 ++++++++++++++++++++++++\n session/tmux/adapter_test.go |  57 ++++++++++\n session/tmux/monitor.go      |  72 +++++++++++++\n session/tmux/monitor_test.go |  35 ++++++\n session/tmux/session.go      |  54 ++++++++++\n session/tmux/tmux_attach.go  | 210 ------------------------------------\n session/tmux/tmux_io.go      | 247 -------------------------------------------\n session/tmux/tmux_unix.go    |  78 --------------\n session/tmux/tmux_windows.go |  57 ----------\n 9 files changed, 355 insertions(+), 592 deletions(-)\n",
+            "title": "Show what was committed in task-1 commit",
+            "metadata": {
+              "output": "commit 1a602f7763464e0192badb8fd0fe50cd0c81b835\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 09:12:29 2026 -0600\n\n    feat(task-1/clean-room): define Session interface, program adapters, and status monitor\n    \n    - session.go: Session interface contract for the instance layer + PermissionChoice type\n    - adapter.go: ProgramAdapter interface with claudeAdapter and opencodeAdapter implementations\n    - monitor.go: exported StatusMonitor with hash-based change detection and 15-tick debounce\n    - adapter_test.go, monitor_test.go: TDD tests covering all adapter and monitor behaviors\n    - Delete tmux_io.go, tmux_attach.go, tmux_unix.go, tmux_windows.go (AGPL-tainted files)\n    \n    Note: package build blocked on Task 2 completing TmuxSession I/O methods (TapEnter,\n    CapturePaneContent, SendKeys, GetSanitizedName, SendPermissionResponse)\n    \n    Entire-Checkpoint: 8acf2f3db1dc\n\n session/tmux/adapter.go      | 137 ++++++++++++++++++++++++\n session/tmux/adapter_test.go |  57 ++++++++++\n session/tmux/monitor.go      |  72 +++++++++++++\n session/tmux/monitor_test.go |  35 ++++++\n session/tmux/session.go      |  54 ++++++++++\n session/tmux/tmux_attach.go  | 210 ------------------------------------\n session/tmux/tmux_io.go      | 247 -------------------------------------------\n session/tmux/tmux_unix.go    |  78 --------------\n session/tmux/tmux_windows.go |  57 ----------\n 9 files changed, 355 insertions(+), 592 deletions(-)\n",
+              "exit": 0,
+              "description": "Show what was committed in task-1 commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552708739,
+              "end": 1772552708743
+            }
+          },
+          "id": "prt_cb45fdf45001of2QkV2mqZBZla",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fcdeb001ATlWA19WexZq3L"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls /home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer/session/tmux/",
+              "description": "List tmux session directory files"
+            },
+            "output": "adapter.go\nadapter_test.go\nenv_vars_test.go\nmonitor.go\nmonitor_test.go\npty.go\nsession.go\nsession_title_test.go\nshell.go\nshell_test.go\ntmux_permission_test.go\ntmux_session.go\ntmux_session_test.go\ntmux_test.go\n",
+            "title": "List tmux session directory files",
+            "metadata": {
+              "output": "adapter.go\nadapter_test.go\nenv_vars_test.go\nmonitor.go\nmonitor_test.go\npty.go\nsession.go\nsession_title_test.go\nshell.go\nshell_test.go\ntmux_permission_test.go\ntmux_session.go\ntmux_session_test.go\ntmux_test.go\n",
+              "exit": 0,
+              "description": "List tmux session directory files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772552709580,
+              "end": 1772552709587
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fcdeb001ATlWA19WexZq3L"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "cost": 0,
+          "tokens": {
+            "total": 83089,
+            "input": 1,
+            "output": 315,
+            "reasoning": 0,
+            "cache": {
+              "read": 78905,
+              "write": 3868
+            }
+          },
+          "id": "prt_cb45fe5e1001yCTD4JUc4IRzLD",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fcdeb001ATlWA19WexZq3L"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772552709610
+        },
+        "parentID": "msg_cb45e3539001jAvA4UF3IWuITz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01a-rewrite-tmux-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb45fe5ea001uNDCetHPafE4zi",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e44177bffedceaa496125960ddbdcaa995c5e7ef",
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fe5ea001uNDCetHPafE4zi"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1772552714251
+          },
+          "id": "prt_cb45ff80b001wnVM2liOj8Blr0",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb45fe5ea001uNDCetHPafE4zi"
+        }
+      ]
+    }
+  ]
+}
