@@ -200,6 +200,13 @@
       "context": "/ee/f77501f7a7/7/context.md",
       "content_hash": "/ee/f77501f7a7/7/content_hash.txt",
       "prompt": "/ee/f77501f7a7/7/prompt.txt"
+    },
+    {
+      "metadata": "/ee/f77501f7a7/8/metadata.json",
+      "transcript": "/ee/f77501f7a7/8/full.jsonl",
+      "context": "/ee/f77501f7a7/8/context.md",
+      "content_hash": "/ee/f77501f7a7/8/content_hash.txt",
+      "prompt": "/ee/f77501f7a7/8/prompt.txt"
     }
   ],
   "token_usage": {
