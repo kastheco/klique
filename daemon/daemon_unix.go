@@ -2,13 +2,10 @@
 
 package daemon
 
-import (
-	"syscall"
-)
+import "syscall"
 
-// getSysProcAttr returns platform-specific process attributes for detaching the child process
+// getSysProcAttr returns Unix-specific attributes that detach the child
+// process from the parent by placing it in a new session.
 func getSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{
-		Setsid: true, // Create a new session
-	}
+	return &syscall.SysProcAttr{Setsid: true}
 }
