@@ -22,11 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
+        goos: [linux, darwin]
         goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
 
     steps:
     - uses: actions/checkout@v4
@@ -45,11 +42,7 @@ jobs:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
       run: |
-        BINARY_NAME=kasmos
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          BINARY_NAME=$BINARY_NAME.exe
-        fi
-        go build -v -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
+        go build -v -o build/${{ matrix.goos }}_${{ matrix.goarch }}/kasmos
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
