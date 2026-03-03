@@ -1,0 +1,10 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Implement restart-agent. Goal: restart-agent
+
+add an option to the space menu of an instance (where open, kill, etc is) and add a 'restart' option that kills the session (if it still exists) then launches a fresh agent with the same configuration and prompt.
+
