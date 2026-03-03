@@ -62,6 +62,7 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{
 		FocusMode:        m.state == stateFocusAgent,
 		TmuxSessionCount: m.tmuxSessionCount,
+		ProjectDir:       filepath.Base(m.activeRepoPath),
 	}
 
 	if m.nav == nil {
