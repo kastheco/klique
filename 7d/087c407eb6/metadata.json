@@ -1,0 +1,22 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "7d087c407eb6",
+  "strategy": "manual-commit",
+  "branch": "plan/02b-rewrite-overlay-ui",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_actions.go",
+    "app/app_input.go",
+    "ui/overlay/contextMenu.go",
+    "ui/overlay/contextMenu_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7d/087c407eb6/0/metadata.json",
+      "transcript": "/7d/087c407eb6/0/full.jsonl",
+      "context": "",
+      "content_hash": "/7d/087c407eb6/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
