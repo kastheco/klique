@@ -67,12 +67,12 @@ type TopicInfo struct {
 func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 	plans, err := store.List(project)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: %w", err)
+		return nil, fmt.Errorf("task store: %w", err)
 	}
 
 	topics, err := store.ListTopics(project)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: %w", err)
+		return nil, fmt.Errorf("task store: %w", err)
 	}
 
 	ps := &TaskState{
@@ -293,7 +293,7 @@ func (ps *TaskState) ForceSetStatus(filename string, status Status) error {
 	entry.Status = status
 	ps.Plans[filename] = entry
 	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	return nil
 }
@@ -317,7 +317,7 @@ func (ps *TaskState) setStatus(filename string, status Status) error {
 	entry.Status = status
 	ps.Plans[filename] = entry
 	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	return nil
 }
@@ -330,7 +330,7 @@ func (ps *TaskState) CreateWithContent(filename, description, branch, topic stri
 		return err
 	}
 	if err := ps.store.SetContent(ps.project, filename, content); err != nil {
-		return fmt.Errorf("plan store set content: %w", err)
+		return fmt.Errorf("task store set content: %w", err)
 	}
 	return nil
 }
@@ -371,7 +371,7 @@ func (ps *TaskState) Create(filename, description, branch, topic string, created
 		}
 	}
 	if err := ps.store.Create(ps.project, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	// Auto-create topic in store if needed
 	if topic != "" {
@@ -379,7 +379,7 @@ func (ps *TaskState) Create(filename, description, branch, topic string, created
 		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
 			// Ignore "already exists" errors for topics
 			if !isAlreadyExistsError(err) {
-				return fmt.Errorf("plan store: %w", err)
+				return fmt.Errorf("task store: %w", err)
 			}
 		}
 	}
@@ -403,7 +403,7 @@ func (ps *TaskState) Register(filename, description, branch string, createdAt ti
 	}
 	ps.Plans[filename] = entry
 	if err := ps.store.Create(ps.project, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	return nil
 }
@@ -434,14 +434,14 @@ func (ps *TaskState) SetTopic(filename, topic string) error {
 		}
 	}
 	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	// Auto-create topic in store if needed
 	if topic != "" {
 		topicEntry := taskstore.TopicEntry{Name: topic, CreatedAt: ps.TopicEntries[topic].CreatedAt}
 		if err := ps.store.CreateTopic(ps.project, topicEntry); err != nil {
 			if !isAlreadyExistsError(err) {
-				return fmt.Errorf("plan store: %w", err)
+				return fmt.Errorf("task store: %w", err)
 			}
 		}
 	}
@@ -457,7 +457,7 @@ func (ps *TaskState) SetBranch(filename, branch string) error {
 	entry.Branch = branch
 	ps.Plans[filename] = entry
 	if err := ps.store.Update(ps.project, filename, ps.toTaskstoreEntry(filename, entry)); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	return nil
 }
@@ -516,7 +516,7 @@ func (ps *TaskState) Rename(oldFilename, newName string) (string, error) {
 	delete(ps.Plans, oldFilename)
 
 	if err := ps.store.Rename(ps.project, oldFilename, newFilename); err != nil {
-		return "", fmt.Errorf("plan store: %w", err)
+		return "", fmt.Errorf("task store: %w", err)
 	}
 	return newFilename, nil
 }
@@ -579,7 +579,7 @@ func (ps *TaskState) SetClickUpTaskID(filename, taskID string) error {
 	entry.ClickUpTaskID = taskID
 	ps.Plans[filename] = entry
 	if err := ps.store.SetClickUpTaskID(ps.project, filename, taskID); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	return nil
 }
@@ -603,7 +603,7 @@ func (ps *TaskState) IncrementReviewCycle(filename string) error {
 		return fmt.Errorf("plan not found: %s", filename)
 	}
 	if err := ps.store.IncrementReviewCycle(ps.project, filename); err != nil {
-		return fmt.Errorf("plan store: %w", err)
+		return fmt.Errorf("task store: %w", err)
 	}
 	entry.ReviewCycle++
 	ps.Plans[filename] = entry

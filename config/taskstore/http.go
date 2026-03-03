@@ -12,7 +12,7 @@ import (
 )
 
 // HTTPStore is a Store implementation that talks to a remote task store server
-// over HTTP. Connection errors are wrapped with "plan store unreachable" so
+// over HTTP. Connection errors are wrapped with "task store unreachable" so
 // callers can detect and surface them gracefully.
 type HTTPStore struct {
 	baseURL string
@@ -56,7 +56,7 @@ func (s *HTTPStore) topicURL(project string) string {
 func (s *HTTPStore) do(req *http.Request) (*http.Response, error) {
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("plan store unreachable: %w", err)
+		return nil, fmt.Errorf("task store unreachable: %w", err)
 	}
 	return resp, nil
 }
@@ -69,20 +69,20 @@ func decodeError(resp *http.Response) error {
 		Error string `json:"error"`
 	}
 	if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
-		return fmt.Errorf("plan store: %s (status %d)", errResp.Error, resp.StatusCode)
+		return fmt.Errorf("task store: %s (status %d)", errResp.Error, resp.StatusCode)
 	}
-	return fmt.Errorf("plan store: unexpected status %d", resp.StatusCode)
+	return fmt.Errorf("task store: unexpected status %d", resp.StatusCode)
 }
 
 // Create adds a new task entry to the remote store.
 func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
-		return fmt.Errorf("plan store: marshal entry: %w", err)
+		return fmt.Errorf("task store: marshal entry: %w", err)
 	}
 	req, err := http.NewRequest(http.MethodPost, s.taskURL(project), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -102,7 +102,7 @@ func (s *HTTPStore) Create(project string, entry TaskEntry) error {
 func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskItemURL(project, filename), nil)
 	if err != nil {
-		return TaskEntry{}, fmt.Errorf("plan store: build request: %w", err)
+		return TaskEntry{}, fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -112,7 +112,7 @@ func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return TaskEntry{}, fmt.Errorf("plan store: plan not found: %s", filename)
+		return TaskEntry{}, fmt.Errorf("task store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return TaskEntry{}, decodeError(resp)
@@ -120,7 +120,7 @@ func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 
 	var entry TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entry); err != nil {
-		return TaskEntry{}, fmt.Errorf("plan store: decode response: %w", err)
+		return TaskEntry{}, fmt.Errorf("task store: decode response: %w", err)
 	}
 	return entry, nil
 }
@@ -129,11 +129,11 @@ func (s *HTTPStore) Get(project, filename string) (TaskEntry, error) {
 func (s *HTTPStore) Update(project, filename string, entry TaskEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
-		return fmt.Errorf("plan store: marshal entry: %w", err)
+		return fmt.Errorf("task store: marshal entry: %w", err)
 	}
 	req, err := http.NewRequest(http.MethodPut, s.taskItemURL(project, filename), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -157,12 +157,12 @@ func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("plan store: marshal rename payload: %w", err)
+		return fmt.Errorf("task store: marshal rename payload: %w", err)
 	}
 	renameURL := fmt.Sprintf("%s/rename", s.taskItemURL(project, oldFilename))
 	req, err := http.NewRequest(http.MethodPost, renameURL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -182,7 +182,7 @@ func (s *HTTPStore) Rename(project, oldFilename, newFilename string) error {
 func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskContentURL(project, filename), nil)
 	if err != nil {
-		return "", fmt.Errorf("plan store: build request: %w", err)
+		return "", fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -192,7 +192,7 @@ func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", fmt.Errorf("plan store: plan not found: %s", filename)
+		return "", fmt.Errorf("task store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", decodeError(resp)
@@ -200,7 +200,7 @@ func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("plan store: read content response: %w", err)
+		return "", fmt.Errorf("task store: read content response: %w", err)
 	}
 	return string(body), nil
 }
@@ -209,7 +209,7 @@ func (s *HTTPStore) GetContent(project, filename string) (string, error) {
 func (s *HTTPStore) SetContent(project, filename, content string) error {
 	req, err := http.NewRequest(http.MethodPut, s.taskContentURL(project, filename), strings.NewReader(content))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -219,7 +219,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("plan store: plan not found: %s", filename)
+		return fmt.Errorf("task store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
@@ -231,7 +231,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build request: %w", err)
+		return nil, fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -246,7 +246,7 @@ func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 
 	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
-		return nil, fmt.Errorf("plan store: decode response: %w", err)
+		return nil, fmt.Errorf("task store: decode response: %w", err)
 	}
 	return plans, nil
 }
@@ -255,7 +255,7 @@ func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {
 	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build URL: %w", err)
+		return nil, fmt.Errorf("task store: build URL: %w", err)
 	}
 
 	q := u.Query()
@@ -266,7 +266,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntr
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build request: %w", err)
+		return nil, fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -281,7 +281,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntr
 
 	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
-		return nil, fmt.Errorf("plan store: decode response: %w", err)
+		return nil, fmt.Errorf("task store: decode response: %w", err)
 	}
 	return plans, nil
 }
@@ -290,7 +290,7 @@ func (s *HTTPStore) ListByStatus(project string, statuses ...Status) ([]TaskEntr
 func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	u, err := url.Parse(s.taskURL(project))
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build URL: %w", err)
+		return nil, fmt.Errorf("task store: build URL: %w", err)
 	}
 
 	q := u.Query()
@@ -299,7 +299,7 @@ func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build request: %w", err)
+		return nil, fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -314,7 +314,7 @@ func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 
 	var plans []TaskEntry
 	if err := json.NewDecoder(resp.Body).Decode(&plans); err != nil {
-		return nil, fmt.Errorf("plan store: decode response: %w", err)
+		return nil, fmt.Errorf("task store: decode response: %w", err)
 	}
 	return plans, nil
 }
@@ -323,7 +323,7 @@ func (s *HTTPStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 func (s *HTTPStore) ListTopics(project string) ([]TopicEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.topicURL(project), nil)
 	if err != nil {
-		return nil, fmt.Errorf("plan store: build request: %w", err)
+		return nil, fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -338,7 +338,7 @@ func (s *HTTPStore) ListTopics(project string) ([]TopicEntry, error) {
 
 	var topics []TopicEntry
 	if err := json.NewDecoder(resp.Body).Decode(&topics); err != nil {
-		return nil, fmt.Errorf("plan store: decode response: %w", err)
+		return nil, fmt.Errorf("task store: decode response: %w", err)
 	}
 	return topics, nil
 }
@@ -347,11 +347,11 @@ func (s *HTTPStore) ListTopics(project string) ([]TopicEntry, error) {
 func (s *HTTPStore) CreateTopic(project string, entry TopicEntry) error {
 	body, err := json.Marshal(entry)
 	if err != nil {
-		return fmt.Errorf("plan store: marshal topic: %w", err)
+		return fmt.Errorf("task store: marshal topic: %w", err)
 	}
 	req, err := http.NewRequest(http.MethodPost, s.topicURL(project), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -375,12 +375,12 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("plan store: marshal clickup task id: %w", err)
+		return fmt.Errorf("task store: marshal clickup task id: %w", err)
 	}
 	u := fmt.Sprintf("%s/clickup-task-id", s.taskItemURL(project, filename))
 	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -391,7 +391,7 @@ func (s *HTTPStore) SetClickUpTaskID(project, filename, taskID string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("plan store: plan not found: %s", filename)
+		return fmt.Errorf("task store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
@@ -404,7 +404,7 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 	u := fmt.Sprintf("%s/increment-review-cycle", s.taskItemURL(project, filename))
 	req, err := http.NewRequest(http.MethodPost, u, nil)
 	if err != nil {
-		return fmt.Errorf("plan store: build request: %w", err)
+		return fmt.Errorf("task store: build request: %w", err)
 	}
 
 	resp, err := s.do(req)
@@ -414,7 +414,7 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("plan store: plan not found: %s", filename)
+		return fmt.Errorf("task store: plan not found: %s", filename)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
@@ -434,17 +434,17 @@ func (s *HTTPStore) Ping() error {
 	pingClient := &http.Client{Timeout: 2 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, s.baseURL+"/v1/ping", nil)
 	if err != nil {
-		return fmt.Errorf("plan store: build ping request: %w", err)
+		return fmt.Errorf("task store: build ping request: %w", err)
 	}
 
 	resp, err := pingClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("plan store unreachable: %w", err)
+		return fmt.Errorf("task store unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("plan store: ping returned status %d", resp.StatusCode)
+		return fmt.Errorf("task store: ping returned status %d", resp.StatusCode)
 	}
 	return nil
 }
