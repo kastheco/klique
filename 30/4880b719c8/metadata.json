@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "304880b719c8",
+  "strategy": "manual-commit",
+  "branch": "plan/01a-rewrite-tmux-layer",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "session/tmux/pane_io.go",
+    "session/tmux/tmux_session.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/30/4880b719c8/0/metadata.json",
+      "transcript": "/30/4880b719c8/0/full.jsonl",
+      "context": "/30/4880b719c8/0/context.md",
+      "content_hash": "/30/4880b719c8/0/content_hash.txt",
+      "prompt": "/30/4880b719c8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 34,
+    "cache_creation_tokens": 118765,
+    "cache_read_tokens": 3268719,
+    "output_tokens": 7328,
+    "api_call_count": 34
+  }
+}
