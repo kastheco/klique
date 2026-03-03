@@ -1,0 +1,191 @@
+Implement Task 5: Rewrite PickerOverlay and ContextMenu
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 5 of 3 in Wave 2. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/overlay/pickerOverlay.go`
+- Modify: `ui/overlay/contextMenu.go`
+- Create: `ui/overlay/pickerOverlay_test.go`
+- Create: `ui/overlay/contextMenu_test.go`
+
+These two share search/filter logic. Both are rewritten to implement `Overlay` and use shared `Styles`.
+
+**Step 1: write the failing test**
+
+```go
+// pickerOverlay_test.go
+package overlay
+
+import (
+    "testing"
+
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestPickerOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewPickerOverlay("pick one", []string{"a", "b", "c"})
+}
+
+func TestPickerOverlay_HandleKey_Submit(t *testing.T) {
+    p := NewPickerOverlay("pick", []string{"alpha", "beta"})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "alpha", result.Value)
+}
+
+func TestPickerOverlay_HandleKey_Navigate(t *testing.T) {
+    p := NewPickerOverlay("pick", []string{"alpha", "beta"})
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "beta", result.Value)
+}
+
+func TestPickerOverlay_HandleKey_Filter(t *testing.T) {
+    p := NewPickerOverlay("pick", []string{"alpha", "beta", "gamma"})
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "beta", result.Value)
+}
+
+func TestPickerOverlay_HandleKey_Cancel(t *testing.T) {
+    p := NewPickerOverlay("pick", []string{"alpha"})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+
+func TestPickerOverlay_AllowCustom(t *testing.T) {
+    p := NewPickerOverlay("pick", []string{"alpha"})
+    p.SetAllowCustom(true)
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "z", result.Value)
+}
+
+func TestPickerOverlay_View(t *testing.T) {
+    p := NewPickerOverlay("select item", []string{"one", "two"})
+    p.SetSize(50, 20)
+    view := p.View()
+    assert.Contains(t, view, "select item")
+    assert.Contains(t, view, "one")
+    assert.Contains(t, view, "two")
+}
+
+// contextMenu_test.go
+func TestContextMenu_ImplementsOverlay(t *testing.T) {
+    items := []ContextMenuItem{{Label: "kill", Action: "kill"}}
+    var _ Overlay = NewContextMenu(0, 0, items)
+}
+
+func TestContextMenu_HandleKey_Select(t *testing.T) {
+    items := []ContextMenuItem{
+        {Label: "kill", Action: "kill"},
+        {Label: "rename", Action: "rename"},
+    }
+    cm := NewContextMenu(0, 0, items)
+    result := cm.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.Equal(t, "kill", result.Action)
+}
+
+func TestContextMenu_HandleKey_Navigate(t *testing.T) {
+    items := []ContextMenuItem{
+        {Label: "kill", Action: "kill"},
+        {Label: "rename", Action: "rename"},
+    }
+    cm := NewContextMenu(0, 0, items)
+    cm.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+    result := cm.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "rename", result.Action)
+}
+
+func TestContextMenu_HandleKey_NumberShortcut(t *testing.T) {
+    items := []ContextMenuItem{
+        {Label: "kill", Action: "kill"},
+        {Label: "rename", Action: "rename"},
+    }
+    cm := NewContextMenu(0, 0, items)
+    result := cm.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+    assert.True(t, result.Dismissed)
+    assert.Equal(t, "rename", result.Action)
+}
+
+func TestContextMenu_HandleKey_Dismiss(t *testing.T) {
+    items := []ContextMenuItem{{Label: "kill", Action: "kill"}}
+    cm := NewContextMenu(0, 0, items)
+    result := cm.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.Empty(t, result.Action)
+}
+
+func TestContextMenu_HandleKey_DisabledSkipped(t *testing.T) {
+    items := []ContextMenuItem{
+        {Label: "disabled", Action: "disabled", Disabled: true},
+        {Label: "enabled", Action: "enabled"},
+    }
+    cm := NewContextMenu(0, 0, items)
+    result := cm.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "enabled", result.Action)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run "TestPickerOverlay_ImplementsOverlay|TestContextMenu_ImplementsOverlay" -v
+```
+
+expected: FAIL — types don't implement `Overlay` (missing `HandleKey` returning `Result`)
+
+**Step 3: write minimal implementation**
+
+Rewrite `PickerOverlay` and `ContextMenu` to implement `Overlay`:
+
+- `PickerOverlay.HandleKey` returns `Result{Submitted: true, Value: selectedItem}` on enter, `Result{Dismissed: true}` on esc. The old `HandleKeyPress(tea.KeyMsg) bool` becomes a wrapper.
+- `ContextMenu.HandleKey` returns `Result{Dismissed: true, Action: selectedAction}` on selection, `Result{Dismissed: true}` on esc. The old `HandleKeyPress(tea.KeyMsg) (string, bool)` becomes a wrapper.
+- Both use `DefaultStyles()` for rendering instead of package-level `var` styles.
+- `ContextMenu.View()` replaces `Render()`. `PickerOverlay.View()` replaces `Render()`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run "TestPickerOverlay|TestContextMenu" -v
+```
+
+expected: PASS (both old and new tests)
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/pickerOverlay.go ui/overlay/pickerOverlay_test.go ui/overlay/contextMenu.go ui/overlay/contextMenu_test.go
+git commit -m "feat(overlay): rewrite picker and context menu to implement Overlay interface"
+```
