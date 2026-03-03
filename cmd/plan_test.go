@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -275,6 +276,85 @@ func TestExecutePlanLinkClickUp_SkipsAlreadyLinked(t *testing.T) {
 	n, err := executePlanLinkClickUp("proj", store)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n, "already linked plan should not be updated")
+}
+
+func TestResolveRepoRoot_Worktree(t *testing.T) {
+	mainRepo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, "docs", "plans"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "test-wt"), 0o755))
+
+	worktree := t.TempDir()
+	gitFile := fmt.Sprintf("gitdir: %s/.git/worktrees/test-wt\n", mainRepo)
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte(gitFile), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(mainRepo, ".git", "worktrees", "test-wt", "commondir"),
+		[]byte("../..\n"), 0o644,
+	))
+
+	root, err := resolveRepoRoot(worktree)
+	require.NoError(t, err)
+	assert.Equal(t, mainRepo, root)
+}
+
+func TestResolveRepoRoot_MainRepo(t *testing.T) {
+	mainRepo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git"), 0o755))
+
+	root, err := resolveRepoRoot(mainRepo)
+	require.NoError(t, err)
+	assert.Equal(t, mainRepo, root)
+}
+
+func TestPlanCLI_FromWorktreeContext(t *testing.T) {
+	// Create main repo structure with docs/plans
+	mainRepo := t.TempDir()
+	plansDir := filepath.Join(mainRepo, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "wt-plans"), 0o755))
+
+	// Create a worktree that has a .git file pointing to the main repo's worktrees dir
+	worktree := t.TempDir()
+	gitFile := fmt.Sprintf("gitdir: %s/.git/worktrees/wt-plans\n", mainRepo)
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte(gitFile), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(mainRepo, ".git", "worktrees", "wt-plans", "commondir"),
+		[]byte("../..\n"), 0o644,
+	))
+
+	// Verify resolveRepoRoot resolves correctly from the worktree
+	root, err := resolveRepoRoot(worktree)
+	require.NoError(t, err)
+	assert.Equal(t, mainRepo, root)
+
+	// Use the resolved plansDir (as resolvePlansDir would after the fix)
+	resolvedPlansDir := filepath.Join(root, "docs", "plans")
+	assert.Equal(t, plansDir, resolvedPlansDir)
+
+	// Populate the store and verify plan operations succeed
+	store := planstore.NewTestSQLiteStore(t)
+	project := projectFromPlansDir(resolvedPlansDir)
+	require.NoError(t, store.Create(project, planstore.PlanEntry{
+		Filename:    "2026-03-01-worktree-plan.md",
+		Status:      planstore.StatusReady,
+		Description: "worktree plan",
+		Branch:      "plan/worktree-plan",
+		CreatedAt:   time.Now(),
+	}))
+
+	// executePlanList should succeed from the resolved plansDir
+	output := executePlanList(resolvedPlansDir, "", store)
+	assert.Contains(t, output, "2026-03-01-worktree-plan.md")
+
+	// executePlanSetStatus should succeed
+	err = executePlanSetStatus(resolvedPlansDir, "2026-03-01-worktree-plan.md", "done", true, store)
+	require.NoError(t, err)
+
+	// executePlanTransition: reset then transition
+	err = executePlanSetStatus(resolvedPlansDir, "2026-03-01-worktree-plan.md", "ready", true, store)
+	require.NoError(t, err)
+	newStatus, err := executePlanTransition(resolvedPlansDir, "2026-03-01-worktree-plan.md", "plan_start", store)
+	require.NoError(t, err)
+	assert.Equal(t, "planning", newStatus)
 }
 
 // TestPlanList_WithStore verifies that executePlanListWithStore works with a
