@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "6b45e0ce464c",
+  "session_id": "ses_34efa7aedffe6zluHTcKq5jtyi",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T00:15:13.259958466Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-03-02-update-clickup-with-progress.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "abd44233558f",
+  "token_usage": {
+    "input_tokens": 75,
+    "cache_creation_tokens": 134214,
+    "cache_read_tokens": 8188618,
+    "output_tokens": 20583,
+    "api_call_count": 73
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T00:15:12.918795535Z",
+    "agent_lines": 0,
+    "human_added": 430,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 430,
+    "agent_percentage": 0
+  }
+}
