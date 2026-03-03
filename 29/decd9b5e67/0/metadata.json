@@ -3,14 +3,12 @@
   "checkpoint_id": "29decd9b5e67",
   "session_id": "840b1904-87f8-4ed5-aa44-1685a9ff5b17",
   "strategy": "manual-commit",
-  "created_at": "2026-03-03T04:25:07.256339298Z",
+  "created_at": "2026-03-03T04:26:32.623692488Z",
   "branch": "main",
   "checkpoints_count": 0,
   "files_touched": [
-    "docs/plans/2026-03-03-review-cycle-count-should-be-included.md",
     "cmd/plan.go",
-    "cmd/plan_test.go",
-    "docs/plans/2026-03-02-review-cycle-count-should-be-included.md"
+    "cmd/plan_test.go"
   ],
   "agent": "Claude Code",
   "turn_id": "6fc64c711e5a",
@@ -24,12 +22,12 @@
     "api_call_count": 0
   },
   "initial_attribution": {
-    "calculated_at": "2026-03-03T04:25:07.244871732Z",
-    "agent_lines": 411,
-    "human_added": 62,
+    "calculated_at": "2026-03-03T04:26:32.611410054Z",
+    "agent_lines": 0,
+    "human_added": 0,
     "human_modified": 0,
     "human_removed": 0,
-    "total_committed": 473,
-    "agent_percentage": 86.89217758985201
+    "total_committed": 0,
+    "agent_percentage": 0
   }
 }
