@@ -17,11 +17,11 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 	required := []string{
 		"Always commit plan files to the main branch.",
 		"Do NOT create feature branches for planning work.",
-		"Only register implementation plans in plan-state.json",
+		"Only register implementation plans",
 		"never register design docs",
 		".kasmos/signals/planner-finished-",
 		"KASMOS_MANAGED",
-		"Do not edit `plan-state.json` directly",
+		"Never modify plan state directly",
 		"plan review", // planner must reference the review step
 	}
 
