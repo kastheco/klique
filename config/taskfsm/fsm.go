@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"fmt"
@@ -93,17 +93,17 @@ func ApplyTransition(current Status, event Event) (Status, error) {
 	return next, nil
 }
 
-// PlanStateMachine is the sole writer of plan state. All plan status mutations
+// TaskStateMachine is the sole writer of plan state. All plan status mutations
 // must flow through Transition(). The store handles concurrency via SQLite.
-type PlanStateMachine struct {
+type TaskStateMachine struct {
 	dir     string          // docs/plans/ directory (for file operations)
 	store   taskstore.Store // always non-nil
 	project string          // project name used with the store
 }
 
-// New creates a PlanStateMachine backed by the given store.
+// New creates a TaskStateMachine backed by the given store.
 func New(store taskstore.Store, project, dir string) *TaskStateMachine {
-	return &PlanStateMachine{dir: dir, store: store, project: project}
+	return &TaskStateMachine{dir: dir, store: store, project: project}
 }
 
 // Transition applies an event to a plan's current status. It reads the current

@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestFSM creates a PlanStateMachine backed by an in-memory SQLite store.
+// newTestFSM creates a TaskStateMachine backed by an in-memory SQLite store.
 func newTestFSM(t *testing.T) (*TaskStateMachine, taskstore.Store) {
 	t.Helper()
 	store := taskstore.NewTestSQLiteStore(t)
@@ -78,7 +78,7 @@ func TestIsUserOnly(t *testing.T) {
 	assert.False(t, ReviewApproved.IsUserOnly())
 }
 
-func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
+func TestTaskStateMachine_TransitionWritesToStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
@@ -99,7 +99,7 @@ func TestPlanStateMachine_TransitionWritesToStore(t *testing.T) {
 	assert.Equal(t, "planning", string(entry.Status))
 }
 
-func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
+func TestTaskStateMachine_RejectsInvalidTransition(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
@@ -119,7 +119,7 @@ func TestPlanStateMachine_RejectsInvalidTransition(t *testing.T) {
 	assert.Equal(t, "ready", string(entry.Status))
 }
 
-func TestPlanStateMachine_MissingPlanReturnsError(t *testing.T) {
+func TestTaskStateMachine_MissingPlanReturnsError(t *testing.T) {
 	fsm, _ := newTestFSM(t)
 	err := fsm.Transition("nonexistent.md", PlanStart)
 	assert.Error(t, err)

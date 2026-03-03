@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"os"
@@ -49,7 +49,7 @@ func TestParseWaveSignal(t *testing.T) {
 			assert.Equal(t, tt.wantOK, ok)
 			if ok {
 				assert.Equal(t, tt.wantWave, ws.WaveNumber)
-				assert.Equal(t, tt.wantPlan, ws.PlanFile)
+				assert.Equal(t, tt.wantPlan, ws.TaskFile)
 			}
 		})
 	}
@@ -73,5 +73,5 @@ func TestScanSignals_IncludesWaveSignals(t *testing.T) {
 	waveSignals := ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 2, waveSignals[0].WaveNumber)
-	assert.Equal(t, "test.md", waveSignals[0].PlanFile)
+	assert.Equal(t, "test.md", waveSignals[0].TaskFile)
 }

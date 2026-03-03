@@ -1,4 +1,4 @@
-package planfsm
+package taskfsm
 
 import (
 	"net/http/httptest"
@@ -26,16 +26,16 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 	require.Len(t, signals, 2)
 
 	// Sort by plan file for deterministic assertion
-	if signals[0].PlanFile > signals[1].PlanFile {
+	if signals[0].TaskFile > signals[1].TaskFile {
 		signals[0], signals[1] = signals[1], signals[0]
 	}
 
 	assert.Equal(t, PlannerFinished, signals[1].Event)
-	assert.Equal(t, "foo.md", signals[1].PlanFile)
+	assert.Equal(t, "foo.md", signals[1].TaskFile)
 	assert.Empty(t, signals[1].Body)
 
 	assert.Equal(t, ReviewChangesRequested, signals[0].Event)
-	assert.Equal(t, "bar.md", signals[0].PlanFile)
+	assert.Equal(t, "bar.md", signals[0].TaskFile)
 	assert.Equal(t, "fix the tests", signals[0].Body)
 }
 
@@ -74,9 +74,9 @@ func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
 }
 
 func TestSignalKey_Dedup(t *testing.T) {
-	a := Signal{Event: ReviewChangesRequested, PlanFile: "foo.md"}
-	b := Signal{Event: ReviewChangesRequested, PlanFile: "foo.md"}
-	c := Signal{Event: ImplementFinished, PlanFile: "foo.md"}
+	a := Signal{Event: ReviewChangesRequested, TaskFile: "foo.md"}
+	b := Signal{Event: ReviewChangesRequested, TaskFile: "foo.md"}
+	c := Signal{Event: ImplementFinished, TaskFile: "foo.md"}
 
 	assert.Equal(t, a.Key(), b.Key(), "same event+planFile should produce same key")
 	assert.NotEqual(t, a.Key(), c.Key(), "different events should produce different keys")
@@ -90,7 +90,7 @@ func TestConsumeSignal_DeletesFile(t *testing.T) {
 	path := filepath.Join(signalsDir, "planner-finished-test.md")
 	require.NoError(t, os.WriteFile(path, nil, 0o644))
 
-	sig := Signal{Event: PlannerFinished, PlanFile: "test.md", filePath: path}
+	sig := Signal{Event: PlannerFinished, TaskFile: "test.md", filePath: path}
 	ConsumeSignal(sig)
 
 	_, err := os.Stat(path)

@@ -140,7 +140,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 	msg := metadataResultMsg{
 		PlanState: ps,
 		Signals: []taskfsm.Signal{
-			{Event: taskfsm.ImplementFinished, PlanFile: planFile},
+			{Event: taskfsm.ImplementFinished, TaskFile: planFile},
 		},
 	}
 	model, _ := h.Update(msg)
@@ -204,7 +204,7 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 	msg := metadataResultMsg{
 		PlanState: ps,
 		Signals: []taskfsm.Signal{
-			{Event: taskfsm.ImplementFinished, PlanFile: planFile},
+			{Event: taskfsm.ImplementFinished, TaskFile: planFile},
 		},
 	}
 	model, _ := h.Update(msg)
