@@ -67,6 +67,12 @@ func TestStyles_DangerBorder(t *testing.T) {
 	assert.NotEmpty(t, rendered)
 }
 
+func TestStyles_WarningTitle(t *testing.T) {
+	s := DefaultStyles()
+	rendered := s.WarningTitle.Render("warning title")
+	assert.Contains(t, rendered, "warning title")
+}
+
 func TestThemeRosePine_NotNil(t *testing.T) {
 	theme := ThemeRosePine()
 	assert.NotNil(t, theme)

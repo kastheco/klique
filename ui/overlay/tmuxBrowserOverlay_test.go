@@ -73,7 +73,7 @@ func TestTmuxBrowserOverlay_Actions(t *testing.T) {
 	}{
 		{"esc dismisses", tea.KeyMsg{Type: tea.KeyEsc}, true, ""},
 		{"enter attaches", tea.KeyMsg{Type: tea.KeyEnter}, true, "attach"},
-		{"k kills when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, true, "kill"},
+		{"k kills when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, false, "kill"},
 		{"a adopts when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, true, "adopt"},
 		{"o attaches when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")}, true, "attach"},
 	}

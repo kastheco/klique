@@ -1023,6 +1023,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			return m.handleTmuxBrowserAction(browser, result.Action)
 		}
+		// Handle non-dismissed actions (e.g. "kill" keeps the browser open for
+		// multi-kill workflow — the action handler decides whether to dismiss).
+		if result.Action != "" {
+			return m.handleTmuxBrowserAction(browser, result.Action)
+		}
 		return m, nil
 	}
 

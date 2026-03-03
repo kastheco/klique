@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // TmuxBrowserItem holds metadata for a single tmux session (managed or orphaned).
@@ -23,38 +22,6 @@ type TmuxBrowserItem struct {
 	AgentType string // "planner"/"coder"/"reviewer" (managed only)
 	Status    string // "running"/"ready"/"loading"/"paused" (managed only)
 }
-
-var browserBorderStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorIris).
-	Padding(1, 2)
-
-var browserTitleStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(colorIris).
-	MarginBottom(1)
-
-var browserSearchStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorFoam).
-	Padding(0, 1).
-	MarginBottom(1)
-
-var browserItemStyle = lipgloss.NewStyle().
-	Padding(0, 1).
-	Foreground(colorText)
-
-var browserSelectedStyle = lipgloss.NewStyle().
-	Padding(0, 1).
-	Background(colorFoam).
-	Foreground(colorBase)
-
-var browserMutedStyle = lipgloss.NewStyle().
-	Foreground(colorMuted)
-
-var browserHintStyle = lipgloss.NewStyle().
-	Foreground(colorMuted).
-	MarginTop(1)
 
 // TmuxBrowserOverlay shows orphaned tmux sessions with kill/adopt/attach actions.
 type TmuxBrowserOverlay struct {
@@ -116,9 +83,10 @@ func (b *TmuxBrowserOverlay) IsEmpty() bool {
 
 // render draws the browser overlay.
 func (b *TmuxBrowserOverlay) render() string {
+	st := DefaultStyles()
 	var s strings.Builder
 
-	s.WriteString(browserTitleStyle.Render("tmux sessions"))
+	s.WriteString(st.Title.Render("tmux sessions"))
 	s.WriteString("\n")
 
 	// Search bar
@@ -128,14 +96,14 @@ func (b *TmuxBrowserOverlay) render() string {
 	}
 	searchText := b.searchQuery
 	if searchText == "" {
-		searchText = browserMutedStyle.Render("\uf002 type to filter...")
+		searchText = st.Muted.Render("\uf002 type to filter...")
 	}
-	s.WriteString(browserSearchStyle.Width(innerWidth).Render(searchText))
+	s.WriteString(st.SearchBar.Width(innerWidth).Render(searchText))
 	s.WriteString("\n")
 
 	// Items
 	if len(b.filtered) == 0 {
-		s.WriteString(browserMutedStyle.Render("  no sessions"))
+		s.WriteString(st.Muted.Render("  no sessions"))
 		s.WriteString("\n")
 	} else {
 		for i, idx := range b.filtered {
@@ -155,16 +123,16 @@ func (b *TmuxBrowserOverlay) render() string {
 				if item.AgentType != "" {
 					badgeText = item.AgentType
 				}
-				badge = browserMutedStyle.Render(" [" + badgeText + "]")
+				badge = st.Muted.Render(" [" + badgeText + "]")
 			}
 
 			label := fmt.Sprintf("%-28s %8s %s%s",
 				truncateStr(item.Title, 28), age, attachedIndicator, dims) + badge
 
 			if i == b.selectedIdx {
-				s.WriteString(browserSelectedStyle.Width(innerWidth).Render("▸ " + label))
+				s.WriteString(st.SelectedItem.Width(innerWidth).Render("▸ " + label))
 			} else {
-				s.WriteString(browserItemStyle.Width(innerWidth).Render("  " + label))
+				s.WriteString(st.Item.Width(innerWidth).Render("  " + label))
 			}
 			s.WriteString("\n")
 		}
@@ -174,9 +142,9 @@ func (b *TmuxBrowserOverlay) render() string {
 	if len(b.filtered) > 0 && !b.SelectedItem().Managed {
 		hint = "↑↓ navigate · k kill · a adopt · o attach · esc close"
 	}
-	s.WriteString(browserHintStyle.Render(hint))
+	s.WriteString(st.Hint.Render(hint))
 
-	return browserBorderStyle.Width(b.width).Render(s.String())
+	return st.FloatingBorder.Width(b.width).Render(s.String())
 }
 
 // SetSize updates the overlay width.
@@ -185,6 +153,10 @@ func (b *TmuxBrowserOverlay) SetSize(width, height int) {
 }
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
+//
+// "kill" returns Result{Action: "kill"} without Dismissed so the browser stays
+// open and the user can kill multiple sessions. The app layer must handle
+// non-dismissed action results. "adopt" and "attach" do dismiss the overlay.
 func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -223,7 +195,9 @@ func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
 			switch r {
 			case "k":
 				if len(b.filtered) > 0 {
-					return Result{Dismissed: true, Action: "kill"}
+					// Do NOT dismiss — browser stays open for multi-kill workflow.
+					// The app layer handles the action via the non-dismissed path.
+					return Result{Action: "kill"}
 				}
 				return Result{}
 			case "a":

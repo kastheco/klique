@@ -14,9 +14,10 @@ type Styles struct {
 	DangerBorder   lipgloss.Style // danger modals (double border, love/red)
 
 	// Text styles
-	Title lipgloss.Style // overlay title (bold, iris)
-	Hint  lipgloss.Style // hint/help text at bottom (muted)
-	Muted lipgloss.Style // secondary text (muted foreground)
+	Title        lipgloss.Style // overlay title (bold, iris)
+	WarningTitle lipgloss.Style // overlay title for warning overlays (bold, gold)
+	Hint         lipgloss.Style // hint/help text at bottom (muted)
+	Muted        lipgloss.Style // secondary text (muted foreground)
 
 	// List item styles (picker, context menu, browser)
 	Item         lipgloss.Style // normal list item
@@ -55,6 +56,9 @@ func DefaultStyles() Styles {
 			Foreground(colorIris).
 			Bold(true).
 			MarginBottom(1),
+		WarningTitle: lipgloss.NewStyle().
+			Foreground(colorGold).
+			Bold(true),
 		Hint: lipgloss.NewStyle().
 			Foreground(colorMuted).
 			MarginTop(1),

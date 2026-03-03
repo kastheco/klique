@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // FormOverlay is a multi-field form overlay backed by huh.Form.
@@ -180,26 +179,13 @@ func (f *FormOverlay) View() string {
 		w = 40
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(colorIris).
-		Bold(true).
-		MarginBottom(1)
+	st := DefaultStyles()
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(colorMuted).
-		MarginTop(1)
-
-	content := titleStyle.Render(f.title) + "\n"
+	content := st.Title.Render(f.title) + "\n"
 	content += f.form.View() + "\n"
-	content += hintStyle.Render("tab/↑↓ navigate · enter create")
+	content += st.Hint.Render("tab/↑↓ navigate · enter create")
 
-	style := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(colorIris).
-		Padding(1, 2).
-		Width(w)
-
-	return style.Render(content)
+	return st.ModalBorder.Width(w).Render(content)
 }
 
 // SetSize implements Overlay. Updates the available width for the overlay.

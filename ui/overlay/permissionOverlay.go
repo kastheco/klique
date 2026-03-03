@@ -65,45 +65,19 @@ func (p *PermissionOverlay) Description() string {
 
 // render draws the permission overlay.
 func (p *PermissionOverlay) render() string {
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorGold).
-		Padding(1, 2).
-		Width(p.width)
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(colorGold)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(colorText)
-
-	patternStyle := lipgloss.NewStyle().
-		Foreground(colorMuted)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(colorMuted)
-
-	selectedStyle := lipgloss.NewStyle().
-		Background(colorFoam).
-		Foreground(colorBase).
-		Padding(0, 1)
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(colorText).
-		Padding(0, 1)
+	st := DefaultStyles()
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("△ permission required"))
+	b.WriteString(st.WarningTitle.Render("△ permission required"))
 	b.WriteString("\n")
-	b.WriteString(descStyle.Render(p.description))
+	b.WriteString(st.Item.Render(p.description))
 	if p.pattern != "" {
 		b.WriteString("\n")
-		b.WriteString(patternStyle.Render(fmt.Sprintf("pattern: %s", p.pattern)))
+		b.WriteString(st.Muted.Render(fmt.Sprintf("pattern: %s", p.pattern)))
 	}
 	if p.instanceTitle != "" {
 		b.WriteString("\n")
-		b.WriteString(patternStyle.Render(fmt.Sprintf("instance: %s", p.instanceTitle)))
+		b.WriteString(st.Muted.Render(fmt.Sprintf("instance: %s", p.instanceTitle)))
 	}
 	b.WriteString("\n\n")
 
@@ -111,16 +85,16 @@ func (p *PermissionOverlay) render() string {
 	var choices []string
 	for i, label := range permissionChoiceLabels {
 		if i == p.selectedIdx {
-			choices = append(choices, selectedStyle.Render("▸ "+label))
+			choices = append(choices, st.SelectedItem.Render("▸ "+label))
 		} else {
-			choices = append(choices, normalStyle.Render("  "+label))
+			choices = append(choices, st.Item.Render("  "+label))
 		}
 	}
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, choices...))
 	b.WriteString("\n\n")
-	b.WriteString(hintStyle.Render("←→ select · enter confirm · esc dismiss"))
+	b.WriteString(st.Muted.Render("←→ select · enter confirm · esc dismiss"))
 
-	return borderStyle.Render(b.String())
+	return st.WarningBorder.Width(p.width).Render(b.String())
 }
 
 // permissionActionLabels maps selectedIdx to the action string returned by HandleKey.
