@@ -1056,7 +1056,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772548639401
+          "created": 1772548639401,
+          "completed": 1772548647845
         },
         "parentID": "msg_cb4208ef9001WL3VALVFWB5A8q",
         "modelID": "claude-sonnet-4-6",
@@ -1069,15 +1070,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 67217,
+          "input": 1,
+          "output": 344,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 66670,
+            "write": 202
           }
         },
         "variant": "medium",
+        "finish": "stop",
         "id": "msg_cb421caa9001bhl5m6624ajZRx",
         "sessionID": "ses_34bdf711effeGpxAoctLsWTf2a"
       },
@@ -1091,11 +1094,31 @@
         },
         {
           "type": "text",
-          "text": "",
+          "text": "Done. The clean-room rewrite of `session/git/worktree_git.go` is complete:\n\n- **`runGitCommand`** — method on `*GitWorktree`, builds `git -C <path> <args...>`, returns combined output, wraps errors with output text\n- **`PushChanges`** — checks gh CLI, calls `CommitChanges` then `Push`\n- **`Push`** — runs `git push -u origin <branch>`, logs (not propagates) `OpenBranchURL` errors when `open=true`\n- **`GeneratePRBody`** — requires non-empty `baseCommitSHA`, assembles three markdown sections joined with double newlines\n- **`CreatePR`** — calls `PushChanges`, creates PR via `gh pr create`, handles \"already exists\" by opening existing PR\n- **`CommitChanges`** — no-op when clean; otherwise `git add .` + `git commit -m <msg> --no-verify`\n- **`IsDirty`** — `git status --porcelain`, non-empty output → dirty\n- **`IsBranchCheckedOut`** — `git branch --show-current` in `repoPath`, compared to `branchName`\n- **`OpenBranchURL`** — checks gh CLI, runs `gh browse --branch <branch>` in worktree dir\n\nAll 11 existing tests pass after the rewrite.",
           "time": {
-            "start": 1772548641129
+            "start": 1772548647806,
+            "end": 1772548647806
           },
           "id": "prt_cb421d169002F85CSlb2Mzh9wr",
+          "sessionID": "ses_34bdf711effeGpxAoctLsWTf2a",
+          "messageID": "msg_cb421caa9001bhl5m6624ajZRx"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "3e0b8eb870235a28639a570125748015dc4d95f1",
+          "cost": 0,
+          "tokens": {
+            "total": 67217,
+            "input": 1,
+            "output": 344,
+            "reasoning": 0,
+            "cache": {
+              "read": 66670,
+              "write": 202
+            }
+          },
+          "id": "REDACTED",
           "sessionID": "ses_34bdf711effeGpxAoctLsWTf2a",
           "messageID": "msg_cb421caa9001bhl5m6624ajZRx"
         }
