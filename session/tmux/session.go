@@ -41,7 +41,6 @@ type Session interface {
 	SetTaskEnv(taskNumber, waveNumber, peerCount int)
 	SetSessionTitle(title string)
 	SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string))
-	NewReset(name, program string, skipPermissions bool) Session
 }
 
 // PermissionChoice represents the user's response to a permission prompt.
