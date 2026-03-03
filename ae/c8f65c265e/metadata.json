@@ -2,6 +2,7 @@
   "cli_version": "0.4.8",
   "checkpoint_id": "aec8f65c265e",
   "strategy": "manual-commit",
+  "branch": "plan/have-to-kill-twice",
   "checkpoints_count": 5,
   "files_touched": [
     ".claude/settings.json",
@@ -75,6 +76,13 @@
       "context": "/ae/c8f65c265e/8/context.md",
       "content_hash": "/ae/c8f65c265e/8/content_hash.txt",
       "prompt": "/ae/c8f65c265e/8/prompt.txt"
+    },
+    {
+      "metadata": "/ae/c8f65c265e/9/metadata.json",
+      "transcript": "/ae/c8f65c265e/9/full.jsonl",
+      "context": "/ae/c8f65c265e/9/context.md",
+      "content_hash": "/ae/c8f65c265e/9/content_hash.txt",
+      "prompt": "/ae/c8f65c265e/9/prompt.txt"
     }
   ],
   "token_usage": {
