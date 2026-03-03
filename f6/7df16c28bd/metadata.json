@@ -3,7 +3,7 @@
   "checkpoint_id": "f67df16c28bd",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 5,
   "files_touched": [
     ".agents/skills/kasmos-coder/SKILL.md",
     ".agents/skills/kasmos-fixer/SKILL.md",
@@ -59,13 +59,20 @@
       "context": "/f6/7df16c28bd/3/context.md",
       "content_hash": "/f6/7df16c28bd/3/content_hash.txt",
       "prompt": "/f6/7df16c28bd/3/prompt.txt"
+    },
+    {
+      "metadata": "/f6/7df16c28bd/4/metadata.json",
+      "transcript": "/f6/7df16c28bd/4/full.jsonl",
+      "context": "/f6/7df16c28bd/4/context.md",
+      "content_hash": "/f6/7df16c28bd/4/content_hash.txt",
+      "prompt": "/f6/7df16c28bd/4/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 50,
-    "cache_creation_tokens": 173665,
-    "cache_read_tokens": 3343159,
-    "output_tokens": 8814,
-    "api_call_count": 45
+    "input_tokens": 143,
+    "cache_creation_tokens": 309040,
+    "cache_read_tokens": 13603816,
+    "output_tokens": 23039,
+    "api_call_count": 137
   }
 }
