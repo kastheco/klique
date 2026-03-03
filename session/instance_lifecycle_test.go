@@ -84,6 +84,69 @@ func TestStartKeepsQueuedPromptForAider(t *testing.T) {
 	assert.Equal(t, "Fix the bug.", inst.QueuedPrompt)
 }
 
+func TestRestartTmux_FailsWhenNotStarted(t *testing.T) {
+	inst := &Instance{
+		Title:   "test-restart-not-started",
+		Path:    t.TempDir(),
+		Program: "opencode",
+	}
+	err := inst.RestartTmux()
+	assert.Error(t, err, "RestartTmux should return an error when instance has not been started")
+}
+
+func TestRestartTmux_ResetsStateAndRestartsSession(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte("Ask anything"), nil },
+	}
+
+	inst := &Instance{
+		Title:                  "test-restart",
+		Path:                   t.TempDir(),
+		Program:                "opencode",
+		started:                true,
+		Exited:                 true,
+		ImplementationComplete: true,
+		HasWorked:              true,
+		AwaitingWork:           true,
+		PromptDetected:         true,
+	}
+	inst.Status = Ready
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps("test-restart", "opencode", false, &testPtyFactory{}, cmdExec)
+
+	err := inst.RestartTmux()
+	require.NoError(t, err)
+
+	assert.Equal(t, Running, inst.Status, "status should be Running after restart")
+	assert.False(t, inst.Exited, "Exited flag should be reset")
+	assert.False(t, inst.ImplementationComplete, "ImplementationComplete flag should be reset")
+	assert.False(t, inst.HasWorked, "HasWorked flag should be reset")
+	assert.False(t, inst.AwaitingWork, "AwaitingWork flag should be reset")
+	assert.False(t, inst.PromptDetected, "PromptDetected flag should be reset")
+}
+
+func TestRestartTmux_TransfersQueuedPrompt(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte("Ask anything"), nil },
+	}
+
+	inst := &Instance{
+		Title:        "test-restart-prompt",
+		Path:         t.TempDir(),
+		Program:      "opencode",
+		started:      true,
+		QueuedPrompt: "Implement the feature.",
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps("test-restart-prompt", "opencode", false, &testPtyFactory{}, cmdExec)
+
+	err := inst.RestartTmux()
+	require.NoError(t, err)
+
+	// QueuedPrompt should be cleared (transferred to initialPrompt via transferPromptToCli).
+	assert.Empty(t, inst.QueuedPrompt, "QueuedPrompt should be cleared after restart for opencode")
+}
+
 func TestStartOnBranch_SetsFields(t *testing.T) {
 	repoPath := setupGitRepo(t)
 

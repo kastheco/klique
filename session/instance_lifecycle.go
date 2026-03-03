@@ -342,6 +342,49 @@ func (i *Instance) StopTmux() {
 	}
 }
 
+// RestartTmux kills the existing tmux session (best-effort) and starts a fresh
+// one in the same working directory. The git worktree is preserved. All
+// completion/state flags are reset so the instance behaves as if freshly started.
+// Returns an error if the instance has never been started.
+func (i *Instance) RestartTmux() error {
+	if !i.started {
+		return fmt.Errorf("cannot restart instance that has not been started")
+	}
+
+	// Best-effort close of the existing session.
+	if i.tmuxSession != nil {
+		_ = i.tmuxSession.Close()
+	}
+
+	// Create a fresh tmux session with the same identity.
+	ts := tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	ts.SetAgentType(i.AgentType)
+	i.tmuxSession = ts
+	i.setTmuxTaskEnv()
+	i.configureSessionTitle()
+	i.transferPromptToCli()
+
+	// Determine the working directory: worktree path if one exists, else repo root.
+	workDir := i.Path
+	if i.gitWorktree != nil {
+		workDir = i.gitWorktree.GetWorktreePath()
+	}
+
+	if err := ts.Start(workDir); err != nil {
+		return fmt.Errorf("failed to restart tmux session: %w", err)
+	}
+
+	// Reset all completion/state flags.
+	i.Exited = false
+	i.ImplementationComplete = false
+	i.HasWorked = false
+	i.AwaitingWork = false
+	i.PromptDetected = false
+	i.SetStatus(Running)
+
+	return nil
+}
+
 // Pause stops the tmux session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
 	if !i.started {
