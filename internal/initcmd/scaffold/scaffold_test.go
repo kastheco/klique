@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -677,3 +678,18 @@ func TestScaffold_IncludesFixerAgent(t *testing.T) {
 }
 
 func ptrFloat(f float64) *float64 { return &f }
+
+func TestPlannerTemplates_NoDatedSentinelReferences(t *testing.T) {
+	for _, harnessName := range []string{"claude", "opencode"} {
+		t.Run(harnessName, func(t *testing.T) {
+			content, err := templates.ReadFile(
+				fmt.Sprintf("templates/%s/agents/planner.md", harnessName))
+			require.NoError(t, err)
+			s := string(content)
+			assert.NotContains(t, s, "<date>-<name>",
+				"planner template should use dateless slug convention")
+			assert.NotContains(t, s, "planner-finished-<date>",
+				"sentinel naming should not reference date prefix")
+		})
+	}
+}
