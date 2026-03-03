@@ -208,6 +208,7 @@ func init() {
 	rootCmd.AddCommand(kasSetupCmd)
 	rootCmd.AddCommand(cmd2.NewTaskCmd())
 	rootCmd.AddCommand(cmd2.NewServeCmd())
+	rootCmd.AddCommand(cmd2.NewInstanceCmd())
 }
 
 func main() {
