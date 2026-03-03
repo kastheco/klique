@@ -621,8 +621,17 @@ func (n *NavigationPanel) IsFocused() bool            { return n.focused }
 func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.rebuildRows() }
 
 // availRows returns the number of rows the scroll window can display.
+// Overhead accounts for border (2), search box (3), blank line (1),
+// legend (1), and gap above legend (1) = 8.  When the audit pane is
+// active, an additional 6 lines are reserved (1 gap below legend +
+// 1 audit header + 4 minimum body lines) so the log section never
+// flickers in and out as the window resizes.
 func (n *NavigationPanel) availRows() int {
-	v := n.height - 8
+	overhead := 8
+	if n.auditView != "" && n.auditHeight > 0 {
+		overhead += 6
+	}
+	v := n.height - overhead
 	if v < 1 {
 		return 1
 	}
