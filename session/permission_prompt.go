@@ -24,25 +24,21 @@ func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
 	clean := ansi.Strip(content)
 	lines := strings.Split(clean, "\n")
 
-	// Only scan the bottom 25 lines of the pane. The permission dialog is
-	// rendered at the bottom of opencode's TUI (~10 lines for the dialog
-	// plus status bar). Scanning the full pane false-positives on
-	// conversation text that discusses permissions.
+	// Only examine the last 25 lines — the permission dialog renders at the
+	// bottom of opencode's TUI. Limiting the scan window avoids false-positives
+	// from conversation text that may mention "Permission required".
 	const tailLines = 25
-	startLine := len(lines) - tailLines
-	if startLine < 0 {
-		startLine = 0
+	if start := len(lines) - tailLines; start > 0 {
+		lines = lines[start:]
 	}
-	lines = lines[startLine:]
 
-	// Two structural checks to avoid false-positives from conversation text:
-	//  1. "△ Permission required" header (the △ glyph is opencode UI chrome)
-	//  2. Button bar with "Allow once" + "Allow always" on the same line
-	// Both must appear within the tail window.
+	// Structural check 1: locate the "△ Permission required" header line.
+	// The △ glyph is unique to opencode's UI chrome; its presence on the same
+	// line as "Permission required" is the primary signal.
 	permIdx := -1
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, "△") && strings.Contains(trimmed, "Permission required") {
+		t := strings.TrimSpace(line)
+		if strings.Contains(t, "△") && strings.Contains(t, "Permission required") {
 			permIdx = i
 			break
 		}
@@ -51,51 +47,54 @@ func ParsePermissionPrompt(content string, program string) *PermissionPrompt {
 		return nil
 	}
 
-	hasButtons := false
+	// Structural check 2: button bar with both "Allow once" and "Allow always"
+	// must appear after the header line. Without this guard a bare mention of
+	// "Permission required" in conversation text would create false-positives.
+	buttonFound := false
 	for _, line := range lines[permIdx:] {
 		if strings.Contains(line, "Allow once") && strings.Contains(line, "Allow always") {
-			hasButtons = true
+			buttonFound = true
 			break
 		}
 	}
-	if !hasButtons {
+	if !buttonFound {
 		return nil
 	}
 
 	prompt := &PermissionPrompt{}
 
-	// Description is on the next non-empty line after "Permission required".
-	// Strip leading arrow prefixes — opencode uses both "← " and "→ ".
+	// Description: first non-empty line after the header.
+	// opencode prefixes the description with "← " or "→ " arrow glyphs.
 	for i := permIdx + 1; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "" {
+		t := strings.TrimSpace(lines[i])
+		if t == "" {
 			continue
 		}
-		trimmed = strings.TrimPrefix(trimmed, "← ")
-		trimmed = strings.TrimPrefix(trimmed, "←")
-		trimmed = strings.TrimPrefix(trimmed, "→ ")
-		trimmed = strings.TrimPrefix(trimmed, "→")
-		trimmed = strings.TrimSpace(trimmed)
-		prompt.Description = trimmed
+		t = strings.TrimPrefix(t, "← ")
+		t = strings.TrimPrefix(t, "←")
+		t = strings.TrimPrefix(t, "→ ")
+		t = strings.TrimPrefix(t, "→")
+		prompt.Description = strings.TrimSpace(t)
 		break
 	}
 
-	// Pattern: find "Patterns" header, then first line starting with "- ".
+	// Pattern: locate "Patterns" header, then take the first non-empty line
+	// that starts with "- ".
 	for i := permIdx; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "Patterns" {
-			for j := i + 1; j < len(lines); j++ {
-				trimmed := strings.TrimSpace(lines[j])
-				if trimmed == "" {
-					continue
-				}
-				if strings.HasPrefix(trimmed, "- ") {
-					prompt.Pattern = strings.TrimPrefix(trimmed, "- ")
-					break
-				}
-				break // non-empty, non-pattern line — stop
+		if strings.TrimSpace(lines[i]) != "Patterns" {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			t := strings.TrimSpace(lines[j])
+			if t == "" {
+				continue
+			}
+			if strings.HasPrefix(t, "- ") {
+				prompt.Pattern = strings.TrimPrefix(t, "- ")
 			}
 			break
 		}
+		break
 	}
 
 	return prompt
