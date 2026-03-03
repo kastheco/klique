@@ -2,7 +2,7 @@ package ui
 
 import "strings"
 
-// The base KASMOS banner — 6 rows tall.
+// fallbackBannerRaw is the 6-row KASMOS block-art banner using Unicode box-drawing characters.
 var fallbackBannerRaw = `██╗  ██╗ █████╗ ███████╗███╗   ███╗ ██████╗ ███████╗
 ██║ ██╔╝██╔══██╗██╔════╝████╗ ████║██╔═══██╗██╔════╝
 █████╔╝ ███████║███████╗██╔████╔██║██║   ██║███████╗
@@ -10,8 +10,8 @@ var fallbackBannerRaw = `██╗  ██╗ █████╗ █████
 ██║  ██╗██║  ██║███████║██║ ╚═╝ ██║╚██████╔╝███████║
 ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚══════╝`
 
-// Block-art glyphs, each 6 rows to match the banner height.
-// period: small block sitting at the bottom.
+// blockPeriod is a block-art period glyph, 6 rows tall to match the banner height.
+// The visible dot occupies the bottom two rows; the upper four rows are blank.
 var blockPeriod = [6]string{
 	"   ",
 	"   ",
@@ -21,8 +21,8 @@ var blockPeriod = [6]string{
 	"╚═╝",
 }
 
-// bannerFrames are precomputed gradient-rendered banner strings.
-// Animation: base → . → .. → ... → .. → . → (loop)
+// bannerFrames holds the precomputed gradient-rendered banner strings for each animation frame.
+// Frames progress: base → one period → two periods → three periods (then cycle).
 var bannerFrames = func() []string {
 	base := strings.Split(fallbackBannerRaw, "\n")
 
@@ -48,14 +48,14 @@ var bannerFrames = func() []string {
 	return frames
 }()
 
-// FallBackText returns the precomputed banner frame for the given tick.
+// FallBackText returns the precomputed gradient banner string for the given animation tick.
+// The frame index wraps around automatically.
 func FallBackText(frame int) string {
 	return bannerFrames[frame%len(bannerFrames)]
 }
 
-// BannerLines returns the pre-rendered gradient banner as individual lines
+// BannerLines returns the precomputed gradient banner split into individual lines
 // for the given animation frame. Always returns exactly 6 lines.
 func BannerLines(frame int) []string {
-	banner := bannerFrames[frame%len(bannerFrames)]
-	return strings.Split(banner, "\n")
+	return strings.Split(bannerFrames[frame%len(bannerFrames)], "\n")
 }
