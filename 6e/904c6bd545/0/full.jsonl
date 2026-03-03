@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772519180061,
-      "updated": 1772519648295
+      "updated": 1772519720166
     }
   },
   "messages": [
@@ -4229,7 +4229,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772519648276
+          "created": 1772519648276,
+          "completed": 1772519665666
         },
         "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
         "modelID": "claude-opus-4-6",
@@ -4242,14 +4243,16 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 145203,
+          "input": 1,
+          "output": 102,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 144944,
+            "write": 156
           }
         },
+        "finish": "tool-calls",
         "id": "REDACTED",
         "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
       },
@@ -4266,22 +4269,714 @@
           "callID": "toolu_01YVzzthQRpasaHhnt9ugNxH",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add -A && git commit -m \"fix: restore docs/plans/ files deleted out of scope (reviewer self-fix)\"",
               "description": "Commit restored plan files"
             },
+            "output": "[plan/rename-plan-to-task 483e55c] fix: restore docs/plans/ files deleted out of scope (reviewer self-fix)\n 9 files changed, 3149 insertions(+)\n create mode 100644 docs/plans/01a-rewrite-tmux-layer.md\n create mode 100644 docs/plans/01b-rewrite-git-layer.md\n create mode 100644 docs/plans/02a-rewrite-session-core.md\n create mode 100644 docs/plans/02b-rewrite-overlay-ui.md\n create mode 100644 docs/plans/03-rewrite-ui-panels.md\n create mode 100644 docs/plans/04-rewrite-plumbing.md\n create mode 100644 docs/plans/extract-orchestrator.md\n create mode 100644 docs/plans/instance-management-cli.md\n",
+            "title": "Commit restored plan files",
             "metadata": {
-              "output": "",
-              "description": "Commit restored plan files"
+              "output": "[plan/rename-plan-to-task 483e55c] fix: restore docs/plans/ files deleted out of scope (reviewer self-fix)\n 9 files changed, 3149 insertions(+)\n create mode 100644 docs/plans/01a-rewrite-tmux-layer.md\n create mode 100644 docs/plans/01b-rewrite-git-layer.md\n create mode 100644 docs/plans/02a-rewrite-session-core.md\n create mode 100644 docs/plans/02b-rewrite-overlay-ui.md\n create mode 100644 docs/plans/03-rewrite-ui-panels.md\n create mode 100644 docs/plans/04-rewrite-plumbing.md\n create mode 100644 docs/plans/extract-orchestrator.md\n create mode 100644 docs/plans/instance-management-cli.md\n",
+              "exit": 0,
+              "description": "Commit restored plan files",
+              "truncated": false
             },
             "time": {
-              "start": 1772519653372
+              "start": 1772519653371,
+              "end": 1772519665655
             }
           },
           "id": "prt_cb2677be50018Tyl45llXWw1Bp",
           "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
           "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 145203,
+            "input": 1,
+            "output": 102,
+            "reasoning": 0,
+            "cache": {
+              "read": 144944,
+              "write": 156
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519665670,
+          "completed": 1772519678264
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 145645,
+          "input": 1,
+          "output": 206,
+          "reasoning": 0,
+          "cache": {
+            "read": 145100,
+            "write": 338
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb267b006001p0NyC9R1vVuOn1",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "prt_cb267ba9f0011f0bLZIiY9ZGGN",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb267b006001p0NyC9R1vVuOn1"
+        },
+        {
+          "type": "text",
+          "text": "Now let me run the full test suite one final time to confirm everything is clean:",
+          "time": {
+            "start": 1772519669489,
+            "end": 1772519669489
+          },
+          "id": "prt_cb267ba9f002H5114MHfGLi5CG",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb267b006001p0NyC9R1vVuOn1"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01XXsoTEYPjGD93PyUYncXS4",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./... -count=1 2>&1",
+              "description": "Final test suite run",
+              "timeout": 180000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos\t0.009s\nok  \tgithub.com/kastheco/kasmos/app\t7.376s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.015s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.539s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.010s\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.011s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.010s\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.021s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.032s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.010s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.013s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.017s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.108s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.003s\nok  \tgithub.com/kastheco/kasmos/keys\t0.003s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/session\t0.017s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.024s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.107s\nok  \tgithub.com/kastheco/kasmos/ui\t0.020s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.012s\n",
+            "title": "Final test suite run",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos\t0.009s\nok  \tgithub.com/kastheco/kasmos/app\t7.376s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.015s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.539s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.010s\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.011s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.010s\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.021s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.032s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.010s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.013s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.017s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.010s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.108s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.003s\nok  \tgithub.com/kastheco/kasmos/keys\t0.003s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/session\t0.017s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.024s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.107s\nok  \tgithub.com/kastheco/kasmos/ui\t0.020s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.012s\n",
+              "exit": 0,
+              "description": "Final test suite run",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519670251,
+              "end": 1772519678254
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb267b006001p0NyC9R1vVuOn1"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_017MwtmRfuLAe6jGmfnPYJue",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD --name-only | rg '\\.go$' | xargs typos 2>&1",
+              "description": "Final typos check on changed files"
+            },
+            "output": "error: `tio` should be `to`\n    ╭▸ app/task_cancel_rename_delay_test.go:112:2\n    │\n112 │     tio := overlay.NewTextInputOverlay(\"rename plan\", \"zebra\")\n    ╰╴    ━━━\nerror: `tio` should be `to`\n    ╭▸ app/task_cancel_rename_delay_test.go:113:23\n    │\n113 │     h.textInputOverlay = tio\n    ╰╴                         ━━━\n",
+            "title": "Final typos check on changed files",
+            "metadata": {
+              "output": "error: `tio` should be `to`\n    ╭▸ app/task_cancel_rename_delay_test.go:112:2\n    │\n112 │     tio := overlay.NewTextInputOverlay(\"rename plan\", \"zebra\")\n    ╰╴    ━━━\nerror: `tio` should be `to`\n    ╭▸ app/task_cancel_rename_delay_test.go:113:23\n    │\n113 │     h.textInputOverlay = tio\n    ╰╴                         ━━━\n",
+              "exit": 123,
+              "description": "Final typos check on changed files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519671138,
+              "end": 1772519671241
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb267b006001p0NyC9R1vVuOn1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 145645,
+            "input": 1,
+            "output": 206,
+            "reasoning": 0,
+            "cache": {
+              "read": 145100,
+              "write": 338
+            }
+          },
+          "id": "prt_cb267e12f001vR8fP9ipZjA1xK",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb267b006001p0NyC9R1vVuOn1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519678267,
+          "completed": 1772519690134
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 146812,
+          "input": 1,
+          "output": 303,
+          "reasoning": 0,
+          "cache": {
+            "read": 145438,
+            "write": 1070
+          }
+        },
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "prt_cb267f6aa0018ubUWyBH7XOqpX",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass. The `tio` typos are false positives — it's a variable name abbreviation for `TextInputOverlay` that exists on main.\n\nNow let me update the todo list and write the signal file:",
+          "time": {
+            "start": 1772519685720,
+            "end": 1772519685720
+          },
+          "id": "prt_cb267f6ab001wXoa4U69bOiiE0",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "todowrite",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'",
+                  "status": "completed",
+                  "priority": "low"
+                },
+                {
+                  "content": "MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'",
+                  "status": "cancelled",
+                  "priority": "low"
+                },
+                {
+                  "content": "Write review signal file",
+                  "status": "in_progress",
+                  "priority": "high"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'\",\n    \"status\": \"completed\",\n    \"priority\": \"low\"\n  },\n  {\n    \"content\": \"MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'\",\n    \"status\": \"cancelled\",\n    \"priority\": \"low\"\n  },\n  {\n    \"content\": \"Write review signal file\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  }\n]",
+            "title": "2 todos",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'",
+                  "status": "completed",
+                  "priority": "low"
+                },
+                {
+                  "content": "MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'",
+                  "status": "cancelled",
+                  "priority": "low"
+                },
+                {
+                  "content": "Write review signal file",
+                  "status": "in_progress",
+                  "priority": "high"
+                }
+              ],
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519690092,
+              "end": 1772519690092
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 146812,
+            "input": 1,
+            "output": 303,
+            "reasoning": 0,
+            "cache": {
+              "read": 145438,
+              "write": 1070
+            }
+          },
+          "id": "prt_cb2680f8c001cCUejYhloZylxh",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519690137,
+          "completed": 1772519701496
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 147286,
+          "input": 1,
+          "output": 215,
+          "reasoning": 0,
+          "cache": {
+            "read": 146508,
+            "write": 562
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb2680f99001RRiv3r3tVp7kF3",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "prt_cb268222c001U99A422wrxfTuc",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2680f99001RRiv3r3tVp7kF3"
+        },
+        {
+          "type": "text",
+          "text": "Note on the cancelled item: The error message strings like `\"plan store unreachable\"`, `\"plan not found\"` etc. in the taskstore package are internal error strings, not user-facing. The plan's Task 6 specifically targets CLI and app-layer user-facing strings, and Task 7 targets HTTP API paths and SQL schema. The plan does not call for renaming internal error message strings in the taskstore package. These are acceptable as-is — they're internal implementation details that don't leak to users. Renaming them would be scope creep in the other direction.\n\nNow write the signal file:",
+          "time": {
+            "start": 1772519700865,
+            "end": 1772519700865
+          },
+          "id": "prt_cb268222d001dAh1S5I1Fu45X1",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2680f99001RRiv3r3tVp7kF3"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01JEuugTXsDd1LUj2CSo2LG4",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals",
+              "description": "Create signals directory"
+            },
+            "output": "",
+            "title": "Create signals directory",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Create signals directory",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519701319,
+              "end": 1772519701321
+            }
+          },
+          "id": "prt_cb2683990001UTYrxhEx45BaTw",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2680f99001RRiv3r3tVp7kF3"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 147286,
+            "input": 1,
+            "output": 215,
+            "reasoning": 0,
+            "cache": {
+              "read": 146508,
+              "write": 562
+            }
+          },
+          "id": "prt_cb2683bef001WXdje0I13PBfQG",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2680f99001RRiv3r3tVp7kF3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519701499,
+          "completed": 1772519710407
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 147616,
+          "input": 1,
+          "output": 304,
+          "reasoning": 0,
+          "cache": {
+            "read": 147070,
+            "write": 241
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb2683bfb001OlCWxRHYmELKYE",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2683bfb001OlCWxRHYmELKYE"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01JgyjZMSg2LHC3YodeZtwhJ",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task/.kasmos/signals/review-approved-rename-plan-to-task.md",
+              "content": "Approved. all 7 tasks complete across 3 waves. package renames (planstore→taskstore, planstate→taskstate, planfsm→taskfsm, planparser→taskparser), struct/field renames (PlanFile→TaskFile, PlanState→TaskState, etc.), CLI command rename (plan→task), HTTP API path migration (/plans→/tasks), SQLite schema migration (plans→tasks table), and backwards-compatible JSON deserialization all verified. two self-fixes applied: (1) critical migration ordering bug where CREATE TABLE ran before ALTER TABLE RENAME, which would silently orphan existing data on upgrade, and (2) restored docs/plans/ files that were deleted out of scope plus fixed ~40 stale doc comments still referencing \"plan\" in the taskstore package. all tests pass (28 packages, 0 failures).\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": ".kasmos/signals/review-approved-rename-plan-to-task.md",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task/config/taskstore/sqlite.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task/config/taskstore/http.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task/.kasmos/signals/review-approved-rename-plan-to-task.md",
+              "exists": false,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519710379,
+              "end": 1772519710381
+            }
+          },
+          "id": "prt_cb268468d001ZzrVBDSm0G5P6J",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2683bfb001OlCWxRHYmELKYE"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 147616,
+            "input": 1,
+            "output": 304,
+            "reasoning": 0,
+            "cache": {
+              "read": 147070,
+              "write": 241
+            }
+          },
+          "id": "prt_cb2685ebd0014QpRH1bBXQSQsD",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2683bfb001OlCWxRHYmELKYE"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519710411,
+          "completed": 1772519720141
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 147883,
+          "input": 1,
+          "output": 251,
+          "reasoning": 0,
+          "cache": {
+            "read": 147311,
+            "write": 320
+          }
+        },
+        "finish": "tool-calls",
+        "id": "msg_cb2685ecb001m7ydvoWTqXgXk5",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2685ecb001m7ydvoWTqXgXk5"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "todowrite",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'",
+                  "status": "completed",
+                  "priority": "low"
+                },
+                {
+                  "content": "MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'",
+                  "status": "cancelled",
+                  "priority": "low"
+                },
+                {
+                  "content": "Write review signal file",
+                  "status": "completed",
+                  "priority": "high"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'\",\n    \"status\": \"completed\",\n    \"priority\": \"low\"\n  },\n  {\n    \"content\": \"MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'\",\n    \"status\": \"cancelled\",\n    \"priority\": \"low\"\n  },\n  {\n    \"content\": \"Write review signal file\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  }\n]",
+            "title": "1 todos",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "CRITICAL: SQLite migration ordering — schema creates empty tasks table before rename migration runs, causing data loss on upgrade",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "CRITICAL: docs/plans/ files deleted — plan explicitly says leave docs/plans/ as-is",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "MINOR: Stale doc comments in taskstore package still say 'plan' instead of 'task'",
+                  "status": "completed",
+                  "priority": "low"
+                },
+                {
+                  "content": "MINOR: Stale error message strings in taskstore still say 'plan store' and 'plan not found'",
+                  "status": "cancelled",
+                  "priority": "low"
+                },
+                {
+                  "content": "Write review signal file",
+                  "status": "completed",
+                  "priority": "high"
+                }
+              ],
+              "truncated": false
+            },
+            "time": {
+              "start": 1772519720098,
+              "end": 1772519720099
+            }
+          },
+          "id": "prt_cb2687de4001NhRC778o40aEQB",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2685ecb001m7ydvoWTqXgXk5"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 147883,
+            "input": 1,
+            "output": 251,
+            "reasoning": 0,
+            "cache": {
+              "read": 147311,
+              "write": 320
+            }
+          },
+          "id": "prt_cb26884c400114MGifUX15Fnrh",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb2685ecb001m7ydvoWTqXgXk5"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772519720144,
+          "completed": 1772519737967
+        },
+        "parentID": "msg_cb260472c001prLaJYfSTJ3VFm",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-rename-plan-to-task"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 148141,
+          "input": 1,
+          "output": 625,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 147515
+          }
+        },
+        "finish": "stop",
+        "id": "msg_cb26884d00017VVpGfRt16mOqt",
+        "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "id": "REDACTED",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb26884d00017VVpGfRt16mOqt"
+        },
+        {
+          "type": "text",
+          "text": "## Review Summary — Round 1\n\n### Spec Compliance\n\nAll 7 tasks across 3 waves are implemented correctly:\n\n| Task                                                         | Status | Notes                                                                                              |\n| ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------- |\n| Task 1: Rename config/planstore → config/taskstore           | ✅     | Package, types, imports all updated                                                                |\n| Task 2: Rename config/planstate → config/taskstate           | ✅     | Package, types, methods all updated                                                                |\n| Task 3: Rename config/planfsm → config/taskfsm               | ✅     | Package, types, Signal.TaskFile field correct                                                      |\n| Task 4: Rename config/planparser → config/taskparser         | ✅     | Package and file renames correct                                                                   |\n| Task 5: Rename PlanFile→TaskFile, vars/methods, file renames | ✅     | Struct fields, JSON tags, backwards-compat UnmarshalJSON, config PlanStore→DatabaseURL all correct |\n| Task 6: CLI command names and user-facing strings            | ✅     | `kq task` command, context menu labels, toast messages updated                                       |\n| Task 7: HTTP API paths and SQLite schema migration           | ✅     | Routes /plans→/tasks, SQL table renamed, migration helper present                                  |\n\n### Issues Found and Resolved (Self-Fixed)\n\n**Critical — SQLite migration ordering (`config/taskstore/sqlite.go:71-77`):** The `CREATE TABLE IF NOT EXISTS tasks` ran before `migrateRenameTable(\"plans\", \"tasks\")`. For existing databases with a `plans` table, this would create an empty `tasks` table, causing the rename migration to skip (since `tasks` already exists), silently orphaning all existing data. **Fixed** by moving `migrateRenameTable` before the schema `CREATE TABLE`.\n\n**Critical — docs/plans/ files deleted:** All 9 plan files in `docs/plans/` were deleted. The plan explicitly states \"The `docs/plans/` directory is left as-is since a pending task will move plan content to the database.\" **Fixed** by restoring all files from main.\n\n**Minor — ~40 stale doc comments in taskstore package:** Doc comments on exported functions in `sqlite.go`, `http.go`, and `server.go` still referenced \"plan entry\", \"plan store\", \"plans table\" despite the package being renamed to `taskstore` with `TaskEntry` types. **Fixed** via batch `sd` replacements.\n\n### Verification\n\n- `go test ./...` — 28 packages, 0 failures\n- `go build ./...` — clean\n- `typos` — only false positives on pre-existing `tio` variable name",
+          "time": {
+            "start": 1772519737867,
+            "end": 1772519737867
+          },
+          "id": "prt_cb26895c6001ee7sB7sRBmprzZ",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb26884d00017VVpGfRt16mOqt"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "f939c29faa51d6319314c82974ddeef4d3378d3d",
+          "cost": 0,
+          "tokens": {
+            "total": 148141,
+            "input": 1,
+            "output": 625,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 147515
+            }
+          },
+          "id": "prt_cb268ca65001zUU9z5gdwtqRi4",
+          "sessionID": "ses_34d9fb8e2fferum7Ud5erP1gLG",
+          "messageID": "msg_cb26884d00017VVpGfRt16mOqt"
         }
       ]
     }
