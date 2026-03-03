@@ -3,7 +3,7 @@
   "checkpoint_id": "9f4e7ab2a6f4",
   "strategy": "manual-commit",
   "branch": "plan/restart-agent",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     ".claude/settings.json",
     ".entire/.gitignore",
@@ -88,13 +88,20 @@
       "context": "/9f/4e7ab2a6f4/9/context.md",
       "content_hash": "/9f/4e7ab2a6f4/9/content_hash.txt",
       "prompt": "/9f/4e7ab2a6f4/9/prompt.txt"
+    },
+    {
+      "metadata": "/9f/4e7ab2a6f4/10/metadata.json",
+      "transcript": "/9f/4e7ab2a6f4/10/full.jsonl",
+      "context": "/9f/4e7ab2a6f4/10/context.md",
+      "content_hash": "/9f/4e7ab2a6f4/10/content_hash.txt",
+      "prompt": "/9f/4e7ab2a6f4/10/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 269,
-    "cache_creation_tokens": 521906,
-    "cache_read_tokens": 23956221,
-    "output_tokens": 53147,
-    "api_call_count": 257
+    "input_tokens": 286,
+    "cache_creation_tokens": 600700,
+    "cache_read_tokens": 24595025,
+    "output_tokens": 55810,
+    "api_call_count": 268
   }
 }
