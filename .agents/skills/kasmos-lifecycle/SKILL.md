@@ -21,7 +21,7 @@ Plans move through a fixed set of states. Only the transitions listed below are 
 | `reviewing` | `done` | reviewer writes sentinel `reviewer-approved-<planfile>` |
 | `done` | — | terminal state, no further transitions |
 
-State is persisted in the **plan store** — a SQLite database (`~/.config/kasmos/planstore.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas plan` CLI commands (manual mode).
+State is persisted in the **task store** — a SQLite database (`~/.config/kasmos/kasmos.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas task` CLI commands (manual mode).
 
 ## Signal File Mechanics
 
@@ -37,7 +37,7 @@ Examples:
 
 **How kasmos processes sentinels:**
 1. kasmos scans `.kasmos/signals/` every ~500ms
-2. On detecting a sentinel, kasmos reads it, validates the event against the current plan state, and applies the transition
+2. On detecting a sentinel, kasmos reads it, validates the event against the current task state, and applies the transition
 3. The sentinel file is consumed (deleted) after processing — do not rely on it persisting
 4. Sentinel content is optional; kasmos uses the filename to determine the event type
 
@@ -56,17 +56,17 @@ Check `KASMOS_MANAGED` to determine how transitions are handled.
 | Mode | `KASMOS_MANAGED` value | Transition mechanism |
 |------|------------------------|---------------------|
 | managed | `1` (or any non-empty) | write sentinel → kasmos handles the rest |
-| manual | unset or empty | use `kas plan` CLI commands (e.g. `kas plan register`, `kas plan transition`) |
+| manual | unset or empty | use `kas task` CLI commands (e.g. `kas task register`, `kas task transition`) |
 
 ```bash
 if [ -n "$KASMOS_MANAGED" ]; then
   echo "managed mode: write sentinel and stop"
 else
-  echo "manual mode: use kas plan CLI commands to register and transition plans"
+  echo "manual mode: use kas task CLI commands to register and transition plans"
 fi
 ```
 
-In managed mode: **never** mutate plan state yourself. In manual mode: use `kas plan` CLI commands — the store backend handles persistence.
+In managed mode: **never** mutate task state yourself. In manual mode: use `kas task` CLI commands — the store backend handles persistence.
 
 ## Agent Roles (brief)
 

@@ -16,11 +16,11 @@ Before writing code, load the `kasmos-coder` skill.
 Do NOT ask the user if they want to commit — just do it. Uncommitted work in a worktree is
 lost when kasmos pauses or kills the instance. This is non-negotiable.
 
-## Plan State
+## Task State
 
-Plan state is stored in the **plan store** (SQLite database or HTTP API), not in files on disk.
-Use `kas plan` CLI commands for all state mutations. When you finish implementing a plan,
-transition it via `kas plan set-status <plan> done --force`. Valid statuses: `ready`, `planning`,
+Task state is stored in the **task store** (SQLite database or HTTP API), not in files on disk.
+Use `kas task` CLI commands for all state mutations. When you finish implementing a plan,
+transition it via `kas task set-status <plan> done --force`. Valid statuses: `ready`, `planning`,
 `implementing`, `reviewing`, `done`, `cancelled`.
 
 ## CLI Tools (MANDATORY)

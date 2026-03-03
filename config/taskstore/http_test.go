@@ -70,7 +70,7 @@ func TestHTTPStore_ServerUnreachable(t *testing.T) {
 	_, err := client.List("kasmos")
 	require.Error(t, err)
 	// Error should be recognizable as a connectivity issue
-	assert.Contains(t, err.Error(), "plan store unreachable")
+	assert.Contains(t, err.Error(), "task store unreachable")
 }
 
 func TestHTTPStore_Ping(t *testing.T) {

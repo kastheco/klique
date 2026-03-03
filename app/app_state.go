@@ -574,7 +574,7 @@ func (m *home) loadTaskState() {
 	if err != nil {
 		log.WarningLog.Printf("could not load plan state: %v", err)
 		if m.toastManager != nil {
-			m.toastManager.Error("plan store error: " + err.Error())
+			m.toastManager.Error("task store error: " + err.Error())
 		}
 		return
 	}
@@ -1001,7 +1001,7 @@ func (m *home) materializeTaskFile(planFile, repoPath string) error {
 }
 
 // ingestTaskContent reads the plan markdown file from the given repo path and
-// stores its content in the DB via the plan store. This bridges the gap between
+// stores its content in the DB via the task store. This bridges the gap between
 // agents writing plan files to their worktree and the DB being the source of truth.
 // Called when a PlannerFinished signal is processed.
 func (m *home) ingestTaskContent(planFile, repoPath string) {
@@ -1069,7 +1069,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 func (m *home) createTaskEntry(name, description, topic string) error {
 	if m.taskState == nil {
 		if m.taskStore == nil {
-			return fmt.Errorf("plan store not configured")
+			return fmt.Errorf("task store not configured")
 		}
 		ps, err := taskstate.Load(m.taskStore, m.taskStoreProject, m.taskStateDir)
 		if err != nil {
@@ -1083,7 +1083,7 @@ func (m *home) createTaskEntry(name, description, topic string) error {
 	branch := "plan/" + slug
 	if err := m.taskState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
 		if m.toastManager != nil {
-			m.toastManager.Error("plan store error: " + err.Error())
+			m.toastManager.Error("task store error: " + err.Error())
 		}
 		return err
 	}
@@ -1118,7 +1118,7 @@ func renderPlanStub(name, description, filename string) string {
 func (m *home) createPlanRecord(planFile, description, branch string, now time.Time) error {
 	if m.taskState == nil {
 		if m.taskStore == nil {
-			return fmt.Errorf("plan store not configured")
+			return fmt.Errorf("task store not configured")
 		}
 		ps, err := taskstate.Load(m.taskStore, m.taskStoreProject, m.taskStateDir)
 		if err != nil {
@@ -1128,7 +1128,7 @@ func (m *home) createPlanRecord(planFile, description, branch string, now time.T
 	}
 	if err := m.taskState.Register(planFile, description, branch, now); err != nil {
 		if m.toastManager != nil {
-			m.toastManager.Error("plan store error: " + err.Error())
+			m.toastManager.Error("task store error: " + err.Error())
 		}
 		return err
 	}

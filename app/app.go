@@ -244,10 +244,10 @@ type home struct {
 	// signalsDir is the directory where agent sentinel files are written.
 	// Defaults to <repoRoot>/.kasmos/signals/ (project-local, gitignored).
 	signalsDir string
-	// embeddedServer is the in-process HTTP+SQLite plan store server started on boot.
+	// embeddedServer is the in-process HTTP+SQLite task store server started on boot.
 	// Always non-nil after newHome() returns.
 	embeddedServer *taskstore.EmbeddedServer
-	// taskStore is the plan store client. Always non-nil after newHome() returns —
+	// taskStore is the task store client. Always non-nil after newHome() returns —
 	// points at the embedded server URL unless appConfig.DatabaseURL overrides it.
 	taskStore taskstore.Store
 	// taskStoreProject is the project name used with the remote store (derived from repo basename).
@@ -385,27 +385,27 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		pendingReviewFeedback: make(map[string]string),
 	}
 
-	// Always start an embedded plan store server. This gives us a local SQLite
+	// Always start an embedded task store server. This gives us a local SQLite
 	// DB as the single source of truth without requiring a separate process.
 	dbPath := taskstore.ResolvedDBPath()
 	embSrv, err := taskstore.StartEmbedded(dbPath, 0)
 	if err != nil {
-		fmt.Printf("Failed to start embedded plan store: %v\n", err)
+		fmt.Printf("Failed to start embedded task store: %v\n", err)
 		os.Exit(1)
 	}
 	h.embeddedServer = embSrv
 
-	// Default: use the embedded server's URL for the plan store client.
+	// Default: use the embedded server's URL for the task store client.
 	storeURL := embSrv.URL()
 	remoteStoreUnreachable := false
 
-	// If a remote plan store is configured, use that URL instead (multi-machine
+	// If a remote task store is configured, use that URL instead (multi-machine
 	// access over tailscale, etc.). The embedded server still runs for audit log
 	// DB access via its SQLite store.
 	if appConfig.DatabaseURL != "" {
 		remoteStore := taskstore.NewHTTPStore(appConfig.DatabaseURL, project)
 		if pingErr := remoteStore.Ping(); pingErr != nil {
-			log.WarningLog.Printf("remote plan store unreachable: %v — falling back to embedded", pingErr)
+			log.WarningLog.Printf("remote task store unreachable: %v — falling back to embedded", pingErr)
 			remoteStoreUnreachable = true
 			// storeURL stays as the embedded server URL
 		} else {
@@ -445,10 +445,10 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.toastManager = overlay.NewToastManager(&h.spinner)
 	h.overlays = overlay.NewManager()
 
-	// Show a warning toast if a remote plan store was configured but unreachable
+	// Show a warning toast if a remote task store was configured but unreachable
 	// (we fell back to the embedded server).
 	if remoteStoreUnreachable {
-		h.toastManager.Error("remote plan store unreachable — using embedded store")
+		h.toastManager.Error("remote task store unreachable — using embedded store")
 	}
 
 	permCacheDir := filepath.Join(activeRepoPath, ".kasmos")

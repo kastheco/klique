@@ -16,12 +16,12 @@ import (
 )
 
 // executeTaskRegister registers a plan file that exists on disk but isn't
-// tracked in plan state yet. It extracts a description from the first markdown
+// tracked in task state yet. It extracts a description from the first markdown
 // heading and uses the conventional branch name format.
 func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
 	if _, err := os.Stat(fullPath); err != nil {
-		return fmt.Errorf("plan file not found on disk: %s", fullPath)
+		return fmt.Errorf("task file not found on disk: %s", fullPath)
 	}
 	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
@@ -69,7 +69,7 @@ func executeTaskList(plansDir, statusFilter string, store taskstore.Store) strin
 }
 
 // executeTaskListWithStore returns a formatted string listing all plans from a
-// remote store backend. storeURL is the base URL of the plan store server
+// remote store backend. storeURL is the base URL of the task store server
 // (e.g. "http://athena:7433") and project is the project name to query.
 func executeTaskListWithStore(storeURL, project string) string {
 	store := taskstore.NewHTTPStore(storeURL, project)
@@ -89,7 +89,7 @@ func executeTaskListWithStore(storeURL, project string) string {
 // Requires force=true to prevent accidental misuse.
 func executeTaskSetStatus(plansDir, planFile, status string, force bool, store taskstore.Store) error {
 	if !force {
-		return fmt.Errorf("--force required to override plan status (this bypasses the FSM)")
+		return fmt.Errorf("--force required to override task status (this bypasses the FSM)")
 	}
 	ps, err := loadTaskState(plansDir, store)
 	if err != nil {
@@ -146,7 +146,7 @@ func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.S
 	}
 	entry, ok := ps.Entry(planFile)
 	if !ok {
-		return fmt.Errorf("plan not found: %s", planFile)
+		return fmt.Errorf("task not found: %s", planFile)
 	}
 	current := taskfsm.Status(entry.Status)
 	// If still in planning, finish that phase first (→ ready).
@@ -181,7 +181,7 @@ func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.S
 func executeTaskLinkClickUp(project string, store taskstore.Store) (int, error) {
 	plans, err := store.List(project)
 	if err != nil {
-		return 0, fmt.Errorf("list plans: %w", err)
+		return 0, fmt.Errorf("list tasks: %w", err)
 	}
 
 	updated := 0
@@ -331,7 +331,7 @@ func NewTaskCmd() *cobra.Command {
 				var err error
 				store, err = localSQLiteStore()
 				if err != nil {
-					return fmt.Errorf("open local plan store: %w", err)
+					return fmt.Errorf("open local task store: %w", err)
 				}
 				defer store.Close()
 			}
@@ -380,7 +380,7 @@ func projectFromPlansDir(plansDir string) string {
 	return filepath.Base(filepath.Dir(filepath.Dir(plansDir)))
 }
 
-// localSQLiteStore opens (or creates) the local SQLite plan store at the
+// localSQLiteStore opens (or creates) the local SQLite task store at the
 // canonical path returned by taskstore.ResolvedDBPath(). Used as a fallback
 // when no remote store is configured.
 func localSQLiteStore() (taskstore.Store, error) {
@@ -391,14 +391,14 @@ func localSQLiteStore() (taskstore.Store, error) {
 	return taskstore.NewSQLiteStore(dbPath)
 }
 
-// loadTaskState loads plan state using the store backend.
+// loadTaskState loads task state using the store backend.
 // When store is nil, falls back to the local SQLite store.
 func loadTaskState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()
 		if err != nil {
-			return nil, fmt.Errorf("open local plan store: %w", err)
+			return nil, fmt.Errorf("open local task store: %w", err)
 		}
 	}
 	return taskstate.Load(store, projectFromPlansDir(plansDir), plansDir)
@@ -413,14 +413,14 @@ func newFSM(plansDir string, store taskstore.Store) *taskfsm.TaskStateMachine {
 		if err != nil {
 			// Panic is acceptable here — this is a CLI tool and the store
 			// is required for all operations.
-			panic("newFSM: open local plan store: " + err.Error())
+			panic("newFSM: open local task store: " + err.Error())
 		}
 	}
 	project := projectFromPlansDir(plansDir)
 	return taskfsm.New(store, project, plansDir)
 }
 
-// resolveStore returns the remote plan store from config, or nil if not
+// resolveStore returns the remote task store from config, or nil if not
 // configured or unreachable.
 func resolveStore(plansDir string) taskstore.Store {
 	store, _ := resolveStoreConfig(plansDir)

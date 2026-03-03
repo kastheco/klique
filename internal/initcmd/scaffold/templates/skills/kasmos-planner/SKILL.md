@@ -66,7 +66,7 @@ the plan lifecycle FSM: `ready → planning → implementing → reviewing → d
 
 **your work covers:** `(any state) → planning → ready`
 
-- kasmos sets the plan status to `planning` when it spawns you
+- kasmos sets the task status to `planning` when it spawns you
 - you explore the design, write the plan doc, signal completion
 - kasmos picks it up and moves it to `implementing` when the user triggers execution
 - you do NOT implement, review, or merge — stop after signaling
@@ -135,8 +135,8 @@ approach, update your recommendation and confirm before proceeding.
 
 **plan naming convention:** `<feature-name>.md`
 
-Plans are stored in the **plan store** (SQLite database or HTTP API), not as files on disk.
-Use `kas plan register` to register plans after writing content.
+Plans are stored in the **task store** (SQLite database or HTTP API), not as files on disk.
+Use `kas task register` to register plans after writing content.
 
 ### required header
 
@@ -336,10 +336,10 @@ TodoWrite([
 
 ### 2. register and commit the plan
 
-**managed mode:** the plan content is passed to kasmos via sentinel — kasmos registers it
-in the plan store. you don't need to commit a separate file.
+**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it
+in the task store. you don't need to commit a separate file.
 
-**manual mode:** use the `kas plan register` CLI command to register the plan in the store,
+**manual mode:** use the `kas task register` CLI command to register the plan in the store,
 then commit any supporting files (design docs, etc.) if needed.
 
 do NOT commit sentinel files — kasmos consumes and deletes them automatically.
@@ -363,9 +363,9 @@ mkdir -p .kasmos/signals
 touch .kasmos/signals/planner-finished-<feature-name>.md
 ```
 
-the filename must match the plan filename exactly (with `planner-finished-` prefix).
+the filename must match the task filename exactly (with `planner-finished-` prefix).
 
-**do NOT modify plan state directly** — kasmos manages the plan store.
+**do NOT modify task state directly** — kasmos manages the task store.
 
 announce completion and stop:
 
@@ -375,19 +375,19 @@ announce completion and stop:
 
 ### manual mode (`KASMOS_MANAGED` unset)
 
-register the plan in the plan store using the CLI:
+register the plan in the task store using the CLI:
 
 ```bash
-kas plan register <feature-name>.md
+kas task register <feature-name>.md
 ```
 
-this creates an entry in the plan store with status `ready`. the plan content should be
-written to the store via `kas plan` or committed as a `.md` file in `docs/plans/` for
-`kas plan register` to pick up.
+this creates an entry in the task store with status `ready`. the task content should be
+written to the store via `kas task` or committed as a `.md` file in `docs/plans/` for
+`kas task register` to pick up.
 
 then offer execution choices:
 
-> "plan complete: `<feature-name>.md` (registered in plan store). two execution options:
+> "plan complete: `<feature-name>.md` (registered in task store). two execution options:
 >
 > **1. this session** — i dispatch a fresh subagent per task, self-review between waves.
 >

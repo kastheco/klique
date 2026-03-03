@@ -482,7 +482,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 // planning→ready→implementing two-step when called after a planner finishes.
 func (m *home) fsmSetImplementing(planFile string) error {
 	if m.taskState == nil {
-		return fmt.Errorf("plan state is not loaded")
+		return fmt.Errorf("task state is not loaded")
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
@@ -512,7 +512,7 @@ func (m *home) fsmSetImplementing(planFile string) error {
 // If already reviewing, it's a no-op (allows re-spawning a reviewer).
 func (m *home) fsmSetReviewing(planFile string) error {
 	if m.taskState == nil {
-		return fmt.Errorf("plan state is not loaded")
+		return fmt.Errorf("task state is not loaded")
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
@@ -540,7 +540,7 @@ func (m *home) fsmSetReviewing(planFile string) error {
 // Used when implementation can't start (e.g., missing wave headers).
 func (m *home) fsmRevertToPlanning(planFile string) error {
 	if m.taskState == nil {
-		return fmt.Errorf("plan state is not loaded")
+		return fmt.Errorf("task state is not loaded")
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
@@ -559,7 +559,7 @@ func (m *home) fsmRevertToPlanning(planFile string) error {
 // Used for start-over scenarios where branch history is reset.
 func (m *home) fsmForceToPlanning(planFile string) error {
 	if m.taskState == nil {
-		return fmt.Errorf("plan state is not loaded")
+		return fmt.Errorf("task state is not loaded")
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {

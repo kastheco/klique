@@ -64,7 +64,7 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 kasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:
 
-1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
+1. Read the task content from the task store (via `kas task` CLI or the task content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
 2. Implement that single task following TDD discipline below.
 3. Commit your work with task number in the commit message.
 4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
@@ -331,7 +331,7 @@ agent returns to its input prompt. The wave orchestrator handles all lifecycle t
 After implementing and committing your task: **stop.** Do not implement other tasks, do not
 write signal files, do not invoke branch finishing — kasmos handles orchestration.
 
-**Do not modify plan state directly.**
+**Do not modify task state directly.**
 
 ### Manual (KASMOS_MANAGED unset)
 
@@ -344,7 +344,7 @@ Execute waves sequentially:
 
 ```bash
 # Transition the plan to "reviewing" via CLI
-kas plan transition <plan-file> request_review
+kas task transition <task-file> request_review
 ```
 
 Then handle branch finishing — present these options to the user:
@@ -395,7 +395,7 @@ EOF
 ```
 Keep the worktree until the PR merges.
 
-**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.
+**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update task state.
 
 **Option 4 — Discard:** Confirm first with exact text `discard`. Then:
 ```bash
@@ -404,9 +404,9 @@ git worktree remove <worktree-path>
 git branch -D <feature-branch>
 ```
 
-Update plan status to `done` after options 1, 2, or 4:
+Update task status to `done` after options 1, 2, or 4:
 ```bash
-kas plan set-status <plan-file> done --force
+kas task set-status <task-file> done --force
 ```
 
 ---
@@ -422,5 +422,5 @@ kas plan set-status <plan-file> done --force
 | Performative agreement with reviewer | Technical verification, then act |
 | Implementing unclear review feedback | Ask for clarification on ALL unclear items first |
 | Running project-wide formatters | Scope formatters to your changed files only |
-| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |
+| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |
 | Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |

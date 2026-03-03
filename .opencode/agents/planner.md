@@ -17,30 +17,30 @@ before proceeding.
 
 ## Branch Policy
 
-Always commit plan files to the main branch. Do NOT create feature branches for planning work.
+Always commit task files to the main branch. Do NOT create feature branches for planning work.
 The feature branch for implementation is created by kasmos when the user triggers "implement".
 
 Only register implementation plans — never register design docs (*-design.md) as separate entries.
 
 ## Plan Registration (CRITICAL — must follow every time)
 
-Plan state is stored in the **plan store** (SQLite database or HTTP API), not in files on disk.
-Never modify plan state directly — use `kas plan` CLI commands or sentinel files.
+Task state is stored in the **task store** (SQLite database or HTTP API), not in files on disk.
+Never modify task state directly — use `kas task` CLI commands or sentinel files.
 
 **You MUST register every plan you write.** How you register depends on the environment.
 
 Registration steps (do both, never skip step 2):
-1. Write the plan content
+1. Write the task content
 2. Register the plan — check `$KASMOS_MANAGED` to determine method:
 
 **If `KASMOS_MANAGED=1` (running inside kasmos):** Create a sentinel file:
 `.kasmos/signals/planner-finished-<name>.md` (empty file — just `touch` it).
-kasmos will detect this and register the plan. **Do not modify plan state directly.**
+kasmos will detect this and register the plan. **Do not modify task state directly.**
 
 **If `KASMOS_MANAGED` is unset (raw terminal):** Use the CLI to register:
-`kas plan register <name>.md`
+`kas task register <name>.md`
 
-**Never modify plan statuses directly.** Only register NEW plans. Status transitions (`ready` →
+**Never modify task statuses directly.** Only register NEW plans. Status transitions (`ready` →
 `implementing` → `reviewing` → `done`) are managed by kasmos or the relevant workflow skill.
 
 ## CLI Tools (MANDATORY)
