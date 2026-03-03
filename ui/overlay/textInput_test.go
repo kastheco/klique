@@ -49,3 +49,22 @@ func TestTextInputOverlay_SetPlaceholder(t *testing.T) {
 	ti.SetPlaceholder("describe what you want to work on...")
 	assert.Contains(t, ti.Render(), "describe what you want to work on")
 }
+
+func TestTextInputOverlay_ImplementsOverlay(t *testing.T) {
+	var _ Overlay = NewTextInputOverlay("title", "")
+}
+
+func TestTextInputOverlay_HandleKey_Submit(t *testing.T) {
+	ti := NewTextInputOverlay("title", "hello")
+	result := ti.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.True(t, result.Submitted)
+	assert.Equal(t, "hello", result.Value)
+}
+
+func TestTextInputOverlay_HandleKey_Cancel(t *testing.T) {
+	ti := NewTextInputOverlay("title", "")
+	result := ti.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.True(t, result.Dismissed)
+	assert.False(t, result.Submitted)
+}
