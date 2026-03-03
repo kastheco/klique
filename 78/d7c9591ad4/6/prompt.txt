@@ -1,0 +1,74 @@
+review all open code and quad code skills to ensure that all of the casmo skills and agents are up to date with the latest changes in regards to the planstore, the http api, and sqlite database backing it. I just noticed a planner tried to access plan-state.json in the docs / plans directory.
+
+---
+
+1. cool with that; 2. delete them; 3. good idea; 4. good idea
+
+---
+
+yes then push bugfix release. do i need to rerun scaffolding or is my local project here and in ~/dev/freyja/backend both up to date?
+
+---
+
+do i need to do --clean or --force?
+
+---
+
+run 'just bi'
+
+---
+
+~/dev/freyja/backend   main [?↑7]
+❯ kms setup --force
+
+Syncing personal skills...
+  opencode     OK
+  claude       OK
+
+Installing enforcement hooks...
+  opencode     OK
+  claude       OK
+
+Writing config...
+  /home/kas/.config/kasmos/config.toml
+
+Scaffolding project: /home/kas/dev/freyja/backend
+  .agents/skills/cli-tools/SKILL.md        OK
+  .agents/skills/cli-tools/resources/ast-grep.md OK
+  .agents/skills/cli-tools/resources/comby.md OK
+  .agents/skills/cli-tools/resources/difftastic.md OK
+  .agents/skills/cli-tools/resources/rg.md OK
+  .agents/skills/cli-tools/resources/scc.md OK
+  .agents/skills/cli-tools/resources/sd.md OK
+  .agents/skills/cli-tools/resources/typos.md OK
+  .agents/skills/cli-tools/resources/yq.md OK
+  .agents/skills/kasmos-coder/SKILL.md     OK
+  .agents/skills/kasmos-fixer/SKILL.md     OK
+  .agents/skills/kasmos-lifecycle/SKILL.md OK
+  .agents/skills/kasmos-planner/SKILL.md   OK
+  .agents/skills/kasmos-reviewer/SKILL.md  OK
+  .claude/agents/chat.md                   OK
+  .opencode/agents/coder.md                OK
+  .opencode/agents/reviewer.md             OK
+  .opencode/agents/planner.md              OK
+  .opencode/agents/chat.md                 OK
+  .opencode/agents/fixer.md                OK
+  .opencode/opencode.jsonc                 OK
+
+Done! Run 'kas' to start.  ----- recheck to see if it worked
+
+---
+
+i ran the force command, then started two planners which then turned into 3 build agents but it should've been coders. when i launch opencode from the dir directly, i see the proper agents but they dont show when tabbing in interactive mode
+
+---
+
+yes opencode --agent coder works. and no i dont believe so its working fine in kasmos dir just not that dir. investigate please
+
+---
+
+no just bi
+
+---
+
+can you copy those files to the worktrees for implement-property-search-endpoint and implement-circuit-breaker-service?
