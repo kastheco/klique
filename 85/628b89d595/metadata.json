@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "85628b89d595",
+  "strategy": "manual-commit",
+  "branch": "plan/review-cycle-count-should-be-included",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_plan_completion_test.go",
+    "app/app_state.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/85/628b89d595/0/metadata.json",
+      "transcript": "/85/628b89d595/0/full.jsonl",
+      "context": "/85/628b89d595/0/context.md",
+      "content_hash": "/85/628b89d595/0/content_hash.txt",
+      "prompt": "/85/628b89d595/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 11557,
+    "cache_read_tokens": 1664638,
+    "output_tokens": 6744,
+    "api_call_count": 17
+  }
+}
