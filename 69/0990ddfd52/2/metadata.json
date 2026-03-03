@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "690990ddfd52",
+  "session_id": "ses_34eff496bffe5NDcdgdJkxTC9m",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-03T00:19:00.644295618Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/2026-03-02-kas-plan-register-flags.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c34dd5e57520",
+  "checkpoint_transcript_start": 30,
+  "transcript_lines_at_start": 30,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-03T00:19:00.589513357Z",
+    "agent_lines": 0,
+    "human_added": 180,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 180,
+    "agent_percentage": 0
+  }
+}
