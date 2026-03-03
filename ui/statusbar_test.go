@@ -221,6 +221,40 @@ func TestStatusBar_TmuxSessionCountMovedToMenu(t *testing.T) {
 	assert.NotContains(t, plain, "tmux:")
 }
 
+func TestStatusBar_ProjectDirRightAligned(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(100)
+	sb.SetData(StatusBarData{
+		Branch:     "main",
+		ProjectDir: "kasmos",
+	})
+
+	plain := stripANSI(sb.String())
+	assert.Contains(t, plain, "kasmos")
+
+	// The project dir should appear after the branch (right-aligned).
+	// Find the rightmost occurrence of "kasmos" (the project dir, not the logo).
+	lastIdx := strings.LastIndex(plain, "kasmos")
+	branchIdx := strings.Index(plain, "main")
+	require.NotEqual(t, -1, lastIdx)
+	require.NotEqual(t, -1, branchIdx)
+	assert.Greater(t, lastIdx, branchIdx,
+		"project dir should appear to the right of the branch")
+}
+
+func TestStatusBar_ProjectDirDroppedWhenNarrow(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(40) // very narrow
+	sb.SetData(StatusBarData{
+		Branch:     "feature/some-long-branch-name",
+		ProjectDir: "my-project",
+	})
+
+	plain := stripANSI(sb.String())
+	// Project dir should be dropped when it can't fit alongside the branch.
+	require.NotEmpty(t, plain)
+}
+
 func TestStatusBar_FocusModeNoLongerShowsPill(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)

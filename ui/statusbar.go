@@ -25,6 +25,7 @@ type StatusBarData struct {
 	TaskGlyphs       []TaskGlyph // per-task status for wave progress
 	FocusMode        bool        // true when in interactive/focus mode
 	TmuxSessionCount int         // total kas_ tmux sessions (0 = hide)
+	ProjectDir       string      // project directory name, shown right-aligned
 }
 
 // StatusBar is the top status bar component.
@@ -70,6 +71,10 @@ var statusBarWaveLabelStyle = lipgloss.NewStyle().
 	Background(ColorSurface)
 
 var statusBarTmuxCountStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Background(ColorSurface)
+
+var statusBarProjectDirStyle = lipgloss.NewStyle().
 	Foreground(ColorMuted).
 	Background(ColorSurface)
 
@@ -163,6 +168,23 @@ func (s *StatusBar) String() string {
 		centerWidth = 0
 	}
 
+	// Right group: project directory name (only when there's room).
+	right := ""
+	rightWidth := 0
+	if s.data.ProjectDir != "" {
+		right = statusBarProjectDirStyle.Render(s.data.ProjectDir)
+		rightWidth = lipgloss.Width(right)
+	}
+
+	// Position right group at the end of the content area.
+	rightStart := contentWidth - rightWidth
+	// Drop right group if it would overlap with center.
+	if right != "" && rightStart < centerStart+centerWidth+1 {
+		right = ""
+		rightWidth = 0
+		rightStart = contentWidth
+	}
+
 	var b strings.Builder
 	cursor := 0
 	writeAt := func(start, visualWidth int, text string) {
@@ -181,6 +203,7 @@ func (s *StatusBar) String() string {
 
 	writeAt(0, leftWidth, left)
 	writeAt(centerStart, centerWidth, center)
+	writeAt(rightStart, rightWidth, right)
 
 	if cursor < contentWidth {
 		b.WriteString(strings.Repeat(" ", contentWidth-cursor))
