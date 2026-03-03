@@ -1,0 +1,938 @@
+{
+  "info": {
+    "id": "ses_34aedd43fffeXdGvVhxkD1axpn",
+    "slug": "stellar-nebula",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+    "title": "kas: implement 03-rewrite-ui-panels w2/t6",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772564392896,
+      "updated": 1772564427595
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772564392921
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb5122bce0012gLMInWHuQka8a",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 7: Rewrite navigation_panel.go — Sidebar Plan/Instance Tree\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.\n**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.\n**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify\n\n## Wave 2 of 3\n\n## Parallel Execution\n\nYou are Task 7 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `ui/navigation_panel.go`\n- Test: `ui/nav_panel_test.go` (existing — 1004 LOC, 40+ test functions covering row building, sorting, navigation, expand/collapse, search, rendering, cycle, selection persistence)\n\n**Step 1: write the failing test**\n\nNo new tests needed. Existing `nav_panel_test.go` is the most comprehensive test file in the package, covering: empty panel, plans with instances, solo instances, mixed plan+solo, history/cancelled sections, dead section partitioning (done plans with running/non-running/mixed instances), history expansion, dead section collapsibility, ClickUp import action, sort ordering (notifications first, instance sort within plan), navigation (up/down/left/right with solo header skipping), expand/collapse (plan header, instance returns false, auto-collapse, user override persistence), selection API (GetSelectedInstance, GetSelectedPlanFile, IsSelectedPlanHeader, SelectByID, SelectInstance, GetSelectedID), selection persistence across rebuild, Kill/Remove, search (activate/deactivate, filter visible rows), rendering (section headers, instance display titles with wave/task, legend, review cycle numbers, implementing/reviewing plans in active section), CycleNextActive/CyclePrevActive (skips paused, auto-expands collapsed plans), FindPlanInstance (prefers running), and misc (SetSize, SetFocused, SelectedSpaceAction, AddInstance, Clear, SelectFirst, ClickItem).\n\n**Step 2: run test to verify baseline passes**\n\n```bash\ngo test ./ui/... -run \"Test\" -v -count=1 2>&1 | tail -5\n```\n\nexpected: PASS\n\n**Step 3: rewrite implementation**\n\nDelete the contents of `ui/navigation_panel.go` and rewrite from scratch:\n\n- **Constants** — `SidebarPlanPrefix = \"__plan__\"`, `SidebarTopicPrefix = \"__topic__\"`, `SidebarPlanHistoryToggle = \"__plan_history_toggle__\"`, `SidebarImportClickUp = \"__import_clickup__\"`.\n- **`PlanDisplay` struct** — `Filename`, `Status`, `Description`, `Branch`, `Topic string`.\n- **`TopicStatus` struct** — `HasRunning`, `HasNotification bool`.\n- **`TopicDisplay` struct** — `Name string`, `Plans []PlanDisplay`.\n- **`navRowKind` type** — `int` enum: `navRowPlanHeader`, `navRowInstance`, `navRowSoloHeader`, `navRowTopicHeader`, `navRowImportAction`, `navRowDeadToggle`, `navRowDeadPlan`, `navRowHistoryToggle`, `navRowHistoryPlan`, `navRowCancelled`.\n- **`navRow` struct** — `Kind navRowKind`, `ID string`, `Label string`, `TaskFile string`, `PlanStatus string`, `Instance *session.Instance`, `Collapsed bool`, `HasRunning bool`, `HasNotification bool`, `Indent int`.\n- **Styles** — 15+ package-level `lipgloss.Style` vars for nav items, selection, sections, icons, search box (matching current visual output exactly).\n- **`NavigationPanel` struct** — fields: `spinner *spinner.Model`, `rows []navRow`, `selectedIdx int`, `scrollOffset int`, `plans []PlanDisplay`, `topics []TopicDisplay`, `instances []*session.Instance`, `deadPlans []PlanDisplay`, `historyPlans []PlanDisplay`, `promotedPlans []PlanDisplay`, `cancelled []PlanDisplay`, `planStatuses map[string]TopicStatus`, `collapsed map[string]bool`, `userOverrides map[string]bool`, `inspectedPlans map[string]bool`, `deadExpanded bool`, `historyExpanded bool`, `searchActive bool`, `searchQuery string`, `clickUpAvail bool`, `auditView string`, `auditHeight int`, `width int`, `height int`, `focused bool`.\n- **`NewNavigationPanel(sp *spinner.Model) *NavigationPanel`** — initializes maps, `deadExpanded: true`, `focused: true`.\n- **Data setters** — `SetData(plans, instances, history, cancelled, planStatuses)`, `SetPlans(plans)`, `SetTopicsAndPlans(topics, ungrouped, history, cancelled...)`, `SetPlanStatuses(statuses)`, `SetItems(...)` (legacy compat).\n- **`splitDeadFromHistory(finished []PlanDisplay)`** — partitions finished plans into three buckets based on instance state: promoted (has running instances → appended to active plans), dead (has non-running instances or manually inspected), history (no instances). Removes previously promoted plans before re-partitioning.\n- **`resplitDead()`** — recombines all finished plans and re-partitions.\n- **`InspectPlan(planFile string)`** — marks plan as inspected, re-partitions, expands dead section, rebuilds rows.\n- **`rebuildRows()`** — core row-building logic: preserves selected ID across rebuild. Groups instances by plan file, sorts instances within each plan (running < notified < paused < completed, alphabetical tiebreak). Sorts plans by sort key (notification=0, running/implementing/reviewing=1, idle=2, alphabetical tiebreak). Builds row list: optional ClickUp import action, dead section (toggle + plans if expanded), active plans (sort key < 2), solo instances with divider header, idle plans grouped by topic (with topic headers, collapsible), ungrouped idle plans, history section (toggle + plans if expanded), cancelled plans. Restores selection by ID or clamps to previous numeric position (skipping non-selectable dividers).\n- **Sort helpers** — `navInstanceSortKey(inst)` (implementation-complete=3, running/loading=0, paused=2, notified=1, default=3), `navPlanSortKey(p, insts, st)` (notification=0, running=1, implementing/reviewing=1, idle=2), `aggregateNavPlanStatus(insts, st)`.\n- **`isPlanCollapsed(planFile, hasRunning, hasNotification) bool`** — user override wins; default: collapsed unless running or notified.\n- **Layout** — `SetSize(width, height)`, `SetAuditView(view, h)`, `SetFocused(focused)`, `IsFocused()`, `SetClickUpAvailable(a)`, `availRows()` (height - 8, min 1), `clampScroll()`.\n- **Search** — `ActivateSearch()`, `DeactivateSearch()`, `IsSearchActive()`, `GetSearchQuery()`, `SetSearchQuery(q)` (snaps selection to first matching row), `rowMatchesSearch(idx)` (case-insensitive label/taskfile match).\n- **Navigation** — `Up()`/`Down()` (skip solo headers and search-hidden rows), `Left()` (collapse or jump to parent), `Right()` (expand or descend), `ToggleSelectedExpand()`.\n- **Selection API** — `GetSelectedInstance()`, `GetSelectedPlanFile()`, `IsSelectedPlanHeader()`, `IsSelectedHistoryPlan()`, `GetSelectedID()`, `GetSelectedIdx()`, `GetScrollOffset()`, `ClickItem(row)`, `SelectByID(id)`, `SelectInstance(inst)` (auto-expands collapsed plan), `SetSelectedInstance(idx)`, `SelectedIndex()`, `SelectFirst()` (skips solo header), `SelectedSpaceAction()`.\n- **Cycle** — `CycleNextActive()`/`CyclePrevActive()` via `cycleActive(step)`: builds ordered list of non-paused instances in visual order (including hidden instances under collapsed plan headers at their header position), wraps around, auto-expands via `SelectInstance`.\n- **Instance management** — `GetInstances()`, `TotalInstances()`, `NumInstances()`, `AddInstance(inst)`, `RemoveByTitle(title)`, `Remove()`, `Kill()`, `Attach()`, `Clear()`, `SetSessionPreviewSize(width, height)`, `FindPlanInstance(planFile)` (prefers running over ready, skips paused).\n- **Display helpers** — `navInstanceTitle(inst)` (wave/task format, review cycle, planner, solo agent, coder fix labels), `navInstanceStatusIcon(inst)` (spinner for running, colored glyphs for ready/notified/paused/exited/completed), `navPlanStatusIcon(row)`, `navSectionLabel(key)`, `navDividerLine(label, w)`.\n- **`renderNavRow(row, contentWidth) string`** — per-kind rendering: plan header (indent + chevron + label + gap + status icon), instance (indent + title + gap + status icon, solo vs plan-child styling, dead instance strikethrough), solo header divider, topic header (chevron + label), dead/history toggles, history plan (label + done icon), cancelled (strikethrough + ✕), import action (right-aligned).\n- **`String() string`** — builds bordered panel: border style (double+iris when focused, rounded+overlay otherwise). Inner content: search bar (active/inactive styling), visible items with section dividers between plan sort-key groups (active vs plans), scroll window centered on selected item, legend (icon key centered), optional audit view (bottom-pinned with gap splitting). Wraps in `zone.Mark(ZoneNavPanel, ...)`. Each row wrapped in `zone.Mark(NavRowZoneID(idx), ...)`.\n- **`isAuditContinuationLine(line string) bool`** — strips ANSI + leading spaces, returns true if first char is not a digit (not a timestamp line).\n- **`RowCount() int`** — returns `len(rows)`.\n\nImports: `fmt`, `sort`, `strings`, `github.com/charmbracelet/bubbles/spinner`, `github.com/charmbracelet/lipgloss`, `github.com/charmbracelet/x/ansi`, `github.com/kastheco/kasmos/config/taskstate`, `github.com/kastheco/kasmos/session`, `github.com/lrstanley/bubblezone`, `github.com/mattn/go-runewidth`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./ui/... -run \"Test\" -v -count=1 2>&1 | tail -5\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add ui/navigation_panel.go\ngit commit -m \"feat(clean-room): rewrite navigation_panel.go from scratch\"\n```",
+          "id": "prt_cb5122bce002jrhpbpFCGMxzX4",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122bce0012gLMInWHuQka8a"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564392931,
+          "completed": 1772564396852
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 43167,
+          "input": 3,
+          "output": 134,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 43030
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5122be3001SDkTs39wxpJqgM",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb51235b90014mdi69eBMbOC0d",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122be3001SDkTs39wxpJqgM"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then examining the existing code to understand what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqECCkYICxgCKkAQaGnzy8v0deOeLu/DAgZ1VKq4X16Ny0w/REDACTED/REDACTED/HC4GptNo1LTbAfHlAjAgru/REDACTED/R9i4JQg9qi/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564395449,
+            "end": 1772564396350
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122be3001SDkTs39wxpJqgM"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01JrW1myyRjdvNPdZeu22Qiu",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564396808,
+              "end": 1772564396813
+            }
+          },
+          "id": "prt_cb512393e001Z5VubPQfVrWzJB",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122be3001SDkTs39wxpJqgM"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01NmByHtQFWeeqqjoxtVhxnM",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564396823,
+              "end": 1772564396826
+            }
+          },
+          "id": "prt_cb5123b09001Eok98iSriy7UNI",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122be3001SDkTs39wxpJqgM"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 43167,
+            "input": 3,
+            "output": 134,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 43030
+            }
+          },
+          "id": "prt_cb5123b21001PwEo1IFzWBfjjF",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5122be3001SDkTs39wxpJqgM"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564396853,
+          "completed": 1772564400751
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 51510,
+          "input": 1,
+          "output": 217,
+          "reasoning": 0,
+          "cache": {
+            "read": 43030,
+            "write": 8262
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5123b35001Ej42v2amowDtp7",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb5123fd1001T4ivW69N5pYy0c",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        },
+        {
+          "type": "reasoning",
+          "text": "Good, I've loaded both skills. Now let me examine the existing navigation_panel.go file and the test file to understand what I need to implement.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/1SAR1OLOzItaxSVi2d/REDACTED/UMHIdN2fR5Av8fOpcT/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564398034,
+            "end": 1772564399186
+          },
+          "id": "prt_cb5123fd20015ymUoUrKF657jR",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        },
+        {
+          "type": "text",
+          "text": "Now let me examine the existing test file and current implementation:",
+          "time": {
+            "start": 1772564399582,
+            "end": 1772564399582
+          },
+          "id": "prt_cb5124452001KP5blHatswviDH",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/nav_panel_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/nav_panel_test.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/charmbracelet/bubbles/spinner\"\n7: \t\"github.com/kastheco/kasmos/session\"\n8: \t\"github.com/stretchr/testify/assert\"\n9: \t\"github.com/stretchr/testify/require\"\n10: )\n11: \n12: func newTestPanel() *NavigationPanel {\n13: \tsp := spinner.New(spinner.WithSpinner(spinner.Dot))\n14: \treturn NewNavigationPanel(&sp)\n15: }\n16: \n17: func makeInst(title, planFile string, status session.Status) *session.Instance {\n18: \treturn &session.Instance{\n19: \t\tTitle:    title,\n20: \t\tTaskFile: planFile,\n21: \t\tStatus:   status,\n22: \t}\n23: }\n24: \n25: // ---------- rebuildRows grouping ----------\n26: \n27: func TestRebuildRows_EmptyPanel(t *testing.T) {\n28: \tn := newTestPanel()\n29: \tn.SetData(nil, nil, nil, nil, nil)\n30: \tassert.Empty(t, n.rows)\n31: \tassert.Equal(t, 0, n.selectedIdx)\n32: }\n33: \n34: func TestRebuildRows_PlansWithInstances(t *testing.T) {\n35: \tn := newTestPanel()\n36: \tplans := []PlanDisplay{\n37: \t\t{Filename: \"plan-a.md\"},\n38: \t\t{Filename: \"plan-b.md\"},\n39: \t}\n40: \tinstances := []*session.Instance{\n41: \t\tmakeInst(\"a-impl\", \"plan-a.md\", session.Running),\n42: \t\tmakeInst(\"b-impl\", \"plan-b.md\", session.Running),\n43: \t}\n44: \tstatuses := map[string]TopicStatus{\n45: \t\t\"plan-a.md\": {HasRunning: true},\n46: \t\t\"plan-b.md\": {HasRunning: true},\n47: \t}\n48: \tn.SetData(plans, instances, nil, nil, statuses)\n49: \n50: \t// Both plans have running instances so they should be expanded.\n51: \t// Expected: plan-a header, a-impl, plan-b header, b-impl\n52: \trequire.Len(t, n.rows, 4)\n53: \tassert.Equal(t, navRowPlanHeader, n.rows[0].Kind)\n54: \tassert.Equal(t, navRowInstance, n.rows[1].Kind)\n55: \tassert.Equal(t, \"a-impl\", n.rows[1].Label)\n56: \tassert.Equal(t, navRowPlanHeader, n.rows[2].Kind)\n57: \tassert.Equal(t, navRowInstance, n.rows[3].Kind)\n58: }\n59: \n60: func TestRebuildRows_SoloInstances(t *testing.T) {\n61: \tn := newTestPanel()\n62: \tinstances := []*session.Instance{\n63: \t\tmakeInst(\"solo-1\", \"\", session.Running),\n64: \t\tmakeInst(\"solo-2\", \"\", session.Ready),\n65: \t}\n66: \tn.SetData(nil, instances, nil, nil, nil)\n67: \n68: \t// Solo instances: solo header + 2 instances\n69: \trequire.Len(t, n.rows, 3)\n70: \tassert.Equal(t, navRowSoloHeader, n.rows[0].Kind)\n71: \tassert.Equal(t, navRowInstance, n.rows[1].Kind)\n72: \tassert.Equal(t, navRowInstance, n.rows[2].Kind)\n73: }\n74: \n75: func TestRebuildRows_MixedPlanAndSolo(t *testing.T) {\n76: \tn := newTestPanel()\n77: \tplans := []PlanDisplay{{Filename: \"plan.md\"}}\n78: \tinstances := []*session.Instance{\n79: \t\tmakeInst(\"plan-impl\", \"plan.md\", session.Running),\n80: \t\tmakeInst(\"adhoc\", \"\", session.Running),\n81: \t}\n82: \tstatuses := map[string]TopicStatus{\"plan.md\": {HasRunning: true}}\n83: \tn.SetData(plans, instances, nil, nil, statuses)\n84: \n85: \t// plan header + plan instance + solo header + solo instance\n86: \trequire.Len(t, n.rows, 4)\n87: \tassert.Equal(t, navRowPlanHeader, n.rows[0].Kind)\n88: \tassert.Equal(t, navRowInstance, n.rows[1].Kind)\n89: \tassert.Equal(t, \"plan-impl\", n.rows[1].Label)\n90: \tassert.Equal(t, navRowSoloHeader, n.rows[2].Kind)\n91: \tassert.Equal(t, navRowInstance, n.rows[3].Kind)\n92: \tassert.Equal(t, \"adhoc\", n.rows[3].Label)\n93: }\n94: \n95: func TestRebuildRows_HistoryAndCancelled(t *testing.T) {\n96: \tn := newTestPanel()\n97: \thistory := []PlanDisplay{{Filename: \"old-plan.md\"}}\n98: \tcancelled := []PlanDisplay{{Filename: \"bad-plan.md\"}}\n99: \tn.SetData(nil, nil, history, cancelled, nil)\n100: \n101: \t// history toggle + cancelled row\n102: \trequire.Len(t, n.rows, 2)\n103: \tassert.Equal(t, navRowHistoryToggle, n.rows[0].Kind)\n104: \tassert.Equal(t, navRowCancelled, n.rows[1].Kind)\n105: }\n106: \n107: func TestRebuildRows_HistoryExpanded(t *testing.T) {\n108: \tn := newTestPanel()\n109: \thistory := []PlanDisplay{\n110: \t\t{Filename: \"old-a.md\"},\n111: \t\t{Filename: \"old-b.md\"},\n112: \t}\n113: \tn.SetData(nil, nil, history, nil, nil)\n114: \trequire.Len(t, n.rows, 1) // just the toggle, collapsed\n115: \n116: \t// Select the history toggle and expand it\n117: \tn.selectedIdx = 0\n118: \tn.ToggleSelectedExpand()\n119: \tassert.True(t, n.historyExpanded)\n120: \t// toggle + 2 history plans\n121: \trequire.Len(t, n.rows, 3)\n122: \tassert.Equal(t, navRowHistoryToggle, n.rows[0].Kind)\n123: \tassert.Equal(t, navRowHistoryPlan, n.rows[1].Kind)\n124: \tassert.Equal(t, navRowHistoryPlan, n.rows[2].Kind)\n125: }\n126: \n127: func TestRebuildRows_DeadSection_DonePlanWithNonRunningInstances(t *testing.T) {\n128: \tn := newTestPanel()\n129: \thistory := []PlanDisplay{{Filename: \"done-plan.md\", Status: \"done\"}}\n130: \t// Ready (non-running) instance — plan goes to dead section.\n131: \tinstances := []*session.Instance{makeInst(\"worker\", \"done-plan.md\", session.Ready)}\n132: \tn.SetData(nil, instances, history, nil, nil)\n133: \n134: \t// Done plan with non-running instances goes to dead section (expanded by default).\n135: \t// Plan header is auto-collapsed (no running instances), so no child instance rows.\n136: \trequire.True(t, len(n.rows) >= 2)\n137: \tassert.Equal(t, navRowDeadToggle, n.rows[0].Kind)\n138: \tassert.Equal(t, \"dead\", n.rows[0].Label)\n139: \tassert.Equal(t, navRowPlanHeader, n.rows[1].Kind)\n140: \t// No history toggle since the only done plan went to dead.\n141: \tfor _, row := range n.rows {\n142: \t\tassert.NotEqual(t, navRowHistoryToggle, row.Kind)\n143: \t}\n144: }\n145: \n146: func TestRebuildRows_DeadSection_Collapsible(t *testing.T) {\n147: \tn := newTestPanel()\n148: \thistory := []PlanDisplay{{Filename: \"done-plan.md\", Status: \"done\"}}\n149: \t// Use Ready (non-running) instance so plan goes to dead section.\n150: \tinstances := []*session.Instance{makeInst(\"worker\", \"done-plan.md\", session.Ready)}\n151: \tn.SetData(nil, instances, history, nil, nil)\n152: \n153: \t// Dead section is expanded by default.\n154: \tassert.True(t, n.deadExpanded)\n155: \trequire.True(t, len(n.rows) >= 2)\n156: \tassert.Equal(t, navRowPlanHeader, n.rows[1].Kind)\n157: \tassert.Equal(t, \"done-plan.md\", n.rows[1].TaskFile)\n158: \t// Plan header is auto-collapsed (no running instances), so instance row is hidden.\n159: \n160: \t// Collapse the dead section.\n161: \tn.selectedIdx = 0\n162: \tn.ToggleSelectedExpand()\n163: \tassert.False(t, n.deadExpanded)\n164: \trequire.Len(t, n.rows, 1)\n165: \tassert.Equal(t, navRowDeadToggle, n.rows[0].Kind)\n166: }\n167: \n168: func TestRebuildRows_DonePlanWithRunningInstances_AppearsInActiveSection(t *testing.T) {\n169: \tn := newTestPanel()\n170: \thistory := []PlanDisplay{{Filename: \"done-plan.md\", Status: \"done\"}}\n171: \tinstances := []*session.Instance{makeInst(\"worker\", \"done-plan.md\", session.Running)}\n172: \tn.SetData(nil, instances, history, nil, nil)\n173: \n174: \t// Done plan with running instances should NOT be in dead section.\n175: \t// It should appear as an active plan (plan header + instance).\n176: \tfor _, row := range n.rows {\n177: \t\tassert.NotEqual(t, navRowDeadToggle, row.Kind,\n178: \t\t\t\"running instances should not be in dead section\")\n179: \t}\n180: \t// Should have plan header + instance in the active area.\n181: \trequire.True(t, len(n.rows) >= 2, \"expected at least plan header + instance, got %d rows\", len(n.rows))\n182: \tassert.Equal(t, navRowPlanHeader, n.rows[0].Kind)\n183: \tassert.Equal(t, \"done-plan.md\", n.rows[0].TaskFile)\n184: \tassert.Equal(t, navRowInstance, n.rows[1].Kind)\n185: \tassert.Equal(t, \"worker\", n.rows[1].Label)\n186: }\n187: \n188: func TestRebuildRows_DonePlanWithDeadInstances_GoesToDeadSection(t *testing.T) {\n189: \tn := newTestPanel()\n190: \thistory := []PlanDisplay{{Filename: \"done-plan.md\", Status: \"done\"}}\n191: \t// Ready (not running) instance — plan should go to dead section.\n192: \tinstances := []*session.Instance{makeInst(\"worker\", \"done-plan.md\", session.Ready)}\n193: \tn.SetData(nil, instances, history, nil, nil)\n194: \n195: \t// Done plan with only non-running instances goes to dead section.\n196: \t// Plan header is collapsed (no running instances), so we get dead toggle + plan header.\n197: \trequire.True(t, len(n.rows) >= 2)\n198: \tassert.Equal(t, navRowDeadToggle, n.rows[0].Kind)\n199: \tassert.Equal(t, \"dead\", n.rows[0].Label)\n200: \tassert.Equal(t, navRowPlanHeader, n.rows[1].Kind)\n201: }\n202: \n203: func TestRebuildRows_DonePlanMixedInstances_RunningPromotesToActive(t *testing.T) {\n204: \tn := newTestPanel()\n205: \thistory := []PlanDisplay{{Filename: \"done-plan.md\", Status: \"done\"}}\n206: \t// Mix of running and ready instances — running takes priority.\n207: \tinstances := []*session.Instance{\n208: \t\tmakeInst(\"ready-worker\", \"done-plan.md\", session.Ready),\n209: \t\tmakeInst(\"running-worker\", \"done-plan.md\", session.Running),\n210: \t}\n211: \tn.SetData(nil, instances, history, nil, nil)\n212: \n213: \t// Plan has at least one running instance → should be in active section, not dead.\n214: \tfor _, row := range n.rows {\n215: \t\tassert.NotEqual(t, navRowDeadToggle, row.Kind,\n216: \t\t\t\"plan with running instances should not be in dead section\")\n217: \t}\n218: \tassert.Equal(t, navRowPlanHeader, n.rows[0].Kind)\n219: \tassert.Equal(t, \"done-plan.md\", n.rows[0].TaskFile)\n220: }\n221: \n222: func TestRebuildRows_DeadSection_DonePlanWithoutInstances_GoesToHistory(t *testing.T) {\n223: \tn := newTestPanel()\n224: \thistory := []PlanDisplay{{Filename: \"clean-done.md\", Status: \"done\"}}\n225: \tn.SetData(nil, nil, history, nil, nil)\n226: \n227: \t// No instances → goes to history, not dead.\n228: \trequire.Len(t, n.rows, 1)\n229: \tassert.Equal(t, navRowHistoryToggle, n.rows[0].Kind)\n230: }\n231: \n232: func TestInspectPlan_MovesHistoryToDead(t *testing.T) {\n233: \tn := newTestPanel()\n234: \thistory := []PlanDisplay{\n235: \t\t{Filename: \"plan-a.md\", Status: \"done\"},\n236: \t\t{Filename: \"plan-b.md\", Status: \"done\"},\n237: \t}\n238: \tn.SetData(nil, nil, history, nil, nil)\n239: \n240: \t// Both in history initially.\n241: \trequire.Len(t, n.rows, 1)\n242: \tassert.Equal(t, navRowHistoryToggle, n.rows[0].Kind)\n243: \n244: \t// Inspect plan-a → moves to dead.\n245: \tn.InspectPlan(\"plan-a.md\")\n246: \tassert.True(t, n.deadExpanded)\n247: \n248: \t// Should have dead toggle + plan header (expanded) + history toggle.\n249: \tvar hasDead, hasHistory bool\n250: \tfor _, row := range n.rows {\n251: \t\tif row.Kind == navRowDeadToggle {\n252: \t\t\thasDead = true\n253: \t\t}\n254: \t\tif row.Kind == navRowHistoryToggle {\n255: \t\t\thasHistory = true\n256: \t\t}\n257: \t}\n258: \tassert.True(t, hasDead, \"should have dead section\")\n259: \tassert.True(t, hasHistory, \"plan-b should still be in history\")\n260: }\n261: \n262: func TestRebuildRows_ClickUpAvailable(t *testing.T) {\n263: \tn := newTestPanel()\n264: \tn.SetClickUpAvailable(true)\n265: \trequire.Len(t, n.rows, 1)\n266: \tassert.Equal(t, navRowImportAction, n.rows[0].Kind)\n267: \tassert.Equal(t, SidebarImportClickUp, n.rows[0].ID)\n268: }\n269: \n270: // ---------- sort ordering ----------\n271: \n272: func TestSortOrder_NotificationsFirst(t *testing.T) {\n273: \tn := newTestPanel()\n274: \tplans := []PlanDisplay{\n275: \t\t{Filename: \"running.md\"},\n276: \t\t{Filename: \"notified.md\"},\n277: \t}\n278: \tinstances := []*session.Instance{\n279: \t\tmakeInst(\"running-impl\", \"running.md\", session.Running),\n280: \t\tmakeInst(\"notified-impl\", \"notified.md\", session.Running),\n281: \t}\n282: \tinstances[1].Notified = true\n283: \tstatuses := map[string]TopicStatus{\n284: \t\t\"running.md\":  {HasRunning: true},\n285: \t\t\"notified.md\": {HasNotification: true},\n286: \t}\n287: \tn.SetData(plans, instances, nil, nil, statuses)\n288: \n289: \t// Notified plan should sort before running-only plan.\n290: \trequire.True(t, len(n.rows) >= 2)\n291: \tassert.Contains(t, n.rows[0].TaskFile, \"notified.md\")\n292: }\n293: \n294: func TestSortOrder_InstancesWithinPlan(t *testing.T) {\n295: \tn := newTestPanel()\n296: \tplans := []PlanDisplay{{Filename: \"plan.md\"}}\n297: \tinstances := []*session.Instance{\n298: \t\tmakeInst(\"paused\", \"plan.md\", session.Paused),\n299: \t\tmakeInst(\"running\", \"plan.md\", session.Running),\n300: \t\t{Title: \"notified\", TaskFile: \"plan.md\", Status: session.Running, Notified: true},\n301: \t}\n302: \tstatuses := map[string]TopicStatus{\"plan.md\": {HasRunning: true, HasNotification: true}}\n303: \tn.SetData(plans, instances, nil, nil, statuses)\n304: \n305: \t// Within plan: notified (0) < running (1) < paused (3)\n306: \trequire.Len(t, n.rows, 4) // header + 3 instances\n307: \tassert.Equal(t, \"notified\", n.rows[1].Label)\n308: \tassert.Equal(t, \"running\", n.rows[2].Label)\n309: \tassert.Equal(t, \"paused\", n.rows[3].Label)\n310: }\n311: \n312: // ---------- navigation (Up/Down/Left/Right) ----------\n313: \n314: func TestNavigation_UpDown(t *testing.T) {\n315: \tn := newTestPanel()\n316: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n317: \tinstances := []*session.Instance{\n318: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n319: \t}\n320: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n321: \tn.SetData(plans, instances, nil, nil, statuses)\n322: \t// rows: [header, instance]\n323: \trequire.Len(t, n.rows, 2)\n324: \n325: \tassert.Equal(t, 0, n.selectedIdx)\n326: \tn.Down()\n327: \tassert.Equal(t, 1, n.selectedIdx)\n328: \tn.Down() // at end, should stay\n329: \tassert.Equal(t, 1, n.selectedIdx)\n330: \tn.Up()\n331: \tassert.Equal(t, 0, n.selectedIdx)\n332: \tn.Up() // at start, should stay\n333: \tassert.Equal(t, 0, n.selectedIdx)\n334: }\n335: \n336: func TestNavigation_LeftCollapsesAndJumpsToParent(t *testing.T) {\n337: \tn := newTestPanel()\n338: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n339: \tinstances := []*session.Instance{\n340: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n341: \t}\n342: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n343: \tn.SetData(plans, instances, nil, nil, statuses)\n344: \n345: \t// Select the instance (row 1)\n346: \tn.selectedIdx = 1\n347: \t// Left on instance should jump to parent plan header\n348: \tn.Left()\n349: \tassert.Equal(t, 0, n.selectedIdx)\n350: \tassert.Equal(t, navRowPlanHeader, n.rows[0].Kind)\n351: \n352: \t// Left on expanded plan header should collapse it\n353: \tassert.False(t, n.rows[0].Collapsed)\n354: \tn.Left()\n355: \t// After collapse, rebuild happens — only plan header remains\n356: \trequire.Len(t, n.rows, 1)\n357: \tassert.True(t, n.rows[0].Collapsed)\n358: }\n359: \n360: func TestNavigation_RightExpandsAndDescends(t *testing.T) {\n361: \tn := newTestPanel()\n362: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n363: \tinstances := []*session.Instance{\n364: \t\tmakeInst(\"inst\", \"p.md\", session.Ready), // Ready — not running\n365: \t}\n366: \tn.SetData(plans, instances, nil, nil, nil)\n367: \t// Plan has no running/notification → auto-collapsed\n368: \trequire.Len(t, n.rows, 1)\n369: \tassert.True(t, n.rows[0].Collapsed)\n370: \n371: \t// Right on collapsed plan should expand\n372: \tn.Right()\n373: \trequire.Len(t, n.rows, 2)\n374: \tassert.False(t, n.rows[0].Collapsed)\n375: \tassert.Equal(t, 0, n.selectedIdx) // still on header\n376: \n377: \t// Right on expanded plan should descend to first child\n378: \tn.Right()\n379: \tassert.Equal(t, 1, n.selectedIdx)\n380: }\n381: \n382: // ---------- expand/collapse ----------\n383: \n384: func TestToggleSelectedExpand_PlanHeader(t *testing.T) {\n385: \tn := newTestPanel()\n386: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n387: \tinstances := []*session.Instance{\n388: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n389: \t}\n390: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n391: \tn.SetData(plans, instances, nil, nil, statuses)\n392: \trequire.Len(t, n.rows, 2) // expanded\n393: \n394: \tok := n.ToggleSelectedExpand()\n395: \tassert.True(t, ok)\n396: \trequire.Len(t, n.rows, 1) // collapsed\n397: \n398: \tok = n.ToggleSelectedExpand()\n399: \tassert.True(t, ok)\n400: \trequire.Len(t, n.rows, 2) // expanded again\n401: }\n402: \n403: func TestToggleSelectedExpand_Instance_ReturnsFalse(t *testing.T) {\n404: \tn := newTestPanel()\n405: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n406: \tinstances := []*session.Instance{\n407: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n408: \t}\n409: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n410: \tn.SetData(plans, instances, nil, nil, statuses)\n411: \tn.selectedIdx = 1 // instance row\n412: \n413: \tok := n.ToggleSelectedExpand()\n414: \tassert.False(t, ok)\n415: }\n416: \n417: func TestAutoCollapse_NoRunningNoNotification(t *testing.T) {\n418: \tn := newTestPanel()\n419: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n420: \tinstances := []*session.Instance{\n421: \t\tmakeInst(\"inst\", \"p.md\", session.Paused),\n422: \t}\n423: \tn.SetData(plans, instances, nil, nil, nil)\n424: \n425: \t// No running/notification → auto-collapsed, instance hidden\n426: \trequire.Len(t, n.rows, 1)\n427: \tassert.True(t, n.rows[0].Collapsed)\n428: }\n429: \n430: func TestUserOverride_PreservesCollapsedState(t *testing.T) {\n431: \tn := newTestPanel()\n432: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n433: \tinstances := []*session.Instance{\n434: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n435: \t}\n436: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n437: \tn.SetData(plans, instances, nil, nil, statuses)\n438: \n439: \t// User manually collapses (sets override)\n440: \tn.ToggleSelectedExpand()\n441: \trequire.Len(t, n.rows, 1)\n442: \n443: \t// Refresh data — override should persist even though plan has running instances\n444: \tn.SetData(plans, instances, nil, nil, statuses)\n445: \trequire.Len(t, n.rows, 1, \"user override should keep plan collapsed\")\n446: }\n447: \n448: // ---------- selection API ----------\n449: \n450: func TestGetSelectedInstance(t *testing.T) {\n451: \tn := newTestPanel()\n452: \tinst := makeInst(\"solo\", \"\", session.Running)\n453: \tn.SetData(nil, []*session.Instance{inst}, nil, nil, nil)\n454: \n455: \t// row 0 = solo header, row 1 = instance\n456: \tn.selectedIdx = 0\n457: \tassert.Nil(t, n.GetSelectedInstance())\n458: \n459: \tn.selectedIdx = 1\n460: \tassert.Equal(t, inst, n.GetSelectedInstance())\n461: }\n462: \n463: func TestGetSelectedPlanFile(t *testing.T) {\n464: \tn := newTestPanel()\n465: \tplans := []PlanDisplay{{Filename: \"plan.md\"}}\n466: \tn.SetData(plans, nil, nil, nil, nil)\n467: \n468: \t// Plan header row\n469: \tn.selectedIdx = 0\n470: \tassert.Equal(t, \"plan.md\", n.GetSelectedPlanFile())\n471: }\n472: \n473: func TestIsSelectedPlanHeader(t *testing.T) {\n474: \tn := newTestPanel()\n475: \tplans := []PlanDisplay{{Filename: \"plan.md\"}}\n476: \tinstances := []*session.Instance{\n477: \t\tmakeInst(\"inst\", \"plan.md\", session.Running),\n478: \t}\n479: \tstatuses := map[string]TopicStatus{\"plan.md\": {HasRunning: true}}\n480: \tn.SetData(plans, instances, nil, nil, statuses)\n481: \n482: \tn.selectedIdx = 0\n483: \tassert.True(t, n.IsSelectedPlanHeader())\n484: \n485: \tn.selectedIdx = 1\n486: \tassert.False(t, n.IsSelectedPlanHeader())\n487: }\n488: \n489: func TestSoloHeaderSkippedDuringNavigation(t *testing.T) {\n490: \tn := newTestPanel()\n491: \tplans := []PlanDisplay{{Filename: \"plan.md\"}}\n492: \tinstances := []*session.Instance{\n493: \t\tmakeInst(\"plan-impl\", \"plan.md\", session.Running),\n494: \t\tmakeInst(\"adhoc\", \"\", session.Running),\n495: \t}\n496: \tstatuses := map[string]TopicStatus{\"plan.md\": {HasRunning: true}}\n497: \tn.SetData(plans, instances, nil, nil, statuses)\n498: \n499: \t// Layout: [0]=plan header, [1]=plan-impl, [2]=solo header, [3]=adhoc\n500: \n501: \t// Down from plan-impl should skip solo header, land on adhoc\n502: \tn.selectedIdx = 1\n503: \tn.Down()\n504: \tassert.Equal(t, 3, n.selectedIdx, \"Down should skip solo header\")\n505: \n506: \t// Up from adhoc should skip solo header, land on plan-impl\n507: \tn.Up()\n508: \tassert.Equal(t, 1, n.selectedIdx, \"Up should skip solo header\")\n509: }\n510: \n511: func TestSoloHeaderSkippedBySelectFirst(t *testing.T) {\n512: \tn := newTestPanel()\n513: \tinstances := []*session.Instance{\n514: \t\tmakeInst(\"adhoc\", \"\", session.Running),\n515: \t}\n516: \tn.SetData(nil, instances, nil, nil, nil)\n517: \n518: \t// Layout: [0]=solo header, [1]=adhoc\n519: \tn.SelectFirst()\n520: \tassert.Equal(t, 1, n.selectedIdx, \"SelectFirst should skip solo header\")\n521: }\n522: \n523: func TestSelectByID(t *testing.T) {\n524: \tn := newTestPanel()\n525: \tplans := []PlanDisplay{\n526: \t\t{Filename: \"a.md\"},\n527: \t\t{Filename: \"b.md\"},\n528: \t}\n529: \tn.SetData(plans, nil, nil, nil, nil)\n530: \n531: \tok := n.SelectByID(SidebarPlanPrefix + \"b.md\")\n532: \tassert.True(t, ok)\n533: \tassert.Equal(t, \"b.md\", n.GetSelectedPlanFile())\n534: }\n535: \n536: func TestSelectInstance(t *testing.T) {\n537: \tn := newTestPanel()\n538: \tinst1 := makeInst(\"s1\", \"\", session.Running)\n539: \tinst2 := makeInst(\"s2\", \"\", session.Running)\n540: \tn.SetData(nil, []*session.Instance{inst1, inst2}, nil, nil, nil)\n541: \n542: \tok := n.SelectInstance(inst2)\n543: \tassert.True(t, ok)\n544: \tassert.Equal(t, inst2, n.GetSelectedInstance())\n545: }\n546: \n547: func TestGetSelectedID(t *testing.T) {\n548: \tn := newTestPanel()\n549: \tplans := []PlanDisplay{{Filename: \"my-plan.md\"}}\n550: \tn.SetData(plans, nil, nil, nil, nil)\n551: \n552: \tassert.Equal(t, SidebarPlanPrefix+\"my-plan.md\", n.GetSelectedID())\n553: }\n554: \n555: // ---------- selection persistence ----------\n556: \n557: func TestSelectionPersistence_AcrossRebuild(t *testing.T) {\n558: \tn := newTestPanel()\n559: \tplans := []PlanDisplay{\n560: \t\t{Filename: \"a.md\"},\n561: \t\t{Filename: \"b.md\"},\n562: \t}\n563: \tn.SetData(plans, nil, nil, nil, nil)\n564: \tn.selectedIdx = 1 // select plan-b header\n565: \tprevID := n.rows[1].ID\n566: \n567: \t// Refresh data — same plans, selection should be preserved\n568: \tn.SetData(plans, nil, nil, nil, nil)\n569: \tassert.Equal(t, prevID, n.rows[n.selectedIdx].ID)\n570: }\n571: \n572: // ---------- Kill/Remove ----------\n573: \n574: func TestRemoveByTitle(t *testing.T) {\n575: \tn := newTestPanel()\n576: \tinst1 := makeInst(\"keep\", \"\", session.Running)\n577: \tinst2 := makeInst(\"remove-me\", \"\", session.Running)\n578: \tn.SetData(nil, []*session.Instance{inst1, inst2}, nil, nil, nil)\n579: \n580: \tremoved := n.RemoveByTitle(\"remove-me\")\n581: \tassert.NotNil(t, removed)\n582: \tassert.Equal(t, \"remove-me\", removed.Title)\n583: \tassert.Equal(t, 1, n.TotalInstances())\n584: }\n585: \n586: func TestRemoveByTitle_NotFound(t *testing.T) {\n587: \tn := newTestPanel()\n588: \tinst := makeInst(\"x\", \"\", session.Running)\n589: \tn.SetData(nil, []*session.Instance{inst}, nil, nil, nil)\n590: \n591: \tremoved := n.RemoveByTitle(\"nonexistent\")\n592: \tassert.Nil(t, removed)\n593: \tassert.Equal(t, 1, n.TotalInstances())\n594: }\n595: \n596: func TestRemove_SelectedInstance(t *testing.T) {\n597: \tn := newTestPanel()\n598: \tinst := makeInst(\"target\", \"\", session.Running)\n599: \tn.SetData(nil, []*session.Instance{inst}, nil, nil, nil)\n600: \tn.selectedIdx = 1 // instance row\n601: \n602: \tn.Remove()\n603: \tassert.Equal(t, 0, n.TotalInstances())\n604: }\n605: \n606: // ---------- search ----------\n607: \n608: func TestSearch_ActivateDeactivate(t *testing.T) {\n609: \tn := newTestPanel()\n610: \tassert.False(t, n.IsSearchActive())\n611: \n612: \tn.ActivateSearch()\n613: \tassert.True(t, n.IsSearchActive())\n614: \tassert.Equal(t, \"\", n.GetSearchQuery())\n615: \n616: \tn.SetSearchQuery(\"hello\")\n617: \tassert.Equal(t, \"hello\", n.GetSearchQuery())\n618: \n619: \tn.DeactivateSearch()\n620: \tassert.False(t, n.IsSearchActive())\n621: \tassert.Equal(t, \"\", n.GetSearchQuery())\n622: }\n623: \n624: func TestSearch_FiltersVisibleRows(t *testing.T) {\n625: \tn := newTestPanel()\n626: \tn.SetSize(80, 40)\n627: \tplans := []PlanDisplay{\n628: \t\t{Filename: \"auth-plan.md\"},\n629: \t\t{Filename: \"billing-plan.md\"},\n630: \t}\n631: \tinstances := []*session.Instance{\n632: \t\tmakeInst(\"auth-impl\", \"auth-plan.md\", session.Running),\n633: \t\tmakeInst(\"billing-impl\", \"billing-plan.md\", session.Running),\n634: \t}\n635: \tstatuses := map[string]TopicStatus{\n636: \t\t\"auth-plan.md\":    {HasRunning: true},\n637: \t\t\"billing-plan.md\": {HasRunning: true},\n638: \t}\n639: \tn.SetData(plans, instances, nil, nil, statuses)\n640: \n641: \tn.ActivateSearch()\n642: \tn.SetSearchQuery(\"auth\")\n643: \toutput := n.String()\n644: \tassert.Contains(t, output, \"auth\")\n645: \t// billing should be filtered out\n646: \tassert.NotContains(t, output, \"billing\")\n647: }\n648: \n649: // ---------- rendering ----------\n650: \n651: func TestString_BasicOutput(t *testing.T) {\n652: \tn := newTestPanel()\n653: \tn.SetSize(60, 30)\n654: \tplans := []PlanDisplay{{Filename: \"my-plan.md\"}}\n655: \tinstances := []*session.Instance{\n656: \t\tmakeInst(\"worker\", \"my-plan.md\", session.Running),\n657: \t}\n658: \tstatuses := map[string]TopicStatus{\"my-plan.md\": {HasRunning: true}}\n659: \tn.SetData(plans, instances, nil, nil, statuses)\n660: \n661: \toutput := n.String()\n662: \tassert.Contains(t, output, \"my-plan\")\n663: \tassert.Contains(t, output, \"worker\")\n664: }\n665: \n666: func TestString_EmptyPanel(t *testing.T) {\n667: \tn := newTestPanel()\n668: \tn.SetSize(60, 30)\n669: \tn.SetData(nil, nil, nil, nil, nil)\n670: \toutput := n.String()\n671: \tassert.NotEmpty(t, output) // should still render search box + border\n672: }\n673: \n674: // ---------- CycleActive ----------\n675: \n676: func TestCycleNextActive(t *testing.T) {\n677: \tn := newTestPanel()\n678: \tinst1 := makeInst(\"a\", \"\", session.Running)\n679: \tinst2 := makeInst(\"b\", \"\", session.Paused)\n680: \tinst3 := makeInst(\"c\", \"\", session.Running)\n681: \tn.SetData(nil, []*session.Instance{inst1, inst2, inst3}, nil, nil, nil)\n682: \n683: \t// Select first instance\n684: \tn.SelectInstance(inst1)\n685: \t// CycleNextActive should skip paused inst2 and land on inst3\n686: \tn.CycleNextActive()\n687: \tassert.Equal(t, inst3, n.GetSelectedInstance())\n688: }\n689: \n690: func TestCyclePrevActive(t *testing.T) {\n691: \tn := newTestPanel()\n692: \tinst1 := makeInst(\"a\", \"\", session.Running)\n693: \tinst2 := makeInst(\"b\", \"\", session.Paused)\n694: \tinst3 := makeInst(\"c\", \"\", session.Running)\n695: \tn.SetData(nil, []*session.Instance{inst1, inst2, inst3}, nil, nil, nil)\n696: \n697: \t// Select last instance\n698: \tn.SelectInstance(inst3)\n699: \tn.CyclePrevActive()\n700: \tassert.Equal(t, inst1, n.GetSelectedInstance())\n701: }\n702: \n703: // ---------- misc ----------\n704: \n705: func TestSetSize(t *testing.T) {\n706: \tn := newTestPanel()\n707: \tn.SetSize(100, 50)\n708: \tassert.Equal(t, 100, n.width)\n709: \tassert.Equal(t, 50, n.height)\n710: }\n711: \n712: func TestSetFocused(t *testing.T) {\n713: \tn := newTestPanel()\n714: \tassert.True(t, n.IsFocused()) // default\n715: \tn.SetFocused(false)\n716: \tassert.False(t, n.IsFocused())\n717: }\n718: \n719: func TestSelectedSpaceAction(t *testing.T) {\n720: \tn := newTestPanel()\n721: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n722: \tinstances := []*session.Instance{\n723: \t\tmakeInst(\"inst\", \"p.md\", session.Running),\n724: \t}\n725: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n726: \tn.SetData(plans, instances, nil, nil, statuses)\n727: \n728: \t// Plan header expanded → \"collapse\"\n729: \tn.selectedIdx = 0\n730: \tassert.Equal(t, \"collapse\", n.SelectedSpaceAction())\n731: \n732: \t// Collapse it\n733: \tn.ToggleSelectedExpand()\n734: \tassert.Equal(t, \"expand\", n.SelectedSpaceAction())\n735: \n736: \t// Instance → \"toggle\"\n737: \tn.ToggleSelectedExpand()\n738: \tn.selectedIdx = 1\n739: \tassert.Equal(t, \"toggle\", n.SelectedSpaceAction())\n740: }\n741: \n742: func TestAddInstance(t *testing.T) {\n743: \tn := newTestPanel()\n744: \tinst := makeInst(\"new\", \"\", session.Loading)\n745: \tcleanup := n.AddInstance(inst)\n746: \tassert.NotNil(t, cleanup)\n747: \tassert.Equal(t, 1, n.TotalInstances())\n748: \tassert.Equal(t, inst, n.GetInstances()[0])\n749: }\n750: \n751: func TestClear(t *testing.T) {\n752: \tn := newTestPanel()\n753: \tn.SetData(nil, []*session.Instance{makeInst(\"x\", \"\", session.Running)}, nil, nil, nil)\n754: \tassert.Equal(t, 1, n.TotalInstances())\n755: \n756: \tn.Clear()\n757: \tassert.Equal(t, 0, n.TotalInstances())\n758: \tassert.Empty(t, n.rows)\n759: }\n760: \n761: func TestSelectFirst(t *testing.T) {\n762: \tn := newTestPanel()\n763: \tplans := []PlanDisplay{{Filename: \"a.md\"}, {Filename: \"b.md\"}}\n764: \tn.SetData(plans, nil, nil, nil, nil)\n765: \tn.selectedIdx = 1\n766: \n767: \tn.SelectFirst()\n768: \tassert.Equal(t, 0, n.selectedIdx)\n769: }\n770: \n771: func TestClickItem(t *testing.T) {\n772: \tn := newTestPanel()\n773: \tplans := []PlanDisplay{{Filename: \"a.md\"}, {Filename: \"b.md\"}}\n774: \tn.SetData(plans, nil, nil, nil, nil)\n775: \n776: \tn.ClickItem(1)\n777: \tassert.Equal(t, 1, n.selectedIdx)\n778: }\n779: \n780: // ---------- SelectInstance auto-expand ----------\n781: \n782: func TestSelectInstance_ExpandsCollapsedPlan(t *testing.T) {\n783: \tn := newTestPanel()\n784: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n785: \tinst := makeInst(\"worker\", \"p.md\", session.Ready)\n786: \t// No running/notification → plan auto-collapses, instance hidden\n787: \tn.SetData(plans, []*session.Instance{inst}, nil, nil, nil)\n788: \trequire.Len(t, n.rows, 1, \"plan should be auto-collapsed\")\n789: \tassert.True(t, n.rows[0].Collapsed)\n790: \n791: \t// SelectInstance should auto-expand the plan to reveal the instance\n792: \tok := n.SelectInstance(inst)\n793: \tassert.True(t, ok, \"SelectInstance should succeed by expanding the plan\")\n794: \tassert.Equal(t, inst, n.GetSelectedInstance())\n795: \t// Plan should now be expanded\n796: \trequire.True(t, len(n.rows) >= 2)\n797: \tassert.False(t, n.rows[0].Collapsed)\n798: }\n799: \n800: func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {\n801: \tn := newTestPanel()\n802: \tplans := []PlanDisplay{\n803: \t\t{Filename: \"a.md\"},\n804: \t\t{Filename: \"b.md\"},\n805: \t}\n806: \tinstA := makeInst(\"a-worker\", \"a.md\", session.Running)\n807: \tinstB := makeInst(\"b-worker\", \"b.md\", session.Running)\n808: \tstatuses := map[string]TopicStatus{\n809: \t\t\"a.md\": {HasRunning: true},\n810: \t\t\"b.md\": {HasRunning: true},\n811: \t}\n812: \tn.SetData(plans, []*session.Instance{instA, instB}, nil, nil, statuses)\n813: \n814: \t// Select A, then manually collapse B\n815: \tn.SelectInstance(instA)\n816: \t// Find B's plan header and collapse it\n817: \tfor i, row := range n.rows {\n818: \t\tif row.Kind == navRowPlanHeader && row.TaskFile == \"b.md\" {\n819: \t\t\tn.selectedIdx = i\n820: \t\t\tn.ToggleSelectedExpand()\n821: \t\t\tbreak\n822: \t\t}\n823: \t}\n824: \t// Go back to instA\n825: \tn.SelectInstance(instA)\n826: \n827: \t// CycleNextActive should find instB even though its plan is collapsed\n828: \tn.CycleNextActive()\n829: \tassert.Equal(t, instB, n.GetSelectedInstance(), \"cycle should auto-expand collapsed plan\")\n830: }\n831: \n832: // ---------- FindPlanInstance ----------\n833: \n834: func TestFindPlanInstance_ReturnsRunning(t *testing.T) {\n835: \tn := newTestPanel()\n836: \tready := &session.Instance{Title: \"ready\", TaskFile: \"p.md\", Status: session.Ready}\n837: \trunning := &session.Instance{Title: \"running\", TaskFile: \"p.md\", Status: session.Running}\n838: \tn.SetData(nil, []*session.Instance{ready, running}, nil, nil, nil)\n839: \n840: \tresult := n.FindPlanInstance(\"p.md\")\n841: \tassert.Equal(t, running, result, \"should prefer running instance\")\n842: }\n843: \n844: func TestFindPlanInstance_NoneStarted(t *testing.T) {\n845: \tn := newTestPanel()\n846: \tpaused := makeInst(\"paused\", \"p.md\", session.Paused)\n847: \tn.SetData(nil, []*session.Instance{paused}, nil, nil, nil)\n848: \n849: \tresult := n.FindPlanInstance(\"p.md\")\n850: \tassert.Nil(t, result, \"paused-only plan should return nil\")\n851: }\n852: \n853: // ---------- rendering ----------\n854: \n855: func TestString_SectionHeaders(t *testing.T) {\n856: \tn := newTestPanel()\n857: \tn.SetSize(60, 40)\n858: \tplans := []PlanDisplay{\n859: \t\t{Filename: \"active-plan.md\"},\n860: \t\t{Filename: \"idle-plan.md\"},\n861: \t}\n862: \tinstances := []*session.Instance{\n863: \t\tmakeInst(\"worker\", \"active-plan.md\", session.Running),\n864: \t}\n865: \tstatuses := map[string]TopicStatus{\n866: \t\t\"active-plan.md\": {HasRunning: true},\n867: \t}\n868: \tn.SetData(plans, instances, nil, nil, statuses)\n869: \toutput := n.String()\n870: \tassert.Contains(t, output, \"active\")\n871: \tassert.Contains(t, output, \"idle\")\n872: }\n873: \n874: func TestString_InstanceDisplayTitle(t *testing.T) {\n875: \tn := newTestPanel()\n876: \tn.SetSize(60, 30)\n877: \tplans := []PlanDisplay{{Filename: \"p.md\"}}\n878: \tinst := &session.Instance{\n879: \t\tTitle:      \"p-W2-T5\",\n880: \t\tTaskFile:   \"p.md\",\n881: \t\tStatus:     session.Running,\n882: \t\tWaveNumber: 2,\n883: \t\tTaskNumber: 5,\n884: \t}\n885: \tstatuses := map[string]TopicStatus{\"p.md\": {HasRunning: true}}\n886: \tn.SetData(plans, []*session.Instance{inst}, nil, nil, statuses)\n887: \n888: \toutput := n.String()\n889: \tassert.Contains(t, output, \"wave 2\")\n890: \tassert.Contains(t, output, \"task 5\")\n891: \tassert.NotContains(t, output, \"W2-T5\", \"raw wave/task format should not appear\")\n892: }\n893: \n894: func TestString_Legend(t *testing.T) {\n895: \tn := newTestPanel()\n896: \tn.SetSize(60, 30)\n897: \tn.SetData(nil, nil, nil, nil, nil)\n898: \toutput := n.String()\n899: \tassert.Contains(t, output, \"running\")\n900: \tassert.Contains(t, output, \"review\")\n901: \tassert.Contains(t, output, \"idle\")\n902: }\n903: \n904: func TestString_ReviewingPlanAppearsActive(t *testing.T) {\n905: \tn := newTestPanel()\n906: \tn.SetSize(60, 40)\n907: \t// Plan in \"reviewing\" status with NO running instances — simulates restart\n908: \t// where the reviewer's tmux session is gone.\n909: \tplans := []PlanDisplay{\n910: \t\t{Filename: \"reviewing-plan.md\", Status: \"reviewing\"},\n911: \t\t{Filename: \"idle-plan.md\", Status: \"ready\"},\n912: \t}\n913: \tn.SetData(plans, nil, nil, nil, nil)\n914: \toutput := n.String()\n915: \tassert.Contains(t, output, \"active\", \"reviewing plan should appear in active section\")\n916: }\n917: \n918: func TestString_ImplementingPlanAppearsActive(t *testing.T) {\n919: \tn := newTestPanel()\n920: \tn.SetSize(60, 40)\n921: \t// Plan in \"implementing\" status with NO running instances.\n922: \tplans := []PlanDisplay{\n923: \t\t{Filename: \"impl-plan.md\", Status: \"implementing\"},\n924: \t\t{Filename: \"idle-plan.md\", Status: \"ready\"},\n925: \t}\n926: \tn.SetData(plans, nil, nil, nil, nil)\n927: \toutput := n.String()\n928: \tassert.Contains(t, output, \"active\", \"implementing plan should appear in active section\")\n929: }\n\n(End of file - total 929 lines)\n</content>",
+            "title": "ui/nav_panel_test.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"testing\"\n\n\t\"github.com/charmbracelet/bubbles/spinner\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc newTestPanel() *NavigationPanel {\n\tsp := spinner.New(spinner.WithSpinner(spinner.Dot))\n\treturn NewNavigationPanel(&sp)\n}\n\nfunc makeInst(title, planFile string, status session.Status) *session.Instance {\n\treturn &session.Instance{\n\t\tTitle:    title,\n\t\tTaskFile: planFile,",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564400413,
+              "end": 1772564400419
+            }
+          },
+          "id": "prt_cb51245df001lJV1St5JTrUQ1b",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/navigation_panel.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/navigation_panel.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"sort\"\n6: \t\"strings\"\n7: \n8: \t\"github.com/charmbracelet/bubbles/spinner\"\n9: \t\"github.com/charmbracelet/lipgloss\"\n10: \t\"github.com/charmbracelet/x/ansi\"\n11: \t\"github.com/kastheco/kasmos/config/taskstate\"\n12: \t\"github.com/kastheco/kasmos/session\"\n13: \tzone \"github.com/lrstanley/bubblezone\"\n14: \t\"github.com/mattn/go-runewidth\"\n15: )\n16: \n17: const (\n18: \tSidebarPlanPrefix        = \"__plan__\"\n19: \tSidebarTopicPrefix       = \"__topic__\"\n20: \tSidebarPlanHistoryToggle = \"__plan_history_toggle__\"\n21: \tSidebarImportClickUp     = \"__import_clickup__\"\n22: )\n23: \n24: type PlanDisplay struct {\n25: \tFilename    string\n26: \tStatus      string\n27: \tDescription string\n28: \tBranch      string\n29: \tTopic       string\n30: }\n31: \n32: type TopicStatus struct {\n33: \tHasRunning      bool\n34: \tHasNotification bool\n35: }\n36: \n37: type navRowKind int\n38: \n39: const (\n40: \tnavRowPlanHeader navRowKind = iota\n41: \tnavRowInstance\n42: \tnavRowSoloHeader\n43: \tnavRowTopicHeader\n44: \tnavRowImportAction\n45: \tnavRowDeadToggle\n46: \tnavRowDeadPlan\n47: \tnavRowHistoryToggle\n48: \tnavRowHistoryPlan\n49: \tnavRowCancelled\n50: )\n51: \n52: type navRow struct {\n53: \tKind            navRowKind\n54: \tID              string\n55: \tLabel           string\n56: \tTaskFile        string\n57: \tPlanStatus      string // plan lifecycle status (e.g. \"implementing\", \"reviewing\")\n58: \tInstance        *session.Instance\n59: \tCollapsed       bool\n60: \tHasRunning      bool\n61: \tHasNotification bool\n62: \tIndent          int // indentation level in spaces (0 = top-level)\n63: }\n64: \n65: // Navigation panel styles\n66: var (\n67: \tnavItemStyle          = lipgloss.NewStyle().Foreground(ColorText).Padding(0, 1)\n68: \tnavSelectedRowStyle   = lipgloss.NewStyle().Background(ColorIris).Foreground(ColorBase).Padding(0, 1)\n69: \tnavActiveRowStyle     = lipgloss.NewStyle().Background(ColorOverlay).Foreground(ColorText).Padding(0, 1)\n70: \tnavSectionDivStyle    = lipgloss.NewStyle().Foreground(ColorMuted).Padding(0, 1)\n71: \tnavPlanLabelStyle     = lipgloss.NewStyle().Foreground(ColorText).Bold(true)\n72: \tnavInstanceLabelStyle = lipgloss.NewStyle().Foreground(ColorSubtle)\n73: \tnavRunningIconStyle   = lipgloss.NewStyle().Foreground(ColorFoam)\n74: \tnavReadyIconStyle     = lipgloss.NewStyle().Foreground(ColorFoam)\n75: \tnavNotifyIconStyle    = lipgloss.NewStyle().Foreground(ColorRose)\n76: \tnavPausedIconStyle    = lipgloss.NewStyle().Foreground(ColorMuted)\n77: \tnavCompletedIconStyle = lipgloss.NewStyle().Foreground(ColorFoam).Faint(true)\n78: \tnavIdleIconStyle      = lipgloss.NewStyle().Foreground(ColorMuted)\n79: \tnavCancelledLblStyle  = lipgloss.NewStyle().Foreground(ColorMuted).Strikethrough(true)\n80: \tnavImportStyle        = lipgloss.NewStyle().Foreground(ColorFoam).Padding(0, 1)\n81: \tnavHistoryDivStyle    = lipgloss.NewStyle().Foreground(ColorMuted)\n82: \tnavLegendLabelStyle   = lipgloss.NewStyle().Foreground(ColorMuted)\n83: \tnavSearchBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorOverlay).Padding(0, 1)\n84: \tnavSearchActiveStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorFoam).Padding(0, 1)\n85: )\n86: \n87: type NavigationPanel struct {\n88: \tspinner *spinner.Model\n89: \n90: \trows         []navRow\n91: \tselectedIdx  int\n92: \tscrollOffset int\n93: \n94: \tplans          []PlanDisplay\n95: \ttopics         []TopicDisplay\n96: \tinstances      []*session.Instance\n97: \tdeadPlans      []PlanDisplay\n98: \thistoryPlans   []PlanDisplay\n99: \tpromotedPlans  []PlanDisplay // finished plans promoted to active (have running instances)\n100: \tcancelled      []PlanDisplay\n101: \tplanStatuses   map[string]TopicStatus\n102: \tcollapsed      map[string]bool\n103: \tuserOverrides  map[string]bool\n104: \tinspectedPlans map[string]bool\n105: \n106: \tdeadExpanded    bool\n107: \thistoryExpanded bool\n108: \tsearchActive    bool\n109: \tsearchQuery     string\n110: \tclickUpAvail    bool\n111: \n112: \t// Audit section rendered by the AuditPane and displayed inside the border.\n113: \tauditView   string\n114: \tauditHeight int\n115: \n116: \twidth, height int\n117: \tfocused       bool\n118: }\n119: \n120: type TopicDisplay struct {\n121: \tName  string\n122: \tPlans []PlanDisplay\n123: }\n124: \n125: func NewNavigationPanel(sp *spinner.Model) *NavigationPanel {\n126: \treturn &NavigationPanel{\n127: \t\tspinner:        sp,\n128: \t\tplanStatuses:   make(map[string]TopicStatus),\n129: \t\tcollapsed:      make(map[string]bool),\n130: \t\tuserOverrides:  make(map[string]bool),\n131: \t\tinspectedPlans: make(map[string]bool),\n132: \t\tdeadExpanded:   true,\n133: \t\tfocused:        true,\n134: \t}\n135: }\n136: \n137: func (n *NavigationPanel) SetData(plans []PlanDisplay, instances []*session.Instance, history []PlanDisplay, cancelled []PlanDisplay, planStatuses map[string]TopicStatus) {\n138: \tn.plans = plans\n139: \tn.instances = instances\n140: \tn.cancelled = cancelled\n141: \tif planStatuses == nil {\n142: \t\tn.planStatuses = make(map[string]TopicStatus)\n143: \t} else {\n144: \t\tn.planStatuses = planStatuses\n145: \t}\n146: \t// Split history into dead (has instances or manually inspected) and history.\n147: \tn.splitDeadFromHistory(history)\n148: \tn.rebuildRows()\n149: }\n150: \n151: func (n *NavigationPanel) SetPlans(plans []PlanDisplay) {\n152: \tn.plans = plans\n153: \tn.rebuildRows()\n154: }\n155: \n156: func (n *NavigationPanel) SetTopicsAndPlans(topics []TopicDisplay, ungrouped []PlanDisplay, history []PlanDisplay, cancelled ...[]PlanDisplay) {\n157: \tn.topics = topics\n158: \tif len(cancelled) > 0 {\n159: \t\tn.cancelled = cancelled[0]\n160: \t}\n161: \tplans := make([]PlanDisplay, 0, len(ungrouped))\n162: \tplans = append(plans, ungrouped...)\n163: \tfor _, t := range topics {\n164: \t\tplans = append(plans, t.Plans...)\n165: \t}\n166: \tn.plans = plans\n167: \t// Split history into dead (has instances or manually inspected) and history.\n168: \tn.splitDeadFromHistory(history)\n169: \tn.rebuildRows()\n170: }\n171: \n172: // SetPlanStatuses updates plan-level status flags (running/notification)\n173: // without triggering a row rebuild. Call this before SetTopicsAndPlans so\n174: // the subsequent rebuild uses correct statuses.\n175: func (n *NavigationPanel) SetPlanStatuses(statuses map[string]TopicStatus) {\n176: \tif statuses != nil {\n177: \t\tn.planStatuses = statuses\n178: \t}\n179: }\n180: \n181: func (n *NavigationPanel) SetItems(_ []string, _ map[string]int, _ int, _ map[string]bool, _ map[string]TopicStatus, planStatuses map[string]TopicStatus) {\n182: \tif planStatuses != nil {\n183: \t\tn.planStatuses = planStatuses\n184: \t}\n185: \tn.rebuildRows()\n186: }\n187: \n188: // splitDeadFromHistory partitions finished plans into three buckets:\n189: //   - promoted (appended to n.plans): has running/loading instances\n190: //   - dead: has only non-running instances or was manually inspected\n191: //   - history: no instances at all\n192: func (n *NavigationPanel) splitDeadFromHistory(finished []PlanDisplay) {\n193: \ttype planInfo struct {\n194: \t\thasInstances bool\n195: \t\thasRunning   bool\n196: \t}\n197: \tinfoByPlan := make(map[string]planInfo, len(n.instances))\n198: \tfor _, inst := range n.instances {\n199: \t\tif inst.TaskFile != \"\" {\n200: \t\t\tinfo := infoByPlan[inst.TaskFile]\n201: \t\t\tinfo.hasInstances = true\n202: \t\t\tif inst.Status == session.Running || inst.Status == session.Loading {\n203: \t\t\t\tinfo.hasRunning = true\n204: \t\t\t}\n205: \t\t\tinfoByPlan[inst.TaskFile] = info\n206: \t\t}\n207: \t}\n208: \t// Remove any previously promoted plans from n.plans before re-partitioning.\n209: \tif len(n.promotedPlans) > 0 {\n210: \t\tpromoted := make(map[string]bool, len(n.promotedPlans))\n211: \t\tfor _, p := range n.promotedPlans {\n212: \t\t\tpromoted[p.Filename] = true\n213: \t\t}\n214: \t\tfiltered := n.plans[:0]\n215: \t\tfor _, p := range n.plans {\n216: \t\t\tif !promoted[p.Filename] {\n217: \t\t\t\tfiltered = append(filtered, p)\n218: \t\t\t}\n219: \t\t}\n220: \t\tn.plans = filtered\n221: \t}\n222: \tn.deadPlans = nil\n223: \tn.historyPlans = nil\n224: \tn.promotedPlans = nil\n225: \tfor _, p := range finished {\n226: \t\tinfo := infoByPlan[p.Filename]\n227: \t\tif info.hasRunning {\n228: \t\t\t// Running instances → promote to active plans list.\n229: \t\t\tn.promotedPlans = append(n.promotedPlans, p)\n230: \t\t\tn.plans = append(n.plans, p)\n231: \t\t} else if info.hasInstances || n.inspectedPlans[p.Filename] {\n232: \t\t\tn.deadPlans = append(n.deadPlans, p)\n233: \t\t} else {\n234: \t\t\tn.historyPlans = append(n.historyPlans, p)\n235: \t\t}\n236: \t}\n237: }\n238: \n239: // resplitDead re-partitions dead, promoted, and history plans based on current instances.\n240: func (n *NavigationPanel) resplitDead() {\n241: \tall := make([]PlanDisplay, 0, len(n.deadPlans)+len(n.promotedPlans)+len(n.historyPlans))\n242: \tall = append(all, n.deadPlans...)\n243: \tall = append(all, n.promotedPlans...)\n244: \tall = append(all, n.historyPlans...)\n245: \tn.splitDeadFromHistory(all)\n246: }\n247: \n248: // InspectPlan moves a history plan into the dead section for manual inspection.\n249: func (n *NavigationPanel) InspectPlan(planFile string) {\n250: \tif n.inspectedPlans == nil {\n251: \t\tn.inspectedPlans = make(map[string]bool)\n252: \t}\n253: \tn.inspectedPlans[planFile] = true\n254: \tn.resplitDead()\n255: \tn.deadExpanded = true\n256: \tn.rebuildRows()\n257: }\n258: \n259: func (n *NavigationPanel) rebuildRows() {\n260: \tprevID := \"\"\n261: \tprevIdx := n.selectedIdx\n262: \tif prevIdx >= 0 && prevIdx < len(n.rows) {\n263: \t\tprevID = n.rows[prevIdx].ID\n264: \t}\n265: \n266: \tinstancesByPlan := make(map[string][]*session.Instance)\n267: \tvar solo []*session.Instance\n268: \tfor _, inst := range n.instances {\n269: \t\tif inst.TaskFile == \"\" {\n270: \t\t\tsolo = append(solo, inst)\n271: \t\t\tcontinue\n272: \t\t}\n273: \t\tinstancesByPlan[inst.TaskFile] = append(instancesByPlan[inst.TaskFile], inst)\n274: \t}\n275: \n276: \tsortInstances := func(list []*session.Instance) {\n277: \t\tsort.SliceStable(list, func(i, j int) bool {\n278: \t\t\tki := navInstanceSortKey(list[i])\n279: \t\t\tkj := navInstanceSortKey(list[j])\n280: \t\t\tif ki != kj {\n281: \t\t\t\treturn ki < kj\n282: \t\t\t}\n283: \t\t\treturn strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)\n284: \t\t})\n285: \t}\n286: \tfor _, list := range instancesByPlan {\n287: \t\tsortInstances(list)\n288: \t}\n289: \tsortInstances(solo)\n290: \n291: \tplans := append([]PlanDisplay(nil), n.plans...)\n292: \tsort.SliceStable(plans, func(i, j int) bool {\n293: \t\tpi, pj := plans[i], plans[j]\n294: \t\tki := navPlanSortKey(pi, instancesByPlan[pi.Filename], n.planStatuses[pi.Filename])\n295: \t\tkj := navPlanSortKey(pj, instancesByPlan[pj.Filename], n.planStatuses[pj.Filename])\n296: \t\tif ki != kj {\n297: \t\t\treturn ki < kj\n298: \t\t}\n299: \t\treturn strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))\n300: \t})\n301: \n302: \trows := make([]navRow, 0, len(plans)+len(n.instances)+len(n.deadPlans)+len(n.historyPlans)+len(n.cancelled)+6)\n303: \n304: \t// Helper to append a plan header + its child instances.\n305: \t// indent is the indentation level in spaces for the plan row.\n306: \tappendPlan := func(p PlanDisplay, indent int) {\n307: \t\tinsts := instancesByPlan[p.Filename]\n308: \t\thasRunning, hasNotification := aggregateNavPlanStatus(insts, n.planStatuses[p.Filename])\n309: \t\tcollapsed := n.isPlanCollapsed(p.Filename, hasRunning, hasNotification)\n310: \t\trows = append(rows, navRow{\n311: \t\t\tKind:            navRowPlanHeader,\n312: \t\t\tID:              SidebarPlanPrefix + p.Filename,\n313: \t\t\tLabel:           taskstate.DisplayName(p.Filename),\n314: \t\t\tTaskFile:        p.Filename,\n315: \t\t\tPlanStatus:      p.Status,\n316: \t\t\tCollapsed:       collapsed,\n317: \t\t\tHasRunning:      hasRunning,\n318: \t\t\tHasNotification: hasNotification,\n319: \t\t\tIndent:          indent,\n320: \t\t})\n321: \t\tif !collapsed {\n322: \t\t\tfor _, inst := range insts {\n323: \t\t\t\trows = append(rows, navRow{\n324: \t\t\t\t\tKind:     navRowInstance,\n325: \t\t\t\t\tID:       \"inst:\" + inst.Title,\n326: \t\t\t\t\tLabel:    inst.Title,\n327: \t\t\t\t\tTaskFile: inst.TaskFile,\n328: \t\t\t\t\tInstance: inst,\n329: \t\t\t\t\tIndent:   indent,\n330: \t\t\t\t})\n331: \t\t\t}\n332: \t\t}\n333: \t}\n334: \n335: \t// Import action pinned at the top of the list, below the search bar.\n336: \tif n.clickUpAvail {\n337: \t\trows = append(rows, navRow{Kind: navRowImportAction, ID: SidebarImportClickUp, Label: \"+ import from clickup\"})\n338: \t}\n339: \n340: \t// Dead section: done plans with instances or manually inspected.\n341: \t// Shown above active plans so they're accessible for cleanup.\n342: \tif len(n.deadPlans) > 0 {\n343: \t\trows = append(rows, navRow{Kind: navRowDeadToggle, ID: \"__dead_toggle__\", Label: \"dead\", Collapsed: !n.deadExpanded})\n344: \t\tif n.deadExpanded {\n345: \t\t\tfor _, p := range n.deadPlans {\n346: \t\t\t\tappendPlan(p, 2)\n347: \t\t\t}\n348: \t\t}\n349: \t}\n350: \n351: \t// Split plans into active (sort key 0,1) and idle (sort key 2).\n352: \tvar activePlans, idlePlans []PlanDisplay\n353: \tfor _, p := range plans {\n354: \t\tsk := navPlanSortKey(p, instancesByPlan[p.Filename], n.planStatuses[p.Filename])\n355: \t\tif sk < 2 {\n356: \t\t\tactivePlans = append(activePlans, p)\n357: \t\t} else {\n358: \t\t\tidlePlans = append(idlePlans, p)\n359: \t\t}\n360: \t}\n361: \n362: \t// Emit active plans flat.\n363: \tfor _, p := range activePlans {\n364: \t\tappendPlan(p, 0)\n365: \t}\n366: \n367: \t// Solo instances between active and idle.\n368: \tif len(solo) > 0 {\n369: \t\trows = append(rows, navRow{Kind: navRowSoloHeader, ID: \"__solo__\", Label: \"agents\"})\n370: \t\tfor _, inst := range solo {\n371: \t\t\trows = append(rows, navRow{Kind: navRowInstance, ID: \"inst:\" + inst.Title, Label: inst.Title, Instance: inst})\n372: \t\t}\n373: \t}\n374: \n375: \t// Idle plans grouped by topic.\n376: \t// Build a set of idle filenames for quick lookup.\n377: \tidleSet := make(map[string]bool, len(idlePlans))\n378: \tfor _, p := range idlePlans {\n379: \t\tidleSet[p.Filename] = true\n380: \t}\n381: \n382: \t// Emit topics that contain idle plans.\n383: \temitted := make(map[string]bool)\n384: \tfor _, t := range n.topics {\n385: \t\tvar topicIdlePlans []PlanDisplay\n386: \t\tfor _, p := range t.Plans {\n387: \t\t\tif idleSet[p.Filename] {\n388: \t\t\t\ttopicIdlePlans = append(topicIdlePlans, p)\n389: \t\t\t}\n390: \t\t}\n391: \t\tif len(topicIdlePlans) == 0 {\n392: \t\t\tcontinue\n393: \t\t}\n394: \t\ttopicID := SidebarTopicPrefix + t.Name\n395: \t\tcollapsed := n.collapsed[topicID]\n396: \t\trows = append(rows, navRow{\n397: \t\t\tKind:      navRowTopicHeader,\n398: \t\t\tID:        topicID,\n399: \t\t\tLabel:     t.Name,\n400: \t\t\tCollapsed: collapsed,\n401: \t\t})\n402: \t\tif !collapsed {\n403: \t\t\tfor _, p := range topicIdlePlans {\n404: \t\t\t\tappendPlan(p, 2)\n405: \t\t\t\temitted[p.Filename] = true\n406: \t\t\t}\n407: \t\t} else {\n408: \t\t\tfor _, p := range topicIdlePlans {\n409: \t\t\t\temitted[p.Filename] = true\n410: \t\t\t}\n411: \t\t}\n412: \t}\n413: \n414: \t// Emit ungrouped idle plans (no topic).\n415: \tfor _, p := range idlePlans {\n416: \t\tif !emitted[p.Filename] {\n417: \t\t\tappendPlan(p, 0)\n418: \t\t}\n419: \t}\n420: \n421: \tif len(n.historyPlans) > 0 {\n422: \t\trows = append(rows, navRow{Kind: navRowHistoryToggle, ID: SidebarPlanHistoryToggle, Label: \"history\", Collapsed: !n.historyExpanded})\n423: \t\tif n.historyExpanded {\n424: \t\t\tfor _, p := range n.historyPlans {\n425: \t\t\t\trows = append(rows, navRow{Kind: navRowHistoryPlan, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})\n426: \t\t\t}\n427: \t\t}\n428: \t}\n429: \n430: \tfor _, p := range n.cancelled {\n431: \t\trows = append(rows, navRow{Kind: navRowCancelled, ID: SidebarPlanPrefix + p.Filename, Label: taskstate.DisplayName(p.Filename), TaskFile: p.Filename})\n432: \t}\n433: \n434: \tn.rows = rows\n435: \tif len(rows) == 0 {\n436: \t\tn.selectedIdx = 0\n437: \t\tn.scrollOffset = 0\n438: \t\treturn\n439: \t}\n440: \tif prevID != \"\" {\n441: \t\tfor i, row := range rows {\n442: \t\t\tif row.ID == prevID {\n443: \t\t\t\tn.selectedIdx = i\n444: \t\t\t\tn.clampScroll()\n445: \t\t\t\treturn\n446: \t\t\t}\n447: \t\t}\n448: \t\t// prevID not found — the selected plan may have been transiently\n449: \t\t// absent from an async remote-store reload. Clamp to the same\n450: \t\t// numeric position so the selection doesn't jump to a random row.\n451: \t\t// Skip non-selectable divider rows.\n452: \t\tif prevIdx >= len(rows) {\n453: \t\t\tprevIdx = len(rows) - 1\n454: \t\t}\n455: \t\tif prevIdx < 0 {\n456: \t\t\tprevIdx = 0\n457: \t\t}\n458: \t\tn.selectedIdx = prevIdx\n459: \t\t// If we landed on a non-selectable divider, nudge down then up.\n460: \t\tif n.selectedIdx < len(rows) && rows[n.selectedIdx].Kind == navRowSoloHeader {\n461: \t\t\tif n.selectedIdx+1 < len(rows) {\n462: \t\t\t\tn.selectedIdx++\n463: \t\t\t} else if n.selectedIdx > 0 {\n464: \t\t\t\tn.selectedIdx--\n465: \t\t\t}\n466: \t\t}\n467: \t\tn.clampScroll()\n468: \t\treturn\n469: \t}\n470: \tif n.selectedIdx >= len(rows) {\n471: \t\tn.selectedIdx = len(rows) - 1\n472: \t}\n473: \tif n.selectedIdx < 0 {\n474: \t\tn.selectedIdx = 0\n475: \t}\n476: \tn.clampScroll()\n477: }\n478: \n479: func navInstanceSortKey(inst *session.Instance) int {\n480: \tif inst.ImplementationComplete {\n481: \t\treturn 3\n482: \t}\n483: \tswitch inst.Status {\n484: \tcase session.Running, session.Loading:\n485: \t\treturn 0\n486: \tcase session.Paused:\n487: \t\treturn 2\n488: \t}\n489: \tif inst.Notified {\n490: \t\treturn 1\n491: \t}\n492: \t// Ready / unknown\n493: \treturn 3\n494: }\n495: \n496: func navPlanSortKey(p PlanDisplay, insts []*session.Instance, st TopicStatus) int {\n497: \thasNotification := st.HasNotification\n498: \thasRunning := st.HasRunning\n499: \tfor _, inst := range insts {\n500: \t\tif inst.Notified {\n501: \t\t\thasNotification = true\n502: \t\t}\n503: \t\tif inst.Status == session.Running || inst.Status == session.Loading {\n504: \t\t\thasRunning = true\n505: \t\t}\n506: \t}\n507: \tif hasNotification {\n508: \t\treturn 0\n509: \t}\n510: \tif hasRunning {\n511: \t\treturn 1\n512: \t}\n513: \t// Plans in active lifecycle states (implementing, reviewing) should\n514: \t// appear in the \"active\" section even without running instances —\n515: \t// e.g. after a restart when the agent's tmux session is gone.\n516: \tif p.Status == \"implementing\" || p.Status == \"reviewing\" {\n517: \t\treturn 1\n518: \t}\n519: \treturn 2\n520: }\n521: \n522: func aggregateNavPlanStatus(insts []*session.Instance, st TopicStatus) (bool, bool) {\n523: \thasRunning := st.HasRunning\n524: \thasNotification := st.HasNotification\n525: \tfor _, inst := range insts {\n526: \t\tif inst.Notified {\n527: \t\t\thasNotification = true\n528: \t\t}\n529: \t\tif inst.Status == session.Running || inst.Status == session.Loading {\n530: \t\t\thasRunning = true\n531: \t\t}\n532: \t}\n533: \treturn hasRunning, hasNotification\n534: }\n535: \n536: func (n *NavigationPanel) isPlanCollapsed(planFile string, hasRunning, hasNotification bool) bool {\n537: \tif _, ok := n.userOverrides[planFile]; ok {\n538: \t\treturn n.collapsed[planFile]\n539: \t}\n540: \treturn !hasRunning && !hasNotification\n541: }\n542: \n543: func (n *NavigationPanel) SetSize(width, height int) {\n544: \tn.width, n.height = width, height\n545: \tn.clampScroll()\n546: }\n547: \n548: // SetAuditView sets pre-rendered audit pane content to display inside the border.\n549: func (n *NavigationPanel) SetAuditView(view string, h int) {\n550: \tn.auditView = view\n551: \tn.auditHeight = h\n552: }\n553: \n554: func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }\n555: func (n *NavigationPanel) IsFocused() bool            { return n.focused }\n556: func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.rebuildRows() }\n557: \n558: func (n *NavigationPanel) ActivateSearch()        { n.searchActive = true; n.searchQuery = \"\" }\n559: func (n *NavigationPanel) DeactivateSearch()      { n.searchActive = false; n.searchQuery = \"\" }\n560: func (n *NavigationPanel) IsSearchActive() bool   { return n.searchActive }\n561: func (n *NavigationPanel) GetSearchQuery() string { return n.searchQuery }\n562: func (n *NavigationPanel) SetSearchQuery(q string) {\n563: \tn.searchQuery = q\n564: \t// If the current selection is hidden by the new filter, snap to the first visible row.\n565: \tif q != \"\" && len(n.rows) > 0 && !n.rowMatchesSearch(n.selectedIdx) {\n566: \t\tfor i := range n.rows {\n567: \t\t\tif n.rows[i].Kind != navRowSoloHeader && n.rowMatchesSearch(i) {\n568: \t\t\t\tn.selectedIdx = i\n569: \t\t\t\tn.clampScroll()\n570: \t\t\t\treturn\n571: \t\t\t}\n572: \t\t}\n573: \t}\n574: }\n575: \n576: func (n *NavigationPanel) ToggleSelectedExpand() bool {\n577: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n578: \t\treturn false\n579: \t}\n580: \trow := n.rows[n.selectedIdx]\n581: \tswitch row.Kind {\n582: \tcase navRowPlanHeader:\n583: \t\tn.collapsed[row.TaskFile] = !row.Collapsed\n584: \t\tn.userOverrides[row.TaskFile] = true\n585: \t\tn.rebuildRows()\n586: \t\treturn true\n587: \tcase navRowTopicHeader:\n588: \t\tn.collapsed[row.ID] = !row.Collapsed\n589: \t\tn.rebuildRows()\n590: \t\treturn true\n591: \tcase navRowDeadToggle:\n592: \t\tn.deadExpanded = !n.deadExpanded\n593: \t\tn.rebuildRows()\n594: \t\treturn true\n595: \tcase navRowHistoryToggle:\n596: \t\tn.historyExpanded = !n.historyExpanded\n597: \t\tn.rebuildRows()\n598: \t\treturn true\n599: \tdefault:\n600: \t\treturn false\n601: \t}\n602: }\n603: \n604: func (n *NavigationPanel) Up() {\n605: \torig := n.selectedIdx\n606: \tfor n.selectedIdx > 0 {\n607: \t\tn.selectedIdx--\n608: \t\tif n.rows[n.selectedIdx].Kind == navRowSoloHeader {\n609: \t\t\tcontinue // skip non-selectable divider\n610: \t\t}\n611: \t\tif !n.rowMatchesSearch(n.selectedIdx) {\n612: \t\t\tcontinue // skip rows hidden by search filter\n613: \t\t}\n614: \t\tn.clampScroll()\n615: \t\treturn\n616: \t}\n617: \t// No valid row found above — revert.\n618: \tn.selectedIdx = orig\n619: }\n620: \n621: func (n *NavigationPanel) Down() {\n622: \torig := n.selectedIdx\n623: \tfor n.selectedIdx+1 < len(n.rows) {\n624: \t\tn.selectedIdx++\n625: \t\tif n.rows[n.selectedIdx].Kind == navRowSoloHeader {\n626: \t\t\tcontinue\n627: \t\t}\n628: \t\tif !n.rowMatchesSearch(n.selectedIdx) {\n629: \t\t\tcontinue\n630: \t\t}\n631: \t\tn.clampScroll()\n632: \t\treturn\n633: \t}\n634: \tn.selectedIdx = orig\n635: }\n636: \n637: // rowMatchesSearch returns true if the row at idx is visible under the current\n638: // search filter. Always true when search is inactive or query is empty.\n639: func (n *NavigationPanel) rowMatchesSearch(idx int) bool {\n640: \tif !n.searchActive || n.searchQuery == \"\" {\n641: \t\treturn true\n642: \t}\n643: \trow := n.rows[idx]\n644: \tq := strings.ToLower(n.searchQuery)\n645: \treturn strings.Contains(strings.ToLower(row.Label), q) ||\n646: \t\tstrings.Contains(strings.ToLower(row.TaskFile), q)\n647: }\n648: \n649: func (n *NavigationPanel) Left() {\n650: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n651: \t\treturn\n652: \t}\n653: \trow := n.rows[n.selectedIdx]\n654: \tswitch row.Kind {\n655: \tcase navRowPlanHeader:\n656: \t\tif !row.Collapsed {\n657: \t\t\tn.ToggleSelectedExpand()\n658: \t\t}\n659: \tcase navRowInstance:\n660: \t\tfor i := n.selectedIdx - 1; i >= 0; i-- {\n661: \t\t\tif n.rows[i].Kind == navRowPlanHeader {\n662: \t\t\t\tn.selectedIdx = i\n663: \t\t\t\tn.clampScroll()\n664: \t\t\t\treturn\n665: \t\t\t}\n666: \t\t}\n667: \t}\n668: }\n669: \n670: func (n *NavigationPanel) Right() {\n671: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n672: \t\treturn\n673: \t}\n674: \trow := n.rows[n.selectedIdx]\n675: \tswitch row.Kind {\n676: \tcase navRowPlanHeader:\n677: \t\tif row.Collapsed {\n678: \t\t\tn.ToggleSelectedExpand()\n679: \t\t} else {\n680: \t\t\tn.Down()\n681: \t\t}\n682: \tcase navRowDeadToggle:\n683: \t\tif row.Collapsed {\n684: \t\t\tn.ToggleSelectedExpand()\n685: \t\t} else {\n686: \t\t\tn.Down()\n687: \t\t}\n688: \tcase navRowHistoryToggle:\n689: \t\tif row.Collapsed {\n690: \t\t\tn.ToggleSelectedExpand()\n691: \t\t}\n692: \t}\n693: }\n694: \n695: func (n *NavigationPanel) GetSelectedInstance() *session.Instance {\n696: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n697: \t\treturn nil\n698: \t}\n699: \treturn n.rows[n.selectedIdx].Instance\n700: }\n701: \n702: func (n *NavigationPanel) GetSelectedPlanFile() string {\n703: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n704: \t\treturn \"\"\n705: \t}\n706: \treturn n.rows[n.selectedIdx].TaskFile\n707: }\n708: \n709: func (n *NavigationPanel) IsSelectedPlanHeader() bool {\n710: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n711: \t\treturn false\n712: \t}\n713: \tk := n.rows[n.selectedIdx].Kind\n714: \treturn k == navRowPlanHeader || k == navRowHistoryPlan || k == navRowCancelled\n715: }\n716: \n717: // IsSelectedHistoryPlan returns true if the selected row is a history plan entry.\n718: func (n *NavigationPanel) IsSelectedHistoryPlan() bool {\n719: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n720: \t\treturn false\n721: \t}\n722: \treturn n.rows[n.selectedIdx].Kind == navRowHistoryPlan\n723: }\n724: \n725: func (n *NavigationPanel) GetSelectedID() string {\n726: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n727: \t\treturn \"\"\n728: \t}\n729: \treturn n.rows[n.selectedIdx].ID\n730: }\n731: \n732: func (n *NavigationPanel) GetSelectedIdx() int  { return n.selectedIdx }\n733: func (n *NavigationPanel) GetScrollOffset() int { return n.scrollOffset }\n734: \n735: func (n *NavigationPanel) ClickItem(row int) {\n736: \tif row >= 0 && row < len(n.rows) {\n737: \t\tn.selectedIdx = row\n738: \t\tn.clampScroll()\n739: \t}\n740: }\n741: \n742: func (n *NavigationPanel) SelectByID(id string) bool {\n743: \tfor i, row := range n.rows {\n744: \t\tif row.ID == id {\n745: \t\t\tn.selectedIdx = i\n746: \t\t\tn.clampScroll()\n747: \t\t\treturn true\n748: \t\t}\n749: \t}\n750: \treturn false\n751: }\n752: \n753: func (n *NavigationPanel) SelectInstance(inst *session.Instance) bool {\n754: \tfor i, row := range n.rows {\n755: \t\tif row.Instance == inst {\n756: \t\t\tn.selectedIdx = i\n757: \t\t\tn.clampScroll()\n758: \t\t\treturn true\n759: \t\t}\n760: \t}\n761: \t// Instance not visible — may be under a collapsed plan. Expand it.\n762: \tif inst.TaskFile != \"\" {\n763: \t\tn.collapsed[inst.TaskFile] = false\n764: \t\tn.userOverrides[inst.TaskFile] = true\n765: \t\tn.rebuildRows()\n766: \t\tfor i, row := range n.rows {\n767: \t\t\tif row.Instance == inst {\n768: \t\t\t\tn.selectedIdx = i\n769: \t\t\t\tn.clampScroll()\n770: \t\t\t\treturn true\n771: \t\t\t}\n772: \t\t}\n773: \t}\n774: \treturn false\n775: }\n776: \n777: func (n *NavigationPanel) SetSelectedInstance(idx int) {\n778: \tif idx < 0 || idx >= len(n.instances) {\n779: \t\treturn\n780: \t}\n781: \t_ = n.SelectInstance(n.instances[idx])\n782: }\n783: \n784: func (n *NavigationPanel) SelectedIndex() int {\n785: \tinst := n.GetSelectedInstance()\n786: \tif inst == nil {\n787: \t\treturn 0\n788: \t}\n789: \tfor i, item := range n.instances {\n790: \t\tif item == inst {\n791: \t\t\treturn i\n792: \t\t}\n793: \t}\n794: \treturn 0\n795: }\n796: \n797: func (n *NavigationPanel) CycleNextActive() {\n798: \tn.cycleActive(1)\n799: }\n800: \n801: func (n *NavigationPanel) CyclePrevActive() {\n802: \tn.cycleActive(-1)\n803: }\n804: \n805: func (n *NavigationPanel) cycleActive(step int) {\n806: \t// Build the cycle list in visual (top-to-bottom) order so Ctrl+Up/Down\n807: \t// follows the on-screen layout across active/solo sections.\n808: \t// For collapsed plan headers, insert their hidden instances at the\n809: \t// header's position so cycling can auto-expand them.\n810: \tvar ordered []*session.Instance\n811: \tfor _, row := range n.rows {\n812: \t\tswitch {\n813: \t\tcase row.Kind == navRowInstance && row.Instance != nil:\n814: \t\t\tif !row.Instance.Paused() {\n815: \t\t\t\tordered = append(ordered, row.Instance)\n816: \t\t\t}\n817: \t\tcase row.Kind == navRowPlanHeader && row.Collapsed:\n818: \t\t\t// Plan is collapsed — its instances aren't in rows.\n819: \t\t\t// Insert them here so they appear at the right visual position.\n820: \t\t\tfor _, inst := range n.instances {\n821: \t\t\t\tif inst.TaskFile == row.TaskFile && !inst.Paused() {\n822: \t\t\t\t\tordered = append(ordered, inst)\n823: \t\t\t\t}\n824: \t\t\t}\n825: \t\t}\n826: \t}\n827: \tif len(ordered) == 0 {\n828: \t\treturn\n829: \t}\n830: \n831: \t// Find current position. Match by instance pointer from the selected row.\n832: \tcur := -1\n833: \tsel := n.GetSelectedInstance()\n834: \tif sel != nil {\n835: \t\tfor i, inst := range ordered {\n836: \t\t\tif inst == sel {\n837: \t\t\t\tcur = i\n838: \t\t\t\tbreak\n839: \t\t\t}\n840: \t\t}\n841: \t}\n842: \tif cur < 0 {\n843: \t\tcur = 0\n844: \t}\n845: \n846: \tnext := (cur + step + len(ordered)) % len(ordered)\n847: \tn.SelectInstance(ordered[next])\n848: }\n849: \n850: func (n *NavigationPanel) GetInstances() []*session.Instance { return n.instances }\n851: func (n *NavigationPanel) TotalInstances() int               { return len(n.instances) }\n852: func (n *NavigationPanel) NumInstances() int                 { return len(n.instances) }\n853: \n854: func (n *NavigationPanel) AddInstance(inst *session.Instance) func() {\n855: \tn.instances = append(n.instances, inst)\n856: \tn.resplitDead()\n857: \tn.rebuildRows()\n858: \treturn func() {}\n859: }\n860: \n861: func (n *NavigationPanel) RemoveByTitle(title string) *session.Instance {\n862: \tfor i, inst := range n.instances {\n863: \t\tif inst.Title == title {\n864: \t\t\tn.instances = append(n.instances[:i], n.instances[i+1:]...)\n865: \t\t\tn.resplitDead()\n866: \t\t\tn.rebuildRows()\n867: \t\t\treturn inst\n868: \t\t}\n869: \t}\n870: \treturn nil\n871: }\n872: \n873: func (n *NavigationPanel) Remove() {\n874: \tinst := n.GetSelectedInstance()\n875: \tif inst != nil {\n876: \t\tn.RemoveByTitle(inst.Title)\n877: \t}\n878: }\n879: \n880: func (n *NavigationPanel) Kill() {\n881: \tinst := n.GetSelectedInstance()\n882: \tif inst != nil {\n883: \t\t_ = inst.Kill()\n884: \t\tn.RemoveByTitle(inst.Title)\n885: \t}\n886: }\n887: \n888: func (n *NavigationPanel) Attach() (chan struct{}, error) {\n889: \tinst := n.GetSelectedInstance()\n890: \tif inst == nil {\n891: \t\treturn nil, fmt.Errorf(\"no instance selected\")\n892: \t}\n893: \treturn inst.Attach()\n894: }\n895: \n896: func (n *NavigationPanel) Clear() {\n897: \tn.instances = nil\n898: \tn.rows = nil\n899: \tn.selectedIdx = 0\n900: \tn.scrollOffset = 0\n901: }\n902: \n903: func (n *NavigationPanel) SetSessionPreviewSize(width, height int) error {\n904: \tvar err error\n905: \tfor _, item := range n.instances {\n906: \t\tif !item.Started() || item.Paused() {\n907: \t\t\tcontinue\n908: \t\t}\n909: \t\tif innerErr := item.SetPreviewSize(width, height); innerErr != nil {\n910: \t\t\terr = innerErr\n911: \t\t}\n912: \t}\n913: \treturn err\n914: }\n915: \n916: func (n *NavigationPanel) SelectFirst() {\n917: \tif len(n.rows) > 0 {\n918: \t\tn.selectedIdx = 0\n919: \t\t// Skip non-selectable divider rows.\n920: \t\tif n.rows[0].Kind == navRowSoloHeader && len(n.rows) > 1 {\n921: \t\t\tn.selectedIdx = 1\n922: \t\t}\n923: \t\tn.clampScroll()\n924: \t}\n925: }\n926: \n927: func (n *NavigationPanel) SelectedSpaceAction() string {\n928: \tif n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {\n929: \t\treturn \"toggle\"\n930: \t}\n931: \tswitch n.rows[n.selectedIdx].Kind {\n932: \tcase navRowPlanHeader, navRowDeadToggle, navRowHistoryToggle:\n933: \t\tif n.rows[n.selectedIdx].Collapsed {\n934: \t\t\treturn \"expand\"\n935: \t\t}\n936: \t\treturn \"collapse\"\n937: \tdefault:\n938: \t\treturn \"toggle\"\n939: \t}\n940: }\n941: \n942: func (n *NavigationPanel) availRows() int {\n943: \tavail := n.height - 8\n944: \tif avail < 1 {\n945: \t\treturn 1\n946: \t}\n947: \treturn avail\n948: }\n949: \n950: func (n *NavigationPanel) clampScroll() {\n951: \tif len(n.rows) == 0 {\n952: \t\tn.scrollOffset = 0\n953: \t\treturn\n954: \t}\n955: \tavail := n.availRows()\n956: \tif n.selectedIdx < n.scrollOffset {\n957: \t\tn.scrollOffset = n.selectedIdx\n958: \t}\n959: \tif n.selectedIdx >= n.scrollOffset+avail {\n960: \t\tn.scrollOffset = n.selectedIdx - avail + 1\n961: \t}\n962: \tif n.scrollOffset < 0 {\n963: \t\tn.scrollOffset = 0\n964: \t}\n965: }\n966: \n967: // FindPlanInstance returns the best interactive candidate for a plan.\n968: // Priority: running > any non-paused instance. The caller should check\n969: // Started()/Paused() on the returned instance before entering focus mode.\n970: func (n *NavigationPanel) FindPlanInstance(planFile string) *session.Instance {\n971: \tvar best *session.Instance\n972: \tfor _, inst := range n.instances {\n973: \t\tif inst.TaskFile != planFile || inst.Paused() {\n974: \t\t\tcontinue\n975: \t\t}\n976: \t\tif inst.Status == session.Running || inst.Status == session.Loading {\n977: \t\t\treturn inst\n978: \t\t}\n979: \t\tif best == nil {\n980: \t\t\tbest = inst\n981: \t\t}\n982: \t}\n983: \treturn best\n984: }\n985: \n986: // navInstanceTitle returns a clean display title for an instance in the sidebar.\n987: func navInstanceTitle(inst *session.Instance) string {\n988: \tswitch {\n989: \tcase inst.WaveNumber > 0 && inst.TaskNumber > 0:\n990: \t\treturn fmt.Sprintf(\"wave %d · task %d\", inst.WaveNumber, inst.TaskNumber)\n991: \tcase inst.AgentType == session.AgentTypeReviewer && inst.TaskFile != \"\":\n992: \t\treturn \"review\"\n993: \tcase inst.AgentType == session.AgentTypePlanner && inst.TaskFile != \"\":\n994: \t\treturn \"planning\"\n995: \tcase inst.SoloAgent && inst.TaskFile != \"\":\n996: \t\treturn taskstate.DisplayName(inst.TaskFile)\n997: \tcase inst.AgentType == session.AgentTypeCoder && inst.TaskFile != \"\" && inst.WaveNumber == 0:\n998: \t\treturn \"applying fixes\"\n999: \tdefault:\n1000: \t\treturn inst.Title\n1001: \t}\n1002: }\n1003: \n1004: // navInstanceStatusIcon returns a styled status glyph for an instance.\n1005: func (n *NavigationPanel) navInstanceStatusIcon(inst *session.Instance) string {\n1006: \tif inst.Exited {\n1007: \t\treturn navCancelledLblStyle.Render(\"✕\")\n1008: \t}\n1009: \tif inst.ImplementationComplete {\n1010: \t\treturn navCompletedIconStyle.Render(\"✓\")\n1011: \t}\n1012: \tswitch inst.Status {\n1013: \tcase session.Running, session.Loading:\n1014: \t\tif n.spinner != nil {\n1015: \t\t\treturn strings.TrimRight(n.spinner.View(), \" \")\n1016: \t\t}\n1017: \t\treturn navRunningIconStyle.Render(\"●\")\n1018: \tcase session.Ready:\n1019: \t\tif inst.Notified {\n1020: \t\t\treturn navNotifyIconStyle.Render(\"◉\")\n1021: \t\t}\n1022: \t\treturn navReadyIconStyle.Render(\"●\")\n1023: \tcase session.Paused:\n1024: \t\treturn navPausedIconStyle.Render(\"\\uf04c\")\n1025: \tdefault:\n1026: \t\treturn navIdleIconStyle.Render(\"○\")\n1027: \t}\n1028: }\n1029: \n1030: // navPlanStatusIcon returns a styled status glyph for a plan header row.\n1031: func navPlanStatusIcon(row navRow) string {\n1032: \tif row.HasNotification {\n1033: \t\treturn navNotifyIconStyle.Render(\"◉\")\n1034: \t}\n1035: \tif row.HasRunning {\n1036: \t\treturn navRunningIconStyle.Render(\"●\")\n1037: \t}\n1038: \t// Reflect plan lifecycle status when no instances are active.\n1039: \tswitch row.PlanStatus {\n1040: \tcase \"planning\":\n1041: \t\treturn navRunningIconStyle.Render(\"●\")\n1042: \tcase \"reviewing\":\n1043: \t\treturn navNotifyIconStyle.Render(\"◉\")\n1044: \t}\n1045: \treturn navIdleIconStyle.Render(\"○\")\n1046: }\n1047: \n1048: // navSectionLabel returns a lowercase section label for a plan sort key.\n1049: func navSectionLabel(key int) string {\n1050: \tif key < 2 {\n1051: \t\treturn \"active\"\n1052: \t}\n1053: \treturn \"plans\"\n1054: }\n1055: \n1056: // navDividerLine builds a full-width rule like \"──── label ────\" spanning w cells.\n1057: func navDividerLine(label string, w int) string {\n1058: \tinner := \" \" + label + \" \"\n1059: \tinnerW := runewidth.StringWidth(inner)\n1060: \tremaining := w - innerW\n1061: \tif remaining < 2 {\n1062: \t\treturn navHistoryDivStyle.Render(inner)\n1063: \t}\n1064: \tleft := remaining / 2\n1065: \tright := remaining - left\n1066: \treturn navHistoryDivStyle.Render(strings.Repeat(\"─\", left) + inner + strings.Repeat(\"─\", right))\n1067: }\n1068: \n1069: // renderNavRow renders a single row's content (without selection styling).\n1070: func (n *NavigationPanel) renderNavRow(row navRow, contentWidth int) string {\n1071: \tswitch row.Kind {\n1072: \tcase navRowPlanHeader:\n1073: \t\tchevron := \"▸\"\n1074: \t\tif !row.Collapsed {\n1075: \t\t\tchevron = \"▾\"\n1076: \t\t}\n1077: \t\tstatusIcon := navPlanStatusIcon(row)\n1078: \t\tstatusW := lipgloss.Width(statusIcon)\n1079: \t\tindent := strings.Repeat(\" \", row.Indent)\n1080: \t\tindentW := row.Indent\n1081: \n1082: \t\tlabel := row.Label\n1083: \t\t// Layout: indent + chevron(1) + space(1) + label + gap + space(1) + status\n1084: \t\tmaxLabel := contentWidth - indentW - 3 - statusW\n1085: \t\tif maxLabel < 3 {\n1086: \t\t\tmaxLabel = 3\n1087: \t\t}\n1088: \t\tif runewidth.StringWidth(label) > maxLabel {\n1089: \t\t\tlabel = runewidth.Truncate(label, maxLabel-1, \"…\")\n1090: \t\t}\n1091: \n1092: \t\tusedW := indentW + 2 + runewidth.StringWidth(label) + 1 + statusW\n1093: \t\tgap := contentWidth - usedW\n1094: \t\tif gap < 0 {\n1095: \t\t\tgap = 0\n1096: \t\t}\n1097: \t\t// Plans under topics use normal weight; top-level plans use bold.\n1098: \t\tlabelStyle := navPlanLabelStyle\n1099: \t\tif row.Indent > 0 {\n1100: \t\t\tlabelStyle = navPlanLabelStyle.Bold(false)\n1101: \t\t}\n1102: \t\treturn indent + chevron + \" \" + labelStyle.Render(label) + strings.Repeat(\" \", gap) + \" \" + statusIcon\n1103: \n1104: \tcase navRowInstance:\n1105: \t\tinst := row.Instance\n1106: \t\tisSolo := row.TaskFile == \"\"\n1107: \n1108: \t\tif inst == nil {\n1109: \t\t\tif isSolo {\n1110: \t\t\t\treturn row.Label\n1111: \t\t\t}\n1112: \t\t\treturn \"    \" + row.Label\n1113: \t\t}\n1114: \t\ttitle := navInstanceTitle(inst)\n1115: \t\tstatusIcon := n.navInstanceStatusIcon(inst)\n1116: \t\tstatusW := lipgloss.Width(statusIcon)\n1117: \n1118: \t\tindentW := row.Indent + 4\n1119: \t\tif isSolo {\n1120: \t\t\tindentW = 0\n1121: \t\t}\n1122: \t\t// Layout: indent + title + gap + space(1) + status\n1123: \t\tmaxLabel := contentWidth - indentW - 1 - statusW\n1124: \t\tif maxLabel < 3 {\n1125: \t\t\tmaxLabel = 3\n1126: \t\t}\n1127: \t\tif runewidth.StringWidth(title) > maxLabel {\n1128: \t\t\ttitle = runewidth.Truncate(title, maxLabel-1, \"…\")\n1129: \t\t}\n1130: \n1131: \t\tusedW := indentW + runewidth.StringWidth(title) + 1 + statusW\n1132: \t\tgap := contentWidth - usedW\n1133: \t\tif gap < 0 {\n1134: \t\t\tgap = 0\n1135: \t\t}\n1136: \n1137: \t\tindent := strings.Repeat(\" \", indentW)\n1138: \t\tlabelStyle := navInstanceLabelStyle\n1139: \t\tif isSolo {\n1140: \t\t\tindent = \"\"\n1141: \t\t\tlabelStyle = navPlanLabelStyle\n1142: \t\t}\n1143: \t\t// Dead instances: grey + strikethrough.\n1144: \t\tif inst.Exited {\n1145: \t\t\tlabelStyle = navCancelledLblStyle\n1146: \t\t\tstatusIcon = navCancelledLblStyle.Render(\"✕\")\n1147: \t\t\tstatusW = lipgloss.Width(statusIcon)\n1148: \t\t\t// Recompute gap with updated status width.\n1149: \t\t\tusedW = indentW + runewidth.StringWidth(title) + 1 + statusW\n1150: \t\t\tgap = contentWidth - usedW\n1151: \t\t\tif gap < 0 {\n1152: \t\t\t\tgap = 0\n1153: \t\t\t}\n1154: \t\t}\n1155: \t\treturn indent + labelStyle.Render(title) + strings.Repeat(\" \", gap) + \" \" + statusIcon\n1156: \n1157: \tcase navRowSoloHeader:\n1158: \t\treturn navDividerLine(\"agents\", contentWidth)\n1159: \n1160: \tcase navRowTopicHeader:\n1161: \t\tchevron := \"▸\"\n1162: \t\tif !row.Collapsed {\n1163: \t\t\tchevron = \"▾\"\n1164: \t\t}\n1165: \t\tlabel := row.Label\n1166: \t\tmaxLabel := contentWidth - 2 // chevron + space\n1167: \t\tif maxLabel < 3 {\n1168: \t\t\tmaxLabel = 3\n1169: \t\t}\n1170: \t\tif runewidth.StringWidth(label) > maxLabel {\n1171: \t\t\tlabel = runewidth.Truncate(label, maxLabel-1, \"…\")\n1172: \t\t}\n1173: \t\treturn chevron + \" \" + navPlanLabelStyle.Render(label)\n1174: \n1175: \tcase navRowDeadToggle:\n1176: \t\treturn navDividerLine(\"dead\", contentWidth)\n1177: \n1178: \tcase navRowHistoryToggle:\n1179: \t\tchevron := \"▸\"\n1180: \t\tif !row.Collapsed {\n1181: \t\t\tchevron = \"▾\"\n1182: \t\t}\n1183: \t\treturn navDividerLine(chevron+\" history\", contentWidth)\n1184: \n1185: \tcase navRowHistoryPlan:\n1186: \t\tlabel := row.Label\n1187: \t\tdoneIcon := navCompletedIconStyle.Render(\"●\")\n1188: \t\tdoneW := lipgloss.Width(doneIcon)\n1189: \t\tmaxLabel := contentWidth - 1 - doneW\n1190: \t\tif maxLabel < 3 {\n1191: \t\t\tmaxLabel = 3\n1192: \t\t}\n1193: \t\tif runewidth.StringWidth(label) > maxLabel {\n1194: \t\t\tlabel = runewidth.Truncate(label, maxLabel-1, \"…\")\n1195: \t\t}\n1196: \t\tusedW := runewidth.StringWidth(label) + 1 + doneW\n1197: \t\tgap := contentWidth - usedW\n1198: \t\tif gap < 0 {\n1199: \t\t\tgap = 0\n1200: \t\t}\n1201: \t\treturn navIdleIconStyle.Render(label) + strings.Repeat(\" \", gap) + \" \" + doneIcon\n1202: \n1203: \tcase navRowCancelled:\n1204: \t\tlabel := row.Label\n1205: \t\tconst trailW = 2\n1206: \t\tmaxLabel := contentWidth - trailW\n1207: \t\tif maxLabel < 3 {\n1208: \t\t\tmaxLabel = 3\n1209: \t\t}\n1210: \t\tif runewidth.StringWidth(label) > maxLabel {\n1211: \t\t\tlabel = runewidth.Truncate(label, maxLabel-1, \"…\")\n1212: \t\t}\n1213: \t\tusedW := runewidth.StringWidth(label) + trailW\n1214: \t\tgap := contentWidth - usedW\n1215: \t\tif gap < 0 {\n1216: \t\t\tgap = 0\n1217: \t\t}\n1218: \t\treturn navCancelledLblStyle.Render(label) + strings.Repeat(\" \", gap) + \" \" + navCancelledLblStyle.Render(\"✕\")\n1219: \n1220: \tcase navRowImportAction:\n1221: \t\tlabelW := runewidth.StringWidth(row.Label)\n1222: \t\tpad := contentWidth - labelW\n1223: \t\tif pad < 0 {\n1224: \t\t\tpad = 0\n1225: \t\t}\n1226: \t\treturn strings.Repeat(\" \", pad) + row.Label\n1227: \n1228: \tdefault:\n1229: \t\treturn row.Label\n1230: \t}\n1231: }\n1232: \n1233: func (n *NavigationPanel) String() string {\n1234: \tborder := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorOverlay).Padding(0, 1)\n1235: \tif n.focused {\n1236: \t\tborder = border.Border(lipgloss.DoubleBorder()).BorderForeground(ColorIris)\n1237: \t}\n1238: \tinnerWidth := n.width - 4\n1239: \tif innerWidth < 8 {\n1240: \t\tinnerWidth = 8\n1241: \t}\n1242: \theight := n.height - 2\n1243: \tif height < 4 {\n1244: \t\theight = 4\n1245: \t}\n1246: \n1247: \titemWidth := innerWidth - 2   // border has Padding(0,1) → content area is 2 chars narrower\n1248: \tcontentWidth := itemWidth - 2 // account for Padding(0,1) in row styles\n1249: \tif contentWidth < 4 {\n1250: \t\tcontentWidth = 4\n1251: \t}\n1252: \n1253: \t// Search bar\n1254: \tsearchWidth := innerWidth - 4\n1255: \tif searchWidth < 4 {\n1256: \t\tsearchWidth = 4\n1257: \t}\n1258: \tvar searchBox string\n1259: \tif n.searchActive {\n1260: \t\tsearchText := n.searchQuery\n1261: \t\tif searchText == \"\" {\n1262: \t\t\tsearchText = \" \"\n1263: \t\t}\n1264: \t\tsearchBox = zone.Mark(ZoneNavSearch, navSearchActiveStyle.Width(searchWidth).Render(searchText))\n1265: \t} else {\n1266: \t\tsearchBox = zone.Mark(ZoneNavSearch, navSearchBoxStyle.Width(searchWidth).Render(\"\\uf002 search\"))\n1267: \t}\n1268: \n1269: \t// Build visible items, including section dividers between plan sort-key groups.\n1270: \ttype visItem struct {\n1271: \t\tline   string\n1272: \t\trowIdx int // -1 for section dividers\n1273: \t}\n1274: \titems := make([]visItem, 0, len(n.rows)+4)\n1275: \tselectedDisplayIdx := 0\n1276: \tlastPlanKey := -1\n1277: \tinDeadSection := false\n1278: \n1279: \tfor i, row := range n.rows {\n1280: \t\t// Search filter\n1281: \t\tif n.searchActive && n.searchQuery != \"\" {\n1282: \t\t\tq := strings.ToLower(n.searchQuery)\n1283: \t\t\tif !strings.Contains(strings.ToLower(row.Label), q) &&\n1284: \t\t\t\t!strings.Contains(strings.ToLower(row.TaskFile), q) {\n1285: \t\t\t\tcontinue\n1286: \t\t\t}\n1287: \t\t}\n1288: \n1289: \t\t// Track dead section boundaries to suppress plan-group dividers.\n1290: \t\tif row.Kind == navRowDeadToggle {\n1291: \t\t\tinDeadSection = true\n1292: \t\t} else if row.Kind != navRowPlanHeader && row.Kind != navRowInstance {\n1293: \t\t\tinDeadSection = false\n1294: \t\t}\n1295: \n1296: \t\t// Insert section dividers between plan sort-key groups.\n1297: \t\t// Sort keys 0 (notification) and 1 (running) are merged into a single\n1298: \t\t// \"active\" section so the list doesn't jump between attention/active.\n1299: \t\tif row.Kind == navRowPlanHeader && !inDeadSection {\n1300: \t\t\tsk := 2\n1301: \t\t\tif row.HasNotification || row.HasRunning ||\n1302: \t\t\t\trow.PlanStatus == \"implementing\" || row.PlanStatus == \"reviewing\" {\n1303: \t\t\t\tsk = 0 // unified active group\n1304: \t\t\t}\n1305: \t\t\tif sk != lastPlanKey {\n1306: \t\t\t\tlabel := navSectionLabel(sk)\n1307: \t\t\t\tdivLine := navDividerLine(label, itemWidth)\n1308: \t\t\t\titems = append(items, visItem{line: divLine, rowIdx: -1})\n1309: \t\t\t\tlastPlanKey = sk\n1310: \t\t\t}\n1311: \t\t}\n1312: \t\t// Topic headers are always idle — ensure the idle divider appears.\n1313: \t\tif row.Kind == navRowTopicHeader && lastPlanKey != 2 {\n1314: \t\t\tdivLine := navDividerLine(navSectionLabel(2), itemWidth)\n1315: \t\t\titems = append(items, visItem{line: divLine, rowIdx: -1})\n1316: \t\t\tlastPlanKey = 2\n1317: \t\t}\n1318: \n1319: \t\tif i == n.selectedIdx {\n1320: \t\t\tselectedDisplayIdx = len(items)\n1321: \t\t}\n1322: \n1323: \t\t// Render the row content\n1324: \t\trawLine := n.renderNavRow(row, contentWidth)\n1325: \n1326: \t\t// Apply selection highlighting\n1327: \t\tisSelected := i == n.selectedIdx\n1328: \t\tvar styledLine string\n1329: \t\tif isSelected && n.focused {\n1330: \t\t\tstyledLine = navSelectedRowStyle.Width(itemWidth).Render(ansi.Strip(rawLine))\n1331: \t\t} else if isSelected {\n1332: \t\t\tstyledLine = navActiveRowStyle.Width(itemWidth).Render(ansi.Strip(rawLine))\n1333: \t\t} else if row.Kind == navRowImportAction {\n1334: \t\t\tstyledLine = navImportStyle.Width(itemWidth).Render(rawLine)\n1335: \t\t} else {\n1336: \t\t\tstyledLine = navItemStyle.Width(itemWidth).Render(rawLine)\n1337: \t\t}\n1338: \n1339: \t\titems = append(items, visItem{line: styledLine, rowIdx: i})\n1340: \t}\n1341: \n1342: \t// Scroll window — keep the selected item visible\n1343: \tavail := n.availRows()\n1344: \tstart := selectedDisplayIdx - avail/2\n1345: \tif start < 0 {\n1346: \t\tstart = 0\n1347: \t}\n1348: \tend := start + avail\n1349: \tif end > len(items) {\n1350: \t\tend = len(items)\n1351: \t\tstart = end - avail\n1352: \t\tif start < 0 {\n1353: \t\t\tstart = 0\n1354: \t\t}\n1355: \t}\n1356: \n1357: \tvar bodyLines []string\n1358: \tfor _, item := range items[start:end] {\n1359: \t\tline := item.line\n1360: \t\tif item.rowIdx >= 0 {\n1361: \t\t\tline = zone.Mark(NavRowZoneID(item.rowIdx), line)\n1362: \t\t}\n1363: \t\tbodyLines = append(bodyLines, line)\n1364: \t}\n1365: \tbody := strings.Join(bodyLines, \"\\n\")\n1366: \tif body != \"\" {\n1367: \t\tbody += \"\\n\"\n1368: \t}\n1369: \n1370: \t// Legend — plan status icon key, centered in the pane\n1371: \tlegendContent := navIdleIconStyle.Render(\"○\") + navLegendLabelStyle.Render(\" idle\") +\n1372: \t\t\"  \" + navRunningIconStyle.Render(\"●\") + navLegendLabelStyle.Render(\" planning\") +\n1373: \t\t\"  \" + navRunningIconStyle.Render(\"●\") + navLegendLabelStyle.Render(\" running\") +\n1374: \t\t\"  \" + navNotifyIconStyle.Render(\"◉\") + navLegendLabelStyle.Render(\" review\")\n1375: \tlegend := lipgloss.NewStyle().Width(innerWidth).Align(lipgloss.Center).Render(legendContent)\n1376: \n1377: \t// Assemble content: list on top, legend + log pinned to bottom.\n1378: \ttopContent := searchBox + \"\\n\" + body\n1379: \n1380: \t// Legend sits between history and the log divider.\n1381: \tlegendSection := legend\n1382: \n1383: \ttopLines := strings.Count(topContent, \"\\n\") + 1\n1384: \tlegendLines := strings.Count(legendSection, \"\\n\") + 1\n1385: \n1386: \t// Determine how many lines the audit section can use without overflowing.\n1387: \t// lipgloss .Height() doesn't truncate overflow, so we must never exceed height.\n1388: \tmaxAudit := height - topLines - legendLines // leaves gap=1 at this limit\n1389: \tauditSection := \"\"\n1390: \tauditLines := 0\n1391: \tif n.auditView != \"\" && n.auditHeight > 0 && maxAudit >= 3 {\n1392: \t\tcap := maxAudit\n1393: \t\t// Split into header (── log ──) and event body lines.\n1394: \t\tvlines := strings.Split(n.auditView, \"\\n\")\n1395: \t\theader := \"\"\n1396: \t\tvar body []string\n1397: \t\tif len(vlines) > 0 {\n1398: \t\t\theader = vlines[0]\n1399: \t\t\tbody = vlines[1:]\n1400: \t\t}\n1401: \t\t// Strip trailing blank lines the viewport may have appended.\n1402: \t\tfor len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == \"\" {\n1403: \t\t\tbody = body[:len(body)-1]\n1404: \t\t}\n1405: \t\tmaxBody := cap - 1 // lines available after header\n1406: \t\tif maxBody < 0 {\n1407: \t\t\tmaxBody = 0\n1408: \t\t}\n1409: \t\tif len(body) > maxBody {\n1410: \t\t\tbody = body[len(body)-maxBody:]\n1411: \t\t\t// Drop leading continuation lines (word-wrap fragments without a\n1412: \t\t\t// timestamp) so we never show an orphaned tail of a wrapped message.\n1413: \t\t\tfor len(body) > 0 && isAuditContinuationLine(body[0]) {\n1414: \t\t\t\tbody = body[1:]\n1415: \t\t\t}\n1416: \t\t}\n1417: \t\t// Bottom-align: pad between header and body so events grow upward.\n1418: \t\tpadCount := maxBody - len(body)\n1419: \t\tlines := make([]string, 0, 1+padCount+len(body))\n1420: \t\tlines = append(lines, header)\n1421: \t\tfor i := 0; i < padCount; i++ {\n1422: \t\t\tlines = append(lines, \"\")\n1423: \t\t}\n1424: \t\tlines = append(lines, body...)\n1425: \t\tauditSection = strings.Join(lines, \"\\n\")\n1426: \t\tauditLines = len(lines)\n1427: \t}\n1428: \n1429: \tgap := height - topLines - legendLines - auditLines + 1\n1430: \tif gap < 1 {\n1431: \t\tgap = 1\n1432: \t}\n1433: \n1434: \t// Split gap evenly so legend is centered between the list and log sections.\n1435: \tgapAbove := gap / 2\n1436: \tgapBelow := gap - gapAbove\n1437: \tif gapAbove < 1 {\n1438: \t\tgapAbove = 1\n1439: \t}\n1440: \tif gapBelow < 1 {\n1441: \t\tgapBelow = 1\n1442: \t}\n1443: \n1444: \t// Order: list … gap-above … legend … gap-below … log (bottom-pinned)\n1445: \tinnerContent := topContent + strings.Repeat(\"\\n\", gapAbove) + legendSection\n1446: \tif auditSection != \"\" {\n1447: \t\tinnerContent += strings.Repeat(\"\\n\", gapBelow) + auditSection\n1448: \t}\n1449: \n1450: \tbordered := border.Width(innerWidth).Height(height).Render(innerContent)\n1451: \tplaced := lipgloss.Place(n.width, n.height, lipgloss.Left, lipgloss.Top, bordered)\n1452: \treturn zone.Mark(ZoneNavPanel, placed)\n1453: }\n1454: \n1455: // isAuditContinuationLine returns true if the line is a word-wrap continuation\n1456: // (indented text without a timestamp), not a primary event line.\n1457: // Primary lines look like \" HH:MM  ◆  message\" — after stripping ANSI and\n1458: // trimming whitespace, they start with a digit (the timestamp hour).\n1459: func isAuditContinuationLine(line string) bool {\n1460: \tstripped := strings.TrimLeft(ansi.Strip(line), \" \")\n1461: \tif stripped == \"\" {\n1462: \t\treturn true\n1463: \t}\n1464: \treturn stripped[0] < '0' || stripped[0] > '9'\n1465: }\n1466: \n1467: // RowCount returns the number of rows in the navigation panel rows slice.\n1468: // Used by zone-based mouse hit detection to iterate row zones.\n1469: func (n *NavigationPanel) RowCount() int { return len(n.rows) }\n\n(End of file - total 1469 lines)\n</content>",
+            "title": "ui/navigation_panel.go",
+            "metadata": {
+              "preview": "package ui\n\nimport (\n\t\"fmt\"\n\t\"sort\"\n\t\"strings\"\n\n\t\"github.com/charmbracelet/bubbles/spinner\"\n\t\"github.com/charmbracelet/lipgloss\"\n\t\"github.com/charmbracelet/x/ansi\"\n\t\"github.com/kastheco/kasmos/config/taskstate\"\n\t\"github.com/kastheco/kasmos/session\"\n\tzone \"github.com/lrstanley/bubblezone\"\n\t\"github.com/mattn/go-runewidth\"\n)\n\nconst (\n\tSidebarPlanPrefix        = \"__plan__\"\n\tSidebarTopicPrefix       = \"__topic__\"\n\tSidebarPlanHistoryToggle = \"__plan_history_toggle__\"",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564400715,
+              "end": 1772564400718
+            }
+          },
+          "id": "prt_cb512492f001fPDfQ62gjP2y3h",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 51510,
+            "input": 1,
+            "output": 217,
+            "reasoning": 0,
+            "cache": {
+              "read": 43030,
+              "write": 8262
+            }
+          },
+          "id": "prt_cb5124a66001gL1O7GGaRqasKg",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5123b35001Ej42v2amowDtp7"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564400753,
+          "completed": 1772564409879
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 85178,
+          "input": 1,
+          "output": 414,
+          "reasoning": 0,
+          "cache": {
+            "read": 51292,
+            "write": 33471
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5124a710016YrYrlieakN67G",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb5125143001Z0UCMknLkGRFxh",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me now look at the test file more thoroughly and look at other related files (session, taskstate, theme colors, etc.) to understand what I need to implement.\n\nI see that the current `navigation_panel.go` file is already quite complete. The task says to \"delete the contents of `ui/navigation_panel.go` and rewrite from scratch\". \n\nLet me check:\n1. What color constants are referenced (ColorText, ColorIris, etc.)\n2. What zone constants are referenced (ZoneNavPanel, ZoneNavSearch, etc.)\n3. What session imports are needed\n4. Run the existing tests to verify the baseline passes\n\n\n5. Now I need to examine the theme and zone definitions to understand what constants and structures I'll be working with.",
+          "metadata": {
+            "anthropic": {
+              "signature": "ErMGCkYICxgCKkD5B2BPEBv1/REDACTED/JV06bDLqIiLBDZr/REDACTED/REDACTED/E9EqGBIwna9L/zc1ar5NTLbbfqQoVcUjIlAmVBQ/REDACTED/REDACTED/TzcAXrWwPNIkz/ptRf7eeFLuF7sGSdwijh/g1mZOlgn0NFNoQ7z0nt/Uaktk6dcR67+zdDgn5+u3+EAMkBVEERMcPanv/REDACTED/REDACTED/REDACTED/REDACTED/ARWGAE="
+            }
+          },
+          "time": {
+            "start": 1772564402500,
+            "end": 1772564406631
+          },
+          "id": "prt_cb5125144001dV443DdU6Qy2n3",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        },
+        {
+          "type": "text",
+          "text": "Let me examine the related files to understand the theme, zones, and session types:",
+          "time": {
+            "start": 1772564406904,
+            "end": 1772564406904
+          },
+          "id": "prt_cb51261680016aIUWNZD171aN1",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui</path>\n<type>directory</type>\n<entries>\naudit_pane_test.go\naudit_pane.go\nconsts_test.go\nconsts.go\ndiff.go\nfill.go\ngradient_test.go\ngradient.go\ninfo_pane_test.go\ninfo_pane.go\nmain_test.go\nmenu_test.go\nmenu.go\nnav_panel_test.go\nnavigation_panel.go\noverlay/\npreview_fallback_test.go\npreview_test.go\npreview.go\nspring_test.go\nspring.go\nstatusbar_test.go\nstatusbar.go\ntabbed_window_test.go\ntabbed_window.go\ntermbg_test.go\ntermbg.go\ntheme.go\nzones.go\n\n(29 entries)\n</entries>",
+            "title": "ui",
+            "metadata": {
+              "preview": "audit_pane_test.go\naudit_pane.go\nconsts_test.go\nconsts.go\ndiff.go\nfill.go\ngradient_test.go\ngradient.go\ninfo_pane_test.go\ninfo_pane.go\nmain_test.go\nmenu_test.go\nmenu.go\nnav_panel_test.go\nnavigation_panel.go\noverlay/\npreview_fallback_test.go\npreview_test.go\npreview.go\nspring_test.go",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564408124,
+              "end": 1772564408126
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_016yU6LyHm6ULDuZnzeRfBcQ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./ui/... -run \"Test\" -count=1 2>&1 | tail -20",
+              "description": "Run nav panel tests to check baseline",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+              "timeout": 60000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/ui\t0.017s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.008s\n",
+            "title": "Run nav panel tests to check baseline",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/ui\t0.017s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.008s\n",
+              "exit": 0,
+              "description": "Run nav panel tests to check baseline",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564409568,
+              "end": 1772564409870
+            }
+          },
+          "id": "prt_cb512673e0017QEeG00ZmPS6g2",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 85178,
+            "input": 1,
+            "output": 414,
+            "reasoning": 0,
+            "cache": {
+              "read": 51292,
+              "write": 33471
+            }
+          },
+          "id": "prt_cb5126e0f001D6pQNBpNPoE0U1",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5124a710016YrYrlieakN67G"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564409880,
+          "completed": 1772564417203
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 85957,
+          "input": 1,
+          "output": 449,
+          "reasoning": 0,
+          "cache": {
+            "read": 84763,
+            "write": 744
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5126e180010w7gEG0Gwmm9EZ",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb5127240001AvKXcDpQxQCesA",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5126e180010w7gEG0Gwmm9EZ"
+        },
+        {
+          "type": "reasoning",
+          "text": "The tests are passing. Now I need to understand what I need to do:\n\n1. The existing `navigation_panel.go` is already quite comprehensive. The task says to \"delete the contents and rewrite from scratch.\"\n\n2. Looking at the test file, I need to understand what the tests expect:\n   - They expect `PlanDisplay`, `TopicDisplay`, `TopicStatus` structs\n   - They expect `NavigationPanel` struct with fields `rows`, `selectedIdx`, `scrollOffset`, `width`, `height`, `deadExpanded`, `historyExpanded`, `searchActive`, `searchQuery`, `focused`\n   - They expect `navRowKind` type with constants like `navRowPlanHeader`, `navRowInstance`, `navRowSoloHeader`, and a `navRow` struct with `Kind`, `ID`, `Label`, `TaskFile`, `Instance`, `Collapsed` fields\n   - They expect many methods on `NavigationPanel`\n\nSince the tests are already passing with the current code and the task is to rewrite from scratch, I need to completely rewrite the file while keeping all tests passing. Let me check the theme and zones files to understand the available colors and zone IDs.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/VL9UHynBM8Y8QMnU1+fQ49llKaJ+TpXIX//REDACTED/REDACTED/REDACTED/REDACTED/QvYdWy0XZO5pH1kafqZ/M3IznNR5n4chmyp9cRhhF87s9xp4JlD/REDACTED/REDACTED/REDACTED/d2GhnBJRHlORfRt9qY8+/C7EMDFFg5K6/REDACTED/wiurF3mY9Ugf+xa83vj9N6c/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564410944,
+            "end": 1772564417156
+          },
+          "id": "prt_cb5127240002AwV0FA7LRIXeaY",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5126e180010w7gEG0Gwmm9EZ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/theme.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/theme.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import \"github.com/charmbracelet/lipgloss\"\n4: \n5: // Rosé Pine Moon palette\n6: // https://rosepinetheme.com/palette/\n7: var (\n8: \t// Base tones\n9: \tColorBase    = lipgloss.Color(\"#232136\")\n10: \tColorSurface = lipgloss.Color(\"#2a273f\")\n11: \tColorOverlay = lipgloss.Color(\"#393552\")\n12: \tColorMuted   = lipgloss.Color(\"#6e6a86\")\n13: \tColorSubtle  = lipgloss.Color(\"#908caa\")\n14: \tColorText    = lipgloss.Color(\"#e0def4\")\n15: \n16: \t// Semantic colors\n17: \tColorLove = lipgloss.Color(\"#eb6f92\") // error, danger\n18: \tColorGold = lipgloss.Color(\"#f6c177\") // warning\n19: \tColorRose = lipgloss.Color(\"#ea9a97\") // accent, secondary\n20: \tColorPine = lipgloss.Color(\"#3e8fb0\") // link\n21: \tColorFoam = lipgloss.Color(\"#9ccfd8\") // info, running\n22: \tColorIris = lipgloss.Color(\"#c4a7e7\") // highlight, primary\n23: \n24: \t// Gradient endpoints for the banner and focused tab label\n25: \tGradientStart = \"#9ccfd8\" // foam\n26: \tGradientEnd   = \"#c4a7e7\" // iris\n27: \n28: \t// Diff-specific (keep readable semantic greens/reds)\n29: \tColorDiffAdd    = lipgloss.Color(\"#9ccfd8\") // foam for additions\n30: \tColorDiffDelete = lipgloss.Color(\"#eb6f92\") // love for deletions\n31: \tColorDiffHunk   = lipgloss.Color(\"#c4a7e7\") // iris for hunk headers\n32: )\n\n(End of file - total 32 lines)\n</content>",
+            "title": "ui/theme.go",
+            "metadata": {
+              "preview": "package ui\n\nimport \"github.com/charmbracelet/lipgloss\"\n\n// Rosé Pine Moon palette\n// https://rosepinetheme.com/palette/\nvar (\n\t// Base tones\n\tColorBase    = lipgloss.Color(\"#232136\")\n\tColorSurface = lipgloss.Color(\"#2a273f\")\n\tColorOverlay = lipgloss.Color(\"#393552\")\n\tColorMuted   = lipgloss.Color(\"#6e6a86\")\n\tColorSubtle  = lipgloss.Color(\"#908caa\")\n\tColorText    = lipgloss.Color(\"#e0def4\")\n\n\t// Semantic colors\n\tColorLove = lipgloss.Color(\"#eb6f92\") // error, danger\n\tColorGold = lipgloss.Color(\"#f6c177\") // warning\n\tColorRose = lipgloss.Color(\"#ea9a97\") // accent, secondary\n\tColorPine = lipgloss.Color(\"#3e8fb0\") // link",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564417167,
+              "end": 1772564417169
+            }
+          },
+          "id": "prt_cb5128a87001RdXlUaU1Fw1REA",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5126e180010w7gEG0Gwmm9EZ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01VHqDGjqDm5Zt2cR3PqcFjw",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/zones.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/ui/zones.go</path>\n<type>file</type>\n<content>1: package ui\n2: \n3: import \"fmt\"\n4: \n5: // Zone ID constants for bubblezone hit detection.\n6: // These are used both in render paths (zone.Mark) and input paths (zone.Get().InBounds).\n7: const (\n8: \tZoneNavPanel  = \"zone-nav-panel\"\n9: \tZoneNavSearch = \"zone-nav-search\"\n10: \tZoneTabAgent  = \"zone-tab-agent\"\n11: \tZoneTabDiff   = \"zone-tab-diff\"\n12: \tZoneTabInfo   = \"zone-tab-info\"\n13: \tZoneAgentPane = \"zone-agent-pane\"\n14: \tZoneViewPlan  = \"zone-view-plan\"\n15: )\n16: \n17: // TabZoneIDs maps tab index to zone ID.\n18: // Tab order (post-reorder): InfoTab=0, PreviewTab=1, DiffTab=2.\n19: var TabZoneIDs = [3]string{ZoneTabInfo, ZoneTabAgent, ZoneTabDiff}\n20: \n21: // NavRowZoneID returns the zone ID for a navigation panel row by its rows-slice index.\n22: func NavRowZoneID(idx int) string {\n23: \treturn fmt.Sprintf(\"zone-nav-row-%d\", idx)\n24: }\n\n(End of file - total 24 lines)\n</content>",
+            "title": "ui/zones.go",
+            "metadata": {
+              "preview": "package ui\n\nimport \"fmt\"\n\n// Zone ID constants for bubblezone hit detection.\n// These are used both in render paths (zone.Mark) and input paths (zone.Get().InBounds).\nconst (\n\tZoneNavPanel  = \"zone-nav-panel\"\n\tZoneNavSearch = \"zone-nav-search\"\n\tZoneTabAgent  = \"zone-tab-agent\"\n\tZoneTabDiff   = \"zone-tab-diff\"\n\tZoneTabInfo   = \"zone-tab-info\"\n\tZoneAgentPane = \"zone-agent-pane\"\n\tZoneViewPlan  = \"zone-view-plan\"\n)\n\n// TabZoneIDs maps tab index to zone ID.\n// Tab order (post-reorder): InfoTab=0, PreviewTab=1, DiffTab=2.\nvar TabZoneIDs = [3]string{ZoneTabInfo, ZoneTabAgent, ZoneTabDiff}\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564417187,
+              "end": 1772564417190
+            }
+          },
+          "id": "prt_cb5128a900016eD6b9fKQ5oj6J",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5126e180010w7gEG0Gwmm9EZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 85957,
+            "input": 1,
+            "output": 449,
+            "reasoning": 0,
+            "cache": {
+              "read": 84763,
+              "write": 744
+            }
+          },
+          "id": "prt_cb5128aac001PF6TWkQS0L76ic",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5126e180010w7gEG0Gwmm9EZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564417204,
+          "completed": 1772564422271
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 87277,
+          "input": 1,
+          "output": 274,
+          "reasoning": 0,
+          "cache": {
+            "read": 85507,
+            "write": 1495
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "REDACTED",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me also check the session package to understand what `session.Instance` looks like.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/e5JBP8WUi4DxVEgxb1DfUHW8ggw/cgdkaDHtVR8Kepjit/REDACTED/REDACTED/gY2Icbi015R5kklt2qNy/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772564418455,
+            "end": 1772564419272
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01JjAYa1vbRxC7jv8mB44P81",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg \"type Instance struct\" /home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/ -l",
+              "description": "Find session Instance struct definition"
+            },
+            "output": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go\n",
+            "title": "Find session Instance struct definition",
+            "metadata": {
+              "output": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go\n",
+              "exit": 0,
+              "description": "Find session Instance struct definition",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564420496,
+              "end": 1772564420500
+            }
+          },
+          "id": "prt_cb51292c8001h5gDDpYhoqzfks",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg \"AgentTypeReviewer|AgentTypePlanner|AgentTypeCoder|SoloAgent|WaveNumber|TaskNumber|ImplementationComplete|Notified\" /home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/ --type go -l",
+              "description": "Find relevant session fields"
+            },
+            "output": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/storage.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_wave_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_title_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_taskfile_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_lifecycle.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go\n",
+            "title": "Find relevant session fields",
+            "metadata": {
+              "output": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/storage.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_wave_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_title_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_taskfile_test.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance_lifecycle.go\n/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go\n",
+              "exit": 0,
+              "description": "Find relevant session fields",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772564422238,
+              "end": 1772564422242
+            }
+          },
+          "id": "prt_cb5129791001NzZv0PXORFzv1T",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 87277,
+            "input": 1,
+            "output": 274,
+            "reasoning": 0,
+            "cache": {
+              "read": 85507,
+              "write": 1495
+            }
+          },
+          "id": "prt_cb5129e77001YKNpOMd1pckYT2",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564422273,
+          "completed": 1772564424357
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 87706,
+          "input": 1,
+          "output": 101,
+          "reasoning": 0,
+          "cache": {
+            "read": 87002,
+            "write": 602
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5129e81001mCAZm5g3gM1Q6l",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "REDACTED",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5129e81001mCAZm5g3gM1Q6l"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_0112FyoxDLPkxWxKgA19idtV",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go",
+              "limit": 80
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"path/filepath\"\n6: \t\"time\"\n7: \n8: \t\"github.com/kastheco/kasmos/session/git\"\n9: \t\"github.com/kastheco/kasmos/session/tmux\"\n10: )\n11: \n12: // Status represents the current state of an instance.\n13: type Status int\n14: \n15: const (\n16: \t// Running indicates the instance is active and the agent is working.\n17: \tRunning Status = iota\n18: \t// Ready indicates the instance is idle and waiting for user input.\n19: \tReady\n20: \t// Loading indicates the instance is starting up or initialising.\n21: \tLoading\n22: \t// Paused indicates the instance is paused — the worktree has been removed but the branch is preserved.\n23: \tPaused\n24: )\n25: \n26: // AgentType constants identify the role of an agent session within a plan lifecycle.\n27: const (\n28: \tAgentTypePlanner  = \"planner\"\n29: \tAgentTypeCoder    = \"coder\"\n30: \tAgentTypeReviewer = \"reviewer\"\n31: \tAgentTypeFixer    = \"fixer\"\n32: )\n33: \n34: // Instance represents a managed agent session with its associated tmux and git state.\n35: type Instance struct {\n36: \t// Title is the display name and tmux session identifier for this instance.\n37: \tTitle string\n38: \t// Path is the workspace directory for the instance.\n39: \tPath string\n40: \t// Branch is the git branch associated with this instance.\n41: \tBranch string\n42: \t// Status is the current lifecycle state of the instance.\n43: \tStatus Status\n44: \t// Program is the agent command to execute within the tmux session.\n45: \tProgram string\n46: \t// Height is the terminal height in rows.\n47: \tHeight int\n48: \t// Width is the terminal width in columns.\n49: \tWidth int\n50: \t// CreatedAt records when the instance was first created.\n51: \tCreatedAt time.Time\n52: \t// UpdatedAt records the most recent update timestamp.\n53: \tUpdatedAt time.Time\n54: \t// AutoYes causes the instance to auto-confirm prompts.\n55: \tAutoYes bool\n56: \t// SkipPermissions enables the --dangerously-skip-permissions flag for Claude.\n57: \tSkipPermissions bool\n58: \t// TaskFile is the plan file this instance is implementing (empty for ad-hoc sessions).\n59: \tTaskFile string\n60: \t// Topic is the plan-state group this instance belongs to.\n61: \tTopic string\n62: \t// AgentType identifies the role within a plan lifecycle: planner, coder, reviewer, fixer, or empty.\n63: \tAgentType string\n64: \t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n65: \tTaskNumber int\n66: \t// WaveNumber is the 1-indexed wave number this task belongs to (0 = not a wave task).\n67: \tWaveNumber int\n68: \t// PeerCount is the number of concurrent sibling tasks in the same wave (0 = not a wave task).\n69: \tPeerCount int\n70: \t// IsReviewer indicates a reviewer session.\n71: \t// Deprecated: check AgentType == AgentTypeReviewer instead.\n72: \tIsReviewer bool\n73: \t// ImplementationComplete is set when the coder finishes and the plan transitions to review.\n74: \tImplementationComplete bool\n75: \t// SoloAgent is true for instances launched as standalone agents outside the orchestration lifecycle.\n76: \tSoloAgent bool\n77: \t// Exited is true when the instance's tmux session has terminated unexpectedly.\n78: \tExited bool\n79: \t// QueuedPrompt is delivered to the session on first transition to Ready. Cleared after delivery.\n80: \tQueuedPrompt string\n\n(Showing lines 1-80 of 395. Use offset=81 to continue.)\n</content>",
+            "title": "session/instance.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\n// Status represents the current state of an instance.\ntype Status int\n\nconst (\n\t// Running indicates the instance is active and the agent is working.\n\tRunning Status = iota\n\t// Ready indicates the instance is idle and waiting for user input.\n\tReady\n\t// Loading indicates the instance is starting up or initialising.",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564424332,
+              "end": 1772564424333
+            }
+          },
+          "id": "prt_cb512a4500014rlC5KswDu2YoO",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5129e81001mCAZm5g3gM1Q6l"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 87706,
+            "input": 1,
+            "output": 101,
+            "reasoning": 0,
+            "cache": {
+              "read": 87002,
+              "write": 602
+            }
+          },
+          "id": "prt_cb512a69e001uttltbcfhtvOm0",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb5129e81001mCAZm5g3gM1Q6l"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564424358,
+          "completed": 1772564427588
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 88953,
+          "input": 1,
+          "output": 118,
+          "reasoning": 0,
+          "cache": {
+            "read": 87604,
+            "write": 1230
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb512a6a60012VXUW2oR799f7T",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb512ad3d001zupPe4tFt04cH9",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb512a6a60012VXUW2oR799f7T"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01AYLVhtMnvcs13K1RsJTCKJ",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go",
+              "offset": 81,
+              "limit": 40
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels/session/instance.go</path>\n<type>file</type>\n<content>81: \n82: \t// sharedWorktree indicates the instance shares a topic worktree and should not clean it up.\n83: \tsharedWorktree bool\n84: \t// LoadingStage tracks the current startup progress step for the UI.\n85: \tLoadingStage int\n86: \t// LoadingTotal is the total count of startup stages.\n87: \tLoadingTotal int\n88: \t// LoadingMessage describes the current startup step shown in the UI.\n89: \tLoadingMessage string\n90: \n91: \t// Notified is true after the instance completes (Running→Ready) until the user selects it.\n92: \tNotified bool\n93: \n94: \t// LastActiveAt records the most recent time the instance entered Running or Loading state.\n95: \tLastActiveAt time.Time\n96: \n97: \t// PromptDetected is true when the agent program is waiting for user input.\n98: \t// Persists across status transitions to prevent UI flicker.\n99: \tPromptDetected bool\n100: \n101: \t// AwaitingWork is set when a QueuedPrompt is dispatched and cleared when the agent goes Running.\n102: \t// The wave orchestrator uses this to avoid treating early idle prompts as task completion.\n103: \tAwaitingWork bool\n104: \n105: \t// ReviewCycle is the 1-indexed count of review/fix cycles for this instance (0 = not a cycle instance).\n106: \tReviewCycle int\n107: \n108: \t// HasWorked is true once the agent produces at least one content update after receiving its task.\n109: \t// Prevents permission prompts or early returns from prematurely completing a wave.\n110: \tHasWorked bool\n111: \n112: \t// CPUPercent is the last sampled CPU utilisation of the agent process.\n113: \tCPUPercent float64\n114: \t// MemMB is the last sampled memory usage of the agent process in megabytes.\n115: \tMemMB float64\n116: \n117: \t// LastActivity is the most recently detected agent activity event (ephemeral, not persisted).\n118: \tLastActivity *Activity\n119: \n120: \t// CachedContent is the last tmux pane capture, kept to avoid redundant subprocess calls.\n\n(Showing lines 81-120 of 395. Use offset=121 to continue.)\n</content>",
+            "title": "session/instance.go",
+            "metadata": {
+              "preview": "\n\t// sharedWorktree indicates the instance shares a topic worktree and should not clean it up.\n\tsharedWorktree bool\n\t// LoadingStage tracks the current startup progress step for the UI.\n\tLoadingStage int\n\t// LoadingTotal is the total count of startup stages.\n\tLoadingTotal int\n\t// LoadingMessage describes the current startup step shown in the UI.\n\tLoadingMessage string\n\n\t// Notified is true after the instance completes (Running→Ready) until the user selects it.\n\tNotified bool\n\n\t// LastActiveAt records the most recent time the instance entered Running or Loading state.\n\tLastActiveAt time.Time\n\n\t// PromptDetected is true when the agent program is waiting for user input.\n\t// Persists across status transitions to prevent UI flicker.\n\tPromptDetected bool\n",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772564427560,
+              "end": 1772564427562
+            }
+          },
+          "id": "prt_cb512ad3e001wBEwRg0ad0PApY",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb512a6a60012VXUW2oR799f7T"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "cost": 0,
+          "tokens": {
+            "total": 88953,
+            "input": 1,
+            "output": 118,
+            "reasoning": 0,
+            "cache": {
+              "read": 87604,
+              "write": 1230
+            }
+          },
+          "id": "prt_cb512b33c001oGRKQzLRcS7kJ9",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb512a6a60012VXUW2oR799f7T"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772564427589
+        },
+        "parentID": "msg_cb5122bce0012gLMInWHuQka8a",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-03-rewrite-ui-panels"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb512b345001KZVQVmjnqZlSc7",
+        "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7d7060ae2f27593bd3d224f601513c7234e84453",
+          "id": "prt_cb512b87000172rARb90V29BUV",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb512b345001KZVQVmjnqZlSc7"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1772564428913
+          },
+          "id": "prt_cb512b871001hQ5Sq3DAd3fmPx",
+          "sessionID": "ses_34aedd43fffeXdGvVhxkD1axpn",
+          "messageID": "msg_cb512b345001KZVQVmjnqZlSc7"
+        }
+      ]
+    }
+  ]
+}
