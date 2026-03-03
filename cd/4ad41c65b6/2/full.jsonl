@@ -7,13 +7,13 @@
     "title": "kas: implement 04-rewrite-plumbing w1/t1",
     "version": "1.2.15",
     "summary": {
-      "additions": 0,
-      "deletions": 0,
-      "files": 0
+      "additions": 269,
+      "deletions": 274,
+      "files": 6
     },
     "time": {
       "created": 1772566681593,
-      "updated": 1772566710847
+      "updated": 1772566777071
     }
   },
   "messages": [
@@ -24,7 +24,56 @@
           "created": 1772566681626
         },
         "summary": {
-          "diffs": []
+          "diffs": [
+            {
+              "file": "cmd/cmd.go",
+              "before": "package cmd\n\nimport (\n\t\"os/exec\"\n\t\"strings\"\n\n\t\"github.com/spf13/cobra\"\n)\n\ntype Executor interface {\n\tRun(cmd *exec.Cmd) error\n\tOutput(cmd *exec.Cmd) ([]byte, error)\n}\n\ntype Exec struct{}\n\nfunc (e Exec) Run(cmd *exec.Cmd) error {\n\treturn cmd.Run()\n}\n\nfunc (e Exec) Output(cmd *exec.Cmd) ([]byte, error) {\n\treturn cmd.Output()\n}\n\nfunc MakeExecutor() Executor {\n\treturn Exec{}\n}\n\nfunc ToString(cmd *exec.Cmd) string {\n\tif cmd == nil {\n\t\treturn \"<nil>\"\n\t}\n\treturn strings.Join(cmd.Args, \" \")\n}\n\n// NewRootCmd returns a minimal root cobra command with all subcommands registered.\n// Used in tests and for command discovery.\nfunc NewRootCmd() *cobra.Command {\n\troot := &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents\",\n\t}\n\troot.AddCommand(NewTaskCmd())\n\troot.AddCommand(NewServeCmd())\n\treturn root\n}\n",
+              "after": "package cmd\n\nimport (\n\t\"os/exec\"\n\t\"strings\"\n\n\t\"github.com/spf13/cobra\"\n)\n\n// Executor abstracts command execution for testability.\ntype Executor interface {\n\tRun(cmd *exec.Cmd) error\n\tOutput(cmd *exec.Cmd) ([]byte, error)\n}\n\n// Exec is the real executor that delegates to the underlying os/exec.Cmd methods.\ntype Exec struct{}\n\n// Run executes the command and waits for it to complete.\nfunc (e Exec) Run(cmd *exec.Cmd) error {\n\treturn cmd.Run()\n}\n\n// Output runs the command and returns its standard output.\nfunc (e Exec) Output(cmd *exec.Cmd) ([]byte, error) {\n\treturn cmd.Output()\n}\n\n// MakeExecutor returns the default real executor.\nfunc MakeExecutor() Executor {\n\treturn Exec{}\n}\n\n// ToString returns a human-readable representation of a command's arguments.\n// Returns \"<nil>\" when cmd is nil.\nfunc ToString(cmd *exec.Cmd) string {\n\tif cmd == nil {\n\t\treturn \"<nil>\"\n\t}\n\treturn strings.Join(cmd.Args, \" \")\n}\n\n// NewRootCmd builds the root cobra command with all subcommands attached.\nfunc NewRootCmd() *cobra.Command {\n\troot := &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents\",\n\t}\n\troot.AddCommand(NewTaskCmd())\n\troot.AddCommand(NewServeCmd())\n\treturn root\n}\n",
+              "additions": 8,
+              "deletions": 2,
+              "status": "modified"
+            },
+            {
+              "file": "config/config.go",
+              "before": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/user\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n)\n\nconst (\n\tConfigFileName = \"config.json\"\n\tdefaultProgram = \"opencode\"\n)\n\nvar aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)\n\n// GetConfigDir returns the path to the application's configuration directory.\n// Uses XDG-compliant ~/.config/kasmos/. On first run, migrates legacy\n// directories: ~/.klique or ~/.hivemind -> ~/.config/kasmos/.\nfunc GetConfigDir() (string, error) {\n\thomeDir, err := os.UserHomeDir()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"failed to get config home directory: %w\", err)\n\t}\n\tnewDir := filepath.Join(homeDir, \".config\", \"kasmos\")\n\n\t// Already exists — fast path\n\tif _, err := os.Stat(newDir); err == nil {\n\t\treturn newDir, nil\n\t}\n\n\t// Try migrating from legacy directories (most recent first)\n\tlegacyDirs := []string{\n\t\tfilepath.Join(homeDir, \".klique\"),\n\t\tfilepath.Join(homeDir, \".hivemind\"),\n\t}\n\n\tfor _, oldDir := range legacyDirs {\n\t\tif _, err := os.Stat(oldDir); err == nil {\n\t\t\t// Ensure parent ~/.config/ exists\n\t\t\tif mkErr := os.MkdirAll(filepath.Dir(newDir), 0755); mkErr != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to create %s: %v\", filepath.Dir(newDir), mkErr)\n\t\t\t\treturn oldDir, nil\n\t\t\t}\n\t\t\tif renameErr := os.Rename(oldDir, newDir); renameErr != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to migrate %s to %s: %v\", oldDir, newDir, renameErr)\n\t\t\t\treturn oldDir, nil\n\t\t\t}\n\t\t\treturn newDir, nil\n\t\t}\n\t}\n\n\treturn newDir, nil\n}\n\n// Config represents the application configuration\ntype Config struct {\n\t// DefaultProgram is the default program to run in new instances\n\tDefaultProgram string `json:\"default_program\"`\n\t// AutoYes is a flag to automatically accept all prompts.\n\tAutoYes bool `json:\"auto_yes\"`\n\t// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.\n\tDaemonPollInterval int `json:\"daemon_poll_interval\"`\n\t// BranchPrefix is the prefix used for git branches created by the application.\n\tBranchPrefix string `json:\"branch_prefix\"`\n\t// NotificationsEnabled controls whether macOS/Linux desktop notifications\n\t// are sent when an agent finishes (Running -> Ready).\n\tNotificationsEnabled *bool `json:\"notifications_enabled,omitempty\"`\n\t// Profiles maps agent role names to their program and flags configuration.\n\tProfiles map[string]AgentProfile `json:\"profiles,omitempty\"`\n\t// PhaseRoles maps lifecycle phase names to agent role names.\n\tPhaseRoles map[string]string `json:\"phase_roles,omitempty\"`\n\t// AnimateBanner controls the idle banner animation (disabled by default).\n\tAnimateBanner bool `json:\"animate_banner,omitempty\"`\n\t// AutoAdvanceWaves controls whether wave advancement is automatic after a wave completes\n\t// with zero failures, bypassing the confirmation dialog (disabled by default).\n\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n\t// TelemetryEnabled controls whether crash reporting via Sentry is active.\n\t// Defaults to true when not set.\n\tTelemetryEnabled *bool `json:\"telemetry_enabled,omitempty\"`\n\t// DatabaseURL is the URL of the remote kasmos store server (e.g. \"http://athena:7433\").\n\t// When empty, the legacy plan-state.json file is used.\n\tDatabaseURL string `json:\"database_url,omitempty\"`\n}\n\n// DefaultConfig returns the default configuration\nfunc DefaultConfig() *Config {\n\tprogram, err := GetDefaultCommand()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get default command: %v\", err)\n\t\tprogram = defaultProgram\n\t}\n\n\ttrueVal := true\n\treturn &Config{\n\t\tDefaultProgram:     program,\n\t\tAutoYes:            false,\n\t\tDaemonPollInterval: 1000,\n\t\tBranchPrefix: func() string {\n\t\t\tuser, err := user.Current()\n\t\t\tif err != nil || user == nil || user.Username == \"\" {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to get current user: %v\", err)\n\t\t\t\treturn \"session/\"\n\t\t\t}\n\t\t\treturn fmt.Sprintf(\"%s/\", strings.ToLower(user.Username))\n\t\t}(),\n\t\tNotificationsEnabled: &trueVal,\n\t}\n}\n\n// AreNotificationsEnabled returns whether desktop notifications are enabled.\n// Defaults to true when the field is not set.\nfunc (c *Config) AreNotificationsEnabled() bool {\n\tif c.NotificationsEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.NotificationsEnabled\n}\n\n// IsTelemetryEnabled returns whether Sentry telemetry is enabled.\n// Defaults to true when the field is not set.\nfunc (c *Config) IsTelemetryEnabled() bool {\n\tif c.TelemetryEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.TelemetryEnabled\n}\n\n// GetDefaultCommand attempts to find the preferred default command.\n// It checks in the following order:\n// 1. opencode command\n// 2. claude command\n//\n// For each command, it checks shell alias resolution first, then PATH lookup.\nfunc GetDefaultCommand() (string, error) {\n\tif path, err := findCommand(\"opencode\"); err == nil {\n\t\treturn path, nil\n\t}\n\n\tif path, err := findCommand(\"claude\"); err == nil {\n\t\treturn path, nil\n\t}\n\n\treturn \"\", fmt.Errorf(\"neither opencode nor claude command found in aliases or PATH\")\n}\n\nfunc findCommand(name string) (string, error) {\n\tshell := os.Getenv(\"SHELL\")\n\tif shell == \"\" {\n\t\tshell = \"/bin/bash\" // Default to bash if SHELL is not set\n\t}\n\n\t// Force the shell to load the user's profile and then run the command\n\t// For zsh, source .zshrc; for bash, source .bashrc\n\tvar shellCmd string\n\tif strings.Contains(shell, \"zsh\") {\n\t\tshellCmd = fmt.Sprintf(\"source ~/.zshrc &>/dev/null || true; which %s\", name)\n\t} else if strings.Contains(shell, \"bash\") {\n\t\tshellCmd = fmt.Sprintf(\"source ~/.bashrc &>/dev/null || true; which %s\", name)\n\t} else {\n\t\tshellCmd = fmt.Sprintf(\"which %s\", name)\n\t}\n\n\tcmd := exec.Command(shell, \"-c\", shellCmd)\n\toutput, err := cmd.Output()\n\tif err == nil && len(output) > 0 {\n\t\tpath := parseCommandOutput(string(output))\n\t\tif path != \"\" {\n\t\t\treturn path, nil\n\t\t}\n\t}\n\n\t// Otherwise, try to find in PATH directly\n\tcommandPath, err := exec.LookPath(name)\n\tif err == nil {\n\t\treturn commandPath, nil\n\t}\n\n\treturn \"\", fmt.Errorf(\"%s command not found in aliases or PATH\", name)\n}\n\nfunc parseCommandOutput(output string) string {\n\tpath := strings.TrimSpace(output)\n\tif path == \"\" {\n\t\treturn \"\"\n\t}\n\n\tmatches := aliasRegex.FindStringSubmatch(path)\n\tif len(matches) > 1 {\n\t\treturn matches[1]\n\t}\n\n\treturn path\n}\n\nfunc LoadConfig() *Config {\n\tconfigDir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultConfig()\n\t}\n\n\tconfigPath := filepath.Join(configDir, ConfigFileName)\n\tdata, err := os.ReadFile(configPath)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\t// Create and save default config if file doesn't exist\n\t\t\tdefaultCfg := DefaultConfig()\n\t\t\tif saveErr := saveConfig(defaultCfg); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default config: %v\", saveErr)\n\t\t\t}\n\t\t\treturn defaultCfg\n\t\t}\n\n\t\tlog.WarningLog.Printf(\"failed to get config file: %v\", err)\n\t\treturn DefaultConfig()\n\t}\n\n\tvar config Config\n\tif err := json.Unmarshal(data, &config); err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse config file: %v\", err)\n\t\treturn DefaultConfig()\n\t}\n\n\t// Overlay TOML config if it exists (TOML is authority for Profiles and PhaseRoles)\n\ttomlResult, tomlErr := LoadTOMLConfig()\n\tif tomlErr != nil {\n\t\tlog.WarningLog.Printf(\"failed to load TOML config: %v\", tomlErr)\n\t} else if tomlResult != nil {\n\t\tif len(tomlResult.Profiles) > 0 {\n\t\t\tconfig.Profiles = tomlResult.Profiles\n\t\t}\n\t\tif len(tomlResult.PhaseRoles) > 0 {\n\t\t\tconfig.PhaseRoles = tomlResult.PhaseRoles\n\t\t}\n\t\tif tomlResult.AnimateBanner {\n\t\t\tconfig.AnimateBanner = true\n\t\t}\n\t\tif tomlResult.AutoAdvanceWaves {\n\t\t\tconfig.AutoAdvanceWaves = true\n\t\t}\n\t\tif tomlResult.TelemetryEnabled != nil {\n\t\t\tconfig.TelemetryEnabled = tomlResult.TelemetryEnabled\n\t\t}\n\t\tif tomlResult.DatabaseURL != \"\" {\n\t\t\tconfig.DatabaseURL = tomlResult.DatabaseURL\n\t\t}\n\t}\n\n\treturn &config\n}\n\n// saveConfig saves the configuration to disk\nfunc saveConfig(config *Config) error {\n\tconfigDir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\n\tif err := os.MkdirAll(configDir, 0755); err != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", err)\n\t}\n\n\tconfigPath := filepath.Join(configDir, ConfigFileName)\n\tdata, err := json.MarshalIndent(config, \"\", \"  \")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal config: %w\", err)\n\t}\n\n\treturn os.WriteFile(configPath, data, 0644)\n}\n\n// SaveConfig exports the saveConfig function for use by other packages\nfunc SaveConfig(config *Config) error {\n\treturn saveConfig(config)\n}\n",
+              "after": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/user\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/log\"\n)\n\nconst (\n\t// ConfigFileName is the name of the JSON config file within the config dir.\n\tConfigFileName = \"config.json\"\n\n\t// defaultProgram is the fallback program name when command detection fails.\n\tdefaultProgram = \"opencode\"\n)\n\n// aliasRegex matches shell alias output to extract the real command path.\n// Handles formats: \"aliased to <path>\", \"-> <path>\", \"= <path>\".\nvar aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)\n\n// GetConfigDir returns the XDG-compliant config directory (~/.config/kasmos/).\n// On first call without that directory, it attempts to migrate legacy directories\n// (.klique, then .hivemind) via rename. If migration fails it returns the old path.\nfunc GetConfigDir() (string, error) {\n\thome, err := os.UserHomeDir()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"failed to get config home directory: %w\", err)\n\t}\n\n\ttarget := filepath.Join(home, \".config\", \"kasmos\")\n\n\t// Fast path: target already exists.\n\tif _, statErr := os.Stat(target); statErr == nil {\n\t\treturn target, nil\n\t}\n\n\t// Try each legacy directory in preference order.\n\tfor _, legacy := range []string{\n\t\tfilepath.Join(home, \".klique\"),\n\t\tfilepath.Join(home, \".hivemind\"),\n\t} {\n\t\tif _, statErr := os.Stat(legacy); statErr != nil {\n\t\t\tcontinue\n\t\t}\n\t\t// Ensure ~/.config/ parent exists before rename.\n\t\tif mkErr := os.MkdirAll(filepath.Dir(target), 0755); mkErr != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to create %s: %v\", filepath.Dir(target), mkErr)\n\t\t\treturn legacy, nil\n\t\t}\n\t\tif mvErr := os.Rename(legacy, target); mvErr != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to migrate %s to %s: %v\", legacy, target, mvErr)\n\t\t\treturn legacy, nil\n\t\t}\n\t\treturn target, nil\n\t}\n\n\t// No legacy dir found — return target path; caller creates it on first write.\n\treturn target, nil\n}\n\n// Config holds all persistent application configuration.\ntype Config struct {\n\t// DefaultProgram is the command launched for new instances.\n\tDefaultProgram string `json:\"default_program\"`\n\t// AutoYes makes the daemon automatically accept all agent prompts.\n\tAutoYes bool `json:\"auto_yes\"`\n\t// DaemonPollInterval is how often (ms) the daemon checks sessions.\n\tDaemonPollInterval int `json:\"daemon_poll_interval\"`\n\t// BranchPrefix is prepended to git branch names created by the app.\n\tBranchPrefix string `json:\"branch_prefix\"`\n\t// NotificationsEnabled controls desktop notifications; defaults to true when nil.\n\tNotificationsEnabled *bool `json:\"notifications_enabled,omitempty\"`\n\t// Profiles maps role names to agent program configurations.\n\tProfiles map[string]AgentProfile `json:\"profiles,omitempty\"`\n\t// PhaseRoles maps lifecycle phase names to role names.\n\tPhaseRoles map[string]string `json:\"phase_roles,omitempty\"`\n\t// AnimateBanner enables the idle banner animation (off by default).\n\tAnimateBanner bool `json:\"animate_banner,omitempty\"`\n\t// AutoAdvanceWaves skips the confirmation dialog after a clean wave.\n\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n\t// TelemetryEnabled controls Sentry crash reporting; defaults to true when nil.\n\tTelemetryEnabled *bool `json:\"telemetry_enabled,omitempty\"`\n\t// DatabaseURL is the remote kasmos store URL; uses local file when empty.\n\tDatabaseURL string `json:\"database_url,omitempty\"`\n}\n\n// DefaultConfig builds a Config populated with sensible out-of-the-box values.\nfunc DefaultConfig() *Config {\n\tprogram, err := GetDefaultCommand()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get default command: %v\", err)\n\t\tprogram = defaultProgram\n\t}\n\n\ttrueVal := true\n\tprefix := branchPrefix()\n\n\treturn &Config{\n\t\tDefaultProgram:       program,\n\t\tAutoYes:              false,\n\t\tDaemonPollInterval:   1000,\n\t\tBranchPrefix:         prefix,\n\t\tNotificationsEnabled: &trueVal,\n\t}\n}\n\n// branchPrefix derives the git branch prefix from the current OS user.\n// Falls back to \"session/\" when the username is unavailable.\nfunc branchPrefix() string {\n\tu, err := user.Current()\n\tif err != nil || u == nil || u.Username == \"\" {\n\t\tlog.ErrorLog.Printf(\"failed to get current user: %v\", err)\n\t\treturn \"session/\"\n\t}\n\treturn fmt.Sprintf(\"%s/\", strings.ToLower(u.Username))\n}\n\n// AreNotificationsEnabled reports whether desktop notifications are active.\n// Returns true when NotificationsEnabled is nil (opt-out semantics).\nfunc (c *Config) AreNotificationsEnabled() bool {\n\tif c.NotificationsEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.NotificationsEnabled\n}\n\n// IsTelemetryEnabled reports whether Sentry telemetry is active.\n// Returns true when TelemetryEnabled is nil (opt-out semantics).\nfunc (c *Config) IsTelemetryEnabled() bool {\n\tif c.TelemetryEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.TelemetryEnabled\n}\n\n// GetDefaultCommand returns the preferred agent command path.\n// It tries opencode first, then falls back to claude.\nfunc GetDefaultCommand() (string, error) {\n\tif p, err := findCommand(\"opencode\"); err == nil {\n\t\treturn p, nil\n\t}\n\tif p, err := findCommand(\"claude\"); err == nil {\n\t\treturn p, nil\n\t}\n\treturn \"\", fmt.Errorf(\"neither opencode nor claude command found in aliases or PATH\")\n}\n\n// findCommand locates name via the user's login shell and PATH.\n// It sources the appropriate rc file so aliases are visible, then falls\n// back to exec.LookPath when the shell subprocess fails.\nfunc findCommand(name string) (string, error) {\n\tshell := os.Getenv(\"SHELL\")\n\tif shell == \"\" {\n\t\tshell = \"/bin/bash\"\n\t}\n\n\tvar inline string\n\tswitch {\n\tcase strings.Contains(shell, \"zsh\"):\n\t\tinline = fmt.Sprintf(\"source ~/.zshrc &>/dev/null || true; which %s\", name)\n\tcase strings.Contains(shell, \"bash\"):\n\t\tinline = fmt.Sprintf(\"source ~/.bashrc &>/dev/null || true; which %s\", name)\n\tdefault:\n\t\tinline = fmt.Sprintf(\"which %s\", name)\n\t}\n\n\tout, err := exec.Command(shell, \"-c\", inline).Output()\n\tif err == nil && len(out) > 0 {\n\t\tif p := parseCommandOutput(string(out)); p != \"\" {\n\t\t\treturn p, nil\n\t\t}\n\t}\n\n\t// Fallback: consult PATH directly.\n\tif p, lookErr := exec.LookPath(name); lookErr == nil {\n\t\treturn p, nil\n\t}\n\n\treturn \"\", fmt.Errorf(\"%s command not found in aliases or PATH\", name)\n}\n\n// parseCommandOutput extracts a command path from raw shell output.\n// It resolves alias declarations (e.g. \"opencode: aliased to /usr/local/bin/opencode\")\n// and returns an empty string for blank output.\nfunc parseCommandOutput(output string) string {\n\ttrimmed := strings.TrimSpace(output)\n\tif trimmed == \"\" {\n\t\treturn \"\"\n\t}\n\tif m := aliasRegex.FindStringSubmatch(trimmed); len(m) > 1 {\n\t\treturn m[1]\n\t}\n\treturn trimmed\n}\n\n// LoadConfig reads config.json from the config directory. When the file is\n// absent it creates and persists a default. On parse errors it returns a default.\n// TOML config is overlaid after JSON load for Profiles, PhaseRoles, and flags.\nfunc LoadConfig() *Config {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultConfig()\n\t}\n\n\tdata, readErr := os.ReadFile(filepath.Join(dir, ConfigFileName))\n\tif readErr != nil {\n\t\tif os.IsNotExist(readErr) {\n\t\t\tdef := DefaultConfig()\n\t\t\tif saveErr := saveConfig(def); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default config: %v\", saveErr)\n\t\t\t}\n\t\t\treturn def\n\t\t}\n\t\tlog.WarningLog.Printf(\"failed to get config file: %v\", readErr)\n\t\treturn DefaultConfig()\n\t}\n\n\tvar cfg Config\n\tif unmarshalErr := json.Unmarshal(data, &cfg); unmarshalErr != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse config file: %v\", unmarshalErr)\n\t\treturn DefaultConfig()\n\t}\n\n\t// Overlay TOML config values where present — TOML is authoritative for these fields.\n\ttomlCfg, tomlErr := LoadTOMLConfig()\n\tif tomlErr != nil {\n\t\tlog.WarningLog.Printf(\"failed to load TOML config: %v\", tomlErr)\n\t} else if tomlCfg != nil {\n\t\tif len(tomlCfg.Profiles) > 0 {\n\t\t\tcfg.Profiles = tomlCfg.Profiles\n\t\t}\n\t\tif len(tomlCfg.PhaseRoles) > 0 {\n\t\t\tcfg.PhaseRoles = tomlCfg.PhaseRoles\n\t\t}\n\t\tif tomlCfg.AnimateBanner {\n\t\t\tcfg.AnimateBanner = true\n\t\t}\n\t\tif tomlCfg.AutoAdvanceWaves {\n\t\t\tcfg.AutoAdvanceWaves = true\n\t\t}\n\t\tif tomlCfg.TelemetryEnabled != nil {\n\t\t\tcfg.TelemetryEnabled = tomlCfg.TelemetryEnabled\n\t\t}\n\t\tif tomlCfg.DatabaseURL != \"\" {\n\t\t\tcfg.DatabaseURL = tomlCfg.DatabaseURL\n\t\t}\n\t}\n\n\treturn &cfg\n}\n\n// saveConfig serialises cfg as indented JSON and writes it to the config directory.\nfunc saveConfig(cfg *Config) error {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\tif mkErr := os.MkdirAll(dir, 0755); mkErr != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", mkErr)\n\t}\n\tdata, marshalErr := json.MarshalIndent(cfg, \"\", \"  \")\n\tif marshalErr != nil {\n\t\treturn fmt.Errorf(\"failed to marshal config: %w\", marshalErr)\n\t}\n\treturn os.WriteFile(filepath.Join(dir, ConfigFileName), data, 0644)\n}\n\n// SaveConfig is the exported wrapper around saveConfig.\nfunc SaveConfig(cfg *Config) error {\n\treturn saveConfig(cfg)\n}\n",
+              "additions": 143,
+              "deletions": 145,
+              "status": "modified"
+            },
+            {
+              "file": "config/state.go",
+              "before": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nconst (\n\tStateFileName     = \"state.json\"\n\tInstancesFileName = \"instances.json\"\n)\n\n// InstanceStorage handles instance-related operations\ntype InstanceStorage interface {\n\t// SaveInstances saves the raw instance data\n\tSaveInstances(instancesJSON json.RawMessage) error\n\t// GetInstances returns the raw instance data\n\tGetInstances() json.RawMessage\n\t// DeleteAllInstances removes all stored instances\n\tDeleteAllInstances() error\n}\n\n// AppState handles application-level state\ntype AppState interface {\n\t// GetHelpScreensSeen returns the bitmask of seen help screens\n\tGetHelpScreensSeen() uint32\n\t// SetHelpScreensSeen updates the bitmask of seen help screens\n\tSetHelpScreensSeen(seen uint32) error\n}\n\n// StateManager combines instance storage and app state management\ntype StateManager interface {\n\tInstanceStorage\n\tAppState\n}\n\n// State represents the application state that persists between sessions\ntype State struct {\n\t// HelpScreensSeen is a bitmask tracking which help screens have been shown\n\tHelpScreensSeen uint32 `json:\"help_screens_seen\"`\n\t// Instances stores the serialized instance data as raw JSON\n\tInstancesData json.RawMessage `json:\"instances\"`\n}\n\n// DefaultState returns the default state\nfunc DefaultState() *State {\n\treturn &State{\n\t\tHelpScreensSeen: 0,\n\t\tInstancesData:   json.RawMessage(\"[]\"),\n\t}\n}\n\n// LoadState loads the state from disk. If it cannot be done, we return the default state.\nfunc LoadState() *State {\n\tconfigDir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultState()\n\t}\n\n\tstatePath := filepath.Join(configDir, StateFileName)\n\tdata, err := os.ReadFile(statePath)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\t// Create and save default state if file doesn't exist\n\t\t\tdefaultState := DefaultState()\n\t\t\tif saveErr := SaveState(defaultState); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default state: %v\", saveErr)\n\t\t\t}\n\t\t\treturn defaultState\n\t\t}\n\n\t\tlog.WarningLog.Printf(\"failed to get state file: %v\", err)\n\t\treturn DefaultState()\n\t}\n\n\tvar state State\n\tif err := json.Unmarshal(data, &state); err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse state file: %v\", err)\n\t\treturn DefaultState()\n\t}\n\n\treturn &state\n}\n\n// SaveState saves the state to disk\nfunc SaveState(state *State) error {\n\tconfigDir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\n\tif err := os.MkdirAll(configDir, 0755); err != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", err)\n\t}\n\n\tstatePath := filepath.Join(configDir, StateFileName)\n\tdata, err := json.MarshalIndent(state, \"\", \"  \")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to marshal state: %w\", err)\n\t}\n\n\treturn os.WriteFile(statePath, data, 0644)\n}\n\n// InstanceStorage interface implementation\n\n// SaveInstances saves the raw instance data\nfunc (s *State) SaveInstances(instancesJSON json.RawMessage) error {\n\ts.InstancesData = instancesJSON\n\treturn SaveState(s)\n}\n\n// GetInstances returns the raw instance data\nfunc (s *State) GetInstances() json.RawMessage {\n\treturn s.InstancesData\n}\n\n// DeleteAllInstances removes all stored instances\nfunc (s *State) DeleteAllInstances() error {\n\ts.InstancesData = json.RawMessage(\"[]\")\n\treturn SaveState(s)\n}\n\n// AppState interface implementation\n\n// GetHelpScreensSeen returns the bitmask of seen help screens\nfunc (s *State) GetHelpScreensSeen() uint32 {\n\treturn s.HelpScreensSeen\n}\n\n// SetHelpScreensSeen updates the bitmask of seen help screens\nfunc (s *State) SetHelpScreensSeen(seen uint32) error {\n\ts.HelpScreensSeen = seen\n\treturn SaveState(s)\n}\n",
+              "after": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/log\"\n)\n\nconst (\n\t// StateFileName is the name of the JSON state file within the config dir.\n\tStateFileName = \"state.json\"\n\t// InstancesFileName is the legacy per-file instances store name.\n\tInstancesFileName = \"instances.json\"\n)\n\n// InstanceStorage is the interface for reading and writing serialised instance data.\ntype InstanceStorage interface {\n\t// SaveInstances persists the raw instance JSON blob.\n\tSaveInstances(instancesJSON json.RawMessage) error\n\t// GetInstances returns the current raw instance JSON blob.\n\tGetInstances() json.RawMessage\n\t// DeleteAllInstances resets the stored instances to an empty list.\n\tDeleteAllInstances() error\n}\n\n// AppState is the interface for reading and writing application-level state.\ntype AppState interface {\n\t// GetHelpScreensSeen returns the bitmask of help screens that have been shown.\n\tGetHelpScreensSeen() uint32\n\t// SetHelpScreensSeen stores an updated bitmask and persists it.\n\tSetHelpScreensSeen(seen uint32) error\n}\n\n// StateManager is the unified interface combining instance storage and app state.\ntype StateManager interface {\n\tInstanceStorage\n\tAppState\n}\n\n// State is the on-disk representation of application state.\ntype State struct {\n\t// HelpScreensSeen is a bitmask tracking which help screens the user has seen.\n\tHelpScreensSeen uint32 `json:\"help_screens_seen\"`\n\t// InstancesData holds the serialised instance list as a raw JSON value.\n\tInstancesData json.RawMessage `json:\"instances\"`\n}\n\n// DefaultState returns an initial State with no help screens seen and an empty instances list.\nfunc DefaultState() *State {\n\treturn &State{\n\t\tHelpScreensSeen: 0,\n\t\tInstancesData:   json.RawMessage(\"[]\"),\n\t}\n}\n\n// LoadState reads state.json from the config directory. When the file is absent it\n// creates and persists a default. On parse errors it returns a default without saving.\nfunc LoadState() *State {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultState()\n\t}\n\n\tdata, readErr := os.ReadFile(filepath.Join(dir, StateFileName))\n\tif readErr != nil {\n\t\tif os.IsNotExist(readErr) {\n\t\t\tdef := DefaultState()\n\t\t\tif saveErr := SaveState(def); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default state: %v\", saveErr)\n\t\t\t}\n\t\t\treturn def\n\t\t}\n\t\tlog.WarningLog.Printf(\"failed to get state file: %v\", readErr)\n\t\treturn DefaultState()\n\t}\n\n\tvar s State\n\tif unmarshalErr := json.Unmarshal(data, &s); unmarshalErr != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse state file: %v\", unmarshalErr)\n\t\treturn DefaultState()\n\t}\n\n\treturn &s\n}\n\n// SaveState serialises s as indented JSON and writes it to the config directory.\nfunc SaveState(s *State) error {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\tif mkErr := os.MkdirAll(dir, 0755); mkErr != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", mkErr)\n\t}\n\tdata, marshalErr := json.MarshalIndent(s, \"\", \"  \")\n\tif marshalErr != nil {\n\t\treturn fmt.Errorf(\"failed to marshal state: %w\", marshalErr)\n\t}\n\treturn os.WriteFile(filepath.Join(dir, StateFileName), data, 0644)\n}\n\n// SaveInstances implements InstanceStorage: replaces the stored instances and persists.\nfunc (s *State) SaveInstances(instancesJSON json.RawMessage) error {\n\ts.InstancesData = instancesJSON\n\treturn SaveState(s)\n}\n\n// GetInstances implements InstanceStorage: returns the raw instance JSON blob.\nfunc (s *State) GetInstances() json.RawMessage {\n\treturn s.InstancesData\n}\n\n// DeleteAllInstances implements InstanceStorage: resets instances to an empty list.\nfunc (s *State) DeleteAllInstances() error {\n\ts.InstancesData = json.RawMessage(\"[]\")\n\treturn SaveState(s)\n}\n\n// GetHelpScreensSeen implements AppState: returns the seen-help-screens bitmask.\nfunc (s *State) GetHelpScreensSeen() uint32 {\n\treturn s.HelpScreensSeen\n}\n\n// SetHelpScreensSeen implements AppState: stores an updated bitmask and persists.\nfunc (s *State) SetHelpScreensSeen(seen uint32) error {\n\ts.HelpScreensSeen = seen\n\treturn SaveState(s)\n}\n",
+              "additions": 45,
+              "deletions": 52,
+              "status": "modified"
+            },
+            {
+              "file": "daemon/daemon.go",
+              "before": "package daemon\n\nimport (\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/signal\"\n\t\"path/filepath\"\n\t\"sync\"\n\t\"syscall\"\n\t\"time\"\n)\n\n// RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.\n// It's expected that the main process kills the daemon when the main process starts.\nfunc RunDaemon(cfg *config.Config) error {\n\tlog.InfoLog.Printf(\"starting daemon\")\n\tstate := config.LoadState()\n\tstorage, err := session.NewStorage(state)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to initialize storage: %w\", err)\n\t}\n\n\tinstances, err := storage.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to load instances: %w\", err)\n\t}\n\tfor _, instance := range instances {\n\t\t// Assume AutoYes is true if the daemon is running.\n\t\tinstance.AutoYes = true\n\t}\n\n\tpollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond\n\n\t// If we get an error for a session, it's likely that we'll keep getting the error. Log every 60 seconds.\n\teveryN := log.NewEvery(60 * time.Second)\n\n\twg := &sync.WaitGroup{}\n\twg.Add(1)\n\tstopCh := make(chan struct{})\n\tgo func() {\n\t\tdefer wg.Done()\n\t\tticker := time.NewTimer(pollInterval)\n\t\tfor {\n\t\t\tfor _, instance := range instances {\n\t\t\t\t// We only store started instances, but check anyway.\n\t\t\t\tif instance.Started() && !instance.Paused() {\n\t\t\t\t\tif _, hasPrompt := instance.HasUpdated(); hasPrompt {\n\t\t\t\t\t\tinstance.TapEnter()\n\t\t\t\t\t\tif err := instance.UpdateDiffStats(); err != nil {\n\t\t\t\t\t\t\tif everyN.ShouldLog() {\n\t\t\t\t\t\t\t\tlog.WarningLog.Printf(\"could not update diff stats for %s: %v\", instance.Title, err)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// Handle stop before ticker.\n\t\t\tselect {\n\t\t\tcase <-stopCh:\n\t\t\t\treturn\n\t\t\tdefault:\n\t\t\t}\n\n\t\t\t<-ticker.C\n\t\t\tticker.Reset(pollInterval)\n\t\t}\n\t}()\n\n\t// Notify on SIGINT (Ctrl+C) and SIGTERM. Save instances before\n\tsigChan := make(chan os.Signal, 1)\n\tsignal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)\n\tsig := <-sigChan\n\tlog.InfoLog.Printf(\"received signal %s\", sig.String())\n\n\t// Stop the goroutine so we don't race.\n\tclose(stopCh)\n\twg.Wait()\n\n\tif err := storage.SaveInstances(instances); err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to save instances when terminating daemon: %v\", err)\n\t}\n\treturn nil\n}\n\n// LaunchDaemon launches the daemon process.\nfunc LaunchDaemon() error {\n\t// Find the kasmos binary.\n\texecPath, err := os.Executable()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get executable path: %w\", err)\n\t}\n\n\tcmd := exec.Command(execPath, \"--daemon\")\n\n\t// Detach the process from the parent\n\tcmd.Stdin = nil\n\tcmd.Stdout = nil\n\tcmd.Stderr = nil\n\n\t// Set process group to prevent signals from propagating\n\tcmd.SysProcAttr = getSysProcAttr()\n\n\tif err := cmd.Start(); err != nil {\n\t\treturn fmt.Errorf(\"failed to start child process: %w\", err)\n\t}\n\n\tlog.InfoLog.Printf(\"started daemon child process with PID: %d\", cmd.Process.Pid)\n\n\t// Save PID to a file for later management\n\tpidDir, err := config.GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\n\tpidFile := filepath.Join(pidDir, \"daemon.pid\")\n\tif err := os.WriteFile(pidFile, []byte(fmt.Sprintf(\"%d\", cmd.Process.Pid)), 0644); err != nil {\n\t\treturn fmt.Errorf(\"failed to write PID file: %w\", err)\n\t}\n\n\t// Don't wait for the child to exit, it's detached\n\treturn nil\n}\n\n// StopDaemon attempts to stop a running daemon process if it exists. Returns no error if the daemon is not found\n// (assumes the daemon does not exist).\nfunc StopDaemon() error {\n\tpidDir, err := config.GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\n\tpidFile := filepath.Join(pidDir, \"daemon.pid\")\n\tdata, err := os.ReadFile(pidFile)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to read PID file: %w\", err)\n\t}\n\n\tvar pid int\n\tif _, err := fmt.Sscanf(string(data), \"%d\", &pid); err != nil {\n\t\treturn fmt.Errorf(\"invalid PID file format: %w\", err)\n\t}\n\n\tproc, err := os.FindProcess(pid)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to find daemon process: %w\", err)\n\t}\n\n\tif err := proc.Kill(); err != nil {\n\t\treturn fmt.Errorf(\"failed to stop daemon process: %w\", err)\n\t}\n\n\t// Clean up PID file\n\tif err := os.Remove(pidFile); err != nil {\n\t\treturn fmt.Errorf(\"failed to remove PID file: %w\", err)\n\t}\n\n\tlog.InfoLog.Printf(\"daemon process (PID: %d) stopped successfully\", pid)\n\treturn nil\n}\n",
+              "after": "package daemon\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/signal\"\n\t\"path/filepath\"\n\t\"sync\"\n\t\"syscall\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n)\n\n// RunDaemon is the entry point for daemon mode. It polls all active sessions\n// and automatically accepts prompts on their behalf. The daemon shuts down\n// cleanly when it receives SIGINT or SIGTERM.\nfunc RunDaemon(cfg *config.Config) error {\n\tlog.InfoLog.Printf(\"daemon starting\")\n\n\tstate := config.LoadState()\n\n\tstorage, err := session.NewStorage(state)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: storage init failed: %w\", err)\n\t}\n\n\tinstances, err := storage.LoadInstances()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: load instances failed: %w\", err)\n\t}\n\n\t// Daemon always operates in auto-accept mode.\n\tfor _, inst := range instances {\n\t\tinst.AutoYes = true\n\t}\n\n\tpollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond\n\n\t// Rate-limited logger: identical errors are suppressed for 60 s at a time.\n\tthrottle := log.NewEvery(60 * time.Second)\n\n\tstopCh := make(chan struct{})\n\tvar wg sync.WaitGroup\n\twg.Add(1)\n\n\tgo func() {\n\t\tdefer wg.Done()\n\t\tt := time.NewTimer(pollInterval)\n\t\tfor {\n\t\t\tfor _, inst := range instances {\n\t\t\t\tif inst.Started() && !inst.Paused() {\n\t\t\t\t\tif _, hasPrompt := inst.HasUpdated(); hasPrompt {\n\t\t\t\t\t\tinst.TapEnter()\n\t\t\t\t\t\tif diffErr := inst.UpdateDiffStats(); diffErr != nil {\n\t\t\t\t\t\t\tif throttle.ShouldLog() {\n\t\t\t\t\t\t\t\tlog.WarningLog.Printf(\"diff stats update failed for %s: %v\", inst.Title, diffErr)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// Check for stop before blocking on the timer.\n\t\t\tselect {\n\t\t\tcase <-stopCh:\n\t\t\t\treturn\n\t\t\tdefault:\n\t\t\t}\n\n\t\t\t<-t.C\n\t\t\tt.Reset(pollInterval)\n\t\t}\n\t}()\n\n\t// Block until a termination signal arrives.\n\tsigCh := make(chan os.Signal, 1)\n\tsignal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)\n\treceived := <-sigCh\n\tlog.InfoLog.Printf(\"daemon received signal: %s\", received)\n\n\t// Signal the poll goroutine and wait for it to exit before persisting state.\n\tclose(stopCh)\n\twg.Wait()\n\n\tif saveErr := storage.SaveInstances(instances); saveErr != nil {\n\t\tlog.ErrorLog.Printf(\"daemon: failed to save instances on shutdown: %v\", saveErr)\n\t}\n\n\treturn nil\n}\n\n// LaunchDaemon forks a detached daemon child process and records its PID.\nfunc LaunchDaemon() error {\n\texecPath, err := os.Executable()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: could not resolve executable path: %w\", err)\n\t}\n\n\tcmd := exec.Command(execPath, \"--daemon\")\n\tcmd.Stdin = nil\n\tcmd.Stdout = nil\n\tcmd.Stderr = nil\n\tcmd.SysProcAttr = getSysProcAttr()\n\n\tif err := cmd.Start(); err != nil {\n\t\treturn fmt.Errorf(\"daemon: failed to start process: %w\", err)\n\t}\n\n\tlog.InfoLog.Printf(\"daemon child process started, PID=%d\", cmd.Process.Pid)\n\n\tcfgDir, err := config.GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: failed to locate config directory: %w\", err)\n\t}\n\n\tpidPath := filepath.Join(cfgDir, \"daemon.pid\")\n\tpidContent := fmt.Sprintf(\"%d\", cmd.Process.Pid)\n\tif err := os.WriteFile(pidPath, []byte(pidContent), 0644); err != nil {\n\t\treturn fmt.Errorf(\"daemon: failed to write PID file: %w\", err)\n\t}\n\n\treturn nil\n}\n\n// StopDaemon terminates a running daemon process identified by its PID file.\n// If no PID file exists the function returns without error (daemon is not running).\nfunc StopDaemon() error {\n\tcfgDir, err := config.GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: failed to locate config directory: %w\", err)\n\t}\n\n\tpidPath := filepath.Join(cfgDir, \"daemon.pid\")\n\traw, err := os.ReadFile(pidPath)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"daemon: could not read PID file: %w\", err)\n\t}\n\n\tvar pid int\n\tif _, err := fmt.Sscanf(string(raw), \"%d\", &pid); err != nil {\n\t\treturn fmt.Errorf(\"daemon: malformed PID file: %w\", err)\n\t}\n\n\tproc, err := os.FindProcess(pid)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"daemon: could not find process %d: %w\", pid, err)\n\t}\n\n\tif err := proc.Kill(); err != nil {\n\t\treturn fmt.Errorf(\"daemon: kill process %d failed: %w\", pid, err)\n\t}\n\n\tif err := os.Remove(pidPath); err != nil {\n\t\treturn fmt.Errorf(\"daemon: failed to remove PID file: %w\", err)\n\t}\n\n\tlog.InfoLog.Printf(\"daemon stopped (PID=%d)\", pid)\n\treturn nil\n}\n",
+              "additions": 65,
+              "deletions": 66,
+              "status": "modified"
+            },
+            {
+              "file": "daemon/daemon_unix.go",
+              "before": "//go:build !windows\n\npackage daemon\n\nimport (\n\t\"syscall\"\n)\n\n// getSysProcAttr returns platform-specific process attributes for detaching the child process\nfunc getSysProcAttr() *syscall.SysProcAttr {\n\treturn &syscall.SysProcAttr{\n\t\tSetsid: true, // Create a new session\n\t}\n}\n",
+              "after": "//go:build !windows\n\npackage daemon\n\nimport \"syscall\"\n\n// getSysProcAttr returns Unix-specific attributes that detach the child\n// process from the parent by placing it in a new session.\nfunc getSysProcAttr() *syscall.SysProcAttr {\n\treturn &syscall.SysProcAttr{Setsid: true}\n}\n",
+              "additions": 4,
+              "deletions": 7,
+              "status": "modified"
+            },
+            {
+              "file": "daemon/daemon_windows.go",
+              "before": "//go:build windows\n\npackage daemon\n\nimport (\n\t\"golang.org/x/sys/windows\"\n\t\"syscall\"\n)\n\n// getSysProcAttr returns platform-specific process attributes for detaching the child process\nfunc getSysProcAttr() *syscall.SysProcAttr {\n\treturn &syscall.SysProcAttr{\n\t\tCreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,\n\t}\n}\n",
+              "after": "//go:build windows\n\npackage daemon\n\nimport (\n\t\"syscall\"\n\n\t\"golang.org/x/sys/windows\"\n)\n\n// getSysProcAttr returns Windows-specific attributes that detach the child\n// process from the parent console and place it in a new process group.\nfunc getSysProcAttr() *syscall.SysProcAttr {\n\treturn &syscall.SysProcAttr{\n\t\tCreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,\n\t}\n}\n",
+              "additions": 4,
+              "deletions": 2,
+              "status": "modified"
+            }
+          ]
         },
         "agent": "coder",
         "model": {
@@ -455,7 +504,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772566698884
+          "created": 1772566698884,
+          "completed": 1772566747500
         },
         "parentID": "msg_cb535180b001t4YU5nWW1eAMru",
         "modelID": "claude-sonnet-4-6",
@@ -468,15 +518,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 65691,
+          "input": 1,
+          "output": 3335,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 60760,
+            "write": 1595
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb5355b84001Lo1JSQVhPmdvvk",
         "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn"
       },
@@ -520,13 +572,437 @@
           "callID": "toolu_01VWFd1HxndUHFuD7D2YwFet",
           "tool": "write",
           "state": {
-            "status": "pending",
-            "input": {},
-            "raw": ""
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config.go",
+              "content": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"os/user\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/log\"\n)\n\nconst (\n\t// ConfigFileName is the name of the JSON config file within the config dir.\n\tConfigFileName = \"config.json\"\n\n\t// defaultProgram is the fallback program name when command detection fails.\n\tdefaultProgram = \"opencode\"\n)\n\n// aliasRegex matches shell alias output to extract the real command path.\n// Handles formats: \"aliased to <path>\", \"-> <path>\", \"= <path>\".\nvar aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)\n\n// GetConfigDir returns the XDG-compliant config directory (~/.config/kasmos/).\n// On first call without that directory, it attempts to migrate legacy directories\n// (.klique, then .hivemind) via rename. If migration fails it returns the old path.\nfunc GetConfigDir() (string, error) {\n\thome, err := os.UserHomeDir()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"failed to get config home directory: %w\", err)\n\t}\n\n\ttarget := filepath.Join(home, \".config\", \"kasmos\")\n\n\t// Fast path: target already exists.\n\tif _, statErr := os.Stat(target); statErr == nil {\n\t\treturn target, nil\n\t}\n\n\t// Try each legacy directory in preference order.\n\tfor _, legacy := range []string{\n\t\tfilepath.Join(home, \".klique\"),\n\t\tfilepath.Join(home, \".hivemind\"),\n\t} {\n\t\tif _, statErr := os.Stat(legacy); statErr != nil {\n\t\t\tcontinue\n\t\t}\n\t\t// Ensure ~/.config/ parent exists before rename.\n\t\tif mkErr := os.MkdirAll(filepath.Dir(target), 0755); mkErr != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to create %s: %v\", filepath.Dir(target), mkErr)\n\t\t\treturn legacy, nil\n\t\t}\n\t\tif mvErr := os.Rename(legacy, target); mvErr != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to migrate %s to %s: %v\", legacy, target, mvErr)\n\t\t\treturn legacy, nil\n\t\t}\n\t\treturn target, nil\n\t}\n\n\t// No legacy dir found — return target path; caller creates it on first write.\n\treturn target, nil\n}\n\n// Config holds all persistent application configuration.\ntype Config struct {\n\t// DefaultProgram is the command launched for new instances.\n\tDefaultProgram string `json:\"default_program\"`\n\t// AutoYes makes the daemon automatically accept all agent prompts.\n\tAutoYes bool `json:\"auto_yes\"`\n\t// DaemonPollInterval is how often (ms) the daemon checks sessions.\n\tDaemonPollInterval int `json:\"daemon_poll_interval\"`\n\t// BranchPrefix is prepended to git branch names created by the app.\n\tBranchPrefix string `json:\"branch_prefix\"`\n\t// NotificationsEnabled controls desktop notifications; defaults to true when nil.\n\tNotificationsEnabled *bool `json:\"notifications_enabled,omitempty\"`\n\t// Profiles maps role names to agent program configurations.\n\tProfiles map[string]AgentProfile `json:\"profiles,omitempty\"`\n\t// PhaseRoles maps lifecycle phase names to role names.\n\tPhaseRoles map[string]string `json:\"phase_roles,omitempty\"`\n\t// AnimateBanner enables the idle banner animation (off by default).\n\tAnimateBanner bool `json:\"animate_banner,omitempty\"`\n\t// AutoAdvanceWaves skips the confirmation dialog after a clean wave.\n\tAutoAdvanceWaves bool `json:\"auto_advance_waves,omitempty\"`\n\t// TelemetryEnabled controls Sentry crash reporting; defaults to true when nil.\n\tTelemetryEnabled *bool `json:\"telemetry_enabled,omitempty\"`\n\t// DatabaseURL is the remote kasmos store URL; uses local file when empty.\n\tDatabaseURL string `json:\"database_url,omitempty\"`\n}\n\n// DefaultConfig builds a Config populated with sensible out-of-the-box values.\nfunc DefaultConfig() *Config {\n\tprogram, err := GetDefaultCommand()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get default command: %v\", err)\n\t\tprogram = defaultProgram\n\t}\n\n\ttrueVal := true\n\tprefix := branchPrefix()\n\n\treturn &Config{\n\t\tDefaultProgram:       program,\n\t\tAutoYes:              false,\n\t\tDaemonPollInterval:   1000,\n\t\tBranchPrefix:         prefix,\n\t\tNotificationsEnabled: &trueVal,\n\t}\n}\n\n// branchPrefix derives the git branch prefix from the current OS user.\n// Falls back to \"session/\" when the username is unavailable.\nfunc branchPrefix() string {\n\tu, err := user.Current()\n\tif err != nil || u == nil || u.Username == \"\" {\n\t\tlog.ErrorLog.Printf(\"failed to get current user: %v\", err)\n\t\treturn \"session/\"\n\t}\n\treturn fmt.Sprintf(\"%s/\", strings.ToLower(u.Username))\n}\n\n// AreNotificationsEnabled reports whether desktop notifications are active.\n// Returns true when NotificationsEnabled is nil (opt-out semantics).\nfunc (c *Config) AreNotificationsEnabled() bool {\n\tif c.NotificationsEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.NotificationsEnabled\n}\n\n// IsTelemetryEnabled reports whether Sentry telemetry is active.\n// Returns true when TelemetryEnabled is nil (opt-out semantics).\nfunc (c *Config) IsTelemetryEnabled() bool {\n\tif c.TelemetryEnabled == nil {\n\t\treturn true\n\t}\n\treturn *c.TelemetryEnabled\n}\n\n// GetDefaultCommand returns the preferred agent command path.\n// It tries opencode first, then falls back to claude.\nfunc GetDefaultCommand() (string, error) {\n\tif p, err := findCommand(\"opencode\"); err == nil {\n\t\treturn p, nil\n\t}\n\tif p, err := findCommand(\"claude\"); err == nil {\n\t\treturn p, nil\n\t}\n\treturn \"\", fmt.Errorf(\"neither opencode nor claude command found in aliases or PATH\")\n}\n\n// findCommand locates name via the user's login shell and PATH.\n// It sources the appropriate rc file so aliases are visible, then falls\n// back to exec.LookPath when the shell subprocess fails.\nfunc findCommand(name string) (string, error) {\n\tshell := os.Getenv(\"SHELL\")\n\tif shell == \"\" {\n\t\tshell = \"/bin/bash\"\n\t}\n\n\tvar inline string\n\tswitch {\n\tcase strings.Contains(shell, \"zsh\"):\n\t\tinline = fmt.Sprintf(\"source ~/.zshrc &>/dev/null || true; which %s\", name)\n\tcase strings.Contains(shell, \"bash\"):\n\t\tinline = fmt.Sprintf(\"source ~/.bashrc &>/dev/null || true; which %s\", name)\n\tdefault:\n\t\tinline = fmt.Sprintf(\"which %s\", name)\n\t}\n\n\tout, err := exec.Command(shell, \"-c\", inline).Output()\n\tif err == nil && len(out) > 0 {\n\t\tif p := parseCommandOutput(string(out)); p != \"\" {\n\t\t\treturn p, nil\n\t\t}\n\t}\n\n\t// Fallback: consult PATH directly.\n\tif p, lookErr := exec.LookPath(name); lookErr == nil {\n\t\treturn p, nil\n\t}\n\n\treturn \"\", fmt.Errorf(\"%s command not found in aliases or PATH\", name)\n}\n\n// parseCommandOutput extracts a command path from raw shell output.\n// It resolves alias declarations (e.g. \"opencode: aliased to /usr/local/bin/opencode\")\n// and returns an empty string for blank output.\nfunc parseCommandOutput(output string) string {\n\ttrimmed := strings.TrimSpace(output)\n\tif trimmed == \"\" {\n\t\treturn \"\"\n\t}\n\tif m := aliasRegex.FindStringSubmatch(trimmed); len(m) > 1 {\n\t\treturn m[1]\n\t}\n\treturn trimmed\n}\n\n// LoadConfig reads config.json from the config directory. When the file is\n// absent it creates and persists a default. On parse errors it returns a default.\n// TOML config is overlaid after JSON load for Profiles, PhaseRoles, and flags.\nfunc LoadConfig() *Config {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultConfig()\n\t}\n\n\tdata, readErr := os.ReadFile(filepath.Join(dir, ConfigFileName))\n\tif readErr != nil {\n\t\tif os.IsNotExist(readErr) {\n\t\t\tdef := DefaultConfig()\n\t\t\tif saveErr := saveConfig(def); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default config: %v\", saveErr)\n\t\t\t}\n\t\t\treturn def\n\t\t}\n\t\tlog.WarningLog.Printf(\"failed to get config file: %v\", readErr)\n\t\treturn DefaultConfig()\n\t}\n\n\tvar cfg Config\n\tif unmarshalErr := json.Unmarshal(data, &cfg); unmarshalErr != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse config file: %v\", unmarshalErr)\n\t\treturn DefaultConfig()\n\t}\n\n\t// Overlay TOML config values where present — TOML is authoritative for these fields.\n\ttomlCfg, tomlErr := LoadTOMLConfig()\n\tif tomlErr != nil {\n\t\tlog.WarningLog.Printf(\"failed to load TOML config: %v\", tomlErr)\n\t} else if tomlCfg != nil {\n\t\tif len(tomlCfg.Profiles) > 0 {\n\t\t\tcfg.Profiles = tomlCfg.Profiles\n\t\t}\n\t\tif len(tomlCfg.PhaseRoles) > 0 {\n\t\t\tcfg.PhaseRoles = tomlCfg.PhaseRoles\n\t\t}\n\t\tif tomlCfg.AnimateBanner {\n\t\t\tcfg.AnimateBanner = true\n\t\t}\n\t\tif tomlCfg.AutoAdvanceWaves {\n\t\t\tcfg.AutoAdvanceWaves = true\n\t\t}\n\t\tif tomlCfg.TelemetryEnabled != nil {\n\t\t\tcfg.TelemetryEnabled = tomlCfg.TelemetryEnabled\n\t\t}\n\t\tif tomlCfg.DatabaseURL != \"\" {\n\t\t\tcfg.DatabaseURL = tomlCfg.DatabaseURL\n\t\t}\n\t}\n\n\treturn &cfg\n}\n\n// saveConfig serialises cfg as indented JSON and writes it to the config directory.\nfunc saveConfig(cfg *Config) error {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\tif mkErr := os.MkdirAll(dir, 0755); mkErr != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", mkErr)\n\t}\n\tdata, marshalErr := json.MarshalIndent(cfg, \"\", \"  \")\n\tif marshalErr != nil {\n\t\treturn fmt.Errorf(\"failed to marshal config: %w\", marshalErr)\n\t}\n\treturn os.WriteFile(filepath.Join(dir, ConfigFileName), data, 0644)\n}\n\n// SaveConfig is the exported wrapper around saveConfig.\nfunc SaveConfig(cfg *Config) error {\n\treturn saveConfig(cfg)\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "config/config.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/state.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config_test.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772566747300,
+              "end": 1772566747487
+            }
           },
           "id": "prt_cb5358a19001ehSdSM7b8dDkkt",
           "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
           "messageID": "msg_cb5355b84001Lo1JSQVhPmdvvk"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f4564ddd71bdcf9c14bbc012a005d5860b6206fb",
+          "cost": 0,
+          "tokens": {
+            "total": 65691,
+            "input": 1,
+            "output": 3335,
+            "reasoning": 0,
+            "cache": {
+              "read": 60760,
+              "write": 1595
+            }
+          },
+          "id": "prt_cb5361961001wydDU7Acwk6PDa",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5355b84001Lo1JSQVhPmdvvk"
+        },
+        {
+          "type": "patch",
+          "hash": "9bbf34bb7f25c4405c94a8644181bd64342a813b",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/cmd/cmd.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/daemon/daemon.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/daemon/daemon_unix.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/daemon/daemon_windows.go"
+          ],
+          "id": "prt_cb5361969001Akl0JUB417ONih",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5355b84001Lo1JSQVhPmdvvk"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772566747501,
+          "completed": 1772566764379
+        },
+        "parentID": "msg_cb535180b001t4YU5nWW1eAMru",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 67082,
+          "input": 1,
+          "output": 1377,
+          "reasoning": 0,
+          "cache": {
+            "read": 62355,
+            "write": 3349
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f4564ddd71bdcf9c14bbc012a005d5860b6206fb",
+          "id": "prt_cb53622da0015Ly8CYb2V7CVz4",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011mtAGHihRjKnaoNKZY7Pkm",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/state.go",
+              "content": "package config\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/log\"\n)\n\nconst (\n\t// StateFileName is the name of the JSON state file within the config dir.\n\tStateFileName = \"state.json\"\n\t// InstancesFileName is the legacy per-file instances store name.\n\tInstancesFileName = \"instances.json\"\n)\n\n// InstanceStorage is the interface for reading and writing serialised instance data.\ntype InstanceStorage interface {\n\t// SaveInstances persists the raw instance JSON blob.\n\tSaveInstances(instancesJSON json.RawMessage) error\n\t// GetInstances returns the current raw instance JSON blob.\n\tGetInstances() json.RawMessage\n\t// DeleteAllInstances resets the stored instances to an empty list.\n\tDeleteAllInstances() error\n}\n\n// AppState is the interface for reading and writing application-level state.\ntype AppState interface {\n\t// GetHelpScreensSeen returns the bitmask of help screens that have been shown.\n\tGetHelpScreensSeen() uint32\n\t// SetHelpScreensSeen stores an updated bitmask and persists it.\n\tSetHelpScreensSeen(seen uint32) error\n}\n\n// StateManager is the unified interface combining instance storage and app state.\ntype StateManager interface {\n\tInstanceStorage\n\tAppState\n}\n\n// State is the on-disk representation of application state.\ntype State struct {\n\t// HelpScreensSeen is a bitmask tracking which help screens the user has seen.\n\tHelpScreensSeen uint32 `json:\"help_screens_seen\"`\n\t// InstancesData holds the serialised instance list as a raw JSON value.\n\tInstancesData json.RawMessage `json:\"instances\"`\n}\n\n// DefaultState returns an initial State with no help screens seen and an empty instances list.\nfunc DefaultState() *State {\n\treturn &State{\n\t\tHelpScreensSeen: 0,\n\t\tInstancesData:   json.RawMessage(\"[]\"),\n\t}\n}\n\n// LoadState reads state.json from the config directory. When the file is absent it\n// creates and persists a default. On parse errors it returns a default without saving.\nfunc LoadState() *State {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"failed to get config directory: %v\", err)\n\t\treturn DefaultState()\n\t}\n\n\tdata, readErr := os.ReadFile(filepath.Join(dir, StateFileName))\n\tif readErr != nil {\n\t\tif os.IsNotExist(readErr) {\n\t\t\tdef := DefaultState()\n\t\t\tif saveErr := SaveState(def); saveErr != nil {\n\t\t\t\tlog.WarningLog.Printf(\"failed to save default state: %v\", saveErr)\n\t\t\t}\n\t\t\treturn def\n\t\t}\n\t\tlog.WarningLog.Printf(\"failed to get state file: %v\", readErr)\n\t\treturn DefaultState()\n\t}\n\n\tvar s State\n\tif unmarshalErr := json.Unmarshal(data, &s); unmarshalErr != nil {\n\t\tlog.ErrorLog.Printf(\"failed to parse state file: %v\", unmarshalErr)\n\t\treturn DefaultState()\n\t}\n\n\treturn &s\n}\n\n// SaveState serialises s as indented JSON and writes it to the config directory.\nfunc SaveState(s *State) error {\n\tdir, err := GetConfigDir()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t}\n\tif mkErr := os.MkdirAll(dir, 0755); mkErr != nil {\n\t\treturn fmt.Errorf(\"failed to create config directory: %w\", mkErr)\n\t}\n\tdata, marshalErr := json.MarshalIndent(s, \"\", \"  \")\n\tif marshalErr != nil {\n\t\treturn fmt.Errorf(\"failed to marshal state: %w\", marshalErr)\n\t}\n\treturn os.WriteFile(filepath.Join(dir, StateFileName), data, 0644)\n}\n\n// SaveInstances implements InstanceStorage: replaces the stored instances and persists.\nfunc (s *State) SaveInstances(instancesJSON json.RawMessage) error {\n\ts.InstancesData = instancesJSON\n\treturn SaveState(s)\n}\n\n// GetInstances implements InstanceStorage: returns the raw instance JSON blob.\nfunc (s *State) GetInstances() json.RawMessage {\n\treturn s.InstancesData\n}\n\n// DeleteAllInstances implements InstanceStorage: resets instances to an empty list.\nfunc (s *State) DeleteAllInstances() error {\n\ts.InstancesData = json.RawMessage(\"[]\")\n\treturn SaveState(s)\n}\n\n// GetHelpScreensSeen implements AppState: returns the seen-help-screens bitmask.\nfunc (s *State) GetHelpScreensSeen() uint32 {\n\treturn s.HelpScreensSeen\n}\n\n// SetHelpScreensSeen implements AppState: stores an updated bitmask and persists.\nfunc (s *State) SetHelpScreensSeen(seen uint32) error {\n\ts.HelpScreensSeen = seen\n\treturn SaveState(s)\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "config/state.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/state.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/config_test.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/state.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772566764201,
+              "end": 1772566764367
+            }
+          },
+          "id": "prt_cb53622db001OGRGPe3hx2Osid",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "cost": 0,
+          "tokens": {
+            "total": 67082,
+            "input": 1,
+            "output": 1377,
+            "reasoning": 0,
+            "cache": {
+              "read": 62355,
+              "write": 3349
+            }
+          },
+          "id": "prt_cb5365b51001ltLKnpfxX0YPRu",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "f4564ddd71bdcf9c14bbc012a005d5860b6206fb",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing/config/state.go"
+          ],
+          "id": "prt_cb5365b59001u9Tx33ccDLOOxQ",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772566764381,
+          "completed": 1772566770301
+        },
+        "parentID": "msg_cb535180b001t4YU5nWW1eAMru",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 67280,
+          "input": 1,
+          "output": 182,
+          "reasoning": 0,
+          "cache": {
+            "read": 65704,
+            "write": 1393
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb5365b5d001s6skEad7ZHas5h",
+        "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "id": "prt_cb53663dd001EzanzfUybO7S32",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5365b5d001s6skEad7ZHas5h"
+        },
+        {
+          "type": "text",
+          "text": "Now run the tests to verify everything passes:",
+          "time": {
+            "start": 1772566767371,
+            "end": 1772566767371
+          },
+          "id": "prt_cb53663dd002WnC0YPA73K67XS",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5365b5d001s6skEad7ZHas5h"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EMrwFiQ3o7RNWhtwAaEpvR",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing && go test ./config/... -run 'TestGetDefaultCommand|TestDefaultConfig|TestGetConfigDir|TestLoadConfig|TestSaveConfig|TestIsTelemetryEnabled' -v -count=1 2>&1",
+              "description": "Run config tests to verify rewrite passes",
+              "timeout": 60000
+            },
+            "output": "=== RUN   TestGetDefaultCommand\n=== RUN   TestGetDefaultCommand/finds_opencode_in_PATH\n=== RUN   TestGetDefaultCommand/falls_back_to_claude_when_opencode_is_missing\n=== RUN   TestGetDefaultCommand/handles_missing_opencode_and_claude_commands\n=== RUN   TestGetDefaultCommand/handles_empty_SHELL_environment\n=== RUN   TestGetDefaultCommand/prefers_opencode_when_both_commands_exist\n=== RUN   TestGetDefaultCommand/handles_alias_parsing\n--- PASS: TestGetDefaultCommand (0.00s)\n    --- PASS: TestGetDefaultCommand/finds_opencode_in_PATH (0.00s)\n    --- PASS: TestGetDefaultCommand/falls_back_to_claude_when_opencode_is_missing (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_missing_opencode_and_claude_commands (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_empty_SHELL_environment (0.00s)\n    --- PASS: TestGetDefaultCommand/prefers_opencode_when_both_commands_exist (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_alias_parsing (0.00s)\n=== RUN   TestDefaultConfig\n=== RUN   TestDefaultConfig/creates_config_with_default_values\n=== RUN   TestDefaultConfig/falls_back_to_opencode_when_command_detection_fails\n--- PASS: TestDefaultConfig (0.05s)\n    --- PASS: TestDefaultConfig/creates_config_with_default_values (0.05s)\n    --- PASS: TestDefaultConfig/falls_back_to_opencode_when_command_detection_fails (0.00s)\n=== RUN   TestGetConfigDir\n=== RUN   TestGetConfigDir/returns_valid_config_directory\n=== RUN   TestGetConfigDir/migrates_legacy_.hivemind_to_.config/kasmos\n=== RUN   TestGetConfigDir/migrates_legacy_.klique_to_.config/kasmos\n=== RUN   TestGetConfigDir/skips_migration_when_.config/kasmos_already_exists\n=== RUN   TestGetConfigDir/no-ops_when_neither_dir_exists\n--- PASS: TestGetConfigDir (0.00s)\n    --- PASS: TestGetConfigDir/returns_valid_config_directory (0.00s)\n    --- PASS: TestGetConfigDir/migrates_legacy_.hivemind_to_.config/kasmos (0.00s)\n    --- PASS: TestGetConfigDir/migrates_legacy_.klique_to_.config/kasmos (0.00s)\n    --- PASS: TestGetConfigDir/skips_migration_when_.config/kasmos_already_exists (0.00s)\n    --- PASS: TestGetConfigDir/no-ops_when_neither_dir_exists (0.00s)\n=== RUN   TestLoadConfig\n=== RUN   TestLoadConfig/returns_default_config_when_file_doesn't_exist\n=== RUN   TestLoadConfig/loads_valid_config_file\n=== RUN   TestLoadConfig/returns_default_config_on_invalid_JSON\n--- PASS: TestLoadConfig (0.03s)\n    --- PASS: TestLoadConfig/returns_default_config_when_file_doesn't_exist (0.01s)\n    --- PASS: TestLoadConfig/loads_valid_config_file (0.00s)\n    --- PASS: TestLoadConfig/returns_default_config_on_invalid_JSON (0.01s)\n=== RUN   TestSaveConfig\n=== RUN   TestSaveConfig/saves_config_to_file\n--- PASS: TestSaveConfig (0.00s)\n    --- PASS: TestSaveConfig/saves_config_to_file (0.00s)\n=== RUN   TestIsTelemetryEnabled\n=== RUN   TestIsTelemetryEnabled/nil_defaults_to_true\n=== RUN   TestIsTelemetryEnabled/explicit_true\n=== RUN   TestIsTelemetryEnabled/explicit_false\n--- PASS: TestIsTelemetryEnabled (0.00s)\n    --- PASS: TestIsTelemetryEnabled/nil_defaults_to_true (0.00s)\n    --- PASS: TestIsTelemetryEnabled/explicit_true (0.00s)\n    --- PASS: TestIsTelemetryEnabled/explicit_false (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/config\t0.085s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.003s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.002s [no tests to run]\n",
+            "title": "Run config tests to verify rewrite passes",
+            "metadata": {
+              "output": "=== RUN   TestGetDefaultCommand\n=== RUN   TestGetDefaultCommand/finds_opencode_in_PATH\n=== RUN   TestGetDefaultCommand/falls_back_to_claude_when_opencode_is_missing\n=== RUN   TestGetDefaultCommand/handles_missing_opencode_and_claude_commands\n=== RUN   TestGetDefaultCommand/handles_empty_SHELL_environment\n=== RUN   TestGetDefaultCommand/prefers_opencode_when_both_commands_exist\n=== RUN   TestGetDefaultCommand/handles_alias_parsing\n--- PASS: TestGetDefaultCommand (0.00s)\n    --- PASS: TestGetDefaultCommand/finds_opencode_in_PATH (0.00s)\n    --- PASS: TestGetDefaultCommand/falls_back_to_claude_when_opencode_is_missing (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_missing_opencode_and_claude_commands (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_empty_SHELL_environment (0.00s)\n    --- PASS: TestGetDefaultCommand/prefers_opencode_when_both_commands_exist (0.00s)\n    --- PASS: TestGetDefaultCommand/handles_alias_parsing (0.00s)\n=== RUN   TestDefaultConfig\n=== RUN   TestDefaultConfig/creates_config_with_default_values\n=== RUN   TestDefaultConfig/falls_back_to_opencode_when_command_detection_fails\n--- PASS: TestDefaultConfig (0.05s)\n    --- PASS: TestDefaultConfig/creates_config_with_default_values (0.05s)\n    --- PASS: TestDefaultConfig/falls_back_to_opencode_when_command_detection_fails (0.00s)\n=== RUN   TestGetConfigDir\n=== RUN   TestGetConfigDir/returns_valid_config_directory\n=== RUN   TestGetConfigDir/migrates_legacy_.hivemind_to_.config/kasmos\n=== RUN   TestGetConfigDir/migrates_legacy_.klique_to_.config/kasmos\n=== RUN   TestGetConfigDir/skips_migration_when_.config/kasmos_already_exists\n=== RUN   TestGetConfigDir/no-ops_when_neither_dir_exists\n--- PASS: TestGetConfigDir (0.00s)\n    --- PASS: TestGetConfigDir/returns_valid_config_directory (0.00s)\n    --- PASS: TestGetConfigDir/migrates_legacy_.hivemind_to_.config/kasmos (0.00s)\n    --- PASS: TestGetConfigDir/migrates_legacy_.klique_to_.config/kasmos (0.00s)\n    --- PASS: TestGetConfigDir/skips_migration_when_.config/kasmos_already_exists (0.00s)\n    --- PASS: TestGetConfigDir/no-ops_when_neither_dir_exists (0.00s)\n=== RUN   TestLoadConfig\n=== RUN   TestLoadConfig/returns_default_config_when_file_doesn't_exist\n=== RUN   TestLoadConfig/loads_valid_config_file\n=== RUN   TestLoadConfig/returns_default_config_on_invalid_JSON\n--- PASS: TestLoadConfig (0.03s)\n    --- PASS: TestLoadConfig/returns_default_config_when_file_doesn't_exist (0.01s)\n    --- PASS: TestLoadConfig/loads_valid_config_file (0.00s)\n    --- PASS: TestLoadConfig/returns_default_config_on_invalid_JSON (0.01s)\n=== RUN   TestSaveConfig\n=== RUN   TestSaveConfig/saves_config_to_file\n--- PASS: TestSaveConfig (0.00s)\n    --- PASS: TestSaveConfig/saves_config_to_file (0.00s)\n=== RUN   TestIsTelemetryEnabled\n=== RUN   TestIsTelemetryEnabled/nil_defaults_to_true\n=== RUN   TestIsTelemetryEnabled/explicit_true\n=== RUN   TestIsTelemetryEnabled/explicit_false\n--- PASS: TestIsTelemetryEnabled (0.00s)\n    --- PASS: TestIsTelemetryEnabled/nil_defaults_to_true (0.00s)\n    --- PASS: TestIsTelemetryEnabled/explicit_true (0.00s)\n    --- PASS: TestIsTelemetryEnabled/explicit_false (0.00s)\nPASS\nwrote logs to /tmp/kas.log\nok  \tgithub.com/kastheco/kasmos/config\t0.085s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.003s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.002s [no tests to run]\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.002s [no tests to run]\n",
+              "exit": 0,
+              "description": "Run config tests to verify rewrite passes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772566769927,
+              "end": 1772566770293
+            }
+          },
+          "id": "prt_cb5366712001iif6140JUMwAYq",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5365b5d001s6skEad7ZHas5h"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "cost": 0,
+          "tokens": {
+            "total": 67280,
+            "input": 1,
+            "output": 182,
+            "reasoning": 0,
+            "cache": {
+              "read": 65704,
+              "write": 1393
+            }
+          },
+          "id": "prt_cb5367276001m4pofA8djSU0u4",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5365b5d001s6skEad7ZHas5h"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772566770302,
+          "completed": 1772566777056
+        },
+        "parentID": "msg_cb535180b001t4YU5nWW1eAMru",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 68817,
+          "input": 1,
+          "output": 158,
+          "reasoning": 0,
+          "cache": {
+            "read": 67097,
+            "write": 1561
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb536727e001qsAVQfT8TZM620",
+        "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "id": "prt_cb5367c3c001FEphyFWDtSGxQM",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb536727e001qsAVQfT8TZM620"
+        },
+        {
+          "type": "text",
+          "text": "All 18 tests pass. Commit now:",
+          "time": {
+            "start": 1772566773193,
+            "end": 1772566773193
+          },
+          "id": "prt_cb5367c3c002wQ43Mt5tfl6qtE",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb536727e001qsAVQfT8TZM620"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing && git add config/config.go config/state.go && git commit -m \"feat(clean-room): rewrite config/config.go and config/state.go from scratch\"",
+              "description": "Commit task-1 rewrite of config files"
+            },
+            "output": "[plan/04-rewrite-plumbing ff564c8] feat(clean-room): rewrite config/config.go and config/state.go from scratch\n 2 files changed, 188 insertions(+), 197 deletions(-)\n",
+            "title": "Commit task-1 rewrite of config files",
+            "metadata": {
+              "output": "[plan/04-rewrite-plumbing ff564c8] feat(clean-room): rewrite config/config.go and config/state.go from scratch\n 2 files changed, 188 insertions(+), 197 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit task-1 rewrite of config files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772566775377,
+              "end": 1772566777048
+            }
+          },
+          "id": "prt_cb5367dca001S0hfot11rX9JzH",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb536727e001qsAVQfT8TZM620"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "cost": 0,
+          "tokens": {
+            "total": 68817,
+            "input": 1,
+            "output": 158,
+            "reasoning": 0,
+            "cache": {
+              "read": 67097,
+              "write": 1561
+            }
+          },
+          "id": "prt_cb5368cd8001okTATZdXc8ZUyA",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb536727e001qsAVQfT8TZM620"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772566777057,
+          "completed": 1772566783136
+        },
+        "parentID": "msg_cb535180b001t4YU5nWW1eAMru",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-04-rewrite-plumbing"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 69058,
+          "input": 1,
+          "output": 170,
+          "reasoning": 0,
+          "cache": {
+            "read": 68658,
+            "write": 229
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb5368ce10015ayFImntRpmsL2",
+        "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "id": "prt_cb536936c001Mv3v8T2Z9lvBDG",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5368ce10015ayFImntRpmsL2"
+        },
+        {
+          "type": "text",
+          "text": "Task 1 complete. Both files have been rewritten from scratch:\n\n- **`config/config.go`** — fresh implementation of `GetConfigDir`, `Config`, `DefaultConfig`, `AreNotificationsEnabled`, `IsTelemetryEnabled`, `GetDefaultCommand`, `findCommand`, `parseCommandOutput`, `LoadConfig`, `saveConfig`, `SaveConfig` — all matching the functional spec with identical public API and behavior.\n\n- **`config/state.go`** — fresh implementation of the `InstanceStorage`, `AppState`, `StateManager` interfaces plus `State`, `DefaultState`, `LoadState`, `SaveState` and all five method implementations.\n\nAll 18 regression tests pass (same result before and after the rewrite).",
+          "time": {
+            "start": 1772566783083,
+            "end": 1772566783083
+          },
+          "id": "prt_cb536936c002QZSFQC1ytgzBoF",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5368ce10015ayFImntRpmsL2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8a9da371a30fa213583540fb155f37db32f30527",
+          "cost": 0,
+          "tokens": {
+            "total": 69058,
+            "input": 1,
+            "output": 170,
+            "reasoning": 0,
+            "cache": {
+              "read": 68658,
+              "write": 229
+            }
+          },
+          "id": "prt_cb536a49600198EqB74E6YXnAI",
+          "sessionID": "ses_34acae806ffeHtJjibGM0eJCXn",
+          "messageID": "msg_cb5368ce10015ayFImntRpmsL2"
         }
       ]
     }
