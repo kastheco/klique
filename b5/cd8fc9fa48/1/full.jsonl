@@ -1,0 +1,1118 @@
+{
+  "info": {
+    "id": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+    "slug": "happy-mountain",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+    "title": "Rewrite worktree_ops.go setup/cleanup/sync",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 226,
+      "deletions": 258,
+      "files": 4
+    },
+    "time": {
+      "created": 1772548558443,
+      "updated": 1772548638502
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772548558459
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "session/git/diff.go",
+              "before": "package git\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// DiffStats holds statistics about the changes in a diff\ntype DiffStats struct {\n\t// Content is the full diff content\n\tContent string\n\t// Added is the number of added lines\n\tAdded int\n\t// Removed is the number of removed lines\n\tRemoved int\n\t// Error holds any error that occurred during diff computation\n\t// This allows propagating setup errors (like missing base commit) without breaking the flow\n\tError error\n}\n\nfunc (d *DiffStats) IsEmpty() bool {\n\treturn d.Added == 0 && d.Removed == 0 && d.Content == \"\"\n}\n\n// Diff returns the git diff between the worktree and the base branch along with statistics\nfunc (g *GitWorktree) Diff() *DiffStats {\n\tstats := &DiffStats{}\n\n\t// Bail out early if the worktree directory no longer exists on disk\n\t// (e.g. cleaned up externally or after pause). Avoids spamming git\n\t// errors every tick.\n\tif _, err := os.Stat(g.worktreePath); err != nil {\n\t\tstats.Error = fmt.Errorf(\"worktree path gone: %w\", err)\n\t\treturn stats\n\t}\n\n\tbase := g.GetBaseCommitSHA()\n\tif base == \"\" {\n\t\tstats.Error = fmt.Errorf(\"no base commit SHA available\")\n\t\treturn stats\n\t}\n\n\t// Diff tracked changes (read-only, does not touch the index).\n\tcontent, err := g.runGitCommand(g.worktreePath, \"--no-pager\", \"diff\", base)\n\tif err != nil {\n\t\tstats.Error = err\n\t\treturn stats\n\t}\n\tlines := strings.Split(content, \"\\n\")\n\tfor _, line := range lines {\n\t\tif strings.HasPrefix(line, \"+\") && !strings.HasPrefix(line, \"+++\") {\n\t\t\tstats.Added++\n\t\t} else if strings.HasPrefix(line, \"-\") && !strings.HasPrefix(line, \"---\") {\n\t\t\tstats.Removed++\n\t\t}\n\t}\n\tstats.Content = content\n\n\treturn stats\n}\n",
+              "after": "package git\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// DiffStats holds the result of a diff computation between the worktree and its base commit.\ntype DiffStats struct {\n\t// Content is the full raw diff output.\n\tContent string\n\t// Added is the count of lines added (lines starting with \"+\" but not \"+++\").\n\tAdded int\n\t// Removed is the count of lines removed (lines starting with \"-\" but not \"---\").\n\tRemoved int\n\t// Error captures any error encountered during diff computation so callers\n\t// can inspect it without the method panicking or returning a nil pointer.\n\tError error\n}\n\n// IsEmpty reports whether the diff has no changes and no content.\nfunc (d *DiffStats) IsEmpty() bool {\n\treturn d.Added == 0 && d.Removed == 0 && d.Content == \"\"\n}\n\n// Diff computes the diff between the worktree's current state and its base commit.\n// It returns a populated DiffStats in all cases; callers should check DiffStats.Error.\nfunc (g *GitWorktree) Diff() *DiffStats {\n\tstats := &DiffStats{}\n\n\tif _, err := os.Stat(g.worktreePath); err != nil {\n\t\tstats.Error = fmt.Errorf(\"worktree path unavailable: %w\", err)\n\t\treturn stats\n\t}\n\n\tbase := g.GetBaseCommitSHA()\n\tif base == \"\" {\n\t\tstats.Error = fmt.Errorf(\"base commit SHA not available\")\n\t\treturn stats\n\t}\n\n\toutput, err := g.runGitCommand(g.worktreePath, \"--no-pager\", \"diff\", base)\n\tif err != nil {\n\t\tstats.Error = err\n\t\treturn stats\n\t}\n\n\tfor _, line := range strings.Split(output, \"\\n\") {\n\t\tswitch {\n\t\tcase strings.HasPrefix(line, \"+\") && !strings.HasPrefix(line, \"+++\"):\n\t\t\tstats.Added++\n\t\tcase strings.HasPrefix(line, \"-\") && !strings.HasPrefix(line, \"---\"):\n\t\t\tstats.Removed++\n\t\t}\n\t}\n\tstats.Content = output\n\n\treturn stats\n}\n",
+              "additions": 18,
+              "deletions": 19,
+              "status": "modified"
+            },
+            {
+              "file": "session/git/worktree.go",
+              "before": "package git\n\nimport (\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"path/filepath\"\n\t\"time\"\n)\n\nfunc getWorktreeDirectory(repoPath string) (string, error) {\n\tif repoPath == \"\" {\n\t\treturn \"\", fmt.Errorf(\"repo path is required for worktree directory\")\n\t}\n\treturn filepath.Join(repoPath, \".worktrees\"), nil\n}\n\n// GitWorktree manages git worktree operations for a session\ntype GitWorktree struct {\n\t// Path to the repository\n\trepoPath string\n\t// Path to the worktree\n\tworktreePath string\n\t// Name of the session\n\tsessionName string\n\t// Branch name for the worktree\n\tbranchName string\n\t// Base commit hash for the worktree\n\tbaseCommitSHA string\n}\n\nfunc NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {\n\treturn &GitWorktree{\n\t\trepoPath:      repoPath,\n\t\tworktreePath:  worktreePath,\n\t\tsessionName:   sessionName,\n\t\tbranchName:    branchName,\n\t\tbaseCommitSHA: baseCommitSHA,\n\t}\n}\n\n// NewGitWorktree creates a new GitWorktree instance\nfunc NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {\n\tcfg := config.LoadConfig()\n\tbranchName := fmt.Sprintf(\"%s%s\", cfg.BranchPrefix, sessionName)\n\t// Sanitize the final branch name to handle invalid characters from any source\n\t// (e.g., backslashes from Windows domain usernames like DOMAIN\\user)\n\tbranchName = sanitizeBranchName(branchName)\n\n\t// Convert repoPath to absolute path\n\tabsPath, err := filepath.Abs(repoPath)\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"git worktree path abs error, falling back to repoPath %s: %s\", repoPath, err)\n\t\t// If we can't get absolute path, use original path as fallback\n\t\tabsPath = repoPath\n\t}\n\n\trepoPath, err = findGitRepoRoot(absPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreeDir, err := getWorktreeDirectory(repoPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\t// Use sanitized branch name for the worktree directory name\n\tworktreePath := filepath.Join(worktreeDir, branchName)\n\tworktreePath = worktreePath + \"_\" + fmt.Sprintf(\"%x\", time.Now().UnixNano())\n\n\treturn &GitWorktree{\n\t\trepoPath:     repoPath,\n\t\tsessionName:  sessionName,\n\t\tbranchName:   branchName,\n\t\tworktreePath: worktreePath,\n\t}, branchName, nil\n}\n\n// NewGitWorktreeOnBranch creates a GitWorktree targeting a specific branch name.\n// Unlike NewGitWorktree which auto-generates a branch, this uses the exact branch provided.\n// Setup() will handle whether the branch already exists or needs creating.\nfunc NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree, string, error) {\n\tbranch = sanitizeBranchName(branch)\n\n\tabsPath, err := filepath.Abs(repoPath)\n\tif err != nil {\n\t\tabsPath = repoPath\n\t}\n\n\trepoPath, err = findGitRepoRoot(absPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreeDir, err := getWorktreeDirectory(repoPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreePath := filepath.Join(worktreeDir, branch)\n\tworktreePath = worktreePath + \"_\" + fmt.Sprintf(\"%x\", time.Now().UnixNano())\n\n\treturn &GitWorktree{\n\t\trepoPath:     repoPath,\n\t\tsessionName:  sessionName,\n\t\tbranchName:   branch,\n\t\tworktreePath: worktreePath,\n\t}, branch, nil\n}\n\n// GetWorktreePath returns the path to the worktree\nfunc (g *GitWorktree) GetWorktreePath() string {\n\treturn g.worktreePath\n}\n\n// GetBranchName returns the name of the branch associated with this worktree\nfunc (g *GitWorktree) GetBranchName() string {\n\treturn g.branchName\n}\n\n// GetRepoPath returns the path to the repository\nfunc (g *GitWorktree) GetRepoPath() string {\n\treturn g.repoPath\n}\n\n// GetRepoName returns the name of the repository (last part of the repoPath).\nfunc (g *GitWorktree) GetRepoName() string {\n\treturn filepath.Base(g.repoPath)\n}\n\n// GetBaseCommitSHA returns the base commit SHA for the worktree\nfunc (g *GitWorktree) GetBaseCommitSHA() string {\n\treturn g.baseCommitSHA\n}\n",
+              "after": "package git\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// getWorktreeDirectory returns the directory used to store git worktrees for\n// the given repository. Returns an error when repoPath is empty.\nfunc getWorktreeDirectory(repoPath string) (string, error) {\n\tif repoPath == \"\" {\n\t\treturn \"\", fmt.Errorf(\"repo path is required for worktree directory\")\n\t}\n\treturn filepath.Join(repoPath, \".worktrees\"), nil\n}\n\n// GitWorktree manages git worktree operations for a session.\ntype GitWorktree struct {\n\trepoPath      string\n\tworktreePath  string\n\tsessionName   string\n\tbranchName    string\n\tbaseCommitSHA string\n}\n\n// NewGitWorktreeFromStorage constructs a GitWorktree directly from persisted\n// state without any filesystem interaction. Used when restoring from storage.\nfunc NewGitWorktreeFromStorage(repoPath, worktreePath, sessionName, branchName, baseCommitSHA string) *GitWorktree {\n\treturn &GitWorktree{\n\t\trepoPath:      repoPath,\n\t\tworktreePath:  worktreePath,\n\t\tsessionName:   sessionName,\n\t\tbranchName:    branchName,\n\t\tbaseCommitSHA: baseCommitSHA,\n\t}\n}\n\n// NewGitWorktree creates a GitWorktree with an auto-generated branch name\n// derived from the configured branch prefix and the session name.\nfunc NewGitWorktree(repoPath, sessionName string) (*GitWorktree, string, error) {\n\tcfg := config.LoadConfig()\n\tbranchName := sanitizeBranchName(fmt.Sprintf(\"%s%s\", cfg.BranchPrefix, sessionName))\n\n\tabsPath, err := filepath.Abs(repoPath)\n\tif err != nil {\n\t\tlog.ErrorLog.Printf(\"git worktree path abs error, falling back to repoPath %s: %s\", repoPath, err)\n\t\tabsPath = repoPath\n\t}\n\n\tresolvedRoot, err := findGitRepoRoot(absPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreeDir, err := getWorktreeDirectory(resolvedRoot)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreePath := fmt.Sprintf(\"%s_%x\", filepath.Join(worktreeDir, branchName), time.Now().UnixNano())\n\n\treturn &GitWorktree{\n\t\trepoPath:     resolvedRoot,\n\t\tworktreePath: worktreePath,\n\t\tsessionName:  sessionName,\n\t\tbranchName:   branchName,\n\t}, branchName, nil\n}\n\n// NewGitWorktreeOnBranch creates a GitWorktree targeting a specific branch\n// rather than generating one from the config prefix. The branch name is\n// sanitized before use. Setup handles whether the branch already exists.\nfunc NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree, string, error) {\n\tbranch = sanitizeBranchName(branch)\n\n\tabsPath, err := filepath.Abs(repoPath)\n\tif err != nil {\n\t\tabsPath = repoPath\n\t}\n\n\tresolvedRoot, err := findGitRepoRoot(absPath)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreeDir, err := getWorktreeDirectory(resolvedRoot)\n\tif err != nil {\n\t\treturn nil, \"\", err\n\t}\n\n\tworktreePath := fmt.Sprintf(\"%s_%x\", filepath.Join(worktreeDir, branch), time.Now().UnixNano())\n\n\treturn &GitWorktree{\n\t\trepoPath:     resolvedRoot,\n\t\tworktreePath: worktreePath,\n\t\tsessionName:  sessionName,\n\t\tbranchName:   branch,\n\t}, branch, nil\n}\n\n// GetWorktreePath returns the filesystem path of the worktree.\nfunc (g *GitWorktree) GetWorktreePath() string {\n\treturn g.worktreePath\n}\n\n// GetBranchName returns the git branch associated with this worktree.\nfunc (g *GitWorktree) GetBranchName() string {\n\treturn g.branchName\n}\n\n// GetRepoPath returns the root path of the git repository.\nfunc (g *GitWorktree) GetRepoPath() string {\n\treturn g.repoPath\n}\n\n// GetRepoName returns the base name of the repository directory.\nfunc (g *GitWorktree) GetRepoName() string {\n\treturn filepath.Base(g.repoPath)\n}\n\n// GetBaseCommitSHA returns the commit SHA recorded as the base when the\n// worktree was set up.\nfunc (g *GitWorktree) GetBaseCommitSHA() string {\n\treturn g.baseCommitSHA\n}\n",
+              "additions": 36,
+              "deletions": 42,
+              "status": "modified"
+            },
+            {
+              "file": "session/git/worktree_git.go",
+              "before": "package git\n\nimport (\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os/exec\"\n\t\"strings\"\n)\n\n// runGitCommand executes a git command and returns any error\nfunc (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {\n\tbaseArgs := []string{\"-C\", path}\n\tcmd := exec.Command(\"git\", append(baseArgs, args...)...)\n\n\toutput, err := cmd.CombinedOutput()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"git command failed: %s (%w)\", output, err)\n\t}\n\n\treturn string(output), nil\n}\n\n// PushChanges commits and pushes changes in the worktree to the remote branch.\n// Used by user-triggered push actions where dirty state should be committed first.\nfunc (g *GitWorktree) PushChanges(commitMessage string, open bool) error {\n\tif err := checkGHCLI(); err != nil {\n\t\treturn err\n\t}\n\n\tif err := g.CommitChanges(commitMessage); err != nil {\n\t\treturn err\n\t}\n\n\treturn g.Push(open)\n}\n\n// Push pushes the current branch to the remote without committing.\n// Used by automated flows (plan completion, wave orchestration) where the\n// agent has already committed its work.\nfunc (g *GitWorktree) Push(open bool) error {\n\tif _, err := g.runGitCommand(g.worktreePath, \"push\", \"-u\", \"origin\", g.branchName); err != nil {\n\t\treturn fmt.Errorf(\"failed to push branch %s: %w\", g.branchName, err)\n\t}\n\n\tif open {\n\t\tif err := g.OpenBranchURL(); err != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to open branch URL: %v\", err)\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// GeneratePRBody assembles a markdown PR description from the branch's\n// changed files, commit history, and diff stats.\nfunc (g *GitWorktree) GeneratePRBody() (string, error) {\n\tbase := g.GetBaseCommitSHA()\n\tif base == \"\" {\n\t\treturn \"\", fmt.Errorf(\"no base commit SHA available\")\n\t}\n\n\tvar sections []string\n\n\t// Changed files\n\tfiles, err := g.runGitCommand(g.worktreePath, \"diff\", \"--name-only\", base)\n\tif err == nil && strings.TrimSpace(files) != \"\" {\n\t\tsections = append(sections, \"## Changes\\n\\n\"+strings.TrimSpace(files))\n\t}\n\n\t// Commit messages on the branch\n\tcommits, err := g.runGitCommand(g.worktreePath, \"log\", \"--oneline\", base+\"..HEAD\")\n\tif err == nil && strings.TrimSpace(commits) != \"\" {\n\t\tsections = append(sections, \"## Commits\\n\\n\"+strings.TrimSpace(commits))\n\t}\n\n\t// Diff stats summary\n\tstats, err := g.runGitCommand(g.worktreePath, \"diff\", \"--stat\", base)\n\tif err == nil && strings.TrimSpace(stats) != \"\" {\n\t\tsections = append(sections, \"## Stats\\n\\n\"+strings.TrimSpace(stats))\n\t}\n\n\tif len(sections) == 0 {\n\t\treturn \"\", nil\n\t}\n\n\treturn strings.Join(sections, \"\\n\\n\"), nil\n}\n\n// CreatePR pushes changes and creates a pull request on GitHub.\nfunc (g *GitWorktree) CreatePR(title, body, commitMsg string) error {\n\t// Push changes first (without opening browser)\n\tif err := g.PushChanges(commitMsg, false); err != nil {\n\t\treturn fmt.Errorf(\"failed to push changes: %w\", err)\n\t}\n\n\t// Create the pull request\n\tprCmd := exec.Command(\"gh\", \"pr\", \"create\", \"--title\", title, \"--body\", body, \"--head\", g.branchName)\n\tprCmd.Dir = g.worktreePath\n\tif output, err := prCmd.CombinedOutput(); err != nil {\n\t\t// If PR already exists, just open it\n\t\tif strings.Contains(string(output), \"already exists\") {\n\t\t\tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n\t\t\tviewCmd.Dir = g.worktreePath\n\t\t\t_ = viewCmd.Run()\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to create PR: %s (%w)\", output, err)\n\t}\n\n\t// Open the PR in browser\n\tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n\tviewCmd.Dir = g.worktreePath\n\t_ = viewCmd.Run()\n\n\treturn nil\n}\n\n// CommitChanges commits changes locally without pushing to remote\nfunc (g *GitWorktree) CommitChanges(commitMessage string) error {\n\t// Check if there are any changes to commit\n\tisDirty, err := g.IsDirty()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to check for changes: %w\", err)\n\t}\n\n\tif isDirty {\n\t\t// Stage all changes\n\t\tif _, err := g.runGitCommand(g.worktreePath, \"add\", \".\"); err != nil {\n\t\t\tlog.ErrorLog.Print(err)\n\t\t\treturn fmt.Errorf(\"failed to stage changes: %w\", err)\n\t\t}\n\n\t\t// Create commit (local only)\n\t\tif _, err := g.runGitCommand(g.worktreePath, \"commit\", \"-m\", commitMessage, \"--no-verify\"); err != nil {\n\t\t\tlog.ErrorLog.Print(err)\n\t\t\treturn fmt.Errorf(\"failed to commit changes: %w\", err)\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// IsDirty checks if the worktree has uncommitted changes\nfunc (g *GitWorktree) IsDirty() (bool, error) {\n\toutput, err := g.runGitCommand(g.worktreePath, \"status\", \"--porcelain\")\n\tif err != nil {\n\t\treturn false, fmt.Errorf(\"failed to check worktree status: %w\", err)\n\t}\n\treturn len(output) > 0, nil\n}\n\n// IsBranchCheckedOut checks if the instance branch is currently checked out\nfunc (g *GitWorktree) IsBranchCheckedOut() (bool, error) {\n\toutput, err := g.runGitCommand(g.repoPath, \"branch\", \"--show-current\")\n\tif err != nil {\n\t\treturn false, fmt.Errorf(\"failed to get current branch: %w\", err)\n\t}\n\treturn strings.TrimSpace(output) == g.branchName, nil\n}\n\n// OpenBranchURL opens the branch URL in the default browser\nfunc (g *GitWorktree) OpenBranchURL() error {\n\t// Check if GitHub CLI is available\n\tif err := checkGHCLI(); err != nil {\n\t\treturn err\n\t}\n\n\tcmd := exec.Command(\"gh\", \"browse\", \"--branch\", g.branchName)\n\tcmd.Dir = g.worktreePath\n\tif err := cmd.Run(); err != nil {\n\t\treturn fmt.Errorf(\"failed to open branch URL: %w\", err)\n\t}\n\treturn nil\n}\n",
+              "after": "package git\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// runGitCommand executes a git command with the given path as the working directory.\n// It builds the invocation as: git -C <path> <args...>, captures combined stdout+stderr,\n// and wraps any error with the captured output for context.\nfunc (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {\n\tcmdArgs := append([]string{\"-C\", path}, args...)\n\tcmd := exec.Command(\"git\", cmdArgs...)\n\tout, err := cmd.CombinedOutput()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"git command failed: %s (%w)\", out, err)\n\t}\n\treturn string(out), nil\n}\n\n// PushChanges stages, commits, and pushes the worktree's current state to the remote.\n// It requires the GitHub CLI (gh) to be present and authenticated.\n// When open is true the branch URL is opened in the browser after a successful push.\nfunc (g *GitWorktree) PushChanges(commitMessage string, open bool) error {\n\tif err := checkGHCLI(); err != nil {\n\t\treturn err\n\t}\n\tif err := g.CommitChanges(commitMessage); err != nil {\n\t\treturn err\n\t}\n\treturn g.Push(open)\n}\n\n// Push pushes the current branch to origin without committing first.\n// If open is true it attempts to open the remote branch URL; any error from\n// that step is logged but not returned.\nfunc (g *GitWorktree) Push(open bool) error {\n\tif _, err := g.runGitCommand(g.worktreePath, \"push\", \"-u\", \"origin\", g.branchName); err != nil {\n\t\treturn fmt.Errorf(\"failed to push branch %s: %w\", g.branchName, err)\n\t}\n\tif open {\n\t\tif err := g.OpenBranchURL(); err != nil {\n\t\t\tlog.ErrorLog.Printf(\"failed to open branch URL: %v\", err)\n\t\t}\n\t}\n\treturn nil\n}\n\n// GeneratePRBody builds a markdown pull-request description that summarises\n// the files changed, the commit history, and diff statistics since baseCommitSHA.\n// It returns an error if no base commit SHA is available.\nfunc (g *GitWorktree) GeneratePRBody() (string, error) {\n\tbase := g.GetBaseCommitSHA()\n\tif base == \"\" {\n\t\treturn \"\", fmt.Errorf(\"no base commit SHA available\")\n\t}\n\n\tvar sections []string\n\n\t// List of files that changed relative to the base commit.\n\tif files, err := g.runGitCommand(g.worktreePath, \"diff\", \"--name-only\", base); err == nil {\n\t\tif trimmed := strings.TrimSpace(files); trimmed != \"\" {\n\t\t\tsections = append(sections, \"## Changes\\n\\n\"+trimmed)\n\t\t}\n\t}\n\n\t// One-line commit log from base to HEAD.\n\tif commits, err := g.runGitCommand(g.worktreePath, \"log\", \"--oneline\", base+\"..HEAD\"); err == nil {\n\t\tif trimmed := strings.TrimSpace(commits); trimmed != \"\" {\n\t\t\tsections = append(sections, \"## Commits\\n\\n\"+trimmed)\n\t\t}\n\t}\n\n\t// Summary statistics of insertions/deletions.\n\tif stats, err := g.runGitCommand(g.worktreePath, \"diff\", \"--stat\", base); err == nil {\n\t\tif trimmed := strings.TrimSpace(stats); trimmed != \"\" {\n\t\t\tsections = append(sections, \"## Stats\\n\\n\"+trimmed)\n\t\t}\n\t}\n\n\tif len(sections) == 0 {\n\t\treturn \"\", nil\n\t}\n\treturn strings.Join(sections, \"\\n\\n\"), nil\n}\n\n// CreatePR pushes the current branch and opens a pull request on GitHub.\n// If the PR already exists it opens the existing one in the browser instead.\nfunc (g *GitWorktree) CreatePR(title, body, commitMsg string) error {\n\tif err := g.PushChanges(commitMsg, false); err != nil {\n\t\treturn fmt.Errorf(\"failed to push changes: %w\", err)\n\t}\n\n\tprCmd := exec.Command(\"gh\", \"pr\", \"create\", \"--title\", title, \"--body\", body, \"--head\", g.branchName)\n\tprCmd.Dir = g.worktreePath\n\tout, err := prCmd.CombinedOutput()\n\tif err != nil {\n\t\tif strings.Contains(string(out), \"already exists\") {\n\t\t\tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n\t\t\tviewCmd.Dir = g.worktreePath\n\t\t\t_ = viewCmd.Run()\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to create PR: %s (%w)\", out, err)\n\t}\n\n\tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n\tviewCmd.Dir = g.worktreePath\n\t_ = viewCmd.Run()\n\treturn nil\n}\n\n// CommitChanges stages all changes and creates a commit with the given message.\n// It is a no-op when the worktree is clean.\nfunc (g *GitWorktree) CommitChanges(commitMessage string) error {\n\tdirty, err := g.IsDirty()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to check for changes: %w\", err)\n\t}\n\tif !dirty {\n\t\treturn nil\n\t}\n\tif _, err := g.runGitCommand(g.worktreePath, \"add\", \".\"); err != nil {\n\t\tlog.ErrorLog.Print(err)\n\t\treturn fmt.Errorf(\"failed to stage changes: %w\", err)\n\t}\n\tif _, err := g.runGitCommand(g.worktreePath, \"commit\", \"-m\", commitMessage, \"--no-verify\"); err != nil {\n\t\tlog.ErrorLog.Print(err)\n\t\treturn fmt.Errorf(\"failed to commit changes: %w\", err)\n\t}\n\treturn nil\n}\n\n// IsDirty reports whether the worktree contains uncommitted changes.\nfunc (g *GitWorktree) IsDirty() (bool, error) {\n\tout, err := g.runGitCommand(g.worktreePath, \"status\", \"--porcelain\")\n\tif err != nil {\n\t\treturn false, fmt.Errorf(\"failed to check worktree status: %w\", err)\n\t}\n\treturn len(out) > 0, nil\n}\n\n// IsBranchCheckedOut reports whether the configured branch is the currently\n// checked-out branch in the repository (not in the worktree).\nfunc (g *GitWorktree) IsBranchCheckedOut() (bool, error) {\n\tout, err := g.runGitCommand(g.repoPath, \"branch\", \"--show-current\")\n\tif err != nil {\n\t\treturn false, fmt.Errorf(\"failed to get current branch: %w\", err)\n\t}\n\treturn strings.TrimSpace(out) == g.branchName, nil\n}\n\n// OpenBranchURL opens the remote branch page in the default browser using the\n// GitHub CLI. It requires gh to be present and authenticated.\nfunc (g *GitWorktree) OpenBranchURL() error {\n\tif err := checkGHCLI(); err != nil {\n\t\treturn err\n\t}\n\tcmd := exec.Command(\"gh\", \"browse\", \"--branch\", g.branchName)\n\tcmd.Dir = g.worktreePath\n\tif err := cmd.Run(); err != nil {\n\t\treturn fmt.Errorf(\"failed to open branch URL: %w\", err)\n\t}\n\treturn nil\n}\n",
+              "additions": 62,
+              "deletions": 68,
+              "status": "modified"
+            },
+            {
+              "file": "session/git/worktree_ops.go",
+              "before": "package git\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/go-git/go-git/v5\"\n\t\"github.com/go-git/go-git/v5/plumbing\"\n)\n\n// Setup creates a new worktree for the session\nfunc (g *GitWorktree) Setup() error {\n\t// Ensure worktrees directory exists early (can be done in parallel with branch check)\n\tworktreesDir, err := getWorktreeDirectory(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\t// Create directory and check branch existence in parallel\n\terrChan := make(chan error, 2)\n\tvar branchExists bool\n\n\t// Goroutine for directory creation\n\tgo func() {\n\t\terrChan <- os.MkdirAll(worktreesDir, 0755)\n\t}()\n\n\t// Goroutine for branch check\n\tgo func() {\n\t\trepo, err := git.PlainOpen(g.repoPath)\n\t\tif err != nil {\n\t\t\terrChan <- fmt.Errorf(\"failed to open repository: %w\", err)\n\t\t\treturn\n\t\t}\n\n\t\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n\t\tif _, err := repo.Reference(branchRef, false); err == nil {\n\t\t\tbranchExists = true\n\t\t}\n\t\terrChan <- nil\n\t}()\n\n\t// Wait for both operations\n\tfor i := 0; i < 2; i++ {\n\t\tif err := <-errChan; err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\n\tif branchExists {\n\t\treturn g.setupFromExistingBranch()\n\t}\n\treturn g.setupNewWorktree()\n}\n\n// setupFromExistingBranch creates a worktree from an existing branch\nfunc (g *GitWorktree) setupFromExistingBranch() error {\n\t// Directory already created in Setup(), skip duplicate creation\n\n\t// Clean up any existing worktree first\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath) // Ignore error if worktree doesn't exist\n\n\t// Sync local branch with remote before creating the worktree.\n\t// This prevents local/remote divergence when an agent pushed to origin,\n\t// the worktree was removed, and a new agent respawns on the same branch.\n\tg.syncBranchWithRemote()\n\n\t// Create a new worktree from the existing branch\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", g.worktreePath, g.branchName); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from branch %s: %w\", g.branchName, err)\n\t}\n\n\t// Resolve a base commit for diff computation. Try merge-base with HEAD\n\t// of the main worktree first; fall back to the branch's own HEAD.\n\tif g.baseCommitSHA == \"\" {\n\t\tif out, err := g.runGitCommand(g.repoPath, \"merge-base\", \"HEAD\", g.branchName); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t} else if out, err := g.runGitCommand(g.worktreePath, \"rev-parse\", \"HEAD\"); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// syncBranchWithRemote fast-forwards the local branch to match origin if the\n// remote is ahead. This runs while the branch is NOT checked out in any\n// worktree (the old worktree was just removed), so we can safely update the\n// ref. If the branches have diverged (both have unique commits), we rebase\n// local on top of remote to keep a linear history.\nfunc (g *GitWorktree) syncBranchWithRemote() {\n\tremote := \"origin/\" + g.branchName\n\n\t// Fetch the latest remote state for this branch.\n\t_, _ = g.runGitCommand(g.repoPath, \"fetch\", \"origin\", g.branchName)\n\n\t// Check if the remote tracking branch exists.\n\tif _, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"--verify\", remote); err != nil {\n\t\treturn // no remote branch — nothing to sync\n\t}\n\n\t// Check if local is already up-to-date with remote.\n\tlocalSHA, err := g.runGitCommand(g.repoPath, \"rev-parse\", g.branchName)\n\tif err != nil {\n\t\treturn\n\t}\n\tremoteSHA, err := g.runGitCommand(g.repoPath, \"rev-parse\", remote)\n\tif err != nil {\n\t\treturn\n\t}\n\tif strings.TrimSpace(localSHA) == strings.TrimSpace(remoteSHA) {\n\t\treturn // already in sync\n\t}\n\n\t// Try fast-forward first (remote is strictly ahead).\n\tif _, err := g.runGitCommand(g.repoPath, \"merge-base\", \"--is-ancestor\", g.branchName, remote); err == nil {\n\t\t// Local is ancestor of remote → safe to fast-forward.\n\t\tif _, err := g.runGitCommand(g.repoPath, \"branch\", \"-f\", g.branchName, remote); err != nil {\n\t\t\tlog.WarningLog.Printf(\"syncBranchWithRemote: fast-forward %s to %s failed: %v\", g.branchName, remote, err)\n\t\t}\n\t\treturn\n\t}\n\n\t// Branches diverged — rebase local commits on top of remote.\n\t// Since the branch isn't checked out anywhere, we use a temporary worktree.\n\tlog.InfoLog.Printf(\"syncBranchWithRemote: %s diverged from %s, rebasing\", g.branchName, remote)\n\tif _, err := g.runGitCommand(g.repoPath, \"rebase\", \"--onto\", remote, remote, g.branchName); err != nil {\n\t\t// Rebase failed (conflicts) — abort and leave as-is. The agent will\n\t\t// see the divergence and can handle it manually.\n\t\t_, _ = g.runGitCommand(g.repoPath, \"rebase\", \"--abort\")\n\t\tlog.WarningLog.Printf(\"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v\", g.branchName, remote, err)\n\t}\n}\n\n// setupNewWorktree creates a new worktree from HEAD\nfunc (g *GitWorktree) setupNewWorktree() error {\n\t// Directory already created in Setup(), skip duplicate creation\n\n\t// Clean up any existing worktree first\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath) // Ignore error if worktree doesn't exist\n\n\t// Open the repository\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to open repository: %w\", err)\n\t}\n\n\t// Clean up any existing branch or reference\n\tif err := g.cleanupExistingBranch(repo); err != nil {\n\t\treturn fmt.Errorf(\"failed to cleanup existing branch: %w\", err)\n\t}\n\n\toutput, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"HEAD\")\n\tif err != nil {\n\t\tif strings.Contains(err.Error(), \"fatal: ambiguous argument 'HEAD'\") ||\n\t\t\tstrings.Contains(err.Error(), \"fatal: not a valid object name\") ||\n\t\t\tstrings.Contains(err.Error(), \"fatal: HEAD: not a valid object name\") {\n\t\t\treturn fmt.Errorf(\"this appears to be a brand new repository: please create an initial commit before creating an instance\")\n\t\t}\n\t\treturn fmt.Errorf(\"failed to get HEAD commit hash: %w\", err)\n\t}\n\theadCommit := strings.TrimSpace(output)\n\tg.baseCommitSHA = headCommit\n\n\t// Create a new worktree from the HEAD commit\n\t// Otherwise, we'll inherit uncommitted changes from the previous worktree.\n\t// This way, we can start the worktree with a clean slate.\n\t// TODO: we might want to give an option to use main/master instead of the current branch.\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", \"-b\", g.branchName, g.worktreePath, headCommit); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from commit %s: %w\", headCommit, err)\n\t}\n\n\treturn nil\n}\n\n// Cleanup removes the worktree and associated branch\nfunc (g *GitWorktree) Cleanup() error {\n\tvar errs []error\n\n\t// Check if worktree path exists before attempting removal\n\tif _, err := os.Stat(g.worktreePath); err == nil {\n\t\t// Remove the worktree using git command\n\t\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n\t\t\terrs = append(errs, err)\n\t\t}\n\t} else if !os.IsNotExist(err) {\n\t\t// Only append error if it's not a \"not exists\" error\n\t\terrs = append(errs, fmt.Errorf(\"failed to check worktree path: %w\", err))\n\t}\n\n\t// Open the repository for branch cleanup\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\terrs = append(errs, fmt.Errorf(\"failed to open repository for cleanup: %w\", err))\n\t\treturn errors.Join(errs...)\n\t}\n\n\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n\n\t// Check if branch exists before attempting removal\n\tif _, err := repo.Reference(branchRef, false); err == nil {\n\t\tif err := repo.Storer.RemoveReference(branchRef); err != nil {\n\t\t\terrs = append(errs, fmt.Errorf(\"failed to remove branch %s: %w\", g.branchName, err))\n\t\t}\n\t} else if err != plumbing.ErrReferenceNotFound {\n\t\terrs = append(errs, fmt.Errorf(\"error checking branch %s existence: %w\", g.branchName, err))\n\t}\n\n\t// Prune the worktree to clean up any remaining references\n\tif err := g.Prune(); err != nil {\n\t\terrs = append(errs, err)\n\t}\n\n\tif len(errs) > 0 {\n\t\treturn errors.Join(errs...)\n\t}\n\n\treturn nil\n}\n\n// Remove removes the worktree but keeps the branch\nfunc (g *GitWorktree) Remove() error {\n\t// Remove the worktree using git command\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n\t\treturn fmt.Errorf(\"failed to remove worktree: %w\", err)\n\t}\n\n\treturn nil\n}\n\n// Prune removes all working tree administrative files and directories\nfunc (g *GitWorktree) Prune() error {\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"prune\"); err != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n\t}\n\treturn nil\n}\n\n// CleanupWorktrees removes all worktrees and their associated branches.\n// repoPath is the root of the git repository whose .worktrees/ to clean.\nfunc CleanupWorktrees(repoPath string) error {\n\tworktreesDir, err := getWorktreeDirectory(repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\tentries, err := os.ReadDir(worktreesDir)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to read worktree directory: %w\", err)\n\t}\n\n\trun := func(args ...string) (string, error) {\n\t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repoPath}, args...)...)\n\t\tout, err := cmd.CombinedOutput()\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"git %v: %s (%w)\", args, out, err)\n\t\t}\n\t\treturn string(out), nil\n\t}\n\n\toutput, err := run(\"worktree\", \"list\", \"--porcelain\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to list worktrees: %w\", err)\n\t}\n\n\tworktreeBranches := make(map[string]string)\n\tcurrentWorktree := \"\"\n\tfor _, line := range strings.Split(output, \"\\n\") {\n\t\tif strings.HasPrefix(line, \"worktree \") {\n\t\t\tcurrentWorktree = strings.TrimPrefix(line, \"worktree \")\n\t\t} else if strings.HasPrefix(line, \"branch \") {\n\t\t\tbranchName := strings.TrimPrefix(strings.TrimPrefix(line, \"branch \"), \"refs/heads/\")\n\t\t\tif currentWorktree != \"\" {\n\t\t\t\tworktreeBranches[currentWorktree] = branchName\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, entry := range entries {\n\t\tif !entry.IsDir() {\n\t\t\tcontinue\n\t\t}\n\n\t\tworktreePath := filepath.Join(worktreesDir, entry.Name())\n\n\t\tif _, err := run(\"worktree\", \"remove\", \"-f\", worktreePath); err != nil {\n\t\t\tlog.WarningLog.Printf(\"git worktree remove failed for %s, falling back to os.RemoveAll: %v\", worktreePath, err)\n\t\t\tif rmErr := os.RemoveAll(worktreePath); rmErr != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to remove worktree path %s: %v\", worktreePath, rmErr)\n\t\t\t}\n\t\t}\n\n\t\tfor path, branch := range worktreeBranches {\n\t\t\tif strings.Contains(path, entry.Name()) {\n\t\t\t\tif _, err := run(\"branch\", \"-D\", branch); err != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to delete branch %s: %v\", branch, err)\n\t\t\t\t}\n\t\t\t\tbreak\n\t\t\t}\n\t\t}\n\t}\n\n\t_, err = run(\"worktree\", \"prune\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n\t}\n\n\treturn nil\n}\n",
+              "after": "package git\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/go-git/go-git/v5\"\n\t\"github.com/go-git/go-git/v5/plumbing\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// Setup creates a new worktree for the session. It creates the worktrees\n// directory and determines whether the target branch already exists,\n// dispatching to the appropriate setup path.\nfunc (g *GitWorktree) Setup() error {\n\twtDir, err := getWorktreeDirectory(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\ttype result struct{ err error }\n\tmkdirDone := make(chan result, 1)\n\tbranchCheckDone := make(chan result, 1)\n\tvar branchFound bool\n\n\tgo func() {\n\t\tmkdirDone <- result{os.MkdirAll(wtDir, 0755)}\n\t}()\n\n\tgo func() {\n\t\trepo, openErr := git.PlainOpen(g.repoPath)\n\t\tif openErr != nil {\n\t\t\tbranchCheckDone <- result{fmt.Errorf(\"failed to open repository: %w\", openErr)}\n\t\t\treturn\n\t\t}\n\t\tref := plumbing.NewBranchReferenceName(g.branchName)\n\t\tif _, refErr := repo.Reference(ref, false); refErr == nil {\n\t\t\tbranchFound = true\n\t\t}\n\t\tbranchCheckDone <- result{nil}\n\t}()\n\n\tif r := <-mkdirDone; r.err != nil {\n\t\treturn r.err\n\t}\n\tif r := <-branchCheckDone; r.err != nil {\n\t\treturn r.err\n\t}\n\n\tif branchFound {\n\t\treturn g.setupFromExistingBranch()\n\t}\n\treturn g.setupNewWorktree()\n}\n\n// setupFromExistingBranch creates a worktree from a branch that already exists\n// in the repository. It first removes any stale worktree at the target path,\n// syncs the local branch with the remote, then creates the fresh worktree and\n// resolves the base commit SHA for diff computation.\nfunc (g *GitWorktree) setupFromExistingBranch() error {\n\t// Remove any stale worktree; ignore errors (it may not exist).\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath)\n\n\t// Best-effort sync with remote before creating the worktree.\n\tg.syncBranchWithRemote()\n\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", g.worktreePath, g.branchName); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from branch %s: %w\", g.branchName, err)\n\t}\n\n\t// Resolve the base commit SHA for diff computation.\n\tif g.baseCommitSHA == \"\" {\n\t\tif out, err := g.runGitCommand(g.repoPath, \"merge-base\", \"HEAD\", g.branchName); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t} else if out, err := g.runGitCommand(g.worktreePath, \"rev-parse\", \"HEAD\"); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// syncBranchWithRemote reconciles the local branch with its remote counterpart.\n// It fetches origin/<branch>, and if the SHAs differ it either fast-forwards\n// (when local is an ancestor of remote) or rebases local commits onto remote\n// (when the histories have diverged). All errors are logged but not propagated —\n// this is a best-effort operation.\nfunc (g *GitWorktree) syncBranchWithRemote() {\n\tremote := \"origin/\" + g.branchName\n\n\t_, _ = g.runGitCommand(g.repoPath, \"fetch\", \"origin\", g.branchName)\n\n\t// Bail early if the remote tracking branch does not exist.\n\tif _, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"--verify\", remote); err != nil {\n\t\treturn\n\t}\n\n\tlocalOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", g.branchName)\n\tif err != nil {\n\t\treturn\n\t}\n\tremoteOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", remote)\n\tif err != nil {\n\t\treturn\n\t}\n\n\tif strings.TrimSpace(localOut) == strings.TrimSpace(remoteOut) {\n\t\treturn // already in sync\n\t}\n\n\t// Fast-forward if local is an ancestor of remote.\n\tif _, err := g.runGitCommand(g.repoPath, \"merge-base\", \"--is-ancestor\", g.branchName, remote); err == nil {\n\t\tif _, ffErr := g.runGitCommand(g.repoPath, \"branch\", \"-f\", g.branchName, remote); ffErr != nil {\n\t\t\tlog.WarningLog.Printf(\"syncBranchWithRemote: fast-forward %s to %s failed: %v\", g.branchName, remote, ffErr)\n\t\t}\n\t\treturn\n\t}\n\n\t// Histories have diverged — attempt a rebase.\n\tlog.InfoLog.Printf(\"syncBranchWithRemote: %s diverged from %s, rebasing\", g.branchName, remote)\n\tif _, rebaseErr := g.runGitCommand(g.repoPath, \"rebase\", \"--onto\", remote, remote, g.branchName); rebaseErr != nil {\n\t\t_, _ = g.runGitCommand(g.repoPath, \"rebase\", \"--abort\")\n\t\tlog.WarningLog.Printf(\n\t\t\t\"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v\",\n\t\t\tg.branchName, remote, rebaseErr,\n\t\t)\n\t}\n}\n\n// setupNewWorktree creates a brand-new branch from the current HEAD and adds\n// a worktree for it. It errors early if the repository has no commits yet.\nfunc (g *GitWorktree) setupNewWorktree() error {\n\t// Remove any stale worktree; ignore errors.\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath)\n\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to open repository: %w\", err)\n\t}\n\n\tif err := g.cleanupExistingBranch(repo); err != nil {\n\t\treturn fmt.Errorf(\"failed to cleanup existing branch: %w\", err)\n\t}\n\n\theadOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"HEAD\")\n\tif err != nil {\n\t\tmsg := err.Error()\n\t\tif strings.Contains(msg, \"fatal: ambiguous argument 'HEAD'\") ||\n\t\t\tstrings.Contains(msg, \"fatal: not a valid object name\") ||\n\t\t\tstrings.Contains(msg, \"fatal: HEAD: not a valid object name\") {\n\t\t\treturn fmt.Errorf(\"this appears to be a brand new repository: please create an initial commit before creating an instance\")\n\t\t}\n\t\treturn fmt.Errorf(\"failed to get HEAD commit hash: %w\", err)\n\t}\n\theadCommit := strings.TrimSpace(headOut)\n\tg.baseCommitSHA = headCommit\n\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", \"-b\", g.branchName, g.worktreePath, headCommit); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from commit %s: %w\", headCommit, err)\n\t}\n\n\treturn nil\n}\n\n// Cleanup removes the worktree and its associated branch, then prunes. All\n// sub-errors are collected and returned together via errors.Join.\nfunc (g *GitWorktree) Cleanup() error {\n\tvar errs []error\n\n\tif _, statErr := os.Stat(g.worktreePath); statErr == nil {\n\t\tif _, rmErr := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); rmErr != nil {\n\t\t\terrs = append(errs, rmErr)\n\t\t}\n\t} else if !os.IsNotExist(statErr) {\n\t\terrs = append(errs, fmt.Errorf(\"failed to stat worktree path: %w\", statErr))\n\t}\n\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\terrs = append(errs, fmt.Errorf(\"failed to open repository for cleanup: %w\", err))\n\t\treturn errors.Join(errs...)\n\t}\n\n\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n\tif _, err := repo.Reference(branchRef, false); err == nil {\n\t\tif removeErr := repo.Storer.RemoveReference(branchRef); removeErr != nil {\n\t\t\terrs = append(errs, fmt.Errorf(\"failed to remove branch %s: %w\", g.branchName, removeErr))\n\t\t}\n\t} else if err != plumbing.ErrReferenceNotFound {\n\t\terrs = append(errs, fmt.Errorf(\"error checking branch %s: %w\", g.branchName, err))\n\t}\n\n\tif pruneErr := g.Prune(); pruneErr != nil {\n\t\terrs = append(errs, pruneErr)\n\t}\n\n\treturn errors.Join(errs...)\n}\n\n// Remove removes the worktree filesystem entry and git metadata but leaves the\n// branch intact so it can be re-attached later.\nfunc (g *GitWorktree) Remove() error {\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n\t\treturn fmt.Errorf(\"failed to remove worktree: %w\", err)\n\t}\n\treturn nil\n}\n\n// Prune runs `git worktree prune` to remove stale administrative files.\nfunc (g *GitWorktree) Prune() error {\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"prune\"); err != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n\t}\n\treturn nil\n}\n\n// CleanupWorktrees removes every worktree found under repoPath/.worktrees/ and\n// deletes the associated branch for each one, then prunes. Worktrees that\n// cannot be removed via git fall back to os.RemoveAll.\nfunc CleanupWorktrees(repoPath string) error {\n\twtDir, err := getWorktreeDirectory(repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\tentries, err := os.ReadDir(wtDir)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to read worktree directory: %w\", err)\n\t}\n\n\trun := func(args ...string) (string, error) {\n\t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repoPath}, args...)...)\n\t\tout, cmdErr := cmd.CombinedOutput()\n\t\tif cmdErr != nil {\n\t\t\treturn \"\", fmt.Errorf(\"git %v: %s (%w)\", args, out, cmdErr)\n\t\t}\n\t\treturn string(out), nil\n\t}\n\n\t// Build a path→branch map from the porcelain worktree list.\n\tlistOut, err := run(\"worktree\", \"list\", \"--porcelain\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to list worktrees: %w\", err)\n\t}\n\n\tpathToBranch := make(map[string]string)\n\tvar currentPath string\n\tfor _, line := range strings.Split(listOut, \"\\n\") {\n\t\tswitch {\n\t\tcase strings.HasPrefix(line, \"worktree \"):\n\t\t\tcurrentPath = strings.TrimPrefix(line, \"worktree \")\n\t\tcase strings.HasPrefix(line, \"branch \"):\n\t\t\tbranch := strings.TrimPrefix(line, \"branch \")\n\t\t\tbranch = strings.TrimPrefix(branch, \"refs/heads/\")\n\t\t\tif currentPath != \"\" {\n\t\t\t\tpathToBranch[currentPath] = branch\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, entry := range entries {\n\t\tif !entry.IsDir() {\n\t\t\tcontinue\n\t\t}\n\n\t\twtPath := filepath.Join(wtDir, entry.Name())\n\n\t\tif _, rmErr := run(\"worktree\", \"remove\", \"-f\", wtPath); rmErr != nil {\n\t\t\tlog.WarningLog.Printf(\"git worktree remove failed for %s, falling back to os.RemoveAll: %v\", wtPath, rmErr)\n\t\t\tif fsErr := os.RemoveAll(wtPath); fsErr != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to remove worktree path %s: %v\", wtPath, fsErr)\n\t\t\t}\n\t\t}\n\n\t\t// Delete the branch that was associated with this worktree path.\n\t\tfor p, branch := range pathToBranch {\n\t\t\tif strings.Contains(p, entry.Name()) {\n\t\t\t\tif _, delErr := run(\"branch\", \"-D\", branch); delErr != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to delete branch %s: %v\", branch, delErr)\n\t\t\t\t}\n\t\t\t\tbreak\n\t\t\t}\n\t\t}\n\t}\n\n\tif _, pruneErr := run(\"worktree\", \"prune\"); pruneErr != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", pruneErr)\n\t}\n\n\treturn nil\n}\n",
+              "additions": 110,
+              "deletions": 129,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb4208e7500175y92Jx3h5WISD",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 2: Rewrite worktree_ops.go — Setup, Cleanup, and Sync\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Clean-room rewrite all upstream-derived code in `session/git/` to remove AGPL-tainted lines while preserving identical public API, behavior, and passing all existing tests.\n**Architecture:** Four files rewritten in-place: `worktree.go` (struct + constructors), `worktree_ops.go` (setup/cleanup/sync lifecycle), `worktree_git.go` (git CLI commands, push, PR ops), and `diff.go` (diff computation + stats). Each file is deleted and rewritten from its functional spec — no copy-paste from the original. The `GitWorktree` struct, all exported methods, and the `DiffStats` type keep their exact signatures so callers (`session/instance.go`, `session/instance_lifecycle.go`, `app/app_actions.go`, `app/app_state.go`, `main.go`) require zero changes. Files that are 100% original (`util.go`, `task_lifecycle.go`, `worktree_branch.go`) and all test files are untouched. Existing tests in `worktree_ops_test.go`, `util_test.go`, and `task_lifecycle_test.go` serve as the regression suite.\n**Tech Stack:** Go 1.24, `go-git/v5` (PlainOpen, plumbing refs), `os/exec` (git + gh CLI), testify\n\n## Wave 1 of 1\n\n## Parallel Execution\n\nYou are Task 2 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `session/git/worktree_ops.go`\n- Test: `session/git/worktree_ops_test.go` (existing), `session/git/task_lifecycle_test.go` (existing)\n\n**Step 1: write the failing test**\n\nNo new tests needed. Existing tests cover:\n- `TestCleanupWorktrees_RemovesWorktreeAndBranch` — exercises `CleanupWorktrees`\n- `TestSetupFromExistingBranch_SetsBaseCommitSHA` — exercises `Setup()` → `setupFromExistingBranch()` path\n\n**Step 2: run test to verify baseline passes**\n\n```bash\ngo test ./session/git/... -run \"TestCleanup|TestSetup\" -v -count=1\n```\n\nexpected: PASS\n\n**Step 3: rewrite implementation**\n\nDelete `session/git/worktree_ops.go` and rewrite from scratch:\n\n- **`Setup() error`** — creates worktrees directory via `os.MkdirAll` and checks branch existence via `go-git` `PlainOpen` + `Reference` in parallel goroutines. Dispatches to `setupFromExistingBranch()` or `setupNewWorktree()`.\n- **`setupFromExistingBranch() error`** — removes stale worktree (`git worktree remove -f`), calls `syncBranchWithRemote()`, creates worktree from existing branch (`git worktree add`), resolves `baseCommitSHA` via `merge-base HEAD <branch>` (falls back to `rev-parse HEAD` in worktree).\n- **`syncBranchWithRemote()`** — fetches `origin/<branch>`, compares local/remote SHAs. If identical, returns. If local is ancestor of remote, fast-forwards via `git branch -f`. If diverged, attempts `git rebase --onto`, aborts on conflict. All errors are logged, not returned (best-effort sync).\n- **`setupNewWorktree() error`** — opens repo via `go-git`, calls `cleanupExistingBranch`, gets HEAD via `rev-parse`, stores as `baseCommitSHA`, creates worktree with new branch from HEAD commit (`git worktree add -b <branch> <path> <commit>`). Detects empty repos (no HEAD) with a user-friendly error.\n- **`Cleanup() error`** — removes worktree (if path exists on disk), opens repo via `go-git`, removes branch reference via `Storer.RemoveReference`, prunes. Collects all errors via `errors.Join`.\n- **`Remove() error`** — `git worktree remove -f` (keeps branch).\n- **`Prune() error`** — `git worktree prune`.\n- **`CleanupWorktrees(repoPath string) error`** — reads `.worktrees/` directory entries, lists worktrees via `git worktree list --porcelain` to map paths→branches, removes each worktree + deletes associated branch, prunes. Falls back to `os.RemoveAll` if git removal fails.\n\nImports: `errors`, `fmt`, `os`, `os/exec`, `path/filepath`, `strings`, `github.com/kastheco/kasmos/log`, `github.com/go-git/go-git/v5`, `github.com/go-git/go-git/v5/plumbing`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./session/git/... -v -count=1\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add session/git/worktree_ops.go\ngit commit -m \"feat(clean-room): rewrite session/git/worktree_ops.go from scratch\"\n```\n",
+          "id": "prt_cb4208e75002IAO4la13PtGkn1",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e7500175y92Jx3h5WISD"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548558469,
+          "completed": 1772548562363
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41449,
+          "input": 2,
+          "output": 126,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41321
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4208e85001uGCgik2pOiJk2L",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "",
+          "id": "prt_cb42097af001zE0TzqsYBJ7tL3",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e85001uGCgik2pOiJk2L"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then implementing the task.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/Kmmz4lYbqKMhe8nxe/tcdK7Dt1w7Jn/XL8V//REDACTED/REDACTED/tFUd6pxODVb5Jl/REDACTED/8jjYMVHTQcXYiYutMbFnlxGAE="
+            }
+          },
+          "time": {
+            "start": 1772548560816,
+            "end": 1772548561432
+          },
+          "id": "prt_cb42097b0001X2894EdlnnYvBW",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e85001uGCgik2pOiJk2L"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_015X3YU6biVeWDuPed1dbYzf",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the plan content from the plan store (via `kas plan` CLI or the plan content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify plan state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas plan transition <plan-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update plan state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate plan status to `done` after options 1, 2, or 4:\n```bash\nkas plan set-status <plan-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying plan state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772548561758,
+              "end": 1772548561769
+            }
+          },
+          "id": "prt_cb4209a1a0011tTtqVydfTJKR8",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e85001uGCgik2pOiJk2L"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_018PupdGqYQB11ePi8XnpR9X",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772548562277,
+              "end": 1772548562281
+            }
+          },
+          "id": "prt_cb4209b60001phElQi1mplCw0V",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e85001uGCgik2pOiJk2L"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 41449,
+            "input": 2,
+            "output": 126,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41321
+            }
+          },
+          "id": "prt_cb4209da6001abCeSb3EbttMHK",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4208e85001uGCgik2pOiJk2L"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548562363,
+          "completed": 1772548565694
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49714,
+          "input": 1,
+          "output": 129,
+          "reasoning": 0,
+          "cache": {
+            "read": 41321,
+            "write": 8263
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb4209dbb001222T1QAirWj7DD",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "REDACTED",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4209dbb001222T1QAirWj7DD"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the existing files to understand the codebase before implementing.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772548564307,
+            "end": 1772548564640
+          },
+          "id": "prt_cb420a553001GTrpFerZfzTx9A",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4209dbb001222T1QAirWj7DD"
+        },
+        {
+          "type": "text",
+          "text": "Now let me read the existing files to understand the codebase:",
+          "time": {
+            "start": 1772548564960,
+            "end": 1772548564960
+          },
+          "id": "prt_cb420a6a10015PS4L4Q5KfK2C6",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4209dbb001222T1QAirWj7DD"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_014AYCAzi12d78Y1yAhvRMVb",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git</path>\n<type>directory</type>\n<entries>\ndiff.go\ntask_lifecycle_test.go\ntask_lifecycle.go\nutil_test.go\nutil.go\nworktree_branch.go\nworktree_git.go\nworktree_ops_test.go\nworktree_ops.go\nworktree.go\n\n(10 entries)\n</entries>",
+            "title": "session/git",
+            "metadata": {
+              "preview": "diff.go\ntask_lifecycle_test.go\ntask_lifecycle.go\nutil_test.go\nutil.go\nworktree_branch.go\nworktree_git.go\nworktree_ops_test.go\nworktree_ops.go\nworktree.go",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548565658,
+              "end": 1772548565659
+            }
+          },
+          "id": "prt_cb420a7e1001qmUE41ylGyXbkz",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4209dbb001222T1QAirWj7DD"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 49714,
+            "input": 1,
+            "output": 129,
+            "reasoning": 0,
+            "cache": {
+              "read": 41321,
+              "write": 8263
+            }
+          },
+          "id": "prt_cb420aab4001YSYAfVQoCe57SV",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb4209dbb001222T1QAirWj7DD"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548565695,
+          "completed": 1772548568973
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50087,
+          "input": 1,
+          "output": 239,
+          "reasoning": 0,
+          "cache": {
+            "read": 49584,
+            "write": 263
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb420aabf001DxtamyQpkLGAja",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "prt_cb420b10f001Vdna5mUIjF3qXr",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420aabf001DxtamyQpkLGAja"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01WCV5eo8KfZ16GR8mssrVRr",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"errors\"\n5: \t\"fmt\"\n6: \t\"github.com/kastheco/kasmos/log\"\n7: \t\"os\"\n8: \t\"os/exec\"\n9: \t\"path/filepath\"\n10: \t\"strings\"\n11: \n12: \t\"github.com/go-git/go-git/v5\"\n13: \t\"github.com/go-git/go-git/v5/plumbing\"\n14: )\n15: \n16: // Setup creates a new worktree for the session\n17: func (g *GitWorktree) Setup() error {\n18: \t// Ensure worktrees directory exists early (can be done in parallel with branch check)\n19: \tworktreesDir, err := getWorktreeDirectory(g.repoPath)\n20: \tif err != nil {\n21: \t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n22: \t}\n23: \n24: \t// Create directory and check branch existence in parallel\n25: \terrChan := make(chan error, 2)\n26: \tvar branchExists bool\n27: \n28: \t// Goroutine for directory creation\n29: \tgo func() {\n30: \t\terrChan <- os.MkdirAll(worktreesDir, 0755)\n31: \t}()\n32: \n33: \t// Goroutine for branch check\n34: \tgo func() {\n35: \t\trepo, err := git.PlainOpen(g.repoPath)\n36: \t\tif err != nil {\n37: \t\t\terrChan <- fmt.Errorf(\"failed to open repository: %w\", err)\n38: \t\t\treturn\n39: \t\t}\n40: \n41: \t\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n42: \t\tif _, err := repo.Reference(branchRef, false); err == nil {\n43: \t\t\tbranchExists = true\n44: \t\t}\n45: \t\terrChan <- nil\n46: \t}()\n47: \n48: \t// Wait for both operations\n49: \tfor i := 0; i < 2; i++ {\n50: \t\tif err := <-errChan; err != nil {\n51: \t\t\treturn err\n52: \t\t}\n53: \t}\n54: \n55: \tif branchExists {\n56: \t\treturn g.setupFromExistingBranch()\n57: \t}\n58: \treturn g.setupNewWorktree()\n59: }\n60: \n61: // setupFromExistingBranch creates a worktree from an existing branch\n62: func (g *GitWorktree) setupFromExistingBranch() error {\n63: \t// Directory already created in Setup(), skip duplicate creation\n64: \n65: \t// Clean up any existing worktree first\n66: \t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath) // Ignore error if worktree doesn't exist\n67: \n68: \t// Sync local branch with remote before creating the worktree.\n69: \t// This prevents local/remote divergence when an agent pushed to origin,\n70: \t// the worktree was removed, and a new agent respawns on the same branch.\n71: \tg.syncBranchWithRemote()\n72: \n73: \t// Create a new worktree from the existing branch\n74: \tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", g.worktreePath, g.branchName); err != nil {\n75: \t\treturn fmt.Errorf(\"failed to create worktree from branch %s: %w\", g.branchName, err)\n76: \t}\n77: \n78: \t// Resolve a base commit for diff computation. Try merge-base with HEAD\n79: \t// of the main worktree first; fall back to the branch's own HEAD.\n80: \tif g.baseCommitSHA == \"\" {\n81: \t\tif out, err := g.runGitCommand(g.repoPath, \"merge-base\", \"HEAD\", g.branchName); err == nil {\n82: \t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n83: \t\t} else if out, err := g.runGitCommand(g.worktreePath, \"rev-parse\", \"HEAD\"); err == nil {\n84: \t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n85: \t\t}\n86: \t}\n87: \n88: \treturn nil\n89: }\n90: \n91: // syncBranchWithRemote fast-forwards the local branch to match origin if the\n92: // remote is ahead. This runs while the branch is NOT checked out in any\n93: // worktree (the old worktree was just removed), so we can safely update the\n94: // ref. If the branches have diverged (both have unique commits), we rebase\n95: // local on top of remote to keep a linear history.\n96: func (g *GitWorktree) syncBranchWithRemote() {\n97: \tremote := \"origin/\" + g.branchName\n98: \n99: \t// Fetch the latest remote state for this branch.\n100: \t_, _ = g.runGitCommand(g.repoPath, \"fetch\", \"origin\", g.branchName)\n101: \n102: \t// Check if the remote tracking branch exists.\n103: \tif _, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"--verify\", remote); err != nil {\n104: \t\treturn // no remote branch — nothing to sync\n105: \t}\n106: \n107: \t// Check if local is already up-to-date with remote.\n108: \tlocalSHA, err := g.runGitCommand(g.repoPath, \"rev-parse\", g.branchName)\n109: \tif err != nil {\n110: \t\treturn\n111: \t}\n112: \tremoteSHA, err := g.runGitCommand(g.repoPath, \"rev-parse\", remote)\n113: \tif err != nil {\n114: \t\treturn\n115: \t}\n116: \tif strings.TrimSpace(localSHA) == strings.TrimSpace(remoteSHA) {\n117: \t\treturn // already in sync\n118: \t}\n119: \n120: \t// Try fast-forward first (remote is strictly ahead).\n121: \tif _, err := g.runGitCommand(g.repoPath, \"merge-base\", \"--is-ancestor\", g.branchName, remote); err == nil {\n122: \t\t// Local is ancestor of remote → safe to fast-forward.\n123: \t\tif _, err := g.runGitCommand(g.repoPath, \"branch\", \"-f\", g.branchName, remote); err != nil {\n124: \t\t\tlog.WarningLog.Printf(\"syncBranchWithRemote: fast-forward %s to %s failed: %v\", g.branchName, remote, err)\n125: \t\t}\n126: \t\treturn\n127: \t}\n128: \n129: \t// Branches diverged — rebase local commits on top of remote.\n130: \t// Since the branch isn't checked out anywhere, we use a temporary worktree.\n131: \tlog.InfoLog.Printf(\"syncBranchWithRemote: %s diverged from %s, rebasing\", g.branchName, remote)\n132: \tif _, err := g.runGitCommand(g.repoPath, \"rebase\", \"--onto\", remote, remote, g.branchName); err != nil {\n133: \t\t// Rebase failed (conflicts) — abort and leave as-is. The agent will\n134: \t\t// see the divergence and can handle it manually.\n135: \t\t_, _ = g.runGitCommand(g.repoPath, \"rebase\", \"--abort\")\n136: \t\tlog.WarningLog.Printf(\"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v\", g.branchName, remote, err)\n137: \t}\n138: }\n139: \n140: // setupNewWorktree creates a new worktree from HEAD\n141: func (g *GitWorktree) setupNewWorktree() error {\n142: \t// Directory already created in Setup(), skip duplicate creation\n143: \n144: \t// Clean up any existing worktree first\n145: \t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath) // Ignore error if worktree doesn't exist\n146: \n147: \t// Open the repository\n148: \trepo, err := git.PlainOpen(g.repoPath)\n149: \tif err != nil {\n150: \t\treturn fmt.Errorf(\"failed to open repository: %w\", err)\n151: \t}\n152: \n153: \t// Clean up any existing branch or reference\n154: \tif err := g.cleanupExistingBranch(repo); err != nil {\n155: \t\treturn fmt.Errorf(\"failed to cleanup existing branch: %w\", err)\n156: \t}\n157: \n158: \toutput, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"HEAD\")\n159: \tif err != nil {\n160: \t\tif strings.Contains(err.Error(), \"fatal: ambiguous argument 'HEAD'\") ||\n161: \t\t\tstrings.Contains(err.Error(), \"fatal: not a valid object name\") ||\n162: \t\t\tstrings.Contains(err.Error(), \"fatal: HEAD: not a valid object name\") {\n163: \t\t\treturn fmt.Errorf(\"this appears to be a brand new repository: please create an initial commit before creating an instance\")\n164: \t\t}\n165: \t\treturn fmt.Errorf(\"failed to get HEAD commit hash: %w\", err)\n166: \t}\n167: \theadCommit := strings.TrimSpace(output)\n168: \tg.baseCommitSHA = headCommit\n169: \n170: \t// Create a new worktree from the HEAD commit\n171: \t// Otherwise, we'll inherit uncommitted changes from the previous worktree.\n172: \t// This way, we can start the worktree with a clean slate.\n173: \t// TODO: we might want to give an option to use main/master instead of the current branch.\n174: \tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", \"-b\", g.branchName, g.worktreePath, headCommit); err != nil {\n175: \t\treturn fmt.Errorf(\"failed to create worktree from commit %s: %w\", headCommit, err)\n176: \t}\n177: \n178: \treturn nil\n179: }\n180: \n181: // Cleanup removes the worktree and associated branch\n182: func (g *GitWorktree) Cleanup() error {\n183: \tvar errs []error\n184: \n185: \t// Check if worktree path exists before attempting removal\n186: \tif _, err := os.Stat(g.worktreePath); err == nil {\n187: \t\t// Remove the worktree using git command\n188: \t\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n189: \t\t\terrs = append(errs, err)\n190: \t\t}\n191: \t} else if !os.IsNotExist(err) {\n192: \t\t// Only append error if it's not a \"not exists\" error\n193: \t\terrs = append(errs, fmt.Errorf(\"failed to check worktree path: %w\", err))\n194: \t}\n195: \n196: \t// Open the repository for branch cleanup\n197: \trepo, err := git.PlainOpen(g.repoPath)\n198: \tif err != nil {\n199: \t\terrs = append(errs, fmt.Errorf(\"failed to open repository for cleanup: %w\", err))\n200: \t\treturn errors.Join(errs...)\n201: \t}\n202: \n203: \tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n204: \n205: \t// Check if branch exists before attempting removal\n206: \tif _, err := repo.Reference(branchRef, false); err == nil {\n207: \t\tif err := repo.Storer.RemoveReference(branchRef); err != nil {\n208: \t\t\terrs = append(errs, fmt.Errorf(\"failed to remove branch %s: %w\", g.branchName, err))\n209: \t\t}\n210: \t} else if err != plumbing.ErrReferenceNotFound {\n211: \t\terrs = append(errs, fmt.Errorf(\"error checking branch %s existence: %w\", g.branchName, err))\n212: \t}\n213: \n214: \t// Prune the worktree to clean up any remaining references\n215: \tif err := g.Prune(); err != nil {\n216: \t\terrs = append(errs, err)\n217: \t}\n218: \n219: \tif len(errs) > 0 {\n220: \t\treturn errors.Join(errs...)\n221: \t}\n222: \n223: \treturn nil\n224: }\n225: \n226: // Remove removes the worktree but keeps the branch\n227: func (g *GitWorktree) Remove() error {\n228: \t// Remove the worktree using git command\n229: \tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n230: \t\treturn fmt.Errorf(\"failed to remove worktree: %w\", err)\n231: \t}\n232: \n233: \treturn nil\n234: }\n235: \n236: // Prune removes all working tree administrative files and directories\n237: func (g *GitWorktree) Prune() error {\n238: \tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"prune\"); err != nil {\n239: \t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n240: \t}\n241: \treturn nil\n242: }\n243: \n244: // CleanupWorktrees removes all worktrees and their associated branches.\n245: // repoPath is the root of the git repository whose .worktrees/ to clean.\n246: func CleanupWorktrees(repoPath string) error {\n247: \tworktreesDir, err := getWorktreeDirectory(repoPath)\n248: \tif err != nil {\n249: \t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n250: \t}\n251: \n252: \tentries, err := os.ReadDir(worktreesDir)\n253: \tif err != nil {\n254: \t\tif os.IsNotExist(err) {\n255: \t\t\treturn nil\n256: \t\t}\n257: \t\treturn fmt.Errorf(\"failed to read worktree directory: %w\", err)\n258: \t}\n259: \n260: \trun := func(args ...string) (string, error) {\n261: \t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repoPath}, args...)...)\n262: \t\tout, err := cmd.CombinedOutput()\n263: \t\tif err != nil {\n264: \t\t\treturn \"\", fmt.Errorf(\"git %v: %s (%w)\", args, out, err)\n265: \t\t}\n266: \t\treturn string(out), nil\n267: \t}\n268: \n269: \toutput, err := run(\"worktree\", \"list\", \"--porcelain\")\n270: \tif err != nil {\n271: \t\treturn fmt.Errorf(\"failed to list worktrees: %w\", err)\n272: \t}\n273: \n274: \tworktreeBranches := make(map[string]string)\n275: \tcurrentWorktree := \"\"\n276: \tfor _, line := range strings.Split(output, \"\\n\") {\n277: \t\tif strings.HasPrefix(line, \"worktree \") {\n278: \t\t\tcurrentWorktree = strings.TrimPrefix(line, \"worktree \")\n279: \t\t} else if strings.HasPrefix(line, \"branch \") {\n280: \t\t\tbranchName := strings.TrimPrefix(strings.TrimPrefix(line, \"branch \"), \"refs/heads/\")\n281: \t\t\tif currentWorktree != \"\" {\n282: \t\t\t\tworktreeBranches[currentWorktree] = branchName\n283: \t\t\t}\n284: \t\t}\n285: \t}\n286: \n287: \tfor _, entry := range entries {\n288: \t\tif !entry.IsDir() {\n289: \t\t\tcontinue\n290: \t\t}\n291: \n292: \t\tworktreePath := filepath.Join(worktreesDir, entry.Name())\n293: \n294: \t\tif _, err := run(\"worktree\", \"remove\", \"-f\", worktreePath); err != nil {\n295: \t\t\tlog.WarningLog.Printf(\"git worktree remove failed for %s, falling back to os.RemoveAll: %v\", worktreePath, err)\n296: \t\t\tif rmErr := os.RemoveAll(worktreePath); rmErr != nil {\n297: \t\t\t\tlog.ErrorLog.Printf(\"failed to remove worktree path %s: %v\", worktreePath, rmErr)\n298: \t\t\t}\n299: \t\t}\n300: \n301: \t\tfor path, branch := range worktreeBranches {\n302: \t\t\tif strings.Contains(path, entry.Name()) {\n303: \t\t\t\tif _, err := run(\"branch\", \"-D\", branch); err != nil {\n304: \t\t\t\t\tlog.ErrorLog.Printf(\"failed to delete branch %s: %v\", branch, err)\n305: \t\t\t\t}\n306: \t\t\t\tbreak\n307: \t\t\t}\n308: \t\t}\n309: \t}\n310: \n311: \t_, err = run(\"worktree\", \"prune\")\n312: \tif err != nil {\n313: \t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n314: \t}\n315: \n316: \treturn nil\n317: }\n\n(End of file - total 317 lines)\n</content>",
+            "title": "session/git/worktree_ops.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/go-git/go-git/v5\"\n\t\"github.com/go-git/go-git/v5/plumbing\"\n)\n\n// Setup creates a new worktree for the session\nfunc (g *GitWorktree) Setup() error {\n\t// Ensure worktrees directory exists early (can be done in parallel with branch check)\n\tworktreesDir, err := getWorktreeDirectory(g.repoPath)\n\tif err != nil {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548567779,
+              "end": 1772548567789
+            }
+          },
+          "id": "prt_cb420b10f002mXoHYrNeo65AeP",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420aabf001DxtamyQpkLGAja"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Wu4XDafxA7BH7GpMbXzb2X",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops_test.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"os\"\n5: \t\"os/exec\"\n6: \t\"path/filepath\"\n7: \t\"strings\"\n8: \t\"testing\"\n9: \n10: \t\"github.com/stretchr/testify/assert\"\n11: \t\"github.com/stretchr/testify/require\"\n12: )\n13: \n14: func initCleanupTestRepo(t *testing.T) string {\n15: \tt.Helper()\n16: \n17: \trepo := t.TempDir()\n18: \tfor _, args := range [][]string{\n19: \t\t{\"init\"},\n20: \t\t{\"config\", \"user.email\", \"test@test.com\"},\n21: \t\t{\"config\", \"user.name\", \"test\"},\n22: \t} {\n23: \t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repo}, args...)...)\n24: \t\tout, err := cmd.CombinedOutput()\n25: \t\trequire.NoError(t, err, \"git %v: %s\", args, out)\n26: \t}\n27: \n28: \trequire.NoError(t, os.WriteFile(filepath.Join(repo, \"README.md\"), []byte(\"init\\n\"), 0644))\n29: \n30: \tcmd := exec.Command(\"git\", \"-C\", repo, \"add\", \".\")\n31: \tout, err := cmd.CombinedOutput()\n32: \trequire.NoError(t, err, \"git add: %s\", out)\n33: \n34: \tcmd = exec.Command(\"git\", \"-C\", repo, \"commit\", \"-m\", \"initial\")\n35: \tout, err = cmd.CombinedOutput()\n36: \trequire.NoError(t, err, \"git commit: %s\", out)\n37: \n38: \treturn repo\n39: }\n40: \n41: func TestCleanupWorktrees_RemovesWorktreeAndBranch(t *testing.T) {\n42: \trepo := initCleanupTestRepo(t)\n43: \n44: \toldWD, err := os.Getwd()\n45: \trequire.NoError(t, err)\n46: \tt.Cleanup(func() {\n47: \t\trequire.NoError(t, os.Chdir(oldWD))\n48: \t})\n49: \trequire.NoError(t, os.Chdir(t.TempDir()))\n50: \n51: \twtDir := filepath.Join(repo, \".worktrees\", \"test-branch\")\n52: \trequire.NoError(t, os.MkdirAll(filepath.Dir(wtDir), 0755))\n53: \n54: \tcmd := exec.Command(\"git\", \"-C\", repo, \"worktree\", \"add\", \"-b\", \"test-branch\", wtDir, \"HEAD\")\n55: \tout, err := cmd.CombinedOutput()\n56: \trequire.NoError(t, err, \"git worktree add: %s\", out)\n57: \n58: \tcmd = exec.Command(\"git\", \"-C\", repo, \"branch\", \"--list\", \"test-branch\")\n59: \tout, err = cmd.CombinedOutput()\n60: \trequire.NoError(t, err)\n61: \trequire.Contains(t, string(out), \"test-branch\")\n62: \n63: \terr = CleanupWorktrees(repo)\n64: \trequire.NoError(t, err)\n65: \n66: \t_, err = os.Stat(wtDir)\n67: \tassert.True(t, os.IsNotExist(err), \"worktree dir should be removed\")\n68: \n69: \tcmd = exec.Command(\"git\", \"-C\", repo, \"branch\", \"--list\", \"test-branch\")\n70: \tout, err = cmd.CombinedOutput()\n71: \trequire.NoError(t, err)\n72: \tassert.Empty(t, strings.TrimSpace(string(out)), \"branch should be deleted\")\n73: }\n\n(End of file - total 73 lines)\n</content>",
+            "title": "session/git/worktree_ops_test.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc initCleanupTestRepo(t *testing.T) string {\n\tt.Helper()\n\n\trepo := t.TempDir()\n\tfor _, args := range [][]string{\n\t\t{\"init\"},\n\t\t{\"config\", \"user.email\", \"test@test.com\"},",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548568300,
+              "end": 1772548568302
+            }
+          },
+          "id": "prt_cb420b2e5001fuupDykdEcne3y",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420aabf001DxtamyQpkLGAja"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01J2NnuhtYfznmQSwmccpW1D",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"github.com/kastheco/kasmos/config\"\n6: \t\"github.com/kastheco/kasmos/log\"\n7: \t\"path/filepath\"\n8: \t\"time\"\n9: )\n10: \n11: func getWorktreeDirectory(repoPath string) (string, error) {\n12: \tif repoPath == \"\" {\n13: \t\treturn \"\", fmt.Errorf(\"repo path is required for worktree directory\")\n14: \t}\n15: \treturn filepath.Join(repoPath, \".worktrees\"), nil\n16: }\n17: \n18: // GitWorktree manages git worktree operations for a session\n19: type GitWorktree struct {\n20: \t// Path to the repository\n21: \trepoPath string\n22: \t// Path to the worktree\n23: \tworktreePath string\n24: \t// Name of the session\n25: \tsessionName string\n26: \t// Branch name for the worktree\n27: \tbranchName string\n28: \t// Base commit hash for the worktree\n29: \tbaseCommitSHA string\n30: }\n31: \n32: func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {\n33: \treturn &GitWorktree{\n34: \t\trepoPath:      repoPath,\n35: \t\tworktreePath:  worktreePath,\n36: \t\tsessionName:   sessionName,\n37: \t\tbranchName:    branchName,\n38: \t\tbaseCommitSHA: baseCommitSHA,\n39: \t}\n40: }\n41: \n42: // NewGitWorktree creates a new GitWorktree instance\n43: func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {\n44: \tcfg := config.LoadConfig()\n45: \tbranchName := fmt.Sprintf(\"%s%s\", cfg.BranchPrefix, sessionName)\n46: \t// Sanitize the final branch name to handle invalid characters from any source\n47: \t// (e.g., backslashes from Windows domain usernames like DOMAIN\\user)\n48: \tbranchName = sanitizeBranchName(branchName)\n49: \n50: \t// Convert repoPath to absolute path\n51: \tabsPath, err := filepath.Abs(repoPath)\n52: \tif err != nil {\n53: \t\tlog.ErrorLog.Printf(\"git worktree path abs error, falling back to repoPath %s: %s\", repoPath, err)\n54: \t\t// If we can't get absolute path, use original path as fallback\n55: \t\tabsPath = repoPath\n56: \t}\n57: \n58: \trepoPath, err = findGitRepoRoot(absPath)\n59: \tif err != nil {\n60: \t\treturn nil, \"\", err\n61: \t}\n62: \n63: \tworktreeDir, err := getWorktreeDirectory(repoPath)\n64: \tif err != nil {\n65: \t\treturn nil, \"\", err\n66: \t}\n67: \n68: \t// Use sanitized branch name for the worktree directory name\n69: \tworktreePath := filepath.Join(worktreeDir, branchName)\n70: \tworktreePath = worktreePath + \"_\" + fmt.Sprintf(\"%x\", time.Now().UnixNano())\n71: \n72: \treturn &GitWorktree{\n73: \t\trepoPath:     repoPath,\n74: \t\tsessionName:  sessionName,\n75: \t\tbranchName:   branchName,\n76: \t\tworktreePath: worktreePath,\n77: \t}, branchName, nil\n78: }\n79: \n80: // NewGitWorktreeOnBranch creates a GitWorktree targeting a specific branch name.\n81: // Unlike NewGitWorktree which auto-generates a branch, this uses the exact branch provided.\n82: // Setup() will handle whether the branch already exists or needs creating.\n83: func NewGitWorktreeOnBranch(repoPath, sessionName, branch string) (*GitWorktree, string, error) {\n84: \tbranch = sanitizeBranchName(branch)\n85: \n86: \tabsPath, err := filepath.Abs(repoPath)\n87: \tif err != nil {\n88: \t\tabsPath = repoPath\n89: \t}\n90: \n91: \trepoPath, err = findGitRepoRoot(absPath)\n92: \tif err != nil {\n93: \t\treturn nil, \"\", err\n94: \t}\n95: \n96: \tworktreeDir, err := getWorktreeDirectory(repoPath)\n97: \tif err != nil {\n98: \t\treturn nil, \"\", err\n99: \t}\n100: \n101: \tworktreePath := filepath.Join(worktreeDir, branch)\n102: \tworktreePath = worktreePath + \"_\" + fmt.Sprintf(\"%x\", time.Now().UnixNano())\n103: \n104: \treturn &GitWorktree{\n105: \t\trepoPath:     repoPath,\n106: \t\tsessionName:  sessionName,\n107: \t\tbranchName:   branch,\n108: \t\tworktreePath: worktreePath,\n109: \t}, branch, nil\n110: }\n111: \n112: // GetWorktreePath returns the path to the worktree\n113: func (g *GitWorktree) GetWorktreePath() string {\n114: \treturn g.worktreePath\n115: }\n116: \n117: // GetBranchName returns the name of the branch associated with this worktree\n118: func (g *GitWorktree) GetBranchName() string {\n119: \treturn g.branchName\n120: }\n121: \n122: // GetRepoPath returns the path to the repository\n123: func (g *GitWorktree) GetRepoPath() string {\n124: \treturn g.repoPath\n125: }\n126: \n127: // GetRepoName returns the name of the repository (last part of the repoPath).\n128: func (g *GitWorktree) GetRepoName() string {\n129: \treturn filepath.Base(g.repoPath)\n130: }\n131: \n132: // GetBaseCommitSHA returns the base commit SHA for the worktree\n133: func (g *GitWorktree) GetBaseCommitSHA() string {\n134: \treturn g.baseCommitSHA\n135: }\n\n(End of file - total 135 lines)\n</content>",
+            "title": "session/git/worktree.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"path/filepath\"\n\t\"time\"\n)\n\nfunc getWorktreeDirectory(repoPath string) (string, error) {\n\tif repoPath == \"\" {\n\t\treturn \"\", fmt.Errorf(\"repo path is required for worktree directory\")\n\t}\n\treturn filepath.Join(repoPath, \".worktrees\"), nil\n}\n\n// GitWorktree manages git worktree operations for a session\ntype GitWorktree struct {\n\t// Path to the repository",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548568856,
+              "end": 1772548568858
+            }
+          },
+          "id": "prt_cb420b4ed0011voA17EvsmyQ9s",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420aabf001DxtamyQpkLGAja"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 50087,
+            "input": 1,
+            "output": 239,
+            "reasoning": 0,
+            "cache": {
+              "read": 49584,
+              "write": 263
+            }
+          },
+          "id": "prt_cb420b77f001R3Y0fKSSf7WJHe",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420aabf001DxtamyQpkLGAja"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548568974,
+          "completed": 1772548572573
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58089,
+          "input": 1,
+          "output": 212,
+          "reasoning": 0,
+          "cache": {
+            "read": 49847,
+            "write": 8029
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb420b78e001g1Gt19CYgju5f2",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "prt_cb420bd3b001c7PzKWQBx5M81w",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420b78e001g1Gt19CYgju5f2"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the task_lifecycle_test.go to understand what TestSetupFromExistingBranch_SetsBaseCommitSHA looks like:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/hxljsSQyavbFo9X6v3Wm4JXv0/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772548570428,
+            "end": 1772548571634
+          },
+          "id": "prt_cb420bd3c001OMSqSXPAkQ5Eby",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420b78e001g1Gt19CYgju5f2"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Rw4u9dix4tDA3h6LLtJDZW",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/task_lifecycle_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/task_lifecycle_test.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"os\"\n5: \t\"os/exec\"\n6: \t\"path/filepath\"\n7: \t\"testing\"\n8: \n9: \t\"github.com/stretchr/testify/assert\"\n10: \t\"github.com/stretchr/testify/require\"\n11: )\n12: \n13: func TestTaskBranchFromFile(t *testing.T) {\n14: \tgot := TaskBranchFromFile(\"auth-refactor.md\")\n15: \twant := \"plan/auth-refactor\"\n16: \tif got != want {\n17: \t\tt.Fatalf(\"TaskBranchFromFile() = %q, want %q\", got, want)\n18: \t}\n19: }\n20: \n21: func TestTaskWorktreePath(t *testing.T) {\n22: \trepo := \"/tmp/repo\"\n23: \tbranch := \"plan/auth-refactor\"\n24: \tgot := TaskWorktreePath(repo, branch)\n25: \twant := filepath.Join(repo, \".worktrees\", \"plan-auth-refactor\")\n26: \tif got != want {\n27: \t\tt.Fatalf(\"TaskWorktreePath() = %q, want %q\", got, want)\n28: \t}\n29: }\n30: \n31: func TestNewSharedTaskWorktree(t *testing.T) {\n32: \trepo := \"/tmp/repo\"\n33: \tbranch := \"plan/auth-refactor\"\n34: \tgt := NewSharedTaskWorktree(repo, branch)\n35: \n36: \tif gt.GetRepoPath() != repo {\n37: \t\tt.Fatalf(\"repo = %q, want %q\", gt.GetRepoPath(), repo)\n38: \t}\n39: \tif gt.GetWorktreePath() != filepath.Join(repo, \".worktrees\", \"plan-auth-refactor\") {\n40: \t\tt.Fatalf(\"unexpected worktree path %q\", gt.GetWorktreePath())\n41: \t}\n42: \tif gt.GetBranchName() != branch {\n43: \t\tt.Fatalf(\"branch = %q, want %q\", gt.GetBranchName(), branch)\n44: \t}\n45: }\n46: \n47: func TestSetupFromExistingBranch_SetsBaseCommitSHA(t *testing.T) {\n48: \trepo := initTestRepo(t)\n49: \n50: \tcmd := exec.Command(\"git\", \"-C\", repo, \"branch\", \"plan/test-base\")\n51: \trequire.NoError(t, cmd.Run())\n52: \n53: \tgt := NewSharedTaskWorktree(repo, \"plan/test-base\")\n54: \trequire.NoError(t, gt.Setup())\n55: \tt.Cleanup(func() { _ = gt.Cleanup() })\n56: \n57: \tassert.NotEmpty(t, gt.GetBaseCommitSHA(), \"baseCommitSHA should be set after Setup\")\n58: }\n59: \n60: func initTestRepo(t *testing.T) string {\n61: \tt.Helper()\n62: \n63: \trepo := t.TempDir()\n64: \trunGit := func(args ...string) {\n65: \t\tt.Helper()\n66: \t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repo}, args...)...)\n67: \t\tout, err := cmd.CombinedOutput()\n68: \t\trequire.NoErrorf(t, err, \"git %v failed: %s\", args, string(out))\n69: \t}\n70: \n71: \trunGit(\"init\")\n72: \trunGit(\"config\", \"user.email\", \"test@example.com\")\n73: \trunGit(\"config\", \"user.name\", \"test\")\n74: \n75: \treadmePath := filepath.Join(repo, \"README.md\")\n76: \trequire.NoError(t, os.WriteFile(readmePath, []byte(\"initial\\n\"), 0644))\n77: \n78: \trunGit(\"add\", \"README.md\")\n79: \trunGit(\"commit\", \"-m\", \"initial commit\")\n80: \n81: \treturn repo\n82: }\n\n(End of file - total 82 lines)\n</content>",
+            "title": "session/git/task_lifecycle_test.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestTaskBranchFromFile(t *testing.T) {\n\tgot := TaskBranchFromFile(\"auth-refactor.md\")\n\twant := \"plan/auth-refactor\"\n\tif got != want {\n\t\tt.Fatalf(\"TaskBranchFromFile() = %q, want %q\", got, want)\n\t}\n}\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548572436,
+              "end": 1772548572438
+            }
+          },
+          "id": "prt_cb420c1f3001md0gcn4t5YSX4w",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420b78e001g1Gt19CYgju5f2"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_018z7Jfofu4XE1fJRsDqhUXp",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/util.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/util.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"os/exec\"\n6: \t\"path/filepath\"\n7: \t\"regexp\"\n8: \t\"strings\"\n9: \n10: \t\"github.com/go-git/go-git/v5\"\n11: )\n12: \n13: // Pre-compiled regexes for branch name sanitization.\n14: var (\n15: \tunsafeCharsRegex = regexp.MustCompile(`[^a-z0-9\\-_/.]+`)\n16: \tmultiDashRegex   = regexp.MustCompile(`-+`)\n17: )\n18: \n19: // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.\n20: func sanitizeBranchName(s string) string {\n21: \ts = strings.ToLower(s)\n22: \ts = strings.ReplaceAll(s, \" \", \"-\")\n23: \ts = unsafeCharsRegex.ReplaceAllString(s, \"\")\n24: \ts = multiDashRegex.ReplaceAllString(s, \"-\")\n25: \ts = strings.Trim(s, \"-/\")\n26: \treturn s\n27: }\n28: \n29: // checkGHCLI checks if GitHub CLI is installed and configured\n30: func checkGHCLI() error {\n31: \t// Check if gh is installed\n32: \tif _, err := exec.LookPath(\"gh\"); err != nil {\n33: \t\treturn fmt.Errorf(\"GitHub CLI (gh) is not installed. Please install it first\")\n34: \t}\n35: \n36: \t// Check if gh is authenticated\n37: \tcmd := exec.Command(\"gh\", \"auth\", \"status\")\n38: \tif err := cmd.Run(); err != nil {\n39: \t\treturn fmt.Errorf(\"GitHub CLI is not configured. Please run 'gh auth login' first\")\n40: \t}\n41: \n42: \treturn nil\n43: }\n44: \n45: // IsGitRepo checks if the given path is within a git repository\n46: func IsGitRepo(path string) bool {\n47: \t_, err := findGitRepoRoot(path)\n48: \treturn err == nil\n49: }\n50: \n51: func findGitRepoRoot(path string) (string, error) {\n52: \tcurrentPath := path\n53: \tfor {\n54: \t\t_, err := git.PlainOpen(currentPath)\n55: \t\tif err == nil {\n56: \t\t\t// Found the repository root\n57: \t\t\treturn currentPath, nil\n58: \t\t}\n59: \n60: \t\tparent := filepath.Dir(currentPath)\n61: \t\tif parent == currentPath {\n62: \t\t\t// Reached the filesystem root without finding a repository\n63: \t\t\treturn \"\", fmt.Errorf(\"failed to find Git repository root from path: %s\", path)\n64: \t\t}\n65: \t\tcurrentPath = parent\n66: \t}\n67: }\n\n(End of file - total 67 lines)\n</content>",
+            "title": "session/git/util.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"fmt\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\n\t\"github.com/go-git/go-git/v5\"\n)\n\n// Pre-compiled regexes for branch name sanitization.\nvar (\n\tunsafeCharsRegex = regexp.MustCompile(`[^a-z0-9\\-_/.]+`)\n\tmultiDashRegex   = regexp.MustCompile(`-+`)\n)\n\n// sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.\nfunc sanitizeBranchName(s string) string {",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548572540,
+              "end": 1772548572541
+            }
+          },
+          "id": "prt_cb420c515001Wo5tJwitLEsxPG",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420b78e001g1Gt19CYgju5f2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 58089,
+            "input": 1,
+            "output": 212,
+            "reasoning": 0,
+            "cache": {
+              "read": 49847,
+              "write": 8029
+            }
+          },
+          "id": "prt_cb420c594001VF09uIK0ZiZfoN",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420b78e001g1Gt19CYgju5f2"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548572575,
+          "completed": 1772548575262
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 60340,
+          "input": 1,
+          "output": 165,
+          "reasoning": 0,
+          "cache": {
+            "read": 57876,
+            "write": 2298
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "prt_cb420cafd001wGno2raQqJ8BgQ",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_branch.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_branch.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"fmt\"\n5: \n6: \t\"github.com/go-git/go-git/v5\"\n7: \t\"github.com/go-git/go-git/v5/plumbing\"\n8: )\n9: \n10: // cleanupExistingBranch performs a thorough cleanup of any existing branch or reference\n11: func (g *GitWorktree) cleanupExistingBranch(repo *git.Repository) error {\n12: \tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n13: \n14: \t// Try to remove the branch reference\n15: \tif err := repo.Storer.RemoveReference(branchRef); err != nil && err != plumbing.ErrReferenceNotFound {\n16: \t\treturn fmt.Errorf(\"failed to remove branch reference %s: %w\", g.branchName, err)\n17: \t}\n18: \n19: \t// Remove any worktree-specific references\n20: \tworktreeRef := plumbing.NewReferenceFromStrings(\n21: \t\tfmt.Sprintf(\"worktrees/%s/HEAD\", g.branchName),\n22: \t\t\"\",\n23: \t)\n24: \tif err := repo.Storer.RemoveReference(worktreeRef.Name()); err != nil && err != plumbing.ErrReferenceNotFound {\n25: \t\treturn fmt.Errorf(\"failed to remove worktree reference for %s: %w\", g.branchName, err)\n26: \t}\n27: \n28: \t// Clean up configuration entries\n29: \tcfg, err := repo.Config()\n30: \tif err != nil {\n31: \t\treturn fmt.Errorf(\"failed to get repository config: %w\", err)\n32: \t}\n33: \n34: \tdelete(cfg.Branches, g.branchName)\n35: \tworktreeSection := fmt.Sprintf(\"worktree.%s\", g.branchName)\n36: \tcfg.Raw.RemoveSection(worktreeSection)\n37: \n38: \tif err := repo.Storer.SetConfig(cfg); err != nil {\n39: \t\treturn fmt.Errorf(\"failed to update repository config after removing branch %s: %w\", g.branchName, err)\n40: \t}\n41: \n42: \treturn nil\n43: }\n\n(End of file - total 43 lines)\n</content>",
+            "title": "session/git/worktree_branch.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/go-git/go-git/v5\"\n\t\"github.com/go-git/go-git/v5/plumbing\"\n)\n\n// cleanupExistingBranch performs a thorough cleanup of any existing branch or reference\nfunc (g *GitWorktree) cleanupExistingBranch(repo *git.Repository) error {\n\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n\n\t// Try to remove the branch reference\n\tif err := repo.Storer.RemoveReference(branchRef); err != nil && err != plumbing.ErrReferenceNotFound {\n\t\treturn fmt.Errorf(\"failed to remove branch reference %s: %w\", g.branchName, err)\n\t}\n\n\t// Remove any worktree-specific references\n\tworktreeRef := plumbing.NewReferenceFromStrings(",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548574802,
+              "end": 1772548574804
+            }
+          },
+          "id": "prt_cb420cafe001oQcD1Ww8FHcqnH",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_019Ya9CGmfxLMwVWU93eZ3W9",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_git.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_git.go</path>\n<type>file</type>\n<content>1: package git\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"github.com/kastheco/kasmos/log\"\n6: \t\"os/exec\"\n7: \t\"strings\"\n8: )\n9: \n10: // runGitCommand executes a git command and returns any error\n11: func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {\n12: \tbaseArgs := []string{\"-C\", path}\n13: \tcmd := exec.Command(\"git\", append(baseArgs, args...)...)\n14: \n15: \toutput, err := cmd.CombinedOutput()\n16: \tif err != nil {\n17: \t\treturn \"\", fmt.Errorf(\"git command failed: %s (%w)\", output, err)\n18: \t}\n19: \n20: \treturn string(output), nil\n21: }\n22: \n23: // PushChanges commits and pushes changes in the worktree to the remote branch.\n24: // Used by user-triggered push actions where dirty state should be committed first.\n25: func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {\n26: \tif err := checkGHCLI(); err != nil {\n27: \t\treturn err\n28: \t}\n29: \n30: \tif err := g.CommitChanges(commitMessage); err != nil {\n31: \t\treturn err\n32: \t}\n33: \n34: \treturn g.Push(open)\n35: }\n36: \n37: // Push pushes the current branch to the remote without committing.\n38: // Used by automated flows (plan completion, wave orchestration) where the\n39: // agent has already committed its work.\n40: func (g *GitWorktree) Push(open bool) error {\n41: \tif _, err := g.runGitCommand(g.worktreePath, \"push\", \"-u\", \"origin\", g.branchName); err != nil {\n42: \t\treturn fmt.Errorf(\"failed to push branch %s: %w\", g.branchName, err)\n43: \t}\n44: \n45: \tif open {\n46: \t\tif err := g.OpenBranchURL(); err != nil {\n47: \t\t\tlog.ErrorLog.Printf(\"failed to open branch URL: %v\", err)\n48: \t\t}\n49: \t}\n50: \n51: \treturn nil\n52: }\n53: \n54: // GeneratePRBody assembles a markdown PR description from the branch's\n55: // changed files, commit history, and diff stats.\n56: func (g *GitWorktree) GeneratePRBody() (string, error) {\n57: \tbase := g.GetBaseCommitSHA()\n58: \tif base == \"\" {\n59: \t\treturn \"\", fmt.Errorf(\"no base commit SHA available\")\n60: \t}\n61: \n62: \tvar sections []string\n63: \n64: \t// Changed files\n65: \tfiles, err := g.runGitCommand(g.worktreePath, \"diff\", \"--name-only\", base)\n66: \tif err == nil && strings.TrimSpace(files) != \"\" {\n67: \t\tsections = append(sections, \"## Changes\\n\\n\"+strings.TrimSpace(files))\n68: \t}\n69: \n70: \t// Commit messages on the branch\n71: \tcommits, err := g.runGitCommand(g.worktreePath, \"log\", \"--oneline\", base+\"..HEAD\")\n72: \tif err == nil && strings.TrimSpace(commits) != \"\" {\n73: \t\tsections = append(sections, \"## Commits\\n\\n\"+strings.TrimSpace(commits))\n74: \t}\n75: \n76: \t// Diff stats summary\n77: \tstats, err := g.runGitCommand(g.worktreePath, \"diff\", \"--stat\", base)\n78: \tif err == nil && strings.TrimSpace(stats) != \"\" {\n79: \t\tsections = append(sections, \"## Stats\\n\\n\"+strings.TrimSpace(stats))\n80: \t}\n81: \n82: \tif len(sections) == 0 {\n83: \t\treturn \"\", nil\n84: \t}\n85: \n86: \treturn strings.Join(sections, \"\\n\\n\"), nil\n87: }\n88: \n89: // CreatePR pushes changes and creates a pull request on GitHub.\n90: func (g *GitWorktree) CreatePR(title, body, commitMsg string) error {\n91: \t// Push changes first (without opening browser)\n92: \tif err := g.PushChanges(commitMsg, false); err != nil {\n93: \t\treturn fmt.Errorf(\"failed to push changes: %w\", err)\n94: \t}\n95: \n96: \t// Create the pull request\n97: \tprCmd := exec.Command(\"gh\", \"pr\", \"create\", \"--title\", title, \"--body\", body, \"--head\", g.branchName)\n98: \tprCmd.Dir = g.worktreePath\n99: \tif output, err := prCmd.CombinedOutput(); err != nil {\n100: \t\t// If PR already exists, just open it\n101: \t\tif strings.Contains(string(output), \"already exists\") {\n102: \t\t\tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n103: \t\t\tviewCmd.Dir = g.worktreePath\n104: \t\t\t_ = viewCmd.Run()\n105: \t\t\treturn nil\n106: \t\t}\n107: \t\treturn fmt.Errorf(\"failed to create PR: %s (%w)\", output, err)\n108: \t}\n109: \n110: \t// Open the PR in browser\n111: \tviewCmd := exec.Command(\"gh\", \"pr\", \"view\", \"--web\", g.branchName)\n112: \tviewCmd.Dir = g.worktreePath\n113: \t_ = viewCmd.Run()\n114: \n115: \treturn nil\n116: }\n117: \n118: // CommitChanges commits changes locally without pushing to remote\n119: func (g *GitWorktree) CommitChanges(commitMessage string) error {\n120: \t// Check if there are any changes to commit\n121: \tisDirty, err := g.IsDirty()\n122: \tif err != nil {\n123: \t\treturn fmt.Errorf(\"failed to check for changes: %w\", err)\n124: \t}\n125: \n126: \tif isDirty {\n127: \t\t// Stage all changes\n128: \t\tif _, err := g.runGitCommand(g.worktreePath, \"add\", \".\"); err != nil {\n129: \t\t\tlog.ErrorLog.Print(err)\n130: \t\t\treturn fmt.Errorf(\"failed to stage changes: %w\", err)\n131: \t\t}\n132: \n133: \t\t// Create commit (local only)\n134: \t\tif _, err := g.runGitCommand(g.worktreePath, \"commit\", \"-m\", commitMessage, \"--no-verify\"); err != nil {\n135: \t\t\tlog.ErrorLog.Print(err)\n136: \t\t\treturn fmt.Errorf(\"failed to commit changes: %w\", err)\n137: \t\t}\n138: \t}\n139: \n140: \treturn nil\n141: }\n142: \n143: // IsDirty checks if the worktree has uncommitted changes\n144: func (g *GitWorktree) IsDirty() (bool, error) {\n145: \toutput, err := g.runGitCommand(g.worktreePath, \"status\", \"--porcelain\")\n146: \tif err != nil {\n147: \t\treturn false, fmt.Errorf(\"failed to check worktree status: %w\", err)\n148: \t}\n149: \treturn len(output) > 0, nil\n150: }\n151: \n152: // IsBranchCheckedOut checks if the instance branch is currently checked out\n153: func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {\n154: \toutput, err := g.runGitCommand(g.repoPath, \"branch\", \"--show-current\")\n155: \tif err != nil {\n156: \t\treturn false, fmt.Errorf(\"failed to get current branch: %w\", err)\n157: \t}\n158: \treturn strings.TrimSpace(output) == g.branchName, nil\n159: }\n160: \n161: // OpenBranchURL opens the branch URL in the default browser\n162: func (g *GitWorktree) OpenBranchURL() error {\n163: \t// Check if GitHub CLI is available\n164: \tif err := checkGHCLI(); err != nil {\n165: \t\treturn err\n166: \t}\n167: \n168: \tcmd := exec.Command(\"gh\", \"browse\", \"--branch\", g.branchName)\n169: \tcmd.Dir = g.worktreePath\n170: \tif err := cmd.Run(); err != nil {\n171: \t\treturn fmt.Errorf(\"failed to open branch URL: %w\", err)\n172: \t}\n173: \treturn nil\n174: }\n\n(End of file - total 174 lines)\n</content>",
+            "title": "session/git/worktree_git.go",
+            "metadata": {
+              "preview": "package git\n\nimport (\n\t\"fmt\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"os/exec\"\n\t\"strings\"\n)\n\n// runGitCommand executes a git command and returns any error\nfunc (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {\n\tbaseArgs := []string{\"-C\", path}\n\tcmd := exec.Command(\"git\", append(baseArgs, args...)...)\n\n\toutput, err := cmd.CombinedOutput()\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"git command failed: %s (%w)\", output, err)\n\t}\n\n\treturn string(output), nil",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772548575240,
+              "end": 1772548575246
+            }
+          },
+          "id": "prt_cb420ce60001goy55jZw2SXJvi",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 60340,
+            "input": 1,
+            "output": 165,
+            "reasoning": 0,
+            "cache": {
+              "read": 57876,
+              "write": 2298
+            }
+          },
+          "id": "prt_cb420d015001AXdAtr3WqESIb5",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548575263,
+          "completed": 1772548579439
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 63711,
+          "input": 1,
+          "output": 200,
+          "reasoning": 0,
+          "cache": {
+            "read": 60174,
+            "write": 3336
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb420d01f001Bhk6D02F1asjSW",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "prt_cb420d53c0012XI5029zANwpBH",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420d01f001Bhk6D02F1asjSW"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now I have a good understanding of the codebase. Let me run the existing tests first to verify the baseline, and then I'll rewrite worktree_ops.go.\n\nThe existing worktree_ops.go already looks like it's been partially rewritten. Let me verify the tests pass first.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/UwxOM4HC9yfAtDIz5X/pOezAnrpK/REDACTED/REDACTED/FsLW6f0fGEn8HQy9X/M1h/REDACTED/QFlgyYXRBN8D+8P6Cnz/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772548576573,
+            "end": 1772548577779
+          },
+          "id": "prt_cb420d53d001kERkxNxd5qIV6j",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420d01f001Bhk6D02F1asjSW"
+        },
+        {
+          "type": "text",
+          "text": "Now let me run the baseline tests to verify they pass:",
+          "time": {
+            "start": 1772548578603,
+            "end": 1772548578603
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420d01f001Bhk6D02F1asjSW"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01D7fd8gbURSLGoseDdWaAtu",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./session/git/... -run \"TestCleanup|TestSetup\" -v -count=1 2>&1",
+              "description": "Run baseline tests to verify they pass"
+            },
+            "output": "=== RUN   TestSetupFromExistingBranch_SetsBaseCommitSHA\n--- PASS: TestSetupFromExistingBranch_SetsBaseCommitSHA (0.01s)\n=== RUN   TestCleanupWorktrees_RemovesWorktreeAndBranch\n--- PASS: TestCleanupWorktrees_RemovesWorktreeAndBranch (0.01s)\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.022s\n",
+            "title": "Run baseline tests to verify they pass",
+            "metadata": {
+              "output": "=== RUN   TestSetupFromExistingBranch_SetsBaseCommitSHA\n--- PASS: TestSetupFromExistingBranch_SetsBaseCommitSHA (0.01s)\n=== RUN   TestCleanupWorktrees_RemovesWorktreeAndBranch\n--- PASS: TestCleanupWorktrees_RemovesWorktreeAndBranch (0.01s)\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.022s\n",
+              "exit": 0,
+              "description": "Run baseline tests to verify they pass",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772548579125,
+              "end": 1772548579431
+            }
+          },
+          "id": "prt_cb420dd2c001I8W6Loa563mxsh",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420d01f001Bhk6D02F1asjSW"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "cost": 0,
+          "tokens": {
+            "total": 63711,
+            "input": 1,
+            "output": 200,
+            "reasoning": 0,
+            "cache": {
+              "read": 60174,
+              "write": 3336
+            }
+          },
+          "id": "prt_cb420e0680011sgABpztgysY0i",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420d01f001Bhk6D02F1asjSW"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548579440,
+          "completed": 1772548635034
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 68303,
+          "input": 1,
+          "output": 4450,
+          "reasoning": 0,
+          "cache": {
+            "read": 63510,
+            "write": 342
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb420e070001Jt3XubVvEdZuR1",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "id": "prt_cb420e4ef001SHfkS10kGKvCe7",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        },
+        {
+          "type": "reasoning",
+          "text": "Both tests pass. Now I need to rewrite `worktree_ops.go` from scratch. The key point here is that the existing file needs to be deleted and rewritten. But since this is a \"clean-room rewrite\" to remove AGPL-tainted code, I need to write a fresh implementation that preserves the same API and behavior, without copying the tainted code.\n\nLooking at the existing implementation, it already appears to be working. The task says to \"Delete `session/git/worktree_ops.go` and rewrite from scratch.\" The goal is to produce a clean-room rewrite without any copy-paste from the original (which might contain AGPL-tainted code).\n\n\nNow I'm writing the new implementation based on the functional spec: `Setup()` will create the worktrees directory and check branch existence in parallel, then dispatch to either `setupFromExistingBranch()` or `setupNewWorktree()` depending on whether the branch exists. The `setupFromExistingBranch()` function will handle removing stale worktrees, syncing with remote, and creating the worktree from the existing branch.\n\n`syncBranchWithRemote()` will fetch from origin, compare local and remote SHAs, and either fast-forward or attempt a rebase if they've diverged—all errors get logged but not returned. For new worktrees, `setupNewWorktree()` opens the repo, cleans up any existing branch, captures the current HEAD as the base commit, and creates a fresh worktree with a new branch. Finally, `Cleanup()` will remove the worktree directory and delete the branch reference from the repository. Writing the worktree manager implementation...",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/zm8bg/UpWx4F/zg32MJv9eP9gstgxvHM2ehfVt/REDACTED/REDACTED/gjVgTSn/REDACTED/REDACTED/PXaWRlqNSb9BABQclOtsE/REDACTED/74TIePctvQd6x/REDACTED/REDACTED/IktHbZUn/REDACTED/REDACTED/mmoXK+aBpCP1w9/TEBf8C534t7zeO/REDACTED/REDACTED/REDACTED/REDACTED/v7JqdI/7z/aD8QNJ07VzCVotIij3/REDACTED/REDACTED/ijgUwp8us9hH5Sw+OO/REDACTED/REDACTED/REDACTED/REDACTED/9cPo9LachT+bZm/Uo/6mLCFIArPrVoexkkVmcSkqJ/REDACTED/REDACTED/1e/REDACTED/REDACTED/Kpa4ppYF/Y8YRtkPzECXuoqeEBsp/ibXHsPpnVBReaA56CW3lP366pazcq/REDACTED/REDACTED/REDACTED/cUxpA/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772548580591,
+            "end": 1772548596467
+          },
+          "id": "prt_cb420e4ef002IBNg385Yp89C9z",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        },
+        {
+          "type": "text",
+          "text": "Tests pass. Now I'll delete and rewrite `worktree_ops.go` from scratch per the functional spec:",
+          "time": {
+            "start": 1772548596582,
+            "end": 1772548596582
+          },
+          "id": "prt_cb42122f4001loc10vqaYSAVpy",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go",
+              "content": "package git\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/go-git/go-git/v5\"\n\t\"github.com/go-git/go-git/v5/plumbing\"\n\t\"github.com/kastheco/kasmos/log\"\n)\n\n// Setup creates a new worktree for the session. It creates the worktrees\n// directory and determines whether the target branch already exists,\n// dispatching to the appropriate setup path.\nfunc (g *GitWorktree) Setup() error {\n\twtDir, err := getWorktreeDirectory(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\ttype result struct{ err error }\n\tmkdirDone := make(chan result, 1)\n\tbranchCheckDone := make(chan result, 1)\n\tvar branchFound bool\n\n\tgo func() {\n\t\tmkdirDone <- result{os.MkdirAll(wtDir, 0755)}\n\t}()\n\n\tgo func() {\n\t\trepo, openErr := git.PlainOpen(g.repoPath)\n\t\tif openErr != nil {\n\t\t\tbranchCheckDone <- result{fmt.Errorf(\"failed to open repository: %w\", openErr)}\n\t\t\treturn\n\t\t}\n\t\tref := plumbing.NewBranchReferenceName(g.branchName)\n\t\tif _, refErr := repo.Reference(ref, false); refErr == nil {\n\t\t\tbranchFound = true\n\t\t}\n\t\tbranchCheckDone <- result{nil}\n\t}()\n\n\tif r := <-mkdirDone; r.err != nil {\n\t\treturn r.err\n\t}\n\tif r := <-branchCheckDone; r.err != nil {\n\t\treturn r.err\n\t}\n\n\tif branchFound {\n\t\treturn g.setupFromExistingBranch()\n\t}\n\treturn g.setupNewWorktree()\n}\n\n// setupFromExistingBranch creates a worktree from a branch that already exists\n// in the repository. It first removes any stale worktree at the target path,\n// syncs the local branch with the remote, then creates the fresh worktree and\n// resolves the base commit SHA for diff computation.\nfunc (g *GitWorktree) setupFromExistingBranch() error {\n\t// Remove any stale worktree; ignore errors (it may not exist).\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath)\n\n\t// Best-effort sync with remote before creating the worktree.\n\tg.syncBranchWithRemote()\n\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", g.worktreePath, g.branchName); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from branch %s: %w\", g.branchName, err)\n\t}\n\n\t// Resolve the base commit SHA for diff computation.\n\tif g.baseCommitSHA == \"\" {\n\t\tif out, err := g.runGitCommand(g.repoPath, \"merge-base\", \"HEAD\", g.branchName); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t} else if out, err := g.runGitCommand(g.worktreePath, \"rev-parse\", \"HEAD\"); err == nil {\n\t\t\tg.baseCommitSHA = strings.TrimSpace(out)\n\t\t}\n\t}\n\n\treturn nil\n}\n\n// syncBranchWithRemote reconciles the local branch with its remote counterpart.\n// It fetches origin/<branch>, and if the SHAs differ it either fast-forwards\n// (when local is an ancestor of remote) or rebases local commits onto remote\n// (when the histories have diverged). All errors are logged but not propagated —\n// this is a best-effort operation.\nfunc (g *GitWorktree) syncBranchWithRemote() {\n\tremote := \"origin/\" + g.branchName\n\n\t_, _ = g.runGitCommand(g.repoPath, \"fetch\", \"origin\", g.branchName)\n\n\t// Bail early if the remote tracking branch does not exist.\n\tif _, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"--verify\", remote); err != nil {\n\t\treturn\n\t}\n\n\tlocalOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", g.branchName)\n\tif err != nil {\n\t\treturn\n\t}\n\tremoteOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", remote)\n\tif err != nil {\n\t\treturn\n\t}\n\n\tif strings.TrimSpace(localOut) == strings.TrimSpace(remoteOut) {\n\t\treturn // already in sync\n\t}\n\n\t// Fast-forward if local is an ancestor of remote.\n\tif _, err := g.runGitCommand(g.repoPath, \"merge-base\", \"--is-ancestor\", g.branchName, remote); err == nil {\n\t\tif _, ffErr := g.runGitCommand(g.repoPath, \"branch\", \"-f\", g.branchName, remote); ffErr != nil {\n\t\t\tlog.WarningLog.Printf(\"syncBranchWithRemote: fast-forward %s to %s failed: %v\", g.branchName, remote, ffErr)\n\t\t}\n\t\treturn\n\t}\n\n\t// Histories have diverged — attempt a rebase.\n\tlog.InfoLog.Printf(\"syncBranchWithRemote: %s diverged from %s, rebasing\", g.branchName, remote)\n\tif _, rebaseErr := g.runGitCommand(g.repoPath, \"rebase\", \"--onto\", remote, remote, g.branchName); rebaseErr != nil {\n\t\t_, _ = g.runGitCommand(g.repoPath, \"rebase\", \"--abort\")\n\t\tlog.WarningLog.Printf(\n\t\t\t\"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v\",\n\t\t\tg.branchName, remote, rebaseErr,\n\t\t)\n\t}\n}\n\n// setupNewWorktree creates a brand-new branch from the current HEAD and adds\n// a worktree for it. It errors early if the repository has no commits yet.\nfunc (g *GitWorktree) setupNewWorktree() error {\n\t// Remove any stale worktree; ignore errors.\n\t_, _ = g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath)\n\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to open repository: %w\", err)\n\t}\n\n\tif err := g.cleanupExistingBranch(repo); err != nil {\n\t\treturn fmt.Errorf(\"failed to cleanup existing branch: %w\", err)\n\t}\n\n\theadOut, err := g.runGitCommand(g.repoPath, \"rev-parse\", \"HEAD\")\n\tif err != nil {\n\t\tmsg := err.Error()\n\t\tif strings.Contains(msg, \"fatal: ambiguous argument 'HEAD'\") ||\n\t\t\tstrings.Contains(msg, \"fatal: not a valid object name\") ||\n\t\t\tstrings.Contains(msg, \"fatal: HEAD: not a valid object name\") {\n\t\t\treturn fmt.Errorf(\"this appears to be a brand new repository: please create an initial commit before creating an instance\")\n\t\t}\n\t\treturn fmt.Errorf(\"failed to get HEAD commit hash: %w\", err)\n\t}\n\theadCommit := strings.TrimSpace(headOut)\n\tg.baseCommitSHA = headCommit\n\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"add\", \"-b\", g.branchName, g.worktreePath, headCommit); err != nil {\n\t\treturn fmt.Errorf(\"failed to create worktree from commit %s: %w\", headCommit, err)\n\t}\n\n\treturn nil\n}\n\n// Cleanup removes the worktree and its associated branch, then prunes. All\n// sub-errors are collected and returned together via errors.Join.\nfunc (g *GitWorktree) Cleanup() error {\n\tvar errs []error\n\n\tif _, statErr := os.Stat(g.worktreePath); statErr == nil {\n\t\tif _, rmErr := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); rmErr != nil {\n\t\t\terrs = append(errs, rmErr)\n\t\t}\n\t} else if !os.IsNotExist(statErr) {\n\t\terrs = append(errs, fmt.Errorf(\"failed to stat worktree path: %w\", statErr))\n\t}\n\n\trepo, err := git.PlainOpen(g.repoPath)\n\tif err != nil {\n\t\terrs = append(errs, fmt.Errorf(\"failed to open repository for cleanup: %w\", err))\n\t\treturn errors.Join(errs...)\n\t}\n\n\tbranchRef := plumbing.NewBranchReferenceName(g.branchName)\n\tif _, err := repo.Reference(branchRef, false); err == nil {\n\t\tif removeErr := repo.Storer.RemoveReference(branchRef); removeErr != nil {\n\t\t\terrs = append(errs, fmt.Errorf(\"failed to remove branch %s: %w\", g.branchName, removeErr))\n\t\t}\n\t} else if err != plumbing.ErrReferenceNotFound {\n\t\terrs = append(errs, fmt.Errorf(\"error checking branch %s: %w\", g.branchName, err))\n\t}\n\n\tif pruneErr := g.Prune(); pruneErr != nil {\n\t\terrs = append(errs, pruneErr)\n\t}\n\n\treturn errors.Join(errs...)\n}\n\n// Remove removes the worktree filesystem entry and git metadata but leaves the\n// branch intact so it can be re-attached later.\nfunc (g *GitWorktree) Remove() error {\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"remove\", \"-f\", g.worktreePath); err != nil {\n\t\treturn fmt.Errorf(\"failed to remove worktree: %w\", err)\n\t}\n\treturn nil\n}\n\n// Prune runs `git worktree prune` to remove stale administrative files.\nfunc (g *GitWorktree) Prune() error {\n\tif _, err := g.runGitCommand(g.repoPath, \"worktree\", \"prune\"); err != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", err)\n\t}\n\treturn nil\n}\n\n// CleanupWorktrees removes every worktree found under repoPath/.worktrees/ and\n// deletes the associated branch for each one, then prunes. Worktrees that\n// cannot be removed via git fall back to os.RemoveAll.\nfunc CleanupWorktrees(repoPath string) error {\n\twtDir, err := getWorktreeDirectory(repoPath)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to get worktree directory: %w\", err)\n\t}\n\n\tentries, err := os.ReadDir(wtDir)\n\tif err != nil {\n\t\tif os.IsNotExist(err) {\n\t\t\treturn nil\n\t\t}\n\t\treturn fmt.Errorf(\"failed to read worktree directory: %w\", err)\n\t}\n\n\trun := func(args ...string) (string, error) {\n\t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repoPath}, args...)...)\n\t\tout, cmdErr := cmd.CombinedOutput()\n\t\tif cmdErr != nil {\n\t\t\treturn \"\", fmt.Errorf(\"git %v: %s (%w)\", args, out, cmdErr)\n\t\t}\n\t\treturn string(out), nil\n\t}\n\n\t// Build a path→branch map from the porcelain worktree list.\n\tlistOut, err := run(\"worktree\", \"list\", \"--porcelain\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to list worktrees: %w\", err)\n\t}\n\n\tpathToBranch := make(map[string]string)\n\tvar currentPath string\n\tfor _, line := range strings.Split(listOut, \"\\n\") {\n\t\tswitch {\n\t\tcase strings.HasPrefix(line, \"worktree \"):\n\t\t\tcurrentPath = strings.TrimPrefix(line, \"worktree \")\n\t\tcase strings.HasPrefix(line, \"branch \"):\n\t\t\tbranch := strings.TrimPrefix(line, \"branch \")\n\t\t\tbranch = strings.TrimPrefix(branch, \"refs/heads/\")\n\t\t\tif currentPath != \"\" {\n\t\t\t\tpathToBranch[currentPath] = branch\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, entry := range entries {\n\t\tif !entry.IsDir() {\n\t\t\tcontinue\n\t\t}\n\n\t\twtPath := filepath.Join(wtDir, entry.Name())\n\n\t\tif _, rmErr := run(\"worktree\", \"remove\", \"-f\", wtPath); rmErr != nil {\n\t\t\tlog.WarningLog.Printf(\"git worktree remove failed for %s, falling back to os.RemoveAll: %v\", wtPath, rmErr)\n\t\t\tif fsErr := os.RemoveAll(wtPath); fsErr != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to remove worktree path %s: %v\", wtPath, fsErr)\n\t\t\t}\n\t\t}\n\n\t\t// Delete the branch that was associated with this worktree path.\n\t\tfor p, branch := range pathToBranch {\n\t\t\tif strings.Contains(p, entry.Name()) {\n\t\t\t\tif _, delErr := run(\"branch\", \"-D\", branch); delErr != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to delete branch %s: %v\", branch, delErr)\n\t\t\t\t}\n\t\t\t\tbreak\n\t\t\t}\n\t\t}\n\t}\n\n\tif _, pruneErr := run(\"worktree\", \"prune\"); pruneErr != nil {\n\t\treturn fmt.Errorf(\"failed to prune worktrees: %w\", pruneErr)\n\t}\n\n\treturn nil\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "session/git/worktree_ops.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/task_lifecycle_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/util.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_branch.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_git.go": []
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772548634846,
+              "end": 1772548635022
+            }
+          },
+          "id": "prt_cb4212367001OpOfbiBeBy7IA7",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3e0b8eb870235a28639a570125748015dc4d95f1",
+          "cost": 0,
+          "tokens": {
+            "total": 68303,
+            "input": 1,
+            "output": 4450,
+            "reasoning": 0,
+            "cache": {
+              "read": 63510,
+              "write": 342
+            }
+          },
+          "id": "prt_cb421b98f0013V52TIMLvnlMbI",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        },
+        {
+          "type": "patch",
+          "hash": "01722ef35af0ea4dd8e4673f89d7b8fbb9a111f5",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/diff.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_git.go",
+            "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer/session/git/worktree_ops.go"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb420e070001Jt3XubVvEdZuR1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548635035,
+          "completed": 1772548638491
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 68412,
+          "input": 1,
+          "output": 104,
+          "reasoning": 0,
+          "cache": {
+            "read": 63852,
+            "write": 4455
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb421b99b001T280QT0h1VF1NJ",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3e0b8eb870235a28639a570125748015dc4d95f1",
+          "id": "prt_cb421c0180010fhZyrNUUwbLAM",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421b99b001T280QT0h1VF1NJ"
+        },
+        {
+          "type": "text",
+          "text": "Now run all tests to verify:",
+          "time": {
+            "start": 1772548637377,
+            "end": 1772548637377
+          },
+          "id": "prt_cb421c019001pVA6f3td7I6Pfc",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421b99b001T280QT0h1VF1NJ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011Kecu2wE17REhtbRHvi31x",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./session/git/... -v -count=1 2>&1",
+              "description": "Run all session/git tests to verify implementation"
+            },
+            "output": "=== RUN   TestTaskBranchFromFile\n--- PASS: TestTaskBranchFromFile (0.00s)\n=== RUN   TestTaskWorktreePath\n--- PASS: TestTaskWorktreePath (0.00s)\n=== RUN   TestNewSharedTaskWorktree\n--- PASS: TestNewSharedTaskWorktree (0.00s)\n=== RUN   TestSetupFromExistingBranch_SetsBaseCommitSHA\n--- PASS: TestSetupFromExistingBranch_SetsBaseCommitSHA (0.01s)\n=== RUN   TestSanitizeBranchName\n=== RUN   TestSanitizeBranchName/simple_lowercase_string\n=== RUN   TestSanitizeBranchName/string_with_spaces\n=== RUN   TestSanitizeBranchName/mixed_case_string\n=== RUN   TestSanitizeBranchName/string_with_special_characters\n=== RUN   TestSanitizeBranchName/string_with_allowed_special_characters\n=== RUN   TestSanitizeBranchName/string_with_multiple_dashes\n=== RUN   TestSanitizeBranchName/string_with_leading_and_trailing_dashes\n=== RUN   TestSanitizeBranchName/string_with_leading_and_trailing_slashes\n=== RUN   TestSanitizeBranchName/empty_string\n=== RUN   TestSanitizeBranchName/complex_mixed_case_with_special_chars\n--- PASS: TestSanitizeBranchName (0.00s)\n    --- PASS: TestSanitizeBranchName/simple_lowercase_string (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_spaces (0.00s)\n    --- PASS: TestSanitizeBranchName/mixed_case_string (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_special_characters (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_allowed_special_characters (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_multiple_dashes (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_leading_and_trailing_dashes (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_leading_and_trailing_slashes (0.00s)\n    --- PASS: TestSanitizeBranchName/empty_string (0.00s)\n    --- PASS: TestSanitizeBranchName/complex_mixed_case_with_special_chars (0.00s)\n=== RUN   TestCleanupWorktrees_RemovesWorktreeAndBranch\n--- PASS: TestCleanupWorktrees_RemovesWorktreeAndBranch (0.01s)\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.020s\n",
+            "title": "Run all session/git tests to verify implementation",
+            "metadata": {
+              "output": "=== RUN   TestTaskBranchFromFile\n--- PASS: TestTaskBranchFromFile (0.00s)\n=== RUN   TestTaskWorktreePath\n--- PASS: TestTaskWorktreePath (0.00s)\n=== RUN   TestNewSharedTaskWorktree\n--- PASS: TestNewSharedTaskWorktree (0.00s)\n=== RUN   TestSetupFromExistingBranch_SetsBaseCommitSHA\n--- PASS: TestSetupFromExistingBranch_SetsBaseCommitSHA (0.01s)\n=== RUN   TestSanitizeBranchName\n=== RUN   TestSanitizeBranchName/simple_lowercase_string\n=== RUN   TestSanitizeBranchName/string_with_spaces\n=== RUN   TestSanitizeBranchName/mixed_case_string\n=== RUN   TestSanitizeBranchName/string_with_special_characters\n=== RUN   TestSanitizeBranchName/string_with_allowed_special_characters\n=== RUN   TestSanitizeBranchName/string_with_multiple_dashes\n=== RUN   TestSanitizeBranchName/string_with_leading_and_trailing_dashes\n=== RUN   TestSanitizeBranchName/string_with_leading_and_trailing_slashes\n=== RUN   TestSanitizeBranchName/empty_string\n=== RUN   TestSanitizeBranchName/complex_mixed_case_with_special_chars\n--- PASS: TestSanitizeBranchName (0.00s)\n    --- PASS: TestSanitizeBranchName/simple_lowercase_string (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_spaces (0.00s)\n    --- PASS: TestSanitizeBranchName/mixed_case_string (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_special_characters (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_allowed_special_characters (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_multiple_dashes (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_leading_and_trailing_dashes (0.00s)\n    --- PASS: TestSanitizeBranchName/string_with_leading_and_trailing_slashes (0.00s)\n    --- PASS: TestSanitizeBranchName/empty_string (0.00s)\n    --- PASS: TestSanitizeBranchName/complex_mixed_case_with_special_chars (0.00s)\n=== RUN   TestCleanupWorktrees_RemovesWorktreeAndBranch\n--- PASS: TestCleanupWorktrees_RemovesWorktreeAndBranch (0.01s)\nPASS\nok  \tgithub.com/kastheco/kasmos/session/git\t0.020s\n",
+              "exit": 0,
+              "description": "Run all session/git tests to verify implementation",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772548638184,
+              "end": 1772548638483
+            }
+          },
+          "id": "prt_cb421c2c2001bZoZY0SGiLwmu5",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421b99b001T280QT0h1VF1NJ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3e0b8eb870235a28639a570125748015dc4d95f1",
+          "cost": 0,
+          "tokens": {
+            "total": 68412,
+            "input": 1,
+            "output": 104,
+            "reasoning": 0,
+            "cache": {
+              "read": 63852,
+              "write": 4455
+            }
+          },
+          "id": "prt_cb421c714001hXkrmcMVyhIgzM",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421b99b001T280QT0h1VF1NJ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772548638492
+        },
+        "parentID": "msg_cb4208e7500175y92Jx3h5WISD",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-01b-rewrite-git-layer"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb421c71c001OOYVWs1jwhOYnu",
+        "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3e0b8eb870235a28639a570125748015dc4d95f1",
+          "id": "prt_cb421cc830014vvb1iCwLCqgyz",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421c71c001OOYVWs1jwhOYnu"
+        },
+        {
+          "type": "text",
+          "text": "All 15 tests pass. Now commit:",
+          "time": {
+            "start": 1772548640361,
+            "end": 1772548640361
+          },
+          "id": "prt_cb421cc83002XDBxvt6tORicoC",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421c71c001OOYVWs1jwhOYnu"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git add session/git/worktree_ops.go && git commit -m \"feat(clean-room): rewrite session/git/worktree_ops.go from scratch\"",
+              "description": "Commit the clean-room rewrite of worktree_ops.go"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit the clean-room rewrite of worktree_ops.go"
+            },
+            "time": {
+              "start": 1772548641770
+            }
+          },
+          "id": "prt_cb421ce69001RH9JSYjmR0o0Ph",
+          "sessionID": "ses_34bdf7194ffe5As1fzBaZxlhnx",
+          "messageID": "msg_cb421c71c001OOYVWs1jwhOYnu"
+        }
+      ]
+    }
+  ]
+}
