@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "84dad5b4b5ec",
+  "strategy": "manual-commit",
+  "branch": "plan/rename-plan-to-task",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_state.go",
+    "cmd/task.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/84/dad5b4b5ec/0/metadata.json",
+      "transcript": "/84/dad5b4b5ec/0/full.jsonl",
+      "context": "/84/dad5b4b5ec/0/context.md",
+      "content_hash": "/84/dad5b4b5ec/0/content_hash.txt",
+      "prompt": "/84/dad5b4b5ec/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 289,
+    "cache_read_tokens": 82572,
+    "output_tokens": 411,
+    "api_call_count": 1
+  }
+}
