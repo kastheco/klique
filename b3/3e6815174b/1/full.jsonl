@@ -1,0 +1,840 @@
+{
+  "info": {
+    "id": "REDACTED",
+    "slug": "sunny-mountain",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "kas: plan extract-orchestrator",
+    "version": "1.2.16",
+    "summary": {
+      "additions": 318,
+      "deletions": 0,
+      "files": 1
+    },
+    "time": {
+      "created": 1772578358253,
+      "updated": 1772578455576
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772578358304
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "docs/plans/extract-orchestrator.md",
+              "before": "",
+              "after": "# Extract Orchestration Engine Implementation Plan\n\n**Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n\n**Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n\n**Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n\n**Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n\n---\n\n## Wave 1: Extract Core Engine\n\n### Task 1: Create orchestration package with engine and prompt builders\n\n**Files:**\n- Create: `orchestration/engine.go`\n- Create: `orchestration/prompt.go`\n- Create: `orchestration/engine_test.go`\n- Create: `orchestration/prompt_test.go`\n\n**Step 1: Write failing tests**\n\nCreate `orchestration/engine_test.go` — adapt all orchestrator tests from `app/wave_orchestrator_test.go` into `package orchestration` (do NOT copy `TestBuildClickUpComment` — that tests ClickUp formatting and stays in `app/`). The adapted tests are:\n\n- `TestNewWaveOrchestrator` — verify State, TotalWaves, TotalTasks after construction.\n- `TestWaveOrchestrator_StartWave` — start wave 1, check Running state and task list.\n- `TestWaveOrchestrator_TaskCompleted` — mark tasks complete, verify wave completion.\n- `TestWaveOrchestrator_TaskFailed` — mark task failed, verify counts.\n- `TestWaveOrchestrator_MultiWaveProgression` — two-wave lifecycle.\n- `TestWaveOrchestrator_AllComplete` — single-wave plan completes to AllComplete.\n- `TestWaveOrchestrator_ResetConfirmAllowsReprompt` — NeedsConfirm one-shot latch + reset.\n- `TestIsTaskRunning` — verify running/complete/unknown task queries.\n- `TestWaveOrchestrator_TaskStatusQueries` — IsTaskComplete, IsTaskFailed, IsTaskRunning.\n- `TestWaveOrchestrator_RetryFailedTasksRestoresRunning` — retry transitions and state.\n\nAdd new tests for the three new methods:\n\n```go\nfunc TestRestoreToWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{3})\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n}\n\nfunc TestRestoreToWave_PartialCompletion(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{2}) // task 3 still running\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.True(t, orch.IsTaskComplete(2))\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestShouldPostWaveCompleteComment(t *testing.T) {\n\tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t}}\n\tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n\t}}\n\tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n\tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n\n\t// nil receiver safety\n\tvar nilOrch *WaveOrchestrator\n\tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n}\n\nfunc TestBuildTaskPrompt_Method(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"Test goal\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n\tassert.Contains(t, prompt, \"Task 1\")\n\tassert.Contains(t, prompt, \"Test goal\")\n\tassert.Contains(t, prompt, \"Wave 1 of 1\")\n\tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n}\n```\n\nCreate `orchestration/prompt_test.go` — adapt the two tests from `app/wave_prompt_test.go` (`TestBuildTaskPrompt`, `TestBuildTaskPrompt_SingleTask`) into `package orchestration`. Add:\n\n```go\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"my-feature.md\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n}\n```\n\n**Step 2: Run tests to verify they fail**\n\n```bash\ngo test ./orchestration/... -v\n```\n\nExpected: FAIL — package `orchestration` doesn't exist yet.\n\n**Step 3: Write implementation**\n\nCreate `orchestration/engine.go`:\n- Export `WaveState` type with 4 constants: `WaveStateIdle`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`.\n- Keep `taskStatus` type and constants unexported (only used internally by the engine).\n- `WaveOrchestrator` struct — same fields as current `app/wave_orchestrator.go`, all unexported.\n- `NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator` constructor.\n- All existing methods verbatim from `app/wave_orchestrator.go`: `State`, `TaskFile`, `TotalWaves`, `TotalTasks`, `CurrentWaveNumber`, `CurrentWaveTasks`, `StartNextWave`, `MarkTaskComplete`, `MarkTaskFailed`, `NeedsConfirm`, `ResetConfirm`, `RetryFailedTasks`, `IsCurrentWaveComplete`, `CompletedTaskCount`, `FailedTaskCount`, `IsTaskRunning`, `IsTaskComplete`, `IsTaskFailed`, `HeaderContext`, `checkWaveComplete`, `countCurrentWaveByStatus`.\n- New method `ShouldPostWaveCompleteComment() bool` — nil-receiver safe, returns `o != nil && o.TotalWaves() > 1`. Extracted from `app/clickup_progress.go:shouldPostWaveCompleteComment`.\n- New method `RestoreToWave(targetWave int, completedTasks []int)` — fast-forwards wave-by-wave to `targetWave`, auto-completing all tasks in earlier waves via `StartNextWave` + `MarkTaskComplete` loops, then marks the specified task numbers as complete in the target wave. Extracted from the manual fast-forward loop in `app/app_state.go:rebuildOrphanedOrchestrators` (lines 1637–1657).\n- New method `BuildTaskPrompt(task taskparser.Task, peerCount int) string` — convenience wrapper: `return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)`.\n\nCreate `orchestration/prompt.go`:\n- `BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` — moved verbatim from `app/wave_prompt.go:buildTaskPrompt`.\n- `BuildWaveAnnotationPrompt(planFile string) string` — moved from `app/app_state.go:buildWaveAnnotationPrompt` (lines 1341–1353).\n\n**Step 4: Run tests to verify they pass**\n\n```bash\ngo test ./orchestration/... -v\n```\n\nExpected: PASS — all engine and prompt tests green.\n\nAlso verify the existing app tests still pass (old code untouched):\n\n```bash\ngo test ./app/... -count=1\n```\n\nExpected: PASS.\n\n**Step 5: Commit**\n\n```bash\ngit add orchestration/\ngit commit -m \"feat: extract orchestration engine into standalone package\"\n```\n\n---\n\n## Wave 2: Rewire App Layer\n\n> **depends on wave 1:** Task 2 imports the `orchestration/` package created in Wave 1 to replace inline types and delegate to exported methods.\n\n### Task 2: Consolidate TUI wiring and rewire app imports\n\n**Files:**\n- Create: `app/wave_integration.go`\n- Create: `app/wave_integration_test.go`\n- Modify: `app/app.go`\n- Modify: `app/app_state.go`\n- Modify: `app/app_actions.go`\n- Modify: `app/app_input.go`\n- Modify: `app/clickup_progress.go`\n- Modify: `app/clickup_progress_test.go`\n- Delete: `app/wave_orchestrator.go`\n- Delete: `app/wave_prompt.go`\n- Delete: `app/wave_orchestrator_test.go`\n- Delete: `app/wave_prompt_test.go`\n- Test: `app/*_test.go` (all must pass unchanged via type aliases)\n\n**Step 1: Write failing test**\n\nCreate `app/wave_integration_test.go` with a compile-time type alias verification:\n\n```go\npackage app\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/orchestration\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestWaveIntegration_TypeAliasesResolve(t *testing.T) {\n\t// Verify type aliases resolve correctly to orchestration package types.\n\tassert.Equal(t, orchestration.WaveStateIdle, WaveStateIdle)\n\tassert.Equal(t, orchestration.WaveStateRunning, WaveStateRunning)\n\tassert.Equal(t, orchestration.WaveStateWaveComplete, WaveStateWaveComplete)\n\tassert.Equal(t, orchestration.WaveStateAllComplete, WaveStateAllComplete)\n}\n```\n\n**Step 2: Verify baseline**\n\n```bash\ngo test ./app/... -count=1\n```\n\nExpected: PASS — everything works before refactoring.\n\n**Step 3: Implement the consolidation**\n\n**3a. Create `app/wave_integration.go`** — the single file consolidating all orchestration TUI wiring:\n\nType aliases and constructor alias (preserve backwards compat for all test files):\n```go\npackage app\n\nimport \"github.com/kastheco/kasmos/orchestration\"\n\n// Type aliases — all app/ code and tests use these unqualified names.\ntype WaveOrchestrator = orchestration.WaveOrchestrator\ntype WaveState = orchestration.WaveState\n\n// Constructor alias.\nvar NewWaveOrchestrator = orchestration.NewWaveOrchestrator\n\n// Constant aliases.\nconst (\n\tWaveStateIdle         = orchestration.WaveStateIdle\n\tWaveStateRunning      = orchestration.WaveStateRunning\n\tWaveStateWaveComplete = orchestration.WaveStateWaveComplete\n\tWaveStateAllComplete  = orchestration.WaveStateAllComplete\n)\n```\n\nMove these into `wave_integration.go`:\n- **From `app/app.go`:** wave message types (`waveAdvanceMsg`, `waveRetryMsg`, `waveAbortMsg`, `waveAllCompleteMsg`) — cut from ~lines 1862–1883.\n- **From `app/app_state.go`:** methods `spawnWaveTasks`, `startNextWave`, `retryFailedWaveTasks`, `rebuildOrphanedOrchestrators` — cut from ~lines 1567–1765.\n- **From `app/app_input.go`:** methods `waveStandardConfirmAction`, `waveFailedConfirmAction` — cut from ~lines 1567–1602.\n\n**3b. Update `spawnWaveTasks`** (now in `wave_integration.go`):\n- Replace `buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))` with `orch.BuildTaskPrompt(task, len(tasks))`.\n\n**3c. Update `rebuildOrphanedOrchestrators`** (now in `wave_integration.go`):\n- Replace the manual fast-forward loop (lines 1625–1657 of app_state.go) with:\n```go\norch := orchestration.NewWaveOrchestrator(planFile, plan)\nvar completed []int\nfor _, t := range tasks {\n\tif t.waveNumber == targetWave && t.paused {\n\t\tcompleted = append(completed, t.taskNumber)\n\t}\n}\norch.RestoreToWave(targetWave, completed)\nm.waveOrchestrators[planFile] = orch\n```\n\n**3d. Fix direct field access in `app/app_state.go`** (~line 94):\n- Replace `switch orch.taskStates[task.Number]` with method-based switch:\n```go\nswitch {\ncase orch.IsTaskComplete(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphComplete\ncase orch.IsTaskFailed(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphFailed\ncase orch.IsTaskRunning(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphRunning\ndefault:\n\tdata.TaskGlyphs[i] = ui.TaskGlyphPending\n}\n```\nThis replaces the direct access to the unexported `taskStates` map and `taskComplete`/`taskFailed`/`taskRunning` constants.\n\n**3e. Update `app/app_actions.go`:**\n- Replace `buildWaveAnnotationPrompt(planFile)` with `orchestration.BuildWaveAnnotationPrompt(planFile)`.\n\n**3f. Update `app/clickup_progress.go`:**\n- Remove `shouldPostWaveCompleteComment` function (now `orch.ShouldPostWaveCompleteComment()` method).\n- Keep `resolveClickUpTaskID` and `postClickUpProgress` (standalone function) unchanged.\n\n**3g. Update callers of `shouldPostWaveCompleteComment` in `app/app.go`:**\n- `shouldPostWaveCompleteComment(orch)` → `orch.ShouldPostWaveCompleteComment()` (two call sites, ~lines 1326 and 1367).\n\n**3h. Update `app/clickup_progress_test.go`:**\n- `TestSingleWavePlanSkipsWaveComment`: replace `shouldPostWaveCompleteComment(singleOrch)` → `singleOrch.ShouldPostWaveCompleteComment()` and same for multi.\n- `TestShouldPostWaveCompleteCommentNilOrch`: replace `shouldPostWaveCompleteComment(nil)` → `var nilOrch *WaveOrchestrator; nilOrch.ShouldPostWaveCompleteComment()`.\n\n**3i. Move `TestBuildClickUpComment`** from `app/wave_orchestrator_test.go` to `app/clickup_progress_test.go` (it tests `buildClickUpProgressComment` which is a ClickUp formatter, not orchestration logic).\n\n**3j. Delete old files:**\n- `app/wave_orchestrator.go` — all code now in `orchestration/engine.go` + aliases in `wave_integration.go`.\n- `app/wave_prompt.go` — all code now in `orchestration/prompt.go`.\n- `app/wave_orchestrator_test.go` — orchestrator tests moved to `orchestration/engine_test.go`, ClickUp test moved to `clickup_progress_test.go`.\n- `app/wave_prompt_test.go` — tests moved to `orchestration/prompt_test.go`.\n\n**3k. Remove `buildWaveAnnotationPrompt` from `app/app_state.go`** (lines 1337–1353) — moved to `orchestration/prompt.go`.\n\n**Step 4: Run all tests to verify nothing broke**\n\n```bash\ngo build ./...\ngo test ./... -count=1\n```\n\nExpected: all compile, all PASS. The 1197-line `app_wave_orchestration_flow_test.go` and all other test files compile unchanged thanks to type aliases.\n\n**Step 5: Commit**\n\n```bash\ngit add orchestration/ app/\ngit commit -m \"refactor: consolidate wave TUI wiring into wave_integration.go, rewire to orchestration package\"\n```\n",
+              "additions": 318,
+              "deletions": 0,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "variant": "high",
+        "id": "msg_cb5e74408001ATowAonFQTSdUb",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "The plan at docs/plans/extract-orchestrator.md is missing ## Wave N headers required for kasmos wave orchestration. Please annotate the plan by wrapping all tasks under ## Wave N sections. Every plan needs at least ## Wave 1 — even single-task trivial plans. Keep all existing task content intact; only add the ## Wave headers.\n\nAfter annotating:\n1. Commit: git add docs/plans/extract-orchestrator.md && git commit -m \"plan: add wave headers to extract-orchestrator.md\"\n2. Signal completion: touch .kasmos/signals/planner-finished-extract-orchestrator.md\nDo not edit plan-state.json directly.",
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e74408001ATowAonFQTSdUb"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578358312,
+          "completed": 1772578363346
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40210,
+          "input": 3,
+          "output": 184,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 40023
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb5e744280010NEE4O2OKPUsCV",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "id": "prt_cb5e750190015nLnWaQk2jLRH0",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and reading the plan file.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/GPoIVcKElSAczKmaCrAWPasyerK/ZWPq4CZ/KBEY95dRKlYnalfjdq/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772578361370,
+            "end": 1772578362300
+          },
+          "id": "prt_cb5e7501a001UMLXv65On16rMc",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the task status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `<feature-name>.md`\n\nPlans are stored in the **task store** (SQLite database or HTTP API), not as files on disk.\nUse `kas task register` to register plans after writing content.\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it\nin the task store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas task register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-<feature-name>.md\n```\n\nthe filename must match the task filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify task state directly** — kasmos manages the task store.\n\nannounce completion and stop:\n\n> \"plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the task store using the CLI:\n\n```bash\nkas task register <feature-name>.md\n```\n\nthis creates an entry in the task store with status `ready`. the task content should be\nwritten to the store via `kas task` or committed as a `.md` file in `docs/plans/` for\n`kas task register` to pick up.\n\nthen offer execution choices:\n\n> \"plan complete: `<feature-name>.md` (registered in task store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578362754,
+              "end": 1772578362759
+            }
+          },
+          "id": "prt_cb5e753be001K81s5brfaVusca",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578363157,
+              "end": 1772578363161
+            }
+          },
+          "id": "prt_cb5e75583001pDCQDgExKOFTA7",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EE4mn5H3qu2eqAm6YPAMZt",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/extract-orchestrator.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/docs/plans/extract-orchestrator.md</path>\n<type>file</type>\n<content>\n\n(End of file - total 0 lines)\n</content>",
+            "title": "docs/plans/extract-orchestrator.md",
+            "metadata": {
+              "preview": "",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772578363304,
+              "end": 1772578363308
+            }
+          },
+          "id": "prt_cb5e757160019rfFQOiZqb4J31",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "cost": 0,
+          "tokens": {
+            "total": 40210,
+            "input": 3,
+            "output": 184,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 40023
+            }
+          },
+          "id": "prt_cb5e757bf001Hggy4E2q7Av6iw",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e744280010NEE4O2OKPUsCV"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578363347,
+          "completed": 1772578370009
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48530,
+          "input": 1,
+          "output": 329,
+          "reasoning": 0,
+          "cache": {
+            "read": 40023,
+            "write": 8177
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "id": "prt_cb5e75f2c001E095sXK2Z48rax",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "The plan file is empty. Let me check if it exists but is empty, or if there's content somewhere else. Let me also check the task store and recent git history for context about this plan.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/BHILNjfiLopDB+xm/REDACTED/DueTRisz6YytQbSjZ9/pRdMWl6deRW8U9upiwPuP8UUBgB"
+            }
+          },
+          "time": {
+            "start": 1772578365228,
+            "end": 1772578366883
+          },
+          "id": "prt_cb5e75f2c002f95BzvICII11wn",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "The file exists but is empty. Let me check git history and the task store for the plan content.",
+          "time": {
+            "start": 1772578367376,
+            "end": 1772578367376
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --all --oneline -- docs/plans/extract-orchestrator.md 2>/dev/null; echo \"---\"; git log --oneline -10",
+              "description": "Check git history for the plan file"
+            },
+            "output": "831b022 carry forward: uncommitted session files\n5a3ec0d Plan extract-orchestrator. Goal: Extract Orchestration Engine. Use the `\n75c15e1 carry forward: uncommitted session files\n16c5116 carry forward: uncommitted session files\n78c0b88 carry forward: uncommitted session files\na9e8b01 carry forward: uncommitted session files\nacaa6c4 Claude Code session updates\n7ad1d59 carry forward: uncommitted session files\n64d3366 Claude Code session updates\n82ae4d3 Claude Code session updates\nb07a341 02a-rewrite-session-core was just approved, bring it into release/2.0\nc88a61f Claude Code session updates\n5cbd884 Implement Task 3: Rewrite cli_prompt.go and notify.go — Small Utilities\nc4b2a86 Claude Code session updates\n6eaf70d Claude Code session updates\nc616487 Claude Code session updates\n9e7c4b3 Claude Code session updates\ndc9ba47 Claude Code session updates\n77b4a94 Just commit and push\n8b13aba carry forward: uncommitted session files\nfd39239 I was away from my computer, and when I came back, it looks like the rew\n5148439 Claude Code session updates\ncef66fa Claude Code session updates\n40fc99d plan: rename clean-room plans with parallel-aware prefixes (01a/01b, 02a/02b)\n---\n0002390 fix: context menu wrapping by accounting for component decoration widths\nf566bca fix: pin legend directly above audit log with fixed 1-line gap\n778cc2d fix: use single-width lightning icon (↯) for wave events in audit log\n0713e50 fix: cap audit log pane at 50% of nav panel height\nb1186d9 fix: correct audit line continuation check that was hiding all log events\na67efa3 fix: stabilize audit log height and show review cycle number in nav panel\nbc4b366 merge plan branch plan/fix-kas-task-usage\na7ed52c fix(task-2): complete plan store→task store rename in http.go, taskstate.go, http_test.go, and app_actions.go\n9ef3457 fix: reserve audit pane space in nav panel to prevent log flicker on resize\n548ad6c fix: update contract test assertions to match plan→task rename (reviewer self-fix)\n",
+            "title": "Check git history for the plan file",
+            "metadata": {
+              "output": "831b022 carry forward: uncommitted session files\n5a3ec0d Plan extract-orchestrator. Goal: Extract Orchestration Engine. Use the `\n75c15e1 carry forward: uncommitted session files\n16c5116 carry forward: uncommitted session files\n78c0b88 carry forward: uncommitted session files\na9e8b01 carry forward: uncommitted session files\nacaa6c4 Claude Code session updates\n7ad1d59 carry forward: uncommitted session files\n64d3366 Claude Code session updates\n82ae4d3 Claude Code session updates\nb07a341 02a-rewrite-session-core was just approved, bring it into release/2.0\nc88a61f Claude Code session updates\n5cbd884 Implement Task 3: Rewrite cli_prompt.go and notify.go — Small Utilities\nc4b2a86 Claude Code session updates\n6eaf70d Claude Code session updates\nc616487 Claude Code session updates\n9e7c4b3 Claude Code session updates\ndc9ba47 Claude Code session updates\n77b4a94 Just commit and push\n8b13aba carry forward: uncommitted session files\nfd39239 I was away from my computer, and when I came back, it looks like the rew\n5148439 Claude Code session updates\ncef66fa Claude Code session updates\n40fc99d plan: rename clean-room plans with parallel-aware prefixes (01a/01b, 02a/02b)\n---\n0002390 fix: context menu wrapping by accounting for component decoration widths\nf566bca fix: pin legend directly above audit log with fixed 1-line gap\n778cc2d fix: use single-width lightning icon (↯) for wave events in audit log\n0713e50 fix: cap audit log pane at 50% of nav panel height\nb1186d9 fix: correct audit line continuation check that was hiding all log events\na67efa3 fix: stabilize audit log height and show review cycle number in nav panel\nbc4b366 merge plan branch plan/fix-kas-task-usage\na7ed52c fix(task-2): complete plan store→task store rename in http.go, taskstate.go, http_test.go, and app_actions.go\n9ef3457 fix: reserve audit pane space in nav panel to prevent log flicker on resize\n548ad6c fix: update contract test assertions to match plan→task rename (reviewer self-fix)\n",
+              "exit": 0,
+              "description": "Check git history for the plan file",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578368809,
+              "end": 1772578368960
+            }
+          },
+          "id": "prt_cb5e76790001b2StplUJqTtFnY",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Tpc4vKccfRM7a2DjUfA6ta",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task list 2>/dev/null || echo \"kas task list not available\"",
+              "description": "Check task store for plan"
+            },
+            "output": "cancelled      01-rewrite-tmux-layer.md                           plan/01-rewrite-tmux-layer\ndone           01a-rewrite-tmux-layer.md                          plan/01a-rewrite-tmux-layer\ndone           01b-rewrite-git-layer.md                           plan/01b-rewrite-git-layer\ncancelled      02-rewrite-git-layer.md                            plan/02-rewrite-git-layer\ndone           02a-rewrite-session-core.md                        plan/02a-rewrite-session-core\ndone           02b-rewrite-overlay-ui.md                          plan/02b-rewrite-overlay-ui\ncancelled      03-rewrite-session-core.md                         plan/03-rewrite-session-core\ndone           03-rewrite-ui-panels.md                            plan/03-rewrite-ui-panels\ncancelled      04-rewrite-overlay-ui.md                           plan/04-rewrite-overlay-ui\ndone           04-rewrite-plumbing.md                             plan/04-rewrite-plumbing\ncancelled      05-rewrite-ui-panels.md                            plan/05-rewrite-ui-panels\ncancelled      06-rewrite-plumbing.md                             plan/06-rewrite-plumbing\ndone           1a-tree-renderer.md                                kas/1a-tree-renderer-plan\ndone           1b-tree-navigation.md                              kas/1b-tree-navigation-plan\ndone           1c-highlight-boost-list.md                         plan/1c-highlight-boost-list\ndone           2-tree-mode-wiring.md                              plan/2-tree-mode-wiring\ncancelled      add-episodic-memory.md                             plan/add-episodic-memory\ndone           agent-customize-gate.md\ndone           ai-slugs-not-working.md                            plan/ai-slugs-not-working\ndone           alt-v-not-working.md                               plan/alt-v-not-working\ndone           always-focus-sidebar.md                            plan/always-focus-sidebar\ndone           async-metadata-tick.md\ndone           audit-log.md                                       plan/audit-log\ndone           auto-advance-waves.md                              plan/auto-advance-waves\ndone           automatic-session-naming.md                        plan/automatic-session-naming\ndone           bubblezone-mouse.md                                plan/bubblezone\ncancelled      build-custom-skills-replaced.md                    plan/build-custom-skills\ndone           canceled-plans-delay-removal.md                    plan/canceled-plans-delay-removal\nready          cant-see-successful-review.md                      plan/cant-see-successful-review\ndone           center-col-v-align.md                              plan/center-col-v-align\ncancelled      center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\nready          charm-v2-upgrade.md                                plan/charm-v2-upgrade\ndone           chat-about-this-menu-option-that-opens-up.md       plan/chat-about-this-menu-option-that-opens-up\ndone           chat-and-custodial-customizations.md               plan/chat-and-custodial-customizations\nready          cleanup-prompts.md                                 plan/cleanup-prompts\ndone           cleanup-superpowers-cmds.md                        plan/cleanup-superpowers-cmds\nready          cleanup-tracked-state.md                           plan/cleanup-tracked-state\ncancelled      click-events-interactive.md                        plan/click-events-interactive\ndone           clickup-import.md                                  plan/clickup-import\ndone           contextual-status-bar.md                           plan/contextual-status-bar\ndone           create-fix-agent-and-skill.md                      plan/create-a-debugging-skill-and-agent-type-should\ndone           create-kasmos-custodial-agent.md                   plan/create-kasmos-custodial-agent\ncancelled      ctrl-ud-pagination.md                              plan/ctrl-ud-pagination\ndone           custodian-version-bump.md\ndone           customize-superpowers.md                           plan/customize-superpowers\ndone           details-tab.md                                     plan/details-tab\ndone           detect-allow-perms.md                              plan/detect-allow-perms\ncancelled      detect-permissions-needed.md                       plan/detect-permissions-needed\ndone           disable-cache-focused.md                           plan/disable-cache-focused\ndone           disable-cla-for-prs.md                             plan/disable-cla-for-prs\ndone           dupe-task-after-plan-change.md                     plan/dupe-task-after-plan-change\ndone           enforce-cli-tools.md                               plan/enforce-cli-tools\ndone           enter-not-reachable.md                             plan/enter-not-reachable\nplanning       extract-orchestrator.md                            plan/extract-orchestrator\ndone           fix-kas-task-usage.md                              plan/fix-kas-task-usage\ndone           fix-naming-and-toast-wrap.md\ndone           fix-plan-state-machine.md\ndone           fix-planner-missing-waves.md                       plan/fix-planner-missing-waves\ndone           fix-wave-header-generation.md                      plan/fix-wave-header-generation\ndone           generate-opencode-jsonc-design.md\ndone           generate-opencode-jsonc.md\ndone           global-skill-sync.md\ndone           have-to-kill-twice.md                              plan/have-to-kill-twice\ncancelled      implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\ndone           improve-cli-tools.md                               plan/improve-cli-tools\ndone           improve-plan-storage-system.md                     plan/improve-plan-storage-system\ncancelled      improve-planner-to-implementation.md               plan/improve-planner-to-implementation\nready          improved-info-tab.md                               plan/improved-info-tab\ndone           init-wizard-refinements.md\nready          instance-management-cli.md                         plan/instance-management-cli\ncancelled      kas-cli-plans.md                                   plan/kas-cli-plans\ndone           kas-verify-loop.md                                 plan/kas-verify-loop\ndone           kasmos-custom-skills.md                            plan/kasmos-custom-skills\ndone           kasmos-native-skills-design.md\ndone           kasmos-native-skills.md\ndone           kq-check.md\ndone           kq-init-design.md\ndone           legend-spacing-issue.md                            plan/legend-spacing-issue\ndone           live-preview-terminal.md                           plan/live-preview-terminal\ncancelled      new-plan-cli-command.md                            plan/new-cli-command\ndone           new-plan-issues.md                                 plan/new-plan-issues\ndone           new-plan-tab-cycle.md                              plan/new-plan-tab-cycle\ncancelled      no-plan-to-implement-prompt.md                     plan/no-plan-to-implement-prompt\ndone           opencode-default-harness.md                        plan/opencode-default-harness\ncancelled      orphan-session-recovery.md                         plan/orphan-session-recovery\ndone           osc11-terminal-bg-design.md\ndone           osc11-terminal-bg.md\ncancelled      parallel-fix-agents.md                             plan/parallel-fix-agents\ncancelled      parallelize-superpowers.md                         plan/parallelize-superpowers\ncancelled      plan-centric-sidebar.md\ndone           plan-cli-repo-flag-and-templates.md                plan/plan-cli-repo-flag-and-templates\nready          plan-content-to-database.md                        plan/plan-content-to-database\ndone           plan-instance-grouping.md\ndone           plan-lifecycle-sessions.md\ndone           plan-orchestration-design.md\ndone           plan-orchestration.md\ndone           plan-review.md                                     plan/plan-review\ndone           plan-state-machine.md                              plan/plan-state-machine\ndone           plan-status-cli-bugs.md                            plan/plan-status-cli-bugs\ndone           planner-exit-prompt.md\ncancelled      preview-plan-broken.md                             plan/preview-plan-broken\ndone           project-dir-missing-from-status.md                 plan/project-dir-missing-from-status\ndone           project-skills-distribution.md\ndone           prompt-via-cli.md                                  plan/prompt-via-cli\ndone           quit-confirmation-dialog.md                        plan/quit-confirmation-dialog\ndone           redesign-instance-list.md\ncancelled      reintegrate-auto-accept.md                         plan/reintegrate-auto-accept\ndone           release-1-0-0-failures.md                          plan/release-1-0-0-failures\ndone           release-v1-0-0.md                                  plan/release-v1-0-0\ndone           release-v1-1.md                                    plan/release-v1-1\ndone           reliable-planner-completion.md                     plan/reliable-planner-completion\ndone           remove-date-from-plan-slugs.md                     plan/remove-date-from-plan-slugs\ndone           remove-right-sidbar-right-to-focus-session.md      plan/remove-right-sidbar-right-to-focus-session\ndone           rename-plan-menu.md                                plan/rename-plan-menu\ndone           rename-plan-to-task.md                             plan/rename-plan-to-task\ndone           rename-to-kasmos.md                                plan/rename-to-kasmos\ndone           restart-agent.md                                   plan/restart-agent\ndone           review-approval-gate.md                            plan/review-approval-gate\ndone           review-cycle-count-should-be-included.md           plan/review-cycle-count-should-be-included\ndone           review-didnt-autostart.md                          plan/review-didnt-autostart\nready          review-start-causes-freeze.md                      plan/review-start-causes-freeze\nready          review-use-kas-verify.md                           plan/review-use-kas-verify\ndone           rose-pine-moon-design.md\ndone           rose-pine-moon.md\ndone           scroll-overflow.md                                 plan/scroll-overflow\nready          sentry-analysis.md                                 plan/sentry-analysis\ndone           sentry-integration.md                              plan/sentry-integration\ndone           separate-logs-by-minute.md                         plan/separate-logs-by-minute\ndone           set-status-context-menu.md                         plan/set-status-context-menu\ndone           shorten-cta.md                                     plan/shorten-cta\ndone           show-plan-name-for-topics.md                       plan/show-plan-name-for-topics\ndone           sidebar-nav-showhide.md\ndone           sidebar-toggle-design.md\ndone           sidebar-toggle.md\ndone           simplify-new-plan.md                               plan/simplify-new-plan\ndone           simplify-plan-creation.md                          plan/simplify-plan-creation\ndone           skip-plan-slug-ai-generation.md                    plan/skip-plan-slug-ai-generation\ndone           solo-agent-mode.md                                 plan/solo-agent-mode\ndone           spawn-agent.md                                     plan/spawn-agent\ndone           spring.md                                          plan/spring\ndone           stepthrough-worktrees.md                           plan/stepthrough-worktrees\ndone           tab-focus-ring.md\ndone           task-orchestration-design.md\ndone           task-orchestration.md\ndone           tmux-session-browser.md                            plan/tmux-session-browser\ndone           tmux-session-summary.md                            plan/tmux-session-summary\ndone           tool-discovery-design.md\ndone           topics-as-collision-domains-design.md\ndone           topics-collision-domains.md\ndone           update-ascii-art.md                                plan/update-ascii-art\ndone           update-clickup-with-progress.md                    plan/update-clickup-with-progress\ndone           update-shortcut-hints.md                           plan/update-shortcut-hints\ncancelled      validate-recent-merges.md                          plan/validate-recent-merges\ndone           wave-orchestration.md                              plan/wave-orchestration\nready          web-ui.md                                          plan/web-ui\ndone           wizard-tui-redesign.md                             plan/wizard-tui-redesign\ndone           wizard-ux-design.md\ndone           wizard-ux.md\ndone           yes-keybind.md                                     plan/yes-keybind\n",
+            "title": "Check task store for plan",
+            "metadata": {
+              "output": "cancelled      01-rewrite-tmux-layer.md                           plan/01-rewrite-tmux-layer\ndone           01a-rewrite-tmux-layer.md                          plan/01a-rewrite-tmux-layer\ndone           01b-rewrite-git-layer.md                           plan/01b-rewrite-git-layer\ncancelled      02-rewrite-git-layer.md                            plan/02-rewrite-git-layer\ndone           02a-rewrite-session-core.md                        plan/02a-rewrite-session-core\ndone           02b-rewrite-overlay-ui.md                          plan/02b-rewrite-overlay-ui\ncancelled      03-rewrite-session-core.md                         plan/03-rewrite-session-core\ndone           03-rewrite-ui-panels.md                            plan/03-rewrite-ui-panels\ncancelled      04-rewrite-overlay-ui.md                           plan/04-rewrite-overlay-ui\ndone           04-rewrite-plumbing.md                             plan/04-rewrite-plumbing\ncancelled      05-rewrite-ui-panels.md                            plan/05-rewrite-ui-panels\ncancelled      06-rewrite-plumbing.md                             plan/06-rewrite-plumbing\ndone           1a-tree-renderer.md                                kas/1a-tree-renderer-plan\ndone           1b-tree-navigation.md                              kas/1b-tree-navigation-plan\ndone           1c-highlight-boost-list.md                         plan/1c-highlight-boost-list\ndone           2-tree-mode-wiring.md                              plan/2-tree-mode-wiring\ncancelled      add-episodic-memory.md                             plan/add-episodic-memory\ndone           agent-customize-gate.md\ndone           ai-slugs-not-working.md                            plan/ai-slugs-not-working\ndone           alt-v-not-working.md                               plan/alt-v-not-working\ndone           always-focus-sidebar.md                            plan/always-focus-sidebar\ndone           async-metadata-tick.md\ndone           audit-log.md                                       plan/audit-log\ndone           auto-advance-waves.md                              plan/auto-advance-waves\ndone           automatic-session-naming.md                        plan/automatic-session-naming\ndone           bubblezone-mouse.md                                plan/bubblezone\ncancelled      build-custom-skills-replaced.md                    plan/build-custom-skills\ndone           canceled-plans-delay-removal.md                    plan/canceled-plans-delay-removal\nready          cant-see-successful-review.md                      plan/cant-see-successful-review\ndone           center-col-v-align.md                              plan/center-col-v-align\ncancelled      center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\nready          charm-v2-upgrade.md                                plan/charm-v2-upgrade\ndone           chat-about-this-menu-option-that-opens-up.md       plan/chat-about-this-menu-option-that-opens-up\ndone           chat-and-custodial-customizations.md               plan/chat-and-custodial-customizations\nready          cleanup-prompts.md                                 plan/cleanup-prompts\ndone           cleanup-superpowers-cmds.md                        plan/cleanup-superpowers-cmds\nready          cleanup-tracked-state.md                           plan/cleanup-tracked-state\ncancelled      click-events-interactive.md                        plan/click-events-interactive\ndone           clickup-import.md                                  plan/clickup-import\ndone           contextual-status-bar.md                           plan/contextual-status-bar\ndone           create-fix-agent-and-skill.md                      plan/create-a-debugging-skill-and-agent-type-should\ndone           create-kasmos-custodial-agent.md                   plan/create-kasmos-custodial-agent\ncancelled      ctrl-ud-pagination.md                              plan/ctrl-ud-pagination\ndone           custodian-version-bump.md\ndone           customize-superpowers.md                           plan/customize-superpowers\ndone           details-tab.md                                     plan/details-tab\ndone           detect-allow-perms.md                              plan/detect-allow-perms\ncancelled      detect-permissions-needed.md                       plan/detect-permissions-needed\ndone           disable-cache-focused.md                           plan/disable-cache-focused\ndone           disable-cla-for-prs.md                             plan/disable-cla-for-prs\ndone           dupe-task-after-plan-change.md                     plan/dupe-task-after-plan-change\ndone           enforce-cli-tools.md                               plan/enforce-cli-tools\ndone           enter-not-reachable.md                             plan/enter-not-reachable\nplanning       extract-orchestrator.md                            plan/extract-orchestrator\ndone           fix-kas-task-usage.md                              plan/fix-kas-task-usage\ndone           fix-naming-and-toast-wrap.md\ndone           fix-plan-state-machine.md\ndone           fix-planner-missing-waves.md                       plan/fix-planner-missing-waves\ndone           fix-wave-header-generation.md                      plan/fix-wave-header-generation\ndone           generate-opencode-jsonc-design.md\ndone           generate-opencode-jsonc.md\ndone           global-skill-sync.md\ndone           have-to-kill-twice.md                              plan/have-to-kill-twice\ncancelled      implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\ndone           improve-cli-tools.md                               plan/improve-cli-tools\ndone           improve-plan-storage-system.md                     plan/improve-plan-storage-system\ncancelled      improve-planner-to-implementation.md               plan/improve-planner-to-implementation\nready          improved-info-tab.md                               plan/improved-info-tab\ndone           init-wizard-refinements.md\nready          instance-management-cli.md                         plan/instance-management-cli\ncancelled      kas-cli-plans.md                                   plan/kas-cli-plans\ndone           kas-verify-loop.md                                 plan/kas-verify-loop\ndone           kasmos-custom-skills.md                            plan/kasmos-custom-skills\ndone           kasmos-native-skills-design.md\ndone           kasmos-native-skills.md\ndone           kq-check.md\ndone           kq-init-design.md\ndone           legend-spacing-issue.md                            plan/legend-spacing-issue\ndone           live-preview-terminal.md                           plan/live-preview-terminal\ncancelled      new-plan-cli-command.md                            plan/new-cli-command\ndone           new-plan-issues.md                                 plan/new-plan-issues\ndone           new-plan-tab-cycle.md                              plan/new-plan-tab-cycle\ncancelled      no-plan-to-implement-prompt.md                     plan/no-plan-to-implement-prompt\ndone           opencode-default-harness.md                        plan/opencode-default-harness\ncancelled      orphan-session-recovery.md                         plan/orphan-session-recovery\ndone           osc11-terminal-bg-design.md\ndone           osc11-terminal-bg.md\ncancelled      parallel-fix-agents.md                             plan/parallel-fix-agents\ncancelled      parallelize-superpowers.md                         plan/parallelize-superpowers\ncancelled      plan-centric-sidebar.md\ndone           plan-cli-repo-flag-and-templates.md                plan/plan-cli-repo-flag-and-templates\nready          plan-content-to-database.md                        plan/plan-content-to-database\ndone           plan-instance-grouping.md\ndone           plan-lifecycle-sessions.md\ndone           plan-orchestration-design.md\ndone           plan-orchestration.md\ndone           plan-review.md                                     plan/plan-review\ndone           plan-state-machine.md                              plan/plan-state-machine\ndone           plan-status-cli-bugs.md                            plan/plan-status-cli-bugs\ndone           planner-exit-prompt.md\ncancelled      preview-plan-broken.md                             plan/preview-plan-broken\ndone           project-dir-missing-from-status.md                 plan/project-dir-missing-from-status\ndone           project-skills-distribution.md\ndone           prompt-via-cli.md                                  plan/prompt-via-cli\ndone           quit-confirmation-dialog.md                        plan/quit-confirmation-dialog\ndone           redesign-instance-list.md\ncancelled      reintegrate-auto-accept.md                         plan/reintegrate-auto-accept\ndone           release-1-0-0-failures.md                          plan/release-1-0-0-failures\ndone           release-v1-0-0.md                                  plan/release-v1-0-0\ndone           release-v1-1.md                                    plan/release-v1-1\ndone           reliable-planner-completion.md                     plan/reliable-planner-completion\ndone           remove-date-from-plan-slugs.md                     plan/remove-date-from-plan-slugs\ndone           remove-right-sidbar-right-to-focus-session.md      plan/remove-right-sidbar-right-to-focus-session\ndone           rename-plan-menu.md                                plan/rename-plan-menu\ndone           rename-plan-to-task.md                             plan/rename-plan-to-task\ndone           rename-to-kasmos.md                                plan/rename-to-kasmos\ndone           restart-agent.md                                   plan/restart-agent\ndone           review-approval-gate.md                            plan/review-approval-gate\ndone           review-cycle-count-should-be-included.md           plan/review-cycle-count-should-be-included\ndone           review-didnt-autostart.md                          plan/review-didnt-autostart\nready          review-start-causes-freeze.md                      plan/review-start-causes-freeze\nready          review-use-kas-verify.md                           plan/review-use-kas-verify\ndone           rose-pine-moon-design.md\ndone           rose-pine-moon.md\ndone           scroll-overflow.md                                 plan/scroll-overflow\nready          sentry-analysis.md                                 plan/sentry-analysis\ndone           sentry-integration.md                              plan/sentry-integration\ndone           separate-logs-by-minute.md                         plan/separate-logs-by-minute\ndone           set-status-context-menu.md                         plan/set-status-context-menu\ndone           shorten-cta.md                                     plan/shorten-cta\ndone           show-plan-name-for-topics.md                       plan/show-plan-name-for-topics\ndone           sidebar-nav-showhide.md\ndone           sidebar-toggle-design.md\ndone           sidebar-toggle.md\ndone           simplify-new-plan.md                               plan/simplify-new-plan\ndone           simplify-plan-creation.md                          plan/simplify-plan-creation\ndone           skip-plan-slug-ai-generation.md                    plan/skip-plan-slug-ai-generation\ndone           solo-agent-mode.md                                 plan/solo-agent-mode\ndone           spawn-agent.md                                     plan/spawn-agent\ndone           spring.md                                          plan/spring\ndone           stepthrough-worktrees.md                           plan/stepthrough-worktrees\ndone           tab-focus-ring.md\ndone           task-orchestration-design.md\ndone           task-orchestration.md\ndone           tmux-session-browser.md                            plan/tmux-session-browser\ndone           tmux-session-summary.md                            plan/tmux-session-summary\ndone           tool-discovery-design.md\ndone           topics-as-collision-domains-design.md\ndone           topics-collision-domains.md\ndone           update-ascii-art.md                                plan/update-ascii-art\ndone           update-clickup-with-progress.md                    plan/update-clickup-with-progress\ndone           update-shortcut-hints.md                           plan/update-shortcut-hints\ncancelled      validate-recent-merges.md                          plan/validate-recent-merges\ndone           wave-orchestration.md                              plan/wave-orchestration\nready          web-ui.md                                          plan/web-ui\ndone           wizard-tui-redesign.md                             plan/wizard-tui-redesign\ndone           wizard-ux-design.md\ndone           wizard-ux.md\ndone           yes-keybind.md                                     plan/yes-keybind\n",
+              "exit": 0,
+              "description": "Check task store for plan",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578369714,
+              "end": 1772578369734
+            }
+          },
+          "id": "prt_cb5e76d2a001W60T2QCzjUhggp",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TPc26yGsL9yx6aVBDyz9yt",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "fd extract-orchestrator",
+              "description": "Find all extract-orchestrator files"
+            },
+            "output": "docs/plans/extract-orchestrator.md\nextract-orchestrator.md\n",
+            "title": "Find all extract-orchestrator files",
+            "metadata": {
+              "output": "docs/plans/extract-orchestrator.md\nextract-orchestrator.md\n",
+              "exit": 0,
+              "description": "Find all extract-orchestrator files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578369979,
+              "end": 1772578369992
+            }
+          },
+          "id": "prt_cb5e770b5001fgMWcvkPzRty7G",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "cost": 0,
+          "tokens": {
+            "total": 48530,
+            "input": 1,
+            "output": 329,
+            "reasoning": 0,
+            "cache": {
+              "read": 40023,
+              "write": 8177
+            }
+          },
+          "id": "prt_cb5e771ce001lhvpRS0Xol04sm",
+          "sessionID": "REDACTED",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578370010,
+          "completed": 1772578377631
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 52736,
+          "input": 1,
+          "output": 326,
+          "reasoning": 0,
+          "cache": {
+            "read": 48200,
+            "write": 4209
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb5e771d9001m2hALkN2E77oj8",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "id": "prt_cb5e77b4a00151qb0WHl1Wx9mK",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "reasoning",
+          "text": "The file on disk is empty but the task store has the plan with status `planning`. The plan content was committed in `5a3ec0d`. Let me check that commit for the plan content, and also check the root-level `extract-orchestrator.md` file.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/QogE/FaziWK7x4Wny+KgX2nAqu0L6ziLEbNFK0NL/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772578372427,
+            "end": 1772578374129
+          },
+          "id": "prt_cb5e77b4b001tNcIxNObF61d1I",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "text",
+          "text": "The file on disk is empty. Let me check the commit that originally added it and the root-level file.",
+          "time": {
+            "start": 1772578375082,
+            "end": 1772578375082
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Hybb9z7A89u8VGPQgSGrAr",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git show 5a3ec0d -- docs/plans/extract-orchestrator.md",
+              "description": "Show plan content from original commit"
+            },
+            "output": "commit 5a3ec0d6c9b71f5b07afd036ac13360f63fedc7e\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 16:22:18 2026 -0600\n\n    Plan extract-orchestrator. Goal: Extract Orchestration Engine. Use the `\n    \n    Entire-Metadata: .entire/metadata/ses_34a36422bffeAvW2HqXg6jxItf\n    Entire-Session: ses_34a36422bffeAvW2HqXg6jxItf\n    Entire-Strategy: manual-commit\n\ndiff --git a/docs/plans/extract-orchestrator.md b/docs/plans/extract-orchestrator.md\nnew file mode 100644\nindex 0000000..e69de29\n",
+            "title": "Show plan content from original commit",
+            "metadata": {
+              "output": "commit 5a3ec0d6c9b71f5b07afd036ac13360f63fedc7e\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 16:22:18 2026 -0600\n\n    Plan extract-orchestrator. Goal: Extract Orchestration Engine. Use the `\n    \n    Entire-Metadata: .entire/metadata/ses_34a36422bffeAvW2HqXg6jxItf\n    Entire-Session: ses_34a36422bffeAvW2HqXg6jxItf\n    Entire-Strategy: manual-commit\n\ndiff --git a/docs/plans/extract-orchestrator.md b/docs/plans/extract-orchestrator.md\nnew file mode 100644\nindex 0000000..e69de29\n",
+              "exit": 0,
+              "description": "Show plan content from original commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578376044,
+              "end": 1772578376051
+            }
+          },
+          "id": "prt_cb5e785ad001bbQ7o9InqblHcc",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/extract-orchestrator.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/extract-orchestrator.md</path>\n<type>file</type>\n<content>1: # Extract Orchestration Engine Implementation Plan\n2: \n3: **Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n4: \n5: **Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n6: \n7: **Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n8: \n9: **Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n10: \n11: ---\n12: \n13: ## Wave 1: Extract Core Engine\n14: \n15: ### Task 1: Create orchestration package with engine and prompt builders\n16: \n17: **Files:**\n18: - Create: `orchestration/engine.go`\n19: - Create: `orchestration/prompt.go`\n20: - Create: `orchestration/engine_test.go`\n21: - Create: `orchestration/prompt_test.go`\n22: \n23: **Step 1: Write failing tests**\n24: \n25: Create `orchestration/engine_test.go` — adapt all orchestrator tests from `app/wave_orchestrator_test.go` into `package orchestration` (do NOT copy `TestBuildClickUpComment` — that tests ClickUp formatting and stays in `app/`). The adapted tests are:\n26: \n27: - `TestNewWaveOrchestrator` — verify State, TotalWaves, TotalTasks after construction.\n28: - `TestWaveOrchestrator_StartWave` — start wave 1, check Running state and task list.\n29: - `TestWaveOrchestrator_TaskCompleted` — mark tasks complete, verify wave completion.\n30: - `TestWaveOrchestrator_TaskFailed` — mark task failed, verify counts.\n31: - `TestWaveOrchestrator_MultiWaveProgression` — two-wave lifecycle.\n32: - `TestWaveOrchestrator_AllComplete` — single-wave plan completes to AllComplete.\n33: - `TestWaveOrchestrator_ResetConfirmAllowsReprompt` — NeedsConfirm one-shot latch + reset.\n34: - `TestIsTaskRunning` — verify running/complete/unknown task queries.\n35: - `TestWaveOrchestrator_TaskStatusQueries` — IsTaskComplete, IsTaskFailed, IsTaskRunning.\n36: - `TestWaveOrchestrator_RetryFailedTasksRestoresRunning` — retry transitions and state.\n37: \n38: Add new tests for the three new methods:\n39: \n40: ```go\n41: func TestRestoreToWave(t *testing.T) {\n42: \tplan := &taskparser.Plan{\n43: \t\tWaves: []taskparser.Wave{\n44: \t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n45: \t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n46: \t\t},\n47: \t}\n48: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n49: \torch.RestoreToWave(2, []int{3})\n50: \tassert.Equal(t, WaveStateAllComplete, orch.State())\n51: \tassert.Equal(t, 2, orch.CurrentWaveNumber())\n52: }\n53: \n54: func TestRestoreToWave_PartialCompletion(t *testing.T) {\n55: \tplan := &taskparser.Plan{\n56: \t\tWaves: []taskparser.Wave{\n57: \t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n58: \t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n59: \t\t},\n60: \t}\n61: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n62: \torch.RestoreToWave(2, []int{2}) // task 3 still running\n63: \tassert.Equal(t, WaveStateRunning, orch.State())\n64: \tassert.True(t, orch.IsTaskComplete(2))\n65: \tassert.True(t, orch.IsTaskRunning(3))\n66: }\n67: \n68: func TestShouldPostWaveCompleteComment(t *testing.T) {\n69: \tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n70: \t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n71: \t}}\n72: \tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n73: \t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n74: \t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n75: \t}}\n76: \tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n77: \tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n78: \n79: \t// nil receiver safety\n80: \tvar nilOrch *WaveOrchestrator\n81: \tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n82: }\n83: \n84: func TestBuildTaskPrompt_Method(t *testing.T) {\n85: \tplan := &taskparser.Plan{\n86: \t\tGoal: \"Test goal\",\n87: \t\tWaves: []taskparser.Wave{\n88: \t\t\t{Number: 1, Tasks: []taskparser.Task{\n89: \t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n90: \t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n91: \t\t\t}},\n92: \t\t},\n93: \t}\n94: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n95: \torch.StartNextWave()\n96: \tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n97: \tassert.Contains(t, prompt, \"Task 1\")\n98: \tassert.Contains(t, prompt, \"Test goal\")\n99: \tassert.Contains(t, prompt, \"Wave 1 of 1\")\n100: \tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n101: }\n102: ```\n103: \n104: Create `orchestration/prompt_test.go` — adapt the two tests from `app/wave_prompt_test.go` (`TestBuildTaskPrompt`, `TestBuildTaskPrompt_SingleTask`) into `package orchestration`. Add:\n105: \n106: ```go\n107: func TestBuildWaveAnnotationPrompt(t *testing.T) {\n108: \tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n109: \tassert.Contains(t, prompt, \"## Wave\")\n110: \tassert.Contains(t, prompt, \"my-feature.md\")\n111: \tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n112: }\n113: ```\n114: \n115: **Step 2: Run tests to verify they fail**\n116: \n117: ```bash\n118: go test ./orchestration/... -v\n119: ```\n120: \n121: Expected: FAIL — package `orchestration` doesn't exist yet.\n122: \n123: **Step 3: Write implementation**\n124: \n125: Create `orchestration/engine.go`:\n126: - Export `WaveState` type with 4 constants: `WaveStateIdle`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`.\n127: - Keep `taskStatus` type and constants unexported (only used internally by the engine).\n128: - `WaveOrchestrator` struct — same fields as current `app/wave_orchestrator.go`, all unexported.\n129: - `NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator` constructor.\n130: - All existing methods verbatim from `app/wave_orchestrator.go`: `State`, `TaskFile`, `TotalWaves`, `TotalTasks`, `CurrentWaveNumber`, `CurrentWaveTasks`, `StartNextWave`, `MarkTaskComplete`, `MarkTaskFailed`, `NeedsConfirm`, `ResetConfirm`, `RetryFailedTasks`, `IsCurrentWaveComplete`, `CompletedTaskCount`, `FailedTaskCount`, `IsTaskRunning`, `IsTaskComplete`, `IsTaskFailed`, `HeaderContext`, `checkWaveComplete`, `countCurrentWaveByStatus`.\n131: - New method `ShouldPostWaveCompleteComment() bool` — nil-receiver safe, returns `o != nil && o.TotalWaves() > 1`. Extracted from `app/clickup_progress.go:shouldPostWaveCompleteComment`.\n132: - New method `RestoreToWave(targetWave int, completedTasks []int)` — fast-forwards wave-by-wave to `targetWave`, auto-completing all tasks in earlier waves via `StartNextWave` + `MarkTaskComplete` loops, then marks the specified task numbers as complete in the target wave. Extracted from the manual fast-forward loop in `app/app_state.go:rebuildOrphanedOrchestrators` (lines 1637–1657).\n133: - New method `BuildTaskPrompt(task taskparser.Task, peerCount int) string` — convenience wrapper: `return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)`.\n134: \n135: Create `orchestration/prompt.go`:\n136: - `BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` — moved verbatim from `app/wave_prompt.go:buildTaskPrompt`.\n137: - `BuildWaveAnnotationPrompt(planFile string) string` — moved from `app/app_state.go:buildWaveAnnotationPrompt` (lines 1341–1353).\n138: \n139: **Step 4: Run tests to verify they pass**\n140: \n141: ```bash\n142: go test ./orchestration/... -v\n143: ```\n144: \n145: Expected: PASS — all engine and prompt tests green.\n146: \n147: Also verify the existing app tests still pass (old code untouched):\n148: \n149: ```bash\n150: go test ./app/... -count=1\n151: ```\n152: \n153: Expected: PASS.\n154: \n155: **Step 5: Commit**\n156: \n157: ```bash\n158: git add orchestration/\n159: git commit -m \"feat: extract orchestration engine into standalone package\"\n160: ```\n161: \n162: ---\n163: \n164: ## Wave 2: Rewire App Layer\n165: \n166: > **depends on wave 1:** Task 2 imports the `orchestration/` package created in Wave 1 to replace inline types and delegate to exported methods.\n167: \n168: ### Task 2: Consolidate TUI wiring and rewire app imports\n169: \n170: **Files:**\n171: - Create: `app/wave_integration.go`\n172: - Create: `app/wave_integration_test.go`\n173: - Modify: `app/app.go`\n174: - Modify: `app/app_state.go`\n175: - Modify: `app/app_actions.go`\n176: - Modify: `app/app_input.go`\n177: - Modify: `app/clickup_progress.go`\n178: - Modify: `app/clickup_progress_test.go`\n179: - Delete: `app/wave_orchestrator.go`\n180: - Delete: `app/wave_prompt.go`\n181: - Delete: `app/wave_orchestrator_test.go`\n182: - Delete: `app/wave_prompt_test.go`\n183: - Test: `app/*_test.go` (all must pass unchanged via type aliases)\n184: \n185: **Step 1: Write failing test**\n186: \n187: Create `app/wave_integration_test.go` with a compile-time type alias verification:\n188: \n189: ```go\n190: package app\n191: \n192: import (\n193: \t\"testing\"\n194: \n195: \t\"github.com/kastheco/kasmos/orchestration\"\n196: \t\"github.com/stretchr/testify/assert\"\n197: )\n198: \n199: func TestWaveIntegration_TypeAliasesResolve(t *testing.T) {\n200: \t// Verify type aliases resolve correctly to orchestration package types.\n201: \tassert.Equal(t, orchestration.WaveStateIdle, WaveStateIdle)\n202: \tassert.Equal(t, orchestration.WaveStateRunning, WaveStateRunning)\n203: \tassert.Equal(t, orchestration.WaveStateWaveComplete, WaveStateWaveComplete)\n204: \tassert.Equal(t, orchestration.WaveStateAllComplete, WaveStateAllComplete)\n205: }\n206: ```\n207: \n208: **Step 2: Verify baseline**\n209: \n210: ```bash\n211: go test ./app/... -count=1\n212: ```\n213: \n214: Expected: PASS — everything works before refactoring.\n215: \n216: **Step 3: Implement the consolidation**\n217: \n218: **3a. Create `app/wave_integration.go`** — the single file consolidating all orchestration TUI wiring:\n219: \n220: Type aliases and constructor alias (preserve backwards compat for all test files):\n221: ```go\n222: package app\n223: \n224: import \"github.com/kastheco/kasmos/orchestration\"\n225: \n226: // Type aliases — all app/ code and tests use these unqualified names.\n227: type WaveOrchestrator = orchestration.WaveOrchestrator\n228: type WaveState = orchestration.WaveState\n229: \n230: // Constructor alias.\n231: var NewWaveOrchestrator = orchestration.NewWaveOrchestrator\n232: \n233: // Constant aliases.\n234: const (\n235: \tWaveStateIdle         = orchestration.WaveStateIdle\n236: \tWaveStateRunning      = orchestration.WaveStateRunning\n237: \tWaveStateWaveComplete = orchestration.WaveStateWaveComplete\n238: \tWaveStateAllComplete  = orchestration.WaveStateAllComplete\n239: )\n240: ```\n241: \n242: Move these into `wave_integration.go`:\n243: - **From `app/app.go`:** wave message types (`waveAdvanceMsg`, `waveRetryMsg`, `waveAbortMsg`, `waveAllCompleteMsg`) — cut from ~lines 1862–1883.\n244: - **From `app/app_state.go`:** methods `spawnWaveTasks`, `startNextWave`, `retryFailedWaveTasks`, `rebuildOrphanedOrchestrators` — cut from ~lines 1567–1765.\n245: - **From `app/app_input.go`:** methods `waveStandardConfirmAction`, `waveFailedConfirmAction` — cut from ~lines 1567–1602.\n246: \n247: **3b. Update `spawnWaveTasks`** (now in `wave_integration.go`):\n248: - Replace `buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))` with `orch.BuildTaskPrompt(task, len(tasks))`.\n249: \n250: **3c. Update `rebuildOrphanedOrchestrators`** (now in `wave_integration.go`):\n251: - Replace the manual fast-forward loop (lines 1625–1657 of app_state.go) with:\n252: ```go\n253: orch := orchestration.NewWaveOrchestrator(planFile, plan)\n254: var completed []int\n255: for _, t := range tasks {\n256: \tif t.waveNumber == targetWave && t.paused {\n257: \t\tcompleted = append(completed, t.taskNumber)\n258: \t}\n259: }\n260: orch.RestoreToWave(targetWave, completed)\n261: m.waveOrchestrators[planFile] = orch\n262: ```\n263: \n264: **3d. Fix direct field access in `app/app_state.go`** (~line 94):\n265: - Replace `switch orch.taskStates[task.Number]` with method-based switch:\n266: ```go\n267: switch {\n268: case orch.IsTaskComplete(task.Number):\n269: \tdata.TaskGlyphs[i] = ui.TaskGlyphComplete\n270: case orch.IsTaskFailed(task.Number):\n271: \tdata.TaskGlyphs[i] = ui.TaskGlyphFailed\n272: case orch.IsTaskRunning(task.Number):\n273: \tdata.TaskGlyphs[i] = ui.TaskGlyphRunning\n274: default:\n275: \tdata.TaskGlyphs[i] = ui.TaskGlyphPending\n276: }\n277: ```\n278: This replaces the direct access to the unexported `taskStates` map and `taskComplete`/`taskFailed`/`taskRunning` constants.\n279: \n280: **3e. Update `app/app_actions.go`:**\n281: - Replace `buildWaveAnnotationPrompt(planFile)` with `orchestration.BuildWaveAnnotationPrompt(planFile)`.\n282: \n283: **3f. Update `app/clickup_progress.go`:**\n284: - Remove `shouldPostWaveCompleteComment` function (now `orch.ShouldPostWaveCompleteComment()` method).\n285: - Keep `resolveClickUpTaskID` and `postClickUpProgress` (standalone function) unchanged.\n286: \n287: **3g. Update callers of `shouldPostWaveCompleteComment` in `app/app.go`:**\n288: - `shouldPostWaveCompleteComment(orch)` → `orch.ShouldPostWaveCompleteComment()` (two call sites, ~lines 1326 and 1367).\n289: \n290: **3h. Update `app/clickup_progress_test.go`:**\n291: - `TestSingleWavePlanSkipsWaveComment`: replace `shouldPostWaveCompleteComment(singleOrch)` → `singleOrch.ShouldPostWaveCompleteComment()` and same for multi.\n292: - `TestShouldPostWaveCompleteCommentNilOrch`: replace `shouldPostWaveCompleteComment(nil)` → `var nilOrch *WaveOrchestrator; nilOrch.ShouldPostWaveCompleteComment()`.\n293: \n294: **3i. Move `TestBuildClickUpComment`** from `app/wave_orchestrator_test.go` to `app/clickup_progress_test.go` (it tests `buildClickUpProgressComment` which is a ClickUp formatter, not orchestration logic).\n295: \n296: **3j. Delete old files:**\n297: - `app/wave_orchestrator.go` — all code now in `orchestration/engine.go` + aliases in `wave_integration.go`.\n298: - `app/wave_prompt.go` — all code now in `orchestration/prompt.go`.\n299: - `app/wave_orchestrator_test.go` — orchestrator tests moved to `orchestration/engine_test.go`, ClickUp test moved to `clickup_progress_test.go`.\n300: - `app/wave_prompt_test.go` — tests moved to `orchestration/prompt_test.go`.\n301: \n302: **3k. Remove `buildWaveAnnotationPrompt` from `app/app_state.go`** (lines 1337–1353) — moved to `orchestration/prompt.go`.\n303: \n304: **Step 4: Run all tests to verify nothing broke**\n305: \n306: ```bash\n307: go build ./...\n308: go test ./... -count=1\n309: ```\n310: \n311: Expected: all compile, all PASS. The 1197-line `app_wave_orchestration_flow_test.go` and all other test files compile unchanged thanks to type aliases.\n312: \n313: **Step 5: Commit**\n314: \n315: ```bash\n316: git add orchestration/ app/\n317: git commit -m \"refactor: consolidate wave TUI wiring into wave_integration.go, rewire to orchestration package\"\n318: ```\n\n(End of file - total 318 lines)\n</content>",
+            "title": "extract-orchestrator.md",
+            "metadata": {
+              "preview": "# Extract Orchestration Engine Implementation Plan\n\n**Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n\n**Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n\n**Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n\n**Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n\n---\n\n## Wave 1: Extract Core Engine\n\n### Task 1: Create orchestration package with engine and prompt builders\n\n**Files:**\n- Create: `orchestration/engine.go`\n- Create: `orchestration/prompt.go`\n- Create: `orchestration/engine_test.go`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772578376956,
+              "end": 1772578376959
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_014mEJ2Gg9Kog87JqCtsmQxc",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task show extract-orchestrator.md 2>/dev/null || echo \"kas task show failed\"",
+              "description": "Show task content from store"
+            },
+            "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement    trigger implementation of a specific wave\n  link-clickup backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list         list all tasks with status\n  register     register an untracked task file (sets status to ready)\n  set-status   force-override a task's status (bypasses FSM)\n  transition   apply an FSM event to a task\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+            "title": "Show task content from store",
+            "metadata": {
+              "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement    trigger implementation of a specific wave\n  link-clickup backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list         list all tasks with status\n  register     register an untracked task file (sets status to ready)\n  set-status   force-override a task's status (bypasses FSM)\n  transition   apply an FSM event to a task\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+              "exit": 0,
+              "description": "Show task content from store",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578377602,
+              "end": 1772578377613
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "cost": 0,
+          "tokens": {
+            "total": 52736,
+            "input": 1,
+            "output": 326,
+            "reasoning": 0,
+            "cache": {
+              "read": 48200,
+              "write": 4209
+            }
+          },
+          "id": "prt_cb5e78f97001qavavbtlCI7oIY",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e771d9001m2hALkN2E77oj8"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578377632,
+          "completed": 1772578400841
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 59851,
+          "input": 1,
+          "output": 1169,
+          "reasoning": 0,
+          "cache": {
+            "read": 52409,
+            "write": 6272
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb5e78fa0001X28w7yBuV0i914",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "id": "prt_cb5e7982e0018bYpwBSr1gWZx9",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e78fa0001X28w7yBuV0i914"
+        },
+        {
+          "type": "reasoning",
+          "text": "I see. The plan content is in the root-level `extract-orchestrator.md` file. The `docs/plans/extract-orchestrator.md` is empty on disk. The task store already has the plan registered with status `planning`.\n\nLooking at the root-level file, it already has `## Wave 1` and `## Wave 2` headers! Let me re-read the user's request. They said the plan at `docs/plans/extract-orchestrator.md` is missing wave headers, but the content is actually in the root file. The `docs/plans/` version is empty.\n\nWait - let me re-examine. The user says to annotate the plan at `docs/plans/extract-orchestrator.md`. \n\nBut that file is empty. The actual plan content is in `extract-orchestrator.md` at the root, and it already has wave headers. Looking at the git history, the `docs/plans/` version was created as an empty file, while the root file contains the full plan with wave headers already in place.\n\nSo the solution is straightforward — I need to copy the content from the root file to `docs/plans/extract-orchestrator.md` and commit it. I need to move the plan content from the root `extract-orchestrator.md` file into `docs/plans/extract-orchestrator.md` since that's where it should live canonically, and the root file already has the wave headers the user is asking for. Let me copy that content over to the correct location.",
+          "metadata": {
+            "anthropic": {
+              "signature": "Es0eCkYICxgCKkC6kwEgif1NBv6/rrtfvPamYnVHrDR3XbYUPiK/I/REDACTED/QZsqh+Y4UCE/REDACTED/REDACTED/OZbr1g3mmDrhnAGWq0inT6FILxI/REDACTED/JPps9W9UuuI49dwYDl/li9s9uU9GStE5Eatku5Wyckogrx9/oDTx128+X61bwdsD5Dkwk/REDACTED/AnDOfeJOXDoab+RBjy7yUar9P/REDACTED/ZC0tFUSKz2XfydIHP1KH/RpBe4HcuYj6Ckm/VbiGv/REDACTED//REDACTED/m1zcRLy0Hqs/FF/REDACTED/REDACTED/REDACTED/NQ5a94L4duTmaMSuAkoeJpD/REDACTED/bsy+kGLkTt+RGwTPaoSTA/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/L2POYmfxBD+9H2ewCC2ArDrnR7ZRc2gq/REDACTED/REDACTED/CSDDPxFtoqhEV0rLc95Wzo34D/TebEQ7Hh4GFtbDcN/wGdz0Siw0cTpDF8F/Btq/JRX/REDACTED/REDACTED//REDACTED/UW8TnCdMSLGYIMeQ2/7BG62MpMn4aV/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/26I3gig5/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/z/REDACTED/REDACTED/guhURRBfE/REDACTED/X/REDACTED/REDACTED/REDACTED/p/Kk3M8DBcfp9KMNvlfUl/REDACTED/GbTnzJhoyoP/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772578379823,
+            "end": 1772578398511
+          },
+          "id": "prt_cb5e7982f001NrvmlqpEhApA4r",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e78fa0001X28w7yBuV0i914"
+        },
+        {
+          "type": "text",
+          "text": "i'm using the kasmos-planner skill to annotate this plan with wave headers.\n\nThe situation: `docs/plans/extract-orchestrator.md` is empty on disk, but the full plan content lives at the root-level `extract-orchestrator.md` — and it already has proper `## Wave 1` and `## Wave 2` headers. I need to populate the `docs/plans/` copy with the complete plan content (wave headers intact), then commit and signal.",
+          "time": {
+            "start": 1772578400317,
+            "end": 1772578400317
+          },
+          "id": "prt_cb5e7e137001TCesASnPs3Mcab",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e78fa0001X28w7yBuV0i914"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01PSgXqWfoXPPhtEEoJMxWp6",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/extract-orchestrator.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/extract-orchestrator.md</path>\n<type>file</type>\n<content>1: # Extract Orchestration Engine Implementation Plan\n2: \n3: **Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n4: \n5: **Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n6: \n7: **Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n8: \n9: **Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n10: \n11: ---\n12: \n13: ## Wave 1: Extract Core Engine\n14: \n15: ### Task 1: Create orchestration package with engine and prompt builders\n16: \n17: **Files:**\n18: - Create: `orchestration/engine.go`\n19: - Create: `orchestration/prompt.go`\n20: - Create: `orchestration/engine_test.go`\n21: - Create: `orchestration/prompt_test.go`\n22: \n23: **Step 1: Write failing tests**\n24: \n25: Create `orchestration/engine_test.go` — adapt all orchestrator tests from `app/wave_orchestrator_test.go` into `package orchestration` (do NOT copy `TestBuildClickUpComment` — that tests ClickUp formatting and stays in `app/`). The adapted tests are:\n26: \n27: - `TestNewWaveOrchestrator` — verify State, TotalWaves, TotalTasks after construction.\n28: - `TestWaveOrchestrator_StartWave` — start wave 1, check Running state and task list.\n29: - `TestWaveOrchestrator_TaskCompleted` — mark tasks complete, verify wave completion.\n30: - `TestWaveOrchestrator_TaskFailed` — mark task failed, verify counts.\n31: - `TestWaveOrchestrator_MultiWaveProgression` — two-wave lifecycle.\n32: - `TestWaveOrchestrator_AllComplete` — single-wave plan completes to AllComplete.\n33: - `TestWaveOrchestrator_ResetConfirmAllowsReprompt` — NeedsConfirm one-shot latch + reset.\n34: - `TestIsTaskRunning` — verify running/complete/unknown task queries.\n35: - `TestWaveOrchestrator_TaskStatusQueries` — IsTaskComplete, IsTaskFailed, IsTaskRunning.\n36: - `TestWaveOrchestrator_RetryFailedTasksRestoresRunning` — retry transitions and state.\n37: \n38: Add new tests for the three new methods:\n39: \n40: ```go\n41: func TestRestoreToWave(t *testing.T) {\n42: \tplan := &taskparser.Plan{\n43: \t\tWaves: []taskparser.Wave{\n44: \t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n45: \t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n46: \t\t},\n47: \t}\n48: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n49: \torch.RestoreToWave(2, []int{3})\n50: \tassert.Equal(t, WaveStateAllComplete, orch.State())\n51: \tassert.Equal(t, 2, orch.CurrentWaveNumber())\n52: }\n53: \n54: func TestRestoreToWave_PartialCompletion(t *testing.T) {\n55: \tplan := &taskparser.Plan{\n56: \t\tWaves: []taskparser.Wave{\n57: \t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n58: \t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n59: \t\t},\n60: \t}\n61: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n62: \torch.RestoreToWave(2, []int{2}) // task 3 still running\n63: \tassert.Equal(t, WaveStateRunning, orch.State())\n64: \tassert.True(t, orch.IsTaskComplete(2))\n65: \tassert.True(t, orch.IsTaskRunning(3))\n66: }\n67: \n68: func TestShouldPostWaveCompleteComment(t *testing.T) {\n69: \tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n70: \t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n71: \t}}\n72: \tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n73: \t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n74: \t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n75: \t}}\n76: \tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n77: \tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n78: \n79: \t// nil receiver safety\n80: \tvar nilOrch *WaveOrchestrator\n81: \tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n82: }\n83: \n84: func TestBuildTaskPrompt_Method(t *testing.T) {\n85: \tplan := &taskparser.Plan{\n86: \t\tGoal: \"Test goal\",\n87: \t\tWaves: []taskparser.Wave{\n88: \t\t\t{Number: 1, Tasks: []taskparser.Task{\n89: \t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n90: \t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n91: \t\t\t}},\n92: \t\t},\n93: \t}\n94: \torch := NewWaveOrchestrator(\"plan.md\", plan)\n95: \torch.StartNextWave()\n96: \tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n97: \tassert.Contains(t, prompt, \"Task 1\")\n98: \tassert.Contains(t, prompt, \"Test goal\")\n99: \tassert.Contains(t, prompt, \"Wave 1 of 1\")\n100: \tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n101: }\n102: ```\n103: \n104: Create `orchestration/prompt_test.go` — adapt the two tests from `app/wave_prompt_test.go` (`TestBuildTaskPrompt`, `TestBuildTaskPrompt_SingleTask`) into `package orchestration`. Add:\n105: \n106: ```go\n107: func TestBuildWaveAnnotationPrompt(t *testing.T) {\n108: \tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n109: \tassert.Contains(t, prompt, \"## Wave\")\n110: \tassert.Contains(t, prompt, \"my-feature.md\")\n111: \tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n112: }\n113: ```\n114: \n115: **Step 2: Run tests to verify they fail**\n116: \n117: ```bash\n118: go test ./orchestration/... -v\n119: ```\n120: \n121: Expected: FAIL — package `orchestration` doesn't exist yet.\n122: \n123: **Step 3: Write implementation**\n124: \n125: Create `orchestration/engine.go`:\n126: - Export `WaveState` type with 4 constants: `WaveStateIdle`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`.\n127: - Keep `taskStatus` type and constants unexported (only used internally by the engine).\n128: - `WaveOrchestrator` struct — same fields as current `app/wave_orchestrator.go`, all unexported.\n129: - `NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator` constructor.\n130: - All existing methods verbatim from `app/wave_orchestrator.go`: `State`, `TaskFile`, `TotalWaves`, `TotalTasks`, `CurrentWaveNumber`, `CurrentWaveTasks`, `StartNextWave`, `MarkTaskComplete`, `MarkTaskFailed`, `NeedsConfirm`, `ResetConfirm`, `RetryFailedTasks`, `IsCurrentWaveComplete`, `CompletedTaskCount`, `FailedTaskCount`, `IsTaskRunning`, `IsTaskComplete`, `IsTaskFailed`, `HeaderContext`, `checkWaveComplete`, `countCurrentWaveByStatus`.\n131: - New method `ShouldPostWaveCompleteComment() bool` — nil-receiver safe, returns `o != nil && o.TotalWaves() > 1`. Extracted from `app/clickup_progress.go:shouldPostWaveCompleteComment`.\n132: - New method `RestoreToWave(targetWave int, completedTasks []int)` — fast-forwards wave-by-wave to `targetWave`, auto-completing all tasks in earlier waves via `StartNextWave` + `MarkTaskComplete` loops, then marks the specified task numbers as complete in the target wave. Extracted from the manual fast-forward loop in `app/app_state.go:rebuildOrphanedOrchestrators` (lines 1637–1657).\n133: - New method `BuildTaskPrompt(task taskparser.Task, peerCount int) string` — convenience wrapper: `return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)`.\n134: \n135: Create `orchestration/prompt.go`:\n136: - `BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` — moved verbatim from `app/wave_prompt.go:buildTaskPrompt`.\n137: - `BuildWaveAnnotationPrompt(planFile string) string` — moved from `app/app_state.go:buildWaveAnnotationPrompt` (lines 1341–1353).\n138: \n139: **Step 4: Run tests to verify they pass**\n140: \n141: ```bash\n142: go test ./orchestration/... -v\n143: ```\n144: \n145: Expected: PASS — all engine and prompt tests green.\n146: \n147: Also verify the existing app tests still pass (old code untouched):\n148: \n149: ```bash\n150: go test ./app/... -count=1\n151: ```\n152: \n153: Expected: PASS.\n154: \n155: **Step 5: Commit**\n156: \n157: ```bash\n158: git add orchestration/\n159: git commit -m \"feat: extract orchestration engine into standalone package\"\n160: ```\n161: \n162: ---\n163: \n164: ## Wave 2: Rewire App Layer\n165: \n166: > **depends on wave 1:** Task 2 imports the `orchestration/` package created in Wave 1 to replace inline types and delegate to exported methods.\n167: \n168: ### Task 2: Consolidate TUI wiring and rewire app imports\n169: \n170: **Files:**\n171: - Create: `app/wave_integration.go`\n172: - Create: `app/wave_integration_test.go`\n173: - Modify: `app/app.go`\n174: - Modify: `app/app_state.go`\n175: - Modify: `app/app_actions.go`\n176: - Modify: `app/app_input.go`\n177: - Modify: `app/clickup_progress.go`\n178: - Modify: `app/clickup_progress_test.go`\n179: - Delete: `app/wave_orchestrator.go`\n180: - Delete: `app/wave_prompt.go`\n181: - Delete: `app/wave_orchestrator_test.go`\n182: - Delete: `app/wave_prompt_test.go`\n183: - Test: `app/*_test.go` (all must pass unchanged via type aliases)\n184: \n185: **Step 1: Write failing test**\n186: \n187: Create `app/wave_integration_test.go` with a compile-time type alias verification:\n188: \n189: ```go\n190: package app\n191: \n192: import (\n193: \t\"testing\"\n194: \n195: \t\"github.com/kastheco/kasmos/orchestration\"\n196: \t\"github.com/stretchr/testify/assert\"\n197: )\n198: \n199: func TestWaveIntegration_TypeAliasesResolve(t *testing.T) {\n200: \t// Verify type aliases resolve correctly to orchestration package types.\n201: \tassert.Equal(t, orchestration.WaveStateIdle, WaveStateIdle)\n202: \tassert.Equal(t, orchestration.WaveStateRunning, WaveStateRunning)\n203: \tassert.Equal(t, orchestration.WaveStateWaveComplete, WaveStateWaveComplete)\n204: \tassert.Equal(t, orchestration.WaveStateAllComplete, WaveStateAllComplete)\n205: }\n206: ```\n207: \n208: **Step 2: Verify baseline**\n209: \n210: ```bash\n211: go test ./app/... -count=1\n212: ```\n213: \n214: Expected: PASS — everything works before refactoring.\n215: \n216: **Step 3: Implement the consolidation**\n217: \n218: **3a. Create `app/wave_integration.go`** — the single file consolidating all orchestration TUI wiring:\n219: \n220: Type aliases and constructor alias (preserve backwards compat for all test files):\n221: ```go\n222: package app\n223: \n224: import \"github.com/kastheco/kasmos/orchestration\"\n225: \n226: // Type aliases — all app/ code and tests use these unqualified names.\n227: type WaveOrchestrator = orchestration.WaveOrchestrator\n228: type WaveState = orchestration.WaveState\n229: \n230: // Constructor alias.\n231: var NewWaveOrchestrator = orchestration.NewWaveOrchestrator\n232: \n233: // Constant aliases.\n234: const (\n235: \tWaveStateIdle         = orchestration.WaveStateIdle\n236: \tWaveStateRunning      = orchestration.WaveStateRunning\n237: \tWaveStateWaveComplete = orchestration.WaveStateWaveComplete\n238: \tWaveStateAllComplete  = orchestration.WaveStateAllComplete\n239: )\n240: ```\n241: \n242: Move these into `wave_integration.go`:\n243: - **From `app/app.go`:** wave message types (`waveAdvanceMsg`, `waveRetryMsg`, `waveAbortMsg`, `waveAllCompleteMsg`) — cut from ~lines 1862–1883.\n244: - **From `app/app_state.go`:** methods `spawnWaveTasks`, `startNextWave`, `retryFailedWaveTasks`, `rebuildOrphanedOrchestrators` — cut from ~lines 1567–1765.\n245: - **From `app/app_input.go`:** methods `waveStandardConfirmAction`, `waveFailedConfirmAction` — cut from ~lines 1567–1602.\n246: \n247: **3b. Update `spawnWaveTasks`** (now in `wave_integration.go`):\n248: - Replace `buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))` with `orch.BuildTaskPrompt(task, len(tasks))`.\n249: \n250: **3c. Update `rebuildOrphanedOrchestrators`** (now in `wave_integration.go`):\n251: - Replace the manual fast-forward loop (lines 1625–1657 of app_state.go) with:\n252: ```go\n253: orch := orchestration.NewWaveOrchestrator(planFile, plan)\n254: var completed []int\n255: for _, t := range tasks {\n256: \tif t.waveNumber == targetWave && t.paused {\n257: \t\tcompleted = append(completed, t.taskNumber)\n258: \t}\n259: }\n260: orch.RestoreToWave(targetWave, completed)\n261: m.waveOrchestrators[planFile] = orch\n262: ```\n263: \n264: **3d. Fix direct field access in `app/app_state.go`** (~line 94):\n265: - Replace `switch orch.taskStates[task.Number]` with method-based switch:\n266: ```go\n267: switch {\n268: case orch.IsTaskComplete(task.Number):\n269: \tdata.TaskGlyphs[i] = ui.TaskGlyphComplete\n270: case orch.IsTaskFailed(task.Number):\n271: \tdata.TaskGlyphs[i] = ui.TaskGlyphFailed\n272: case orch.IsTaskRunning(task.Number):\n273: \tdata.TaskGlyphs[i] = ui.TaskGlyphRunning\n274: default:\n275: \tdata.TaskGlyphs[i] = ui.TaskGlyphPending\n276: }\n277: ```\n278: This replaces the direct access to the unexported `taskStates` map and `taskComplete`/`taskFailed`/`taskRunning` constants.\n279: \n280: **3e. Update `app/app_actions.go`:**\n281: - Replace `buildWaveAnnotationPrompt(planFile)` with `orchestration.BuildWaveAnnotationPrompt(planFile)`.\n282: \n283: **3f. Update `app/clickup_progress.go`:**\n284: - Remove `shouldPostWaveCompleteComment` function (now `orch.ShouldPostWaveCompleteComment()` method).\n285: - Keep `resolveClickUpTaskID` and `postClickUpProgress` (standalone function) unchanged.\n286: \n287: **3g. Update callers of `shouldPostWaveCompleteComment` in `app/app.go`:**\n288: - `shouldPostWaveCompleteComment(orch)` → `orch.ShouldPostWaveCompleteComment()` (two call sites, ~lines 1326 and 1367).\n289: \n290: **3h. Update `app/clickup_progress_test.go`:**\n291: - `TestSingleWavePlanSkipsWaveComment`: replace `shouldPostWaveCompleteComment(singleOrch)` → `singleOrch.ShouldPostWaveCompleteComment()` and same for multi.\n292: - `TestShouldPostWaveCompleteCommentNilOrch`: replace `shouldPostWaveCompleteComment(nil)` → `var nilOrch *WaveOrchestrator; nilOrch.ShouldPostWaveCompleteComment()`.\n293: \n294: **3i. Move `TestBuildClickUpComment`** from `app/wave_orchestrator_test.go` to `app/clickup_progress_test.go` (it tests `buildClickUpProgressComment` which is a ClickUp formatter, not orchestration logic).\n295: \n296: **3j. Delete old files:**\n297: - `app/wave_orchestrator.go` — all code now in `orchestration/engine.go` + aliases in `wave_integration.go`.\n298: - `app/wave_prompt.go` — all code now in `orchestration/prompt.go`.\n299: - `app/wave_orchestrator_test.go` — orchestrator tests moved to `orchestration/engine_test.go`, ClickUp test moved to `clickup_progress_test.go`.\n300: - `app/wave_prompt_test.go` — tests moved to `orchestration/prompt_test.go`.\n301: \n302: **3k. Remove `buildWaveAnnotationPrompt` from `app/app_state.go`** (lines 1337–1353) — moved to `orchestration/prompt.go`.\n303: \n304: **Step 4: Run all tests to verify nothing broke**\n305: \n306: ```bash\n307: go build ./...\n308: go test ./... -count=1\n309: ```\n310: \n311: Expected: all compile, all PASS. The 1197-line `app_wave_orchestration_flow_test.go` and all other test files compile unchanged thanks to type aliases.\n312: \n313: **Step 5: Commit**\n314: \n315: ```bash\n316: git add orchestration/ app/\n317: git commit -m \"refactor: consolidate wave TUI wiring into wave_integration.go, rewire to orchestration package\"\n318: ```\n\n(End of file - total 318 lines)\n</content>",
+            "title": "extract-orchestrator.md",
+            "metadata": {
+              "preview": "# Extract Orchestration Engine Implementation Plan\n\n**Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n\n**Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n\n**Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n\n**Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n\n---\n\n## Wave 1: Extract Core Engine\n\n### Task 1: Create orchestration package with engine and prompt builders\n\n**Files:**\n- Create: `orchestration/engine.go`\n- Create: `orchestration/prompt.go`\n- Create: `orchestration/engine_test.go`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772578400807,
+              "end": 1772578400810
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e78fa0001X28w7yBuV0i914"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "cost": 0,
+          "tokens": {
+            "total": 59851,
+            "input": 1,
+            "output": 1169,
+            "reasoning": 0,
+            "cache": {
+              "read": 52409,
+              "write": 6272
+            }
+          },
+          "id": "prt_cb5e7ea3f001W4Bm30ivS1657u",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e78fa0001X28w7yBuV0i914"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578400842,
+          "completed": 1772578455565
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 70097,
+          "input": 1,
+          "output": 4749,
+          "reasoning": 0,
+          "cache": {
+            "read": 58681,
+            "write": 6666
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb5e7ea4a0010uZw0UmxmT1on2",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "id": "prt_cb5e7f240001I5h7ZBiaBltUhb",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e7ea4a0010uZw0UmxmT1on2"
+        },
+        {
+          "type": "text",
+          "text": "Good — the root-level `extract-orchestrator.md` already has proper `## Wave 1` and `## Wave 2` headers. The `docs/plans/extract-orchestrator.md` is just empty. I'll copy the content over, then commit and signal.",
+          "time": {
+            "start": 1772578405521,
+            "end": 1772578405521
+          },
+          "id": "prt_cb5e7f240002lLphXnfjLRPVdI",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e7ea4a0010uZw0UmxmT1on2"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01SRb11HfMA8epvntxv8BKaf",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/extract-orchestrator.md",
+              "content": "# Extract Orchestration Engine Implementation Plan\n\n**Goal:** Extract the wave orchestration state machine and prompt builders from `app/` into a standalone `orchestration/` package, and consolidate the remaining TUI wiring from 4 scattered files into a single `app/wave_integration.go` — making orchestration logic independently testable and the TUI integration navigable.\n\n**Architecture:** Create top-level `orchestration/` package containing the pure-logic engine (`WaveOrchestrator`, `WaveState`, prompt builders) with zero bubbletea dependencies. All TUI-coupled wiring (spawning instances, confirmation dialogs, signal processing, message types) is consolidated from `app.go`, `app_state.go`, `app_actions.go`, and `app_input.go` into one `app/wave_integration.go`. Type aliases in the consolidated file maintain backwards compatibility so existing test code compiles unchanged.\n\n**Tech Stack:** Go 1.24+, `config/taskparser` (dependency of orchestration engine)\n\n**Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)\n\n---\n\n## Wave 1: Extract Core Engine\n\n### Task 1: Create orchestration package with engine and prompt builders\n\n**Files:**\n- Create: `orchestration/engine.go`\n- Create: `orchestration/prompt.go`\n- Create: `orchestration/engine_test.go`\n- Create: `orchestration/prompt_test.go`\n\n**Step 1: Write failing tests**\n\nCreate `orchestration/engine_test.go` — adapt all orchestrator tests from `app/wave_orchestrator_test.go` into `package orchestration` (do NOT copy `TestBuildClickUpComment` — that tests ClickUp formatting and stays in `app/`). The adapted tests are:\n\n- `TestNewWaveOrchestrator` — verify State, TotalWaves, TotalTasks after construction.\n- `TestWaveOrchestrator_StartWave` — start wave 1, check Running state and task list.\n- `TestWaveOrchestrator_TaskCompleted` — mark tasks complete, verify wave completion.\n- `TestWaveOrchestrator_TaskFailed` — mark task failed, verify counts.\n- `TestWaveOrchestrator_MultiWaveProgression` — two-wave lifecycle.\n- `TestWaveOrchestrator_AllComplete` — single-wave plan completes to AllComplete.\n- `TestWaveOrchestrator_ResetConfirmAllowsReprompt` — NeedsConfirm one-shot latch + reset.\n- `TestIsTaskRunning` — verify running/complete/unknown task queries.\n- `TestWaveOrchestrator_TaskStatusQueries` — IsTaskComplete, IsTaskFailed, IsTaskRunning.\n- `TestWaveOrchestrator_RetryFailedTasksRestoresRunning` — retry transitions and state.\n\nAdd new tests for the three new methods:\n\n```go\nfunc TestRestoreToWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{3})\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n}\n\nfunc TestRestoreToWave_PartialCompletion(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{2}) // task 3 still running\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.True(t, orch.IsTaskComplete(2))\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestShouldPostWaveCompleteComment(t *testing.T) {\n\tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t}}\n\tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n\t}}\n\tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n\tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n\n\t// nil receiver safety\n\tvar nilOrch *WaveOrchestrator\n\tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n}\n\nfunc TestBuildTaskPrompt_Method(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"Test goal\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n\tassert.Contains(t, prompt, \"Task 1\")\n\tassert.Contains(t, prompt, \"Test goal\")\n\tassert.Contains(t, prompt, \"Wave 1 of 1\")\n\tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n}\n```\n\nCreate `orchestration/prompt_test.go` — adapt the two tests from `app/wave_prompt_test.go` (`TestBuildTaskPrompt`, `TestBuildTaskPrompt_SingleTask`) into `package orchestration`. Add:\n\n```go\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"my-feature.md\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n}\n```\n\n**Step 2: Run tests to verify they fail**\n\n```bash\ngo test ./orchestration/... -v\n```\n\nExpected: FAIL — package `orchestration` doesn't exist yet.\n\n**Step 3: Write implementation**\n\nCreate `orchestration/engine.go`:\n- Export `WaveState` type with 4 constants: `WaveStateIdle`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`.\n- Keep `taskStatus` type and constants unexported (only used internally by the engine).\n- `WaveOrchestrator` struct — same fields as current `app/wave_orchestrator.go`, all unexported.\n- `NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator` constructor.\n- All existing methods verbatim from `app/wave_orchestrator.go`: `State`, `TaskFile`, `TotalWaves`, `TotalTasks`, `CurrentWaveNumber`, `CurrentWaveTasks`, `StartNextWave`, `MarkTaskComplete`, `MarkTaskFailed`, `NeedsConfirm`, `ResetConfirm`, `RetryFailedTasks`, `IsCurrentWaveComplete`, `CompletedTaskCount`, `FailedTaskCount`, `IsTaskRunning`, `IsTaskComplete`, `IsTaskFailed`, `HeaderContext`, `checkWaveComplete`, `countCurrentWaveByStatus`.\n- New method `ShouldPostWaveCompleteComment() bool` — nil-receiver safe, returns `o != nil && o.TotalWaves() > 1`. Extracted from `app/clickup_progress.go:shouldPostWaveCompleteComment`.\n- New method `RestoreToWave(targetWave int, completedTasks []int)` — fast-forwards wave-by-wave to `targetWave`, auto-completing all tasks in earlier waves via `StartNextWave` + `MarkTaskComplete` loops, then marks the specified task numbers as complete in the target wave. Extracted from the manual fast-forward loop in `app/app_state.go:rebuildOrphanedOrchestrators` (lines 1637–1657).\n- New method `BuildTaskPrompt(task taskparser.Task, peerCount int) string` — convenience wrapper: `return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)`.\n\nCreate `orchestration/prompt.go`:\n- `BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` — moved verbatim from `app/wave_prompt.go:buildTaskPrompt`.\n- `BuildWaveAnnotationPrompt(planFile string) string` — moved from `app/app_state.go:buildWaveAnnotationPrompt` (lines 1341–1353).\n\n**Step 4: Run tests to verify they pass**\n\n```bash\ngo test ./orchestration/... -v\n```\n\nExpected: PASS — all engine and prompt tests green.\n\nAlso verify the existing app tests still pass (old code untouched):\n\n```bash\ngo test ./app/... -count=1\n```\n\nExpected: PASS.\n\n**Step 5: Commit**\n\n```bash\ngit add orchestration/\ngit commit -m \"feat: extract orchestration engine into standalone package\"\n```\n\n---\n\n## Wave 2: Rewire App Layer\n\n> **depends on wave 1:** Task 2 imports the `orchestration/` package created in Wave 1 to replace inline types and delegate to exported methods.\n\n### Task 2: Consolidate TUI wiring and rewire app imports\n\n**Files:**\n- Create: `app/wave_integration.go`\n- Create: `app/wave_integration_test.go`\n- Modify: `app/app.go`\n- Modify: `app/app_state.go`\n- Modify: `app/app_actions.go`\n- Modify: `app/app_input.go`\n- Modify: `app/clickup_progress.go`\n- Modify: `app/clickup_progress_test.go`\n- Delete: `app/wave_orchestrator.go`\n- Delete: `app/wave_prompt.go`\n- Delete: `app/wave_orchestrator_test.go`\n- Delete: `app/wave_prompt_test.go`\n- Test: `app/*_test.go` (all must pass unchanged via type aliases)\n\n**Step 1: Write failing test**\n\nCreate `app/wave_integration_test.go` with a compile-time type alias verification:\n\n```go\npackage app\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/orchestration\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestWaveIntegration_TypeAliasesResolve(t *testing.T) {\n\t// Verify type aliases resolve correctly to orchestration package types.\n\tassert.Equal(t, orchestration.WaveStateIdle, WaveStateIdle)\n\tassert.Equal(t, orchestration.WaveStateRunning, WaveStateRunning)\n\tassert.Equal(t, orchestration.WaveStateWaveComplete, WaveStateWaveComplete)\n\tassert.Equal(t, orchestration.WaveStateAllComplete, WaveStateAllComplete)\n}\n```\n\n**Step 2: Verify baseline**\n\n```bash\ngo test ./app/... -count=1\n```\n\nExpected: PASS — everything works before refactoring.\n\n**Step 3: Implement the consolidation**\n\n**3a. Create `app/wave_integration.go`** — the single file consolidating all orchestration TUI wiring:\n\nType aliases and constructor alias (preserve backwards compat for all test files):\n```go\npackage app\n\nimport \"github.com/kastheco/kasmos/orchestration\"\n\n// Type aliases — all app/ code and tests use these unqualified names.\ntype WaveOrchestrator = orchestration.WaveOrchestrator\ntype WaveState = orchestration.WaveState\n\n// Constructor alias.\nvar NewWaveOrchestrator = orchestration.NewWaveOrchestrator\n\n// Constant aliases.\nconst (\n\tWaveStateIdle         = orchestration.WaveStateIdle\n\tWaveStateRunning      = orchestration.WaveStateRunning\n\tWaveStateWaveComplete = orchestration.WaveStateWaveComplete\n\tWaveStateAllComplete  = orchestration.WaveStateAllComplete\n)\n```\n\nMove these into `wave_integration.go`:\n- **From `app/app.go`:** wave message types (`waveAdvanceMsg`, `waveRetryMsg`, `waveAbortMsg`, `waveAllCompleteMsg`) — cut from ~lines 1862–1883.\n- **From `app/app_state.go`:** methods `spawnWaveTasks`, `startNextWave`, `retryFailedWaveTasks`, `rebuildOrphanedOrchestrators` — cut from ~lines 1567–1765.\n- **From `app/app_input.go`:** methods `waveStandardConfirmAction`, `waveFailedConfirmAction` — cut from ~lines 1567–1602.\n\n**3b. Update `spawnWaveTasks`** (now in `wave_integration.go`):\n- Replace `buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))` with `orch.BuildTaskPrompt(task, len(tasks))`.\n\n**3c. Update `rebuildOrphanedOrchestrators`** (now in `wave_integration.go`):\n- Replace the manual fast-forward loop (lines 1625–1657 of app_state.go) with:\n```go\norch := orchestration.NewWaveOrchestrator(planFile, plan)\nvar completed []int\nfor _, t := range tasks {\n\tif t.waveNumber == targetWave && t.paused {\n\t\tcompleted = append(completed, t.taskNumber)\n\t}\n}\norch.RestoreToWave(targetWave, completed)\nm.waveOrchestrators[planFile] = orch\n```\n\n**3d. Fix direct field access in `app/app_state.go`** (~line 94):\n- Replace `switch orch.taskStates[task.Number]` with method-based switch:\n```go\nswitch {\ncase orch.IsTaskComplete(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphComplete\ncase orch.IsTaskFailed(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphFailed\ncase orch.IsTaskRunning(task.Number):\n\tdata.TaskGlyphs[i] = ui.TaskGlyphRunning\ndefault:\n\tdata.TaskGlyphs[i] = ui.TaskGlyphPending\n}\n```\nThis replaces the direct access to the unexported `taskStates` map and `taskComplete`/`taskFailed`/`taskRunning` constants.\n\n**3e. Update `app/app_actions.go`:**\n- Replace `buildWaveAnnotationPrompt(planFile)` with `orchestration.BuildWaveAnnotationPrompt(planFile)`.\n\n**3f. Update `app/clickup_progress.go`:**\n- Remove `shouldPostWaveCompleteComment` function (now `orch.ShouldPostWaveCompleteComment()` method).\n- Keep `resolveClickUpTaskID` and `postClickUpProgress` (standalone function) unchanged.\n\n**3g. Update callers of `shouldPostWaveCompleteComment` in `app/app.go`:**\n- `shouldPostWaveCompleteComment(orch)` → `orch.ShouldPostWaveCompleteComment()` (two call sites, ~lines 1326 and 1367).\n\n**3h. Update `app/clickup_progress_test.go`:**\n- `TestSingleWavePlanSkipsWaveComment`: replace `shouldPostWaveCompleteComment(singleOrch)` → `singleOrch.ShouldPostWaveCompleteComment()` and same for multi.\n- `TestShouldPostWaveCompleteCommentNilOrch`: replace `shouldPostWaveCompleteComment(nil)` → `var nilOrch *WaveOrchestrator; nilOrch.ShouldPostWaveCompleteComment()`.\n\n**3i. Move `TestBuildClickUpComment`** from `app/wave_orchestrator_test.go` to `app/clickup_progress_test.go` (it tests `buildClickUpProgressComment` which is a ClickUp formatter, not orchestration logic).\n\n**3j. Delete old files:**\n- `app/wave_orchestrator.go` — all code now in `orchestration/engine.go` + aliases in `wave_integration.go`.\n- `app/wave_prompt.go` — all code now in `orchestration/prompt.go`.\n- `app/wave_orchestrator_test.go` — orchestrator tests moved to `orchestration/engine_test.go`, ClickUp test moved to `clickup_progress_test.go`.\n- `app/wave_prompt_test.go` — tests moved to `orchestration/prompt_test.go`.\n\n**3k. Remove `buildWaveAnnotationPrompt` from `app/app_state.go`** (lines 1337–1353) — moved to `orchestration/prompt.go`.\n\n**Step 4: Run all tests to verify nothing broke**\n\n```bash\ngo build ./...\ngo test ./... -count=1\n```\n\nExpected: all compile, all PASS. The 1197-line `app_wave_orchestration_flow_test.go` and all other test files compile unchanged thanks to type aliases.\n\n**Step 5: Commit**\n\n```bash\ngit add orchestration/ app/\ngit commit -m \"refactor: consolidate wave TUI wiring into wave_integration.go, rewire to orchestration package\"\n```\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "docs/plans/extract-orchestrator.md",
+            "metadata": {
+              "diagnostics": {},
+              "filepath": "/home/kas/dev/kasmos/docs/plans/extract-orchestrator.md",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772578455540,
+              "end": 1772578455545
+            }
+          },
+          "id": "prt_cb5e7fc92001BWey62ywOYFcQB",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e7ea4a0010uZw0UmxmT1on2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "f388536e0a51fed73d80fc62cb894720ce6cd96c",
+          "cost": 0,
+          "tokens": {
+            "total": 70097,
+            "input": 1,
+            "output": 4749,
+            "reasoning": 0,
+            "cache": {
+              "read": 58681,
+              "write": 6666
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e7ea4a0010uZw0UmxmT1on2"
+        },
+        {
+          "type": "patch",
+          "hash": "75d712a397332c6a92adc354a4bd8fcf54d49d0d",
+          "files": [
+            "/home/kas/dev/kasmos/docs/plans/extract-orchestrator.md"
+          ],
+          "id": "prt_cb5e8c00b0011pvdEGBXHTKofb",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e7ea4a0010uZw0UmxmT1on2"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772578455566
+        },
+        "parentID": "msg_cb5e74408001ATowAonFQTSdUb",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cb5e8c00e001u8r7ZWpBR2A2Y4",
+        "sessionID": "REDACTED"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "f388536e0a51fed73d80fc62cb894720ce6cd96c",
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e8c00e001u8r7ZWpBR2A2Y4"
+        },
+        {
+          "type": "text",
+          "text": "Now commit and signal:",
+          "time": {
+            "start": 1772578460208,
+            "end": 1772578460208
+          },
+          "id": "prt_cb5e8cec00011ORcnkJh7tP3XM",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e8c00e001u8r7ZWpBR2A2Y4"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git add docs/plans/extract-orchestrator.md && git commit -m \"plan: add wave headers to extract-orchestrator.md\"",
+              "description": "Commit annotated plan file"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit annotated plan file"
+            },
+            "time": {
+              "start": 1772578461043
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "REDACTED",
+          "messageID": "msg_cb5e8c00e001u8r7ZWpBR2A2Y4"
+        }
+      ]
+    }
+  ]
+}
