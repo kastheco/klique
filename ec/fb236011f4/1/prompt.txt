@@ -1,0 +1,5 @@
+the log disappears and reappears depending on the size of the kasmos window
+
+---
+
+commit that, then tell me why fix-kas-task-usage is showing review instead of review #1. that was unique functionality we made and i would like that restored
