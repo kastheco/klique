@@ -1,0 +1,80 @@
+Implement Task 3: Rewrite menu.go — Bottom Keybind Bar
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite all non-overlay panel files in `ui/` to eliminate AGPL-tainted code. The rewrite preserves the identical public API and visual output so all callers (`app/`, `cmd/`) compile without changes, while replacing every line of implementation. Existing test files are the regression suite.
+**Architecture:** Ten source files rewritten in-place across the `ui/` package: `gradient.go` (color interpolation utilities), `consts.go` (banner art and animation frames), `statusbar.go` (top status bar), `menu.go` (bottom keybind bar), `diff.go` (diff pane with file sidebar), `info_pane.go` (metadata pane), `audit_pane.go` (activity feed), `preview.go` (agent session preview with scroll/document modes), `navigation_panel.go` (sidebar plan/instance tree), and `tabbed_window.go` (tab container wiring preview+info+diff). Six files are excluded as 100% post-fork original work: `fill.go`, `spring.go`, `termbg.go`, `theme.go`, `zones.go`, `main_test.go`. The `ui/overlay/` subdirectory was already rewritten in plan 02b. The dead file `list_styles.go.bak` is deleted. All existing test files are preserved as the regression gate — they must pass after each task.
+**Tech Stack:** Go 1.24, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+ (viewport, spinner), bubblezone, go-runewidth, harmonica, wordwrap, charmbracelet/x/ansi, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 3 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/menu.go`
+- Test: `ui/menu_test.go` (existing — covers state transitions, option generation, rendering, focus mode)
+
+**Step 1: write the failing test**
+
+No new tests needed. Existing `menu_test.go` covers: `NewMenu` defaults, `SetState` transitions (empty/default/new-instance/prompt), `SetInstance` with nil/non-nil, `SetFocusMode` toggle, `SetFocusSlot` sidebar/agent, `SetSidebarSpaceAction` variants, `Keydown`/`ClearKeydown`, `SetInDiffTab`, `String` output containing expected keybind labels, focus mode rendering with spinner and exit hint, tmux session count display, and group separator placement.
+
+**Step 2: run test to verify baseline passes**
+
+```bash
+go test ./ui/... -run "TestMenu" -v -count=1
+```
+
+expected: PASS
+
+**Step 3: rewrite implementation**
+
+Delete the contents of `ui/menu.go` and rewrite from scratch:
+
+- **Styles** — package-level vars: `keyStyle` (fg=`ColorSubtle`), `descStyle` (fg=`ColorMuted`), `sepStyle` (fg=`ColorOverlay`), `actionGroupStyle` (fg=`ColorRose`), `menuStyle` (fg=`ColorFoam`). Separators: `separator = " • "`, `verticalSeparator = " │ "`.
+- **`MenuState` type** — `int` enum: `StateDefault`, `StateEmpty`, `StateNewInstance`, `StatePrompt`.
+- **Focus slot constants** — `MenuSlotSidebar=0`, `MenuSlotInfo=1`, `MenuSlotAgent=2`, `MenuSlotDiff=3`, `MenuSlotList=4`.
+- **`Menu` struct** — fields: `options []keys.KeyName`, `height int`, `width int`, `state MenuState`, `instance *session.Instance`, `isInDiffTab bool`, `isFocusMode bool`, `focusSlot int`, `sidebarSpaceAction string`, `keyDown keys.KeyName`, `systemGroupSize int`, `tmuxSessionCount int`.
+- **Default option slices** — `defaultMenuOptions`, `emptyMenuOptions`, `newInstanceMenuOptions`, `promptMenuOptions` using `keys.Key*` constants. `defaultSystemGroupSize=4`, `emptySystemGroupSize=3`.
+- **`NewMenu() *Menu`** — returns menu with `StateEmpty`, `keyDown: -1`, `sidebarSpaceAction: "toggle"`, default options.
+- **Setter methods** — `SetTmuxSessionCount`, `Keydown`, `ClearKeydown`, `SetState` (updates state + calls `updateOptions`), `SetInstance` (updates instance, auto-transitions state if not in special state, calls `updateOptions`), `SetInDiffTab`, `SetFocusMode`, `SetFocusSlot`, `SetSidebarSpaceAction` (validates "expand"/"collapse", defaults to "toggle"), `SetSize`.
+- **`updateOptions()`** — dispatches on focus mode (single exit key) or state: `StateEmpty` → sidebar or empty options based on focus slot; `StateDefault` → instance options if instance selected, else sidebar options; `StateNewInstance`/`StatePrompt` → submit-only options.
+- **`addSidebarOptions(includeNewPlan bool)`** — builds options: optional new-plan, action group (enter, space-expand, view-plan, audit-toggle), system group (search, help, quit).
+- **`addInstanceOptions()`** — builds options: management group (new-plan, kill), action group (enter, send-prompt, space, conditional yes/resume), system group (search, tab, help, quit).
+- **Focus mode styles** — `focusModeFrames` (braille spinner), `focusDotStyle` (fg=`ColorLove`, bold), `focusLabelStyle` (fg=`ColorLove`, bold), `focusHintKeyStyle` (fg=`ColorSubtle`), `focusHintDescStyle` (fg=`ColorMuted`).
+- **`renderFocusMode() string`** — animated spinner frame from wall-clock `time.Now().UnixMilli()/100`, badge "interactive" + spinner, hint "ctrl+space exit". Cursor-positioned: centered content + right-aligned tmux count.
+- **`String() string`** — if focus mode, delegates to `renderFocusMode`. Otherwise: iterates options, renders each with key+desc styling (action group uses `actionGroupStyle`, others use `keyStyle`+`descStyle`). Applies underline if `keyDown` matches. Inserts group separators (vertical `│` between groups, bullet `•` within). Centers the menu text, right-aligns tmux count. Uses cursor-based positioning to avoid overlap.
+
+Imports: `fmt`, `strings`, `time`, `github.com/kastheco/kasmos/keys`, `github.com/kastheco/kasmos/session`, `github.com/charmbracelet/lipgloss`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run "TestMenu" -v -count=1
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/menu.go
+git commit -m "feat(clean-room): rewrite menu.go from scratch"
+```
