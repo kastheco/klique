@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772558872741,
-      "updated": 1772558979714
+      "updated": 1772558990166
     }
   },
   "messages": [
@@ -1196,7 +1196,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772558979705
+          "created": 1772558979705,
+          "completed": 1772558990155
         },
         "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
         "modelID": "claude-sonnet-4-6",
@@ -1209,15 +1210,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 71438,
+          "input": 1,
+          "output": 140,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 71127,
+            "write": 170
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb4bf927900183qXlkl2S00WUZ",
         "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
       },
@@ -1245,22 +1248,118 @@
           "callID": "toolu_01H8qzE8tjRmkb2Csgjok6PB",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "cd /home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core && git add session/instance.go && git commit -m \"feat(clean-room): rewrite session/instance.go from scratch\"",
               "description": "Commit the rewritten instance.go"
             },
+            "output": "[plan/02a-rewrite-session-core fd1a2f1] feat(clean-room): rewrite session/instance.go from scratch\n 1 file changed, 113 insertions(+), 114 deletions(-)\n",
+            "title": "Commit the rewritten instance.go",
             "metadata": {
-              "output": "",
-              "description": "Commit the rewritten instance.go"
+              "output": "[plan/02a-rewrite-session-core fd1a2f1] feat(clean-room): rewrite session/instance.go from scratch\n 1 file changed, 113 insertions(+), 114 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the rewritten instance.go",
+              "truncated": false
             },
             "time": {
-              "start": 1772558983119
+              "start": 1772558983117,
+              "end": 1772558990142
             }
           },
           "id": "prt_cb4bf99cb001Siybu4lBng6EK4",
           "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
           "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 71438,
+            "input": 1,
+            "output": 140,
+            "reasoning": 0,
+            "cache": {
+              "read": 71127,
+              "write": 170
+            }
+          },
+          "id": "prt_cb4bfbb3e001w4oHDIC7QaNAi1",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bf927900183qXlkl2S00WUZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772558990156,
+          "completed": 1772558997315
+        },
+        "parentID": "msg_cb4bdf0af001ZXsZXCpmYV5VKY",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-02a-rewrite-session-core"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 71745,
+          "input": 1,
+          "output": 239,
+          "reasoning": 0,
+          "cache": {
+            "read": 71297,
+            "write": 208
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb4bfbb4c0014si039ywKNsJ6D",
+        "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "id": "prt_cb4bfbf81001UvewexiwSONpI0",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
+        },
+        {
+          "type": "text",
+          "text": "Task 5 complete. All 12 tests pass (`TestNewInstance*`, `TestInstanceData*`, `TestBuildTitleOpts*`), the package builds cleanly, and the commit is in.\n\nThe rewrite of `session/instance.go`:\n- Preserves identical public API: all exported types, method signatures, and constants unchanged\n- Rewrites every line of implementation from scratch (clean-room)\n- `Status` type with `iota` starting at `Running(0)`, `Ready(1)`, `Loading(2)`, `Paused(3)`\n- Agent type constants: `planner`, `coder`, `reviewer`, `fixer`\n- All ~40 `Instance` struct fields in correct order with same types and export status\n- `ToInstanceData()`/`FromInstanceData()` round-trip with proper worktree and diff stats handling\n- Paused vs live instance restoration logic in `FromInstanceData()`\n- All accessor methods with correct side-effects (`SetStatus` notification logic, etc.)",
+          "time": {
+            "start": 1772558997276,
+            "end": 1772558997276
+          },
+          "id": "prt_cb4bfbf810022VWxZv61qJ89kW",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "a2255f16786170b683820c7a2223e058c0cad4f5",
+          "cost": 0,
+          "tokens": {
+            "total": 71745,
+            "input": 1,
+            "output": 239,
+            "reasoning": 0,
+            "cache": {
+              "read": 71297,
+              "write": 208
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34b420f5bffeeCrRT5zXpc2pGq",
+          "messageID": "msg_cb4bfbb4c0014si039ywKNsJ6D"
         }
       ]
     }
