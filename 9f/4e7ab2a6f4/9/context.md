@@ -1,0 +1,10 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan automatic-session-naming. Goal: automatic-session-naming
+
+when launching sessions to plan/implement/review a task/plan, the session name should be manually set to reflect what's being worked on (and which wave/subtask if applicable). relying on the automatic is resulting in titles like "I'll load the required skills first, then generate the title." which never actually update. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tas...
+
