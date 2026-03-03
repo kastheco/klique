@@ -1,0 +1,269 @@
+Implement Task 3: Implement Start, Restore, Close, DoesSessionExist
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `session/tmux/` to remove all AGPL-tainted code from the upstream fork. Introduces a `Session` interface so the instance layer depends on a contract rather than a concrete struct, and extracts program-specific logic (readiness detection, prompt injection) into adapters. Only opencode + claude programs are supported; aider/gemini support is dropped.
+**Architecture:** The new tmux package exports a `Session` interface with methods for lifecycle (Start/Restore/Close), I/O (SendKeys/CapturePaneContent/HasUpdated), attach/detach, and discovery. `TmuxSession` is the concrete implementation. Program-specific behavior (ready-string detection, trust-screen taps, CLI prompt syntax) lives in a `ProgramAdapter` interface with `claudeAdapter` and `opencodeAdapter` implementations. The `statusMonitor` is extracted as a standalone type with hash-based change detection and configurable debounce. All files in `session/tmux/` are deleted and rewritten from scratch — no line-by-line rewrite, no copy-paste from upstream.
+**Tech Stack:** Go 1.24, tmux CLI, creack/pty, charmbracelet/x/ansi, cmd.Executor, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 3 of 4 in Wave 2. 3 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `session/tmux/tmux_session.go`
+- Test: `session/tmux/tmux_session_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestStart_CreatesAndRestoresSession(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Do you trust the files in this folder?"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-start", "claude", false, ptyFactory, cmdExec)
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    require.Len(t, ptyFactory.cmds, 2) // new-session + attach-session
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "new-session")
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "KASMOS_MANAGED=1")
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[1]), "attach-session")
+}
+
+func TestStart_WithSkipPermissions(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Do you trust the files in this folder?"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-skip", "claude", true, ptyFactory, cmdExec)
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "--dangerously-skip-permissions")
+}
+
+func TestStart_OpenCode_NoTrustTap(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    var ranCmds []string
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            ranCmds = append(ranCmds, cmd2.ToString(cmd))
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Ask anything"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-oc", "opencode", false, ptyFactory, cmdExec)
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    for _, c := range ranCmds {
+        assert.NotContains(t, c, "send-keys")
+    }
+}
+
+func TestStart_InjectsAgentFlag(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Ask anything"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-agent", "opencode", false, ptyFactory, cmdExec)
+    s.SetAgentType("planner")
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "--agent planner")
+}
+
+func TestStart_InjectsTaskEnvVars(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Do you trust the files in this folder?"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-env", "claude", false, ptyFactory, cmdExec)
+    s.SetTaskEnv(3, 2, 4)
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    cmdStr := cmd2.ToString(ptyFactory.cmds[0])
+    assert.Contains(t, cmdStr, "KASMOS_TASK=3")
+    assert.Contains(t, cmdStr, "KASMOS_WAVE=2")
+    assert.Contains(t, cmdStr, "KASMOS_PEERS=4")
+}
+
+func TestStart_WithInitialPrompt_OpenCode(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Ask anything"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-prompt", "opencode", false, ptyFactory, cmdExec)
+    s.SetAgentType("planner")
+    s.SetInitialPrompt("Plan auth. Goal: JWT tokens.")
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "--prompt 'Plan auth. Goal: JWT tokens.'")
+}
+
+func TestStart_WithInitialPrompt_Claude(t *testing.T) {
+    ptyFactory := NewMockPtyFactory(t)
+    created := false
+    cmdExec := cmd_test.MockCmdExec{
+        RunFunc: func(cmd *exec.Cmd) error {
+            if strings.Contains(cmd.String(), "has-session") && !created {
+                created = true
+                return fmt.Errorf("no session")
+            }
+            return nil
+        },
+        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+            if strings.Contains(cmd.String(), "capture-pane") {
+                return []byte("Do you trust the files in this folder?"), nil
+            }
+            return []byte("output"), nil
+        },
+    }
+
+    workdir := t.TempDir()
+    s := NewTmuxSessionWithDeps("test-claude-prompt", "claude", false, ptyFactory, cmdExec)
+    s.SetInitialPrompt("Implement the auth module.")
+    err := s.Start(workdir)
+    require.NoError(t, err)
+    assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "'Implement the auth module.'")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./session/tmux/... -run "TestStart_" -v
+```
+
+expected: FAIL — Start/Restore/Close not implemented
+
+**Step 3: write minimal implementation**
+
+Implement in `tmux_session.go`:
+
+- `Start(workDir)` — build program command string (append flags based on adapter, agent type, task env, initial prompt via adapter's `BuildPromptArg`), prepend `KASMOS_MANAGED=1`, create detached tmux session via `tmux new-session -d -s <name> -c <workDir> <program>`, poll for session existence with exponential backoff (5ms→50ms, 2s timeout), close initial PTY, configure session (history-limit 10000, status off, set-environment KASMOS_MANAGED), call `Restore()`, if adapter exists: poll for ready string with exponential backoff (100ms→1s, 30s timeout), tap trust screen if needed, fire title callback for opencode.
+- `Restore()` — attach to existing session via PTY, create new `StatusMonitor`, hide status bar.
+- `Close()` — close PTY, kill tmux session, remove prompt file.
+- `DoesSessionExist()` — `tmux has-session -t=<name>` exact match.
+- `buildProgramCommand(workDir)` — extracted helper that constructs the full command string with all flags and env vars.
+
+For opencode: append `--print-logs 2>><logfile>` to the program command.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./session/tmux/... -run "TestStart_" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add session/tmux/tmux_session.go session/tmux/tmux_session_test.go
+git commit -m "feat(clean-room): implement Start, Restore, Close, DoesSessionExist"
+```
