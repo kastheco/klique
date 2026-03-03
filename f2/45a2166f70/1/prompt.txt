@@ -1,0 +1,176 @@
+Implement Task 6: Rewrite FormOverlay, PermissionOverlay, and TmuxBrowserOverlay
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 6 of 3 in Wave 2. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/overlay/formOverlay.go`
+- Modify: `ui/overlay/formOverlay_test.go`
+- Modify: `ui/overlay/permissionOverlay.go`
+- Create: `ui/overlay/permissionOverlay_test.go`
+- Modify: `ui/overlay/tmuxBrowserOverlay.go`
+- Modify: `ui/overlay/tmuxBrowserOverlay_test.go`
+
+These are the more complex overlays. Each is rewritten to implement `Overlay` with domain-specific result values carried in `Result.Value` and `Result.Action`.
+
+**Step 1: write the failing test**
+
+```go
+// permissionOverlay_test.go
+package overlay
+
+import (
+    "testing"
+
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestPermissionOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewPermissionOverlay("instance", "desc", "pattern")
+}
+
+func TestPermissionOverlay_HandleKey_Confirm(t *testing.T) {
+    p := NewPermissionOverlay("inst", "run command", "*.sh")
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "allow_once", result.Action)
+}
+
+func TestPermissionOverlay_HandleKey_Navigate(t *testing.T) {
+    p := NewPermissionOverlay("inst", "run command", "*.sh")
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "allow_always", result.Action)
+}
+
+func TestPermissionOverlay_HandleKey_Reject(t *testing.T) {
+    p := NewPermissionOverlay("inst", "run command", "*.sh")
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+    p.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.Equal(t, "reject", result.Action)
+}
+
+func TestPermissionOverlay_HandleKey_Dismiss(t *testing.T) {
+    p := NewPermissionOverlay("inst", "run command", "*.sh")
+    result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+
+func TestPermissionOverlay_View(t *testing.T) {
+    p := NewPermissionOverlay("inst", "run command", "*.sh")
+    p.SetSize(60, 20)
+    view := p.View()
+    assert.Contains(t, view, "permission required")
+    assert.Contains(t, view, "run command")
+}
+```
+
+Add to `formOverlay_test.go`:
+
+```go
+func TestFormOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewFormOverlay("title", 60)
+}
+
+func TestFormOverlay_HandleKey_Submit(t *testing.T) {
+    f := NewFormOverlay("new plan", 60)
+    for _, r := range "test-name" {
+        f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+    }
+    result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "test-name", result.Value)
+}
+
+func TestFormOverlay_HandleKey_Cancel(t *testing.T) {
+    f := NewFormOverlay("new plan", 60)
+    result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+```
+
+Add to `tmuxBrowserOverlay_test.go`:
+
+```go
+func TestTmuxBrowserOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewTmuxBrowserOverlay(nil)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
+    b := NewTmuxBrowserOverlay(nil)
+    result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.Empty(t, result.Action)
+}
+
+func TestTmuxBrowserOverlay_HandleKey_Attach(t *testing.T) {
+    items := []TmuxBrowserItem{{Name: "sess", Title: "my-session"}}
+    b := NewTmuxBrowserOverlay(items)
+    result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.Equal(t, "attach", result.Action)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run "TestPermissionOverlay_ImplementsOverlay|TestFormOverlay_ImplementsOverlay|TestTmuxBrowserOverlay_ImplementsOverlay" -v
+```
+
+expected: FAIL — types don't implement `Overlay`
+
+**Step 3: write minimal implementation**
+
+Rewrite each overlay to implement `Overlay`:
+
+- `FormOverlay.HandleKey` returns `Result{Submitted: true, Value: name}` on submit. The `Description()`, `Branch()`, `WorkPath()` methods remain as accessors for the app layer to read after submit.
+- `PermissionOverlay.HandleKey` returns `Result{Submitted: true, Action: "allow_once"|"allow_always"|"reject"}` on confirm. The `Choice()`, `Pattern()`, `Description()` methods remain as accessors.
+- `TmuxBrowserOverlay.HandleKey` returns `Result{Dismissed: true, Action: "attach"|"kill"|"adopt"|"dismiss"}`. The `SelectedItem()`, `RemoveSelected()`, `IsEmpty()` methods remain as accessors.
+- All three rename `Render()` to `View()` and use `DefaultStyles()`.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run "TestPermission|TestFormOverlay|TestTmuxBrowser" -v
+```
+
+expected: PASS (both old and new tests)
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/formOverlay.go ui/overlay/formOverlay_test.go ui/overlay/permissionOverlay.go ui/overlay/permissionOverlay_test.go ui/overlay/tmuxBrowserOverlay.go ui/overlay/tmuxBrowserOverlay_test.go
+git commit -m "feat(overlay): rewrite form, permission, and tmux browser overlays to implement Overlay interface"
+```
