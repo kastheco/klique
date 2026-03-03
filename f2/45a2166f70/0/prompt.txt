@@ -1,0 +1,173 @@
+Implement Task 4: Rewrite ConfirmationOverlay, TextOverlay, and TextInputOverlay
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 4 of 3 in Wave 2. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/overlay/confirmationOverlay.go`
+- Modify: `ui/overlay/textOverlay.go`
+- Modify: `ui/overlay/textInput.go`
+- Modify: `ui/overlay/textInput_test.go`
+- Create: `ui/overlay/confirmationOverlay_test.go`
+- Create: `ui/overlay/textOverlay_test.go`
+
+These three are the simplest overlays — they don't have search/filter logic. Rewriting them together keeps the task cohesive.
+
+**Step 1: write the failing test**
+
+```go
+// confirmationOverlay_test.go
+package overlay
+
+import (
+    "testing"
+
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestConfirmationOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewConfirmationOverlay("are you sure?")
+}
+
+func TestConfirmationOverlay_HandleKey_Confirm(t *testing.T) {
+    c := NewConfirmationOverlay("delete?")
+    result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "y", result.Action)
+}
+
+func TestConfirmationOverlay_HandleKey_Cancel(t *testing.T) {
+    c := NewConfirmationOverlay("delete?")
+    result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+    assert.Equal(t, "n", result.Action)
+}
+
+func TestConfirmationOverlay_HandleKey_Esc(t *testing.T) {
+    c := NewConfirmationOverlay("delete?")
+    result := c.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+
+func TestConfirmationOverlay_HandleKey_CustomKeys(t *testing.T) {
+    c := NewConfirmationOverlay("retry?")
+    c.ConfirmKey = "r"
+    c.CancelKey = "n"
+    result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "r", result.Action)
+}
+
+func TestConfirmationOverlay_View(t *testing.T) {
+    c := NewConfirmationOverlay("are you sure?")
+    c.SetSize(60, 20)
+    view := c.View()
+    assert.Contains(t, view, "are you sure?")
+}
+
+// textOverlay_test.go
+func TestTextOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewTextOverlay("content")
+}
+
+func TestTextOverlay_HandleKey_AnyKeyDismisses(t *testing.T) {
+    o := NewTextOverlay("help text")
+    result := o.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+    assert.True(t, result.Dismissed)
+}
+
+func TestTextOverlay_View(t *testing.T) {
+    o := NewTextOverlay("help content here")
+    o.SetSize(60, 20)
+    view := o.View()
+    assert.Contains(t, view, "help content here")
+}
+```
+
+Update `textInput_test.go` to test the new `HandleKey` → `Result` API alongside the existing tests:
+
+```go
+func TestTextInputOverlay_ImplementsOverlay(t *testing.T) {
+    var _ Overlay = NewTextInputOverlay("title", "")
+}
+
+func TestTextInputOverlay_HandleKey_Submit(t *testing.T) {
+    ti := NewTextInputOverlay("title", "hello")
+    result := ti.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Dismissed)
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "hello", result.Value)
+}
+
+func TestTextInputOverlay_HandleKey_Cancel(t *testing.T) {
+    ti := NewTextInputOverlay("title", "")
+    result := ti.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run "TestConfirmationOverlay_ImplementsOverlay|TestTextOverlay_ImplementsOverlay|TestTextInputOverlay_ImplementsOverlay" -v
+```
+
+expected: FAIL — types don't implement `Overlay` interface (missing `HandleKey` method returning `Result`)
+
+**Step 3: write minimal implementation**
+
+Rewrite each overlay to implement the `Overlay` interface. Keep the old `HandleKeyPress` methods as deprecated wrappers that call `HandleKey` internally, so the app layer doesn't break during the transition.
+
+For `ConfirmationOverlay`: add `HandleKey(tea.KeyMsg) Result` and `View() string` (rename existing `Render` to `View`), add `SetSize(w, h int)`. The old `HandleKeyPress` calls `HandleKey` and returns `result.Dismissed`.
+
+For `TextOverlay`: add `HandleKey` returning `Result{Dismissed: true}` on any key, rename `Render` to `View`, add `SetSize`.
+
+For `TextInputOverlay`: add `HandleKey` that returns `Result{Value: textarea.Value(), Submitted: true}` on submit, keep old `HandleKeyPress` as wrapper.
+
+All three use `DefaultStyles()` for their border/title/hint rendering instead of inline `lipgloss.NewStyle()` calls.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run "TestConfirmation|TestTextOverlay|TestTextInput" -v
+```
+
+expected: PASS (both old and new tests)
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/confirmationOverlay.go ui/overlay/confirmationOverlay_test.go ui/overlay/textOverlay.go ui/overlay/textOverlay_test.go ui/overlay/textInput.go ui/overlay/textInput_test.go
+git commit -m "feat(overlay): rewrite confirmation, text, and text-input overlays to implement Overlay interface"
+```
