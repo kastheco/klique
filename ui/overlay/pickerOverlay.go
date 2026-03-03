@@ -93,6 +93,7 @@ func (p *PickerOverlay) Value() string {
 	return val
 }
 
+// SetSize implements Overlay. Updates available dimensions; width is used for layout.
 func (p *PickerOverlay) SetSize(width, height int) {
 	p.width = width
 }

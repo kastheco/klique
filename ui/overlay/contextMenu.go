@@ -29,7 +29,6 @@ type filteredItem struct {
 	origIdx int // 1-based number for display and hotkey
 }
 
-// NewContextMenu creates a context menu at the given screen position.
 // NewContextMenu creates a context menu with the given items.
 // Position is managed by the OverlayManager via ShowPositioned.
 func NewContextMenu(items []ContextMenuItem) *ContextMenu {
