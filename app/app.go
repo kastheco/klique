@@ -973,7 +973,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPlannerTaskFile = capturedPlanFile
 				m.confirmAction(
-					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
+					fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
 					func() tea.Msg {
 						return plannerCompleteMsg{planFile: capturedPlanFile}
 					},
@@ -1001,7 +1001,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPlannerTaskFile = planFile
 				m.confirmAction(
-					fmt.Sprintf("plan '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
+					fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
 					func() tea.Msg {
 						return plannerCompleteMsg{planFile: planFile}
 					},

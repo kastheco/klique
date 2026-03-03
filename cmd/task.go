@@ -214,15 +214,15 @@ func executeTaskLinkClickUp(project string, store taskstore.Store) (int, error) 
 // NewTaskCmd builds the `kq plan` cobra command tree.
 func NewTaskCmd() *cobra.Command {
 	planCmd := &cobra.Command{
-		Use:   "plan",
-		Short: "manage plan lifecycle (list, set-status, transition, implement)",
+		Use:   "task",
+		Short: "manage task lifecycle (list, set-status, transition, implement)",
 	}
 
 	// kq plan list
 	var statusFilter string
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "list all plans with status",
+		Short: "list all tasks with status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plansDir, err := resolvePlansDir()
 			if err != nil {
@@ -239,7 +239,7 @@ func NewTaskCmd() *cobra.Command {
 	var branchFlag, topicFlag, descriptionFlag string
 	registerCmd := &cobra.Command{
 		Use:   "register <plan-file>",
-		Short: "register an untracked plan file (sets status to ready)",
+		Short: "register an untracked task file (sets status to ready)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plansDir, err := resolvePlansDir()
@@ -262,7 +262,7 @@ func NewTaskCmd() *cobra.Command {
 	var forceFlag bool
 	setStatusCmd := &cobra.Command{
 		Use:   "set-status <plan-file> <status>",
-		Short: "force-override a plan's status (bypasses FSM)",
+		Short: "force-override a task's status (bypasses FSM)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plansDir, err := resolvePlansDir()
@@ -282,7 +282,7 @@ func NewTaskCmd() *cobra.Command {
 	// kq plan transition
 	transitionCmd := &cobra.Command{
 		Use:   "transition <plan-file> <event>",
-		Short: "apply an FSM event to a plan",
+		Short: "apply an FSM event to a task",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plansDir, err := resolvePlansDir()
@@ -324,7 +324,7 @@ func NewTaskCmd() *cobra.Command {
 	var linkProject string
 	linkClickUpCmd := &cobra.Command{
 		Use:   "link-clickup",
-		Short: "backfill ClickUp task IDs from plan content (parses **Source:** ClickUp <ID> lines)",
+		Short: "backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, project := resolveStoreConfig("")
 			if store == nil {
