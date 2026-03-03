@@ -498,24 +498,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.WindowSize()
 		}
 
-		// !/@ /#: exit focus mode and switch to the corresponding center tab.
-		// Sidebar retains focus (slotNav) — only the visible tab changes.
-		var jumpTab int
-		var doJump bool
-		switch msg.String() {
-		case "!":
-			jumpTab, doJump = ui.PreviewTab, true
-		case "@":
-			jumpTab, doJump = ui.DiffTab, true
-		case "#":
-			jumpTab, doJump = ui.InfoTab, true
-		}
-		if doJump {
-			m.exitFocusMode()
-			m.tabbedWindow.SetActiveTab(jumpTab)
-			return m, tea.WindowSize()
-		}
-
 		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
 		if msg.Type == tea.KeyCtrlUp || msg.Type == tea.KeyCtrlDown {
 			if msg.Type == tea.KeyCtrlUp {
