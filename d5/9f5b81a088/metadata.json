@@ -14,6 +14,13 @@
       "context": "",
       "content_hash": "/d5/9f5b81a088/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/d5/9f5b81a088/1/metadata.json",
+      "transcript": "/d5/9f5b81a088/1/full.jsonl",
+      "context": "/d5/9f5b81a088/1/context.md",
+      "content_hash": "/d5/9f5b81a088/1/content_hash.txt",
+      "prompt": "/d5/9f5b81a088/1/prompt.txt"
     }
   ],
   "token_usage": {
