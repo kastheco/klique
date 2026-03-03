@@ -432,6 +432,27 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m, m.confirmAction(fmt.Sprintf("start over plan '%s'? this resets the branch.", planName), startOverAction)
 
+	case "restart_instance":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		capturedTitle := selected.Title
+		capturedAgent := selected.AgentType
+		capturedPlan := selected.PlanFile
+		return m, func() tea.Msg {
+			err := selected.Restart()
+			if err != nil {
+				return err
+			}
+			m.audit(auditlog.EventAgentRestarted, "agent restarted",
+				auditlog.WithInstance(capturedTitle),
+				auditlog.WithAgent(capturedAgent),
+				auditlog.WithPlan(capturedPlan),
+			)
+			return instanceChangedMsg{}
+		}
+
 	case "toggle_auto_advance":
 		if m.appConfig == nil {
 			return m, nil
@@ -591,6 +612,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	items := []overlay.ContextMenuItem{
 		{Label: "open", Action: "open_instance"},
 		{Label: "kill", Action: "kill_instance"},
+		{Label: "restart", Action: "restart_instance"},
 	}
 	if selected.Status == session.Paused {
 		items = append(items, overlay.ContextMenuItem{Label: "resume", Action: "resume_instance"})

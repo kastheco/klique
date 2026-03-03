@@ -1447,3 +1447,44 @@ func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {
 	assert.Equal(t, "my-agent", h.previewTerminalInstance,
 		"previewTerminalInstance should NOT be cleared by exitFocusMode")
 }
+
+func TestRestartInstance_AppearsInContextMenu(t *testing.T) {
+	h := newTestHome()
+	inst, _ := session.NewInstance(session.InstanceOptions{
+		Title:   "test-restart-menu",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+
+	model, _ := h.openContextMenu()
+	updated := model.(*home)
+	require.NotNil(t, updated.contextMenu)
+
+	found := false
+	for _, item := range updated.contextMenu.Items() {
+		if item.Action == "restart_instance" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "context menu should contain 'restart' option")
+}
+
+func TestExecuteContextAction_RestartInstance(t *testing.T) {
+	h := newTestHome()
+	inst, _ := session.NewInstance(session.InstanceOptions{
+		Title:   "test-restart-action",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+
+	_, cmd := h.executeContextAction("restart_instance")
+	// The action returns an async command (the restart runs in a goroutine).
+	assert.NotNil(t, cmd, "restart action should return a tea.Cmd")
+}
