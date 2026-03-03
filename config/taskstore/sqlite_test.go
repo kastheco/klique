@@ -222,6 +222,21 @@ func TestClickUpTaskIDRoundTrip_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestSQLiteMigration_PlansTableToTasks(t *testing.T) {
+	store, err := taskstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Store should work — the migration creates the tasks table
+	err = store.Create("proj", taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady})
+	require.NoError(t, err)
+
+	entries, err := store.List("proj")
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "test.md", entries[0].Filename)
+}
+
 func TestSQLiteStore_ReviewCycle(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{

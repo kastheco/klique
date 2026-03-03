@@ -22,7 +22,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// List plans (with optional ?status= and ?topic= filters)
-	mux.HandleFunc("GET /v1/projects/{project}/plans", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/projects/{project}/tasks", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		statusFilters := r.URL.Query()["status"]
 		topicFilter := r.URL.Query().Get("topic")
@@ -51,7 +51,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Create plan
-	mux.HandleFunc("POST /v1/projects/{project}/plans", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/projects/{project}/tasks", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		var entry TaskEntry
 		if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
@@ -66,13 +66,13 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Get plan
-	mux.HandleFunc("GET /v1/projects/{project}/plans/{filename}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		entry, err := store.Get(project, filename)
 		if err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -82,7 +82,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Update plan
-	mux.HandleFunc("PUT /v1/projects/{project}/plans/{filename}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		var entry TaskEntry
@@ -92,7 +92,7 @@ func NewHandler(store Store) http.Handler {
 		}
 		if err := store.Update(project, filename, entry); err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -102,13 +102,13 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Get plan content
-	mux.HandleFunc("GET /v1/projects/{project}/plans/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		content, err := store.GetContent(project, filename)
 		if err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -120,7 +120,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Set plan content
-	mux.HandleFunc("PUT /v1/projects/{project}/plans/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/content", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		body, err := io.ReadAll(r.Body)
@@ -130,7 +130,7 @@ func NewHandler(store Store) http.Handler {
 		}
 		if err := store.SetContent(project, filename, string(body)); err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -140,7 +140,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Set ClickUp task ID
-	mux.HandleFunc("PUT /v1/projects/{project}/plans/{filename}/clickup-task-id", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/clickup-task-id", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		var req struct {
@@ -152,7 +152,7 @@ func NewHandler(store Store) http.Handler {
 		}
 		if err := store.SetClickUpTaskID(project, filename, req.ClickUpTaskID); err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -162,12 +162,12 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Increment review cycle
-	mux.HandleFunc("POST /v1/projects/{project}/plans/{filename}/increment-review-cycle", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/increment-review-cycle", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		if err := store.IncrementReviewCycle(project, filename); err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -177,7 +177,7 @@ func NewHandler(store Store) http.Handler {
 	})
 
 	// Rename plan
-	mux.HandleFunc("POST /v1/projects/{project}/plans/{filename}/rename", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/rename", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")
 		filename := r.PathValue("filename")
 		var req struct {
@@ -193,7 +193,7 @@ func NewHandler(store Store) http.Handler {
 		}
 		if err := store.Rename(project, filename, req.NewFilename); err != nil {
 			if isNotFound(err) {
-				writeError(w, http.StatusNotFound, "plan not found: "+filename)
+				writeError(w, http.StatusNotFound, "task not found: "+filename)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
