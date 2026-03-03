@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -8,17 +10,17 @@ import (
 	"github.com/muesli/reflow/wordwrap"
 )
 
-// AuditEventDisplay is a pre-formatted event for rendering in the audit pane.
+// AuditEventDisplay is a pre-formatted event record for the audit pane.
 type AuditEventDisplay struct {
-	Time    string         // formatted as "HH:MM"
+	Time    string         // wall-clock time formatted as "HH:MM"
 	Kind    string         // event kind string (e.g. "agent_spawned")
-	Icon    string         // single-char icon
-	Message string         // human-readable message
-	Color   lipgloss.Color // icon color
-	Level   string         // "info", "warn", "error"
+	Icon    string         // single-character icon glyph
+	Message string         // human-readable event description
+	Color   lipgloss.Color // icon foreground colour
+	Level   string         // "info", "warn", or "error"
 }
 
-// AuditPane renders a scrollable activity feed inside the navigation panel border.
+// AuditPane renders a chronological, scrollable activity feed.
 type AuditPane struct {
 	events   []AuditEventDisplay
 	viewport viewport.Model
@@ -27,69 +29,61 @@ type AuditPane struct {
 	visible  bool
 }
 
-// NewAuditPane creates a new AuditPane (visible by default).
+// NewAuditPane returns an AuditPane that is visible by default.
 func NewAuditPane() *AuditPane {
-	vp := viewport.New(0, 0)
 	return &AuditPane{
 		visible:  true,
-		viewport: vp,
+		viewport: viewport.New(0, 0),
 	}
 }
 
-// SetSize updates the pane dimensions and rebuilds the viewport content.
+// SetSize stores the total pane dimensions and rebuilds content.
+// One line is reserved for the header divider; the viewport gets the rest.
 func (p *AuditPane) SetSize(w, h int) {
 	p.width = w
-	// Reserve 1 line for the header divider.
+	p.height = h
 	bodyH := h - 1
 	if bodyH < 0 {
 		bodyH = 0
 	}
-	p.height = h
 	p.viewport.Width = w
 	p.viewport.Height = bodyH
 	p.viewport.SetContent(p.renderBody())
 }
 
-// SetEvents replaces the event list and refreshes the viewport.
+// SetEvents replaces the event slice, rebuilds body content, and pins the
+// viewport to the bottom so the newest event is immediately visible.
 func (p *AuditPane) SetEvents(events []AuditEventDisplay) {
 	p.events = events
 	p.viewport.SetContent(p.renderBody())
 	p.viewport.GotoBottom()
 }
 
-// Events returns the current list of pre-formatted audit event displays.
-// Primarily used in tests to inspect formatted event data without needing
-// a sized viewport.
+// Events returns the current event slice (used by tests).
 func (p *AuditPane) Events() []AuditEventDisplay {
 	return p.events
 }
 
-// ScrollDown scrolls the viewport down by n lines.
+// ScrollDown advances the viewport by n lines.
 func (p *AuditPane) ScrollDown(n int) {
 	p.viewport.LineDown(n)
 }
 
-// ScrollUp scrolls the viewport up by n lines.
+// ScrollUp retreats the viewport by n lines.
 func (p *AuditPane) ScrollUp(n int) {
 	p.viewport.LineUp(n)
 }
 
-// Visible returns whether the pane is currently shown.
-func (p *AuditPane) Visible() bool {
-	return p.visible
-}
+// Visible reports whether the pane is shown.
+func (p *AuditPane) Visible() bool { return p.visible }
 
-// Height returns the current total height of the pane (header + body).
-func (p *AuditPane) Height() int {
-	return p.height
-}
+// Height returns the total height (header + body) set by SetSize.
+func (p *AuditPane) Height() int { return p.height }
 
-// ToggleVisible flips the visibility state.
-func (p *AuditPane) ToggleVisible() {
-	p.visible = !p.visible
-}
+// ToggleVisible flips the visibility flag.
+func (p *AuditPane) ToggleVisible() { p.visible = !p.visible }
 
-// Styles for the audit pane — Rosé Pine Moon palette.
+// Audit-pane styles — Rosé Pine Moon palette.
 var (
 	auditDividerStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 	auditMinuteStyle  = lipgloss.NewStyle().Foreground(ColorMuted)
@@ -100,77 +94,75 @@ var (
 	auditRowPad       = lipgloss.NewStyle().PaddingLeft(1)
 )
 
-// String renders the audit pane: a 1-line header divider + scrollable body.
+// String returns the full rendered output: header divider + viewport body.
 func (p *AuditPane) String() string {
-	header := p.renderHeader()
-	body := p.viewport.View()
-	return lipgloss.JoinVertical(lipgloss.Left, header, body)
+	return lipgloss.JoinVertical(lipgloss.Left, p.renderHeader(), p.viewport.View())
 }
 
-// renderHeader builds a centered divider: ────── log ──────
-// Matches the nav panel's navDividerLine aesthetic exactly.
+// renderHeader builds the centred "────── log ──────" divider line.
 func (p *AuditPane) renderHeader() string {
-	inner := " log "
-	innerW := len(inner)
-	remaining := p.width - innerW
+	const label = " log "
+	remaining := p.width - len(label)
 	if remaining < 2 {
-		return auditDividerStyle.Render(inner)
+		return auditDividerStyle.Render(label)
 	}
 	left := remaining / 2
 	right := remaining - left
-	return auditDividerStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
+	return auditDividerStyle.Render(
+		strings.Repeat("─", left) + label + strings.Repeat("─", right),
+	)
 }
 
-// renderMinuteHeader builds a centered minute divider: ────── HH:MM ──────
-// Mirrors renderHeader() but uses the minute string instead of "log".
+// renderMinuteHeader builds a centred "────── HH:MM ──────" divider.
 func (p *AuditPane) renderMinuteHeader(minute string) string {
 	inner := " " + minute + " "
-	innerW := len(inner)
-	remaining := p.width - innerW
+	remaining := p.width - len(inner)
 	if remaining < 2 {
 		return auditMinuteStyle.Render(inner)
 	}
 	left := remaining / 2
 	right := remaining - left
-	return auditMinuteStyle.Render(strings.Repeat("─", left) + inner + strings.Repeat("─", right))
+	return auditMinuteStyle.Render(
+		strings.Repeat("─", left) + inner + strings.Repeat("─", right),
+	)
 }
 
-// renderBody builds the scrollable event list content.
+// renderBody builds the scrollable event list.
+//
+// Layout per event row:
+//
+//	" ◆  message text"
+//	 1 1 2 = 4 chars of overhead before message
+//
+// Continuation lines from word-wrapped messages are indented by the same
+// overhead so they align under the first character of the message text.
 func (p *AuditPane) renderBody() string {
 	if len(p.events) == 0 {
-		return auditRowPad.Render(
-			auditEmptyStyle.Render("· no events"),
-		)
+		return auditRowPad.Render(auditEmptyStyle.Render("· no events"))
 	}
 
-	// Available width for message text after icon + padding.
-	// Layout per row: " ◆  message"
-	//                  1 1 2 = 4 chars of overhead
 	const overhead = 4
-	msgWidth := p.width - overhead
-	if msgWidth < 10 {
-		msgWidth = 10
+	msgW := p.width - overhead
+	if msgW < 10 {
+		msgW = 10
 	}
-	// Continuation lines indent to align under the message text.
-	const contIndent = overhead
 
-	// Iterate oldest-first so newest events appear at the bottom.
-	// Emit a centered minute header whenever the minute changes.
+	// Walk events newest-first so that we can detect minute boundaries, then
+	// append in reverse order so oldest events end up at the top of the output.
 	lines := make([]string, 0, len(p.events))
 	var lastMinute string
+
 	for i := len(p.events) - 1; i >= 0; i-- {
 		e := p.events[i]
 
-		// Emit minute header on minute boundary.
+		// Emit a centred minute header whenever the minute value changes.
 		if e.Time != lastMinute {
 			lines = append(lines, p.renderMinuteHeader(e.Time))
 			lastMinute = e.Time
 		}
 
 		icon := lipgloss.NewStyle().Foreground(e.Color).Render(e.Icon)
-
-		// Word-wrap the message at msgWidth, then render each wrapped segment.
-		wrapped := wordwrap.String(e.Message, msgWidth)
+		wrapped := wordwrap.String(e.Message, msgW)
 		segments := strings.Split(wrapped, "\n")
 
 		for j, seg := range segments {
@@ -183,20 +175,22 @@ func (p *AuditPane) renderBody() string {
 			default:
 				styledSeg = auditMsgStyle.Render(seg)
 			}
-			var line string
+
+			var row string
 			if j == 0 {
-				line = auditRowPad.Render(icon + "  " + styledSeg)
+				row = auditRowPad.Render(icon + "  " + styledSeg)
 			} else {
-				line = auditRowPad.Render(strings.Repeat(" ", contIndent) + styledSeg)
+				row = auditRowPad.Render(strings.Repeat(" ", overhead) + styledSeg)
 			}
-			lines = append(lines, line)
+			lines = append(lines, row)
 		}
 	}
+
 	return strings.Join(lines, "\n")
 }
 
-// EventKindIcon returns the icon and color for a given event kind string.
-// Used by the app layer when building AuditEventDisplay values.
+// EventKindIcon maps an event kind string to a display glyph and colour.
+// Used by the app layer when constructing AuditEventDisplay values.
 func EventKindIcon(kind string) (icon string, color lipgloss.Color) {
 	switch kind {
 	case "agent_spawned":
@@ -242,4 +236,15 @@ func EventKindIcon(kind string) (icon string, color lipgloss.Color) {
 	default:
 		return "·", ColorMuted
 	}
+}
+
+// debugAudit appends a formatted line to /tmp/audit_debug.log.
+// Fire-and-forget; errors are intentionally ignored.
+func debugAudit(format string, args ...any) {
+	f, err := os.OpenFile("/tmp/audit_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, format+"\n", args...)
 }
