@@ -1,0 +1,239 @@
+Implement Task 2: Implement OverlayManager with PlaceOverlay Compositing
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Clean-room rewrite of `ui/overlay/` to replace 8 ad-hoc overlay structs (each with different APIs) with a unified `Overlay` interface and `OverlayManager`. Eliminates the 27-state switch explosion in `app/app_input.go` and the 20-case render switch in `app/app.go:View()` by making overlays polymorphic. Preserves all existing overlay types and their behavior.
+**Architecture:** A new `Overlay` interface defines the contract: `HandleKey(tea.KeyMsg) Result`, `View() string`, `SetSize(w, h int)`. The `Result` type carries dismiss/submit/action signals so the `home` struct doesn't need per-overlay type assertions. An `OverlayManager` holds the active overlay stack (modal + toast layer), handles `PlaceOverlay` compositing, and exposes `IsActive() bool` for the input guard. Each concrete overlay (confirmation, text input, picker, form, permission, context menu, tmux browser) is rewritten to implement the interface. The `home` struct replaces 8 pointer fields with one `OverlayManager`, and the giant state/render switches collapse to `if m.overlays.IsActive() { return m.overlays.HandleKey(msg) }`.
+**Tech Stack:** Go 1.24, bubbletea v1.3, lipgloss v1.1, bubbles v0.20, huh v0.6, testify
+
+## Wave 1 of 3
+
+## Parallel Execution
+
+You are Task 2 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `ui/overlay/manager.go`
+- Test: `ui/overlay/manager_test.go`
+
+**Step 1: write the failing test**
+
+```go
+// manager_test.go
+package overlay
+
+import (
+    "testing"
+
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestManager_IsActive(t *testing.T) {
+    mgr := NewManager()
+    assert.False(t, mgr.IsActive())
+
+    mgr.Show(&stubOverlay{rendered: "test"})
+    assert.True(t, mgr.IsActive())
+}
+
+func TestManager_ShowAndDismiss(t *testing.T) {
+    mgr := NewManager()
+    mgr.Show(&stubOverlay{rendered: "overlay content"})
+    require.True(t, mgr.IsActive())
+
+    result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+    assert.True(t, result.Dismissed)
+    assert.False(t, mgr.IsActive())
+}
+
+func TestManager_Submit(t *testing.T) {
+    mgr := NewManager()
+    mgr.Show(&stubOverlay{rendered: "form"})
+
+    result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.True(t, result.Submitted)
+    assert.Equal(t, "test-value", result.Value)
+    assert.False(t, mgr.IsActive(), "overlay should be dismissed after submit")
+}
+
+func TestManager_HandleKeyWhenInactive(t *testing.T) {
+    mgr := NewManager()
+    result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+    assert.False(t, result.Dismissed)
+    assert.False(t, result.Submitted)
+}
+
+func TestManager_SetSize(t *testing.T) {
+    s := &stubOverlay{}
+    mgr := NewManager()
+    mgr.Show(s)
+    mgr.SetSize(100, 50)
+    assert.Equal(t, 100, s.w)
+    assert.Equal(t, 50, s.h)
+}
+
+func TestManager_Render_Inactive(t *testing.T) {
+    mgr := NewManager()
+    bg := "background content"
+    assert.Equal(t, bg, mgr.Render(bg))
+}
+
+func TestManager_Render_Active(t *testing.T) {
+    mgr := NewManager()
+    mgr.SetSize(80, 24)
+    mgr.Show(&stubOverlay{rendered: "OVERLAY"})
+    bg := "background content here"
+    result := mgr.Render(bg)
+    assert.NotEqual(t, bg, result, "render should composite overlay onto background")
+    assert.Contains(t, result, "OVERLAY")
+}
+
+func TestManager_Current(t *testing.T) {
+    mgr := NewManager()
+    assert.Nil(t, mgr.Current())
+
+    s := &stubOverlay{rendered: "x"}
+    mgr.Show(s)
+    assert.Equal(t, s, mgr.Current())
+}
+
+func TestManager_Dismiss(t *testing.T) {
+    mgr := NewManager()
+    mgr.Show(&stubOverlay{rendered: "x"})
+    require.True(t, mgr.IsActive())
+
+    mgr.Dismiss()
+    assert.False(t, mgr.IsActive())
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/overlay/... -run TestManager -v
+```
+
+expected: FAIL — `NewManager`, `Manager` undefined
+
+**Step 3: write minimal implementation**
+
+Implement `Manager` in `ui/overlay/manager.go`. The manager holds one active overlay, delegates key handling, and composites via `PlaceOverlay`:
+
+```go
+package overlay
+
+import tea "github.com/charmbracelet/bubbletea"
+
+// Manager manages the active modal overlay and composites it onto the background.
+type Manager struct {
+    active   Overlay
+    centered bool // whether to center the overlay (true for modals)
+    shadow   bool // whether to show shadow/fade effect
+    w, h     int  // viewport dimensions
+}
+
+// NewManager creates an overlay manager with no active overlay.
+func NewManager() *Manager {
+    return &Manager{centered: true, shadow: true}
+}
+
+// Show activates an overlay. Any previously active overlay is replaced.
+func (m *Manager) Show(o Overlay) {
+    m.active = o
+    if m.w > 0 || m.h > 0 {
+        o.SetSize(m.w, m.h)
+    }
+}
+
+// ShowAt activates an overlay at a specific position (for context menus).
+func (m *Manager) ShowAt(o Overlay, centered, shadow bool) {
+    m.active = o
+    m.centered = centered
+    m.shadow = shadow
+    if m.w > 0 || m.h > 0 {
+        o.SetSize(m.w, m.h)
+    }
+}
+
+// Dismiss closes the active overlay without returning a result.
+func (m *Manager) Dismiss() {
+    m.active = nil
+    m.centered = true
+    m.shadow = true
+}
+
+// IsActive returns true if a modal overlay is currently displayed.
+func (m *Manager) IsActive() bool {
+    return m.active != nil
+}
+
+// Current returns the active overlay, or nil.
+func (m *Manager) Current() Overlay {
+    return m.active
+}
+
+// HandleKey delegates to the active overlay. Returns a zero Result if inactive.
+func (m *Manager) HandleKey(msg tea.KeyMsg) Result {
+    if m.active == nil {
+        return Result{}
+    }
+    result := m.active.HandleKey(msg)
+    if result.Dismissed {
+        m.active = nil
+        m.centered = true
+        m.shadow = true
+    }
+    return result
+}
+
+// SetSize updates the viewport dimensions and propagates to the active overlay.
+func (m *Manager) SetSize(w, h int) {
+    m.w = w
+    m.h = h
+    if m.active != nil {
+        m.active.SetSize(w, h)
+    }
+}
+
+// Render composites the active overlay onto the background string.
+// Returns the background unchanged if no overlay is active.
+func (m *Manager) Render(bg string) string {
+    if m.active == nil {
+        return bg
+    }
+    return PlaceOverlay(0, 0, m.active.View(), bg, m.shadow, m.centered)
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/overlay/... -run TestManager -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/overlay/manager.go ui/overlay/manager_test.go
+git commit -m "feat(overlay): implement OverlayManager with compositing"
+```
