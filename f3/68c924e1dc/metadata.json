@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "f368c924e1dc",
+  "strategy": "manual-commit",
+  "branch": "plan/03-rewrite-ui-panels",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/diff.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f3/68c924e1dc/0/metadata.json",
+      "transcript": "/f3/68c924e1dc/0/full.jsonl",
+      "context": "/f3/68c924e1dc/0/context.md",
+      "content_hash": "/f3/68c924e1dc/0/content_hash.txt",
+      "prompt": "/f3/68c924e1dc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 5052,
+    "cache_read_tokens": 61523,
+    "output_tokens": 193,
+    "api_call_count": 2
+  }
+}
