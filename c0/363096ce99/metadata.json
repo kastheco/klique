@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "c0363096ce99",
+  "strategy": "manual-commit",
+  "branch": "plan/increase-plan-detail",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "app/wave_orchestrator.go",
+    "skills.go",
+    "skills_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c0/363096ce99/0/metadata.json",
+      "transcript": "/c0/363096ce99/0/full.jsonl",
+      "context": "/c0/363096ce99/0/context.md",
+      "content_hash": "/c0/363096ce99/0/content_hash.txt",
+      "prompt": "/c0/363096ce99/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 29,
+    "cache_creation_tokens": 82011,
+    "cache_read_tokens": 1655898,
+    "output_tokens": 15377,
+    "api_call_count": 28
+  }
+}

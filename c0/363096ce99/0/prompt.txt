@@ -1,0 +1,36 @@
+Implement increase-plan-detail.md using the `kasmos-coder` skill. Retrieve the full plan with `kas task show increase-plan-detail.md` and execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `app/wave_orchestrator.go:64-66` — `UpdatePlan` only replaces the plan but does NOT transition state from `WaveStateElaborating` to `WaveStateIdle`, does NOT reset `currentWave`, and does NOT clear `taskStates`. The `orchestration/engine.go:97-102` version correctly does all three. The app version is the one actually used at runtime. Currently works by accident because `StartNextWave` lacks the elaborating guard (see below), so it proceeds from `WaveStateElaborating` → `WaveStateRunning` without error. But any future code checking `orch.State()` after `UpdatePlan` would see stale `WaveStateElaborating`, and adding the missing guard to `StartNextWave` would break the signal handling path. Fix: sync the app version with the orchestration version — add `o.state = WaveStateIdle`, `o.currentWave = 0`, `o.taskStates = make(map[int]taskStatus)`.
+
+- `app/wave_orchestrator.go:103-108` — `StartNextWave` is missing the `WaveStateElaborating` guard present in `orchestration/engine.go:107-109`. Without this guard, `StartNextWave` can proceed while the elaborator is still running if anything calls it before the signal handler fires. After fixing `UpdatePlan` above, this guard becomes essential — without it, `startNextWave` called after `UpdatePlan` (which now resets to Idle) would proceed from `WaveStateIdle` which is correct, but the guard is still needed to prevent accidental wave starts during active elaboration. Fix: add `if o.state == WaveStateElaborating { return nil }` at the top of `StartNextWave`, matching the orchestration package.
+
+## important
+
+- `skills.go:1-46` + `skills_test.go` — scope creep: the `kq skills list` command was completely rewritten (removed `listSkillEntries` helper, removed project-level skill listing, switched from `cmd.OutOrStdout()` to `fmt.Printf` breaking testability), and two tests were deleted (`TestRunSkillsList_IncludesSymlinkedDirs`, `TestRunSkillsList_ShowsProjectSkills`). This is a functional regression unrelated to the elaboration plan. Fix: revert both files to main (`git checkout main -- skills.go skills_test.go`).
+
+- `internal/initcmd/wizard/wizard.go:49-82` — scope creep: default model names and effort/temperature values were changed for coder (codex→sonnet, effort low→medium), planner (effort high→max, temp 0.3→0.5), reviewer (effort medium→xhigh, temp 0.1→0.2), and fixer (codex→sonnet, effort medium→low). These preference changes are unrelated to elaboration. The removal of the elaborator entry from `RoleDefaults` is in scope, but the other changes are not. Fix: revert the model/effort/temperature changes for coder, planner, reviewer, and fixer back to their main values while keeping the elaborator entry removal.
+
+## self-fixed
+
+- `orchestration/prompt_test.go:79` — case mismatch: assertion checked for lowercase `"preserve"` but prompt text uses `"Preserve"`. Fixed to `"Preserve"`. (committed as reviewer self-fix)
+
+---
+
+branches probably diverged
+
+---
+
+and those new settings are what i want
+
+---
+
+and those new settings are what i want
+
+---
+
+and those new settings are what i want
