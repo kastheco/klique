@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -64,17 +64,17 @@ func TestHalfPageUp_WorksRegardlessOfActiveTab(t *testing.T) {
 	// Ctrl+U/D should still scroll the preview pane.
 	assert.Equal(t, InfoTab, tw.GetActiveTab())
 
-	initialOffset := preview.viewport.YOffset
+	initialOffset := preview.viewport.YOffset()
 	tw.HalfPageUp() // should still scroll even though activeTab != PreviewTab
 	// In document mode, HalfPageUp calls viewport.HalfViewUp which decreases YOffset
 	// Since we're at the top, this won't change. Let's scroll down first then up.
 	tw.HalfPageDown()
-	afterDown := preview.viewport.YOffset
+	afterDown := preview.viewport.YOffset()
 	assert.Greater(t, afterDown, initialOffset,
 		"HalfPageDown should scroll the preview even when activeTab is InfoTab")
 
 	tw.HalfPageUp()
-	afterUp := preview.viewport.YOffset
+	afterUp := preview.viewport.YOffset()
 	assert.Less(t, afterUp, afterDown,
 		"HalfPageUp should scroll the preview even when activeTab is InfoTab")
 }
@@ -90,9 +90,9 @@ func TestHalfPageDown_WorksRegardlessOfActiveTab(t *testing.T) {
 	// Set to DiffTab — ctrl+u/d should still scroll the preview.
 	tw.SetActiveTab(DiffTab)
 
-	initialOffset := preview.viewport.YOffset
+	initialOffset := preview.viewport.YOffset()
 	tw.HalfPageDown()
-	afterDown := preview.viewport.YOffset
+	afterDown := preview.viewport.YOffset()
 	assert.Greater(t, afterDown, initialOffset,
 		"HalfPageDown should scroll the preview even when activeTab is DiffTab")
 }
@@ -108,14 +108,14 @@ func TestViewportUpdate_DelegatesOnlyForPreviewTab(t *testing.T) {
 	before := preview.viewport.View()
 
 	tw.SetActiveTab(PreviewTab)
-	cmd := tw.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	cmd := tw.ViewportUpdate(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	afterPreview := preview.viewport.View()
 	assert.Nil(t, cmd)
 	assert.NotEqual(t, before, afterPreview)
 
 	tw.SetActiveTab(DiffTab)
 	beforeDiff := preview.viewport.View()
-	cmd = tw.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	cmd = tw.ViewportUpdate(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	afterDiff := preview.viewport.View()
 	assert.Nil(t, cmd)
 	assert.Equal(t, beforeDiff, afterDiff)

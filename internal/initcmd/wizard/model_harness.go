@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 )
 
@@ -37,7 +37,7 @@ func (h *harnessStep) Init() tea.Cmd {
 }
 
 func (h *harnessStep) Update(msg tea.Msg) (stepModel, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return h, nil
 	}

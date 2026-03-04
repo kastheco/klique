@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // PermissionChoice mirrors tmux.PermissionChoice to avoid import cycle.
@@ -101,8 +101,8 @@ func (p *PermissionOverlay) render() string {
 var permissionActionLabels = []string{"allow_once", "allow_always", "reject"}
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
-func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
-	switch msg.Type {
+func (p *PermissionOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	switch msg.Code {
 	case tea.KeyLeft:
 		if p.selectedIdx > 0 {
 			p.selectedIdx--
@@ -117,7 +117,7 @@ func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
 		p.confirmed = true
 		action := permissionActionLabels[p.selectedIdx]
 		return Result{Dismissed: true, Submitted: true, Action: action}
-	case tea.KeyEsc:
+	case tea.KeyEscape:
 		return Result{Dismissed: true}
 	}
 	return Result{}

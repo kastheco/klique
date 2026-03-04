@@ -1,7 +1,7 @@
 package overlay
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TextOverlay represents a text screen overlay.
@@ -30,7 +30,7 @@ func NewTextOverlay(content string) *TextOverlay {
 // HandleKey processes a key event and returns the result.
 // Any key dismisses the text overlay.
 // Implements the Overlay interface.
-func (t *TextOverlay) HandleKey(msg tea.KeyMsg) Result {
+func (t *TextOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	t.Dismissed = true
 	if t.OnDismiss != nil {
 		t.OnDismiss()

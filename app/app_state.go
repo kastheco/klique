@@ -27,7 +27,7 @@ import (
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func mergeTopicStatus(status ui.TopicStatus, inst *session.Instance, started bool) ui.TopicStatus {
@@ -1444,7 +1444,7 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
-	return m, tea.Batch(tea.WindowSize(), startCmd)
+	return m, tea.Batch(tea.RequestWindowSize, startCmd)
 }
 
 // spawnTaskAgent creates and starts an agent session for the given plan and action.
@@ -1548,7 +1548,7 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
-	return m, tea.Batch(tea.WindowSize(), startCmd)
+	return m, tea.Batch(tea.RequestWindowSize, startCmd)
 }
 
 // getTopicNames returns existing topic names for the picker.
@@ -1710,7 +1710,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, e
 		cmds = append(cmds, startCmd)
 	}
 
-	cmds = append(cmds, tea.WindowSize(), m.toastTickCmd())
+	cmds = append(cmds, tea.RequestWindowSize, m.toastTickCmd())
 	return m, tea.Batch(cmds...)
 }
 
@@ -1861,7 +1861,7 @@ func (m *home) spawnChatAboutTask(planFile, question string) (tea.Model, tea.Cmd
 
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
 	m.nav.SelectInstance(inst)
-	return m, tea.Batch(tea.WindowSize(), startCmd)
+	return m, tea.Batch(tea.RequestWindowSize, startCmd)
 }
 
 // adoptOrphanSession creates a new Instance backed by an existing orphaned tmux session.

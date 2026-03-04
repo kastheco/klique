@@ -2,12 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 var (
@@ -77,15 +78,15 @@ type InfoPane struct {
 
 // NewInfoPane returns a zero-sized InfoPane ready for use.
 func NewInfoPane() *InfoPane {
-	return &InfoPane{viewport: viewport.New(0, 0)}
+	return &InfoPane{viewport: viewport.New()}
 }
 
 // SetSize stores dimensions and refreshes the viewport.
 func (p *InfoPane) SetSize(width, height int) {
 	p.width = width
 	p.height = height
-	p.viewport.Width = width
-	p.viewport.Height = height
+	p.viewport.SetWidth(width)
+	p.viewport.SetHeight(height)
 	p.viewport.SetContent(p.render())
 }
 
@@ -98,12 +99,12 @@ func (p *InfoPane) SetData(data InfoData) {
 
 // ScrollUp moves the viewport one line toward the top.
 func (p *InfoPane) ScrollUp() {
-	p.viewport.LineUp(1)
+	p.viewport.ScrollUp(1)
 }
 
 // ScrollDown moves the viewport one line toward the bottom.
 func (p *InfoPane) ScrollDown() {
-	p.viewport.LineDown(1)
+	p.viewport.ScrollDown(1)
 }
 
 // String returns the visible portion of the pane, or a placeholder when
@@ -116,7 +117,7 @@ func (p *InfoPane) String() string {
 }
 
 // statusColor maps known status strings to palette colors.
-func statusColor(status string) lipgloss.TerminalColor {
+func statusColor(status string) color.Color {
 	switch status {
 	case "implementing":
 		return ColorIris
@@ -298,7 +299,7 @@ func (p *InfoPane) renderWaveSection() string {
 	}
 	for _, t := range p.data.WaveTasks {
 		var glyph string
-		var col lipgloss.TerminalColor
+		var col color.Color
 		switch t.State {
 		case "complete":
 			glyph, col = "✓", ColorFoam

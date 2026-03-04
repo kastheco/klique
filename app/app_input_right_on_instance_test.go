@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +26,7 @@ func TestRightOnInstance_InfoTab_SwitchesToAgentTab(t *testing.T) {
 
 	// Press right.
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyRight})
 	updated := model.(*home)
 
 	assert.Equal(t, ui.PreviewTab, updated.tabbedWindow.GetActiveTab(),
@@ -48,7 +48,7 @@ func TestRightOnInstance_AgentTab_NoOp(t *testing.T) {
 
 	// Press right.
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyRight})
 	updated := model.(*home)
 
 	assert.Equal(t, ui.PreviewTab, updated.tabbedWindow.GetActiveTab(),
@@ -65,7 +65,7 @@ func TestRightOnPlanHeader_InfoTab_ExpandsNotSwitchesTab(t *testing.T) {
 
 	// Press right with no instance selected (plan header or empty).
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRight})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyRight})
 	updated := model.(*home)
 
 	// Tab should remain on info tab — no instance means no tab switch.

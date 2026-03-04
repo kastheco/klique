@@ -3,7 +3,7 @@ package overlay
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // PickerOverlay shows a searchable list of options for selection.
@@ -100,7 +100,7 @@ func (p *PickerOverlay) SetSize(width, height int) {
 
 // HandleKey implements Overlay. It processes a key event and returns a Result
 // indicating whether the overlay should close and what was selected.
-func (p *PickerOverlay) HandleKey(msg tea.KeyMsg) Result {
+func (p *PickerOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	switch msg.String() {
 	case "esc":
 		p.cancelled = true
@@ -123,8 +123,8 @@ func (p *PickerOverlay) HandleKey(msg tea.KeyMsg) Result {
 			p.applyFilter()
 		}
 	default:
-		if msg.Type == tea.KeyRunes {
-			p.searchQuery += string(msg.Runes)
+		if len(msg.Text) > 0 {
+			p.searchQuery += msg.Text
 			p.applyFilter()
 		}
 	}

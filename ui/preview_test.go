@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -343,8 +343,8 @@ func TestPreviewPaneSetSize_ReservesScrollbarColumn(t *testing.T) {
 	previewPane.SetSize(80, 24)
 
 	require.Equal(t, 80, previewPane.width)
-	require.Equal(t, 79, previewPane.viewport.Width)
-	require.Equal(t, 24, previewPane.viewport.Height)
+	require.Equal(t, 79, previewPane.viewport.Width())
+	require.Equal(t, 24, previewPane.viewport.Height())
 }
 
 func TestPreviewPaneViewportUpdate_DocumentModeHandlesNativeKeys(t *testing.T) {
@@ -353,7 +353,7 @@ func TestPreviewPaneViewportUpdate_DocumentModeHandlesNativeKeys(t *testing.T) {
 	previewPane.SetDocumentContent(testDocumentLines(40))
 
 	before := previewPane.viewport.View()
-	cmd := previewPane.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	cmd := previewPane.ViewportUpdate(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	after := previewPane.viewport.View()
 
 	require.Nil(t, cmd)
@@ -365,7 +365,7 @@ func TestPreviewPaneViewportUpdate_NoOpOutsideScrollableModes(t *testing.T) {
 	previewPane.SetSize(30, 5)
 	previewPane.SetRawContent("plain preview")
 
-	cmd := previewPane.ViewportUpdate(tea.KeyMsg{Type: tea.KeyPgDown})
+	cmd := previewPane.ViewportUpdate(tea.KeyPressMsg{Code: tea.KeyPgDown})
 
 	require.Nil(t, cmd)
 	require.False(t, previewPane.IsDocumentMode())

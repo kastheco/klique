@@ -5,7 +5,7 @@ import (
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/log"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // resolveClickUpTaskID returns the ClickUp task ID for a plan entry.

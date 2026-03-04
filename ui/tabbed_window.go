@@ -1,11 +1,13 @@
 package ui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"image/color"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // tabBorderWithBottom constructs a rounded lipgloss border where the bottom
@@ -371,7 +373,7 @@ func (w *TabbedWindow) String() string {
 	tabH := activeTabStyle.GetVerticalFrameSize() + 1
 
 	// Choose border accent based on focus state.
-	var borderColor lipgloss.TerminalColor
+	var borderColor color.Color
 	switch {
 	case w.focusMode:
 		borderColor = ColorFoam

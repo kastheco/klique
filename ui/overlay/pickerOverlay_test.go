@@ -3,7 +3,7 @@ package overlay
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +13,7 @@ func TestPickerOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestPickerOverlay_HandleKey_Submit(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha", "beta"})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "alpha", result.Value)
@@ -21,21 +21,21 @@ func TestPickerOverlay_HandleKey_Submit(t *testing.T) {
 
 func TestPickerOverlay_HandleKey_Navigate(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha", "beta"})
-	p.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.Equal(t, "beta", result.Value)
 }
 
 func TestPickerOverlay_HandleKey_Filter(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha", "beta", "gamma"})
-	p.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	p.HandleKey(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.Equal(t, "beta", result.Value)
 }
 
 func TestPickerOverlay_HandleKey_Cancel(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha"})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -43,8 +43,8 @@ func TestPickerOverlay_HandleKey_Cancel(t *testing.T) {
 func TestPickerOverlay_AllowCustom(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha"})
 	p.SetAllowCustom(true)
-	p.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	p.HandleKey(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "z", result.Value)
 }

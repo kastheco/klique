@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kastheco/kasmos/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,7 +187,7 @@ func TestTruncateForCell(t *testing.T) {
 
 func TestAgentStep_QReturnsStepCancelMsg(t *testing.T) {
 	s := newAgentStep([]AgentState{{Role: "coder", Harness: "claude", Enabled: true}}, []string{"claude"}, nil)
-	next, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	next, cmd := s.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	require.NotNil(t, cmd)
 	_, ok := next.(*agentStepModel)
 	require.True(t, ok)

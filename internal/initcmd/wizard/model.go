@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 )
@@ -106,8 +106,8 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stepCancelMsg:
 		m.cancelled = true
 		return m, tea.Quit
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
+	case tea.KeyPressMsg:
+		if msg.String() == "ctrl+c" {
 			m.cancelled = true
 			return m, tea.Quit
 		}
@@ -122,9 +122,11 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m rootModel) View() string {
+func (m rootModel) View() tea.View {
+	v := tea.View{AltScreen: true}
 	if m.step < 0 || m.step >= len(m.steps) || m.steps[m.step] == nil {
-		return ""
+		v.Content = ""
+		return v
 	}
 
 	header := lipgloss.JoinVertical(
@@ -141,7 +143,8 @@ func (m rootModel) View() string {
 	content := m.steps[m.step].View(m.width, contentHeight)
 
 	page := lipgloss.JoinVertical(lipgloss.Left, header, "", content)
-	return lipgloss.NewStyle().Padding(1, 2).Render(page)
+	v.Content = lipgloss.NewStyle().Padding(1, 2).Render(page)
+	return v
 }
 
 func (m rootModel) modelCacheForSelectedHarness() map[string][]string {

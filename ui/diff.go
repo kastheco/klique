@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/session"
 	"github.com/mattn/go-runewidth"
 )
@@ -70,7 +70,7 @@ type DiffPane struct {
 // NewDiffPane creates a DiffPane ready for use.
 func NewDiffPane() *DiffPane {
 	return &DiffPane{
-		viewport:     viewport.New(0, 0),
+		viewport:     viewport.New(),
 		selectedFile: 0,
 	}
 }
@@ -81,7 +81,7 @@ func (d *DiffPane) SetSize(width, height int) {
 	d.height = height
 	d.computeSidebarWidth()
 	d.updateViewportWidth()
-	d.viewport.Height = height
+	d.viewport.SetHeight(height)
 	d.rebuildViewport()
 }
 
@@ -117,7 +117,7 @@ func (d *DiffPane) updateViewportWidth() {
 	if w < 10 {
 		w = 10
 	}
-	d.viewport.Width = w
+	d.viewport.SetWidth(w)
 }
 
 // SetDiff loads diff data from the given instance into the pane.
@@ -324,12 +324,12 @@ func (d *DiffPane) FileDown() {
 
 // ScrollUp scrolls the diff viewport up by 3 lines.
 func (d *DiffPane) ScrollUp() {
-	d.viewport.LineUp(3)
+	d.viewport.ScrollUp(3)
 }
 
 // ScrollDown scrolls the diff viewport down by 3 lines.
 func (d *DiffPane) ScrollDown() {
-	d.viewport.LineDown(3)
+	d.viewport.ScrollDown(3)
 }
 
 // HasFiles reports whether any diff files are loaded.

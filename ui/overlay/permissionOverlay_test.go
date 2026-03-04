@@ -3,7 +3,7 @@ package overlay
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +13,7 @@ func TestPermissionOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestPermissionOverlay_HandleKey_Confirm(t *testing.T) {
 	p := NewPermissionOverlay("inst", "run command", "*.sh")
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "allow_always", result.Action, "default selection should be allow_always")
@@ -21,21 +21,21 @@ func TestPermissionOverlay_HandleKey_Confirm(t *testing.T) {
 
 func TestPermissionOverlay_HandleKey_NavigateLeft(t *testing.T) {
 	p := NewPermissionOverlay("inst", "run command", "*.sh")
-	p.HandleKey(tea.KeyMsg{Type: tea.KeyLeft})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.Equal(t, "allow_once", result.Action)
 }
 
 func TestPermissionOverlay_HandleKey_Reject(t *testing.T) {
 	p := NewPermissionOverlay("inst", "run command", "*.sh")
-	p.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.Equal(t, "reject", result.Action)
 }
 
 func TestPermissionOverlay_HandleKey_Dismiss(t *testing.T) {
 	p := NewPermissionOverlay("inst", "run command", "*.sh")
-	result := p.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

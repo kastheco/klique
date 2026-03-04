@@ -1,0 +1,261 @@
+# Fix `kas plan` → `kas task` in Agent/Skill Documentation
+
+**Goal:** Replace all stale `kas plan` CLI references with `kas task` in skill files, agent prompt templates, README, and Go user-facing strings — so agents actually use the correct command name.
+
+**Architecture:** Mechanical text replacement across three file categories: (1) skill SKILL.md files in `.agents/skills/` (canonical) + `internal/initcmd/scaffold/templates/skills/` (copies that must stay in sync), (2) agent prompt markdown templates in scaffold + live directories for opencode/claude/codex harnesses, (3) Go source strings in `cmd/serve.go`, `cmd/task.go`, and `app/` for user-visible error messages and help text. Uses `sd` for all batch replacements. Verification via `rg` to confirm zero stale references remain.
+
+**Tech Stack:** `sd` for batch string replacement, `rg` for verification, Go compiler for string change validation
+
+**Size:** Small (estimated ~1 hour, 2 tasks, 1 wave)
+
+---
+
+## Wave 1
+
+### Task 1: Replace `kas plan` and stale plan-entity terminology in all markdown files
+
+**Files:**
+- Modify: `.agents/skills/kasmos-planner/SKILL.md`
+- Modify: `.agents/skills/kasmos-fixer/SKILL.md`
+- Modify: `.agents/skills/kasmos-lifecycle/SKILL.md`
+- Modify: `.agents/skills/kasmos-coder/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/codex/AGENTS.md`
+- Modify: `internal/initcmd/scaffold/templates/opencode/agents/planner.md`
+- Modify: `internal/initcmd/scaffold/templates/opencode/agents/coder.md`
+- Modify: `internal/initcmd/scaffold/templates/opencode/agents/fixer.md`
+- Modify: `internal/initcmd/scaffold/templates/claude/agents/planner.md`
+- Modify: `internal/initcmd/scaffold/templates/claude/agents/coder.md`
+- Modify: `internal/initcmd/scaffold/templates/claude/agents/fixer.md`
+- Modify: `.opencode/agents/planner.md`
+- Modify: `.opencode/agents/coder.md`
+- Modify: `.opencode/agents/fixer.md`
+- Modify: `.opencode/agents/custodian.md`
+- Modify: `.claude/agents/planner.md`
+- Modify: `.claude/agents/coder.md`
+- Modify: `README.md`
+
+**Step 1: write the failing test**
+
+No unit tests — these are documentation files. Verification is via `rg` search for stale references.
+
+**Step 2: run verification to confirm stale references exist (baseline)**
+
+```bash
+rg 'kas plan' .agents/skills/ internal/initcmd/scaffold/templates/ .opencode/agents/ .claude/agents/ README.md -c
+```
+
+expected: multiple matches across ~22 files
+
+**Step 3: apply batch replacements**
+
+The replacements fall into four categories: CLI command references, storage/state terminology, entity renames, and scaffold sync.
+
+**Category A — CLI command: `kas plan` → `kas task`**
+
+Target all markdown files in skill dirs, scaffold dirs, live agent dirs, and README:
+
+```bash
+# Collect all target files
+TARGETS=$(fd -e md . .agents/skills/ internal/initcmd/scaffold/templates/ .opencode/agents/ .claude/agents/)
+TARGETS="$TARGETS README.md"
+
+# Replace 'kas plan' → 'kas task' in all contexts (backticked, quoted, bare)
+sd 'kas plan' 'kas task' $TARGETS
+```
+
+**Category B — storage/state terminology**
+
+```bash
+# "plan store" → "task store" (the storage backend)
+sd 'plan store' 'task store' $TARGETS
+
+# "Plan store" → "Task store" (sentence start)
+sd 'Plan store' 'Task store' $TARGETS
+
+# "plan state" → "task state" (lifecycle state)
+sd 'plan state' 'task state' $TARGETS
+
+# "Plan state" → "Task state" (sentence/heading start)
+sd 'Plan state' 'Task state' $TARGETS
+
+# "plan status" → "task status"
+sd 'plan status' 'task status' $TARGETS
+
+# "plan statuses" → "task statuses"
+sd 'plan statuses' 'task statuses' $TARGETS
+
+# "planstore.db" → "kasmos.db"
+sd 'planstore.db' 'kasmos.db' $TARGETS
+
+# "plan states" → "task states"
+sd 'plan states' 'task states' $TARGETS
+```
+
+**Category C — entity references (noun "plan" as the tracked entity)**
+
+These require targeted patterns to avoid clobbering "plan" as a verb or "planner"/"planning":
+
+```bash
+# "<plan-file>" argument placeholder → "<task-file>"
+sd '<plan-file>' '<task-file>' $TARGETS
+sd 'plan-file' 'task-file' $TARGETS
+
+# "plan content" → "task content"
+sd 'plan content' 'task content' $TARGETS
+
+# "plan not found" → "task not found"
+sd 'plan not found' 'task not found' $TARGETS
+
+# "plan file" → "task file" (the lifecycle entity reference)
+sd 'plan file' 'task file' $TARGETS
+
+# Headings: "## Plan State" → "## Task State"
+sd '## Plan State' '## Task State' $TARGETS
+
+# "plan's status" → "task's status"
+sd "plan's status" "task's status" $TARGETS
+
+# Fixer-specific: "plan/*" branch prefix → "task/*"
+sd 'plan/\*' 'task/*' $TARGETS
+
+# "all plans" → "all tasks" (list descriptions)
+sd 'all plans' 'all tasks' $TARGETS
+
+# "register an untracked plan" → "register an untracked task"
+sd 'register an untracked plan' 'register an untracked task' $TARGETS
+
+# "plan to a topic" → "task to a topic"
+sd 'plan to a topic' 'task to a topic' $TARGETS
+
+# "/kas.reset-plan" → "/kas.reset-task" (slash command)
+sd '/kas.reset-plan' '/kas.reset-task' $TARGETS
+
+# "triage plans" → "triage tasks"
+sd 'triage plans' 'triage tasks' $TARGETS
+
+# README specific: "plan store (remote state)" section
+sd 'plan store \(remote state\)' 'task store (remote state)' README.md
+sd '## plan store' '## task store' README.md
+```
+
+**Category D — sync scaffold ↔ live files**
+
+After all `sd` replacements, verify canonical `.agents/skills/` files match their scaffold copies:
+
+```bash
+difft .agents/skills/kasmos-planner/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md
+difft .agents/skills/kasmos-fixer/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md
+difft .agents/skills/kasmos-lifecycle/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md
+difft .agents/skills/kasmos-coder/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md
+```
+
+expected: "No changes." for all four. If any differ, copy canonical to scaffold:
+```bash
+cp .agents/skills/<name>/SKILL.md internal/initcmd/scaffold/templates/skills/<name>/SKILL.md
+```
+
+Similarly verify scaffold ↔ live agent prompts match:
+```bash
+difft internal/initcmd/scaffold/templates/opencode/agents/fixer.md .opencode/agents/fixer.md
+difft internal/initcmd/scaffold/templates/opencode/agents/planner.md .opencode/agents/planner.md
+difft internal/initcmd/scaffold/templates/opencode/agents/coder.md .opencode/agents/coder.md
+difft internal/initcmd/scaffold/templates/claude/agents/fixer.md .claude/agents/fixer.md
+difft internal/initcmd/scaffold/templates/claude/agents/planner.md .claude/agents/planner.md
+difft internal/initcmd/scaffold/templates/claude/agents/coder.md .claude/agents/coder.md
+```
+
+**Step 4: verify no stale references remain**
+
+```bash
+# Must return zero matches:
+rg 'kas plan[^n]' .agents/skills/ internal/initcmd/scaffold/templates/ .opencode/agents/ .claude/agents/ README.md
+
+# Also check for "plan store" (should be zero):
+rg 'plan store' .agents/skills/ internal/initcmd/scaffold/templates/ .opencode/agents/ .claude/agents/ README.md
+
+# Verify "kas task" references now exist:
+rg 'kas task' .agents/skills/ internal/initcmd/scaffold/templates/ -c
+```
+
+expected: first two searches return zero matches; third returns counts for all updated files
+
+**Step 5: commit**
+
+```bash
+git add .agents/skills/ internal/initcmd/scaffold/templates/ .opencode/agents/ .claude/agents/ README.md
+git commit -m "fix: replace stale kas plan references with kas task in all skill and agent docs"
+```
+
+### Task 2: Fix Go user-facing strings referencing "plan store" and stale plan terminology
+
+**Files:**
+- Modify: `cmd/serve.go`
+- Modify: `cmd/task.go`
+- Modify: `app/app.go`
+- Modify: `app/app_state.go`
+
+**Step 1: write the failing test**
+
+No new tests — these are string literal changes in existing code. The Go compiler validates the changes compile.
+
+**Step 2: verify baseline compiles**
+
+```bash
+go build ./...
+```
+
+expected: PASS (baseline)
+
+**Step 3: apply replacements**
+
+```bash
+# cmd/serve.go — user-facing help text and error messages
+sd 'plan store' 'task store' cmd/serve.go
+sd 'plan state' 'task state' cmd/serve.go
+
+# cmd/task.go — error messages and comments
+sd 'plan store' 'task store' cmd/task.go
+sd 'plan status' 'task status' cmd/task.go
+sd 'plan not found' 'task not found' cmd/task.go
+sd 'plan file not found' 'task file not found' cmd/task.go
+sd 'list plans' 'list tasks' cmd/task.go
+sd 'plan state' 'task state' cmd/task.go
+
+# cmd/task.go — code comments
+sd '// remote store backend. storeURL is the base URL of the plan store server' '// remote store backend. storeURL is the base URL of the task store server' cmd/task.go
+sd 'local SQLite plan store' 'local SQLite task store' cmd/task.go
+sd 'the remote plan store' 'the remote task store' cmd/task.go
+sd 'loadTaskState loads plan state' 'loadTaskState loads task state' cmd/task.go
+
+# app/app.go — embedded store messages
+sd 'plan store' 'task store' app/app.go
+
+# app/app_state.go — toast messages
+sd 'plan store' 'task store' app/app_state.go
+```
+
+**Step 4: verify it compiles and no stale references remain**
+
+```bash
+go build ./...
+
+# Verify no "plan store" in Go source:
+rg 'plan store' cmd/ app/ --type go
+
+# Some "plan" references are expected (e.g. "docs/plans/" path, "plan/" branch prefix,
+# FSM event names like PlanStart). These are NOT stale — they refer to directory paths
+# or internal constants that are handled by the separate rename-plan-to-task plan.
+```
+
+expected: `go build` succeeds; `rg 'plan store'` returns zero matches
+
+**Step 5: commit**
+
+```bash
+git add cmd/serve.go cmd/task.go app/app.go app/app_state.go
+git commit -m "fix: update stale plan store/state strings to task store/state in Go source"
+```

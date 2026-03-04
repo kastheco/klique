@@ -26,10 +26,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 const GlobalInstanceLimit = 20
@@ -40,7 +40,7 @@ const clickUpOpTimeout = 30 * time.Second
 func Run(ctx context.Context, program string, autoYes bool) error {
 	// Set the terminal's default background to the theme base color so every
 	// ANSI reset and unstyled cell falls back to #232136 instead of black.
-	restore := ui.SetTerminalBackground(string(ui.ColorBase))
+	restore := ui.SetTerminalBackground("#232136")
 	defer restore()
 	defer sentrypkg.RecoverPanic()
 
@@ -51,11 +51,7 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 	if h.permissionStore != nil {
 		defer h.permissionStore.Close()
 	}
-	p := tea.NewProgram(
-		h,
-		tea.WithAltScreen(),
-		tea.WithMouseAllMotion(), // Full mouse tracking for hover + scroll + click
-	)
+	p := tea.NewProgram(h)
 	_, err := p.Run()
 	return err
 }
@@ -538,7 +534,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
-	// Detect actual terminal resize vs spurious tea.WindowSize() side-effects.
+	// Detect actual terminal resize vs spurious tea.RequestWindowSize side-effects.
 	termResized := msg.Width != m.termWidth || msg.Height != m.termHeight
 
 	m.termWidth = msg.Width
@@ -582,7 +578,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 
 	// Only resize overlays when the terminal dimensions actually changed.
-	// Many handlers emit tea.WindowSize() as a batched side-effect (e.g.
+	// Many handlers emit tea.RequestWindowSize as a batched side-effect (e.g.
 	// instanceStartedMsg) — those fire with the same dimensions and should
 	// not overwrite the overlay's explicit sizing.
 	if termResized {
@@ -1424,9 +1420,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			asyncCmds = append(asyncCmds, m.toastTickCmd())
 		}
 		return m, tea.Batch(asyncCmds...)
-	case tea.MouseMsg:
-		return m.handleMouse(msg)
-	case tea.KeyMsg:
+	case tea.MouseClickMsg:
+		return m.handleMouseClick(msg)
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
+	case tea.KeyPressMsg:
 		return m.handleKeyPress(msg)
 	case tea.WindowSizeMsg:
 		m.updateHandleWindowSizeEvent(msg)
@@ -1456,7 +1454,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.removeFromAllInstances(msg.title)
 		m.saveAllInstances()
 		m.updateNavPanelStatus()
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 	case taskStageConfirmedMsg:
 		// User confirmed past the topic-concurrency gate — execute the stage.
 		return m.executeTaskStage(msg.planFile, msg.stage)
@@ -1464,7 +1462,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload plan state and refresh sidebar after async plan mutation.
 		m.loadTaskState()
 		m.updateSidebarTasks()
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 	case clickUpTaskFetchedMsg:
 		if msg.Err != nil {
 			m.toastManager.Error("clickup fetch failed: " + msg.Err.Error())
@@ -1519,7 +1517,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateNavPanelStatus()
 		m.toastManager.Info(fmt.Sprintf("wave orchestration aborted for %s",
 			taskstate.DisplayName(msg.planFile)))
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.toastTickCmd())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged(), m.toastTickCmd())
 	case waveAllCompleteMsg:
 		// All waves finished and user confirmed — push branch and advance to review.
 		planFile := msg.planFile
@@ -1549,7 +1547,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			reviewerCmd = cmd
 		}
 		m.toastManager.Info(fmt.Sprintf("all waves complete for '%s' — starting review", planName))
-		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
+		return m, tea.Batch(tea.RequestWindowSize, reviewerCmd, m.toastTickCmd())
 	case coderCompleteMsg:
 		// Single-coder (non-wave) implementation finished and user confirmed push.
 		// Transition FSM and spawn reviewer — mirrors waveAllCompleteMsg flow.
@@ -1582,7 +1580,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			reviewerCmd = cmd
 		}
 		m.toastManager.Info(fmt.Sprintf("implementation complete for '%s' — starting review", planName))
-		return m, tea.Batch(tea.WindowSize(), reviewerCmd, m.toastTickCmd())
+		return m, tea.Batch(tea.RequestWindowSize, reviewerCmd, m.toastTickCmd())
 	case tmuxSessionsMsg:
 		if msg.err != nil {
 			return m, m.handleError(msg.err)
@@ -1631,7 +1629,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	case tmuxAttachReturnMsg:
 		m.toastManager.Info("detached from tmux session")
-		return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
+		return m, tea.Batch(tea.RequestWindowSize, m.toastTickCmd())
 	case permissionAutoApproveMsg:
 		if msg.instance != nil && msg.instance.Started() {
 			i := msg.instance
@@ -1663,7 +1661,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					po.SetTitle(
 						fmt.Sprintf("assign to topic for '%s'", msg.title),
 					)
-					return m, tea.WindowSize()
+					return m, tea.RequestWindowSize
 				}
 			}
 		}
@@ -1700,7 +1698,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.autoYes {
 			msg.instance.AutoYes = true
 		}
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -1748,7 +1746,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-func (m *home) View() string {
+func (m *home) View() tea.View {
 	// All columns use identical padding and height for uniform alignment.
 	colStyle := lipgloss.NewStyle().Height(m.contentHeight)
 	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
@@ -1791,7 +1789,10 @@ func (m *home) View() string {
 	// OSC 11 handles the actual background color; this just pads vertically.
 	result = ui.FillBackground(result, m.termHeight)
 
-	return result
+	v := tea.NewView(result)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeAllMotion
+	return v
 }
 
 func safeZoneScan(s string) (scanned string) {

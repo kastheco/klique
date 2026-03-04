@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TmuxBrowserItem holds metadata for a single tmux session (managed or orphaned).
@@ -157,9 +157,9 @@ func (b *TmuxBrowserOverlay) SetSize(width, height int) {
 // "kill" returns Result{Action: "kill"} without Dismissed so the browser stays
 // open and the user can kill multiple sessions. The app layer must handle
 // non-dismissed action results. "adopt" and "attach" do dismiss the overlay.
-func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
-	switch msg.Type {
-	case tea.KeyEsc:
+func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	switch msg.Code {
+	case tea.KeyEscape:
 		if b.searchQuery != "" {
 			b.searchQuery = ""
 			b.applyFilter()
@@ -188,34 +188,36 @@ func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyMsg) Result {
 			b.applyFilter()
 		}
 		return Result{}
-	case tea.KeyRunes:
-		r := string(msg.Runes)
-		// Action keys only fire when search is empty
-		if b.searchQuery == "" {
-			switch r {
-			case "k":
-				if len(b.filtered) > 0 {
-					// Do NOT dismiss — browser stays open for multi-kill workflow.
-					// The app layer handles the action via the non-dismissed path.
-					return Result{Action: "kill"}
+	default:
+		if len(msg.Text) > 0 {
+			r := msg.Text
+			// Action keys only fire when search is empty
+			if b.searchQuery == "" {
+				switch r {
+				case "k":
+					if len(b.filtered) > 0 {
+						// Do NOT dismiss — browser stays open for multi-kill workflow.
+						// The app layer handles the action via the non-dismissed path.
+						return Result{Action: "kill"}
+					}
+					return Result{}
+				case "a":
+					if len(b.filtered) > 0 && !b.SelectedItem().Managed {
+						return Result{Dismissed: true, Action: "adopt"}
+					}
+					return Result{}
+				case "o":
+					if len(b.filtered) > 0 {
+						return Result{Dismissed: true, Action: "attach"}
+					}
+					return Result{}
 				}
-				return Result{}
-			case "a":
-				if len(b.filtered) > 0 && !b.SelectedItem().Managed {
-					return Result{Dismissed: true, Action: "adopt"}
-				}
-				return Result{}
-			case "o":
-				if len(b.filtered) > 0 {
-					return Result{Dismissed: true, Action: "attach"}
-				}
-				return Result{}
 			}
+			// All other runes type into search
+			b.searchQuery += r
+			b.applyFilter()
+			return Result{}
 		}
-		// All other runes type into search
-		b.searchQuery += r
-		b.applyFilter()
-		return Result{}
 	}
 	return Result{}
 }

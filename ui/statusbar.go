@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // TaskGlyph represents the completion state of a single task in wave progress.
@@ -81,7 +82,7 @@ var statusBarProjectDirStyle = lipgloss.NewStyle().
 
 // planStatusStyle returns a styled version of status using semantic colors.
 func planStatusStyle(status string) string {
-	var fg lipgloss.TerminalColor
+	var fg color.Color
 	switch status {
 	case "implementing", "planning":
 		fg = ColorFoam

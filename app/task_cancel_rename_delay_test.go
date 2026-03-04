@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
@@ -114,7 +114,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	h.overlays.Show(tio)
 	h.state = stateRenameTask
 
-	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 	_, _ = h.handleKeyPress(enterKey)
 
 	// The handler renamed aardvark → zebra and must have called SelectByID so

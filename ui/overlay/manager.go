@@ -1,6 +1,6 @@
 package overlay
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Manager manages the active modal overlay and composites it onto the background.
 type Manager struct {
@@ -90,7 +90,7 @@ func (m *Manager) Current() Overlay {
 
 // HandleKey delegates to the active overlay. Returns a zero Result if inactive.
 // Returns a zero Result if m is nil.
-func (m *Manager) HandleKey(msg tea.KeyMsg) Result {
+func (m *Manager) HandleKey(msg tea.KeyPressMsg) Result {
 	if m == nil || m.active == nil {
 		return Result{}
 	}

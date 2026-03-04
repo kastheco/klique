@@ -9,8 +9,8 @@ import (
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +31,7 @@ func TestStatusBarIncludedInView(t *testing.T) {
 	h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	view := h.View()
-	firstLine := strings.SplitN(view, "\n", 2)[0]
+	firstLine := strings.SplitN(view.Content, "\n", 2)[0]
 	// App name is gradient-rendered (per-char ANSI), so check individual chars.
 	for _, c := range "kasmos" {
 		assert.Contains(t, firstLine, string(c))

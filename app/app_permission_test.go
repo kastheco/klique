@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
@@ -184,7 +184,7 @@ func TestHandleKeyPress_PermissionEnter_SendsResponse(t *testing.T) {
 	m.pendingPermissionInstance = inst
 
 	// Enter confirms with current selection (default: allow always)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	assert.Equal(t, stateDefault, m.state, "enter should return to stateDefault")
 	assert.NotNil(t, cmd, "enter should return a permission response cmd")
@@ -202,7 +202,7 @@ func TestHandleKeyPress_PermissionEsc_DismissesWithoutSending(t *testing.T) {
 	m.overlays.Show(overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*"))
 	m.pendingPermissionInstance = inst
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	assert.Equal(t, stateDefault, m.state, "esc should return to stateDefault")
 	assert.False(t, m.overlays.IsActive(), "overlay should be cleared")
@@ -250,37 +250,37 @@ func TestPermissionDetection_ShowsOverlayForOpenCode(t *testing.T) {
 func TestPermissionOverlay_ArrowKeysNavigate(t *testing.T) {
 	po := overlay.NewPermissionOverlay("test", "Access /opt", "/opt/*")
 
-	// Default is "allow once" (index 0 — matches opencode's default cursor position)
-	assert.Equal(t, overlay.PermissionAllowOnce, po.Choice())
-
-	// Right → "allow always"
-	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+	// Default is "allow always" (index 1)
 	assert.Equal(t, overlay.PermissionAllowAlways, po.Choice())
 
 	// Right → "reject"
-	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+	po.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	assert.Equal(t, overlay.PermissionReject, po.Choice())
 
 	// Right at end → stays on "reject"
-	po.HandleKey(tea.KeyMsg{Type: tea.KeyRight})
+	po.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	assert.Equal(t, overlay.PermissionReject, po.Choice())
 
 	// Left → back to "allow always"
-	po.HandleKey(tea.KeyMsg{Type: tea.KeyLeft})
+	po.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
 	assert.Equal(t, overlay.PermissionAllowAlways, po.Choice())
+
+	// Left → "allow once"
+	po.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	assert.Equal(t, overlay.PermissionAllowOnce, po.Choice())
 }
 
 func TestPermissionOverlay_EnterConfirms(t *testing.T) {
 	po := overlay.NewPermissionOverlay("test", "Access /opt", "/opt/*")
-	result := po.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := po.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
-	assert.Equal(t, overlay.PermissionAllowOnce, po.Choice()) // default matches opencode
+	assert.Equal(t, overlay.PermissionAllowAlways, po.Choice()) // default is "allow always"
 }
 
 func TestPermissionOverlay_EscDismisses(t *testing.T) {
 	po := overlay.NewPermissionOverlay("test", "Access /opt", "/opt/*")
-	result := po.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := po.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

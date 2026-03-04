@@ -15,7 +15,7 @@ import (
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	"github.com/atotto/clipboard"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // executeContextAction performs the action selected from a context menu.
@@ -35,7 +35,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			m.saveAllInstances()
 			m.updateNavPanelStatus()
 		}
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 
 	case "open_instance":
 		selected := m.nav.GetSelectedInstance()
@@ -64,7 +64,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			)
 			m.saveAllInstances()
 		}
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 
 	case "resume_instance":
 		selected := m.nav.GetSelectedInstance()
@@ -79,7 +79,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			)
 			m.saveAllInstances()
 		}
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 
 	case "push_instance":
 		selected := m.nav.GetSelectedInstance()
@@ -209,7 +209,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if planFile != "" {
 			m.nav.InspectPlan(planFile)
 		}
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 
 	case "view_plan":
 		return m.viewSelectedPlan()
@@ -345,7 +345,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.loadTaskState()
 		m.updateSidebarTasks()
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 
 	case "request_review":
 		planFile := m.nav.GetSelectedPlanFile()
@@ -360,7 +360,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if cmd := m.spawnReviewer(planFile); cmd != nil {
 			return m, cmd
 		}
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 
 	case "resume_implement":
 		planFile := m.nav.GetSelectedPlanFile()
@@ -372,7 +372,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		m.loadTaskState()
 		m.updateSidebarTasks()
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 
 	case "cancel_plan":
 		planFile := m.nav.GetSelectedPlanFile()

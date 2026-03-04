@@ -1,112 +1,105 @@
 # Rewrite Plumbing Implementation Plan
 
-**Goal:** Clean-room rewrite all upstream-derived code in the plumbing layer (main.go, cmd/cmd.go, config/config.go, config/state.go, keys/keys.go, log/log.go, daemon/daemon.go, app/help.go, app/app_input.go, app/app.go, app/app_actions.go) to remove AGPL-tainted lines. This is the largest plan — it covers the application entry point, configuration, key bindings, logging, daemon, help screen, and the core app model.
+**Goal:** Clean-room rewrite all upstream-derived code in `config/config.go`, `config/state.go`, `cmd/cmd.go`, and `daemon/` to remove AGPL-tainted lines from the fork point (`bbc8cad`), enabling a license change. The rewrite preserves identical behavior and public API while replacing every line that traces back to the upstream fork.
 
-**Architecture:** Eleven files rewritten in-place. The app layer (app.go, app_input.go, app_actions.go) has the most upstream LOC but is also the most heavily modified — the upstream skeleton is buried under thousands of lines of original code. The rewrite approach for these files is surgical: identify and replace the upstream-derived sections while preserving the surrounding original code. For smaller files (main.go, cmd.go, config.go, state.go, keys.go, log.go, daemon.go, help.go), full file rewrites are appropriate. Existing tests across all packages serve as the regression suite.
+**Architecture:** Six files are rewritten in-place across three packages: `config/` (config.go, state.go), `cmd/` (cmd.go), and `daemon/` (daemon.go, daemon_unix.go, daemon_windows.go). Each file is deleted and rewritten from its functional specification — no copy-paste from the original. All exported types, functions, and method signatures stay identical so callers compile without changes. Files that are 100% post-fork original (`config/toml.go`, `config/profile.go`, `config/permission_store.go`, `config/permission_migrate.go`, `config/taskfsm/`, `config/taskparser/`, `config/taskstate/`, `config/taskstore/`, `config/auditlog/`, `cmd/task.go`, `cmd/serve.go`) are untouched. Existing tests in `config/config_test.go` and `cmd/cmd_test/` serve as the regression suite.
 
-**Tech Stack:** Go 1.24, cobra, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+, testify
+**Tech Stack:** Go 1.24, encoding/json, os/exec, os/user, os/signal, syscall, cobra, testify
 
-**Size:** Large (estimated ~5 hours, 6 tasks, 3 waves)
+**Size:** Small (estimated ~1.5 hours, 3 tasks, 1 wave)
 
 ---
 
-## Wave 1: Foundation — Config, Logging, Keys
+## Wave 1: Plumbing Rewrite
 
-### Task 1: Rewrite config/state.go and log/log.go — State Management and Logging
+All three tasks are independent — each rewrites files in a different package. No task depends on another task's output.
 
-**Files:**
-- Modify: `config/state.go`
-- Modify: `log/log.go`
-- Test: `config/config_test.go` (existing)
-
-**Step 1: write the failing test**
-
-Existing tests cover `LoadState`, `SaveState`, `DefaultState`, and the `StateManager` interface. Log initialization is tested implicitly by every test that calls `log.Initialize`.
-
-**Step 2: run test to verify baseline passes**
-
-```bash
-go test ./config/... -v -count=1 && go test ./log/... -v -count=1
-```
-
-expected: PASS
-
-**Step 3: rewrite implementation**
-
-Rewrite both files from scratch:
-
-**config/state.go:**
-- Constants: `StateFileName`, `InstancesFileName`
-- Interfaces: `InstanceStorage` (SaveInstances, GetInstances, DeleteAllInstances), `AppState` (GetHelpScreensSeen, SetHelpScreensSeen), `StateManager` (combines both)
-- `State` struct — HelpScreensSeen uint32, InstancesData json.RawMessage
-- `DefaultState()` — return default with empty instances array
-- `LoadState()` — read from config dir, create default if missing, unmarshal JSON
-- `SaveState(state)` — marshal JSON, write to config dir
-- Interface implementations on `*State`
-
-**log/log.go:**
-- Global loggers: `WarningLog`, `InfoLog`, `ErrorLog`
-- `Initialize(daemon, telemetryEnabled...)` — open log file, configure log format, create loggers with optional Sentry writers
-- `Close()` — close log file, print path
-- `Every` struct — rate-limited logging helper with timeout-based gating
-- `NewEvery(timeout)`, `ShouldLog()` — timer-based rate limiter
-
-**Step 4: run test to verify it passes**
-
-```bash
-go test ./config/... -v -count=1 && go test ./log/... -v -count=1
-```
-
-expected: PASS
-
-**Step 5: commit**
-
-```bash
-git add config/state.go log/log.go
-git commit -m "feat(clean-room): rewrite config/state.go and log/log.go from scratch"
-```
-
-### Task 2: Rewrite config/config.go and keys/keys.go — Configuration and Key Bindings
+### Task 1: Rewrite config/config.go and config/state.go
 
 **Files:**
 - Modify: `config/config.go`
-- Modify: `keys/keys.go`
-- Test: `config/config_test.go`, `keys/keys_test.go` (existing)
+- Modify: `config/state.go`
+- Test: `config/config_test.go` (existing, no changes needed)
 
 **Step 1: write the failing test**
 
-Existing tests cover `LoadConfig`, `SaveConfig`, config defaults, and key binding lookups.
+No new tests needed. The existing `config/config_test.go` (335 LOC) covers `GetConfigDir` (including legacy migration from `.hivemind` and `.klique`), `GetDefaultCommand` (opencode preference, claude fallback, empty SHELL, alias parsing), `DefaultConfig`, `LoadConfig` (missing file, valid file, invalid JSON), `SaveConfig`, and `IsTelemetryEnabled`. These tests ARE the regression gate.
 
-**Step 2: run test to verify baseline passes**
+**Step 2: run test to verify it passes (baseline)**
 
 ```bash
-go test ./config/... -v -count=1 && go test ./keys/... -v -count=1
+go test ./config/... -run 'TestGetDefaultCommand|TestDefaultConfig|TestGetConfigDir|TestLoadConfig|TestSaveConfig|TestIsTelemetryEnabled' -v -count=1
 ```
 
-expected: PASS
+expected: PASS — all existing tests pass before we touch anything
 
 **Step 3: rewrite implementation**
 
-Rewrite both files from scratch:
+Delete `config/config.go` and rewrite from scratch based on this functional spec:
 
-**config/config.go:**
-- `Config` struct — all fields preserved (BranchPrefix, DefaultProgram, DaemonPollInterval, etc.)
-- `DefaultConfig()` — return sensible defaults
-- `LoadConfig()` — load from TOML + JSON, merge, return
-- `SaveConfig(cfg)` — write to config dir
-- `GetConfigDir()` — return `~/.kasmos/` (or `~/.klique/` for legacy)
-- Config validation and migration helpers
+**Constants:**
+- `ConfigFileName = "config.json"`
+- `defaultProgram = "opencode"` (unexported)
+- `aliasRegex` — compiled regex `(?:aliased to|->|=)\s*([^\s]+)` for parsing shell alias output
 
-**keys/keys.go:**
-- `KeyName` enum — all key constants (KeyUp, KeyDown, KeyEnter, KeyKill, KeyAbort, etc.)
-- `GlobalKeyStringsMap` — string-to-KeyName mapping
-- `GlobalkeyBindings` — KeyName-to-key.Binding mapping with help text
-- All key bindings preserved exactly (same keys, same help strings)
+**`GetConfigDir() (string, error)`** — returns `~/.config/kasmos/`. On first call: if the directory already exists, return it (fast path). Otherwise try migrating legacy directories in order: `~/.klique`, `~/.hivemind`. Migration: ensure `~/.config/` parent exists via `os.MkdirAll`, then `os.Rename` old → new. On any migration error, log and return the old directory. If no legacy dir exists, return the new path (caller creates it on first write).
+
+**`Config` struct** — JSON-tagged fields: `DefaultProgram string`, `AutoYes bool`, `DaemonPollInterval int`, `BranchPrefix string`, `NotificationsEnabled *bool` (omitempty), `Profiles map[string]AgentProfile` (omitempty), `PhaseRoles map[string]string` (omitempty), `AnimateBanner bool` (omitempty), `AutoAdvanceWaves bool` (omitempty), `TelemetryEnabled *bool` (omitempty), `DatabaseURL string` (omitempty).
+
+**`DefaultConfig() *Config`** — calls `GetDefaultCommand()` for program (falls back to `"opencode"` on error), sets `AutoYes: false`, `DaemonPollInterval: 1000`, `BranchPrefix: "<username>/"` from `user.Current()` (falls back to `"session/"` on error), `NotificationsEnabled: &true`.
+
+**`AreNotificationsEnabled() bool`** — returns true when `NotificationsEnabled` is nil, otherwise dereferences.
+
+**`IsTelemetryEnabled() bool`** — returns true when `TelemetryEnabled` is nil, otherwise dereferences.
+
+**`GetDefaultCommand() (string, error)`** — tries `findCommand("opencode")` then `findCommand("claude")`. Returns error if neither found.
+
+**`findCommand(name string) (string, error)`** — reads `$SHELL` (defaults to `/bin/bash`). For zsh: `source ~/.zshrc &>/dev/null || true; which <name>`. For bash: `source ~/.bashrc &>/dev/null || true; which <name>`. Otherwise: `which <name>`. Runs via `exec.Command(shell, "-c", shellCmd)`. On success, parses output via `parseCommandOutput`. Falls back to `exec.LookPath(name)`.
+
+**`parseCommandOutput(output string) string`** — trims whitespace, returns empty on blank. Checks `aliasRegex` for alias resolution, otherwise returns the trimmed path.
+
+**`LoadConfig() *Config`** — gets config dir, reads `config.json`. On not-exist: creates and saves default. On parse error: returns default. After JSON parse, overlays TOML config (`LoadTOMLConfig()`): copies `Profiles`, `PhaseRoles`, `AnimateBanner`, `AutoAdvanceWaves`, `TelemetryEnabled`, `DatabaseURL` when present in TOML.
+
+**`saveConfig(config *Config) error`** — ensures config dir exists, marshals to indented JSON, writes file.
+
+**`SaveConfig(config *Config) error`** — exported wrapper for `saveConfig`.
+
+Imports: `encoding/json`, `fmt`, `os`, `os/exec`, `os/user`, `path/filepath`, `regexp`, `strings`, `github.com/kastheco/kasmos/log`.
+
+---
+
+Delete `config/state.go` and rewrite from scratch based on this functional spec:
+
+**Constants:**
+- `StateFileName = "state.json"`
+- `InstancesFileName = "instances.json"`
+
+**Interfaces:**
+- `InstanceStorage` — `SaveInstances(json.RawMessage) error`, `GetInstances() json.RawMessage`, `DeleteAllInstances() error`
+- `AppState` — `GetHelpScreensSeen() uint32`, `SetHelpScreensSeen(uint32) error`
+- `StateManager` — embeds `InstanceStorage` + `AppState`
+
+**`State` struct** — JSON-tagged: `HelpScreensSeen uint32`, `InstancesData json.RawMessage` (tag: `"instances"`).
+
+**`DefaultState() *State`** — returns `HelpScreensSeen: 0`, `InstancesData: json.RawMessage("[]")`.
+
+**`LoadState() *State`** — gets config dir, reads `state.json`. On not-exist: saves and returns default. On parse error: returns default.
+
+**`SaveState(state *State) error`** — ensures config dir, marshals indented JSON, writes file.
+
+**`State` methods implementing interfaces:**
+- `SaveInstances` — sets `InstancesData`, calls `SaveState`
+- `GetInstances` — returns `InstancesData`
+- `DeleteAllInstances` — sets `InstancesData` to `"[]"`, calls `SaveState`
+- `GetHelpScreensSeen` — returns field
+- `SetHelpScreensSeen` — sets field, calls `SaveState`
+
+Imports: `encoding/json`, `fmt`, `os`, `path/filepath`, `github.com/kastheco/kasmos/log`.
 
 **Step 4: run test to verify it passes**
 
 ```bash
-go test ./config/... -v -count=1 && go test ./keys/... -v -count=1
+go test ./config/... -run 'TestGetDefaultCommand|TestDefaultConfig|TestGetConfigDir|TestLoadConfig|TestSaveConfig|TestIsTelemetryEnabled' -v -count=1
 ```
 
 expected: PASS
@@ -114,47 +107,43 @@ expected: PASS
 **Step 5: commit**
 
 ```bash
-git add config/config.go keys/keys.go
-git commit -m "feat(clean-room): rewrite config/config.go and keys/keys.go from scratch"
+git add config/config.go config/state.go
+git commit -m "feat(clean-room): rewrite config/config.go and config/state.go from scratch"
 ```
 
-## Wave 2: Entry Points — Main, Cmd, Daemon, Help
-
-> **depends on wave 1:** main.go uses config and log. daemon.go uses config, log, and session. cmd.go uses cobra. help.go uses keys. All depend on wave 1 rewrites being stable.
-
-### Task 3: Rewrite main.go and cmd/cmd.go — Application Entry Point
+### Task 2: Rewrite cmd/cmd.go
 
 **Files:**
-- Modify: `main.go`
 - Modify: `cmd/cmd.go`
-- Test: `cmd/plan_test.go`, `cmd/serve_test.go` (existing)
+- Test: `cmd/cmd_test/testutils.go` (existing, no changes needed)
 
 **Step 1: write the failing test**
 
-Existing tests cover `NewRootCmd`, `NewPlanCmd`, `NewServeCmd`, and the `Executor` interface.
+No new tests needed. The `cmd/cmd.go` file defines the `Executor` interface, `Exec` struct, `MakeExecutor`, `ToString`, and `NewRootCmd` — all exercised by the existing test infrastructure in `cmd/cmd_test/testutils.go` and indirectly by `cmd/task_test.go` and `cmd/serve_test.go`. The `NewRootCmd` function is also tested by the cobra command tree tests.
 
-**Step 2: run test to verify baseline passes**
+**Step 2: run test to verify it passes (baseline)**
 
 ```bash
 go test ./cmd/... -v -count=1
 ```
 
-expected: PASS
+expected: PASS — all existing tests pass before we touch anything
 
 **Step 3: rewrite implementation**
 
-Rewrite both files from scratch:
+Delete `cmd/cmd.go` and rewrite from scratch based on this functional spec:
 
-**main.go:**
-- `main()` — parse flags (--daemon, --version), initialize logging, load config, initialize Sentry, set up cobra root command, register subcommands, handle daemon mode, launch TUI
-- Flag handling, version display, signal handling
+**`Executor` interface** — `Run(cmd *exec.Cmd) error`, `Output(cmd *exec.Cmd) ([]byte, error)`.
 
-**cmd/cmd.go:**
-- `Executor` interface — `Run(cmd)`, `Output(cmd)`
-- `Exec` struct implementing Executor
-- `MakeExecutor()` — constructor
-- `ToString(cmd)` — format command as string
-- `NewRootCmd()` — create root cobra command with subcommands
+**`Exec` struct** — empty struct implementing `Executor`. `Run` delegates to `cmd.Run()`. `Output` delegates to `cmd.Output()`.
+
+**`MakeExecutor() Executor`** — returns `Exec{}`.
+
+**`ToString(cmd *exec.Cmd) string`** — returns `"<nil>"` for nil cmd, otherwise `strings.Join(cmd.Args, " ")`.
+
+**`NewRootCmd() *cobra.Command`** — creates root command with `Use: "kas"`, `Short: "kas - Manage multiple AI agents"`. Adds `NewTaskCmd()` and `NewServeCmd()` as subcommands.
+
+Imports: `os/exec`, `strings`, `github.com/spf13/cobra`.
 
 **Step 4: run test to verify it passes**
 
@@ -167,155 +156,76 @@ expected: PASS
 **Step 5: commit**
 
 ```bash
-git add main.go cmd/cmd.go
-git commit -m "feat(clean-room): rewrite main.go and cmd/cmd.go from scratch"
+git add cmd/cmd.go
+git commit -m "feat(clean-room): rewrite cmd/cmd.go from scratch"
 ```
 
-### Task 4: Rewrite daemon/daemon.go and app/help.go — Daemon and Help Screen
+### Task 3: Rewrite daemon/ package
 
 **Files:**
 - Modify: `daemon/daemon.go`
-- Modify: `app/help.go`
-- Test: `app/app_test.go` (existing, exercises help rendering)
+- Modify: `daemon/daemon_unix.go`
+- Modify: `daemon/daemon_windows.go`
+- Test: (no dedicated test file — daemon is integration-tested via the main binary)
 
 **Step 1: write the failing test**
 
-Existing tests exercise help screen rendering through the app test harness. Daemon is tested via integration.
+No new tests needed. The daemon package has no unit tests (it requires real tmux sessions and process management). The rewrite is verified by: (a) compilation, (b) the existing `go vet ./daemon/...` passing, and (c) manual smoke test of `kas --daemon` if desired. The daemon is a thin orchestration layer over `config.LoadState`, `session.NewStorage`, and `session.LoadInstances` — all of which have their own test suites.
 
-**Step 2: run test to verify baseline passes**
+**Step 2: run test to verify baseline compiles**
 
 ```bash
-go test ./app/... -run "TestHelp" -v -count=1
+go build ./daemon/...
+go vet ./daemon/...
 ```
 
-expected: PASS
+expected: no errors
 
 **Step 3: rewrite implementation**
 
-Rewrite both files from scratch:
+Delete `daemon/daemon.go` and rewrite from scratch based on this functional spec:
 
-**daemon/daemon.go:**
-- `RunDaemon(cfg)` — load state, load instances, set AutoYes, poll loop (check HasUpdated, TapEnter, UpdateDiffStats), signal handling (SIGINT/SIGTERM), save instances on exit
-- `LaunchDaemon()` — find executable, spawn detached child with --daemon flag, write PID file
-- `StopDaemon()` — read PID file, kill process, remove PID file
+**`RunDaemon(cfg *config.Config) error`** — loads state via `config.LoadState()`, creates storage via `session.NewStorage(state)`, loads instances via `storage.LoadInstances()`. Sets `AutoYes = true` on all instances. Creates a polling goroutine with `time.NewTimer(pollInterval)` where `pollInterval = time.Duration(cfg.DaemonPollInterval) * time.Millisecond`. Each tick: for each started, non-paused instance, calls `HasUpdated()` — if `hasPrompt` is true, calls `TapEnter()` and `UpdateDiffStats()` (logging errors via `log.NewEvery(60s)`). Listens for `SIGINT`/`SIGTERM` via `signal.Notify`, stops the goroutine via a `stopCh` channel, waits on a `sync.WaitGroup`, saves instances, returns nil.
 
-**app/help.go:**
-- `HelpScreen` — render multi-page help with key binding reference
-- Help pages: navigation, instance management, plan lifecycle, shortcuts
-- `HelpScreensSeen` bitmask tracking
-- `View()` — render current help page with navigation hints
+**`LaunchDaemon() error`** — finds own executable via `os.Executable()`, creates `exec.Command(execPath, "--daemon")` with nil stdin/stdout/stderr and platform-specific `SysProcAttr` from `getSysProcAttr()`. Starts the process, writes PID to `<configDir>/daemon.pid`.
 
-**Step 4: run test to verify it passes**
+**`StopDaemon() error`** — reads PID from `<configDir>/daemon.pid`. If file doesn't exist, returns nil. Finds process via `os.FindProcess(pid)`, kills it, removes PID file.
+
+Imports: `fmt`, `os`, `os/exec`, `os/signal`, `path/filepath`, `sync`, `syscall`, `time`, `github.com/kastheco/kasmos/config`, `github.com/kastheco/kasmos/log`, `github.com/kastheco/kasmos/session`.
+
+---
+
+Delete `daemon/daemon_unix.go` and rewrite from scratch:
+
+Build tag: `//go:build !windows`
+
+**`getSysProcAttr() *syscall.SysProcAttr`** — returns `&syscall.SysProcAttr{Setsid: true}` to create a new session for process detachment.
+
+Imports: `syscall`.
+
+---
+
+Delete `daemon/daemon_windows.go` and rewrite from scratch:
+
+Build tag: `//go:build windows`
+
+**`getSysProcAttr() *syscall.SysProcAttr`** — returns `&syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}`.
+
+Imports: `golang.org/x/sys/windows`, `syscall`.
+
+**Step 4: run test to verify it compiles**
 
 ```bash
-go test ./app/... -run "TestHelp" -v -count=1 && go test ./daemon/... -v -count=1
+go build ./daemon/...
+go vet ./daemon/...
+go build ./...
 ```
 
-expected: PASS
+expected: no errors
 
 **Step 5: commit**
 
 ```bash
-git add daemon/daemon.go app/help.go
-git commit -m "feat(clean-room): rewrite daemon/daemon.go and app/help.go from scratch"
-```
-
-## Wave 3: App Core — The Big Three
-
-> **depends on wave 2:** The app model files depend on all lower layers (config, keys, log, cmd, daemon, session, ui) being stable.
-
-### Task 5: Rewrite app/app_input.go — Input Handling
-
-**Files:**
-- Modify: `app/app_input.go`
-- Test: `app/app_input_keybytes_test.go`, `app/app_input_right_on_instance_test.go`, `app/app_input_viewport_test.go`, `app/app_input_yes_keybind_test.go` (existing)
-
-**Step 1: write the failing test**
-
-Existing tests cover key dispatch, viewport scrolling, yes keybind, and instance selection input.
-
-**Step 2: run test to verify baseline passes**
-
-```bash
-go test ./app/... -run "TestInput|TestKey" -v -count=1
-```
-
-expected: PASS
-
-**Step 3: rewrite implementation**
-
-Rewrite `app/app_input.go` from scratch. This is the largest upstream-derived file (~660 LOC upstream in 1533 LOC total). The rewrite replaces the key dispatch table and input routing logic:
-
-- `handleKeyMsg(msg)` — main key dispatch: route to overlay handler if active, otherwise to global key handler
-- `handleGlobalKey(msg)` — dispatch based on KeyName: navigation (up/down/left/right), instance actions (enter, kill, abort, checkout, resume, push), plan actions (new plan, search), view actions (tab cycle, sidebar toggle, help), agent actions (send prompt, send yes, spawn agent)
-- `handleOverlayKey(msg)` — delegate to active overlay's Update method
-- `handleSearchInput(msg)` — filter instances by search query
-- `handleInteractiveMode(msg)` — forward keys to attached tmux session
-- Scroll handling for viewport panels
-
-**Step 4: run test to verify it passes**
-
-```bash
-go test ./app/... -v -count=1
-```
-
-expected: PASS
-
-**Step 5: commit**
-
-```bash
-git add app/app_input.go
-git commit -m "feat(clean-room): rewrite app/app_input.go from scratch"
-```
-
-### Task 6: Rewrite app/app.go and app/app_actions.go — App Model and Actions
-
-**Files:**
-- Modify: `app/app.go`
-- Modify: `app/app_actions.go`
-- Test: `app/app_test.go` and all app test files (existing)
-
-**Step 1: write the failing test**
-
-Existing tests cover the full app model: Init, Update, View, instance creation, plan actions, wave orchestration.
-
-**Step 2: run test to verify baseline passes**
-
-```bash
-go test ./app/... -v -count=1
-```
-
-expected: PASS
-
-**Step 3: rewrite implementation**
-
-Rewrite both files from scratch. These have the least upstream LOC relative to total size (~173 LOC upstream in 2037 LOC app.go, ~63 LOC upstream in 910 LOC app_actions.go), so the rewrite is mostly about replacing the skeletal upstream structure:
-
-**app/app.go:**
-- `Model` struct — all fields preserved (instances, storage, config, UI components, overlay state, etc.)
-- `New(cfg, storage, state)` — constructor
-- `Init()` — initialize UI components, load instances, start tick
-- `Update(msg)` — main message dispatch: key messages, window size, tick messages, instance metadata, plan state changes
-- `View()` — compose layout: sidebar + center pane (tabbed window) + bottom menu, overlay on top if active
-- Tick management, instance metadata polling, plan state polling
-
-**app/app_actions.go:**
-- Instance actions: `createInstance`, `killInstance`, `pauseInstance`, `resumeInstance`, `restartInstance`, `attachInstance`, `detachInstance`
-- Plan actions: `createPlan`, `implementPlan`, `cancelPlan`
-- Push/PR actions: `pushChanges`, `createPR`
-- Toast helpers, confirmation dialog helpers
-
-**Step 4: run test to verify it passes**
-
-```bash
-go test ./app/... -v -count=1
-```
-
-expected: PASS
-
-**Step 5: commit**
-
-```bash
-git add app/app.go app/app_actions.go
-git commit -m "feat(clean-room): rewrite app/app.go and app/app_actions.go from scratch"
+git add daemon/daemon.go daemon/daemon_unix.go daemon/daemon_windows.go
+git commit -m "feat(clean-room): rewrite daemon/ package from scratch"
 ```

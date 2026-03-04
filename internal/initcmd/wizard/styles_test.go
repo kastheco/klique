@@ -3,23 +3,24 @@ package wizard
 import (
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestRosePineMoonPalette(t *testing.T) {
-	assert.Equal(t, "#232136", string(colorBase))
-	assert.Equal(t, "#2a273f", string(colorSurface))
-	assert.Equal(t, "#393552", string(colorOverlay))
-	assert.Equal(t, "#6e6a86", string(colorMuted))
-	assert.Equal(t, "#908caa", string(colorSubtle))
-	assert.Equal(t, "#e0def4", string(colorText))
+	assert.Equal(t, lipgloss.Color("#232136"), colorBase)
+	assert.Equal(t, lipgloss.Color("#2a273f"), colorSurface)
+	assert.Equal(t, lipgloss.Color("#393552"), colorOverlay)
+	assert.Equal(t, lipgloss.Color("#6e6a86"), colorMuted)
+	assert.Equal(t, lipgloss.Color("#908caa"), colorSubtle)
+	assert.Equal(t, lipgloss.Color("#e0def4"), colorText)
 
-	assert.Equal(t, "#eb6f92", string(colorLove))
-	assert.Equal(t, "#f6c177", string(colorGold))
-	assert.Equal(t, "#ea9a97", string(colorRose))
-	assert.Equal(t, "#3e8fb0", string(colorPine))
-	assert.Equal(t, "#9ccfd8", string(colorFoam))
-	assert.Equal(t, "#c4a7e7", string(colorIris))
+	assert.Equal(t, lipgloss.Color("#eb6f92"), colorLove)
+	assert.Equal(t, lipgloss.Color("#f6c177"), colorGold)
+	assert.Equal(t, lipgloss.Color("#ea9a97"), colorRose)
+	assert.Equal(t, lipgloss.Color("#3e8fb0"), colorPine)
+	assert.Equal(t, lipgloss.Color("#9ccfd8"), colorFoam)
+	assert.Equal(t, lipgloss.Color("#c4a7e7"), colorIris)
 
 	assert.Equal(t, "#9ccfd8", gradientStart)
 	assert.Equal(t, "#c4a7e7", gradientEnd)

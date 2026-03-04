@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/session"
 )

@@ -1,23 +1,24 @@
-# Instance Management CLI
+# Instance Management CLI Implementation Plan
 
-**Goal:** Add `kas instance` subcommands (list, create, kill, pause, resume, restart, attach) so that agent sessions can be managed headlessly from the terminal without the TUI, enabling scripted workflows and remote management.
+**Goal:** Add a `kas instance` CLI command tree that enables headless instance monitoring and lifecycle management — listing, killing, pausing, resuming, and prompting agent sessions without launching the TUI.
 
-**Architecture:** A new `cmd/instance.go` file adds cobra subcommands under `kas instance`. Each subcommand reads instance state from the existing `session.Storage` (state.json), operates on `session.Instance` objects using their lifecycle methods, and writes state back. The `attach` command opens a tmux attach-session to the instance's tmux session. All commands are synchronous — no bubbletea dependency.
+**Architecture:** A new `cmd/instance.go` file follows the established pattern from `cmd/task.go`: testable `executeXxx()` functions with thin cobra wrappers. The `list` command reads raw `InstanceData` from `config.State` without reconstructing live tmux sessions. Lifecycle commands (`kill`, `pause`, `resume`, `send`) reconstruct the target `Instance` via `session.FromInstanceData` and call the existing lifecycle methods, then persist state back. All commands are wired into both `cmd/cmd.go` `NewRootCmd()` and `main.go` `init()`.
 
-**Tech Stack:** Go 1.24, cobra CLI, `session` package (Instance, Storage), `session/tmux` (TmuxSession), `session/git` (GitWorktree)
+**Tech Stack:** Go, cobra, `session.Storage`/`session.InstanceData`, `config.State`, `encoding/json`
 
-**Size:** Medium (estimated ~3 hours, 2 tasks, 2 waves)
+**Size:** Small (estimated ~2 hours, 2 tasks, 2 waves)
 
 ---
 
-## Wave 1: Read and Mutate Commands
+## Wave 1: List Command and Infrastructure
 
-### Task 1: Add kas instance list, kill, pause, and resume commands
+### Task 1: Instance List Command with JSON Support
 
 **Files:**
-- Create: `cmd/instance.go` — `NewInstanceCmd` with `list`, `kill`, `pause`, `resume` subcommands
-- Modify: `main.go` — wire `NewInstanceCmd` into root command
-- Test: `cmd/instance_test.go`
+- Create: `cmd/instance.go`
+- Create: `cmd/instance_test.go`
+- Modify: `cmd/cmd.go`
+- Modify: `main.go`
 
 **Step 1: write the failing test**
 
@@ -26,124 +27,113 @@
 package cmd
 
 import (
-	"bytes"
+	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestInstanceList_Empty(t *testing.T) {
-	cmd := NewInstanceCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"list"})
-	err := cmd.Execute()
+// newTestState returns a State pre-populated with the given instances.
+func newTestState(t *testing.T, instances []session.InstanceData) *config.State {
+	t.Helper()
+	raw, err := json.Marshal(instances)
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), "no instances")
+	s := config.DefaultState()
+	s.InstancesData = raw
+	return s
 }
 
-func TestInstanceKill_NotFound(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"kill", "nonexistent"})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+func TestInstanceList_Text(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{
+		{Title: "planner-foo", Status: session.Running, Branch: "plan/foo", Program: "claude", TaskFile: "foo.md"},
+		{Title: "coder-bar", Status: session.Ready, Branch: "plan/bar", Program: "opencode", TaskFile: "bar.md"},
+		{Title: "solo-baz", Status: session.Paused, Branch: "plan/baz", Program: "claude"},
+	})
+
+	output := executeInstanceList(state, "text")
+	assert.Contains(t, output, "planner-foo")
+	assert.Contains(t, output, "coder-bar")
+	assert.Contains(t, output, "solo-baz")
+	assert.Contains(t, output, "running")
+	assert.Contains(t, output, "ready")
+	assert.Contains(t, output, "paused")
 }
 
-func TestInstancePause_NotFound(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"pause", "nonexistent"})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+func TestInstanceList_JSON(t *testing.T) {
+	instances := []session.InstanceData{
+		{Title: "agent-1", Status: session.Running, Branch: "plan/agent", Program: "claude"},
+	}
+	state := newTestState(t, instances)
+
+	output := executeInstanceList(state, "json")
+	var parsed []map[string]interface{}
+	err := json.Unmarshal([]byte(output), &parsed)
+	require.NoError(t, err)
+	assert.Len(t, parsed, 1)
+	assert.Equal(t, "agent-1", parsed[0]["title"])
 }
 
-func TestInstanceResume_NotFound(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"resume", "nonexistent"})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+func TestInstanceList_Empty(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{})
+	output := executeInstanceList(state, "text")
+	assert.Equal(t, "no instances\n", output)
+}
+
+func TestInstanceList_StatusFilter(t *testing.T) {
+	state := newTestState(t, []session.InstanceData{
+		{Title: "running-1", Status: session.Running, Program: "claude"},
+		{Title: "paused-1", Status: session.Paused, Program: "claude"},
+	})
+
+	output := executeInstanceList(state, "text", "paused")
+	assert.Contains(t, output, "paused-1")
+	assert.NotContains(t, output, "running-1")
 }
 ```
 
 **Step 2: run test to verify it fails**
 
 ```bash
-go test ./cmd/... -run "TestInstanceList|TestInstanceKill|TestInstancePause|TestInstanceResume" -v
+go test ./cmd/... -run TestInstanceList -v
 ```
 
-expected: FAIL — `NewInstanceCmd undefined`
+expected: FAIL — `executeInstanceList` undefined
 
 **Step 3: write minimal implementation**
 
-Create `cmd/instance.go` with the parent command and four subcommands:
+Create `cmd/instance.go` with:
+- `statusString(s session.Status) string` helper to convert numeric status to text
+- `executeInstanceList(state config.StateManager, format string, statusFilters ...string) string` — reads raw `InstancesData` from state, unmarshals to `[]session.InstanceData`, formats as text table or JSON
+- `NewInstanceCmd() *cobra.Command` — parent `kas instance` command with `list` subcommand
+- `list` subcommand with `--format` (text/json) and `--status` filter flags
 
+Wire into `cmd/cmd.go` `NewRootCmd()`:
 ```go
-package cmd
-
-import (
-	"fmt"
-	"os"
-	"text/tabwriter"
-
-	"github.com/kastheco/kasmos/config"
-	"github.com/kastheco/kasmos/session"
-	"github.com/spf13/cobra"
-)
-
-func NewInstanceCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "instance",
-		Short: "manage agent instances",
-	}
-	cmd.AddCommand(newInstanceListCmd())
-	cmd.AddCommand(newInstanceKillCmd())
-	cmd.AddCommand(newInstancePauseCmd())
-	cmd.AddCommand(newInstanceResumeCmd())
-	return cmd
-}
+root.AddCommand(NewInstanceCmd())
 ```
 
-`list` displays a tabwriter table of all instances with title, status, program, branch, and task file. `kill` finds by title, calls `inst.Kill()`, removes from list, saves. `pause` and `resume` find by title and call the corresponding lifecycle method.
-
-Factor out a shared helper for instance lookup:
-
+Wire into `main.go` `init()`:
 ```go
-func loadAndFindInstance(title string) ([]*session.Instance, *session.Instance, error) {
-	state, err := config.NewState()
-	if err != nil {
-		return nil, nil, fmt.Errorf("load state: %w", err)
-	}
-	storage, err := session.NewStorage(state)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create storage: %w", err)
-	}
-	instances, err := storage.LoadInstances()
-	if err != nil {
-		return nil, nil, fmt.Errorf("load instances: %w", err)
-	}
-	for _, inst := range instances {
-		if inst.Title == title {
-			return instances, inst, nil
-		}
-	}
-	return nil, nil, fmt.Errorf("instance %q not found", title)
-}
+rootCmd.AddCommand(cmd2.NewInstanceCmd())
 ```
 
-Wire into `main.go`:
-
-```go
-rootCmd.AddCommand(cmd.NewInstanceCmd())
+Text output format (tab-aligned):
 ```
+TITLE              STATUS    BRANCH              PROGRAM    TASK
+planner-foo        running   plan/foo            claude     foo.md
+coder-bar          ready     plan/bar            opencode   bar.md
+```
+
+JSON output: array of objects with `title`, `status`, `branch`, `program`, `task_file`, `agent_type`, `created_at` fields.
 
 **Step 4: run test to verify it passes**
 
 ```bash
-go build ./...
-go test ./cmd/... -run "TestInstanceList|TestInstanceKill|TestInstancePause|TestInstanceResume" -v
+go test ./cmd/... -run TestInstanceList -v
 ```
 
 expected: PASS
@@ -151,159 +141,127 @@ expected: PASS
 **Step 5: commit**
 
 ```bash
-git add cmd/instance.go cmd/instance_test.go main.go
-git commit -m "feat: add kas instance list, kill, pause, and resume commands"
+git add cmd/instance.go cmd/instance_test.go cmd/cmd.go main.go
+git commit -m "feat: add kas instance list command with text/json output"
 ```
 
-## Wave 2: Create, Attach, and Restart Commands
+---
 
-> **depends on wave 1:** The instance lookup helper and command wiring pattern from wave 1 are reused here.
+## Wave 2: Lifecycle Commands
 
-### Task 2: Add kas instance create, attach, and restart commands
+> **depends on wave 1:** uses `NewInstanceCmd()` command tree, `statusString()` helper, and state loading patterns established in Task 1
+
+### Task 2: Kill, Pause, Resume, and Send Commands
 
 **Files:**
-- Modify: `cmd/instance.go` — add `create`, `attach`, and `restart` subcommands
-- Modify: `cmd/instance_test.go` — add tests for all three commands
+- Modify: `cmd/instance.go`
+- Modify: `cmd/instance_test.go`
 
 **Step 1: write the failing test**
 
 ```go
-func TestInstanceCreate_MissingTitle(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"create"})
-	err := cmd.Execute()
-	assert.Error(t, err) // requires at least a title
+func TestFindInstanceData_Found(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "alpha", Status: session.Running},
+		{Title: "beta", Status: session.Paused},
+	}
+	found, err := findInstanceData(records, "beta")
+	require.NoError(t, err)
+	assert.Equal(t, "beta", found.Title)
+	assert.Equal(t, session.Paused, found.Status)
 }
 
-func TestInstanceAttach_NotFound(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"attach", "nonexistent"})
-	err := cmd.Execute()
+func TestFindInstanceData_NotFound(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "alpha", Status: session.Running},
+	}
+	_, err := findInstanceData(records, "missing")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
-func TestInstanceRestart_NotFound(t *testing.T) {
-	cmd := NewInstanceCmd()
-	cmd.SetArgs([]string{"restart", "nonexistent"})
-	err := cmd.Execute()
+func TestFindInstanceData_FuzzyMatch(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "planner-my-feature", Status: session.Running},
+		{Title: "coder-my-feature-task-1", Status: session.Running},
+	}
+	// Exact match should work
+	found, err := findInstanceData(records, "planner-my-feature")
+	require.NoError(t, err)
+	assert.Equal(t, "planner-my-feature", found.Title)
+
+	// Substring match when no exact match
+	found, err = findInstanceData(records, "task-1")
+	require.NoError(t, err)
+	assert.Equal(t, "coder-my-feature-task-1", found.Title)
+}
+
+func TestFindInstanceData_AmbiguousSubstring(t *testing.T) {
+	records := []session.InstanceData{
+		{Title: "planner-foo", Status: session.Running},
+		{Title: "coder-foo", Status: session.Running},
+	}
+	_, err := findInstanceData(records, "foo")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+	assert.Contains(t, err.Error(), "ambiguous")
+}
+
+func TestValidateInstanceStatus_Kill(t *testing.T) {
+	// Kill should work on any non-paused, non-exited instance
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "kill"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "kill"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "kill"))
+}
+
+func TestValidateInstanceStatus_Pause(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "pause"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "pause"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "pause"))
+}
+
+func TestValidateInstanceStatus_Resume(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "resume"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "resume"))
+}
+
+func TestValidateInstanceStatus_Send(t *testing.T) {
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Running}, "send"))
+	assert.NoError(t, validateStatusForAction(session.InstanceData{Status: session.Ready}, "send"))
+	assert.Error(t, validateStatusForAction(session.InstanceData{Status: session.Paused}, "send"))
 }
 ```
 
 **Step 2: run test to verify it fails**
 
 ```bash
-go test ./cmd/... -run "TestInstanceCreate|TestInstanceAttach|TestInstanceRestart" -v
+go test ./cmd/... -run "TestFindInstanceData|TestValidateInstanceStatus" -v
 ```
 
-expected: FAIL — no `create`/`attach`/`restart` subcommands
+expected: FAIL — `findInstanceData`, `validateStatusForAction` undefined
 
 **Step 3: write minimal implementation**
 
-**create** — creates a new instance with flags for program, branch, task file, and initial prompt:
+Add to `cmd/instance.go`:
 
-```go
-func newInstanceCreateCmd() *cobra.Command {
-	var (
-		program  string
-		branch   string
-		taskFile string
-		prompt   string
-	)
-	cmd := &cobra.Command{
-		Use:   "create <title>",
-		Short: "create and start a new agent instance",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeInstanceCreate(cmd, args[0], program, branch, taskFile, prompt)
-		},
-	}
-	cmd.Flags().StringVar(&program, "program", "opencode", "agent program to run")
-	cmd.Flags().StringVar(&branch, "branch", "", "git branch (creates worktree; empty = new branch)")
-	cmd.Flags().StringVar(&taskFile, "task", "", "bind to a task file")
-	cmd.Flags().StringVar(&prompt, "prompt", "", "initial prompt to send to the agent")
-	return cmd
-}
+Helper functions:
+- `loadInstanceRecords(state config.StateManager) ([]session.InstanceData, error)` — unmarshals raw state to `[]InstanceData`
+- `findInstanceData(records []session.InstanceData, title string) (session.InstanceData, error)` — exact match first, then substring match; returns error on not-found or ambiguous
+- `validateStatusForAction(data session.InstanceData, action string) error` — validates the instance is in a compatible status for the requested action
+- `removeInstanceFromState(state config.StateManager, title string) error` — removes the named instance from persisted state
+- `updateInstanceInState(state config.StateManager, title string, updater func(*session.Instance) error) error` — reconstructs via `FromInstanceData`, applies the updater, saves state back
 
-func executeInstanceCreate(cmd *cobra.Command, title, program, branch, taskFile, prompt string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
-	}
+Cobra subcommands:
+- `kill <title>` — validates status, reconstructs Instance, calls `Kill()`, removes from state
+- `pause <title>` — validates not-paused, reconstructs Instance, calls `Pause()`, updates state
+- `resume <title>` — validates paused, reconstructs Instance, calls `Resume()`, updates state
+- `send <title> <prompt>` — validates running/ready, reconstructs Instance, calls `SendPrompt()`, no state change needed
 
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:    title,
-		Path:     cwd,
-		Program:  program,
-		PlanFile: taskFile,
-	})
-	if err != nil {
-		return fmt.Errorf("create instance: %w", err)
-	}
-	if prompt != "" {
-		inst.QueuedPrompt = prompt
-	}
-
-	if branch != "" {
-		if err := inst.StartOnBranch(branch); err != nil {
-			return fmt.Errorf("start on branch: %w", err)
-		}
-	} else {
-		if err := inst.Start(true); err != nil {
-			return fmt.Errorf("start instance: %w", err)
-		}
-	}
-
-	// Save to state
-	state, err := config.NewState()
-	if err != nil {
-		return fmt.Errorf("load state: %w", err)
-	}
-	storage, err := session.NewStorage(state)
-	if err != nil {
-		return fmt.Errorf("create storage: %w", err)
-	}
-	instances, _ := storage.LoadInstances()
-	instances = append(instances, inst)
-	if err := storage.SaveInstances(instances); err != nil {
-		return fmt.Errorf("save instances: %w", err)
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "created: %s (branch: %s)\n", inst.Title, inst.Branch)
-	return nil
-}
-```
-
-**attach** — finds the instance and execs into its tmux session:
-
-```go
-func executeInstanceAttach(cmd *cobra.Command, title string) error {
-	_, inst, err := loadAndFindInstance(title)
-	if err != nil {
-		return err
-	}
-	if !inst.TmuxAlive() {
-		return fmt.Errorf("instance %q tmux session is not running", title)
-	}
-	tmuxBin, err := exec.LookPath("tmux")
-	if err != nil {
-		return fmt.Errorf("tmux not found: %w", err)
-	}
-	return syscall.Exec(tmuxBin, []string{"tmux", "attach-session", "-t", inst.Title}, os.Environ())
-}
-```
-
-**restart** — finds the instance and calls `inst.Restart()`, saves state.
-
-Add all three to `NewInstanceCmd`.
+All commands print a confirmation message on success (e.g., `killed: planner-foo`) and return errors via cobra's error handling.
 
 **Step 4: run test to verify it passes**
 
 ```bash
-go build ./...
-go test ./cmd/... -run "TestInstanceCreate|TestInstanceAttach|TestInstanceRestart" -v
+go test ./cmd/... -run "TestFindInstanceData|TestValidateInstanceStatus" -v
 ```
 
 expected: PASS
@@ -312,5 +270,5 @@ expected: PASS
 
 ```bash
 git add cmd/instance.go cmd/instance_test.go
-git commit -m "feat: add kas instance create, attach, and restart commands"
+git commit -m "feat: add kas instance kill/pause/resume/send commands"
 ```

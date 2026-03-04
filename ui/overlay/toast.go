@@ -2,11 +2,12 @@ package overlay
 
 import (
 	"fmt"
+	"image/color"
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -254,7 +255,7 @@ func (tm *ToastManager) enforceMaxToasts() {
 }
 
 // toastColor returns the Rosé Pine Moon palette color for a toast type.
-func toastColor(typ ToastType) lipgloss.Color {
+func toastColor(typ ToastType) color.Color {
 	switch typ {
 	case ToastInfo:
 		return colorFoam
