@@ -1,0 +1,138 @@
+Implement Task 4: Migrate All Test Files
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Migrate klique from Charm v1 (bubbletea v1.3, lipgloss v1.1, bubbles v0.21) to Charm v2 (bubbletea v2, lipgloss v2, bubbles v2) — adopting the new declarative View API, restructured key/mouse events, and getter/setter component patterns.
+**Architecture:** All three core Charm libraries must upgrade atomically since they share types at module boundaries. The migration rewrites import paths (`charm.land/*/v2`), converts `View() string` to `View() tea.View`, replaces `tea.KeyMsg` struct matching with `tea.KeyPressMsg`, moves program options into declarative View fields, and updates bubbles component APIs to use getter/setter methods. huh v2 (experimental branch) replaces huh v0.8. glamour and harmonica remain at current versions.
+**Tech Stack:** Go 1.24+, charm.land/bubbletea/v2, charm.land/lipgloss/v2, charm.land/bubbles/v2, charm.land/huh/v2 (v2-exp branch), charmbracelet/glamour v0.10, charmbracelet/harmonica v0.2
+
+## Wave 3 of 3
+
+## Parallel Execution
+
+You are Task 4 of 2 in Wave 3. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+All test files construct `tea.KeyMsg` struct literals for input simulation. These must become `tea.KeyPressMsg` with v2 fields (`Code`, `Text`, `Mod` instead of `Type`, `Runes`, `Alt`). Also update viewport field access and mouse event construction in tests.
+
+**Files:**
+- Modify: `app/app_test.go` (38 tea.KeyMsg refs)
+- Modify: `app/app_task_creation_test.go` (13 refs)
+- Modify: `app/app_permission_test.go` (8 refs)
+- Modify: `app/app_input_right_on_instance_test.go`
+- Modify: `app/app_input_yes_keybind_test.go`
+- Modify: `app/app_input_viewport_test.go`
+- Modify: `app/app_input_keybytes_test.go`
+- Modify: `app/app_audit_pane_test.go`
+- Modify: `app/app_planner_signal_test.go`
+- Modify: `app/app_wave_orchestration_flow_test.go`
+- Modify: `app/task_cancel_rename_delay_test.go`
+- Modify: `app/app_statusbar_integration_test.go`
+- Modify: `app/clickup_progress_test.go`
+- Modify: `app/app_solo_agent_test.go`
+- Modify: `app/app_task_actions_test.go`
+- Modify: `app/app_task_completion_test.go`
+- Modify: `ui/overlay/formOverlay_test.go` (42 refs)
+- Modify: `ui/overlay/tmuxBrowserOverlay_test.go` (19 refs)
+- Modify: `ui/overlay/pickerOverlay_test.go`
+- Modify: `ui/overlay/textInput_test.go`
+- Modify: `ui/overlay/contextMenu_test.go`
+- Modify: `ui/overlay/confirmationOverlay_test.go`
+- Modify: `ui/overlay/permissionOverlay_test.go`
+- Modify: `ui/overlay/iface_test.go`
+- Modify: `ui/overlay/manager_test.go`
+- Modify: `ui/overlay/textOverlay_test.go`
+- Modify: `ui/overlay/toast_test.go`
+- Modify: `ui/overlay/theme_test.go`
+- Modify: `ui/preview_test.go`
+- Modify: `ui/tabbed_window_test.go`
+- Modify: `ui/nav_panel_test.go`
+- Modify: `internal/initcmd/wizard/model_test.go`
+- Modify: `internal/initcmd/wizard/model_agents_test.go`
+- Modify: `internal/initcmd/wizard/model_review_test.go`
+
+**Step 1: write the failing test**
+
+```bash
+go test ./... 2>&1 | head -30
+```
+
+expected: FAIL — test files won't compile due to tea.KeyMsg struct literal changes
+
+**Step 2: run test to verify it fails**
+
+```bash
+go build ./... 2>&1 | rg '_test.go' | head -10
+```
+
+expected: FAIL
+
+**Step 3: write minimal implementation**
+
+Batch-migrate test key event construction using `comby`:
+
+```go
+// Before (v1 struct literals)
+tea.KeyMsg{Type: tea.KeyEnter}
+tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}
+tea.KeyMsg{Type: tea.KeyEsc}
+tea.KeyMsg{Type: tea.KeyCtrlC}
+
+// After (v2 — KeyPressMsg with Code/Text)
+tea.KeyPressMsg{Code: tea.KeyEnter}
+tea.KeyPressMsg{Code: 'q', Text: "q"}
+tea.KeyPressMsg{Code: tea.KeyEscape}
+tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+```
+
+Use `comby` for consistent patterns:
+```bash
+comby 'tea.KeyMsg{Type: tea.KeyEnter}' 'tea.KeyPressMsg{Code: tea.KeyEnter}' .go -in-place
+comby 'tea.KeyMsg{Type: tea.KeyEsc}' 'tea.KeyPressMsg{Code: tea.KeyEscape}' .go -in-place
+# ... etc for each pattern
+```
+
+Then manually fix:
+- `tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(...)}` → `tea.KeyPressMsg{Code: rune, Text: string}`
+- `tea.WindowSizeMsg` — field names unchanged, no migration needed
+- Mouse event construction in tests:
+  ```go
+  // Before
+  tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 5, Y: 10}
+  // After
+  tea.MouseClickMsg{Button: tea.MouseLeft, Mouse: tea.Mouse{X: 5, Y: 10}}
+  ```
+- Viewport YOffset in `ui/tabbed_window_test.go`:
+  ```go
+  preview.viewport.YOffset    →    preview.viewport.YOffset()
+  ```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./... -count=1
+```
+
+expected: PASS — all tests green
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "test: migrate all test files to charm v2 key/mouse event constructors"
+```

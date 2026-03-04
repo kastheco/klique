@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "a534a06a866f",
+  "strategy": "manual-commit",
+  "branch": "plan/charm-v2-upgrade",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "go.mod",
+    "go.sum"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a5/34a06a866f/0/metadata.json",
+      "transcript": "/a5/34a06a866f/0/full.jsonl",
+      "context": "/a5/34a06a866f/0/context.md",
+      "content_hash": "/a5/34a06a866f/0/content_hash.txt",
+      "prompt": "/a5/34a06a866f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 15,
+    "cache_creation_tokens": 58806,
+    "cache_read_tokens": 688713,
+    "output_tokens": 3737,
+    "api_call_count": 15
+  }
+}

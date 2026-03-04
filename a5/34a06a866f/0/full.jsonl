@@ -1,0 +1,1771 @@
+{
+  "info": {
+    "id": "ses_34923676effeGLybPEdal0vlM0",
+    "slug": "shiny-panda",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+    "title": "Migrate test files to Charm v2 events",
+    "version": "1.2.16",
+    "summary": {
+      "additions": 0,
+      "deletions": 13,
+      "files": 2
+    },
+    "time": {
+      "created": 1772594436241,
+      "updated": 1772594512065
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772594436287
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "go.mod",
+              "before": "module github.com/kastheco/kasmos\n\ngo 1.24.4\n\nrequire (\n\tcharm.land/bubbles/v2 v2.0.0\n\tcharm.land/bubbletea/v2 v2.0.1\n\tcharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b\n\tcharm.land/lipgloss/v2 v2.0.0\n\tgithub.com/BurntSushi/toml v1.6.0\n\tgithub.com/atotto/clipboard v0.1.4\n\tgithub.com/charmbracelet/glamour v0.10.0\n\tgithub.com/charmbracelet/harmonica v0.2.0\n\tgithub.com/charmbracelet/x/ansi v0.11.6\n\tgithub.com/charmbracelet/x/vt v0.0.0-20260302105528-e9b285c73169\n\tgithub.com/creack/pty v1.1.24\n\tgithub.com/getsentry/sentry-go v0.43.0\n\tgithub.com/go-git/go-git/v5 v5.14.0\n\tgithub.com/lrstanley/bubblezone v1.0.0\n\tgithub.com/lrstanley/bubblezone/v2 v2.0.0\n\tgithub.com/mattn/go-runewidth v0.0.20\n\tgithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6\n\tgithub.com/muesli/reflow v0.3.0\n\tgithub.com/muesli/termenv v0.16.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/stretchr/testify v1.10.0\n\tgolang.org/x/sys v0.41.0\n\tmodernc.org/sqlite v1.46.1\n)\n\nrequire (\n\tdario.cat/mergo v1.0.0 // indirect\n\tgithub.com/Microsoft/go-winio v0.6.2 // indirect\n\tgithub.com/ProtonMail/go-crypto v1.1.5 // indirect\n\tgithub.com/alecthomas/chroma/v2 v2.14.0 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/aymerick/douceur v0.2.0 // indirect\n\tgithub.com/catppuccin/go v0.3.0 // indirect\n\tgithub.com/charmbracelet/bubbletea v1.3.10 // indirect\n\tgithub.com/charmbracelet/colorprofile v0.4.2 // indirect\n\tgithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 // indirect\n\tgithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff // indirect\n\tgithub.com/charmbracelet/x/cellbuf v0.0.15 // indirect\n\tgithub.com/charmbracelet/x/exp/ordered v0.1.0 // indirect\n\tgithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect\n\tgithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect\n\tgithub.com/charmbracelet/x/term v0.2.2 // indirect\n\tgithub.com/charmbracelet/x/termios v0.1.1 // indirect\n\tgithub.com/charmbracelet/x/windows v0.2.2 // indirect\n\tgithub.com/clipperhouse/displaywidth v0.11.0 // indirect\n\tgithub.com/clipperhouse/uax29/v2 v2.7.0 // indirect\n\tgithub.com/cloudflare/circl v1.6.0 // indirect\n\tgithub.com/cyphar/filepath-securejoin v0.4.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/dlclark/regexp2 v1.11.0 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/emirpasic/gods v1.18.1 // indirect\n\tgithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect\n\tgithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect\n\tgithub.com/go-git/go-billy/v5 v5.6.2 // indirect\n\tgithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/css v1.0.1 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect\n\tgithub.com/kevinburke/ssh_config v1.2.0 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.3.0 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mattn/go-localereader v0.0.1 // indirect\n\tgithub.com/microcosm-cc/bluemonday v1.0.27 // indirect\n\tgithub.com/mitchellh/hashstructure/v2 v2.0.2 // indirect\n\tgithub.com/muesli/cancelreader v0.2.2 // indirect\n\tgithub.com/ncruces/go-strftime v1.0.0 // indirect\n\tgithub.com/pjbgf/sha1cd v0.3.2 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect\n\tgithub.com/skeema/knownhosts v1.3.1 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/xanzy/ssh-agent v0.3.3 // indirect\n\tgithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect\n\tgithub.com/yuin/goldmark v1.7.8 // indirect\n\tgithub.com/yuin/goldmark-emoji v1.0.5 // indirect\n\tgolang.org/x/crypto v0.35.0 // indirect\n\tgolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect\n\tgolang.org/x/net v0.36.0 // indirect\n\tgolang.org/x/sync v0.19.0 // indirect\n\tgolang.org/x/term v0.31.0 // indirect\n\tgolang.org/x/text v0.34.0 // indirect\n\tgopkg.in/warnings.v0 v0.1.2 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tmodernc.org/libc v1.67.6 // indirect\n\tmodernc.org/mathutil v1.7.1 // indirect\n\tmodernc.org/memory v1.11.0 // indirect\n)\n\n// x/vt uses uv.Buffer.Touched which was moved to uv.RenderBuffer upstream.\n// Local patch changes Screen.buf from uv.Buffer to *uv.RenderBuffer.\nreplace github.com/charmbracelet/x/vt => ./_patches/vt\n",
+              "after": "module github.com/kastheco/kasmos\n\ngo 1.24.4\n\nrequire (\n\tcharm.land/bubbles/v2 v2.0.0\n\tcharm.land/bubbletea/v2 v2.0.1\n\tcharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b\n\tcharm.land/lipgloss/v2 v2.0.0\n\tgithub.com/BurntSushi/toml v1.6.0\n\tgithub.com/atotto/clipboard v0.1.4\n\tgithub.com/charmbracelet/glamour v0.10.0\n\tgithub.com/charmbracelet/harmonica v0.2.0\n\tgithub.com/charmbracelet/x/ansi v0.11.6\n\tgithub.com/charmbracelet/x/vt v0.0.0-20260302105528-e9b285c73169\n\tgithub.com/creack/pty v1.1.24\n\tgithub.com/getsentry/sentry-go v0.43.0\n\tgithub.com/go-git/go-git/v5 v5.14.0\n\tgithub.com/lrstanley/bubblezone/v2 v2.0.0\n\tgithub.com/mattn/go-runewidth v0.0.20\n\tgithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6\n\tgithub.com/muesli/reflow v0.3.0\n\tgithub.com/muesli/termenv v0.16.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/stretchr/testify v1.10.0\n\tgolang.org/x/sys v0.41.0\n\tmodernc.org/sqlite v1.46.1\n)\n\nrequire (\n\tdario.cat/mergo v1.0.0 // indirect\n\tgithub.com/Microsoft/go-winio v0.6.2 // indirect\n\tgithub.com/ProtonMail/go-crypto v1.1.5 // indirect\n\tgithub.com/alecthomas/chroma/v2 v2.14.0 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/aymerick/douceur v0.2.0 // indirect\n\tgithub.com/catppuccin/go v0.3.0 // indirect\n\tgithub.com/charmbracelet/colorprofile v0.4.2 // indirect\n\tgithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 // indirect\n\tgithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff // indirect\n\tgithub.com/charmbracelet/x/cellbuf v0.0.15 // indirect\n\tgithub.com/charmbracelet/x/exp/ordered v0.1.0 // indirect\n\tgithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect\n\tgithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect\n\tgithub.com/charmbracelet/x/term v0.2.2 // indirect\n\tgithub.com/charmbracelet/x/termios v0.1.1 // indirect\n\tgithub.com/charmbracelet/x/windows v0.2.2 // indirect\n\tgithub.com/clipperhouse/displaywidth v0.11.0 // indirect\n\tgithub.com/clipperhouse/uax29/v2 v2.7.0 // indirect\n\tgithub.com/cloudflare/circl v1.6.0 // indirect\n\tgithub.com/cyphar/filepath-securejoin v0.4.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/dlclark/regexp2 v1.11.0 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/emirpasic/gods v1.18.1 // indirect\n\tgithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect\n\tgithub.com/go-git/go-billy/v5 v5.6.2 // indirect\n\tgithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/css v1.0.1 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect\n\tgithub.com/kevinburke/ssh_config v1.2.0 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.3.0 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/microcosm-cc/bluemonday v1.0.27 // indirect\n\tgithub.com/mitchellh/hashstructure/v2 v2.0.2 // indirect\n\tgithub.com/muesli/cancelreader v0.2.2 // indirect\n\tgithub.com/ncruces/go-strftime v1.0.0 // indirect\n\tgithub.com/pjbgf/sha1cd v0.3.2 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect\n\tgithub.com/skeema/knownhosts v1.3.1 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/xanzy/ssh-agent v0.3.3 // indirect\n\tgithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect\n\tgithub.com/yuin/goldmark v1.7.8 // indirect\n\tgithub.com/yuin/goldmark-emoji v1.0.5 // indirect\n\tgolang.org/x/crypto v0.35.0 // indirect\n\tgolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect\n\tgolang.org/x/net v0.36.0 // indirect\n\tgolang.org/x/sync v0.19.0 // indirect\n\tgolang.org/x/term v0.31.0 // indirect\n\tgolang.org/x/text v0.34.0 // indirect\n\tgopkg.in/warnings.v0 v0.1.2 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tmodernc.org/libc v1.67.6 // indirect\n\tmodernc.org/mathutil v1.7.1 // indirect\n\tmodernc.org/memory v1.11.0 // indirect\n)\n\n// x/vt uses uv.Buffer.Touched which was moved to uv.RenderBuffer upstream.\n// Local patch changes Screen.buf from uv.Buffer to *uv.RenderBuffer.\nreplace github.com/charmbracelet/x/vt => ./_patches/vt\n",
+              "additions": 0,
+              "deletions": 4,
+              "status": "modified"
+            },
+            {
+              "file": "go.sum",
+              "before": "charm.land/bubbles/v2 v2.0.0 h1:tE3eK/REDACTED/ai5s=\ncharm.land/bubbles/v2 v2.0.0/go.mod h1:REDACTED/qOI=\ncharm.land/bubbletea/v2 v2.0.1 h1:REDACTED\ncharm.land/bubbletea/v2 v2.0.1/go.mod h1:REDACTED\ncharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b h1:REDACTED\ncharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b/go.mod h1:REDACTED\ncharm.land/lipgloss/v2 v2.0.0 h1:sd8N/REDACTED\ncharm.land/lipgloss/v2 v2.0.0/go.mod h1:w6SnmsBFBmEFBodiEDurGS/sdUY/u1+v72DqUzc6J14=\ndario.cat/mergo v1.0.0 h1:REDACTED\ndario.cat/mergo v1.0.0/go.mod h1:REDACTED\ngithub.com/BurntSushi/toml v1.6.0 h1:REDACTED\ngithub.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/REDACTED\ngithub.com/MakeNowJust/heredoc v1.0.0 h1:REDACTED\ngithub.com/MakeNowJust/heredoc v1.0.0/go.mod h1:REDACTED\ngithub.com/Microsoft/go-winio v0.5.2/go.mod h1:REDACTED\ngithub.com/Microsoft/go-winio v0.6.2 h1:REDACTED\ngithub.com/Microsoft/go-winio v0.6.2/go.mod h1:REDACTED\ngithub.com/ProtonMail/go-crypto v1.1.5 h1:REDACTED\ngithub.com/ProtonMail/go-crypto v1.1.5/go.mod h1:rA3QumHc/REDACTED\ngithub.com/alecthomas/assert/v2 v2.7.0 h1:REDACTED\ngithub.com/alecthomas/assert/v2 v2.7.0/go.mod h1:REDACTED/zg8yS+TtBj1WA3k=\ngithub.com/alecthomas/chroma/v2 v2.14.0 h1:REDACTED\ngithub.com/alecthomas/chroma/v2 v2.14.0/go.mod h1:REDACTED\ngithub.com/alecthomas/repr v0.4.0 h1:REDACTED\ngithub.com/alecthomas/repr v0.4.0/go.mod h1:REDACTED/O/4=\ngithub.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:REDACTED\ngithub.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:REDACTED\ngithub.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=\ngithub.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:REDACTED\ngithub.com/atotto/clipboard v0.1.4 h1:REDACTED\ngithub.com/atotto/clipboard v0.1.4/go.mod h1:REDACTED\ngithub.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:REDACTED\ngithub.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:REDACTED\ngithub.com/aymanbagabas/go-udiff v0.4.0 h1:REDACTED\ngithub.com/aymanbagabas/go-udiff v0.4.0/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=\ngithub.com/aymerick/douceur v0.2.0 h1:REDACTED\ngithub.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=\ngithub.com/catppuccin/go v0.3.0 h1:d+0/REDACTED\ngithub.com/catppuccin/go v0.3.0/go.mod h1:REDACTED\ngithub.com/charmbracelet/bubbletea v1.3.10 h1:REDACTED\ngithub.com/charmbracelet/bubbletea v1.3.10/go.mod h1:REDACTED\ngithub.com/charmbracelet/colorprofile v0.4.2 h1:REDACTED\ngithub.com/charmbracelet/colorprofile v0.4.2/go.mod h1:REDACTED\ngithub.com/charmbracelet/glamour v0.10.0 h1:REDACTED\ngithub.com/charmbracelet/glamour v0.10.0/go.mod h1:f+uf+I/REDACTED/l6NU2ndYk=\ngithub.com/charmbracelet/harmonica v0.2.0 h1:8NxJWRWg/REDACTED\ngithub.com/charmbracelet/harmonica v0.2.0/go.mod h1:KSri/REDACTED\ngithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 h1:REDACTED\ngithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834/go.mod h1:aKC/REDACTED/VkVhA=\ngithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff h1:uY7A6hTokHPJBHfq7rj9Y/wm+IAjOghZTxKfVW6QLvw=\ngithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff/go.mod h1:E6/REDACTED\ngithub.com/charmbracelet/x/ansi v0.11.6 h1:GhV21SiDz/REDACTED\ngithub.com/charmbracelet/x/ansi v0.11.6/go.mod h1:2JNYLgQUsyqaiLovhU2Rv/pb8r6ydXKS3NIttu3VGZQ=\ngithub.com/charmbracelet/x/cellbuf v0.0.15 h1:ur3pZy0o6z/REDACTED\ngithub.com/charmbracelet/x/cellbuf v0.0.15/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/conpty v0.1.1 h1:REDACTED\ngithub.com/charmbracelet/x/conpty v0.1.1/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/errors v0.0.0-20240508181413-e8d8b6e2de86 h1:REDACTED\ngithub.com/charmbracelet/x/errors v0.0.0-20240508181413-e8d8b6e2de86/go.mod h1:REDACTED/0=\ngithub.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f h1:REDACTED/RD0vm4uIA=\ngithub.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/exp/ordered v0.1.0 h1:55/qLwjIh0gL0Vni+QAWk7T/qRVP6sBf+2agPBgnOFE=\ngithub.com/charmbracelet/x/exp/ordered v0.1.0/go.mod h1:5UHwmG+is5THxMyCJHNPCn2/ecI07aKNrW+LcResjJ8=\ngithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf h1:REDACTED\ngithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf/go.mod h1:B3UgsnsBZS/REDACTED\ngithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 h1:qko3AQ4gK1MTS/de7F5hPGx6/k1u0w4TeYmBFwzYVP4=\ngithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/term v0.2.2 h1:xVRT/REDACTED\ngithub.com/charmbracelet/x/term v0.2.2/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/termios v0.1.1 h1:REDACTED\ngithub.com/charmbracelet/x/termios v0.1.1/go.mod h1:rB7fnv1TgOPOyyKRJ9o+AsTU/vK5WHJ2ivHeut/Pcwo=\ngithub.com/charmbracelet/x/windows v0.2.2 h1:IofanmuvaxnKHuV04sC0eBy/smG6kIKrWG2/jYn2GuM=\ngithub.com/charmbracelet/x/windows v0.2.2/go.mod h1:/REDACTED\ngithub.com/charmbracelet/x/xpty v0.1.3 h1:REDACTED\ngithub.com/charmbracelet/x/xpty v0.1.3/go.mod h1:REDACTED\ngithub.com/clipperhouse/displaywidth v0.11.0 h1:lBc6kY44VFw+TDx4I8opi/EtL9m20WSEFgwIwO+UVM8=\ngithub.com/clipperhouse/displaywidth v0.11.0/go.mod h1:REDACTED/o0=\ngithub.com/clipperhouse/uax29/v2 v2.7.0 h1:REDACTED\ngithub.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:REDACTED\ngithub.com/cloudflare/circl v1.6.0 h1:REDACTED\ngithub.com/cloudflare/circl v1.6.0/go.mod h1:REDACTED\ngithub.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:REDACTED\ngithub.com/creack/pty v1.1.24 h1:REDACTED\ngithub.com/creack/pty v1.1.24/go.mod h1:REDACTED\ngithub.com/cyphar/filepath-securejoin v0.4.1 h1:REDACTED\ngithub.com/cyphar/filepath-securejoin v0.4.1/go.mod h1:Sdj7gXlvMcPZsbhwhQ33GguGLDGQL7h7bg04C/+u9jI=\ngithub.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=\ngithub.com/davecgh/go-spew v1.1.1 h1:vj9j/REDACTED\ngithub.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=\ngithub.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=\ngithub.com/dlclark/regexp2 v1.11.0/go.mod h1:REDACTED\ngithub.com/dustin/go-humanize v1.0.1 h1:REDACTED\ngithub.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/REDACTED\ngithub.com/elazarl/goproxy v1.7.2 h1:REDACTED\ngithub.com/elazarl/goproxy v1.7.2/go.mod h1:REDACTED\ngithub.com/emirpasic/gods v1.18.1 h1:REDACTED\ngithub.com/emirpasic/gods v1.18.1/go.mod h1:REDACTED/FMNAnJvWQ=\ngithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f h1:Y/REDACTED\ngithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f/go.mod h1:REDACTED\ngithub.com/getsentry/sentry-go v0.43.0 h1:REDACTED\ngithub.com/getsentry/sentry-go v0.43.0/go.mod h1:REDACTED\ngithub.com/gliderlabs/ssh v0.3.8 h1:REDACTED\ngithub.com/gliderlabs/ssh v0.3.8/go.mod h1:REDACTED/wxQ1pL1fAU=\ngithub.com/go-errors/errors v1.4.2 h1:REDACTED\ngithub.com/go-errors/errors v1.4.2/go.mod h1:sIVyrIiJhuEF+Pj9Ebtd6P/rEYROXFi3BopGUQ5a5Og=\ngithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 h1:+zs/REDACTED\ngithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376/go.mod h1:REDACTED\ngithub.com/go-git/go-billy/v5 v5.6.2 h1:REDACTED/UNbRM=\ngithub.com/go-git/go-billy/v5 v5.6.2/go.mod h1:rcFC2rAsp/REDACTED\ngithub.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399 h1:REDACTED\ngithub.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399/go.mod h1:1OCfN199q1Jm3HZlxleg+Dw/mwps2Wbk9frAWm+4FII=\ngithub.com/go-git/go-git/v5 v5.14.0 h1:/REDACTED\ngithub.com/go-git/go-git/v5 v5.14.0/go.mod h1:REDACTED\ngithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:REDACTED\ngithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:REDACTED\ngithub.com/google/go-cmp v0.7.0 h1:REDACTED\ngithub.com/google/go-cmp v0.7.0/go.mod h1:REDACTED/iU=\ngithub.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e h1:REDACTED/JR1M3sGqeJoxs=\ngithub.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e/go.mod h1:REDACTED\ngithub.com/google/uuid v1.6.0 h1:REDACTED\ngithub.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=\ngithub.com/gorilla/css v1.0.1 h1:REDACTED\ngithub.com/gorilla/css v1.0.1/go.mod h1:BvnYkspnSzMmwRK+b8/xgNPLiIuNZr6vbZBTPQ2A3b0=\ngithub.com/hashicorp/golang-lru/v2 v2.0.7 h1:REDACTED\ngithub.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=\ngithub.com/hexops/gotextdiff v1.0.3 h1:REDACTED\ngithub.com/hexops/gotextdiff v1.0.3/go.mod h1:REDACTED/V2vxeg=\ngithub.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=\ngithub.com/inconshreveable/mousetrap v1.1.0/go.mod h1:REDACTED\ngithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:REDACTED\ngithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:REDACTED\ngithub.com/kevinburke/ssh_config v1.2.0 h1:REDACTED\ngithub.com/kevinburke/ssh_config v1.2.0/go.mod h1:CT57kijsi8u/K/BOFA39wgDQJ9CxiF4nAY/ojJ6r6mM=\ngithub.com/kr/pretty v0.1.0/go.mod h1:REDACTED\ngithub.com/kr/pretty v0.3.1 h1:REDACTED\ngithub.com/kr/pretty v0.3.1/go.mod h1:REDACTED\ngithub.com/kr/pty v1.1.1/go.mod h1:REDACTED\ngithub.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=\ngithub.com/kr/text v0.2.0 h1:REDACTED\ngithub.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=\ngithub.com/lrstanley/bubblezone v1.0.0 h1:bIpUaBilD42rAQwlg/4u5aTqVAt6DSRKYZuSdmkr8UA=\ngithub.com/lrstanley/bubblezone v1.0.0/go.mod h1:kcTekA8HE/REDACTED\ngithub.com/lrstanley/bubblezone/v2 v2.0.0 h1:REDACTED/S0UZ5hyh7ZA=\ngithub.com/lrstanley/bubblezone/v2 v2.0.0/go.mod h1:yV/REDACTED/SafOuDp57dgY=\ngithub.com/lucasb-eyer/go-colorful v1.3.0 h1:2/REDACTED\ngithub.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:REDACTED\ngithub.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=\ngithub.com/mattn/go-isatty v0.0.20/go.mod h1:REDACTED/D7dTCTo3Y=\ngithub.com/mattn/go-localereader v0.0.1 h1:REDACTED/oIi4=\ngithub.com/mattn/go-localereader v0.0.1/go.mod h1:REDACTED\ngithub.com/mattn/go-runewidth v0.0.12/go.mod h1:REDACTED\ngithub.com/mattn/go-runewidth v0.0.20 h1:REDACTED\ngithub.com/mattn/go-runewidth v0.0.20/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=\ngithub.com/microcosm-cc/bluemonday v1.0.27 h1:REDACTED\ngithub.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=\ngithub.com/mitchellh/hashstructure/v2 v2.0.2 h1:REDACTED\ngithub.com/mitchellh/hashstructure/v2 v2.0.2/go.mod h1:MG3aRVU/N29oo/V/IhBX8GR/zz4kQkprJgF2EVszyDE=\ngithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 h1:REDACTED\ngithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6/go.mod h1:REDACTED/ldJBSIo=\ngithub.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELUXHmA=\ngithub.com/muesli/cancelreader v0.2.2/go.mod h1:REDACTED\ngithub.com/muesli/reflow v0.3.0 h1:REDACTED\ngithub.com/muesli/reflow v0.3.0/go.mod h1:REDACTED/8=\ngithub.com/muesli/termenv v0.16.0 h1:REDACTED\ngithub.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=\ngithub.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=\ngithub.com/ncruces/go-strftime v1.0.0/go.mod h1:REDACTED\ngithub.com/onsi/gomega v1.34.1 h1:REDACTED\ngithub.com/onsi/gomega v1.34.1/go.mod h1:REDACTED\ngithub.com/pingcap/errors v0.11.4 h1:lFuQV/REDACTED\ngithub.com/pingcap/errors v0.11.4/go.mod h1:REDACTED\ngithub.com/pjbgf/sha1cd v0.3.2 h1:a9wb0bp1oC2TGwStyn0Umc/IGKQnEgF0vVaZ8QF8eo4=\ngithub.com/pjbgf/sha1cd v0.3.2/go.mod h1:REDACTED\ngithub.com/pkg/errors v0.9.1 h1:REDACTED\ngithub.com/pkg/errors v0.9.1/go.mod h1:REDACTED\ngithub.com/pmezard/go-difflib v1.0.0 h1:REDACTED/f1lZbAQM=\ngithub.com/pmezard/go-difflib v1.0.0/go.mod h1:REDACTED/4=\ngithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:REDACTED\ngithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.1.0/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.2.0/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.4.7 h1:REDACTED\ngithub.com/rivo/uniseg v0.4.7/go.mod h1:REDACTED\ngithub.com/rogpeppe/go-internal v1.14.1 h1:REDACTED/otEQ=\ngithub.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=\ngithub.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/REDACTED\ngithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 h1:n661drycOFuPLCN3Uc8sB6B/s6Z4t2xvBgU1htSHuq8=\ngithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3/go.mod h1:REDACTED\ngithub.com/sirupsen/logrus v1.7.0/go.mod h1:REDACTED\ngithub.com/skeema/knownhosts v1.3.1 h1:REDACTED\ngithub.com/skeema/knownhosts v1.3.1/go.mod h1:r7KTdC8l4uxWRyK2TpQZ/1o5HaSzh06ePQNxPwTcfiY=\ngithub.com/spf13/cobra v1.9.1 h1:REDACTED\ngithub.com/spf13/cobra v1.9.1/go.mod h1:REDACTED\ngithub.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=\ngithub.com/spf13/pflag v1.0.6/go.mod h1:REDACTED\ngithub.com/stretchr/objx v0.1.0/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.2.2/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.4.0/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/REDACTED\ngithub.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/REDACTED\ngithub.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/REDACTED\ngithub.com/xanzy/ssh-agent v0.3.3/go.mod h1:REDACTED\ngithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=\ngithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=\ngithub.com/yuin/goldmark v1.7.1/go.mod h1:REDACTED\ngithub.com/yuin/goldmark v1.7.8 h1:iERMLn0/REDACTED\ngithub.com/yuin/goldmark v1.7.8/go.mod h1:REDACTED\ngithub.com/yuin/goldmark-emoji v1.0.5 h1:REDACTED\ngithub.com/yuin/goldmark-emoji v1.0.5/go.mod h1:REDACTED\ngo.uber.org/goleak v1.3.0 h1:REDACTED\ngo.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/REDACTED\ngolang.org/x/crypto v0.0.0-20220622213112-05595931fe9d/go.mod h1:REDACTED\ngolang.org/x/crypto v0.35.0 h1:REDACTED\ngolang.org/x/crypto v0.35.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=\ngolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 h1:mgKeJMpvi0yx/REDACTED\ngolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546/go.mod h1:j/REDACTED\ngolang.org/x/mod v0.32.0 h1:9F4d3PHLljb6x//jOyokMv3eX+YDeepZSEo3mFJy93c=\ngolang.org/x/mod v0.32.0/go.mod h1:SgipZ/3h2Ci89DlEtEXWUk/HteuRin+HHhN+WbNhguU=\ngolang.org/x/net v0.0.0-20211112202133-69e39bad7dc2/go.mod h1:REDACTED\ngolang.org/x/net v0.36.0 h1:REDACTED\ngolang.org/x/net v0.36.0/go.mod h1:REDACTED/38fxi1I=\ngolang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=\ngolang.org/x/sync v0.19.0/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20191026070338-33540a1f6037/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210124154548-22da62e12c0c/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210809222454-d867a43fc93e/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:REDACTED\ngolang.org/x/sys v0.6.0/go.mod h1:REDACTED\ngolang.org/x/sys v0.41.0 h1:Ivj+2Cp/REDACTED\ngolang.org/x/sys v0.41.0/go.mod h1:REDACTED/uXjp9XT3ks=\ngolang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:REDACTED\ngolang.org/x/term v0.31.0 h1:REDACTED\ngolang.org/x/term v0.31.0/go.mod h1:REDACTED\ngolang.org/x/text v0.3.6/go.mod h1:5Zoc/REDACTED\ngolang.org/x/text v0.34.0 h1:oL/Qq0Kdaqxa1KbNeMKwQq0reLCCaFtqu2eNuSeNHbk=\ngolang.org/x/text v0.34.0/go.mod h1:homfLqTYRFyVYemLBFl5GgL/DWEiH5wcsQ5gSh1yziA=\ngolang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/REDACTED\ngolang.org/x/tools v0.41.0 h1:REDACTED\ngolang.org/x/tools v0.41.0/go.mod h1:REDACTED\ngopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:REDACTED/cbN4VW5Yz0=\ngopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:REDACTED/cbN4VW5Yz0=\ngopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/REDACTED\ngopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/REDACTED\ngopkg.in/warnings.v0 v0.1.2 h1:wFXVbFY8DY5/REDACTED\ngopkg.in/warnings.v0 v0.1.2/go.mod h1:jksf8JmL6Qr/REDACTED\ngopkg.in/yaml.v2 v2.2.2/go.mod h1:REDACTED\ngopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=\ngopkg.in/yaml.v3 v3.0.1 h1:fxVm/REDACTED\ngopkg.in/yaml.v3 v3.0.1/go.mod h1:REDACTED\nmodernc.org/cc/v4 v4.27.1 h1:REDACTED\nmodernc.org/cc/v4 v4.27.1/go.mod h1:uVtb5OGqUKpoLWhqwNQo/8LwvoiEBLvZXIQ/SmO6mL0=\nmodernc.org/ccgo/v4 v4.30.1 h1:REDACTED\nmodernc.org/ccgo/v4 v4.30.1/go.mod h1:REDACTED\nmodernc.org/fileutil v1.3.40 h1:REDACTED\nmodernc.org/fileutil v1.3.40/go.mod h1:HxmghZSZVAz/LXcMNwZPA/DRrQZEVP9VX0V4LQGQFOc=\nmodernc.org/gc/v2 v2.6.5 h1:REDACTED/9xI=\nmodernc.org/gc/v2 v2.6.5/go.mod h1:REDACTED\nmodernc.org/gc/v3 v3.1.1 h1:k8T3gkXWY9sEiytKhcgyiZ2L0DTyCQ/nvX+LoCljoRE=\nmodernc.org/gc/v3 v3.1.1/go.mod h1:HFK/6AGESC7Ex+EZJhJ2Gni6cTaYpSMmU/cT9RmlfYY=\nmodernc.org/goabi0 v0.2.0 h1:REDACTED\nmodernc.org/goabi0 v0.2.0/go.mod h1:REDACTED\nmodernc.org/libc v1.67.6 h1:REDACTED\nmodernc.org/libc v1.67.6/go.mod h1:REDACTED\nmodernc.org/mathutil v1.7.1 h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=\nmodernc.org/mathutil v1.7.1/go.mod h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJg=\nmodernc.org/memory v1.11.0 h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=\nmodernc.org/memory v1.11.0/go.mod h1:/REDACTED\nmodernc.org/opt v0.1.4 h1:2kNGMRiUjrp4LcaPuLY2PzUfqM/w9N23quVwhKt5Qm8=\nmodernc.org/opt v0.1.4/go.mod h1:REDACTED//bEtgns=\nmodernc.org/sortutil v1.2.1 h1:REDACTED\nmodernc.org/sortutil v1.2.1/go.mod h1:REDACTED\nmodernc.org/sqlite v1.46.1 h1:REDACTED\nmodernc.org/sqlite v1.46.1/go.mod h1:REDACTED/nA=\nmodernc.org/strutil v1.2.1 h1:REDACTED\nmodernc.org/strutil v1.2.1/go.mod h1:REDACTED\nmodernc.org/token v1.1.0 h1:REDACTED\nmodernc.org/token v1.1.0/go.mod h1:REDACTED/XTDM=\n",
+              "after": "charm.land/bubbles/v2 v2.0.0 h1:tE3eK/REDACTED/ai5s=\ncharm.land/bubbles/v2 v2.0.0/go.mod h1:REDACTED/qOI=\ncharm.land/bubbletea/v2 v2.0.1 h1:REDACTED\ncharm.land/bubbletea/v2 v2.0.1/go.mod h1:REDACTED\ncharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b h1:REDACTED\ncharm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b/go.mod h1:REDACTED\ncharm.land/lipgloss/v2 v2.0.0 h1:sd8N/REDACTED\ncharm.land/lipgloss/v2 v2.0.0/go.mod h1:w6SnmsBFBmEFBodiEDurGS/sdUY/u1+v72DqUzc6J14=\ndario.cat/mergo v1.0.0 h1:REDACTED\ndario.cat/mergo v1.0.0/go.mod h1:REDACTED\ngithub.com/BurntSushi/toml v1.6.0 h1:REDACTED\ngithub.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/REDACTED\ngithub.com/MakeNowJust/heredoc v1.0.0 h1:REDACTED\ngithub.com/MakeNowJust/heredoc v1.0.0/go.mod h1:REDACTED\ngithub.com/Microsoft/go-winio v0.5.2/go.mod h1:REDACTED\ngithub.com/Microsoft/go-winio v0.6.2 h1:REDACTED\ngithub.com/Microsoft/go-winio v0.6.2/go.mod h1:REDACTED\ngithub.com/ProtonMail/go-crypto v1.1.5 h1:REDACTED\ngithub.com/ProtonMail/go-crypto v1.1.5/go.mod h1:rA3QumHc/REDACTED\ngithub.com/alecthomas/assert/v2 v2.7.0 h1:REDACTED\ngithub.com/alecthomas/assert/v2 v2.7.0/go.mod h1:REDACTED/zg8yS+TtBj1WA3k=\ngithub.com/alecthomas/chroma/v2 v2.14.0 h1:REDACTED\ngithub.com/alecthomas/chroma/v2 v2.14.0/go.mod h1:REDACTED\ngithub.com/alecthomas/repr v0.4.0 h1:REDACTED\ngithub.com/alecthomas/repr v0.4.0/go.mod h1:REDACTED/O/4=\ngithub.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:REDACTED\ngithub.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:REDACTED\ngithub.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=\ngithub.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:REDACTED\ngithub.com/atotto/clipboard v0.1.4 h1:REDACTED\ngithub.com/atotto/clipboard v0.1.4/go.mod h1:REDACTED\ngithub.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:REDACTED\ngithub.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:REDACTED\ngithub.com/aymanbagabas/go-udiff v0.4.0 h1:REDACTED\ngithub.com/aymanbagabas/go-udiff v0.4.0/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=\ngithub.com/aymerick/douceur v0.2.0 h1:REDACTED\ngithub.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=\ngithub.com/catppuccin/go v0.3.0 h1:d+0/REDACTED\ngithub.com/catppuccin/go v0.3.0/go.mod h1:REDACTED\ngithub.com/charmbracelet/colorprofile v0.4.2 h1:REDACTED\ngithub.com/charmbracelet/colorprofile v0.4.2/go.mod h1:REDACTED\ngithub.com/charmbracelet/glamour v0.10.0 h1:REDACTED\ngithub.com/charmbracelet/glamour v0.10.0/go.mod h1:f+uf+I/REDACTED/l6NU2ndYk=\ngithub.com/charmbracelet/harmonica v0.2.0 h1:8NxJWRWg/REDACTED\ngithub.com/charmbracelet/harmonica v0.2.0/go.mod h1:KSri/REDACTED\ngithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 h1:REDACTED\ngithub.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834/go.mod h1:aKC/REDACTED/VkVhA=\ngithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff h1:uY7A6hTokHPJBHfq7rj9Y/wm+IAjOghZTxKfVW6QLvw=\ngithub.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff/go.mod h1:E6/REDACTED\ngithub.com/charmbracelet/x/ansi v0.11.6 h1:GhV21SiDz/REDACTED\ngithub.com/charmbracelet/x/ansi v0.11.6/go.mod h1:2JNYLgQUsyqaiLovhU2Rv/pb8r6ydXKS3NIttu3VGZQ=\ngithub.com/charmbracelet/x/cellbuf v0.0.15 h1:ur3pZy0o6z/REDACTED\ngithub.com/charmbracelet/x/cellbuf v0.0.15/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/conpty v0.1.1 h1:REDACTED\ngithub.com/charmbracelet/x/conpty v0.1.1/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/errors v0.0.0-20240508181413-e8d8b6e2de86 h1:REDACTED\ngithub.com/charmbracelet/x/errors v0.0.0-20240508181413-e8d8b6e2de86/go.mod h1:REDACTED/0=\ngithub.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f h1:REDACTED/RD0vm4uIA=\ngithub.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/exp/ordered v0.1.0 h1:55/qLwjIh0gL0Vni+QAWk7T/qRVP6sBf+2agPBgnOFE=\ngithub.com/charmbracelet/x/exp/ordered v0.1.0/go.mod h1:5UHwmG+is5THxMyCJHNPCn2/ecI07aKNrW+LcResjJ8=\ngithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf h1:REDACTED\ngithub.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf/go.mod h1:B3UgsnsBZS/REDACTED\ngithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 h1:qko3AQ4gK1MTS/de7F5hPGx6/k1u0w4TeYmBFwzYVP4=\ngithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/term v0.2.2 h1:xVRT/REDACTED\ngithub.com/charmbracelet/x/term v0.2.2/go.mod h1:REDACTED\ngithub.com/charmbracelet/x/termios v0.1.1 h1:REDACTED\ngithub.com/charmbracelet/x/termios v0.1.1/go.mod h1:rB7fnv1TgOPOyyKRJ9o+AsTU/vK5WHJ2ivHeut/Pcwo=\ngithub.com/charmbracelet/x/windows v0.2.2 h1:IofanmuvaxnKHuV04sC0eBy/smG6kIKrWG2/jYn2GuM=\ngithub.com/charmbracelet/x/windows v0.2.2/go.mod h1:/REDACTED\ngithub.com/charmbracelet/x/xpty v0.1.3 h1:REDACTED\ngithub.com/charmbracelet/x/xpty v0.1.3/go.mod h1:REDACTED\ngithub.com/clipperhouse/displaywidth v0.11.0 h1:lBc6kY44VFw+TDx4I8opi/EtL9m20WSEFgwIwO+UVM8=\ngithub.com/clipperhouse/displaywidth v0.11.0/go.mod h1:REDACTED/o0=\ngithub.com/clipperhouse/uax29/v2 v2.7.0 h1:REDACTED\ngithub.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:REDACTED\ngithub.com/cloudflare/circl v1.6.0 h1:REDACTED\ngithub.com/cloudflare/circl v1.6.0/go.mod h1:REDACTED\ngithub.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:REDACTED\ngithub.com/creack/pty v1.1.24 h1:REDACTED\ngithub.com/creack/pty v1.1.24/go.mod h1:REDACTED\ngithub.com/cyphar/filepath-securejoin v0.4.1 h1:REDACTED\ngithub.com/cyphar/filepath-securejoin v0.4.1/go.mod h1:Sdj7gXlvMcPZsbhwhQ33GguGLDGQL7h7bg04C/+u9jI=\ngithub.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=\ngithub.com/davecgh/go-spew v1.1.1 h1:vj9j/REDACTED\ngithub.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=\ngithub.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=\ngithub.com/dlclark/regexp2 v1.11.0/go.mod h1:REDACTED\ngithub.com/dustin/go-humanize v1.0.1 h1:REDACTED\ngithub.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/REDACTED\ngithub.com/elazarl/goproxy v1.7.2 h1:REDACTED\ngithub.com/elazarl/goproxy v1.7.2/go.mod h1:REDACTED\ngithub.com/emirpasic/gods v1.18.1 h1:REDACTED\ngithub.com/emirpasic/gods v1.18.1/go.mod h1:REDACTED/FMNAnJvWQ=\ngithub.com/getsentry/sentry-go v0.43.0 h1:REDACTED\ngithub.com/getsentry/sentry-go v0.43.0/go.mod h1:REDACTED\ngithub.com/gliderlabs/ssh v0.3.8 h1:REDACTED\ngithub.com/gliderlabs/ssh v0.3.8/go.mod h1:REDACTED/wxQ1pL1fAU=\ngithub.com/go-errors/errors v1.4.2 h1:REDACTED\ngithub.com/go-errors/errors v1.4.2/go.mod h1:sIVyrIiJhuEF+Pj9Ebtd6P/rEYROXFi3BopGUQ5a5Og=\ngithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 h1:+zs/REDACTED\ngithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376/go.mod h1:REDACTED\ngithub.com/go-git/go-billy/v5 v5.6.2 h1:REDACTED/UNbRM=\ngithub.com/go-git/go-billy/v5 v5.6.2/go.mod h1:rcFC2rAsp/REDACTED\ngithub.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399 h1:REDACTED\ngithub.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399/go.mod h1:1OCfN199q1Jm3HZlxleg+Dw/mwps2Wbk9frAWm+4FII=\ngithub.com/go-git/go-git/v5 v5.14.0 h1:/REDACTED\ngithub.com/go-git/go-git/v5 v5.14.0/go.mod h1:REDACTED\ngithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:REDACTED\ngithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:REDACTED\ngithub.com/google/go-cmp v0.7.0 h1:REDACTED\ngithub.com/google/go-cmp v0.7.0/go.mod h1:REDACTED/iU=\ngithub.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e h1:REDACTED/JR1M3sGqeJoxs=\ngithub.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e/go.mod h1:REDACTED\ngithub.com/google/uuid v1.6.0 h1:REDACTED\ngithub.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=\ngithub.com/gorilla/css v1.0.1 h1:REDACTED\ngithub.com/gorilla/css v1.0.1/go.mod h1:BvnYkspnSzMmwRK+b8/xgNPLiIuNZr6vbZBTPQ2A3b0=\ngithub.com/hashicorp/golang-lru/v2 v2.0.7 h1:REDACTED\ngithub.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=\ngithub.com/hexops/gotextdiff v1.0.3 h1:REDACTED\ngithub.com/hexops/gotextdiff v1.0.3/go.mod h1:REDACTED/V2vxeg=\ngithub.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=\ngithub.com/inconshreveable/mousetrap v1.1.0/go.mod h1:REDACTED\ngithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:REDACTED\ngithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:REDACTED\ngithub.com/kevinburke/ssh_config v1.2.0 h1:REDACTED\ngithub.com/kevinburke/ssh_config v1.2.0/go.mod h1:CT57kijsi8u/K/BOFA39wgDQJ9CxiF4nAY/ojJ6r6mM=\ngithub.com/kr/pretty v0.1.0/go.mod h1:REDACTED\ngithub.com/kr/pretty v0.3.1 h1:REDACTED\ngithub.com/kr/pretty v0.3.1/go.mod h1:REDACTED\ngithub.com/kr/pty v1.1.1/go.mod h1:REDACTED\ngithub.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=\ngithub.com/kr/text v0.2.0 h1:REDACTED\ngithub.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=\ngithub.com/lrstanley/bubblezone/v2 v2.0.0 h1:REDACTED/S0UZ5hyh7ZA=\ngithub.com/lrstanley/bubblezone/v2 v2.0.0/go.mod h1:yV/REDACTED/SafOuDp57dgY=\ngithub.com/lucasb-eyer/go-colorful v1.3.0 h1:2/REDACTED\ngithub.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:REDACTED\ngithub.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=\ngithub.com/mattn/go-isatty v0.0.20/go.mod h1:REDACTED/D7dTCTo3Y=\ngithub.com/mattn/go-runewidth v0.0.12/go.mod h1:REDACTED\ngithub.com/mattn/go-runewidth v0.0.20 h1:REDACTED\ngithub.com/mattn/go-runewidth v0.0.20/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=\ngithub.com/microcosm-cc/bluemonday v1.0.27 h1:REDACTED\ngithub.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=\ngithub.com/mitchellh/hashstructure/v2 v2.0.2 h1:REDACTED\ngithub.com/mitchellh/hashstructure/v2 v2.0.2/go.mod h1:MG3aRVU/N29oo/V/IhBX8GR/zz4kQkprJgF2EVszyDE=\ngithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 h1:REDACTED\ngithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6/go.mod h1:REDACTED/ldJBSIo=\ngithub.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELUXHmA=\ngithub.com/muesli/cancelreader v0.2.2/go.mod h1:REDACTED\ngithub.com/muesli/reflow v0.3.0 h1:REDACTED\ngithub.com/muesli/reflow v0.3.0/go.mod h1:REDACTED/8=\ngithub.com/muesli/termenv v0.16.0 h1:REDACTED\ngithub.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=\ngithub.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=\ngithub.com/ncruces/go-strftime v1.0.0/go.mod h1:REDACTED\ngithub.com/onsi/gomega v1.34.1 h1:REDACTED\ngithub.com/onsi/gomega v1.34.1/go.mod h1:REDACTED\ngithub.com/pingcap/errors v0.11.4 h1:lFuQV/REDACTED\ngithub.com/pingcap/errors v0.11.4/go.mod h1:REDACTED\ngithub.com/pjbgf/sha1cd v0.3.2 h1:a9wb0bp1oC2TGwStyn0Umc/IGKQnEgF0vVaZ8QF8eo4=\ngithub.com/pjbgf/sha1cd v0.3.2/go.mod h1:REDACTED\ngithub.com/pkg/errors v0.9.1 h1:REDACTED\ngithub.com/pkg/errors v0.9.1/go.mod h1:REDACTED\ngithub.com/pmezard/go-difflib v1.0.0 h1:REDACTED/f1lZbAQM=\ngithub.com/pmezard/go-difflib v1.0.0/go.mod h1:REDACTED/4=\ngithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:REDACTED\ngithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.1.0/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.2.0/go.mod h1:REDACTED\ngithub.com/rivo/uniseg v0.4.7 h1:REDACTED\ngithub.com/rivo/uniseg v0.4.7/go.mod h1:REDACTED\ngithub.com/rogpeppe/go-internal v1.14.1 h1:REDACTED/otEQ=\ngithub.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=\ngithub.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/REDACTED\ngithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 h1:n661drycOFuPLCN3Uc8sB6B/s6Z4t2xvBgU1htSHuq8=\ngithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3/go.mod h1:REDACTED\ngithub.com/sirupsen/logrus v1.7.0/go.mod h1:REDACTED\ngithub.com/skeema/knownhosts v1.3.1 h1:REDACTED\ngithub.com/skeema/knownhosts v1.3.1/go.mod h1:r7KTdC8l4uxWRyK2TpQZ/1o5HaSzh06ePQNxPwTcfiY=\ngithub.com/spf13/cobra v1.9.1 h1:REDACTED\ngithub.com/spf13/cobra v1.9.1/go.mod h1:REDACTED\ngithub.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=\ngithub.com/spf13/pflag v1.0.6/go.mod h1:REDACTED\ngithub.com/stretchr/objx v0.1.0/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.2.2/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.4.0/go.mod h1:REDACTED\ngithub.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/REDACTED\ngithub.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/REDACTED\ngithub.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/REDACTED\ngithub.com/xanzy/ssh-agent v0.3.3/go.mod h1:REDACTED\ngithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=\ngithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=\ngithub.com/yuin/goldmark v1.7.1/go.mod h1:REDACTED\ngithub.com/yuin/goldmark v1.7.8 h1:iERMLn0/REDACTED\ngithub.com/yuin/goldmark v1.7.8/go.mod h1:REDACTED\ngithub.com/yuin/goldmark-emoji v1.0.5 h1:REDACTED\ngithub.com/yuin/goldmark-emoji v1.0.5/go.mod h1:REDACTED\ngo.uber.org/goleak v1.3.0 h1:REDACTED\ngo.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/REDACTED\ngolang.org/x/crypto v0.0.0-20220622213112-05595931fe9d/go.mod h1:REDACTED\ngolang.org/x/crypto v0.35.0 h1:REDACTED\ngolang.org/x/crypto v0.35.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=\ngolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 h1:mgKeJMpvi0yx/REDACTED\ngolang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546/go.mod h1:j/REDACTED\ngolang.org/x/mod v0.32.0 h1:9F4d3PHLljb6x//jOyokMv3eX+YDeepZSEo3mFJy93c=\ngolang.org/x/mod v0.32.0/go.mod h1:SgipZ/3h2Ci89DlEtEXWUk/HteuRin+HHhN+WbNhguU=\ngolang.org/x/net v0.0.0-20211112202133-69e39bad7dc2/go.mod h1:REDACTED\ngolang.org/x/net v0.36.0 h1:REDACTED\ngolang.org/x/net v0.36.0/go.mod h1:REDACTED/38fxi1I=\ngolang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=\ngolang.org/x/sync v0.19.0/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20191026070338-33540a1f6037/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210124154548-22da62e12c0c/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:REDACTED\ngolang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:REDACTED\ngolang.org/x/sys v0.6.0/go.mod h1:REDACTED\ngolang.org/x/sys v0.41.0 h1:Ivj+2Cp/REDACTED\ngolang.org/x/sys v0.41.0/go.mod h1:REDACTED/uXjp9XT3ks=\ngolang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:REDACTED\ngolang.org/x/term v0.31.0 h1:REDACTED\ngolang.org/x/term v0.31.0/go.mod h1:REDACTED\ngolang.org/x/text v0.3.6/go.mod h1:5Zoc/REDACTED\ngolang.org/x/text v0.34.0 h1:oL/Qq0Kdaqxa1KbNeMKwQq0reLCCaFtqu2eNuSeNHbk=\ngolang.org/x/text v0.34.0/go.mod h1:homfLqTYRFyVYemLBFl5GgL/DWEiH5wcsQ5gSh1yziA=\ngolang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/REDACTED\ngolang.org/x/tools v0.41.0 h1:REDACTED\ngolang.org/x/tools v0.41.0/go.mod h1:REDACTED\ngopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:REDACTED/cbN4VW5Yz0=\ngopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:REDACTED/cbN4VW5Yz0=\ngopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/REDACTED\ngopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/REDACTED\ngopkg.in/warnings.v0 v0.1.2 h1:wFXVbFY8DY5/REDACTED\ngopkg.in/warnings.v0 v0.1.2/go.mod h1:jksf8JmL6Qr/REDACTED\ngopkg.in/yaml.v2 v2.2.2/go.mod h1:REDACTED\ngopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=\ngopkg.in/yaml.v3 v3.0.1 h1:fxVm/REDACTED\ngopkg.in/yaml.v3 v3.0.1/go.mod h1:REDACTED\nmodernc.org/cc/v4 v4.27.1 h1:REDACTED\nmodernc.org/cc/v4 v4.27.1/go.mod h1:uVtb5OGqUKpoLWhqwNQo/8LwvoiEBLvZXIQ/SmO6mL0=\nmodernc.org/ccgo/v4 v4.30.1 h1:REDACTED\nmodernc.org/ccgo/v4 v4.30.1/go.mod h1:REDACTED\nmodernc.org/fileutil v1.3.40 h1:REDACTED\nmodernc.org/fileutil v1.3.40/go.mod h1:HxmghZSZVAz/LXcMNwZPA/DRrQZEVP9VX0V4LQGQFOc=\nmodernc.org/gc/v2 v2.6.5 h1:REDACTED/9xI=\nmodernc.org/gc/v2 v2.6.5/go.mod h1:REDACTED\nmodernc.org/gc/v3 v3.1.1 h1:k8T3gkXWY9sEiytKhcgyiZ2L0DTyCQ/nvX+LoCljoRE=\nmodernc.org/gc/v3 v3.1.1/go.mod h1:HFK/6AGESC7Ex+EZJhJ2Gni6cTaYpSMmU/cT9RmlfYY=\nmodernc.org/goabi0 v0.2.0 h1:REDACTED\nmodernc.org/goabi0 v0.2.0/go.mod h1:REDACTED\nmodernc.org/libc v1.67.6 h1:REDACTED\nmodernc.org/libc v1.67.6/go.mod h1:REDACTED\nmodernc.org/mathutil v1.7.1 h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=\nmodernc.org/mathutil v1.7.1/go.mod h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJg=\nmodernc.org/memory v1.11.0 h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=\nmodernc.org/memory v1.11.0/go.mod h1:/REDACTED\nmodernc.org/opt v0.1.4 h1:2kNGMRiUjrp4LcaPuLY2PzUfqM/w9N23quVwhKt5Qm8=\nmodernc.org/opt v0.1.4/go.mod h1:REDACTED//bEtgns=\nmodernc.org/sortutil v1.2.1 h1:REDACTED\nmodernc.org/sortutil v1.2.1/go.mod h1:REDACTED\nmodernc.org/sqlite v1.46.1 h1:REDACTED\nmodernc.org/sqlite v1.46.1/go.mod h1:REDACTED/nA=\nmodernc.org/strutil v1.2.1 h1:REDACTED\nmodernc.org/strutil v1.2.1/go.mod h1:REDACTED\nmodernc.org/token v1.1.0 h1:REDACTED\nmodernc.org/token v1.1.0/go.mod h1:REDACTED/XTDM=\n",
+              "additions": 0,
+              "deletions": 9,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 4: Migrate All Test Files\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Migrate klique from Charm v1 (bubbletea v1.3, lipgloss v1.1, bubbles v0.21) to Charm v2 (bubbletea v2, lipgloss v2, bubbles v2) — adopting the new declarative View API, restructured key/mouse events, and getter/setter component patterns.\n**Architecture:** All three core Charm libraries must upgrade atomically since they share types at module boundaries. The migration rewrites import paths (`charm.land/*/v2`), converts `View() string` to `View() tea.View`, replaces `tea.KeyMsg` struct matching with `tea.KeyPressMsg`, moves program options into declarative View fields, and updates bubbles component APIs to use getter/setter methods. huh v2 (experimental branch) replaces huh v0.8. glamour and harmonica remain at current versions.\n**Tech Stack:** Go 1.24+, charm.land/bubbletea/v2, charm.land/lipgloss/v2, charm.land/bubbles/v2, charm.land/huh/v2 (v2-exp branch), charmbracelet/glamour v0.10, charmbracelet/harmonica v0.2\n\n## Wave 3 of 3\n\n## Parallel Execution\n\nYou are Task 4 of 2 in Wave 3. 1 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\nAll test files construct `tea.KeyMsg` struct literals for input simulation. These must become `tea.KeyPressMsg` with v2 fields (`Code`, `Text`, `Mod` instead of `Type`, `Runes`, `Alt`). Also update viewport field access and mouse event construction in tests.\n\n**Files:**\n- Modify: `app/app_test.go` (38 tea.KeyMsg refs)\n- Modify: `app/app_task_creation_test.go` (13 refs)\n- Modify: `app/app_permission_test.go` (8 refs)\n- Modify: `app/app_input_right_on_instance_test.go`\n- Modify: `app/app_input_yes_keybind_test.go`\n- Modify: `app/app_input_viewport_test.go`\n- Modify: `app/app_input_keybytes_test.go`\n- Modify: `app/app_audit_pane_test.go`\n- Modify: `app/app_planner_signal_test.go`\n- Modify: `app/app_wave_orchestration_flow_test.go`\n- Modify: `app/task_cancel_rename_delay_test.go`\n- Modify: `app/app_statusbar_integration_test.go`\n- Modify: `app/clickup_progress_test.go`\n- Modify: `app/app_solo_agent_test.go`\n- Modify: `app/app_task_actions_test.go`\n- Modify: `app/app_task_completion_test.go`\n- Modify: `ui/overlay/formOverlay_test.go` (42 refs)\n- Modify: `ui/overlay/tmuxBrowserOverlay_test.go` (19 refs)\n- Modify: `ui/overlay/pickerOverlay_test.go`\n- Modify: `ui/overlay/textInput_test.go`\n- Modify: `ui/overlay/contextMenu_test.go`\n- Modify: `ui/overlay/confirmationOverlay_test.go`\n- Modify: `ui/overlay/permissionOverlay_test.go`\n- Modify: `ui/overlay/iface_test.go`\n- Modify: `ui/overlay/manager_test.go`\n- Modify: `ui/overlay/textOverlay_test.go`\n- Modify: `ui/overlay/toast_test.go`\n- Modify: `ui/overlay/theme_test.go`\n- Modify: `ui/preview_test.go`\n- Modify: `ui/tabbed_window_test.go`\n- Modify: `ui/nav_panel_test.go`\n- Modify: `internal/initcmd/wizard/model_test.go`\n- Modify: `internal/initcmd/wizard/model_agents_test.go`\n- Modify: `internal/initcmd/wizard/model_review_test.go`\n\n**Step 1: write the failing test**\n\n```bash\ngo test ./... 2>&1 | head -30\n```\n\nexpected: FAIL — test files won't compile due to tea.KeyMsg struct literal changes\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo build ./... 2>&1 | rg '_test.go' | head -10\n```\n\nexpected: FAIL\n\n**Step 3: write minimal implementation**\n\nBatch-migrate test key event construction using `comby`:\n\n```go\n// Before (v1 struct literals)\ntea.KeyMsg{Type: tea.KeyEnter}\ntea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(\"q\")}\ntea.KeyMsg{Type: tea.KeyEsc}\ntea.KeyMsg{Type: tea.KeyCtrlC}\n\n// After (v2 — KeyPressMsg with Code/Text)\ntea.KeyPressMsg{Code: tea.KeyEnter}\ntea.KeyPressMsg{Code: 'q', Text: \"q\"}\ntea.KeyPressMsg{Code: tea.KeyEscape}\ntea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}\n```\n\nUse `comby` for consistent patterns:\n```bash\ncomby 'tea.KeyMsg{Type: tea.KeyEnter}' 'tea.KeyPressMsg{Code: tea.KeyEnter}' .go -in-place\ncomby 'tea.KeyMsg{Type: tea.KeyEsc}' 'tea.KeyPressMsg{Code: tea.KeyEscape}' .go -in-place\n# ... etc for each pattern\n```\n\nThen manually fix:\n- `tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(...)}` → `tea.KeyPressMsg{Code: rune, Text: string}`\n- `tea.WindowSizeMsg` — field names unchanged, no migration needed\n- Mouse event construction in tests:\n  ```go\n  // Before\n  tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 5, Y: 10}\n  // After\n  tea.MouseClickMsg{Button: tea.MouseLeft, Mouse: tea.Mouse{X: 5, Y: 10}}\n  ```\n- Viewport YOffset in `ui/tabbed_window_test.go`:\n  ```go\n  preview.viewport.YOffset    →    preview.viewport.YOffset()\n  ```\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./... -count=1\n```\n\nexpected: PASS — all tests green\n\n**Step 5: commit**\n\n```bash\ngit add -A\ngit commit -m \"test: migrate all test files to charm v2 key/mouse event constructors\"\n```\n",
+          "id": "prt_cb6dc98a7002czNA73LNxFLWHj",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98a7001HJK3iDnaihbhDf"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594436297,
+          "completed": 1772594440775
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41842,
+          "input": 2,
+          "output": 125,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 41715
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dc98c9001tUZU7PnpL3pk0G",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dcaa36001pgxglmoDKIR9rw",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98c9001tUZU7PnpL3pk0G"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills before beginning the implementation.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EvgBCkYICxgCKkBt104v+Rk0P7MsRZt/BdSzFY6kje5DueSYSNtYXm7r/REDACTED/REDACTED/M1yqPSyPlLgMhhf1IMds0B+bsYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772594440759,
+            "end": 1772594440760
+          },
+          "id": "prt_cb6dcaa37001OxubkskLbLqIpx",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98c9001tUZU7PnpL3pk0G"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Read the task content from the task store (via `kas task` CLI or the task content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Read the plan. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify task state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas task transition <task-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update task state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate task status to `done` after options 1, 2, or 4:\n```bash\nkas task set-status <task-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594440761,
+              "end": 1772594440763
+            }
+          },
+          "id": "prt_cb6dcaa38001wtj6woWuVZ8Oyl",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98c9001tUZU7PnpL3pk0G"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594440762,
+              "end": 1772594440762
+            }
+          },
+          "id": "prt_cb6dcaa3a0010JGdJHK3XRpMCS",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98c9001tUZU7PnpL3pk0G"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 41842,
+            "input": 2,
+            "output": 125,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 41715
+            }
+          },
+          "id": "prt_cb6dcaa3d001c5CH1iNC2SqgpT",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dc98c9001tUZU7PnpL3pk0G"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594440775,
+          "completed": 1772594445858
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50214,
+          "input": 1,
+          "output": 266,
+          "reasoning": 0,
+          "cache": {
+            "read": 41715,
+            "write": 8232
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dcaa47001GtTdCK5wmSZkdY",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dcb0b0001sZclxqfMNiCut6",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcaa47001GtTdCK5wmSZkdY"
+        },
+        {
+          "type": "reasoning",
+          "text": "Skills loaded. Now let me start implementing Task 4. Let me first check the current state of the test files to understand what needs to be migrated.\n\nLet me first run the test command to see what failures we have, then look at some test files to understand the patterns.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/Tjb/KpwCraEX+yURAGWwhbUhhHLTYu/XBWiOhCkuNl9giBzHOm4DKkHbL/REDACTED/REDACTED/REDACTED/REDACTED/LTB+4cYGqx5Tvby6jLBITh7FI/j6ghFhHyDvHroVWEboeM+MXu746pTVuW/uKQt0d0YAQ=="
+            }
+          },
+          "time": {
+            "start": 1772594442416,
+            "end": 1772594443693
+          },
+          "id": "prt_cb6dcb0b0002Xe77YWHfBLj3hq",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcaa47001GtTdCK5wmSZkdY"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01BgygACzBuXP4DBiyboT6mA",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go build ./... 2>&1 | rg '_test.go' | head -30",
+              "description": "Check test file compilation errors",
+              "timeout": 60000
+            },
+            "output": "",
+            "title": "Check test file compilation errors",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check test file compilation errors",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594445001,
+              "end": 1772594445665
+            }
+          },
+          "id": "prt_cb6dcb5ae0010Aqk6mZWD5fQho",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcaa47001GtTdCK5wmSZkdY"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg' app/ ui/ internal/ --type go -l",
+              "description": "List files with tea.KeyMsg references"
+            },
+            "output": "ui/tabbed_window.go\nui/preview.go\n",
+            "title": "List files with tea.KeyMsg references",
+            "metadata": {
+              "output": "ui/tabbed_window.go\nui/preview.go\n",
+              "exit": 0,
+              "description": "List files with tea.KeyMsg references",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594445828,
+              "end": 1772594445833
+            }
+          },
+          "id": "prt_cb6dcbaca00101t9lQEkvlTVod",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcaa47001GtTdCK5wmSZkdY"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 50214,
+            "input": 1,
+            "output": 266,
+            "reasoning": 0,
+            "cache": {
+              "read": 41715,
+              "write": 8232
+            }
+          },
+          "id": "prt_cb6dcbe1a0017HmPn5LgUx17MG",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcaa47001GtTdCK5wmSZkdY"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594445859,
+          "completed": 1772594449934
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50513,
+          "input": 1,
+          "output": 214,
+          "reasoning": 0,
+          "cache": {
+            "read": 49947,
+            "write": 351
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dcbe23001fUd0hZKxoBoGeN",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dcc4a00017ni69VdnhdDqfH",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcbe23001fUd0hZKxoBoGeN"
+        },
+        {
+          "type": "reasoning",
+          "text": "It seems the build is passing. Let me check more carefully what the current state is.",
+          "metadata": {
+            "anthropic": {
+              "signature": "Ev0BCkYICxgCKkDRd6ka48pWk3KO2CKcY8J3b//dB7dLEkrgG6vTRSxhera3h61spSSsj0/AkA8uZoQSKTKlKh3CjEmyY/REDACTED/Bo11AcYqMMDoa/REDACTED/REDACTED/og22wMWRK4C9YwAowAbwhhgB"
+            }
+          },
+          "time": {
+            "start": 1772594447521,
+            "end": 1772594448264
+          },
+          "id": "prt_cb6dcc4a1001MIthOwVA0pApPt",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcbe23001fUd0hZKxoBoGeN"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg' app/ ui/ internal/ --type go | head -30",
+              "description": "Find tea.KeyMsg usage patterns"
+            },
+            "output": "ui/tabbed_window.go:func (w *TabbedWindow) ViewportHandlesKey(msg tea.KeyMsg) bool {\nui/preview.go:func (p *PreviewPane) ViewportHandlesKey(msg tea.KeyMsg) bool {\n",
+            "title": "Find tea.KeyMsg usage patterns",
+            "metadata": {
+              "output": "ui/tabbed_window.go:func (w *TabbedWindow) ViewportHandlesKey(msg tea.KeyMsg) bool {\nui/preview.go:func (p *PreviewPane) ViewportHandlesKey(msg tea.KeyMsg) bool {\n",
+              "exit": 0,
+              "description": "Find tea.KeyMsg usage patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594449096,
+              "end": 1772594449101
+            }
+          },
+          "id": "prt_cb6dcc78b001jqeElgCAhLdeN6",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcbe23001fUd0hZKxoBoGeN"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01H35qoFrbxtXhnabPsHT4sM",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg\\{' app/ ui/ internal/ --type go | head -40",
+              "description": "Find tea.KeyMsg struct literals"
+            },
+            "output": "",
+            "title": "Find tea.KeyMsg struct literals",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find tea.KeyMsg struct literals",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594449714,
+              "end": 1772594449719
+            }
+          },
+          "id": "prt_cb6dccaca001DIk3HEieZLbT4c",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcbe23001fUd0hZKxoBoGeN"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 50513,
+            "input": 1,
+            "output": 214,
+            "reasoning": 0,
+            "cache": {
+              "read": 49947,
+              "write": 351
+            }
+          },
+          "id": "prt_cb6dcce030011PD14vx93FYfAM",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcbe23001fUd0hZKxoBoGeN"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594449935,
+          "completed": 1772594452997
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 50815,
+          "input": 1,
+          "output": 169,
+          "reasoning": 0,
+          "cache": {
+            "read": 50298,
+            "write": 347
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dcce0f001IfnZZXPeK4Bf7i",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dcd5c2001IhFFCPV7v5GPf5",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcce0f001IfnZZXPeK4Bf7i"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.Key' app/app_test.go | head -20",
+              "description": "Check app_test.go for key event patterns"
+            },
+            "output": "\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})\n\tpress := func(msg tea.KeyPressMsg) {\n\t\tpress(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tmodel, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'y', Text: \"y\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\tvar keyMsg tea.KeyPressMsg\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key}\n\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\thandle := func(t *testing.T, h *home, msg tea.KeyPressMsg) *home {\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: \"T\"})\n",
+            "title": "Check app_test.go for key event patterns",
+            "metadata": {
+              "output": "\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})\n\tpress := func(msg tea.KeyPressMsg) {\n\t\tpress(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tmodel, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'y', Text: \"y\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\tvar keyMsg tea.KeyPressMsg\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key}\n\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\thandle := func(t *testing.T, h *home, msg tea.KeyPressMsg) *home {\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: \"T\"})\n",
+              "exit": 0,
+              "description": "Check app_test.go for key event patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594452346,
+              "end": 1772594452351
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcce0f001IfnZZXPeK4Bf7i"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "head -100 app/app_test.go",
+              "description": "Look at app_test.go structure"
+            },
+            "output": "package app\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"testing\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/config/taskstate\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/kastheco/kasmos/ui\"\n\t\"github.com/kastheco/kasmos/ui/overlay\"\n\n\t\"charm.land/bubbles/v2/spinner\"\n\ttea \"charm.land/bubbletea/v2\"\n\tzone \"github.com/lrstanley/bubblezone/v2\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\n// TestMain runs before all tests to set up the test environment\nfunc TestMain(m *testing.M) {\n\t// Initialize bubblezone global manager (required for zone.Mark/zone.Get in tests)\n\tzone.NewGlobal()\n\n\t// Initialize the logger before any tests run\n\tlog.Initialize(false)\n\tdefer log.Close()\n\n\t// Run all tests\n\texitCode := m.Run()\n\n\t// Exit with the same code as the tests\n\tos.Exit(exitCode)\n}\n\nfunc newTestHome() *home {\n\tspin := spinner.New(spinner.WithSpinner(spinner.Dot))\n\treturn &home{\n\t\tctx:            context.Background(),\n\t\tstate:          stateDefault,\n\t\tappConfig:      config.DefaultConfig(),\n\t\tnav:            ui.NewNavigationPanel(&spin),\n\t\tmenu:           ui.NewMenu(),\n\t\tauditPane:      ui.NewAuditPane(),\n\t\ttabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),\n\t\ttoastManager:   overlay.NewToastManager(&spin),\n\t\toverlays:       overlay.NewManager(),\n\t\tactiveRepoPath: os.TempDir(),\n\t\tprogram:        \"opencode\",\n\t}\n}\n\nfunc TestSpawnAdHocAgent_DefaultCreatesWorktree(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"\", \"\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.Equal(t, session.Loading, last.Status)\n\tassert.NotNil(t, cmd, \"should return async start command\")\n}\n\nfunc TestSpawnAdHocAgent_BranchOverride(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"feature/login\", \"\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.NotNil(t, cmd)\n}\n\nfunc TestSpawnAdHocAgent_PathOverride(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"\", \"/tmp/custom-path\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.NotNil(t, cmd)\n}\n\nfunc TestSpawnAgent_KeyOpensFormOverlay(t *testing.T) {\n\th := newTestHome()\n\th.keySent = true\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tupdated := model.(*home)\n\trequire.Equal(t, stateSpawnAgent, updated.state)\n\trequire.True(t, updated.overlays.IsActive(), \"form overlay must be set\")\n\t_, ok := updated.overlays.Current().(*overlay.FormOverlay)\n",
+            "title": "Look at app_test.go structure",
+            "metadata": {
+              "output": "package app\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"testing\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/config/taskstate\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/kastheco/kasmos/ui\"\n\t\"github.com/kastheco/kasmos/ui/overlay\"\n\n\t\"charm.land/bubbles/v2/spinner\"\n\ttea \"charm.land/bubbletea/v2\"\n\tzone \"github.com/lrstanley/bubblezone/v2\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\n// TestMain runs before all tests to set up the test environment\nfunc TestMain(m *testing.M) {\n\t// Initialize bubblezone global manager (required for zone.Mark/zone.Get in tests)\n\tzone.NewGlobal()\n\n\t// Initialize the logger before any tests run\n\tlog.Initialize(false)\n\tdefer log.Close()\n\n\t// Run all tests\n\texitCode := m.Run()\n\n\t// Exit with the same code as the tests\n\tos.Exit(exitCode)\n}\n\nfunc newTestHome() *home {\n\tspin := spinner.New(spinner.WithSpinner(spinner.Dot))\n\treturn &home{\n\t\tctx:            context.Background(),\n\t\tstate:          stateDefault,\n\t\tappConfig:      config.DefaultConfig(),\n\t\tnav:            ui.NewNavigationPanel(&spin),\n\t\tmenu:           ui.NewMenu(),\n\t\tauditPane:      ui.NewAuditPane(),\n\t\ttabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),\n\t\ttoastManager:   overlay.NewToastManager(&spin),\n\t\toverlays:       overlay.NewManager(),\n\t\tactiveRepoPath: os.TempDir(),\n\t\tprogram:        \"opencode\",\n\t}\n}\n\nfunc TestSpawnAdHocAgent_DefaultCreatesWorktree(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"\", \"\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.Equal(t, session.Loading, last.Status)\n\tassert.NotNil(t, cmd, \"should return async start command\")\n}\n\nfunc TestSpawnAdHocAgent_BranchOverride(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"feature/login\", \"\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.NotNil(t, cmd)\n}\n\nfunc TestSpawnAdHocAgent_PathOverride(t *testing.T) {\n\th := newTestHome()\n\tmodel, cmd := h.spawnAdHocAgent(\"my-agent\", \"\", \"/tmp/custom-path\")\n\tupdated := model.(*home)\n\tinstances := updated.nav.GetInstances()\n\trequire.NotEmpty(t, instances)\n\tlast := instances[len(instances)-1]\n\tassert.Equal(t, \"my-agent\", last.Title)\n\tassert.NotNil(t, cmd)\n}\n\nfunc TestSpawnAgent_KeyOpensFormOverlay(t *testing.T) {\n\th := newTestHome()\n\th.keySent = true\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tupdated := model.(*home)\n\trequire.Equal(t, stateSpawnAgent, updated.state)\n\trequire.True(t, updated.overlays.IsActive(), \"form overlay must be set\")\n\t_, ok := updated.overlays.Current().(*overlay.FormOverlay)\n",
+              "exit": 0,
+              "description": "Look at app_test.go structure",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594452955,
+              "end": 1772594452959
+            }
+          },
+          "id": "prt_cb6dcd77c001cyyfvmz53IUEt5",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcce0f001IfnZZXPeK4Bf7i"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 50815,
+            "input": 1,
+            "output": 169,
+            "reasoning": 0,
+            "cache": {
+              "read": 50298,
+              "write": 347
+            }
+          },
+          "id": "prt_cb6dcd9f8001N3pO7NM8lR8twY",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcce0f001IfnZZXPeK4Bf7i"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594452999,
+          "completed": 1772594457477
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 52736,
+          "input": 1,
+          "output": 246,
+          "reasoning": 0,
+          "cache": {
+            "read": 50645,
+            "write": 1844
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dcda070017DC6aDdakbScmR",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dce00f001zgwiuLgK66ZaX5",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcda070017DC6aDdakbScmR"
+        },
+        {
+          "type": "reasoning",
+          "text": "The test files already use `tea.KeyPressMsg`! It seems some of the migration may have been done already by another agent. Let me look at the overlay test files to see what's there.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/t7K79C01/REDACTED/REDACTED/RcYJvEMYX/REDACTED/REDACTED/C+Amqk3P2yhgB"
+            }
+          },
+          "time": {
+            "start": 1772594454544,
+            "end": 1772594455732
+          },
+          "id": "prt_cb6dce010001EpsFh4MjP134X1",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcda070017DC6aDdakbScmR"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01X35gg4WgUVJW6SmXqBDGmi",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg\\{' ui/overlay/ app/ internal/ --type go | head -30",
+              "description": "Check for remaining tea.KeyMsg struct literals"
+            },
+            "output": "",
+            "title": "Check for remaining tea.KeyMsg struct literals",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check for remaining tea.KeyMsg struct literals",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594457021,
+              "end": 1772594457027
+            }
+          },
+          "id": "prt_cb6dce4b6001ZpNbUKmDoPRiqO",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcda070017DC6aDdakbScmR"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01V8igcD7goVhppcib1MSkaF",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg' ui/overlay/ app/ internal/ --type go | head -30",
+              "description": "Check for any tea.KeyMsg references"
+            },
+            "output": "",
+            "title": "Check for any tea.KeyMsg references",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check for any tea.KeyMsg references",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594457448,
+              "end": 1772594457453
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcda070017DC6aDdakbScmR"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 52736,
+            "input": 1,
+            "output": 246,
+            "reasoning": 0,
+            "cache": {
+              "read": 50645,
+              "write": 1844
+            }
+          },
+          "id": "prt_cb6dceb7b001VJj3JnSy1CM4Ib",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcda070017DC6aDdakbScmR"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594457478,
+          "completed": 1772594460329
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 52928,
+          "input": 1,
+          "output": 115,
+          "reasoning": 0,
+          "cache": {
+            "read": 52489,
+            "write": 323
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dceb86001g97onE1p10sLYi",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dceb86001g97onE1p10sLYi"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./app/... ./ui/... ./internal/... 2>&1 | tail -40",
+              "description": "Run tests in relevant packages",
+              "timeout": 120000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/app\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/check\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t(cached)\n",
+            "title": "Run tests in relevant packages",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/app\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/check\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t(cached)\n",
+              "exit": 0,
+              "description": "Run tests in relevant packages",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594460231,
+              "end": 1772594460321
+            }
+          },
+          "id": "prt_cb6dcf18a001kdfOfq0AitGFi3",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dceb86001g97onE1p10sLYi"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 52928,
+            "input": 1,
+            "output": 115,
+            "reasoning": 0,
+            "cache": {
+              "read": 52489,
+              "write": 323
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dceb86001g97onE1p10sLYi"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594460330,
+          "completed": 1772594474788
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53497,
+          "input": 1,
+          "output": 275,
+          "reasoning": 0,
+          "cache": {
+            "read": 52812,
+            "write": 409
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dcfc3f001l80O64ZS81Wfex",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO"
+        },
+        {
+          "type": "reasoning",
+          "text": "All tests are passing (from cache). It appears the test migration was already done, or perhaps this is the initial state. Let me check a few specific files that are mentioned in the task to verify what the current state is - checking if the migration is already done by a prior agent or if these are the original files.\n\nLet me check the git log to see what has been done.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/nWWaB2z2pTKyIw9rhFz0kRH/w4Rqr1VgURp3NgDQHtXCi7Bw/OCNSmX/REDACTED/mukSSOn5hK+QH/PPNLJefqkS11NA9cCGEe/AFbWB3/REDACTED/B9hgSmegYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772594461759,
+            "end": 1772594463868
+          },
+          "id": "prt_cb6dcfc3f002bRC7PNnzX9wK73",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EtzjR8wM2LGn2cMneHBtUv",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline -20",
+              "description": "Check recent git history"
+            },
+            "output": "601948f refactor: migrate ui/overlay/wizard packages to charm v2 APIs\ne63d9f9 refactor: rewrite charm import paths from github.com to charm.land/v2\n720ceda plan: charm ecosystem v2 upgrade implementation plan\n4213ef1 merge plan branch plan/plan-content-to-database\ne721e24 fix: restore misplaced doc comment on TestPlanList_WithStore (reviewer self-fix)\n42ba12d feat(task-1): migrate implement/solo actions and wave validation from disk to database\n84e435d feat(task-2): ingest plan file content into database during kas task register\nf0e16bb plan: add wave headers to plan-content-to-database.md\n29b469f merge plan branch plan/instance-management-cli\n19c78ef fix: use unmodified program for opencode suffix check in buildResumeCommand (reviewer self-fix)\ncb13c64 fix(instance-cli): fix data loss, wrong tmux names, and degraded resume\nf8623b0 feat: add kas instance kill/pause/resume/send commands\n42b5d34 feat: add kas instance list command with text/json output\n20920a1 merge plan branch plan/extract-orchestrator\nf43a01d feat: extract orchestration engine into standalone package\n2b10fba plan: add wave headers to extract-orchestrator.md\n0002390 fix: context menu wrapping by accounting for component decoration widths\nf566bca fix: pin legend directly above audit log with fixed 1-line gap\n778cc2d fix: use single-width lightning icon (↯) for wave events in audit log\n0713e50 fix: cap audit log pane at 50% of nav panel height\n",
+            "title": "Check recent git history",
+            "metadata": {
+              "output": "601948f refactor: migrate ui/overlay/wizard packages to charm v2 APIs\ne63d9f9 refactor: rewrite charm import paths from github.com to charm.land/v2\n720ceda plan: charm ecosystem v2 upgrade implementation plan\n4213ef1 merge plan branch plan/plan-content-to-database\ne721e24 fix: restore misplaced doc comment on TestPlanList_WithStore (reviewer self-fix)\n42ba12d feat(task-1): migrate implement/solo actions and wave validation from disk to database\n84e435d feat(task-2): ingest plan file content into database during kas task register\nf0e16bb plan: add wave headers to plan-content-to-database.md\n29b469f merge plan branch plan/instance-management-cli\n19c78ef fix: use unmodified program for opencode suffix check in buildResumeCommand (reviewer self-fix)\ncb13c64 fix(instance-cli): fix data loss, wrong tmux names, and degraded resume\nf8623b0 feat: add kas instance kill/pause/resume/send commands\n42b5d34 feat: add kas instance list command with text/json output\n20920a1 merge plan branch plan/extract-orchestrator\nf43a01d feat: extract orchestration engine into standalone package\n2b10fba plan: add wave headers to extract-orchestrator.md\n0002390 fix: context menu wrapping by accounting for component decoration widths\nf566bca fix: pin legend directly above audit log with fixed 1-line gap\n778cc2d fix: use single-width lightning icon (↯) for wave events in audit log\n0713e50 fix: cap audit log pane at 50% of nav panel height\n",
+              "exit": 0,
+              "description": "Check recent git history",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594464285,
+              "end": 1772594464288
+            }
+          },
+          "id": "prt_cb6dd047d001nznRE63Ja6c6c4",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DmDmho1GMzzzsKbJNzWuh9",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./app/... ./ui/... ./internal/... -count=1 2>&1 | tail -30",
+              "description": "Run tests without cache",
+              "timeout": 180000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/app\t8.974s\nok  \tgithub.com/kastheco/kasmos/ui\t0.020s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.018s\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.002s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.110s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.011s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.002s\n",
+            "title": "Run tests without cache",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/app\t8.974s\nok  \tgithub.com/kastheco/kasmos/ui\t0.020s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.018s\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.002s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.110s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.011s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.002s\n",
+              "exit": 0,
+              "description": "Run tests without cache",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594465220,
+              "end": 1772594474781
+            }
+          },
+          "id": "prt_cb6dd0621001ja70wLAHdi7YLy",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 53497,
+            "input": 1,
+            "output": 275,
+            "reasoning": 0,
+            "cache": {
+              "read": 52812,
+              "write": 409
+            }
+          },
+          "id": "prt_cb6dd2f1d001rdJQi7Hd4oFTMj",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dcf6aa001U2wF7cAQJ1WZdO"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594474789,
+          "completed": 1772594479764
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 54587,
+          "input": 1,
+          "output": 321,
+          "reasoning": 0,
+          "cache": {
+            "read": 53221,
+            "write": 1044
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dd3477001Iz14FXGUTmZRc3",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "All tests pass already. The recent git log shows that the refactoring was done in the commit `refactor: migrate ui/overlay/wizard packages to charm v2 APIs` which was task 3. Looking at the test files, they already use `tea.KeyPressMsg`. Let me check the specific test files mentioned to see if they were already migrated.\n\nLet me verify a few specific files to see whether migration was already done by a sibling agent.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EssECkYICxgCKkAL5/REDACTED/REDACTED/ziZxZmRbZYmb+LQ8G/REDACTED/REDACTED/w/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/wv75ccB2zA0cTSpr9bAH7Z/qV+6iAu3lUI7EYCnVqhtzos/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772594476151,
+            "end": 1772594478189
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01UxevUGgWNgzCL5ovdj4xFv",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'KeyPressMsg|KeyMsg|MouseMsg|MouseClickMsg' ui/overlay/formOverlay_test.go | head -20",
+              "description": "Check formOverlay_test.go for key event types"
+            },
+            "output": "\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n",
+            "title": "Check formOverlay_test.go for key event types",
+            "metadata": {
+              "output": "\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tresult := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tf.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tf.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n",
+              "exit": 0,
+              "description": "Check formOverlay_test.go for key event types",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594479397,
+              "end": 1772594479400
+            }
+          },
+          "id": "prt_cb6dd3c6f001MxkpHRdB0mI61l",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_015NMNg1uhvGhzGyfwdVkZzB",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'KeyPressMsg|KeyMsg|MouseMsg|MouseClickMsg' app/app_test.go | head -20",
+              "description": "Check app_test.go for key event types"
+            },
+            "output": "\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})\n\tpress := func(msg tea.KeyPressMsg) {\n\t\tpress(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tmodel, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'y', Text: \"y\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\tvar keyMsg tea.KeyPressMsg\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key}\n\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\thandle := func(t *testing.T, h *home, msg tea.KeyPressMsg) *home {\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: \"T\"})\n",
+            "title": "Check app_test.go for key event types",
+            "metadata": {
+              "output": "\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: \"s\"})\n\tmodel, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})\n\tpress := func(msg tea.KeyPressMsg) {\n\t\tpress(tea.KeyPressMsg{Code: r, Text: string(r)})\n\tmodel, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'y', Text: \"y\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\t\tkeyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\tvar keyMsg tea.KeyPressMsg\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}\n\t\t\t\tkeyMsg = tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key}\n\tkeyMsg := tea.KeyPressMsg{Code: 'n', Text: \"n\"}\n\thandle := func(t *testing.T, h *home, msg tea.KeyPressMsg) *home {\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})\n\t\thomeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: \"T\"})\n",
+              "exit": 0,
+              "description": "Check app_test.go for key event types",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594479721,
+              "end": 1772594479724
+            }
+          },
+          "id": "prt_cb6dd4127001ii1QGZN7B8A3i3",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "cost": 0,
+          "tokens": {
+            "total": 54587,
+            "input": 1,
+            "output": 321,
+            "reasoning": 0,
+            "cache": {
+              "read": 53221,
+              "write": 1044
+            }
+          },
+          "id": "prt_cb6dd428c001eleLgNAdNSnkzx",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594479765,
+          "completed": 1772594485282
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55931,
+          "input": 1,
+          "output": 293,
+          "reasoning": 0,
+          "cache": {
+            "read": 54265,
+            "write": 1372
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "id": "prt_cb6dd476b001ech8885rX948JT",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "The test files already use `tea.KeyPressMsg` with the v2 API. All tests pass. It seems the sibling agent (Task 3) already migrated these files as part of their work, or they were pre-migrated. Let me check for any remaining v1 patterns.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/f/u+I9OoUO+0t8Dxzincyup4V/REDACTED/Vd3/REDACTED/REDACTED/rhxhhdXnONQRibe4GAE="
+            }
+          },
+          "time": {
+            "start": 1772594481003,
+            "end": 1772594483246
+          },
+          "id": "prt_cb6dd476b0021JX4Dh8LtDvXad",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg\\{|Type: tea\\.Key|Runes: \\[\\]rune' app/ ui/ internal/ --type go | head -20",
+              "description": "Check for any remaining v1 key event patterns"
+            },
+            "output": "",
+            "title": "Check for any remaining v1 key event patterns",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check for any remaining v1 key event patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594484281,
+              "end": 1772594484286
+            }
+          },
+          "id": "prt_cb6dd5031001bVqzwsXj8usP4K",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01KRcGqRzSm419pqT6Rtbr6r",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.MouseMsg\\{|MouseActionPress|MouseButtonLeft' app/ ui/ internal/ --type go | head -20",
+              "description": "Check for any remaining v1 mouse event patterns"
+            },
+            "output": "",
+            "title": "Check for any remaining v1 mouse event patterns",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check for any remaining v1 mouse event patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594485248,
+              "end": 1772594485253
+            }
+          },
+          "id": "prt_cb6dd543b001raX9i9PKbvi98f",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 55931,
+            "input": 1,
+            "output": 293,
+            "reasoning": 0,
+            "cache": {
+              "read": 54265,
+              "write": 1372
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "d214f95e9a03556ffa7c1b07cab3a845b63d8737",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/go.mod",
+            "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade/go.sum"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594485284,
+          "completed": 1772594488440
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 56169,
+          "input": 1,
+          "output": 161,
+          "reasoning": 0,
+          "cache": {
+            "read": 55637,
+            "write": 370
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dd5823001zW06fEcqaT1Lp9",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd5823001zW06fEcqaT1Lp9"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg '\\.YOffset\\b' ui/ app/ --type go | head -20",
+              "description": "Check for YOffset field access patterns"
+            },
+            "output": "ui/tabbed_window_test.go:\tinitialOffset := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterDown := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterUp := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tinitialOffset := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterDown := preview.viewport.YOffset()\nui/preview.go:\tif p.viewport.AtBottom() && p.viewport.YOffset() == 0 {\n",
+            "title": "Check for YOffset field access patterns",
+            "metadata": {
+              "output": "ui/tabbed_window_test.go:\tinitialOffset := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterDown := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterUp := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tinitialOffset := preview.viewport.YOffset()\nui/tabbed_window_test.go:\tafterDown := preview.viewport.YOffset()\nui/preview.go:\tif p.viewport.AtBottom() && p.viewport.YOffset() == 0 {\n",
+              "exit": 0,
+              "description": "Check for YOffset field access patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594488122,
+              "end": 1772594488128
+            }
+          },
+          "id": "prt_cb6dd5e7a002cYXK737s32knfw",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd5823001zW06fEcqaT1Lp9"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff HEAD --name-only",
+              "description": "Check what files have been modified"
+            },
+            "output": "docs/plans/charm-v2-upgrade.md\ngo.mod\ngo.sum\n",
+            "title": "Check what files have been modified",
+            "metadata": {
+              "output": "docs/plans/charm-v2-upgrade.md\ngo.mod\ngo.sum\n",
+              "exit": 0,
+              "description": "Check what files have been modified",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594488393,
+              "end": 1772594488401
+            }
+          },
+          "id": "prt_cb6dd633c0017wB31Ip47bdN6e",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd5823001zW06fEcqaT1Lp9"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 56169,
+            "input": 1,
+            "output": 161,
+            "reasoning": 0,
+            "cache": {
+              "read": 55637,
+              "write": 370
+            }
+          },
+          "id": "prt_cb6dd646f0011u3Vst759Oo2yb",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd5823001zW06fEcqaT1Lp9"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594488441,
+          "completed": 1772594495068
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 56769,
+          "input": 1,
+          "output": 370,
+          "reasoning": 0,
+          "cache": {
+            "read": 56007,
+            "write": 391
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dd6479001ds10ByjWi0x0CC",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "prt_cb6dd69c3001mUHUG1r4oQcg25",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd6479001ds10ByjWi0x0CC"
+        },
+        {
+          "type": "reasoning",
+          "text": "Looking at the situation:\n\n1. All the test files already use `tea.KeyPressMsg` with the correct v2 API fields\n2. The `YOffset()` is already using the method call (getter) syntax \n3. All tests pass\n4. There are no remaining v1 patterns to migrate\n\nIt seems the sibling agent (which did `refactor: migrate ui/overlay/wizard packages to charm v2 APIs`) already handled the test file migration, or all the test files were written in v2 format from the beginning.\n\nLet me check if there's a prior commit that shows the original files, or if these test files were already in v2 format. \n\nI'll examine the git history to see when these test files were last modified and whether they've already been updated.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/jp/qF+45S9W9Vj/E/tL6Z4F3kL49k+UwW/REDACTED/REDACTED/REDACTED/gycU57NkeJP7YaPzI4ie1M/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/HGEOFkEaQblVyj7E6v81+j2b9BBhi/REDACTED/REDACTED/REDACTED/ZBCHx7mGsLTHbk2oLNB/L0oQvm/3riW3tjMZ5frXTZV6a2/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772594489795,
+            "end": 1772594494211
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd6479001ds10ByjWi0x0CC"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01MfUbJYUqVZJGGV7SB1FjQf",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline -- app/app_test.go ui/overlay/formOverlay_test.go ui/tabbed_window_test.go | head -10",
+              "description": "Check git history of test files"
+            },
+            "output": "601948f refactor: migrate ui/overlay/wizard packages to charm v2 APIs\ne63d9f9 refactor: rewrite charm import paths from github.com to charm.land/v2\n6082f06 feat(task-7): integrate OverlayManager into app layer, remove deprecated overlay wrappers\ndeafedf feat(overlay): rewrite form, permission, and tmux browser overlays to implement Overlay interface\nee8afed refactor: rename PlanFile→TaskFile, plan-prefixed vars/methods, and file renames\n1f50c58 refactor(task-2): rename config/planstate package to config/taskstate\n19e8f5e feat: remove date prefix from plan slug generation, display, and all tests\n5c48a10 fix: allow single-action cleanup of exited instances without double-kill\n6afa2e4 feat: add restart option to instance context menu\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n",
+            "title": "Check git history of test files",
+            "metadata": {
+              "output": "601948f refactor: migrate ui/overlay/wizard packages to charm v2 APIs\ne63d9f9 refactor: rewrite charm import paths from github.com to charm.land/v2\n6082f06 feat(task-7): integrate OverlayManager into app layer, remove deprecated overlay wrappers\ndeafedf feat(overlay): rewrite form, permission, and tmux browser overlays to implement Overlay interface\nee8afed refactor: rename PlanFile→TaskFile, plan-prefixed vars/methods, and file renames\n1f50c58 refactor(task-2): rename config/planstate package to config/taskstate\n19e8f5e feat: remove date prefix from plan slug generation, display, and all tests\n5c48a10 fix: allow single-action cleanup of exited instances without double-kill\n6afa2e4 feat: add restart option to instance context menu\n48578f0 refactor(task-6 app): read plan content from DB instead of filesystem\n",
+              "exit": 0,
+              "description": "Check git history of test files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594494352,
+              "end": 1772594494364
+            }
+          },
+          "id": "prt_cb6dd7b06001HiptRl1Y8BlVYy",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd6479001ds10ByjWi0x0CC"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01CJ6dn9iXDMv9FFecBRy99u",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git show 601948f --name-only | head -30",
+              "description": "See which files were modified in the charm v2 refactor commit"
+            },
+            "output": "commit 601948f1113ca3375b5b86abbfa7f568a34c46e1\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 21:20:13 2026 -0600\n\n    refactor: migrate ui/overlay/wizard packages to charm v2 APIs\n    \n    Entire-Checkpoint: fb146198b8fd\n\n_patches/vt/LICENSE\n_patches/vt/buffer.go\n_patches/vt/callbacks.go\n_patches/vt/cc.go\n_patches/vt/charset.go\n_patches/vt/csi.go\n_patches/vt/csi_cursor.go\n_patches/vt/csi_mode.go\n_patches/vt/csi_screen.go\n_patches/vt/csi_sgr.go\n_patches/vt/cursor.go\n_patches/vt/damage.go\n_patches/vt/dcs.go\n_patches/vt/emulator.go\n_patches/vt/emulator_test.go\n_patches/vt/esc.go\n_patches/vt/focus.go\n_patches/vt/go.mod\n_patches/vt/go.sum\n_patches/vt/handlers.go\n_patches/vt/key.go\n_patches/vt/mode.go\n",
+            "title": "See which files were modified in the charm v2 refactor commit",
+            "metadata": {
+              "output": "commit 601948f1113ca3375b5b86abbfa7f568a34c46e1\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 21:20:13 2026 -0600\n\n    refactor: migrate ui/overlay/wizard packages to charm v2 APIs\n    \n    Entire-Checkpoint: fb146198b8fd\n\n_patches/vt/LICENSE\n_patches/vt/buffer.go\n_patches/vt/callbacks.go\n_patches/vt/cc.go\n_patches/vt/charset.go\n_patches/vt/csi.go\n_patches/vt/csi_cursor.go\n_patches/vt/csi_mode.go\n_patches/vt/csi_screen.go\n_patches/vt/csi_sgr.go\n_patches/vt/cursor.go\n_patches/vt/damage.go\n_patches/vt/dcs.go\n_patches/vt/emulator.go\n_patches/vt/emulator_test.go\n_patches/vt/esc.go\n_patches/vt/focus.go\n_patches/vt/go.mod\n_patches/vt/go.sum\n_patches/vt/handlers.go\n_patches/vt/key.go\n_patches/vt/mode.go\n",
+              "exit": 0,
+              "description": "See which files were modified in the charm v2 refactor commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594495016,
+              "end": 1772594495020
+            }
+          },
+          "id": "prt_cb6dd7b91001hFmCZGVmAhCO0X",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd6479001ds10ByjWi0x0CC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 56769,
+            "input": 1,
+            "output": 370,
+            "reasoning": 0,
+            "cache": {
+              "read": 56007,
+              "write": 391
+            }
+          },
+          "id": "prt_cb6dd7e54001UTO1Oc5GG0P0L4",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd6479001ds10ByjWi0x0CC"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594495069,
+          "completed": 1772594498045
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57505,
+          "input": 1,
+          "output": 104,
+          "reasoning": 0,
+          "cache": {
+            "read": 56398,
+            "write": 1002
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dd7e5d001ugw5A51PIkXIFF",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "prt_cb6dd8660001kHVUDwxkvnDDvH",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd7e5d001ugw5A51PIkXIFF"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git show 601948f --name-only 2>&1 | rg '_test\\.go'",
+              "description": "Check which test files were modified in the sibling agent commit"
+            },
+            "output": "_patches/vt/emulator_test.go\napp/app_audit_pane_test.go\napp/app_input_keybytes_test.go\napp/app_input_right_on_instance_test.go\napp/app_input_viewport_test.go\napp/app_input_yes_keybind_test.go\napp/app_permission_test.go\napp/app_planner_signal_test.go\napp/app_statusbar_integration_test.go\napp/app_task_creation_test.go\napp/app_test.go\napp/app_wave_orchestration_flow_test.go\napp/task_cancel_rename_delay_test.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/wizard/styles_test.go\nui/main_test.go\nui/overlay/confirmationOverlay_test.go\nui/overlay/contextMenu_test.go\nui/overlay/formOverlay_test.go\nui/overlay/iface_test.go\nui/overlay/manager_test.go\nui/overlay/permissionOverlay_test.go\nui/overlay/pickerOverlay_test.go\nui/overlay/textInput_test.go\nui/overlay/textOverlay_test.go\nui/overlay/tmuxBrowserOverlay_test.go\nui/preview_test.go\nui/tabbed_window_test.go\n",
+            "title": "Check which test files were modified in the sibling agent commit",
+            "metadata": {
+              "output": "_patches/vt/emulator_test.go\napp/app_audit_pane_test.go\napp/app_input_keybytes_test.go\napp/app_input_right_on_instance_test.go\napp/app_input_viewport_test.go\napp/app_input_yes_keybind_test.go\napp/app_permission_test.go\napp/app_planner_signal_test.go\napp/app_statusbar_integration_test.go\napp/app_task_creation_test.go\napp/app_test.go\napp/app_wave_orchestration_flow_test.go\napp/task_cancel_rename_delay_test.go\ninternal/initcmd/wizard/model_agents_test.go\ninternal/initcmd/wizard/model_review_test.go\ninternal/initcmd/wizard/styles_test.go\nui/main_test.go\nui/overlay/confirmationOverlay_test.go\nui/overlay/contextMenu_test.go\nui/overlay/formOverlay_test.go\nui/overlay/iface_test.go\nui/overlay/manager_test.go\nui/overlay/permissionOverlay_test.go\nui/overlay/pickerOverlay_test.go\nui/overlay/textInput_test.go\nui/overlay/textOverlay_test.go\nui/overlay/tmuxBrowserOverlay_test.go\nui/preview_test.go\nui/tabbed_window_test.go\n",
+              "exit": 0,
+              "description": "Check which test files were modified in the sibling agent commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594497991,
+              "end": 1772594497994
+            }
+          },
+          "id": "prt_cb6dd8660002r1e1JybEy1pUfD",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd7e5d001ugw5A51PIkXIFF"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 57505,
+            "input": 1,
+            "output": 104,
+            "reasoning": 0,
+            "cache": {
+              "read": 56398,
+              "write": 1002
+            }
+          },
+          "id": "prt_cb6dd89f50011j6K5LFZHcEVLo",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd7e5d001ugw5A51PIkXIFF"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594498046,
+          "completed": 1772594508455
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58789,
+          "input": 1,
+          "output": 909,
+          "reasoning": 0,
+          "cache": {
+            "read": 57400,
+            "write": 479
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6dd89fe0016Y8VbopZB4sNSg",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "prt_cb6dd9032001UyIGmrtNrAtJy2",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd89fe0016Y8VbopZB4sNSg"
+        },
+        {
+          "type": "reasoning",
+          "text": "The sibling agent (Task 3) already migrated all the test files in commit `601948f`. The test files are already fully migrated to use v2 APIs. All tests pass.\n\nLet me check which files listed in the task were NOT included in the sibling commit:\n\nSibling committed:\n- app/app_audit_pane_test.go ✅\n- app/app_input_keybytes_test.go ✅\n- app/app_input_right_on_instance_test.go ✅\n- app/app_input_viewport_test.go ✅\n\n\n- app/app_input_yes_keybind_test.go ✅\n- app/app_permission_test.go ✅\n- app/app_planner_signal_test.go ✅\n- app/app_statusbar_integration_test.go ✅\n- app/app_task_creation_test.go ✅\n- app/app_test.go ✅\n- app/app_wave_orchestration_flow_test.go ✅\n- app/task_cancel_rename_delay_test.go ✅\n- internal/initcmd/wizard/model_agents_test.go ✅\n\nLooks like the sibling already covered all the test files from the task list. I've finished checking those test files and found several that aren't in the sibling commit, so I need to examine them for v1 patterns.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EpoPCkYICxgCKkBQ/bfCPfPrILp7jJ/lQZWGDh5bytXr6QdAbptED7bI/hw2UVqPYnDwEIL6k4of4B8qtq/j/REDACTED/REDACTED/9Gd4egX2i9iZwiTlkFFTxVIV/REDACTED/gv//REDACTED/REDACTED/REDACTED/REDACTED/zyLKRnRCtFBPVb/REDACTED/REDACTED/REDACTED/REDACTED/MqFW7o+CL/eCxafaNXixofwvdQfLoxk/REDACTED/gcaQUBbRWcwTwDf0aScy/REDACTED/REDACTED/REDACTED/6NEgaNl/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772594499635,
+            "end": 1772594506923
+          },
+          "id": "prt_cb6dd9033001xIHLcOIPPwpHpB",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd89fe0016Y8VbopZB4sNSg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01W8MxQSq6daZhV1MR8WCYa6",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.KeyMsg\\{|Type: tea\\.Key|Runes:|MouseMsg\\{|MouseAction' \\\n  internal/initcmd/wizard/model_test.go \\\n  app/app_solo_agent_test.go \\\n  app/app_task_actions_test.go \\\n  app/app_task_completion_test.go \\\n  app/clickup_progress_test.go \\\n  ui/overlay/toast_test.go \\\n  ui/overlay/theme_test.go 2>/dev/null | head -30",
+              "description": "Check remaining test files for v1 patterns"
+            },
+            "output": "",
+            "title": "Check remaining test files for v1 patterns",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Check remaining test files for v1 patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594508416,
+              "end": 1772594508421
+            }
+          },
+          "id": "prt_cb6ddacad001FtKLZD3VI8bKsK",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd89fe0016Y8VbopZB4sNSg"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 58789,
+            "input": 1,
+            "output": 909,
+            "reasoning": 0,
+            "cache": {
+              "read": 57400,
+              "write": 479
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6dd89fe0016Y8VbopZB4sNSg"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594508457,
+          "completed": 1772594512055
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58976,
+          "input": 1,
+          "output": 169,
+          "reasoning": 0,
+          "cache": {
+            "read": 57879,
+            "write": 927
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cb6ddb2a9001IhroJ0c5P5KJwj",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "prt_cb6ddba30001TAq55jRwdjVA9F",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6ddb2a9001IhroJ0c5P5KJwj"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Pf4TXif39a6mkpt5pPP8KN",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg 'tea\\.' internal/initcmd/wizard/model_test.go app/app_solo_agent_test.go app/app_task_actions_test.go app/app_task_completion_test.go app/clickup_progress_test.go ui/overlay/toast_test.go ui/overlay/theme_test.go 2>/dev/null | head -30",
+              "description": "Check remaining test files for any tea package usage"
+            },
+            "output": "app/clickup_progress_test.go:// cleared from pendingReviewFeedback and a tea.Cmd is returned for the\napp/app_task_completion_test.go:// tea.Msg rather than being silently swallowed with _ =.\ninternal/initcmd/wizard/model_test.go:\t_, ok = msg.(tea.QuitMsg)\n",
+            "title": "Check remaining test files for any tea package usage",
+            "metadata": {
+              "output": "app/clickup_progress_test.go:// cleared from pendingReviewFeedback and a tea.Cmd is returned for the\napp/app_task_completion_test.go:// tea.Msg rather than being silently swallowed with _ =.\ninternal/initcmd/wizard/model_test.go:\t_, ok = msg.(tea.QuitMsg)\n",
+              "exit": 0,
+              "description": "Check remaining test files for any tea package usage",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772594511777,
+              "end": 1772594511781
+            }
+          },
+          "id": "prt_cb6ddba31001CA6jvT08FpUF1F",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6ddb2a9001IhroJ0c5P5KJwj"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "cost": 0,
+          "tokens": {
+            "total": 58976,
+            "input": 1,
+            "output": 169,
+            "reasoning": 0,
+            "cache": {
+              "read": 57879,
+              "write": 927
+            }
+          },
+          "id": "prt_cb6ddc0ad001yxobBVHfeziJgu",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6ddb2a9001IhroJ0c5P5KJwj"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772594512057
+        },
+        "parentID": "msg_cb6dc98a7001HJK3iDnaihbhDf",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-charm-v2-upgrade"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cb6ddc0b9001rVbceD57hDcFL0",
+        "sessionID": "ses_34923676effeGLybPEdal0vlM0"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "e355d47c59540b8c7fb5d5dda9cea713c464f2c8",
+          "id": "prt_cb6ddc6370014C0UjYRRa8q68z",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6ddc0b9001rVbceD57hDcFL0"
+        },
+        {
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1772594513464
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34923676effeGLybPEdal0vlM0",
+          "messageID": "msg_cb6ddc0b9001rVbceD57hDcFL0"
+        }
+      ]
+    }
+  ]
+}
