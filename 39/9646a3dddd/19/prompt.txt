@@ -1,0 +1,29 @@
+implement "docs/plants/2026-03-02-kas-plan-register-flags.md" plan
+
+---
+
+docs/plans*
+
+---
+
+commit and push as a new bugfix release ('m aware its a feature technically but not big enough to warrant a new minor version bump)
+
+---
+
+i just saw kas in the ~/dev/freyja/backend repo pull in using-superpowers and cli-developer, why is that?
+
+---
+
+yes
+
+---
+
+check for me
+
+---
+
+where is using-superpowers defined?
+
+---
+
+and yes remove the domain specific ones
