@@ -1,0 +1,104 @@
+Implement Task 2: Migrate all test files to orchestration package types
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Delete the AGPL-tainted `app/wave_orchestrator.go` and `app/wave_prompt.go` and switch all `app/` code to import the clean-room `orchestration/` package, eliminating duplicate types and licensing risk.
+**Architecture:** The `orchestration/` package already contains a complete clean-room rewrite of `WaveOrchestrator`, `WaveState`, `BuildTaskPrompt`, `BuildElaborationPrompt`, `BuildWaveAnnotationPrompt`, `ShouldPostWaveCompleteComment`, and `RestoreToWave`. The `app/` package currently defines its own copies of these types and has one existing import of `orchestration` (for `BuildElaborationPrompt` only). The migration replaces all `app`-internal orchestration types/functions with qualified `orchestration.*` references and deletes the old files.
+**Tech Stack:** Go, `orchestration/` package, `sd`/`comby` for bulk mechanical renames
+
+## Wave 2 of 2
+
+## Task Instructions
+
+**Files:**
+- Delete: `app/wave_orchestrator_test.go` (tests for the deleted app-internal orchestrator — equivalent tests exist in `orchestration/engine_test.go`)
+- Delete: `app/wave_prompt_test.go` (tests for the deleted app-internal prompt builder — equivalent tests exist in `orchestration/prompt_test.go`)
+- Modify: `app/app_wave_orchestration_flow_test.go`
+- Modify: `app/app_task_actions_test.go`
+- Modify: `app/clickup_progress_test.go`
+- Modify: `app/app_solo_agent_test.go`
+- Modify: `app/app_planner_signal_test.go`
+
+**Step 1: write the failing test**
+
+No new tests — this task migrates existing tests to use the `orchestration` package types. The tests themselves are the verification.
+
+**Step 2: run tests to confirm they fail**
+
+```bash
+go test ./app/... -count=1 2>&1 | head -20
+```
+
+Expected: compilation errors from test files referencing deleted `app.WaveOrchestrator` etc.
+
+**Step 3: delete redundant test files and update remaining tests**
+
+1. Delete `app/wave_orchestrator_test.go` — the clean-room tests already exist in `orchestration/engine_test.go` and cover:
+   - constructor/state transitions
+   - retry semantics
+   - restore semantics
+   - `ShouldPostWaveCompleteComment`
+   - elaboration state
+   - `BuildTaskPrompt` method wrapper
+
+2. Delete `app/wave_prompt_test.go` — equivalent prompt tests exist in `orchestration/prompt_test.go`.
+
+3. In each remaining test file, add the orchestration import:
+
+```go
+import "github.com/kastheco/kasmos/orchestration"
+```
+
+4. Apply mechanical type/function migrations in all listed test files:
+   - `*WaveOrchestrator` -> `*orchestration.WaveOrchestrator`
+   - `map[string]*WaveOrchestrator` -> `map[string]*orchestration.WaveOrchestrator`
+   - `NewWaveOrchestrator(` -> `orchestration.NewWaveOrchestrator(`
+   - `WaveState*` -> `orchestration.WaveState*`
+
+5. Update the helper signature in `app/app_wave_orchestration_flow_test.go`:
+
+```go
+func waveFlowHome(t *testing.T, ps *taskstate.TaskState, plansDir string, orchMap map[string]*orchestration.WaveOrchestrator) *home
+```
+
+6. Update `clickup_progress_test.go` helper assertions:
+   - Replace `shouldPostWaveCompleteComment(orch)` with `orch.ShouldPostWaveCompleteComment()`.
+   - Keep nil-safety coverage using method call on nil receiver:
+
+```go
+var nilOrch *orchestration.WaveOrchestrator
+assert.False(t, nilOrch.ShouldPostWaveCompleteComment())
+```
+
+7. Update `app_task_actions_test.go` prompt tests to use canonical prompt builder now that app-local function is removed:
+   - `buildWaveAnnotationPrompt("...")` -> `orchestration.BuildWaveAnnotationPrompt("...")`
+
+8. Keep existing assertion style and helper patterns unchanged (`require` for setup/preconditions, `assert` for behavioral checks), matching current test conventions.
+
+9. Run an identifier sweep across tests to ensure nothing from deleted app files remains:
+
+```bash
+rg '\b(WaveOrchestrator|NewWaveOrchestrator|WaveState[A-Za-z]+|shouldPostWaveCompleteComment|buildTaskPrompt\(|buildWaveAnnotationPrompt\()' app --glob '*_test.go'
+```
+
+Expected after migration:
+- No `buildTaskPrompt` refs in `app/*_test.go` (file deleted).
+- No `shouldPostWaveCompleteComment` refs.
+- `buildWaveAnnotationPrompt` refs replaced by `orchestration.BuildWaveAnnotationPrompt`.
+
+**Step 4: run full test suite**
+
+```bash
+go test ./... -count=1
+```
+
+Expected: all tests pass (except the pre-existing wizard test failures unrelated to this change).
+
+**Step 5: commit**
+
+```bash
+git add -u app/
+git commit -m "refactor(task-2): migrate app/ tests to orchestration package, delete redundant test files"
+```

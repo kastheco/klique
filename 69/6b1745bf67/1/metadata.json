@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "696b1745bf67",
+  "session_id": "ses_34535b591ffegR4InMZh2OF71P",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T21:47:51.491426535Z",
+  "branch": "plan/purge-agpl-orchestrator",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/clickup_progress_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "22d4c7573bc3",
+  "checkpoint_transcript_start": 33,
+  "transcript_lines_at_start": 33,
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 210,
+    "cache_read_tokens": 111061,
+    "output_tokens": 411,
+    "api_call_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T21:47:51.289004221Z",
+    "agent_lines": 22,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 22,
+    "agent_percentage": 100
+  }
+}
