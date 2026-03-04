@@ -427,28 +427,28 @@ func resolveStore(plansDir string) taskstore.Store {
 	return nil
 }
 
-// resolvePlansDir resolves docs/plans/ relative to cwd. When the cwd doesn't
-// contain docs/plans/ (e.g. when running from a git worktree), it falls back
-// to resolving the main repo root via resolveRepoRoot and looks for docs/plans/
-// there.
+// resolvePlansDir resolves docs/plans/ relative to the main repository root.
+// It always resolves the repo root first (handling worktrees correctly) so that
+// projectFromPlansDir derives a consistent project name regardless of whether
+// the command is run from a worktree or the main checkout.
 func resolvePlansDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get cwd: %w", err)
 	}
 
-	// Fast path: docs/plans/ exists relative to cwd (main repo case).
-	dir := filepath.Join(cwd, "docs", "plans")
-	if _, err := os.Stat(dir); err == nil {
-		return dir, nil
-	}
-
-	// Fallback: resolve the main repo root (worktree case) and try there.
+	// Always resolve the main repo root so project name derivation is
+	// consistent between worktrees and the main checkout.
 	root, err := resolveRepoRoot(cwd)
 	if err != nil {
+		// Last resort: try docs/plans/ relative to cwd.
+		dir := filepath.Join(cwd, "docs", "plans")
+		if _, errStat := os.Stat(dir); errStat == nil {
+			return dir, nil
+		}
 		return "", fmt.Errorf("plans directory not found in cwd and cannot resolve repo root: %w", err)
 	}
-	dir = filepath.Join(root, "docs", "plans")
+	dir := filepath.Join(root, "docs", "plans")
 	if _, err := os.Stat(dir); err != nil {
 		return "", fmt.Errorf("plans directory not found: %s", dir)
 	}
