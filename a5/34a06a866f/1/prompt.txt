@@ -1,0 +1,74 @@
+Implement Task 5: Final Build Verification and Full Test Suite
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Migrate klique from Charm v1 (bubbletea v1.3, lipgloss v1.1, bubbles v0.21) to Charm v2 (bubbletea v2, lipgloss v2, bubbles v2) — adopting the new declarative View API, restructured key/mouse events, and getter/setter component patterns.
+**Architecture:** All three core Charm libraries must upgrade atomically since they share types at module boundaries. The migration rewrites import paths (`charm.land/*/v2`), converts `View() string` to `View() tea.View`, replaces `tea.KeyMsg` struct matching with `tea.KeyPressMsg`, moves program options into declarative View fields, and updates bubbles component APIs to use getter/setter methods. huh v2 (experimental branch) replaces huh v0.8. glamour and harmonica remain at current versions.
+**Tech Stack:** Go 1.24+, charm.land/bubbletea/v2, charm.land/lipgloss/v2, charm.land/bubbles/v2, charm.land/huh/v2 (v2-exp branch), charmbracelet/glamour v0.10, charmbracelet/harmonica v0.2
+
+## Wave 3 of 3
+
+## Parallel Execution
+
+You are Task 5 of 2 in Wave 3. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+Complete verification of the migration — build, vet, race-detect test, and fix any remaining issues.
+
+**Files:**
+- Possibly modify: any file with remaining compilation or test failures
+
+> TDD note: this is a verification/fixup task. Steps 1-2 are the verification itself.
+
+**Step 1: write the failing test**
+
+```bash
+go build ./... && go vet ./... && go test ./... -count=1 -race
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go build ./... && go vet ./...
+```
+
+expected: PASS (or FAIL with specific remaining issues to fix)
+
+**Step 3: write minimal implementation**
+
+Fix any remaining issues:
+- Unused imports from removed v1 types (e.g., `cursor` package if no longer needed)
+- Type assertion failures from interface changes
+- Runtime panics from incorrect mouse/key event handling
+- Verify unused v1 module references are cleaned from `go.sum`
+- Run `go mod tidy` one final time
+
+**Step 4: run test to verify it passes**
+
+```bash
+go build ./... && go vet ./... && go test ./... -count=1 -race
+```
+
+expected: PASS — all tests green, no data races, no vet warnings
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "fix: resolve remaining charm v2 migration issues and verify full test suite"
+```
