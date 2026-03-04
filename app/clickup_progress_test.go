@@ -54,6 +54,28 @@ func TestPostClickUpProgressFallsBackToContentParse(t *testing.T) {
 	assert.Equal(t, "content789", taskID, "task ID must be parsed from content when field is empty")
 }
 
+// TestBuildClickUpComment verifies the ClickUp progress comment formatter
+// produces expected markdown for each event type.
+func TestBuildClickUpComment(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   string
+		detail  string
+		wantSub string
+	}{
+		{"plan_ready", "plan_ready", "3 tasks, 2 waves", "plan finalized"},
+		{"wave_complete", "wave_complete", "wave 1/2: 3/3 tasks", "wave 1/2"},
+		{"review_approved", "review_approved", "", "review approved"},
+		{"review_changes", "review_changes_requested", "fix the tests", "changes requested"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comment := buildClickUpProgressComment(tt.event, "my-feature", tt.detail)
+			assert.Contains(t, comment, tt.wantSub)
+		})
+	}
+}
+
 // TestSingleWavePlanSkipsWaveComment verifies that wave_complete comments are
 // NOT posted for single-wave plans. Only multi-wave plans emit intermediate
 // wave-complete comments; single-wave plans use the all-waves-complete event.
