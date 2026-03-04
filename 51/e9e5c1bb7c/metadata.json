@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "51e9e5c1bb7c",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-agent-skills-cli",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "skills_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/51/e9e5c1bb7c/0/metadata.json",
+      "transcript": "/51/e9e5c1bb7c/0/full.jsonl",
+      "context": "/51/e9e5c1bb7c/0/context.md",
+      "content_hash": "/51/e9e5c1bb7c/0/content_hash.txt",
+      "prompt": "/51/e9e5c1bb7c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6,
+    "cache_creation_tokens": 52561,
+    "cache_read_tokens": 192433,
+    "output_tokens": 1823,
+    "api_call_count": 6
+  }
+}
