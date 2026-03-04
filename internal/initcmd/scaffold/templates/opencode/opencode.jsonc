@@ -37,6 +37,37 @@
       "temperature": 0.3,
       "textVerbosity": "medium"
     },
+    "elaborator": {
+      "model": "{{ELABORATOR_MODEL}}",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow",
+          "{{HOME_DIR}}/.config/opencode/*": "allow",
+          "{{HOME_DIR}}/.config/opencode/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      {{ELABORATOR_EFFORT_LINE}}
+      "temperature": {{ELABORATOR_TEMP}},
+      "textVerbosity": "medium"
+    },
     "coder": {
       "model": "{{CODER_MODEL}}",
       "permission": {
