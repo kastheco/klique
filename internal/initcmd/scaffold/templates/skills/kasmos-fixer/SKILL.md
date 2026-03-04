@@ -293,6 +293,15 @@ kas task list --status implementing  # only implementing plans
 kas task list --status ready         # plans waiting to start
 ```
 
+### `kas task show <plan-file>`
+
+Print the plan's full markdown content from the task store. Use this to retrieve plan details
+without reading from disk.
+
+```bash
+kas task show my-plan.md
+```
+
 ### `kas task set-status <task-file> <status> --force`
 
 Force-override a task's status, bypassing the FSM transition table. Requires `--force`.
