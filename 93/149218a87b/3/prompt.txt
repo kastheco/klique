@@ -1,0 +1,112 @@
+Implement Task 3: Elaboration Prompt Builder
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add an automatic elaboration phase between plan-ready and coder-start that expands terse task descriptions into detailed implementation instructions, reducing coder decision-making and improving output quality.
+**Architecture:** When the user triggers "implement", kasmos spawns an elaborator agent before starting wave 1. The elaborator reads the plan from the task store, deeply reads the codebase files referenced by each task, and rewrites each task body with detailed implementation guidance (exact signatures, patterns from existing code, edge cases, error handling). It writes the enriched plan back to the store and signals completion via `elaborator-finished-<planfile>`. kasmos detects this signal, re-parses the updated plan into the wave orchestrator, and starts wave 1 normally. A context menu bypass ("implement directly") skips elaboration. The elaborator uses a configurable agent profile (`"elaborating"` phase) so a strong model can be assigned.
+**Tech Stack:** Go 1.24+, bubbletea v1.3.x, existing kasmos packages (config/taskfsm, config/taskparser, orchestration, session, app)
+
+## Wave 1 of 2
+
+## Parallel Execution
+
+You are Task 3 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `orchestration/prompt.go`
+- Test: `orchestration/prompt_test.go`
+
+**Step 1: write the failing test**
+
+Add to `prompt_test.go`:
+
+```go
+func TestBuildElaborationPrompt(t *testing.T) {
+	prompt := BuildElaborationPrompt("my-feature.md")
+
+	// Must reference the plan file for retrieval
+	assert.Contains(t, prompt, "kas task show my-feature.md")
+	// Must reference updating the plan
+	assert.Contains(t, prompt, "kas task update-content my-feature.md")
+	// Must reference the signal
+	assert.Contains(t, prompt, "elaborator-finished-my-feature.md")
+	// Must instruct to expand task bodies
+	assert.Contains(t, prompt, "implementation detail")
+	// Must instruct to preserve structure
+	assert.Contains(t, prompt, "preserve")
+	// Must reference reading the codebase
+	assert.Contains(t, prompt, "codebase")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./orchestration/... -run TestBuildElaborationPrompt -v
+```
+
+expected: FAIL — `BuildElaborationPrompt` undefined
+
+**Step 3: write minimal implementation**
+
+Add to `orchestration/prompt.go`:
+
+```go
+// BuildElaborationPrompt returns the prompt for an elaborator agent session.
+// The elaborator reads the plan, deeply reads the codebase for each task's files,
+// and expands task bodies with detailed implementation instructions.
+func BuildElaborationPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"You are the elaborator agent. Your job: enrich a plan's task descriptions with "+
+			"detailed implementation instructions so coder agents make fewer decisions.\n\n"+
+			"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\n\n"+
+			"## Instructions\n\n"+
+			"1. Retrieve the plan: `kas task show %[1]s`\n"+
+			"2. For each task, read the codebase files listed in its **Files:** section. "+
+			"Study existing patterns, interfaces, function signatures, error handling, "+
+			"and data flow in those files and their neighbors.\n"+
+			"3. Expand each task body with concrete implementation detail:\n"+
+			"   - Exact function signatures to create or modify\n"+
+			"   - Existing codebase patterns to follow (with file references)\n"+
+			"   - Edge cases and error handling requirements\n"+
+			"   - Import paths and dependencies\n"+
+			"   - Concrete code snippets where helpful\n"+
+			"4. Preserve the plan structure — do not change wave organization, "+
+			"task numbering, file lists, or the header fields. Only expand task bodies.\n"+
+			"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\n"+
+			"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\n",
+		planFile,
+	)
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./orchestration/... -run TestBuildElaborationPrompt -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add orchestration/prompt.go orchestration/prompt_test.go
+git commit -m "feat(task-3): add BuildElaborationPrompt for pre-implementation plan enrichment"
+```
