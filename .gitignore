@@ -18,6 +18,7 @@ dist/
 # Scaffold-generated skill symlinks (created by kq init, point to .agents/skills/)
 # Actual skill directories in .claude/skills/ (with SKILL.md) remain tracked.
 .opencode/skills/*
+!.opencode/skills/*/
 .codex/skills/*
 # .claude/skills/ has both real dirs and symlinks — ignore files (symlinks), keep dirs
 .claude/skills/*
