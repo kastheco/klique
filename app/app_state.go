@@ -21,6 +21,7 @@ import (
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -980,6 +981,44 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 		err := coderInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: coderInst, err: err}
 	}
+}
+
+// spawnElaborator creates and starts an elaborator agent session for the given plan.
+// The elaborator runs on the main branch (not in a worktree) since it only reads the
+// codebase and updates the task store — it does not modify files. When it finishes,
+// it writes an elaborator-finished-<planFile> sentinel that the metadata tick picks up
+// to advance the orchestrator from WaveStateElaborating to wave 1.
+func (m *home) spawnElaborator(planFile string, orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+	planName := taskstate.DisplayName(planFile)
+	prompt := orchestration.BuildElaborationPrompt(planFile)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:    fmt.Sprintf("%s-elaborator", planName),
+		Path:     m.activeRepoPath,
+		Program:  m.programForAgent(session.AgentTypeElaborator),
+		TaskFile: planFile,
+	})
+	if err != nil {
+		return m, m.handleError(err)
+	}
+	inst.AgentType = session.AgentTypeElaborator
+	inst.QueuedPrompt = prompt
+	inst.SetStatus(session.Loading)
+	inst.LoadingTotal = 6
+	inst.LoadingMessage = "elaborating plan..."
+
+	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+
+	startCmd := func() tea.Msg {
+		return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
+	}
+
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned elaborator for %s", planName),
+		auditlog.WithPlan(planFile),
+		auditlog.WithAgent(session.AgentTypeElaborator))
+
+	m.toastManager.Info(fmt.Sprintf("elaborating plan '%s' before implementation", planName))
+	return m, tea.Batch(tea.RequestWindowSize, startCmd, m.toastTickCmd())
 }
 
 func (m *home) materializeTaskFile(planFile, repoPath string) error {

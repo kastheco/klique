@@ -825,9 +825,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				waveSignals = taskfsm.ScanWaveSignals(signalsDir)
 			}
 
+			var elaborationSignals []taskfsm.ElaborationSignal
+			if signalsDir != "" {
+				elaborationSignals = taskfsm.ScanElaborationSignals(signalsDir)
+			}
+
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
 			time.Sleep(200 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, TmuxSessionCount: tmuxCount}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
@@ -1052,6 +1057,56 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			mdl, cmd := m.startNextWave(orch, entry)
+			m = mdl.(*home)
+			if cmd != nil {
+				signalCmds = append(signalCmds, cmd)
+			}
+		}
+
+		// Process elaboration signals — elaborator-finished files written by the
+		// elaborator agent once it has enriched all task bodies and stored the
+		// updated plan in the task store. On receipt we re-read the plan,
+		// replace it in the orchestrator, kill the elaborator instance, and
+		// start wave 1 normally.
+		for _, es := range msg.ElaborationSignals {
+			taskfsm.ConsumeElaborationSignal(es)
+
+			orch, exists := m.waveOrchestrators[es.TaskFile]
+			if !exists || orch.State() != WaveStateElaborating {
+				log.WarningLog.Printf("ignoring elaborator-finished signal for %q — no active elaboration", es.TaskFile)
+				continue
+			}
+
+			// Re-read the enriched plan from the store.
+			content, err := m.taskStore.GetContent(m.taskStoreProject, es.TaskFile)
+			if err != nil {
+				log.WarningLog.Printf("elaboration signal: could not read plan %s: %v", es.TaskFile, err)
+				continue
+			}
+			plan, err := taskparser.Parse(content)
+			if err != nil {
+				log.WarningLog.Printf("elaboration signal: could not parse enriched plan %s: %v", es.TaskFile, err)
+				continue
+			}
+
+			// Replace the plan in the orchestrator with the enriched version.
+			orch.UpdatePlan(plan)
+
+			// Kill the elaborator instance.
+			for _, inst := range m.nav.GetInstances() {
+				if inst.TaskFile == es.TaskFile && inst.AgentType == session.AgentTypeElaborator {
+					_ = inst.Kill()
+					break
+				}
+			}
+
+			entry, ok := m.taskState.Entry(es.TaskFile)
+			if !ok {
+				continue
+			}
+
+			m.toastManager.Info(fmt.Sprintf("plan elaborated — starting wave 1 for '%s'", taskstate.DisplayName(es.TaskFile)))
 			mdl, cmd := m.startNextWave(orch, entry)
 			m = mdl.(*home)
 			if cmd != nil {
@@ -2005,11 +2060,12 @@ type instanceMetadata struct {
 
 // metadataResultMsg carries all per-instance metadata collected by the async tick.
 type metadataResultMsg struct {
-	Results          []instanceMetadata
-	PlanState        *taskstate.TaskState // pre-loaded plan state (nil if dir not set)
-	Signals          []taskfsm.Signal     // agent sentinel files found this tick
-	WaveSignals      []taskfsm.WaveSignal // implement-wave-N signal files found this tick
-	TmuxSessionCount int                  // number of kas_-prefixed tmux sessions
+	Results            []instanceMetadata
+	PlanState          *taskstate.TaskState        // pre-loaded plan state (nil if dir not set)
+	Signals            []taskfsm.Signal            // agent sentinel files found this tick
+	WaveSignals        []taskfsm.WaveSignal        // implement-wave-N signal files found this tick
+	ElaborationSignals []taskfsm.ElaborationSignal // elaborator-finished signal files found this tick
+	TmuxSessionCount   int                         // number of kas_-prefixed tmux sessions
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 200ms. We iterate

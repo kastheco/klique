@@ -14,6 +14,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -1143,6 +1144,123 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	// Now it should complete.
 	assert.Empty(t, updated2.waveOrchestrators,
 		"orchestrator must be deleted after HasWorked is set and task completes")
+}
+
+// ---------------------------------------------------------------------------
+// Elaboration phase tests
+// ---------------------------------------------------------------------------
+
+// waveElabTestHarness bundles the minimal state needed for elaboration flow tests
+// so each test doesn't have to duplicate setup boilerplate.
+type waveElabTestHarness struct {
+	t        *testing.T
+	dir      string
+	plansDir string
+	store    taskstore.Store
+	h        *home
+}
+
+func newWaveElabTestHarness(t *testing.T) *waveElabTestHarness {
+	t.Helper()
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	ps, err := taskstate.Load(store, "proj", plansDir)
+	require.NoError(t, err)
+	fsm := taskfsm.New(store, "proj", plansDir)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:               context.Background(),
+		taskState:         ps,
+		taskStore:         store,
+		taskStoreProject:  "proj",
+		taskStateDir:      plansDir,
+		fsm:               fsm,
+		nav:               ui.NewNavigationPanel(&sp),
+		menu:              ui.NewMenu(),
+		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:      overlay.NewToastManager(&sp),
+		overlays:          overlay.NewManager(),
+		waveOrchestrators: make(map[string]*WaveOrchestrator),
+		activeRepoPath:    dir,
+		program:           "opencode",
+		appConfig:         config.DefaultConfig(),
+		state:             stateDefault,
+	}
+	return &waveElabTestHarness{t: t, dir: dir, plansDir: plansDir, store: store, h: h}
+}
+
+// registerPlan creates a plan entry in the store (with content and branch) and
+// reloads task state so the home struct picks up the new plan.
+func (th *waveElabTestHarness) registerPlan(planFile, content, branch string) {
+	th.t.Helper()
+	require.NoError(th.t, th.store.Create("proj", taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusReady,
+		Branch:   branch,
+		Content:  content,
+	}))
+	ps, err := taskstate.Load(th.store, "proj", th.plansDir)
+	require.NoError(th.t, err)
+	th.h.taskState = ps
+}
+
+// executeTaskStage delegates to the home struct's executeTaskStage.
+func (th *waveElabTestHarness) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
+	return th.h.executeTaskStage(planFile, stage)
+}
+
+// TestImplementTriggersElaborationBeforeWave1 verifies that triggering "implement"
+// creates a wave orchestrator in the elaborating state and spawns an elaborator instance.
+func TestImplementTriggersElaborationBeforeWave1(t *testing.T) {
+	h := newWaveElabTestHarness(t)
+
+	const planFile = "elab-test.md"
+	planContent := "**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\n**Files:**\n- Create: `foo.go`\n\nImplement foo."
+	h.registerPlan(planFile, planContent, "plan/elab-test")
+
+	model, _ := h.executeTaskStage(planFile, "implement")
+	m := model.(*home)
+
+	// Orchestrator should exist and be in elaborating state
+	orch, exists := m.waveOrchestrators[planFile]
+	require.True(t, exists, "orchestrator must be created")
+	assert.Equal(t, WaveStateElaborating, orch.State(),
+		"orchestrator must be in elaborating state, not running")
+
+	// An elaborator instance should have been spawned
+	var foundElaborator bool
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeElaborator {
+			foundElaborator = true
+			assert.Contains(t, inst.QueuedPrompt, "elaborator",
+				"elaborator prompt must reference the elaborator role")
+			break
+		}
+	}
+	assert.True(t, foundElaborator, "elaborator instance must be spawned")
+}
+
+// TestImplementDirectlySkipsElaboration verifies that "implement_direct" creates an
+// orchestrator in the running state without spawning an elaborator.
+func TestImplementDirectlySkipsElaboration(t *testing.T) {
+	h := newWaveElabTestHarness(t)
+
+	const planFile = "direct-test.md"
+	planContent := "**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\nDo it."
+	h.registerPlan(planFile, planContent, "plan/direct-test")
+
+	model, _ := h.executeTaskStage(planFile, "implement_direct")
+	m := model.(*home)
+
+	// Orchestrator should exist and be running (not elaborating)
+	orch, exists := m.waveOrchestrators[planFile]
+	require.True(t, exists, "orchestrator must be created")
+	assert.NotEqual(t, WaveStateElaborating, orch.State(),
+		"direct implement must skip elaboration")
 }
 
 // TestCoderExit_FocusesCoderInstance_BeforePushConfirm verifies that when a
