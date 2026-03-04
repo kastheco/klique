@@ -1013,6 +1013,16 @@ func (m *home) ingestTaskContent(planFile, repoPath string) {
 		log.WarningLog.Printf("ingestTaskContent: cannot read %s: %v", planPath, err)
 		return
 	}
+	// Don't clobber existing DB content with an empty disk file. The
+	// wave-annotation planner writes content directly to the DB via
+	// `kas task update-content`; overwriting with a stale/empty disk
+	// file causes a planning→replanning loop.
+	if strings.TrimSpace(string(data)) == "" {
+		if existing, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && strings.TrimSpace(existing) != "" {
+			log.WarningLog.Printf("ingestTaskContent: disk file empty but DB has content for %s — skipping overwrite", planFile)
+			return
+		}
+	}
 	if err := m.taskState.SetContent(planFile, string(data)); err != nil {
 		log.WarningLog.Printf("ingestTaskContent: cannot store content for %s: %v", planFile, err)
 	}
