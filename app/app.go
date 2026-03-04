@@ -235,7 +235,8 @@ type home struct {
 
 	// taskState holds the parsed plan-state.json for the active repo. Nil when missing.
 	taskState *taskstate.TaskState
-	// taskStateDir is the directory containing plan-state.json (docs/plans/ of active repo).
+	// taskStateDir is the legacy plans directory path. Retained only for JSON migration.
+	// New code should not depend on this path existing on disk.
 	taskStateDir string
 	// signalsDir is the directory where agent sentinel files are written.
 	// Defaults to <repoRoot>/.kasmos/signals/ (project-local, gitignored).
@@ -371,7 +372,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		state:                 stateDefault,
 		appState:              appState,
 		activeRepoPath:        activeRepoPath,
-		taskStateDir:          filepath.Join(activeRepoPath, "docs", "plans"),
+		taskStateDir:          filepath.Join(activeRepoPath, "docs", "plans"), // legacy: only for JSON migration
 		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
 		taskStoreProject:      project,
 		instanceFinalizers:    make(map[*session.Instance]func()),
@@ -1705,6 +1706,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.instance.AutoYes = true
 		}
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
+	case tea.PasteMsg:
+		// Forward pasted text to the embedded PTY in focus mode.
+		if m.state == stateFocusAgent && m.previewTerminal != nil {
+			if content := msg.Content; content != "" {
+				// Wrap in bracketed paste so the program inside tmux sees it
+				// as a paste event rather than typed input.
+				data := []byte("\x1b[200~" + content + "\x1b[201~")
+				_ = m.previewTerminal.SendKey(data)
+			}
+			return m, nil
+		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)

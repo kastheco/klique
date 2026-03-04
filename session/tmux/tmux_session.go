@@ -322,6 +322,14 @@ func (t *TmuxSession) Start(workDir string) error {
 		log.InfoLog.Printf("Warning: failed to hide status bar for session %s: %v", t.sanitizedName, err)
 	}
 
+	// Set escape-time to 0 so ESC is forwarded immediately to the inner program.
+	// Without this, tmux waits its default 500ms to disambiguate ESC from escape
+	// sequences, making ESC feel broken in focus/interactive mode.
+	escapeTimeCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "escape-time", "0")
+	if err := t.cmdExec.Run(escapeTimeCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to set escape-time for session %s: %v", t.sanitizedName, err)
+	}
+
 	// Inject KASMOS_MANAGED=1 so agents can detect they're running under kasmos orchestration.
 	envCmd := exec.Command("tmux", "set-environment", "-t", t.sanitizedName, "KASMOS_MANAGED", "1")
 	if err := t.cmdExec.Run(envCmd); err != nil {
@@ -404,6 +412,11 @@ func (t *TmuxSession) Restore() error {
 	statusCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "status", "off")
 	if err := t.cmdExec.Run(statusCmd); err != nil {
 		log.InfoLog.Printf("Warning: failed to hide status bar for restored session %s: %v", t.sanitizedName, err)
+	}
+	// Idempotently set escape-time to 0 for immediate ESC forwarding.
+	escapeTimeCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "escape-time", "0")
+	if err := t.cmdExec.Run(escapeTimeCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to set escape-time for restored session %s: %v", t.sanitizedName, err)
 	}
 	return nil
 }
