@@ -37,7 +37,7 @@ func NewPermissionOverlay(instanceTitle, description, pattern string) *Permissio
 		instanceTitle: instanceTitle,
 		description:   description,
 		pattern:       pattern,
-		selectedIdx:   0, // default to "allow once" (opencode's default cursor position)
+		selectedIdx:   1, // default to "allow always"
 		width:         50,
 	}
 }
