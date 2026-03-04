@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.8",
   "checkpoint_id": "34a24be70b61",
+  "session_id": "ses_348f35218ffe74QdJQoCgxB9nf",
   "strategy": "manual-commit",
+  "created_at": "2026-03-04T04:16:35.726793273Z",
   "branch": "plan/fix-agents-reading-from-disk",
   "checkpoints_count": 0,
   "files_touched": [
@@ -12,27 +14,24 @@
     "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
     "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md"
   ],
-  "sessions": [
-    {
-      "metadata": "/34/a24be70b61/0/metadata.json",
-      "transcript": "/34/a24be70b61/0/full.jsonl",
-      "context": "/34/a24be70b61/0/context.md",
-      "content_hash": "/34/a24be70b61/0/content_hash.txt",
-      "prompt": "/34/a24be70b61/0/prompt.txt"
-    },
-    {
-      "metadata": "/34/a24be70b61/1/metadata.json",
-      "transcript": "/34/a24be70b61/1/full.jsonl",
-      "context": "/34/a24be70b61/1/context.md",
-      "content_hash": "/34/a24be70b61/1/content_hash.txt",
-      "prompt": "/34/a24be70b61/1/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "4aaeda7d38b8",
+  "checkpoint_transcript_start": 8,
+  "transcript_lines_at_start": 8,
   "token_usage": {
     "input_tokens": 10,
     "cache_creation_tokens": 5786,
     "cache_read_tokens": 730356,
     "output_tokens": 2181,
     "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T04:16:35.559326301Z",
+    "agent_lines": 0,
+    "human_added": 64,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 64,
+    "agent_percentage": 0
   }
 }
