@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772582783802,
-      "updated": 1772584566638
+      "updated": 1772584587830
     }
   },
   "messages": [
@@ -3434,7 +3434,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772584566629
+          "created": 1772584566629,
+          "completed": 1772584574565
         },
         "parentID": "REDACTED",
         "modelID": "claude-opus-4-6",
@@ -3447,15 +3448,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 96168,
+          "input": 1,
+          "output": 135,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 95117,
+            "write": 915
           }
         },
         "variant": "high",
+        "finish": "tool-calls",
         "id": "msg_cb645ff65001hTLPRw9d1j0BbG",
         "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy"
       },
@@ -3483,22 +3486,433 @@
           "callID": "toolu_013sobNFNWqGBwTNRhwZLubK",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add cmd/instance.go cmd/instance_test.go && git commit -m \"fix: use unmodified program for opencode suffix check in buildResumeCommand (reviewer self-fix)\"",
               "description": "Commit reviewer self-fix"
             },
+            "output": "[plan/instance-management-cli 19c78ef] fix: use unmodified program for opencode suffix check in buildResumeCommand (reviewer self-fix)\n 2 files changed, 20 insertions(+), 1 deletion(-)\n",
+            "title": "Commit reviewer self-fix",
             "metadata": {
-              "output": "",
-              "description": "Commit reviewer self-fix"
+              "output": "[plan/instance-management-cli 19c78ef] fix: use unmodified program for opencode suffix check in buildResumeCommand (reviewer self-fix)\n 2 files changed, 20 insertions(+), 1 deletion(-)\n",
+              "exit": 0,
+              "description": "Commit reviewer self-fix",
+              "truncated": false
             },
             "time": {
-              "start": 1772584572466
+              "start": 1772584572465,
+              "end": 1772584574555
             }
           },
           "id": "prt_cb64610eb0018Mq273Vkhm0Fl2",
           "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
           "messageID": "msg_cb645ff65001hTLPRw9d1j0BbG"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "cost": 0,
+          "tokens": {
+            "total": 96168,
+            "input": 1,
+            "output": 135,
+            "reasoning": 0,
+            "cache": {
+              "read": 95117,
+              "write": 915
+            }
+          },
+          "id": "prt_cb6461e5c001Vxwa5wdbQRh4hO",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb645ff65001hTLPRw9d1j0BbG"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772584574567,
+          "completed": 1772584579227
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 96326,
+          "input": 1,
+          "output": 87,
+          "reasoning": 0,
+          "cache": {
+            "read": 96032,
+            "write": 206
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb6461e67001uhNh4oE2sCV5do",
+        "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "id": "prt_cb6462c4e001BKjVKE4Cz4eVLi",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb6461e67001uhNh4oE2sCV5do"
+        },
+        {
+          "type": "text",
+          "text": "Now write the approval signal:",
+          "time": {
+            "start": 1772584578573,
+            "end": 1772584578573
+          },
+          "id": "prt_cb6462c4e002ARdMgK2vcbpyjT",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb6461e67001uhNh4oE2sCV5do"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals",
+              "description": "Create signals directory"
+            },
+            "output": "",
+            "title": "Create signals directory",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Create signals directory",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772584579113,
+              "end": 1772584579116
+            }
+          },
+          "id": "prt_cb6462e1b001KRY0KzvpywbocX",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb6461e67001uhNh4oE2sCV5do"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "cost": 0,
+          "tokens": {
+            "total": 96326,
+            "input": 1,
+            "output": 87,
+            "reasoning": 0,
+            "cache": {
+              "read": 96032,
+              "write": 206
+            }
+          },
+          "id": "prt_cb6463092001b9O6eG1iEjxKv4",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb6461e67001uhNh4oE2sCV5do"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772584579229,
+          "completed": 1772584587816
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 96564,
+          "input": 1,
+          "output": 212,
+          "reasoning": 0,
+          "cache": {
+            "read": 96238,
+            "write": 113
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb646309d0010ZuBtvT3WZaCpl",
+        "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "id": "prt_cb6463dff001F66LQfZNBHW7Cr",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646309d0010ZuBtvT3WZaCpl"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/.kasmos/signals/review-approved-instance-management-cli.md",
+              "content": "Approved. all 5 subcommands (list, kill, pause, resume, send) implemented with correct field-for-field InstanceData mirror, round-trip data preservation tests, status validation, kasTmuxName parity, and PlanFile migration. one bug self-fixed: buildResumeCommand used modified program variable for opencode suffix check causing log redirection to be skipped when agent type was set — fixed to use rec.Program and added regression test.\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": ".kasmos/signals/review-approved-instance-management-cli.md",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/session/storage.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/config/state.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/session/tmux/tmux_session.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 379,
+                        "character": 6
+                      },
+                      "end": {
+                        "line": 379,
+                        "character": 33
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using min"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 523,
+                        "character": 22
+                      },
+                      "end": {
+                        "line": 523,
+                        "character": 35
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#stringsseq"
+                    },
+                    "source": "stringsseq",
+                    "message": "Ranging over SplitSeq is more efficient"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 594,
+                        "character": 22
+                      },
+                      "end": {
+                        "line": 594,
+                        "character": 35
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#stringsseq"
+                    },
+                    "source": "stringsseq",
+                    "message": "Ranging over SplitSeq is more efficient"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 639,
+                        "character": 22
+                      },
+                      "end": {
+                        "line": 639,
+                        "character": 35
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#stringsseq"
+                    },
+                    "source": "stringsseq",
+                    "message": "Ranging over SplitSeq is more efficient"
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/session/tmux/tmux_session_test.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/session/tmux/shell.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/cmd/cmd.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/main.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/check.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 137,
+                        "character": 74
+                      },
+                      "end": {
+                        "line": 137,
+                        "character": 86
+                      }
+                    },
+                    "severity": 3,
+                    "code": "unusedparams",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/gopls/internal/analysis/unusedparams#unusedparams"
+                    },
+                    "source": "unusedparams",
+                    "message": "unused parameter: verbose"
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/cmd/instance.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/cmd/instance_test.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 68,
+                        "character": 25
+                      },
+                      "end": {
+                        "line": 68,
+                        "character": 36
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#any"
+                    },
+                    "source": "any",
+                    "message": "interface{} can be replaced by any"
+                  }
+                ]
+              },
+              "filepath": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli/.kasmos/signals/review-approved-instance-management-cli.md",
+              "exists": false,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772584587771,
+              "end": 1772584587774
+            }
+          },
+          "id": "prt_cb6463e00001WHjq25t00MdzVH",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646309d0010ZuBtvT3WZaCpl"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "cost": 0,
+          "tokens": {
+            "total": 96564,
+            "input": 1,
+            "output": 212,
+            "reasoning": 0,
+            "cache": {
+              "read": 96238,
+              "write": 113
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646309d0010ZuBtvT3WZaCpl"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772584587819,
+          "completed": 1772584603097
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 97038,
+          "input": 1,
+          "output": 458,
+          "reasoning": 0,
+          "cache": {
+            "read": 96351,
+            "write": 228
+          }
+        },
+        "variant": "high",
+        "finish": "stop",
+        "id": "msg_cb646522b001xb2v2FWercmObC",
+        "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "id": "prt_cb6465b1c001E8PLGj1kiLDPIR",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646522b001xb2v2FWercmObC"
+        },
+        {
+          "type": "text",
+          "text": "## Review Complete — Approved\n\n### Summary\n\nThe implementation adds a `kas instance` CLI command tree with 5 subcommands: `list`, `kill`, `pause`, `resume`, and `send`. The code is well-structured and carefully avoids the import cycle between `cmd` and `session/tmux` by maintaining a local `instanceRecord` type that mirrors `session.InstanceData` field-for-field.\n\n### Checklist Results\n\n| Area                           | Verdict                                                                  |\n| ------------------------------ | ------------------------------------------------------------------------ |\n| Spec compliance                | All subcommands present and functional                                   |\n| Field parity with InstanceData | All 25+ fields match including nested Worktree/DiffStats                 |\n| Round-trip data preservation   | Tested — removal and update preserve all fields of sibling records       |\n| kasTmuxName parity             | Matches `session/tmux.toKasTmuxName` implementation exactly                |\n| PlanFile→TaskFile migration    | Custom UnmarshalJSON handles legacy `plan_file` key                        |\n| Status validation              | Correct for all 4 actions × all status combinations                      |\n| Error handling                 | Errors returned properly; best-effort ops (tmux kill) silenced correctly |\n| Test coverage                  | 22 test cases covering list/find/validate/state-mutation/resume/naming   |\n| Tests pass                     | `go test ./...` — all green                                                |\n| Typos                          | Clean                                                                    |\n\n### Self-Fixed Issue\n\n- **`cmd/instance.go:152`** — `buildResumeCommand` checked `strings.HasSuffix(program, \"opencode\")` on the modified local `program` variable. After appending `--agent TYPE` on line 148, the suffix was no longer \"opencode\", silently skipping log redirection for opencode agents with a role. Fixed to use `rec.Program` (the unmodified base) matching the original `TmuxSession.Start()` behavior. Added `TestBuildResumeCommand_OpencodeWithAgent` regression test.",
+          "time": {
+            "start": 1772584603058,
+            "end": 1772584603058
+          },
+          "id": "prt_cb6465b1d001aYrKWaI4AepzD0",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646522b001xb2v2FWercmObC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "7f16537180aa2a479d18b6792855685b2ccdcf09",
+          "cost": 0,
+          "tokens": {
+            "total": 97038,
+            "input": 1,
+            "output": 458,
+            "reasoning": 0,
+            "cache": {
+              "read": 96351,
+              "write": 228
+            }
+          },
+          "id": "prt_cb6468dd1001ey47SjNP7RWWzx",
+          "sessionID": "ses_349d534c5ffeAxb7UYy86FR5qy",
+          "messageID": "msg_cb646522b001xb2v2FWercmObC"
         }
       ]
     }
