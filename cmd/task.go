@@ -171,6 +171,26 @@ func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.S
 	return os.WriteFile(filepath.Join(signalsDir, signalName), nil, 0o644)
 }
 
+// executeTaskShow retrieves plan content from the task store and returns it
+// as raw markdown. Returns an error if the plan doesn't exist or has no content.
+func executeTaskShow(plansDir, planFile string, store taskstore.Store) (string, error) {
+	ps, err := loadTaskState(plansDir, store)
+	if err != nil {
+		return "", err
+	}
+	if _, ok := ps.Entry(planFile); !ok {
+		return "", fmt.Errorf("task not found: %s", planFile)
+	}
+	content, err := ps.GetContent(planFile)
+	if err != nil {
+		return "", fmt.Errorf("get content for %s: %w", planFile, err)
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("no content stored for %s", planFile)
+	}
+	return content, nil
+}
+
 // executeTaskLinkClickUp iterates all plans in the given project, reads their
 // content, parses the ClickUp task ID from the "**Source:** ClickUp <ID>" line,
 // and stores it in the clickup_task_id field for any plan that has an ID in its
@@ -316,6 +336,26 @@ func NewTaskCmd() *cobra.Command {
 	}
 	implementCmd.Flags().IntVar(&waveNum, "wave", 1, "wave number to trigger (default: 1)")
 	planCmd.AddCommand(implementCmd)
+
+	// kq task show
+	showCmd := &cobra.Command{
+		Use:   "show <plan-file>",
+		Short: "print plan content from the task store",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			plansDir, err := resolvePlansDir()
+			if err != nil {
+				return err
+			}
+			content, err := executeTaskShow(plansDir, args[0], resolveStore(plansDir))
+			if err != nil {
+				return err
+			}
+			fmt.Print(content)
+			return nil
+		},
+	}
+	planCmd.AddCommand(showCmd)
 
 	// kq plan link-clickup
 	var linkProject string
