@@ -49,8 +49,8 @@ func executeTaskRegister(plansDir, planFile, branch, topic, description string, 
 
 // executeTaskList returns a formatted string listing all plans, optionally
 // filtered by status. Exported for testing without cobra plumbing.
-func executeTaskList(plansDir, statusFilter string, store taskstore.Store) string {
-	ps, err := loadTaskState(plansDir, store)
+func executeTaskList(project, statusFilter string, store taskstore.Store) string {
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -84,11 +84,11 @@ func executeTaskListWithStore(storeURL, project string) string {
 
 // executeTaskSetStatus force-overrides a plan's status, bypassing the FSM.
 // Requires force=true to prevent accidental misuse.
-func executeTaskSetStatus(plansDir, planFile, status string, force bool, store taskstore.Store) error {
+func executeTaskSetStatus(project, planFile, status string, force bool, store taskstore.Store) error {
 	if !force {
 		return fmt.Errorf("--force required to override task status (this bypasses the FSM)")
 	}
-	ps, err := loadTaskState(plansDir, store)
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func executeTaskSetStatus(plansDir, planFile, status string, force bool, store t
 }
 
 // executeTaskTransition applies a named FSM event to a plan and returns the new status.
-func executeTaskTransition(plansDir, planFile, event string, store taskstore.Store) (string, error) {
+func executeTaskTransition(project, planFile, event string, store taskstore.Store) (string, error) {
 	eventMap := map[string]taskfsm.Event{
 		"plan_start":         taskfsm.PlanStart,
 		"planner_finished":   taskfsm.PlannerFinished,
@@ -118,11 +118,11 @@ func executeTaskTransition(plansDir, planFile, event string, store taskstore.Sto
 		}
 		return "", fmt.Errorf("unknown event %q; valid events: %s", event, strings.Join(names, ", "))
 	}
-	fsm := newFSM(plansDir, store)
+	fsm := newFSMByProject(project, store)
 	if err := fsm.Transition(planFile, fsmEvent); err != nil {
 		return "", err
 	}
-	ps, err := loadTaskState(plansDir, store)
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return "", err
 	}
@@ -132,12 +132,12 @@ func executeTaskTransition(plansDir, planFile, event string, store taskstore.Sto
 
 // executeTaskImplement transitions a plan into implementing state and writes
 // a wave signal file so the TUI metadata tick can pick it up.
-func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.Store) error {
+func executeTaskImplement(repoRoot, project, planFile string, wave int, store taskstore.Store) error {
 	if wave < 1 {
 		return fmt.Errorf("wave number must be >= 1, got %d", wave)
 	}
-	fsm := newFSM(plansDir, store)
-	ps, err := loadTaskState(plansDir, store)
+	fsm := newFSMByProject(project, store)
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return err
 	}
@@ -161,8 +161,6 @@ func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.S
 	}
 
 	// Write the wave signal file consumed by the TUI metadata tick.
-	// plansDir is <repo>/docs/plans — go up two levels to reach the repo root.
-	repoRoot := filepath.Dir(filepath.Dir(plansDir))
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	if err := os.MkdirAll(signalsDir, 0o755); err != nil {
 		return err
@@ -173,8 +171,8 @@ func executeTaskImplement(plansDir, planFile string, wave int, store taskstore.S
 
 // executeTaskShow retrieves plan content from the task store and returns it
 // as raw markdown. Returns an error if the plan doesn't exist or has no content.
-func executeTaskShow(plansDir, planFile string, store taskstore.Store) (string, error) {
-	ps, err := loadTaskState(plansDir, store)
+func executeTaskShow(project, planFile string, store taskstore.Store) (string, error) {
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return "", err
 	}
@@ -241,11 +239,11 @@ func NewTaskCmd() *cobra.Command {
 		Use:   "list",
 		Short: "list all tasks with status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			fmt.Print(executeTaskList(plansDir, statusFilter, resolveStore(plansDir)))
+			fmt.Print(executeTaskList(project, statusFilter, resolveStore(project)))
 			return nil
 		},
 	}
@@ -282,11 +280,11 @@ func NewTaskCmd() *cobra.Command {
 		Short: "force-override a task's status (bypasses FSM)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			if err := executeTaskSetStatus(plansDir, args[0], args[1], forceFlag, resolveStore(plansDir)); err != nil {
+			if err := executeTaskSetStatus(project, args[0], args[1], forceFlag, resolveStore(project)); err != nil {
 				return err
 			}
 			fmt.Printf("%s → %s\n", args[0], args[1])
@@ -302,11 +300,11 @@ func NewTaskCmd() *cobra.Command {
 		Short: "apply an FSM event to a task",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			newStatus, err := executeTaskTransition(plansDir, args[0], args[1], resolveStore(plansDir))
+			newStatus, err := executeTaskTransition(project, args[0], args[1], resolveStore(project))
 			if err != nil {
 				return err
 			}
@@ -323,11 +321,11 @@ func NewTaskCmd() *cobra.Command {
 		Short: "trigger implementation of a specific wave",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			repoRoot, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			if err := executeTaskImplement(plansDir, args[0], waveNum, resolveStore(plansDir)); err != nil {
+			if err := executeTaskImplement(repoRoot, project, args[0], waveNum, resolveStore(project)); err != nil {
 				return err
 			}
 			fmt.Printf("implementation triggered: %s wave %d\n", args[0], waveNum)
@@ -343,11 +341,11 @@ func NewTaskCmd() *cobra.Command {
 		Short: "print plan content from the task store",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			content, err := executeTaskShow(plansDir, args[0], resolveStore(plansDir))
+			content, err := executeTaskShow(project, args[0], resolveStore(project))
 			if err != nil {
 				return err
 			}
@@ -363,24 +361,21 @@ func NewTaskCmd() *cobra.Command {
 		Use:   "link-clickup",
 		Short: "backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, project := resolveStoreConfig("")
+			_, repoProject, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			store, project := resolveStoreConfig(repoProject)
 			if store == nil {
-				var err error
 				store, err = localSQLiteStore()
 				if err != nil {
 					return fmt.Errorf("open local task store: %w", err)
 				}
 				defer store.Close()
+				project = repoProject
 			}
 			if linkProject != "" {
 				project = linkProject
-			}
-			if project == "" {
-				plansDir, err := resolvePlansDir()
-				if err != nil {
-					return err
-				}
-				project = projectFromPlansDir(plansDir)
 			}
 			n, err := executeTaskLinkClickUp(project, store)
 			if err != nil {
@@ -398,12 +393,11 @@ func NewTaskCmd() *cobra.Command {
 
 // resolveStoreConfig returns the remote store and project name from config.
 // Returns (nil, "") when no remote store is configured.
-func resolveStoreConfig(plansDir string) (taskstore.Store, string) {
+func resolveStoreConfig(project string) (taskstore.Store, string) {
 	cfg := config.LoadConfig()
 	if cfg.DatabaseURL == "" {
 		return nil, ""
 	}
-	project := projectFromPlansDir(plansDir)
 	store, err := taskstore.NewStoreFromConfig(cfg.DatabaseURL, project)
 	if err != nil || store == nil {
 		return nil, ""
@@ -413,6 +407,7 @@ func resolveStoreConfig(plansDir string) (taskstore.Store, string) {
 
 // projectFromPlansDir extracts the repo/project name from a plansDir path.
 // plansDir is typically <repo>/docs/plans — go up two levels.
+// Deprecated: prefer resolveRepoInfo() which derives the project name directly.
 func projectFromPlansDir(plansDir string) string {
 	return filepath.Base(filepath.Dir(filepath.Dir(plansDir)))
 }
@@ -430,7 +425,14 @@ func localSQLiteStore() (taskstore.Store, error) {
 
 // loadTaskState loads task state using the store backend.
 // When store is nil, falls back to the local SQLite store.
+// Deprecated: use loadTaskStateByProject for new code paths.
 func loadTaskState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
+	return loadTaskStateByProject(projectFromPlansDir(plansDir), store)
+}
+
+// loadTaskStateByProject loads task state using the store backend and a project name.
+// When store is nil, falls back to the local SQLite store.
+func loadTaskStateByProject(project string, store taskstore.Store) (*taskstate.TaskState, error) {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()
@@ -438,55 +440,64 @@ func loadTaskState(plansDir string, store taskstore.Store) (*taskstate.TaskState
 			return nil, fmt.Errorf("open local task store: %w", err)
 		}
 	}
-	return taskstate.Load(store, projectFromPlansDir(plansDir), plansDir)
+	return taskstate.Load(store, project, "")
 }
 
 // newFSM creates a PlanStateMachine backed by the given store.
 // When store is nil, falls back to the local SQLite store.
+// Deprecated: use newFSMByProject for new code paths.
 func newFSM(plansDir string, store taskstore.Store) *taskfsm.TaskStateMachine {
+	return newFSMByProject(projectFromPlansDir(plansDir), store)
+}
+
+// newFSMByProject creates a TaskStateMachine backed by the given store and project name.
+// When store is nil, falls back to the local SQLite store.
+func newFSMByProject(project string, store taskstore.Store) *taskfsm.TaskStateMachine {
 	if store == nil {
 		var err error
 		store, err = localSQLiteStore()
 		if err != nil {
-			// Panic is acceptable here — this is a CLI tool and the store
-			// is required for all operations.
-			panic("newFSM: open local task store: " + err.Error())
+			panic("newFSMByProject: open local task store: " + err.Error())
 		}
 	}
-	project := projectFromPlansDir(plansDir)
-	return taskfsm.New(store, project, plansDir)
+	return taskfsm.New(store, project, "")
 }
 
 // resolveStore returns the remote task store from config, or nil if not
 // configured or unreachable.
-func resolveStore(plansDir string) taskstore.Store {
-	store, _ := resolveStoreConfig(plansDir)
+func resolveStore(project string) taskstore.Store {
+	store, _ := resolveStoreConfig(project)
 	if store != nil && store.Ping() == nil {
 		return store
 	}
 	return nil
 }
 
-// resolvePlansDir resolves docs/plans/ relative to the main repository root.
-// It always resolves the repo root first (handling worktrees correctly) so that
-// projectFromPlansDir derives a consistent project name regardless of whether
-// the command is run from a worktree or the main checkout.
-func resolvePlansDir() (string, error) {
+// resolveRepoInfo resolves the main repository root and derives the project
+// name from it. Handles both regular repos and git worktrees. The project name
+// is the basename of the repo root directory (e.g. "kasai" for /home/kas/dev/kasai).
+//
+// This replaces the legacy resolvePlansDir() which required docs/plans/ to exist.
+func resolveRepoInfo() (repoRoot, project string, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("get cwd: %w", err)
+		return "", "", fmt.Errorf("get cwd: %w", err)
 	}
 
-	// Always resolve the main repo root so project name derivation is
-	// consistent between worktrees and the main checkout.
 	root, err := resolveRepoRoot(cwd)
 	if err != nil {
-		// Last resort: try docs/plans/ relative to cwd.
-		dir := filepath.Join(cwd, "docs", "plans")
-		if _, errStat := os.Stat(dir); errStat == nil {
-			return dir, nil
-		}
-		return "", fmt.Errorf("plans directory not found in cwd and cannot resolve repo root: %w", err)
+		return "", "", fmt.Errorf("cannot resolve repo root: %w", err)
+	}
+	return root, filepath.Base(root), nil
+}
+
+// resolvePlansDir resolves docs/plans/ relative to the main repository root.
+// Deprecated: only used for legacy migration and register (which reads .md from disk).
+// Prefer resolveRepoInfo() for all other operations.
+func resolvePlansDir() (string, error) {
+	root, _, err := resolveRepoInfo()
+	if err != nil {
+		return "", err
 	}
 	dir := filepath.Join(root, "docs", "plans")
 	if _, err := os.Stat(dir); err != nil {

@@ -15,20 +15,13 @@ import (
 )
 
 // setupTestPlanState creates an in-memory SQLite store pre-populated with two
-// test plans and returns the store and a temp plans directory.
-// The plans directory is structured as <root>/docs/plans so that
-// projectFromPlansDir returns a stable project name derived from <root>.
-func setupTestPlanState(t *testing.T) (taskstore.Store, string) {
+// test plans and returns the store, the repo root, and the project name.
+func setupTestPlanState(t *testing.T) (taskstore.Store, string, string) {
 	t.Helper()
 	store := taskstore.NewTestSQLiteStore(t)
 
-	// Build a plans dir with the expected structure so projectFromPlansDir
-	// returns a known project name.
 	root := t.TempDir()
-	plansDir := filepath.Join(root, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
-	project := projectFromPlansDir(plansDir)
+	project := filepath.Base(root)
 
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename:    "test-plan.md",
@@ -45,11 +38,11 @@ func setupTestPlanState(t *testing.T) (taskstore.Store, string) {
 		CreatedAt:   time.Now(),
 	}))
 
-	return store, plansDir
+	return store, root, project
 }
 
 func TestPlanList(t *testing.T) {
-	store, dir := setupTestPlanState(t)
+	store, _, project := setupTestPlanState(t)
 
 	tests := []struct {
 		name           string
@@ -71,7 +64,7 @@ func TestPlanList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := executeTaskList(dir, tt.statusFilter, store)
+			output := executeTaskList(project, tt.statusFilter, store)
 			for _, want := range tt.wantContains {
 				assert.Contains(t, output, want)
 			}
@@ -83,63 +76,61 @@ func TestPlanList(t *testing.T) {
 }
 
 func TestPlanSetStatus(t *testing.T) {
-	store, dir := setupTestPlanState(t)
+	store, _, project := setupTestPlanState(t)
 
 	// Requires --force
-	err := executeTaskSetStatus(dir, "test-plan.md", "done", false, store)
+	err := executeTaskSetStatus(project, "test-plan.md", "done", false, store)
 	assert.Error(t, err, "should require --force flag")
 
 	// Valid override
-	err = executeTaskSetStatus(dir, "test-plan.md", "done", true, store)
+	err = executeTaskSetStatus(project, "test-plan.md", "done", true, store)
 	require.NoError(t, err)
 
-	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
 	entry, ok := ps.Entry("test-plan.md")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.Status("done"), entry.Status)
 
 	// Invalid status
-	err = executeTaskSetStatus(dir, "test-plan.md", "bogus", true, store)
+	err = executeTaskSetStatus(project, "test-plan.md", "bogus", true, store)
 	assert.Error(t, err, "should reject invalid status")
 }
 
 func TestPlanTransition(t *testing.T) {
-	store, dir := setupTestPlanState(t)
+	store, _, project := setupTestPlanState(t)
 
 	// Valid transition: ready → planning via plan_start
-	newStatus, err := executeTaskTransition(dir, "test-plan.md", "plan_start", store)
+	newStatus, err := executeTaskTransition(project, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 
 	// Invalid transition (plan is now in "planning" state)
-	_, err = executeTaskTransition(dir, "test-plan.md", "review_approved", store)
+	_, err = executeTaskTransition(project, "test-plan.md", "review_approved", store)
 	assert.Error(t, err)
 }
 
 func TestPlanCLI_EndToEnd(t *testing.T) {
-	store, dir := setupTestPlanState(t)
-	// dir is <root>/docs/plans; signals go to <root>/.kasmos/signals/
-	repoRoot := filepath.Dir(filepath.Dir(dir))
+	store, repoRoot, project := setupTestPlanState(t)
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// List all
-	output := executeTaskList(dir, "", store)
+	output := executeTaskList(project, "", store)
 	assert.Contains(t, output, "ready")
 	assert.Contains(t, output, "implementing")
 
 	// Transition ready → planning
-	status, err := executeTaskTransition(dir, "test-plan.md", "plan_start", store)
+	status, err := executeTaskTransition(project, "test-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", status)
 
 	// Force set back to ready
-	err = executeTaskSetStatus(dir, "test-plan.md", "ready", true, store)
+	err = executeTaskSetStatus(project, "test-plan.md", "ready", true, store)
 	require.NoError(t, err)
 
 	// Implement with wave signal
-	err = executeTaskImplement(dir, "test-plan.md", 2, store)
+	err = executeTaskImplement(repoRoot, project, "test-plan.md", 2, store)
 	require.NoError(t, err)
 
 	// Verify signal file
@@ -151,24 +142,22 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	assert.Contains(t, names, "implement-wave-2-test-plan.md")
 
 	// Verify final status
-	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
 	entry, _ := ps.Entry("test-plan.md")
 	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
 }
 
 func TestPlanImplement(t *testing.T) {
-	store, dir := setupTestPlanState(t)
-	// dir is <root>/docs/plans; signals go to <root>/.kasmos/signals/
-	repoRoot := filepath.Dir(filepath.Dir(dir))
+	store, repoRoot, project := setupTestPlanState(t)
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	err := executeTaskImplement(dir, "test-plan.md", 1, store)
+	err := executeTaskImplement(repoRoot, project, "test-plan.md", 1, store)
 	require.NoError(t, err)
 
 	// Verify plan transitioned to implementing
-	ps, err := taskstate.Load(store, projectFromPlansDir(dir), dir)
+	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
 	entry, _ := ps.Entry("test-plan.md")
 	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
@@ -186,20 +175,22 @@ func TestPlanImplement(t *testing.T) {
 }
 
 func TestPlanRegister(t *testing.T) {
-	store, dir := setupTestPlanState(t)
-	project := projectFromPlansDir(dir)
+	store, repoRoot, project := setupTestPlanState(t)
+	// Register still needs docs/plans on disk (it reads .md files).
+	plansDir := filepath.Join(repoRoot, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
 	planFile := "new-feature.md"
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, planFile),
+		filepath.Join(plansDir, planFile),
 		[]byte("# New Feature Plan\n\nSome content."),
 		0o644,
 	))
 
-	err := executeTaskRegister(dir, planFile, "", "", "", store)
+	err := executeTaskRegister(plansDir, planFile, "", "", "", store)
 	require.NoError(t, err)
 
-	ps, err := taskstate.Load(store, project, dir)
+	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
 	entry, ok := ps.Entry(planFile)
 	require.True(t, ok)
@@ -210,20 +201,21 @@ func TestPlanRegister(t *testing.T) {
 }
 
 func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
-	store, dir := setupTestPlanState(t)
-	project := projectFromPlansDir(dir)
+	store, repoRoot, project := setupTestPlanState(t)
+	plansDir := filepath.Join(repoRoot, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
 	planFile := "stub-plan.md"
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, planFile),
+		filepath.Join(plansDir, planFile),
 		[]byte("# Stub Plan\n"),
 		0o644,
 	))
 
-	err := executeTaskRegister(dir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
+	err := executeTaskRegister(plansDir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
 	require.NoError(t, err)
 
-	ps, err := taskstate.Load(store, project, dir)
+	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
 	entry, ok := ps.Entry(planFile)
 	require.True(t, ok)
@@ -306,10 +298,8 @@ func TestResolveRepoRoot_MainRepo(t *testing.T) {
 }
 
 func TestPlanCLI_FromWorktreeContext(t *testing.T) {
-	// Create main repo structure with docs/plans
+	// Create main repo structure
 	mainRepo := t.TempDir()
-	plansDir := filepath.Join(mainRepo, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "wt-plans"), 0o755))
 
 	// Create a worktree that has a .git file pointing to the main repo's worktrees dir
@@ -321,21 +311,19 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 		[]byte("../..\n"), 0o644,
 	))
 
-	// Test resolvePlansDir end-to-end by chdir'ing into the worktree.
-	// The worktree has no docs/plans/ — resolvePlansDir must resolve via
-	// resolveRepoRoot back to the main repo.
+	// Test resolveRepoInfo end-to-end by chdir'ing into the worktree.
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, os.Chdir(origDir)) })
 	require.NoError(t, os.Chdir(worktree))
 
-	resolvedPlansDir, err := resolvePlansDir()
+	repoRoot, project, err := resolveRepoInfo()
 	require.NoError(t, err)
-	assert.Equal(t, plansDir, resolvedPlansDir)
+	assert.Equal(t, mainRepo, repoRoot)
+	assert.Equal(t, filepath.Base(mainRepo), project)
 
 	// Populate the store and verify plan operations succeed
 	store := taskstore.NewTestSQLiteStore(t)
-	project := projectFromPlansDir(resolvedPlansDir)
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename:    "worktree-plan.md",
 		Status:      taskstore.StatusReady,
@@ -344,18 +332,18 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 		CreatedAt:   time.Now(),
 	}))
 
-	// executeTaskList should succeed from the resolved plansDir
-	output := executeTaskList(resolvedPlansDir, "", store)
+	// executeTaskList should succeed with project name
+	output := executeTaskList(project, "", store)
 	assert.Contains(t, output, "worktree-plan.md")
 
 	// executeTaskSetStatus should succeed
-	err = executeTaskSetStatus(resolvedPlansDir, "worktree-plan.md", "done", true, store)
+	err = executeTaskSetStatus(project, "worktree-plan.md", "done", true, store)
 	require.NoError(t, err)
 
 	// executeTaskTransition: reset then transition
-	err = executeTaskSetStatus(resolvedPlansDir, "worktree-plan.md", "ready", true, store)
+	err = executeTaskSetStatus(project, "worktree-plan.md", "ready", true, store)
 	require.NoError(t, err)
-	newStatus, err := executeTaskTransition(resolvedPlansDir, "worktree-plan.md", "plan_start", store)
+	newStatus, err := executeTaskTransition(project, "worktree-plan.md", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 }
@@ -386,47 +374,35 @@ func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 }
 
 func TestExecuteTaskShow(t *testing.T) {
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
 	store := taskstore.NewTestSQLiteStore(t)
-	project := projectFromPlansDir(plansDir)
+	project := "test-show-project"
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename: "my-plan.md",
 		Status:   taskstore.StatusReady,
 		Content:  "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n",
 	}))
 
-	content, err := executeTaskShow(plansDir, "my-plan.md", store)
+	content, err := executeTaskShow(project, "my-plan.md", store)
 	require.NoError(t, err)
 	assert.Equal(t, "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n", content)
 }
 
 func TestExecuteTaskShow_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
 	store := taskstore.NewTestSQLiteStore(t)
-	_, err := executeTaskShow(plansDir, "nonexistent.md", store)
+	_, err := executeTaskShow("test-project", "nonexistent.md", store)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestExecuteTaskShow_EmptyContent(t *testing.T) {
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
 	store := taskstore.NewTestSQLiteStore(t)
-	project := projectFromPlansDir(plansDir)
+	project := "test-empty-project"
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
 		Filename: "empty.md",
 		Status:   taskstore.StatusReady,
 	}))
 
-	_, err := executeTaskShow(plansDir, "empty.md", store)
+	_, err := executeTaskShow(project, "empty.md", store)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no content")
 }

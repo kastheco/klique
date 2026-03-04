@@ -96,7 +96,7 @@ func ApplyTransition(current Status, event Event) (Status, error) {
 // TaskStateMachine is the sole writer of plan state. All plan status mutations
 // must flow through Transition(). The store handles concurrency via SQLite.
 type TaskStateMachine struct {
-	dir     string          // docs/plans/ directory (for file operations)
+	dir     string          // legacy: retained for file rename operations (may be empty)
 	store   taskstore.Store // always non-nil
 	project string          // project name used with the store
 }

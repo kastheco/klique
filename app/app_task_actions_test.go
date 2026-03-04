@@ -38,7 +38,7 @@ func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	prompt := buildWaveAnnotationPrompt("my-feature.md")
 	assert.Contains(t, prompt, "kas task show my-feature.md", "prompt must reference kas task show")
 	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
-	assert.Contains(t, prompt, "commit", "prompt must instruct the planner to commit after annotation")
+	assert.Contains(t, prompt, "kas task", "prompt must instruct the planner to store content via kas task")
 	assert.Contains(t, prompt, "planner-finished-", "prompt must include the signal file instruction")
 	assert.NotContains(t, prompt, "The plan at docs/plans/", "prompt must not reference disk path for reading")
 }

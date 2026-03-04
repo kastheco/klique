@@ -66,9 +66,8 @@ func BuildWaveAnnotationPrompt(planFile string) string {
 			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
 			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
 			"After annotating:\n"+
-			"1. Write the updated plan to docs/plans/%[1]s\n"+
-			"2. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
-			"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
+			"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\n"+
+			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
 			"Do not edit plan-state.json directly.",
 		planFile,
 	)
