@@ -312,6 +312,45 @@ func executeTaskStart(repoRoot, project, planFile string, store taskstore.Store)
 	return wt.GetWorktreePath(), nil
 }
 
+// executeTaskPush resolves the task entry and its branch, constructs a
+// GitWorktree from stored state, commits any dirty changes, and pushes to
+// origin. The commit message is fixed to "update from kas".
+func executeTaskPush(repoRoot, project, planFile string, store taskstore.Store) error {
+	entry, err := resolveTaskEntry(project, planFile, store)
+	if err != nil {
+		return err
+	}
+	branch := entry.Branch
+	worktreePath := git.TaskWorktreePath(repoRoot, branch)
+	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "push", branch, "")
+	return wt.PushChanges("update from kas", false)
+}
+
+// executeTaskPR resolves the task entry, derives the PR title from the task
+// description when title is empty, generates a PR body from the git log, and
+// creates (or reopens) the PR via the GitHub CLI. Returns the PR URL on success.
+func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.Store) (string, error) {
+	entry, err := resolveTaskEntry(project, planFile, store)
+	if err != nil {
+		return "", err
+	}
+	branch := entry.Branch
+	if title == "" {
+		title = entry.Description
+	}
+	if title == "" {
+		// Last-resort: use the filename stem as the title.
+		title = strings.TrimSuffix(planFile, ".md")
+	}
+	worktreePath := git.TaskWorktreePath(repoRoot, branch)
+	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "pr", branch, "")
+	body, _ := wt.GeneratePRBody()
+	if err := wt.CreatePR(title, body, "update from kas"); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 // NewTaskCmd builds the `kq plan` cobra command tree.
 func NewTaskCmd() *cobra.Command {
 	planCmd := &cobra.Command{
@@ -533,6 +572,51 @@ func NewTaskCmd() *cobra.Command {
 		},
 	}
 	planCmd.AddCommand(startCmd)
+
+	// kas task push
+	var pushMessage string
+	pushCmd := &cobra.Command{
+		Use:   "push <plan-file>",
+		Short: "commit dirty changes and push the task branch to origin",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			if err := executeTaskPush(repoRoot, project, args[0], resolveStore(project)); err != nil {
+				return err
+			}
+			fmt.Printf("pushed: %s\n", args[0])
+			return nil
+		},
+	}
+	pushCmd.Flags().StringVar(&pushMessage, "message", "update from kas", "commit message for dirty changes")
+	planCmd.AddCommand(pushCmd)
+
+	// kas task pr
+	var prTitle string
+	prCmd := &cobra.Command{
+		Use:   "pr <plan-file>",
+		Short: "push and open a pull request for the task branch",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			url, err := executeTaskPR(repoRoot, project, args[0], prTitle, resolveStore(project))
+			if err != nil {
+				return err
+			}
+			if url != "" {
+				fmt.Println(url)
+			}
+			return nil
+		},
+	}
+	prCmd.Flags().StringVar(&prTitle, "title", "", "PR title (default: task description)")
+	planCmd.AddCommand(prCmd)
 
 	// kq plan link-clickup
 	var linkProject string

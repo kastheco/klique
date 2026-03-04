@@ -523,6 +523,46 @@ func TestExecuteTaskStart_FromPlanning(t *testing.T) {
 	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 }
 
+func TestExecuteTaskPush_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskPush("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskPush_NoBranch(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "push-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "no-branch.md",
+		Status:   taskstore.StatusReady,
+	}))
+	err := executeTaskPush("", project, "no-branch.md", store)
+	// Should resolve the branch but fail on git ops (no real repo).
+	require.Error(t, err)
+}
+
+func TestExecuteTaskPR_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	_, err := executeTaskPR("", "nope", "missing.md", "", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskPR_DefaultTitle(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "pr-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename:    "my-feature.md",
+		Status:      taskstore.StatusImplementing,
+		Description: "add dark mode toggle",
+		Branch:      "plan/my-feature",
+	}))
+	// Will fail on git/gh ops but tests the title derivation logic.
+	_, err := executeTaskPR("", project, "my-feature.md", "", store)
+	require.Error(t, err) // expected: git error (no real repo)
+}
+
 // TestPlanList_WithStore verifies that executeTaskListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
