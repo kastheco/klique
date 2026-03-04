@@ -1,0 +1,2101 @@
+{
+  "info": {
+    "id": "ses_345701de5ffeVNomfdMG0l4uL7",
+    "slug": "swift-cactus",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+    "title": "Elaborator agent type and profile resolution",
+    "version": "1.2.17",
+    "summary": {
+      "additions": 245,
+      "deletions": 1,
+      "files": 6
+    },
+    "time": {
+      "created": 1772656517658,
+      "updated": 1772656576195
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772656517673
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "config/taskfsm/elaboration_signal.go",
+              "before": "",
+              "after": "package taskfsm\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n)\n\n// ElaborationSignal represents a parsed elaborator-finished signal file.\ntype ElaborationSignal struct {\n\tTaskFile string\n\tfilePath string // full path for deletion\n}\n\nconst elaborationPrefix = \"elaborator-finished-\"\n\n// ParseElaborationSignal attempts to parse a filename as an elaboration signal.\nfunc ParseElaborationSignal(filename string) (ElaborationSignal, bool) {\n\tif !strings.HasPrefix(filename, elaborationPrefix) {\n\t\treturn ElaborationSignal{}, false\n\t}\n\tplanFile := strings.TrimPrefix(filename, elaborationPrefix)\n\tif planFile == \"\" {\n\t\treturn ElaborationSignal{}, false\n\t}\n\tplanFile = filepath.Base(planFile)\n\treturn ElaborationSignal{TaskFile: planFile}, true\n}\n\n// ScanElaborationSignals reads the given signals directory and returns parsed\n// elaboration signals. Like wave signals, these are handled separately from FSM\n// signals — they don't map to state transitions but trigger orchestration actions.\nfunc ScanElaborationSignals(signalsDir string) []ElaborationSignal {\n\tentries, err := os.ReadDir(signalsDir)\n\tif err != nil {\n\t\treturn nil\n\t}\n\tvar signals []ElaborationSignal\n\tfor _, entry := range entries {\n\t\tif entry.IsDir() || strings.HasPrefix(entry.Name(), \".\") {\n\t\t\tcontinue\n\t\t}\n\t\tes, ok := ParseElaborationSignal(entry.Name())\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\t\tes.filePath = filepath.Join(signalsDir, entry.Name())\n\t\tsignals = append(signals, es)\n\t}\n\treturn signals\n}\n\n// ConsumeElaborationSignal deletes the signal file after processing.\nfunc ConsumeElaborationSignal(es ElaborationSignal) {\n\t_ = os.Remove(es.filePath)\n}\n",
+              "additions": 56,
+              "deletions": 0,
+              "status": "added"
+            },
+            {
+              "file": "config/taskfsm/elaboration_signal_test.go",
+              "before": "",
+              "after": "package taskfsm\n\nimport (\n\t\"os\"\n\t\"path/filepath\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestParseElaborationSignal(t *testing.T) {\n\ttests := []struct {\n\t\tname     string\n\t\tfilename string\n\t\twantOk   bool\n\t\twantFile string\n\t}{\n\t\t{\n\t\t\tname:     \"valid elaboration signal\",\n\t\t\tfilename: \"elaborator-finished-my-feature.md\",\n\t\t\twantOk:   true,\n\t\t\twantFile: \"my-feature.md\",\n\t\t},\n\t\t{\n\t\t\tname:     \"not an elaboration signal\",\n\t\t\tfilename: \"planner-finished-test.md\",\n\t\t\twantOk:   false,\n\t\t},\n\t\t{\n\t\t\tname:     \"empty plan file\",\n\t\t\tfilename: \"elaborator-finished-\",\n\t\t\twantOk:   false,\n\t\t},\n\t}\n\tfor _, tt := range tests {\n\t\tt.Run(tt.name, func(t *testing.T) {\n\t\t\tsig, ok := ParseElaborationSignal(tt.filename)\n\t\t\tassert.Equal(t, tt.wantOk, ok)\n\t\t\tif ok {\n\t\t\t\tassert.Equal(t, tt.wantFile, sig.TaskFile)\n\t\t\t}\n\t\t})\n\t}\n}\n\nfunc TestScanElaborationSignals(t *testing.T) {\n\tdir := t.TempDir()\n\tsignalsDir := filepath.Join(dir, \"signals\")\n\trequire.NoError(t, os.MkdirAll(signalsDir, 0o755))\n\n\t// Write an elaboration signal and a non-matching file\n\trequire.NoError(t, os.WriteFile(\n\t\tfilepath.Join(signalsDir, \"elaborator-finished-test.md\"), nil, 0o644))\n\trequire.NoError(t, os.WriteFile(\n\t\tfilepath.Join(signalsDir, \"planner-finished-test.md\"), nil, 0o644))\n\n\tsignals := ScanElaborationSignals(signalsDir)\n\trequire.Len(t, signals, 1)\n\tassert.Equal(t, \"test.md\", signals[0].TaskFile)\n}\n\nfunc TestConsumeElaborationSignal(t *testing.T) {\n\tdir := t.TempDir()\n\tpath := filepath.Join(dir, \"elaborator-finished-test.md\")\n\trequire.NoError(t, os.WriteFile(path, nil, 0o644))\n\n\tsig := ElaborationSignal{TaskFile: \"test.md\", filePath: path}\n\tConsumeElaborationSignal(sig)\n\n\t_, err := os.Stat(path)\n\tassert.True(t, os.IsNotExist(err))\n}\n",
+              "additions": 73,
+              "deletions": 0,
+              "status": "added"
+            },
+            {
+              "file": "orchestration/engine.go",
+              "before": "package orchestration\n\nimport (\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// WaveState represents the current state of wave orchestration for a plan.\ntype WaveState int\n\nconst (\n\tWaveStateIdle         WaveState = iota // Not started\n\tWaveStateRunning                       // Current wave's tasks are running\n\tWaveStateWaveComplete                  // Current wave finished, awaiting user confirmation\n\tWaveStateAllComplete                   // All waves finished\n)\n\n// taskStatus tracks the completion state of a single task.\ntype taskStatus int\n\nconst (\n\ttaskPending taskStatus = iota\n\ttaskRunning\n\ttaskComplete\n\ttaskFailed\n)\n\n// WaveOrchestrator manages wave-based parallel task execution for a single plan.\ntype WaveOrchestrator struct {\n\ttaskFile          string\n\tplan              *taskparser.Plan\n\tstate             WaveState\n\tcurrentWave       int                // 0-indexed into plan.Waves\n\ttaskStates        map[int]taskStatus // task number → status\n\twaitingForConfirm bool               // true once we've shown the wave-complete dialog\n}\n\n// NewWaveOrchestrator creates an orchestrator for the given plan.\nfunc NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator {\n\treturn &WaveOrchestrator{\n\t\ttaskFile:   planFile,\n\t\tplan:       plan,\n\t\tstate:      WaveStateIdle,\n\t\ttaskStates: make(map[int]taskStatus),\n\t}\n}\n\n// State returns the current orchestration state.\nfunc (o *WaveOrchestrator) State() WaveState {\n\treturn o.state\n}\n\n// TaskFile returns the plan filename this orchestrator manages.\nfunc (o *WaveOrchestrator) TaskFile() string {\n\treturn o.taskFile\n}\n\n// TotalWaves returns the number of waves in the plan.\nfunc (o *WaveOrchestrator) TotalWaves() int {\n\treturn len(o.plan.Waves)\n}\n\n// TotalTasks returns the total number of tasks across all waves.\nfunc (o *WaveOrchestrator) TotalTasks() int {\n\ttotal := 0\n\tfor _, w := range o.plan.Waves {\n\t\ttotal += len(w.Tasks)\n\t}\n\treturn total\n}\n\n// CurrentWaveNumber returns the 1-indexed wave number currently active.\nfunc (o *WaveOrchestrator) CurrentWaveNumber() int {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn 0\n\t}\n\treturn o.plan.Waves[o.currentWave].Number\n}\n\n// CurrentWaveTasks returns the tasks in the current wave.\nfunc (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn nil\n\t}\n\treturn o.plan.Waves[o.currentWave].Tasks\n}\n\n// StartNextWave advances to the next wave and returns its tasks.\n// Returns nil if all waves are complete.\nfunc (o *WaveOrchestrator) StartNextWave() []taskparser.Task {\n\tif o.state == WaveStateAllComplete {\n\t\treturn nil\n\t}\n\tif o.state == WaveStateWaveComplete {\n\t\to.currentWave++\n\t\to.waitingForConfirm = false // reset for next wave\n\t}\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\to.state = WaveStateAllComplete\n\t\treturn nil\n\t}\n\n\to.state = WaveStateRunning\n\ttasks := o.plan.Waves[o.currentWave].Tasks\n\tfor _, t := range tasks {\n\t\to.taskStates[t.Number] = taskRunning\n\t}\n\treturn tasks\n}\n\n// MarkTaskComplete marks a task as successfully completed.\n// If all tasks in the current wave are done, transitions state.\n// Idempotent: calling again on an already-resolved task is a no-op.\nfunc (o *WaveOrchestrator) MarkTaskComplete(taskNumber int) {\n\tif o.taskStates[taskNumber] != taskRunning {\n\t\treturn\n\t}\n\to.taskStates[taskNumber] = taskComplete\n\to.checkWaveComplete()\n}\n\n// MarkTaskFailed marks a task as failed.\n// Other tasks in the wave continue. Wave completes when all tasks resolve.\n// Idempotent: calling again on an already-resolved task is a no-op.\nfunc (o *WaveOrchestrator) MarkTaskFailed(taskNumber int) {\n\tif o.taskStates[taskNumber] != taskRunning {\n\t\treturn\n\t}\n\to.taskStates[taskNumber] = taskFailed\n\to.checkWaveComplete()\n}\n\n// NeedsConfirm returns true if the wave just completed and the user hasn't\n// been shown the confirmation dialog yet. Calling this marks the dialog as shown.\nfunc (o *WaveOrchestrator) NeedsConfirm() bool {\n\tif o.state == WaveStateWaveComplete && !o.waitingForConfirm {\n\t\to.waitingForConfirm = true\n\t\treturn true\n\t}\n\treturn false\n}\n\n// ResetConfirm resets the one-shot confirm latch so NeedsConfirm() can return true\n// again on the next check. Call this when the user cancels a wave-advance confirmation\n// so the prompt re-appears on the subsequent metadata tick (fixes deadlock).\nfunc (o *WaveOrchestrator) ResetConfirm() {\n\to.waitingForConfirm = false\n}\n\n// RetryFailedTasks transitions all failed tasks in the current wave back to running\n// and sets the orchestrator state to WaveStateRunning. Returns the tasks that were\n// retried (previously failed). Returns nil if there are no failed tasks to retry.\nfunc (o *WaveOrchestrator) RetryFailedTasks() []taskparser.Task {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn nil\n\t}\n\tvar tasks []taskparser.Task\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif o.taskStates[t.Number] == taskFailed {\n\t\t\to.taskStates[t.Number] = taskRunning\n\t\t\ttasks = append(tasks, t)\n\t\t}\n\t}\n\tif len(tasks) > 0 {\n\t\to.state = WaveStateRunning\n\t\to.waitingForConfirm = false\n\t}\n\treturn tasks\n}\n\n// IsCurrentWaveComplete returns true if all tasks in the current wave have resolved.\nfunc (o *WaveOrchestrator) IsCurrentWaveComplete() bool {\n\treturn o.state == WaveStateWaveComplete || o.state == WaveStateAllComplete\n}\n\n// CompletedTaskCount returns the number of completed tasks in the current wave.\nfunc (o *WaveOrchestrator) CompletedTaskCount() int {\n\treturn o.countCurrentWaveByStatus(taskComplete)\n}\n\n// FailedTaskCount returns the number of failed tasks in the current wave.\nfunc (o *WaveOrchestrator) FailedTaskCount() int {\n\treturn o.countCurrentWaveByStatus(taskFailed)\n}\n\n// IsTaskRunning returns true if the given task number is currently in the running state.\n// Used to gate the \"Mark complete\" context menu action.\nfunc (o *WaveOrchestrator) IsTaskRunning(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskRunning\n}\n\n// IsTaskComplete returns true if the given task number has completed successfully.\nfunc (o *WaveOrchestrator) IsTaskComplete(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskComplete\n}\n\n// IsTaskFailed returns true if the given task number has failed.\nfunc (o *WaveOrchestrator) IsTaskFailed(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskFailed\n}\n\n// HeaderContext returns the plan header for inclusion in task prompts.\nfunc (o *WaveOrchestrator) HeaderContext() string {\n\treturn o.plan.HeaderContext()\n}\n\n// ShouldPostWaveCompleteComment returns true when an intermediate wave_complete\n// comment should be posted. Single-wave plans return false — they use the\n// \"all waves complete\" event instead. Nil-receiver safe.\nfunc (o *WaveOrchestrator) ShouldPostWaveCompleteComment() bool {\n\treturn o != nil && o.TotalWaves() > 1\n}\n\n// RestoreToWave fast-forwards the orchestrator wave-by-wave to targetWave,\n// auto-completing all tasks in earlier waves, then marks the specified task\n// numbers as complete in the target wave. Remaining tasks in the target wave\n// are left in the running state.\nfunc (o *WaveOrchestrator) RestoreToWave(targetWave int, completedTasks []int) {\n\tcompletedSet := make(map[int]bool, len(completedTasks))\n\tfor _, n := range completedTasks {\n\t\tcompletedSet[n] = true\n\t}\n\n\tfor o.currentWave < len(o.plan.Waves) {\n\t\to.StartNextWave()\n\t\tif o.CurrentWaveNumber() == targetWave {\n\t\t\tbreak\n\t\t}\n\t\t// Mark all tasks in this earlier wave as complete to advance.\n\t\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\t\to.MarkTaskComplete(t.Number)\n\t\t}\n\t}\n\n\t// Apply the actual task states for the target wave.\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif completedSet[t.Number] {\n\t\t\to.MarkTaskComplete(t.Number)\n\t\t}\n\t\t// Running tasks stay in taskRunning.\n\t}\n}\n\n// BuildTaskPrompt is a convenience wrapper that builds the task prompt for a\n// task in the current wave.\nfunc (o *WaveOrchestrator) BuildTaskPrompt(task taskparser.Task, peerCount int) string {\n\treturn BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)\n}\n\nfunc (o *WaveOrchestrator) checkWaveComplete() {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn\n\t}\n\ttasks := o.plan.Waves[o.currentWave].Tasks\n\tfor _, t := range tasks {\n\t\ts := o.taskStates[t.Number]\n\t\tif s == taskRunning || s == taskPending {\n\t\t\treturn // still in progress\n\t\t}\n\t}\n\t// All tasks resolved — check if more waves remain\n\tif o.currentWave+1 >= len(o.plan.Waves) {\n\t\to.state = WaveStateAllComplete\n\t} else {\n\t\to.state = WaveStateWaveComplete\n\t}\n}\n\nfunc (o *WaveOrchestrator) countCurrentWaveByStatus(s taskStatus) int {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn 0\n\t}\n\tcount := 0\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif o.taskStates[t.Number] == s {\n\t\t\tcount++\n\t\t}\n\t}\n\treturn count\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// WaveState represents the current state of wave orchestration for a plan.\ntype WaveState int\n\nconst (\n\tWaveStateIdle         WaveState = iota // Not started\n\tWaveStateElaborating                   // Waiting for elaborator to enrich task descriptions\n\tWaveStateRunning                       // Current wave's tasks are running\n\tWaveStateWaveComplete                  // Current wave finished, awaiting user confirmation\n\tWaveStateAllComplete                   // All waves finished\n)\n\n// taskStatus tracks the completion state of a single task.\ntype taskStatus int\n\nconst (\n\ttaskPending taskStatus = iota\n\ttaskRunning\n\ttaskComplete\n\ttaskFailed\n)\n\n// WaveOrchestrator manages wave-based parallel task execution for a single plan.\ntype WaveOrchestrator struct {\n\ttaskFile          string\n\tplan              *taskparser.Plan\n\tstate             WaveState\n\tcurrentWave       int                // 0-indexed into plan.Waves\n\ttaskStates        map[int]taskStatus // task number → status\n\twaitingForConfirm bool               // true once we've shown the wave-complete dialog\n}\n\n// NewWaveOrchestrator creates an orchestrator for the given plan.\nfunc NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator {\n\treturn &WaveOrchestrator{\n\t\ttaskFile:   planFile,\n\t\tplan:       plan,\n\t\tstate:      WaveStateIdle,\n\t\ttaskStates: make(map[int]taskStatus),\n\t}\n}\n\n// State returns the current orchestration state.\nfunc (o *WaveOrchestrator) State() WaveState {\n\treturn o.state\n}\n\n// TaskFile returns the plan filename this orchestrator manages.\nfunc (o *WaveOrchestrator) TaskFile() string {\n\treturn o.taskFile\n}\n\n// TotalWaves returns the number of waves in the plan.\nfunc (o *WaveOrchestrator) TotalWaves() int {\n\treturn len(o.plan.Waves)\n}\n\n// TotalTasks returns the total number of tasks across all waves.\nfunc (o *WaveOrchestrator) TotalTasks() int {\n\ttotal := 0\n\tfor _, w := range o.plan.Waves {\n\t\ttotal += len(w.Tasks)\n\t}\n\treturn total\n}\n\n// CurrentWaveNumber returns the 1-indexed wave number currently active.\nfunc (o *WaveOrchestrator) CurrentWaveNumber() int {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn 0\n\t}\n\treturn o.plan.Waves[o.currentWave].Number\n}\n\n// CurrentWaveTasks returns the tasks in the current wave.\nfunc (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn nil\n\t}\n\treturn o.plan.Waves[o.currentWave].Tasks\n}\n\n// SetElaborating puts the orchestrator into the elaborating state.\n// StartNextWave is blocked until UpdatePlan is called.\nfunc (o *WaveOrchestrator) SetElaborating() {\n\to.state = WaveStateElaborating\n}\n\n// UpdatePlan replaces the plan with an elaborated version and resets the\n// orchestrator to Idle so waves can begin. Task states are cleared since\n// no tasks have started yet.\nfunc (o *WaveOrchestrator) UpdatePlan(plan *taskparser.Plan) {\n\to.plan = plan\n\to.state = WaveStateIdle\n\to.currentWave = 0\n\to.taskStates = make(map[int]taskStatus)\n}\n\n// StartNextWave advances to the next wave and returns its tasks.\n// Returns nil if all waves are complete or if elaboration is in progress.\nfunc (o *WaveOrchestrator) StartNextWave() []taskparser.Task {\n\tif o.state == WaveStateElaborating {\n\t\treturn nil\n\t}\n\tif o.state == WaveStateAllComplete {\n\t\treturn nil\n\t}\n\tif o.state == WaveStateWaveComplete {\n\t\to.currentWave++\n\t\to.waitingForConfirm = false // reset for next wave\n\t}\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\to.state = WaveStateAllComplete\n\t\treturn nil\n\t}\n\n\to.state = WaveStateRunning\n\ttasks := o.plan.Waves[o.currentWave].Tasks\n\tfor _, t := range tasks {\n\t\to.taskStates[t.Number] = taskRunning\n\t}\n\treturn tasks\n}\n\n// MarkTaskComplete marks a task as successfully completed.\n// If all tasks in the current wave are done, transitions state.\n// Idempotent: calling again on an already-resolved task is a no-op.\nfunc (o *WaveOrchestrator) MarkTaskComplete(taskNumber int) {\n\tif o.taskStates[taskNumber] != taskRunning {\n\t\treturn\n\t}\n\to.taskStates[taskNumber] = taskComplete\n\to.checkWaveComplete()\n}\n\n// MarkTaskFailed marks a task as failed.\n// Other tasks in the wave continue. Wave completes when all tasks resolve.\n// Idempotent: calling again on an already-resolved task is a no-op.\nfunc (o *WaveOrchestrator) MarkTaskFailed(taskNumber int) {\n\tif o.taskStates[taskNumber] != taskRunning {\n\t\treturn\n\t}\n\to.taskStates[taskNumber] = taskFailed\n\to.checkWaveComplete()\n}\n\n// NeedsConfirm returns true if the wave just completed and the user hasn't\n// been shown the confirmation dialog yet. Calling this marks the dialog as shown.\nfunc (o *WaveOrchestrator) NeedsConfirm() bool {\n\tif o.state == WaveStateWaveComplete && !o.waitingForConfirm {\n\t\to.waitingForConfirm = true\n\t\treturn true\n\t}\n\treturn false\n}\n\n// ResetConfirm resets the one-shot confirm latch so NeedsConfirm() can return true\n// again on the next check. Call this when the user cancels a wave-advance confirmation\n// so the prompt re-appears on the subsequent metadata tick (fixes deadlock).\nfunc (o *WaveOrchestrator) ResetConfirm() {\n\to.waitingForConfirm = false\n}\n\n// RetryFailedTasks transitions all failed tasks in the current wave back to running\n// and sets the orchestrator state to WaveStateRunning. Returns the tasks that were\n// retried (previously failed). Returns nil if there are no failed tasks to retry.\nfunc (o *WaveOrchestrator) RetryFailedTasks() []taskparser.Task {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn nil\n\t}\n\tvar tasks []taskparser.Task\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif o.taskStates[t.Number] == taskFailed {\n\t\t\to.taskStates[t.Number] = taskRunning\n\t\t\ttasks = append(tasks, t)\n\t\t}\n\t}\n\tif len(tasks) > 0 {\n\t\to.state = WaveStateRunning\n\t\to.waitingForConfirm = false\n\t}\n\treturn tasks\n}\n\n// IsCurrentWaveComplete returns true if all tasks in the current wave have resolved.\nfunc (o *WaveOrchestrator) IsCurrentWaveComplete() bool {\n\treturn o.state == WaveStateWaveComplete || o.state == WaveStateAllComplete\n}\n\n// CompletedTaskCount returns the number of completed tasks in the current wave.\nfunc (o *WaveOrchestrator) CompletedTaskCount() int {\n\treturn o.countCurrentWaveByStatus(taskComplete)\n}\n\n// FailedTaskCount returns the number of failed tasks in the current wave.\nfunc (o *WaveOrchestrator) FailedTaskCount() int {\n\treturn o.countCurrentWaveByStatus(taskFailed)\n}\n\n// IsTaskRunning returns true if the given task number is currently in the running state.\n// Used to gate the \"Mark complete\" context menu action.\nfunc (o *WaveOrchestrator) IsTaskRunning(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskRunning\n}\n\n// IsTaskComplete returns true if the given task number has completed successfully.\nfunc (o *WaveOrchestrator) IsTaskComplete(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskComplete\n}\n\n// IsTaskFailed returns true if the given task number has failed.\nfunc (o *WaveOrchestrator) IsTaskFailed(taskNumber int) bool {\n\treturn o.taskStates[taskNumber] == taskFailed\n}\n\n// HeaderContext returns the plan header for inclusion in task prompts.\nfunc (o *WaveOrchestrator) HeaderContext() string {\n\treturn o.plan.HeaderContext()\n}\n\n// ShouldPostWaveCompleteComment returns true when an intermediate wave_complete\n// comment should be posted. Single-wave plans return false — they use the\n// \"all waves complete\" event instead. Nil-receiver safe.\nfunc (o *WaveOrchestrator) ShouldPostWaveCompleteComment() bool {\n\treturn o != nil && o.TotalWaves() > 1\n}\n\n// RestoreToWave fast-forwards the orchestrator wave-by-wave to targetWave,\n// auto-completing all tasks in earlier waves, then marks the specified task\n// numbers as complete in the target wave. Remaining tasks in the target wave\n// are left in the running state.\nfunc (o *WaveOrchestrator) RestoreToWave(targetWave int, completedTasks []int) {\n\tcompletedSet := make(map[int]bool, len(completedTasks))\n\tfor _, n := range completedTasks {\n\t\tcompletedSet[n] = true\n\t}\n\n\tfor o.currentWave < len(o.plan.Waves) {\n\t\to.StartNextWave()\n\t\tif o.CurrentWaveNumber() == targetWave {\n\t\t\tbreak\n\t\t}\n\t\t// Mark all tasks in this earlier wave as complete to advance.\n\t\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\t\to.MarkTaskComplete(t.Number)\n\t\t}\n\t}\n\n\t// Apply the actual task states for the target wave.\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif completedSet[t.Number] {\n\t\t\to.MarkTaskComplete(t.Number)\n\t\t}\n\t\t// Running tasks stay in taskRunning.\n\t}\n}\n\n// BuildTaskPrompt is a convenience wrapper that builds the task prompt for a\n// task in the current wave.\nfunc (o *WaveOrchestrator) BuildTaskPrompt(task taskparser.Task, peerCount int) string {\n\treturn BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)\n}\n\nfunc (o *WaveOrchestrator) checkWaveComplete() {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn\n\t}\n\ttasks := o.plan.Waves[o.currentWave].Tasks\n\tfor _, t := range tasks {\n\t\ts := o.taskStates[t.Number]\n\t\tif s == taskRunning || s == taskPending {\n\t\t\treturn // still in progress\n\t\t}\n\t}\n\t// All tasks resolved — check if more waves remain\n\tif o.currentWave+1 >= len(o.plan.Waves) {\n\t\to.state = WaveStateAllComplete\n\t} else {\n\t\to.state = WaveStateWaveComplete\n\t}\n}\n\nfunc (o *WaveOrchestrator) countCurrentWaveByStatus(s taskStatus) int {\n\tif o.currentWave >= len(o.plan.Waves) {\n\t\treturn 0\n\t}\n\tcount := 0\n\tfor _, t := range o.plan.Waves[o.currentWave].Tasks {\n\t\tif o.taskStates[t.Number] == s {\n\t\t\tcount++\n\t\t}\n\t}\n\treturn count\n}\n",
+              "additions": 21,
+              "deletions": 1,
+              "status": "modified"
+            },
+            {
+              "file": "orchestration/engine_test.go",
+              "before": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestNewWaveOrchestrator(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"test\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 3, Title: \"Third\", Body: \"do third\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\tassert.Equal(t, WaveStateIdle, orch.State())\n\tassert.Equal(t, 2, orch.TotalWaves())\n\tassert.Equal(t, 3, orch.TotalTasks())\n}\n\nfunc TestWaveOrchestrator_StartWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\ttasks := orch.StartNextWave()\n\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.Equal(t, 1, orch.CurrentWaveNumber())\n\trequire.Len(t, tasks, 1)\n\tassert.Equal(t, \"First\", tasks[0].Title)\n}\n\nfunc TestWaveOrchestrator_TaskCompleted(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\tassert.False(t, orch.IsCurrentWaveComplete())\n\n\torch.MarkTaskComplete(1)\n\tassert.False(t, orch.IsCurrentWaveComplete())\n\n\torch.MarkTaskComplete(2)\n\tassert.True(t, orch.IsCurrentWaveComplete())\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_TaskFailed(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\torch.MarkTaskFailed(1)\n\torch.MarkTaskComplete(2)\n\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 1, orch.FailedTaskCount())\n\tassert.Equal(t, 1, orch.CompletedTaskCount())\n}\n\nfunc TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\n\t// Wave 1\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1)\n\tassert.Equal(t, WaveStateWaveComplete, orch.State())\n\n\t// Advance to wave 2\n\ttasks := orch.StartNextWave()\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n\trequire.Len(t, tasks, 1)\n\n\t// Complete wave 2\n\torch.MarkTaskComplete(2)\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_AllComplete(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"Only\", Body: \"do it\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1)\n\n\t// No more waves — should be AllComplete\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1) // wave 1 complete\n\n\t// First call consumes the one-shot latch\n\tassert.True(t, orch.NeedsConfirm(), \"first call must return true\")\n\tassert.False(t, orch.NeedsConfirm(), \"second call must return false (latch consumed)\")\n\n\t// After reset, NeedsConfirm should fire again\n\torch.ResetConfirm()\n\tassert.True(t, orch.NeedsConfirm(), \"after ResetConfirm, must return true again\")\n}\n\nfunc TestIsTaskRunning(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"test.md\", plan)\n\torch.StartNextWave()\n\n\tassert.True(t, orch.IsTaskRunning(1), \"task 1 should be running after StartNextWave\")\n\tassert.True(t, orch.IsTaskRunning(2), \"task 2 should be running after StartNextWave\")\n\n\torch.MarkTaskComplete(1)\n\tassert.False(t, orch.IsTaskRunning(1), \"task 1 should not be running after MarkTaskComplete\")\n\tassert.True(t, orch.IsTaskRunning(2), \"task 2 should still be running\")\n\n\tassert.False(t, orch.IsTaskRunning(99), \"unknown task should return false\")\n}\n\nfunc TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"Task 1\"},\n\t\t\t\t{Number: 2, Title: \"Task 2\"},\n\t\t\t\t{Number: 3, Title: \"Task 3\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"test.md\", plan)\n\torch.StartNextWave()\n\n\t// All should be running initially.\n\tassert.True(t, orch.IsTaskRunning(1))\n\tassert.False(t, orch.IsTaskComplete(1))\n\tassert.False(t, orch.IsTaskFailed(1))\n\n\torch.MarkTaskComplete(1)\n\tassert.True(t, orch.IsTaskComplete(1))\n\tassert.False(t, orch.IsTaskRunning(1))\n\n\torch.MarkTaskFailed(2)\n\tassert.True(t, orch.IsTaskFailed(2))\n\tassert.False(t, orch.IsTaskRunning(2))\n\n\t// Task 3 still running.\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 3, Title: \"Third\", Body: \"do third\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\t// T1 fails, T2 completes — wave done with failure\n\torch.MarkTaskFailed(1)\n\torch.MarkTaskComplete(2)\n\trequire.Equal(t, WaveStateWaveComplete, orch.State(), \"wave must be WaveComplete with failure\")\n\tassert.Equal(t, 1, orch.FailedTaskCount())\n\n\t// Retry the failed task\n\tretried := orch.RetryFailedTasks()\n\n\tassert.Equal(t, WaveStateRunning, orch.State(), \"state must be Running after retry\")\n\trequire.Len(t, retried, 1, \"must return only the failed task\")\n\tassert.Equal(t, 1, retried[0].Number, \"retried task must be T1\")\n\n\t// After the retried task completes, wave is done again (with more waves pending)\n\torch.MarkTaskComplete(1)\n\tassert.Equal(t, WaveStateWaveComplete, orch.State(), \"wave must be WaveComplete after retry+complete\")\n\tassert.Equal(t, 0, orch.FailedTaskCount(), \"no more failures after retry completes\")\n}\n\nfunc TestRestoreToWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{3})\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n}\n\nfunc TestRestoreToWave_PartialCompletion(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{2}) // task 3 still running\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.True(t, orch.IsTaskComplete(2))\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestShouldPostWaveCompleteComment(t *testing.T) {\n\tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t}}\n\tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n\t}}\n\tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n\tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n\n\t// nil receiver safety\n\tvar nilOrch *WaveOrchestrator\n\tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n}\n\nfunc TestBuildTaskPrompt_Method(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"Test goal\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n\tassert.Contains(t, prompt, \"Task 1\")\n\tassert.Contains(t, prompt, \"Test goal\")\n\tassert.Contains(t, prompt, \"Wave 1 of 1\")\n\tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestNewWaveOrchestrator(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"test\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 3, Title: \"Third\", Body: \"do third\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\tassert.Equal(t, WaveStateIdle, orch.State())\n\tassert.Equal(t, 2, orch.TotalWaves())\n\tassert.Equal(t, 3, orch.TotalTasks())\n}\n\nfunc TestWaveOrchestrator_StartWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\ttasks := orch.StartNextWave()\n\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.Equal(t, 1, orch.CurrentWaveNumber())\n\trequire.Len(t, tasks, 1)\n\tassert.Equal(t, \"First\", tasks[0].Title)\n}\n\nfunc TestWaveOrchestrator_TaskCompleted(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\tassert.False(t, orch.IsCurrentWaveComplete())\n\n\torch.MarkTaskComplete(1)\n\tassert.False(t, orch.IsCurrentWaveComplete())\n\n\torch.MarkTaskComplete(2)\n\tassert.True(t, orch.IsCurrentWaveComplete())\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_TaskFailed(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\torch.MarkTaskFailed(1)\n\torch.MarkTaskComplete(2)\n\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 1, orch.FailedTaskCount())\n\tassert.Equal(t, 1, orch.CompletedTaskCount())\n}\n\nfunc TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\n\t// Wave 1\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1)\n\tassert.Equal(t, WaveStateWaveComplete, orch.State())\n\n\t// Advance to wave 2\n\ttasks := orch.StartNextWave()\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n\trequire.Len(t, tasks, 1)\n\n\t// Complete wave 2\n\torch.MarkTaskComplete(2)\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_AllComplete(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"Only\", Body: \"do it\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1)\n\n\t// No more waves — should be AllComplete\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n}\n\nfunc TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\torch.MarkTaskComplete(1) // wave 1 complete\n\n\t// First call consumes the one-shot latch\n\tassert.True(t, orch.NeedsConfirm(), \"first call must return true\")\n\tassert.False(t, orch.NeedsConfirm(), \"second call must return false (latch consumed)\")\n\n\t// After reset, NeedsConfirm should fire again\n\torch.ResetConfirm()\n\tassert.True(t, orch.NeedsConfirm(), \"after ResetConfirm, must return true again\")\n}\n\nfunc TestIsTaskRunning(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"test.md\", plan)\n\torch.StartNextWave()\n\n\tassert.True(t, orch.IsTaskRunning(1), \"task 1 should be running after StartNextWave\")\n\tassert.True(t, orch.IsTaskRunning(2), \"task 2 should be running after StartNextWave\")\n\n\torch.MarkTaskComplete(1)\n\tassert.False(t, orch.IsTaskRunning(1), \"task 1 should not be running after MarkTaskComplete\")\n\tassert.True(t, orch.IsTaskRunning(2), \"task 2 should still be running\")\n\n\tassert.False(t, orch.IsTaskRunning(99), \"unknown task should return false\")\n}\n\nfunc TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"Task 1\"},\n\t\t\t\t{Number: 2, Title: \"Task 2\"},\n\t\t\t\t{Number: 3, Title: \"Task 3\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"test.md\", plan)\n\torch.StartNextWave()\n\n\t// All should be running initially.\n\tassert.True(t, orch.IsTaskRunning(1))\n\tassert.False(t, orch.IsTaskComplete(1))\n\tassert.False(t, orch.IsTaskFailed(1))\n\n\torch.MarkTaskComplete(1)\n\tassert.True(t, orch.IsTaskComplete(1))\n\tassert.False(t, orch.IsTaskRunning(1))\n\n\torch.MarkTaskFailed(2)\n\tassert.True(t, orch.IsTaskFailed(2))\n\tassert.False(t, orch.IsTaskRunning(2))\n\n\t// Task 3 still running.\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 3, Title: \"Third\", Body: \"do third\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\n\t// T1 fails, T2 completes — wave done with failure\n\torch.MarkTaskFailed(1)\n\torch.MarkTaskComplete(2)\n\trequire.Equal(t, WaveStateWaveComplete, orch.State(), \"wave must be WaveComplete with failure\")\n\tassert.Equal(t, 1, orch.FailedTaskCount())\n\n\t// Retry the failed task\n\tretried := orch.RetryFailedTasks()\n\n\tassert.Equal(t, WaveStateRunning, orch.State(), \"state must be Running after retry\")\n\trequire.Len(t, retried, 1, \"must return only the failed task\")\n\tassert.Equal(t, 1, retried[0].Number, \"retried task must be T1\")\n\n\t// After the retried task completes, wave is done again (with more waves pending)\n\torch.MarkTaskComplete(1)\n\tassert.Equal(t, WaveStateWaveComplete, orch.State(), \"wave must be WaveComplete after retry+complete\")\n\tassert.Equal(t, 0, orch.FailedTaskCount(), \"no more failures after retry completes\")\n}\n\nfunc TestRestoreToWave(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{3})\n\tassert.Equal(t, WaveStateAllComplete, orch.State())\n\tassert.Equal(t, 2, orch.CurrentWaveNumber())\n}\n\nfunc TestRestoreToWave_PartialCompletion(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.RestoreToWave(2, []int{2}) // task 3 still running\n\tassert.Equal(t, WaveStateRunning, orch.State())\n\tassert.True(t, orch.IsTaskComplete(2))\n\tassert.True(t, orch.IsTaskRunning(3))\n}\n\nfunc TestShouldPostWaveCompleteComment(t *testing.T) {\n\tsingle := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t}}\n\tmulti := &taskparser.Plan{Waves: []taskparser.Wave{\n\t\t{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},\n\t\t{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},\n\t}}\n\tassert.False(t, NewWaveOrchestrator(\"s.md\", single).ShouldPostWaveCompleteComment())\n\tassert.True(t, NewWaveOrchestrator(\"m.md\", multi).ShouldPostWaveCompleteComment())\n\n\t// nil receiver safety\n\tvar nilOrch *WaveOrchestrator\n\tassert.False(t, nilOrch.ShouldPostWaveCompleteComment())\n}\n\nfunc TestWaveOrchestrator_ElaboratingState(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.SetElaborating()\n\tassert.Equal(t, WaveStateElaborating, orch.State())\n\n\t// StartNextWave should be blocked while elaborating\n\ttasks := orch.StartNextWave()\n\tassert.Nil(t, tasks, \"must not start waves while elaborating\")\n\tassert.Equal(t, WaveStateElaborating, orch.State())\n}\n\nfunc TestWaveOrchestrator_UpdatePlan(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"original\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"terse body\"},\n\t\t\t}},\n\t\t},\n\t}\n\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.SetElaborating()\n\n\tupdated := &taskparser.Plan{\n\t\tGoal: \"original\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"detailed body with signatures and patterns\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch.UpdatePlan(updated)\n\n\t// Should transition back to Idle so StartNextWave works\n\tassert.Equal(t, WaveStateIdle, orch.State())\n\n\t// Verify the plan was replaced\n\ttasks := orch.StartNextWave()\n\trequire.Len(t, tasks, 1)\n\tassert.Contains(t, tasks[0].Body, \"detailed body\")\n}\n\nfunc TestBuildTaskPrompt_Method(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal: \"Test goal\",\n\t\tWaves: []taskparser.Wave{\n\t\t\t{Number: 1, Tasks: []taskparser.Task{\n\t\t\t\t{Number: 1, Title: \"First\", Body: \"do first\"},\n\t\t\t\t{Number: 2, Title: \"Second\", Body: \"do second\"},\n\t\t\t}},\n\t\t},\n\t}\n\torch := NewWaveOrchestrator(\"plan.md\", plan)\n\torch.StartNextWave()\n\tprompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)\n\tassert.Contains(t, prompt, \"Task 1\")\n\tassert.Contains(t, prompt, \"Test goal\")\n\tassert.Contains(t, prompt, \"Wave 1 of 1\")\n\tassert.Contains(t, prompt, \"parallel\") // peerCount > 1\n}\n",
+              "additions": 51,
+              "deletions": 0,
+              "status": "modified"
+            },
+            {
+              "file": "orchestration/prompt.go",
+              "before": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildElaborationPrompt returns the prompt for an elaborator agent session.\n// The elaborator reads the plan, deeply reads the codebase for each task's files,\n// and expands task bodies with detailed implementation instructions.\nfunc BuildElaborationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n\t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n\t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n\t\t\t\"## Instructions\\n\\n\"+\n\t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n\t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n\t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n\t\t\t\"and data flow in those files and their neighbors.\\n\"+\n\t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n\t\t\t\"   - Exact function signatures to create or modify\\n\"+\n\t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n\t\t\t\"   - Edge cases and error handling requirements\\n\"+\n\t\t\t\"   - Import paths and dependencies\\n\"+\n\t\t\t\"   - Concrete code snippets where helpful\\n\"+\n\t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n\t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n\t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n\t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n\t\tplanFile,\n\t)\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+              "additions": 27,
+              "deletions": 0,
+              "status": "modified"
+            },
+            {
+              "file": "orchestration/prompt_test.go",
+              "before": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n\nfunc TestBuildElaborationPrompt(t *testing.T) {\n\tprompt := BuildElaborationPrompt(\"my-feature.md\")\n\n\t// Must reference the plan file for retrieval\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\t// Must reference updating the plan\n\tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n\t// Must reference the signal\n\tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n\t// Must instruct to expand task bodies\n\tassert.Contains(t, prompt, \"implementation detail\")\n\t// Must instruct to preserve structure\n\tassert.Contains(t, prompt, \"preserve\")\n\t// Must reference reading the codebase\n\tassert.Contains(t, prompt, \"codebase\")\n}\n",
+              "additions": 17,
+              "deletions": 0,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 4: Elaborator Agent Type and Profile Resolution\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Add an automatic elaboration phase between plan-ready and coder-start that expands terse task descriptions into detailed implementation instructions, reducing coder decision-making and improving output quality.\n**Architecture:** When the user triggers \"implement\", kasmos spawns an elaborator agent before starting wave 1. The elaborator reads the plan from the task store, deeply reads the codebase files referenced by each task, and rewrites each task body with detailed implementation guidance (exact signatures, patterns from existing code, edge cases, error handling). It writes the enriched plan back to the store and signals completion via `elaborator-finished-<planfile>`. kasmos detects this signal, re-parses the updated plan into the wave orchestrator, and starts wave 1 normally. A context menu bypass (\"implement directly\") skips elaboration. The elaborator uses a configurable agent profile (`\"elaborating\"` phase) so a strong model can be assigned.\n**Tech Stack:** Go 1.24+, bubbletea v1.3.x, existing kasmos packages (config/taskfsm, config/taskparser, orchestration, session, app)\n\n## Wave 1 of 2\n\n## Parallel Execution\n\nYou are Task 4 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `session/instance.go`\n- Modify: `app/app_state.go`\n- Test: `session/instance_taskfile_test.go`\n\n**Step 1: write the failing test**\n\nAdd to `session/instance_taskfile_test.go`:\n\n```go\nfunc TestAgentTypeElaborator_Constant(t *testing.T) {\n\tassert.Equal(t, \"elaborator\", AgentTypeElaborator)\n}\n```\n\nAlso verify profile resolution works by checking `programForAgent` handles the new type. This is tested indirectly — the constant existence and the switch case are the key assertions.\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./session/... -run TestAgentTypeElaborator_Constant -v\n```\n\nexpected: FAIL — `AgentTypeElaborator` undefined\n\n**Step 3: write minimal implementation**\n\n1. In `session/instance.go`, add to the `AgentType` constants block (after `AgentTypeFixer`):\n\n```go\nAgentTypeElaborator = \"elaborator\"\n```\n\n2. In `app/app_state.go`, add a case to the `programForAgent` switch (after the `AgentTypeFixer` case):\n\n```go\ncase session.AgentTypeElaborator:\n\tprofile = m.appConfig.ResolveProfile(\"elaborating\", m.program)\n```\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./session/... -run TestAgentTypeElaborator_Constant -v\n```\n\nexpected: PASS\n\nVerify no regressions:\n\n```bash\ngo build ./...\n```\n\n**Step 5: commit**\n\n```bash\ngit add session/instance.go app/app_state.go\ngit commit -m \"feat(task-4): add AgentTypeElaborator constant and elaborating profile resolution\"\n```\n",
+          "id": "prt_cba8fe223002IKwCguQu1T1Uwq",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fe223001L08mKvLsZ11Zwz"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656517682,
+          "completed": 1772656521806
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 41008,
+          "input": 2,
+          "output": 126,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 40880
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "id": "prt_cba8fece00010RpTtmtHA0rOSi",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills, then implement the task.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/IggykQbsylUCpCQo42LFXGAE="
+            }
+          },
+          "time": {
+            "start": 1772656520417,
+            "end": 1772656520969
+          },
+          "id": "prt_cba8fece10012D4Aa8MPYP6Q8t",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01HHLvPDZzDgH17BzidAQsvF",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify task state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas task transition <task-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update task state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate task status to `done` after options 1, 2, or 4:\n```bash\nkas task set-status <task-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656521749,
+              "end": 1772656521755
+            }
+          },
+          "id": "prt_cba8fef0b001DTYnlT4UJD7ms6",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Uskmjsoh5udCGBSHz9k1Qf",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656521767,
+              "end": 1772656521770
+            }
+          },
+          "id": "prt_cba8ff216001l0E3QbHQ2ZGTQC",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "cost": 0,
+          "tokens": {
+            "total": 41008,
+            "input": 2,
+            "output": 126,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 40880
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656521807,
+          "completed": 1772656525311
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 49327,
+          "input": 1,
+          "output": 214,
+          "reasoning": 0,
+          "cache": {
+            "read": 40880,
+            "write": 8232
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba8ff24f00187fjBT506PqzBz",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "id": "prt_cba8ff63f0019J0CJYKKbEEVOb",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the relevant files to understand the existing code structure before making changes.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/I7/REDACTED/9n6rFmea6ZGAE="
+            }
+          },
+          "time": {
+            "start": 1772656522815,
+            "end": 1772656523214
+          },
+          "id": "prt_cba8ff63f002FBgs0qgpCJ1LOr",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        },
+        {
+          "type": "text",
+          "text": "Now let me read the relevant files to understand the existing code structure.",
+          "time": {
+            "start": 1772656524059,
+            "end": 1772656524059
+          },
+          "id": "prt_cba8ff7cf001XyNK9OsHOs2JYC",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01GhtfzdmHV8G7B9JuV5YVzn",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance.go",
+              "limit": 80
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"path/filepath\"\n6: \t\"time\"\n7: \n8: \t\"github.com/kastheco/kasmos/session/git\"\n9: \t\"github.com/kastheco/kasmos/session/tmux\"\n10: )\n11: \n12: // Status represents the current state of an instance.\n13: type Status int\n14: \n15: const (\n16: \t// Running indicates the instance is active and the agent is working.\n17: \tRunning Status = iota\n18: \t// Ready indicates the instance is idle and waiting for user input.\n19: \tReady\n20: \t// Loading indicates the instance is starting up or initialising.\n21: \tLoading\n22: \t// Paused indicates the instance is paused — the worktree has been removed but the branch is preserved.\n23: \tPaused\n24: )\n25: \n26: // AgentType constants identify the role of an agent session within a plan lifecycle.\n27: const (\n28: \tAgentTypePlanner  = \"planner\"\n29: \tAgentTypeCoder    = \"coder\"\n30: \tAgentTypeReviewer = \"reviewer\"\n31: \tAgentTypeFixer    = \"fixer\"\n32: )\n33: \n34: // Instance represents a managed agent session with its associated tmux and git state.\n35: type Instance struct {\n36: \t// Title is the display name and tmux session identifier for this instance.\n37: \tTitle string\n38: \t// Path is the workspace directory for the instance.\n39: \tPath string\n40: \t// Branch is the git branch associated with this instance.\n41: \tBranch string\n42: \t// Status is the current lifecycle state of the instance.\n43: \tStatus Status\n44: \t// Program is the agent command to execute within the tmux session.\n45: \tProgram string\n46: \t// Height is the terminal height in rows.\n47: \tHeight int\n48: \t// Width is the terminal width in columns.\n49: \tWidth int\n50: \t// CreatedAt records when the instance was first created.\n51: \tCreatedAt time.Time\n52: \t// UpdatedAt records the most recent update timestamp.\n53: \tUpdatedAt time.Time\n54: \t// AutoYes causes the instance to auto-confirm prompts.\n55: \tAutoYes bool\n56: \t// SkipPermissions enables the --dangerously-skip-permissions flag for Claude.\n57: \tSkipPermissions bool\n58: \t// TaskFile is the plan file this instance is implementing (empty for ad-hoc sessions).\n59: \tTaskFile string\n60: \t// Topic is the plan-state group this instance belongs to.\n61: \tTopic string\n62: \t// AgentType identifies the role within a plan lifecycle: planner, coder, reviewer, fixer, or empty.\n63: \tAgentType string\n64: \t// TaskNumber is the 1-indexed task number within a plan wave (0 = not a wave task).\n65: \tTaskNumber int\n66: \t// WaveNumber is the 1-indexed wave number this task belongs to (0 = not a wave task).\n67: \tWaveNumber int\n68: \t// PeerCount is the number of concurrent sibling tasks in the same wave (0 = not a wave task).\n69: \tPeerCount int\n70: \t// IsReviewer indicates a reviewer session.\n71: \t// Deprecated: check AgentType == AgentTypeReviewer instead.\n72: \tIsReviewer bool\n73: \t// ImplementationComplete is set when the coder finishes and the plan transitions to review.\n74: \tImplementationComplete bool\n75: \t// SoloAgent is true for instances launched as standalone agents outside the orchestration lifecycle.\n76: \tSoloAgent bool\n77: \t// Exited is true when the instance's tmux session has terminated unexpectedly.\n78: \tExited bool\n79: \t// QueuedPrompt is delivered to the session on first transition to Ready. Cleared after delivery.\n80: \tQueuedPrompt string\n\n(Showing lines 1-80 of 395. Use offset=81 to continue.)\n</content>",
+            "title": "session/instance.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"fmt\"\n\t\"path/filepath\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n)\n\n// Status represents the current state of an instance.\ntype Status int\n\nconst (\n\t// Running indicates the instance is active and the agent is working.\n\tRunning Status = iota\n\t// Ready indicates the instance is idle and waiting for user input.\n\tReady\n\t// Loading indicates the instance is starting up or initialising.",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772656524889,
+              "end": 1772656524898
+            }
+          },
+          "id": "prt_cba8ffb1c0010sElyU8jhHRQPm",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_taskfile_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_taskfile_test.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"testing\"\n5: )\n6: \n7: func TestNewInstance_SetsPlanFile(t *testing.T) {\n8: \tinst, err := NewInstance(InstanceOptions{\n9: \t\tTitle:    \"plan-worker\",\n10: \t\tPath:     \".\",\n11: \t\tProgram:  \"claude\",\n12: \t\tTaskFile: \"plan-orchestration.md\",\n13: \t})\n14: \tif err != nil {\n15: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n16: \t}\n17: \tif inst.TaskFile != \"plan-orchestration.md\" {\n18: \t\tt.Fatalf(\"PlanFile = %q, want %q\", inst.TaskFile, \"plan-orchestration.md\")\n19: \t}\n20: }\n21: \n22: func TestInstanceData_RoundTripPlanFile(t *testing.T) {\n23: \tdata := InstanceData{\n24: \t\tTitle:    \"persisted\",\n25: \t\tPath:     \"/tmp/repo\",\n26: \t\tBranch:   \"feature/test\",\n27: \t\tStatus:   Paused,\n28: \t\tProgram:  \"claude\",\n29: \t\tTaskFile: \"plan.md\",\n30: \t\tWorktree: GitWorktreeData{\n31: \t\t\tRepoPath:      \"/tmp/repo\",\n32: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/persisted\",\n33: \t\t\tSessionName:   \"persisted\",\n34: \t\t\tBranchName:    \"feature/test\",\n35: \t\t\tBaseCommitSHA: \"abc123\",\n36: \t\t},\n37: \t}\n38: \n39: \tinst, err := FromInstanceData(data)\n40: \tif err != nil {\n41: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n42: \t}\n43: \tif inst.TaskFile != \"plan.md\" {\n44: \t\tt.Fatalf(\"instance PlanFile = %q, want %q\", inst.TaskFile, \"plan.md\")\n45: \t}\n46: \n47: \troundTrip := inst.ToInstanceData()\n48: \tif roundTrip.TaskFile != \"plan.md\" {\n49: \t\tt.Fatalf(\"ToInstanceData PlanFile = %q, want %q\", roundTrip.TaskFile, \"plan.md\")\n50: \t}\n51: }\n52: \n53: func TestInstanceData_RoundTripImplementationComplete(t *testing.T) {\n54: \tdata := InstanceData{\n55: \t\tTitle:                  \"coder-done\",\n56: \t\tPath:                   \"/tmp/repo\",\n57: \t\tBranch:                 \"feature/impl\",\n58: \t\tStatus:                 Paused,\n59: \t\tProgram:                \"opencode\",\n60: \t\tTaskFile:               \"plan.md\",\n61: \t\tImplementationComplete: true,\n62: \t\tWorktree: GitWorktreeData{\n63: \t\t\tRepoPath:      \"/tmp/repo\",\n64: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/coder-done\",\n65: \t\t\tSessionName:   \"coder-done\",\n66: \t\t\tBranchName:    \"feature/impl\",\n67: \t\t\tBaseCommitSHA: \"def456\",\n68: \t\t},\n69: \t}\n70: \n71: \tinst, err := FromInstanceData(data)\n72: \tif err != nil {\n73: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n74: \t}\n75: \tif !inst.ImplementationComplete {\n76: \t\tt.Fatal(\"expected ImplementationComplete = true after FromInstanceData\")\n77: \t}\n78: \n79: \troundTrip := inst.ToInstanceData()\n80: \tif !roundTrip.ImplementationComplete {\n81: \t\tt.Fatal(\"expected ImplementationComplete = true after ToInstanceData round-trip\")\n82: \t}\n83: }\n84: \n85: func TestNewInstance_SetsAgentType(t *testing.T) {\n86: \tinst, err := NewInstance(InstanceOptions{\n87: \t\tTitle:     \"planner-worker\",\n88: \t\tPath:      \".\",\n89: \t\tProgram:   \"opencode\",\n90: \t\tTaskFile:  \"auth-refactor.md\",\n91: \t\tAgentType: AgentTypePlanner,\n92: \t})\n93: \tif err != nil {\n94: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n95: \t}\n96: \tif inst.AgentType != AgentTypePlanner {\n97: \t\tt.Fatalf(\"AgentType = %q, want %q\", inst.AgentType, AgentTypePlanner)\n98: \t}\n99: }\n100: \n101: func TestInstanceData_RoundTripAgentType(t *testing.T) {\n102: \tdata := InstanceData{\n103: \t\tTitle:     \"persisted\",\n104: \t\tPath:      \"/tmp/repo\",\n105: \t\tBranch:    \"plan/auth-refactor\",\n106: \t\tStatus:    Paused,\n107: \t\tProgram:   \"opencode\",\n108: \t\tTaskFile:  \"auth-refactor.md\",\n109: \t\tAgentType: AgentTypeReviewer,\n110: \t\tWorktree: GitWorktreeData{\n111: \t\t\tRepoPath:      \"/tmp/repo\",\n112: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/plan-auth-refactor\",\n113: \t\t\tSessionName:   \"persisted\",\n114: \t\t\tBranchName:    \"plan/auth-refactor\",\n115: \t\t\tBaseCommitSHA: \"abc123\",\n116: \t\t},\n117: \t}\n118: \n119: \tinst, err := FromInstanceData(data)\n120: \tif err != nil {\n121: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n122: \t}\n123: \tif inst.AgentType != AgentTypeReviewer {\n124: \t\tt.Fatalf(\"instance AgentType = %q, want %q\", inst.AgentType, AgentTypeReviewer)\n125: \t}\n126: \n127: \troundTrip := inst.ToInstanceData()\n128: \tif roundTrip.AgentType != AgentTypeReviewer {\n129: \t\tt.Fatalf(\"ToInstanceData AgentType = %q, want %q\", roundTrip.AgentType, AgentTypeReviewer)\n130: \t}\n131: }\n132: \n133: func TestInstanceData_ImplementationCompleteFalseByDefault(t *testing.T) {\n134: \tdata := InstanceData{\n135: \t\tTitle:   \"normal-session\",\n136: \t\tPath:    \"/tmp/repo\",\n137: \t\tBranch:  \"feature/x\",\n138: \t\tStatus:  Paused,\n139: \t\tProgram: \"claude\",\n140: \t\tWorktree: GitWorktreeData{\n141: \t\t\tRepoPath:      \"/tmp/repo\",\n142: \t\t\tWorktreePath:  \"/tmp/repo/.worktrees/normal-session\",\n143: \t\t\tSessionName:   \"normal-session\",\n144: \t\t\tBranchName:    \"feature/x\",\n145: \t\t\tBaseCommitSHA: \"aaa111\",\n146: \t\t},\n147: \t}\n148: \n149: \tinst, err := FromInstanceData(data)\n150: \tif err != nil {\n151: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n152: \t}\n153: \tif inst.ImplementationComplete {\n154: \t\tt.Fatal(\"expected ImplementationComplete = false for a normal instance\")\n155: \t}\n156: }\n157: \n158: func TestInstanceData_RoundTripSoloAgent(t *testing.T) {\n159: \tinst, err := NewInstance(InstanceOptions{\n160: \t\tTitle:   \"solo-worker\",\n161: \t\tPath:    \"/tmp/repo\",\n162: \t\tProgram: \"opencode\",\n163: \t})\n164: \tif err != nil {\n165: \t\tt.Fatalf(\"NewInstance() error = %v\", err)\n166: \t}\n167: \tinst.SoloAgent = true\n168: \n169: \tdata := inst.ToInstanceData()\n170: \trestored, err := FromInstanceData(data)\n171: \tif err != nil {\n172: \t\tt.Fatalf(\"FromInstanceData() error = %v\", err)\n173: \t}\n174: \tif !restored.SoloAgent {\n175: \t\tt.Fatal(\"expected SoloAgent = true after InstanceData round-trip\")\n176: \t}\n177: }\n\n(End of file - total 177 lines)\n</content>",
+            "title": "session/instance_taskfile_test.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"testing\"\n)\n\nfunc TestNewInstance_SetsPlanFile(t *testing.T) {\n\tinst, err := NewInstance(InstanceOptions{\n\t\tTitle:    \"plan-worker\",\n\t\tPath:     \".\",\n\t\tProgram:  \"claude\",\n\t\tTaskFile: \"plan-orchestration.md\",\n\t})\n\tif err != nil {\n\t\tt.Fatalf(\"NewInstance() error = %v\", err)\n\t}\n\tif inst.TaskFile != \"plan-orchestration.md\" {\n\t\tt.Fatalf(\"PlanFile = %q, want %q\", inst.TaskFile, \"plan-orchestration.md\")\n\t}\n}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772656525289,
+              "end": 1772656525291
+            }
+          },
+          "id": "prt_cba8ffe5b001qtrxO03DbWHz7Y",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "cost": 0,
+          "tokens": {
+            "total": 49327,
+            "input": 1,
+            "output": 214,
+            "reasoning": 0,
+            "cache": {
+              "read": 40880,
+              "write": 8232
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8ff24f00187fjBT506PqzBz"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656525311,
+          "completed": 1772656529721
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53078,
+          "input": 1,
+          "output": 207,
+          "reasoning": 0,
+          "cache": {
+            "read": 49112,
+            "write": 3758
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba8fffff001sCXfSij8ekpf7s",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "id": "prt_cba900461001Dk0F7AH0NLPxTm",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fffff001sCXfSij8ekpf7s"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me read the app/app_state.go file to understand the `programForAgent` function:",
+          "metadata": {
+            "anthropic": {
+              "signature": "Ev8BCkYICxgCKkAlnfK56TO/ap/REDACTED/hAxYdCfLEgzt6xd/REDACTED/REDACTED/l0bJER9qpYXSSLx4y5/FYGO6hmf75hL+kciCXkUS/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772656526434,
+            "end": 1772656527233
+          },
+          "id": "prt_cba90046200136L7H8OnYUG4CH",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fffff001sCXfSij8ekpf7s"
+        },
+        {
+          "type": "text",
+          "text": "Now let me read the `app_state.go` file to find the `programForAgent` function:",
+          "time": {
+            "start": 1772656528033,
+            "end": 1772656528033
+          },
+          "id": "prt_cba900782001m0vuQ1e4oIrikq",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fffff001sCXfSij8ekpf7s"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"programForAgent\\|AgentTypeFixer\\|AgentTypeReviewer\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go | head -40",
+              "description": "Find programForAgent and related patterns in app_state.go"
+            },
+            "output": "",
+            "title": "Find programForAgent and related patterns in app_state.go",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find programForAgent and related patterns in app_state.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656529695,
+              "end": 1772656529714
+            }
+          },
+          "id": "prt_cba900aa2001u5TUeJqVlVp6tA",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fffff001sCXfSij8ekpf7s"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "cost": 0,
+          "tokens": {
+            "total": 53078,
+            "input": 1,
+            "output": 207,
+            "reasoning": 0,
+            "cache": {
+              "read": 49112,
+              "write": 3758
+            }
+          },
+          "id": "prt_cba901132001mnvQK60AloyNuz",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba8fffff001sCXfSij8ekpf7s"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656529722,
+          "completed": 1772656532150
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53232,
+          "input": 1,
+          "output": 128,
+          "reasoning": 0,
+          "cache": {
+            "read": 52870,
+            "write": 233
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba90113a001nRFAhUStRPa3fG",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "id": "prt_cba901664001kkFM13EieQdoGq",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90113a001nRFAhUStRPa3fG"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_0141xMtqfDRw2UDii6hFoJeV",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"programForAgent\\|AgentTypeFixer\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/ | head -40",
+              "description": "Search for programForAgent across app directory"
+            },
+            "output": "",
+            "title": "Search for programForAgent across app directory",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search for programForAgent across app directory",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656532086,
+              "end": 1772656532090
+            }
+          },
+          "id": "prt_cba901664002zL85gOA631F0Tr",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90113a001nRFAhUStRPa3fG"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "cost": 0,
+          "tokens": {
+            "total": 53232,
+            "input": 1,
+            "output": 128,
+            "reasoning": 0,
+            "cache": {
+              "read": 52870,
+              "write": 233
+            }
+          },
+          "id": "prt_cba901aaf001755woFw3aft8PZ",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90113a001nRFAhUStRPa3fG"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656532151,
+          "completed": 1772656534451
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53390,
+          "input": 1,
+          "output": 132,
+          "reasoning": 0,
+          "cache": {
+            "read": 53103,
+            "write": 154
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba901ab7001RsVZXIdjqg6Y6q",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "id": "prt_cba901ee1001vmEv7tPgB7p8ec",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba901ab7001RsVZXIdjqg6Y6q"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"programForAgent\\|AgentTypeFixer\\|ResolveProfile\\|elaborat\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ --type go | head -40",
+              "description": "Search entire project for relevant function names"
+            },
+            "output": "",
+            "title": "Search entire project for relevant function names",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search entire project for relevant function names",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656534415,
+              "end": 1772656534420
+            }
+          },
+          "id": "prt_cba901ee2001l6hRlLZxTixnFZ",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba901ab7001RsVZXIdjqg6Y6q"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "829d807093d25a4ef89fcb848c57ac104b095068",
+          "cost": 0,
+          "tokens": {
+            "total": 53390,
+            "input": 1,
+            "output": 132,
+            "reasoning": 0,
+            "cache": {
+              "read": 53103,
+              "write": 154
+            }
+          },
+          "id": "prt_cba9023a60011hRipmvaHHSl0G",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba901ab7001RsVZXIdjqg6Y6q"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656534452,
+          "completed": 1772656536495
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53514,
+          "input": 1,
+          "output": 98,
+          "reasoning": 0,
+          "cache": {
+            "read": 53257,
+            "write": 158
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba9023b4001XsVzuNiSW7GiaD",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "45fa549130768f4df015b537a5ec709320e2ae4e",
+          "id": "prt_cba90288c001lZngtmWAH47GWG",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9023b4001XsVzuNiSW7GiaD"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/",
+              "description": "List app directory contents"
+            },
+            "output": "app_actions.go\napp_audit_pane_test.go\napp_audit_test.go\napp.go\napp_input.go\napp_input_keybytes_test.go\napp_input_right_on_instance_test.go\napp_input_viewport_test.go\napp_input_yes_keybind_test.go\napp_permission_test.go\napp_planner_signal_test.go\napp_reviewer_program_test.go\napp_solo_agent_test.go\napp_state_branch_test.go\napp_state.go\napp_state_sidebar_status_test.go\napp_statusbar_integration_test.go\napp_task_actions_test.go\napp_task_completion_test.go\napp_task_context_actions_test.go\napp_task_creation_test.go\napp_test.go\napp_wave_orchestration_flow_test.go\napp_wave_validation_test.go\nclickup_import_test.go\nclickup_progress.go\nclickup_progress_test.go\nfsm_test_helpers_test.go\nhelp.go\nnavigation_panel_wiring_test.go\ntask_cancel_rename_delay_test.go\ntask_title.go\ntask_title_test.go\nwave_orchestrator.go\nwave_orchestrator_test.go\nwave_prompt.go\nwave_prompt_test.go\n",
+            "title": "List app directory contents",
+            "metadata": {
+              "output": "app_actions.go\napp_audit_pane_test.go\napp_audit_test.go\napp.go\napp_input.go\napp_input_keybytes_test.go\napp_input_right_on_instance_test.go\napp_input_viewport_test.go\napp_input_yes_keybind_test.go\napp_permission_test.go\napp_planner_signal_test.go\napp_reviewer_program_test.go\napp_solo_agent_test.go\napp_state_branch_test.go\napp_state.go\napp_state_sidebar_status_test.go\napp_statusbar_integration_test.go\napp_task_actions_test.go\napp_task_completion_test.go\napp_task_context_actions_test.go\napp_task_creation_test.go\napp_test.go\napp_wave_orchestration_flow_test.go\napp_wave_validation_test.go\nclickup_import_test.go\nclickup_progress.go\nclickup_progress_test.go\nfsm_test_helpers_test.go\nhelp.go\nnavigation_panel_wiring_test.go\ntask_cancel_rename_delay_test.go\ntask_title.go\ntask_title_test.go\nwave_orchestrator.go\nwave_orchestrator_test.go\nwave_prompt.go\nwave_prompt_test.go\n",
+              "exit": 0,
+              "description": "List app directory contents",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656536470,
+              "end": 1772656536472
+            }
+          },
+          "id": "prt_cba90288c002dbviDoV0IPe4jC",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9023b4001XsVzuNiSW7GiaD"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "45fa549130768f4df015b537a5ec709320e2ae4e",
+          "cost": 0,
+          "tokens": {
+            "total": 53514,
+            "input": 1,
+            "output": 98,
+            "reasoning": 0,
+            "cache": {
+              "read": 53257,
+              "write": 158
+            }
+          },
+          "id": "prt_cba902ba8001rJjtcM8246GmdB",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9023b4001XsVzuNiSW7GiaD"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656536496,
+          "completed": 1772656539014
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53999,
+          "input": 1,
+          "output": 132,
+          "reasoning": 0,
+          "cache": {
+            "read": 53415,
+            "write": 451
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba902bb00011k0tsuCCA36eXH",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba902bb00011k0tsuCCA36eXH"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"programForAgent\\|AgentType\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go | head -40",
+              "description": "Search app_state.go for relevant identifiers"
+            },
+            "output": "",
+            "title": "Search app_state.go for relevant identifiers",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search app_state.go for relevant identifiers",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656538976,
+              "end": 1772656538979
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba902bb00011k0tsuCCA36eXH"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "cost": 0,
+          "tokens": {
+            "total": 53999,
+            "input": 1,
+            "output": 132,
+            "reasoning": 0,
+            "cache": {
+              "read": 53415,
+              "write": 451
+            }
+          },
+          "id": "prt_cba90357e001pPniiCj4imC0Hf",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba902bb00011k0tsuCCA36eXH"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656539015,
+          "completed": 1772656541094
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 54151,
+          "input": 1,
+          "output": 126,
+          "reasoning": 0,
+          "cache": {
+            "read": 53866,
+            "write": 158
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba903587001bWHO7JaBTQMJ9l",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "id": "prt_cba903a1f001v6VhAg4E9t9YtD",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903587001bWHO7JaBTQMJ9l"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01C1i26h7FJChDgSR4RSFKuT",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"program\\|agent\\|resolve\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go | head -30",
+              "description": "Search app_state.go for program and agent patterns"
+            },
+            "output": "",
+            "title": "Search app_state.go for program and agent patterns",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search app_state.go for program and agent patterns",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656541051,
+              "end": 1772656541054
+            }
+          },
+          "id": "prt_cba903a1f0020CWXdd3i6pMfXa",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903587001bWHO7JaBTQMJ9l"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "cost": 0,
+          "tokens": {
+            "total": 54151,
+            "input": 1,
+            "output": 126,
+            "reasoning": 0,
+            "cache": {
+              "read": 53866,
+              "write": 158
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903587001bWHO7JaBTQMJ9l"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656541096,
+          "completed": 1772656542774
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 54277,
+          "input": 1,
+          "output": 100,
+          "reasoning": 0,
+          "cache": {
+            "read": 54024,
+            "write": 152
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba903da80018UxNnWvUyclmVt",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "id": "prt_cba9041ab001EdNVYAnwt0t847",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903da80018UxNnWvUyclmVt"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_016piutXL46PYL4ofhPUiRDu",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go",
+              "limit": 50
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go</path>\n<type>file</type>\n<content>1: package app\n2: \n3: import (\n4: \t\"context\"\n5: \t\"fmt\"\n6: \t\"os\"\n7: \t\"os/exec\"\n8: \t\"path/filepath\"\n9: \t\"regexp\"\n10: \t\"strings\"\n11: \t\"time\"\n12: \n13: \t\"github.com/charmbracelet/glamour\"\n14: \tcmd2 \"github.com/kastheco/kasmos/cmd\"\n15: \t\"github.com/kastheco/kasmos/config\"\n16: \t\"github.com/kastheco/kasmos/config/auditlog\"\n17: \t\"github.com/kastheco/kasmos/config/taskfsm\"\n18: \t\"github.com/kastheco/kasmos/config/taskparser\"\n19: \t\"github.com/kastheco/kasmos/config/taskstate\"\n20: \t\"github.com/kastheco/kasmos/internal/clickup\"\n21: \t\"github.com/kastheco/kasmos/internal/initcmd/scaffold\"\n22: \t\"github.com/kastheco/kasmos/keys\"\n23: \t\"github.com/kastheco/kasmos/log\"\n24: \t\"github.com/kastheco/kasmos/session\"\n25: \tgitpkg \"github.com/kastheco/kasmos/session/git\"\n26: \t\"github.com/kastheco/kasmos/session/tmux\"\n27: \t\"github.com/kastheco/kasmos/ui\"\n28: \t\"github.com/kastheco/kasmos/ui/overlay\"\n29: \n30: \ttea \"charm.land/bubbletea/v2\"\n31: )\n32: \n33: func mergeTopicStatus(status ui.TopicStatus, inst *session.Instance, started bool) ui.TopicStatus {\n34: \tif started && !inst.Paused() && !inst.PromptDetected {\n35: \t\tstatus.HasRunning = true\n36: \t}\n37: \tif inst.Notified {\n38: \t\tstatus.HasNotification = true\n39: \t}\n40: \treturn status\n41: }\n42: \n43: func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool) ui.TopicStatus {\n44: \tif inst.TaskFile == \"\" {\n45: \t\treturn status\n46: \t}\n47: \tif started && !inst.Paused() {\n48: \t\tif inst.IsReviewer {\n49: \t\t\tstatus.HasNotification = true\n50: \t\t} else {\n\n(Showing lines 1-50 of 2111. Use offset=51 to continue.)\n</content>",
+            "title": "app/app_state.go",
+            "metadata": {
+              "preview": "package app\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"regexp\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/charmbracelet/glamour\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/config/auditlog\"\n\t\"github.com/kastheco/kasmos/config/taskfsm\"\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/kastheco/kasmos/config/taskstate\"\n\t\"github.com/kastheco/kasmos/internal/clickup\"",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772656542741,
+              "end": 1772656542744
+            }
+          },
+          "id": "prt_cba9041ac001GpwOhY735wLoe8",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903da80018UxNnWvUyclmVt"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "cost": 0,
+          "tokens": {
+            "total": 54277,
+            "input": 1,
+            "output": 100,
+            "reasoning": 0,
+            "cache": {
+              "read": 54024,
+              "write": 152
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba903da80018UxNnWvUyclmVt"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656542775,
+          "completed": 1772656545227
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55177,
+          "input": 1,
+          "output": 136,
+          "reasoning": 0,
+          "cache": {
+            "read": 54176,
+            "write": 864
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba904437001B50aQBqqcWNzJc",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "id": "prt_cba9048e3001c7MLSGplUalLkj",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904437001B50aQBqqcWNzJc"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_016jkwT4ZCTfCMb62aH1f5i6",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"programForAgent\\|func.*program\\|AgentTypeFixer\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/app_state.go",
+              "description": "Search for the specific function in app_state.go"
+            },
+            "output": "",
+            "title": "Search for the specific function in app_state.go",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Search for the specific function in app_state.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656545142,
+              "end": 1772656545146
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904437001B50aQBqqcWNzJc"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "cost": 0,
+          "tokens": {
+            "total": 55177,
+            "input": 1,
+            "output": 136,
+            "reasoning": 0,
+            "cache": {
+              "read": 54176,
+              "write": 864
+            }
+          },
+          "id": "prt_cba904dbd001Jd2i8D7qqMvu55",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904437001B50aQBqqcWNzJc"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656545228,
+          "completed": 1772656547490
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55337,
+          "input": 1,
+          "output": 134,
+          "reasoning": 0,
+          "cache": {
+            "read": 55040,
+            "write": 162
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba904dcc001iZGnnV2M9XQTXo",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "id": "prt_cba905252001JyT5gCKNwrklWX",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904dcc001iZGnnV2M9XQTXo"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01131utWvoybuuzPRC99Roap",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"programForAgent\\|AgentTypeFixer\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ --type go 2>/dev/null | head -30",
+              "description": "Search entire project for programForAgent"
+            },
+            "output": "",
+            "title": "Search entire project for programForAgent",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search entire project for programForAgent",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656547458,
+              "end": 1772656547467
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904dcc001iZGnnV2M9XQTXo"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "fc79ce82fd29f32c15c0fa5e95f6b16d0c50bb07",
+          "cost": 0,
+          "tokens": {
+            "total": 55337,
+            "input": 1,
+            "output": 134,
+            "reasoning": 0,
+            "cache": {
+              "read": 55040,
+              "write": 162
+            }
+          },
+          "id": "prt_cba905694001YpZrhqopRCOga4",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba904dcc001iZGnnV2M9XQTXo"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656547491,
+          "completed": 1772656552533
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55689,
+          "input": 1,
+          "output": 326,
+          "reasoning": 0,
+          "cache": {
+            "read": 55202,
+            "write": 160
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba9056a3001Em2Dl7jci9eBVy",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "466817959280e6540e97635cebcb6a14fceeecda",
+          "id": "prt_cba905b03001fB3NFPgG5CstIF",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        },
+        {
+          "type": "reasoning",
+          "text": "Hmm, neither `programForAgent` nor `AgentTypeFixer` nor `ResolveProfile` exist yet. These might be functions that are being added by other tasks in this wave. Let me check the app_reviewer_program_test.go and look for what exists related to profiles or agent programs:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/wTt1IkVhodp/REDACTED/TyETIl0mnAtIRgQK4iovoXCm/REDACTED/REDACTED/REDACTED/6m2/iEv5rqLwQ9UrbgkUVfOb/6kF44pyV0pu6O4YAQ=="
+            }
+          },
+          "time": {
+            "start": 1772656548612,
+            "end": 1772656550626
+          },
+          "id": "prt_cba905b04001QYdreWthqsPPRz",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012YYzw9q3fxv61ygqtPfcTy",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"profile\\|Profile\\|fixer\\|Fixer\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/app/ --type go | head -30",
+              "description": "Search app for profile-related code"
+            },
+            "output": "",
+            "title": "Search app for profile-related code",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search app for profile-related code",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656551863,
+              "end": 1772656551868
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"profile\\|Profile\\|fixer\\|Fixer\\|ResolveProfile\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/config/ --type go | head -30",
+              "description": "Search config for profile-related code"
+            },
+            "output": "",
+            "title": "Search config for profile-related code",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Search config for profile-related code",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656552510,
+              "end": 1772656552514
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "0dfec28469cff2a94a5b84c190176a9b25cddced",
+          "cost": 0,
+          "tokens": {
+            "total": 55689,
+            "input": 1,
+            "output": 326,
+            "reasoning": 0,
+            "cache": {
+              "read": 55202,
+              "write": 160
+            }
+          },
+          "id": "prt_cba906a4c001lDZZlJ6VowhF5B",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        },
+        {
+          "type": "patch",
+          "hash": "466817959280e6540e97635cebcb6a14fceeecda",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/orchestration/prompt.go"
+          ],
+          "id": "prt_cba906a53001T8ZlxaLyPGIAxA",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9056a3001Em2Dl7jci9eBVy"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656552534,
+          "completed": 1772656554821
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 55883,
+          "input": 1,
+          "output": 117,
+          "reasoning": 0,
+          "cache": {
+            "read": 55362,
+            "write": 403
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba906a56001vaSY5MzsNt6SRM",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "17b8ca79e8edc086e7986494ac0718a70c459cf3",
+          "id": "prt_cba906f8e001n3l0i6XleOqwVU",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba906a56001vaSY5MzsNt6SRM"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"AgentType\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ --type go | head -30",
+              "description": "Find all AgentType references in the project"
+            },
+            "output": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_managed\", Title: \"managed\", Created: time.Now(), Managed: true, n: \"coder\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:func TestTmuxBrowserOverlay_ManagedItemRendersn(t *testing.T) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_auth\", Title: \"auth\", Created: time.Now(), Managed: true, n: \"coder\", TaskFile: \"auth-plan\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_managed\", Title: \"managed\", Created: time.Now(), Managed: true, n: \"planner\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\tn string // \"planner\"/\"coder\"/\"reviewer\" (managed only)\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\t\t\t\tif item.n != \"\" {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\t\t\t\t\tbadgeText = item.n\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nReviewer && inst.TaskFile != \"\":\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nPlanner && inst.TaskFile != \"\":\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nCoder && inst.TaskFile != \"\" && inst.WaveNumber == 0:\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane_test.go:\t\tn:       \"coder\",\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\tn  string\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\tif p.data.n != \"\" {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\t\trows = append(rows, p.renderRow(\"role\", p.data.n))\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:func TestSetn(t *testing.T) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"  planner  \")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/storage.go:\tn              string `json:\"agent_type,omitempty\"`\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session.go:// Setn sets the agent type flag to inject at startup (planner/coder/reviewer).\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session.go:func (t *TmuxSession) Setn(agentType string) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nPlanner,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn:  nCoder,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nReviewer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nFixer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn:   nReviewer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/session.go:\tSetn(agentType string)\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_taskfile_test.go:func TestNewInstance_Setsn(t *testing.T) {\n",
+            "title": "Find all AgentType references in the project",
+            "metadata": {
+              "output": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_managed\", Title: \"managed\", Created: time.Now(), Managed: true, n: \"coder\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:func TestTmuxBrowserOverlay_ManagedItemRendersn(t *testing.T) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_auth\", Title: \"auth\", Created: time.Now(), Managed: true, n: \"coder\", TaskFile: \"auth-plan\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay_test.go:\t\t{Name: \"kas_managed\", Title: \"managed\", Created: time.Now(), Managed: true, n: \"planner\"},\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\tn string // \"planner\"/\"coder\"/\"reviewer\" (managed only)\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\t\t\t\tif item.n != \"\" {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/overlay/tmuxBrowserOverlay.go:\t\t\t\t\tbadgeText = item.n\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nReviewer && inst.TaskFile != \"\":\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nPlanner && inst.TaskFile != \"\":\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/navigation_panel.go:\tcase inst.n == session.nCoder && inst.TaskFile != \"\" && inst.WaveNumber == 0:\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane_test.go:\t\tn:       \"coder\",\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\tn  string\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\tif p.data.n != \"\" {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ui/info_pane.go:\t\trows = append(rows, p.renderRow(\"role\", p.data.n))\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:func TestSetn(t *testing.T) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"  planner  \")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session_test.go:\ts.Setn(\"planner\")\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/storage.go:\tn              string `json:\"agent_type,omitempty\"`\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session.go:// Setn sets the agent type flag to inject at startup (planner/coder/reviewer).\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/tmux_session.go:func (t *TmuxSession) Setn(agentType string) {\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nPlanner,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn:  nCoder,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nReviewer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn: nFixer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go:\t\t\t\tn:   nReviewer,\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/tmux/session.go:\tSetn(agentType string)\n/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_taskfile_test.go:func TestNewInstance_Setsn(t *testing.T) {\n",
+              "exit": 0,
+              "description": "Find all AgentType references in the project",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656554795,
+              "end": 1772656554799
+            }
+          },
+          "id": "prt_cba906f8e0020PQ3Kemtu8bSnk",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba906a56001vaSY5MzsNt6SRM"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 55883,
+            "input": 1,
+            "output": 117,
+            "reasoning": 0,
+            "cache": {
+              "read": 55362,
+              "write": 403
+            }
+          },
+          "id": "prt_cba90733e001jtokAJhJKORedX",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba906a56001vaSY5MzsNt6SRM"
+        },
+        {
+          "type": "patch",
+          "hash": "17b8ca79e8edc086e7986494ac0718a70c459cf3",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/orchestration/engine.go"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba906a56001vaSY5MzsNt6SRM"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656554823,
+          "completed": 1772656559185
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57577,
+          "input": 1,
+          "output": 196,
+          "reasoning": 0,
+          "cache": {
+            "read": 55765,
+            "write": 1615
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba907347001fNXITzEH3oc1Dl",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba907927001zq7nRJ6nVvHLzb",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba907347001fNXITzEH3oc1Dl"
+        },
+        {
+          "type": "reasoning",
+          "text": "Interesting! The code seems to use `n` (lowercase) instead of `AgentType`. Let me look at the actual session package constants more carefully and how it maps to the older `n` style:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/OLQEYpx8jTF1E85qKwrosJJl8aXE/REDACTED/4yj3KfME5C/ZDPYHeUYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772656556328,
+            "end": 1772656558034
+          },
+          "id": "prt_cba9079280014rB4oN5xWhpVgX",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba907347001fNXITzEH3oc1Dl"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DfKcJXPw9PxpKCSAKuQ1cR",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"nPlanner\\|nCoder\\|nReviewer\\|nFixer\\|AgentType\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance.go",
+              "description": "Find n constants and AgentType in instance.go"
+            },
+            "output": "",
+            "title": "Find n constants and AgentType in instance.go",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Find n constants and AgentType in instance.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656559164,
+              "end": 1772656559168
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba907347001fNXITzEH3oc1Dl"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 57577,
+            "input": 1,
+            "output": 196,
+            "reasoning": 0,
+            "cache": {
+              "read": 55765,
+              "write": 1615
+            }
+          },
+          "id": "prt_cba908449001Yhq0hAeh0OfmT2",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba907347001fNXITzEH3oc1Dl"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656559187,
+          "completed": 1772656562875
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57749,
+          "input": 1,
+          "output": 146,
+          "reasoning": 0,
+          "cache": {
+            "read": 57380,
+            "write": 222
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba908453001LOym9ssqlMNbo3",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba908dad001reZPmq0gAsOtpQ",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba908453001LOym9ssqlMNbo3"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Azpk8apgfQrv3brUHF13kU",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"nPlanner\\|nCoder\\|nReviewer\\|nFixer\\|AgentTypePlanner\\|AgentTypeCoder\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/ --type go | head -30",
+              "description": "Find n constants in session package"
+            },
+            "output": "",
+            "title": "Find n constants in session package",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find n constants in session package",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656562829,
+              "end": 1772656562834
+            }
+          },
+          "id": "prt_cba908dad002CmKk0lnZiV3iIk",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba908453001LOym9ssqlMNbo3"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 57749,
+            "input": 1,
+            "output": 146,
+            "reasoning": 0,
+            "cache": {
+              "read": 57380,
+              "write": 222
+            }
+          },
+          "id": "prt_cba9092b30013b14HNVcY0eyew",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba908453001LOym9ssqlMNbo3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656562877,
+          "completed": 1772656564904
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57898,
+          "input": 1,
+          "output": 123,
+          "reasoning": 0,
+          "cache": {
+            "read": 57602,
+            "write": 172
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba9092bd001jLs0KBPzyUhXtB",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9092bd001jLs0KBPzyUhXtB"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"nPlanner\\|nCoder\\|nFixer\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ --type go | head -30",
+              "description": "Find n constants across project"
+            },
+            "output": "",
+            "title": "Find n constants across project",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find n constants across project",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656564873,
+              "end": 1772656564886
+            }
+          },
+          "id": "prt_cba909741001LqG1YG1nDurMFG",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9092bd001jLs0KBPzyUhXtB"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 57898,
+            "input": 1,
+            "output": 123,
+            "reasoning": 0,
+            "cache": {
+              "read": 57602,
+              "write": 172
+            }
+          },
+          "id": "prt_cba909a9b001H5SPzM5WiHyerg",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba9092bd001jLs0KBPzyUhXtB"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656564906,
+          "completed": 1772656566973
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58053,
+          "input": 1,
+          "output": 129,
+          "reasoning": 0,
+          "cache": {
+            "read": 57774,
+            "write": 149
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba909aaa0011XFVVjoUixRVaj",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba909f51001d9bq7QaqK3MXM6",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba909aaa0011XFVVjoUixRVaj"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -rn \"nPlanner\\|nCoder\\|nFixer\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/ 2>/dev/null | head -30",
+              "description": "Find n constants across project without type filter"
+            },
+            "output": "",
+            "title": "Find n constants across project without type filter",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find n constants across project without type filter",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656566939,
+              "end": 1772656566945
+            }
+          },
+          "id": "prt_cba909f51002C05GRLx50cOJB1",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba909aaa0011XFVVjoUixRVaj"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 58053,
+            "input": 1,
+            "output": 129,
+            "reasoning": 0,
+            "cache": {
+              "read": 57774,
+              "write": 149
+            }
+          },
+          "id": "prt_cba90a2b4001JQOfa3bUa7p4As",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba909aaa0011XFVVjoUixRVaj"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656566975,
+          "completed": 1772656569895
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58177,
+          "input": 1,
+          "output": 98,
+          "reasoning": 0,
+          "cache": {
+            "read": 57923,
+            "write": 155
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba90a2bf001q2RQOXUtDcEpo4",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "",
+          "id": "prt_cba90abcf001TotL6gdR4eQ62a",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90a2bf001q2RQOXUtDcEpo4"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01VYg1rSUggzfZuqD65ZAFFb",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/",
+              "description": "List session directory files"
+            },
+            "output": "activity.go\nactivity_test.go\ncli_prompt.go\ncli_prompt_test.go\ngit\ninstance.go\ninstance_lifecycle.go\ninstance_lifecycle_test.go\ninstance_session_async_test.go\ninstance_session.go\ninstance_taskfile_test.go\ninstance_test.go\ninstance_title_test.go\ninstance_wave_test.go\nnotify.go\nnotify_test.go\npermission_prompt.go\npermission_prompt_test.go\nstorage.go\nterminal.go\ntestmain_test.go\ntmux\n",
+            "title": "List session directory files",
+            "metadata": {
+              "output": "activity.go\nactivity_test.go\ncli_prompt.go\ncli_prompt_test.go\ngit\ninstance.go\ninstance_lifecycle.go\ninstance_lifecycle_test.go\ninstance_session_async_test.go\ninstance_session.go\ninstance_taskfile_test.go\ninstance_test.go\ninstance_title_test.go\ninstance_wave_test.go\nnotify.go\nnotify_test.go\npermission_prompt.go\npermission_prompt_test.go\nstorage.go\nterminal.go\ntestmain_test.go\ntmux\n",
+              "exit": 0,
+              "description": "List session directory files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656569864,
+              "end": 1772656569871
+            }
+          },
+          "id": "prt_cba90abd00013d83EN3N0HfiCZ",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90a2bf001q2RQOXUtDcEpo4"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 58177,
+            "input": 1,
+            "output": 98,
+            "reasoning": 0,
+            "cache": {
+              "read": 57923,
+              "write": 155
+            }
+          },
+          "id": "prt_cba90ae2100115QTa50rM9YOGr",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90a2bf001q2RQOXUtDcEpo4"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656569896,
+          "completed": 1772656574113
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58462,
+          "input": 1,
+          "output": 139,
+          "reasoning": 0,
+          "cache": {
+            "read": 58078,
+            "write": 244
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba90ae2800158JCCdPjQNeuF5",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba90b3a1001zWdZ1t7vs0DOMf",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90ae2800158JCCdPjQNeuF5"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n \"AgentType\\|nPlanner\\|nCoder\\|nFixer\\|nReviewer\" /home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go",
+              "description": "Check instance_title_test for relevant constants"
+            },
+            "output": "",
+            "title": "Check instance_title_test for relevant constants",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Check instance_title_test for relevant constants",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772656574003,
+              "end": 1772656574006
+            }
+          },
+          "id": "prt_cba90b3a1002QhO7uQLPVpk5Ug",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90ae2800158JCCdPjQNeuF5"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 58462,
+            "input": 1,
+            "output": 139,
+            "reasoning": 0,
+            "cache": {
+              "read": 58078,
+              "write": 244
+            }
+          },
+          "id": "prt_cba90be94001vfmIykXbQor7Ar",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90ae2800158JCCdPjQNeuF5"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656574115,
+          "completed": 1772656576176
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 58590,
+          "input": 1,
+          "output": 102,
+          "reasoning": 0,
+          "cache": {
+            "read": 58322,
+            "write": 165
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_cba90bea3001I1271R0G5VoPJ3",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba90c3f9001J6wqTgROz70mkR",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90bea3001I1271R0G5VoPJ3"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go",
+              "limit": 50
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail/session/instance_title_test.go</path>\n<type>file</type>\n<content>1: package session\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/kastheco/kasmos/internal/opencodesession\"\n7: \t\"github.com/stretchr/testify/assert\"\n8: )\n9: \n10: func TestBuildTitleOptsFromInstance(t *testing.T) {\n11: \ttests := []struct {\n12: \t\tname string\n13: \t\tinst *Instance\n14: \t\twant string\n15: \t}{\n16: \t\t{\n17: \t\t\tname: \"planner with plan file\",\n18: \t\t\tinst: &Instance{\n19: \t\t\t\tTaskFile:  \"automatic-session-naming.md\",\n20: \t\t\t\tAgentType: AgentTypePlanner,\n21: \t\t\t\tTitle:     \"automatic-session-naming-plan\",\n22: \t\t\t},\n23: \t\t\twant: \"kas: plan automatic-session-naming\",\n24: \t\t},\n25: \t\t{\n26: \t\t\tname: \"coder wave task\",\n27: \t\t\tinst: &Instance{\n28: \t\t\t\tTaskFile:   \"automatic-session-naming.md\",\n29: \t\t\t\tAgentType:  AgentTypeCoder,\n30: \t\t\t\tWaveNumber: 2,\n31: \t\t\t\tTaskNumber: 3,\n32: \t\t\t\tTitle:      \"automatic-session-naming-W2-T3\",\n33: \t\t\t},\n34: \t\t\twant: \"kas: implement automatic-session-naming w2/t3\",\n35: \t\t},\n36: \t\t{\n37: \t\t\tname: \"reviewer\",\n38: \t\t\tinst: &Instance{\n39: \t\t\t\tTaskFile:  \"automatic-session-naming.md\",\n40: \t\t\t\tAgentType: AgentTypeReviewer,\n41: \t\t\t\tTitle:     \"automatic-session-naming-review\",\n42: \t\t\t},\n43: \t\t\twant: \"kas: review automatic-session-naming\",\n44: \t\t},\n45: \t\t{\n46: \t\t\tname: \"fixer ad-hoc\",\n47: \t\t\tinst: &Instance{\n48: \t\t\t\tAgentType: AgentTypeFixer,\n49: \t\t\t\tTitle:     \"fix-login-bug\",\n50: \t\t\t},\n\n(Showing lines 1-50 of 78. Use offset=51 to continue.)\n</content>",
+            "title": "session/instance_title_test.go",
+            "metadata": {
+              "preview": "package session\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/internal/opencodesession\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTitleOptsFromInstance(t *testing.T) {\n\ttests := []struct {\n\t\tname string\n\t\tinst *Instance\n\t\twant string\n\t}{\n\t\t{\n\t\t\tname: \"planner with plan file\",\n\t\t\tinst: &Instance{\n\t\t\t\tTaskFile:  \"automatic-session-naming.md\",\n\t\t\t\tAgentType: AgentTypePlanner,",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772656576145,
+              "end": 1772656576147
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90bea3001I1271R0G5VoPJ3"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "cost": 0,
+          "tokens": {
+            "total": 58590,
+            "input": 1,
+            "output": 102,
+            "reasoning": 0,
+            "cache": {
+              "read": 58322,
+              "write": 165
+            }
+          },
+          "id": "prt_cba90c6a8001w3Kc1yAw3UhVz6",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90bea3001I1271R0G5VoPJ3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656576179
+        },
+        "parentID": "msg_cba8fe223001L08mKvLsZ11Zwz",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-increase-plan-detail"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "medium",
+        "id": "msg_cba90c6b2001gR9HG8joFJmQFC",
+        "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "24f4c733e5e447a929be1085ccec71d67d81e2ad",
+          "id": "prt_cba90ccd2001D3MJrQ1C6Df9EV",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90c6b2001gR9HG8joFJmQFC"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1772656577747
+          },
+          "id": "prt_cba90ccd300116m88jhUMMFgfO",
+          "sessionID": "ses_345701de5ffeVNomfdMG0l4uL7",
+          "messageID": "msg_cba90c6b2001gR9HG8joFJmQFC"
+        }
+      ]
+    }
+  ]
+}
