@@ -7,13 +7,13 @@
     "title": "kas: review #1 safe-kill",
     "version": "1.2.16",
     "summary": {
-      "additions": 1324,
+      "additions": 0,
       "deletions": 0,
-      "files": 3
+      "files": 1
     },
     "time": {
       "created": 1772597903431,
-      "updated": 1772598083500
+      "updated": 1772598220745
     }
   },
   "messages": [
@@ -26,28 +26,12 @@
         "summary": {
           "diffs": [
             {
-              "file": "docs/plans/fix-agents-reading-from-disk.md",
-              "before": "",
-              "after": "# Fix Agents Reading From Disk Implementation Plan\n\n**Goal:** Stop agents from reading plan content via disk files at `docs/plans/`. Add a `kas task show` CLI command so agents can retrieve plan content from the database, and update all prompt builders, review templates, and skill documentation to reference the CLI instead of disk paths.\n\n**Architecture:** Three parallel changes: (1) Add a `kas task show <plan-file>` subcommand to `cmd/task.go` that reads content from the task store and prints raw markdown to stdout — follows the existing `resolvePlansDir()` → `resolveStore()` pattern. (2) Update all prompt-building functions in `app/app_state.go`, `orchestration/prompt.go`, and `app/app_actions.go` to reference `kas task show` instead of `docs/plans/` — also update `review-prompt.md` template and corresponding test assertions. (3) Update skill documentation (scaffold templates + live copies) to document `kas task show` as the standard way agents retrieve plan content.\n\n**Tech Stack:** Go, cobra (CLI), config/taskstore, config/taskstate, testify, `sd` for batch markdown edits\n\n**Size:** Small (estimated ~2 hours, 3 tasks, 1 wave)\n\n---\n\n## Wave 1: Add CLI command and update all agent-facing references\n\n### Task 1: Add `kas task show` CLI subcommand\n\n**Files:**\n- Modify: `cmd/task.go`\n- Test: `cmd/task_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test in `cmd/task_test.go` that calls `executeTaskShow` and verifies it returns the stored plan content:\n\n```go\nfunc TestExecuteTaskShow(t *testing.T) {\n\tdir := t.TempDir()\n\tplansDir := filepath.Join(dir, \"docs\", \"plans\")\n\trequire.NoError(t, os.MkdirAll(plansDir, 0o755))\n\n\tstore := taskstore.NewTestSQLiteStore(t)\n\tproject := projectFromPlansDir(plansDir)\n\trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n\t\tFilename: \"my-plan.md\",\n\t\tStatus:   taskstore.StatusReady,\n\t\tContent:  \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do it\\n\\nDo the thing.\\n\",\n\t}))\n\n\tcontent, err := executeTaskShow(plansDir, \"my-plan.md\", store)\n\trequire.NoError(t, err)\n\tassert.Equal(t, \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do it\\n\\nDo the thing.\\n\", content)\n}\n\nfunc TestExecuteTaskShow_NotFound(t *testing.T) {\n\tdir := t.TempDir()\n\tplansDir := filepath.Join(dir, \"docs\", \"plans\")\n\trequire.NoError(t, os.MkdirAll(plansDir, 0o755))\n\n\tstore := taskstore.NewTestSQLiteStore(t)\n\t_, err := executeTaskShow(plansDir, \"nonexistent.md\", store)\n\trequire.Error(t, err)\n\tassert.Contains(t, err.Error(), \"not found\")\n}\n\nfunc TestExecuteTaskShow_EmptyContent(t *testing.T) {\n\tdir := t.TempDir()\n\tplansDir := filepath.Join(dir, \"docs\", \"plans\")\n\trequire.NoError(t, os.MkdirAll(plansDir, 0o755))\n\n\tstore := taskstore.NewTestSQLiteStore(t)\n\tproject := projectFromPlansDir(plansDir)\n\trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n\t\tFilename: \"empty.md\",\n\t\tStatus:   taskstore.StatusReady,\n\t}))\n\n\t_, err := executeTaskShow(plansDir, \"empty.md\", store)\n\trequire.Error(t, err)\n\tassert.Contains(t, err.Error(), \"no content\")\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./cmd/... -run \"TestExecuteTaskShow\" -v\n```\n\nexpected: FAIL — `executeTaskShow` is undefined\n\n**Step 3: write minimal implementation**\n\nAdd `executeTaskShow` function and the `show` cobra subcommand in `cmd/task.go`:\n\n```go\n// executeTaskShow retrieves plan content from the task store and returns it\n// as raw markdown. Returns an error if the plan doesn't exist or has no content.\nfunc executeTaskShow(plansDir, planFile string, store taskstore.Store) (string, error) {\n\tps, err := loadTaskState(plansDir, store)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\tif _, ok := ps.Entry(planFile); !ok {\n\t\treturn \"\", fmt.Errorf(\"task not found: %s\", planFile)\n\t}\n\tcontent, err := ps.GetContent(planFile)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"get content for %s: %w\", planFile, err)\n\t}\n\tif strings.TrimSpace(content) == \"\" {\n\t\treturn \"\", fmt.Errorf(\"no content stored for %s\", planFile)\n\t}\n\treturn content, nil\n}\n```\n\nAdd the cobra subcommand inside `NewTaskCmd()`, alongside the existing subcommands:\n\n```go\n// kq task show\nshowCmd := &cobra.Command{\n\tUse:   \"show <plan-file>\",\n\tShort: \"print plan content from the task store\",\n\tArgs:  cobra.ExactArgs(1),\n\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\tplansDir, err := resolvePlansDir()\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tcontent, err := executeTaskShow(plansDir, args[0], resolveStore(plansDir))\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfmt.Print(content)\n\t\treturn nil\n\t},\n}\nplanCmd.AddCommand(showCmd)\n```\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./cmd/... -run \"TestExecuteTaskShow\" -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add cmd/task.go cmd/task_test.go\ngit commit -m \"feat(task-1): add kas task show subcommand for CLI-based plan content retrieval\"\n```\n\n### Task 2: Update prompt builders and review template to reference `kas task show`\n\n**Files:**\n- Modify: `app/app_state.go`\n- Modify: `app/app_actions.go`\n- Modify: `orchestration/prompt.go`\n- Modify: `internal/initcmd/scaffold/templates/shared/review-prompt.md`\n- Test: `app/app_task_actions_test.go`\n- Test: `orchestration/prompt_test.go`\n\n**Step 1: write the failing test**\n\nUpdate existing tests in `app/app_task_actions_test.go` to assert prompts reference `kas task show` instead of `docs/plans/`:\n\n```go\n// TestBuildImplementPrompt — assert prompt says \"kas task show\" not \"docs/plans/\"\nfunc TestBuildImplementPrompt(t *testing.T) {\n\tprompt := buildImplementPrompt(\"auth-refactor.md\")\n\tassert.Contains(t, prompt, \"kas task show auth-refactor.md\")\n\tassert.NotContains(t, prompt, \"docs/plans/\")\n}\n\n// TestBuildSoloPrompt_WithDescription — assert prompt says \"kas task show\" not \"docs/plans/\"\nfunc TestBuildSoloPrompt_WithDescription(t *testing.T) {\n\tprompt := buildSoloPrompt(\"auth-refactor\", \"Refactor JWT auth\", \"auth-refactor.md\")\n\tassert.Contains(t, prompt, \"kas task show auth-refactor.md\")\n\tassert.NotContains(t, prompt, \"docs/plans/\")\n}\n\n// TestBuildSoloPrompt_StubOnly — no plan file, no kas task show reference\nfunc TestBuildSoloPrompt_StubOnly(t *testing.T) {\n\tprompt := buildSoloPrompt(\"quick-fix\", \"Fix the login bug\", \"\")\n\tassert.NotContains(t, prompt, \"kas task show\")\n\tassert.NotContains(t, prompt, \"docs/plans/\")\n}\n```\n\nUpdate `orchestration/prompt_test.go` for `BuildWaveAnnotationPrompt`:\n\n```go\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./app/... -run \"TestBuildImplementPrompt|TestBuildSoloPrompt\" -v\ngo test ./orchestration/... -run \"TestBuildWaveAnnotationPrompt\" -v\n```\n\nexpected: FAIL — prompts still reference `docs/plans/`\n\n**Step 3: write minimal implementation**\n\n**3a. Update `app/app_state.go`** — modify these functions:\n\n`buildImplementPrompt`:\n```go\nfunc buildImplementPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"Implement %s using the `kasmos-coder` skill. \"+\n\t\t\t\"Retrieve the full plan with `kas task show %s` and execute all tasks sequentially.\",\n\t\tplanFile, planFile,\n\t)\n}\n```\n\n`buildSoloPrompt`:\n```go\nfunc buildSoloPrompt(planName, description, planFile string) string {\n\tif planFile != \"\" {\n\t\treturn fmt.Sprintf(\n\t\t\t\"Implement %s. Goal: %s. Retrieve the full plan with `kas task show %s`.\",\n\t\t\tplanName, description, planFile,\n\t\t)\n\t}\n\treturn fmt.Sprintf(\"Implement %s. Goal: %s.\", planName, description)\n}\n```\n\n`buildModifyTaskPrompt`:\n```go\nfunc buildModifyTaskPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"Modify existing plan %s. Retrieve current content with `kas task show %s`. \"+\n\t\t\t\"Keep the same filename and update only what changed.\",\n\t\tplanFile, planFile,\n\t)\n}\n```\n\n`buildWaveAnnotationPrompt` in `app/app_state.go`:\n```go\nfunc buildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Write the updated plan to docs/plans/%[1]s\\n\"+\n\t\t\t\"2. Commit: git add docs/plans/%[1]s && git commit -m \\\"plan: add wave headers to %[1]s\\\"\\n\"+\n\t\t\t\"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n```\n\nNote: The annotation prompt still references `docs/plans/` for the *write* path (commit step). The plan is read via CLI, written to disk for git commit, and the TUI ingests the committed content. This is correct — the goal is to stop agents from *reading* from disk, not from *writing* for commits.\n\n`buildChatAboutTaskPrompt`:\n```go\nfunc buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, question string) string {\n\tname := taskstate.DisplayName(planFile)\n\tvar sb strings.Builder\n\tsb.WriteString(fmt.Sprintf(\"You are answering a question about the plan '%s'.\\n\\n\", name))\n\tsb.WriteString(\"## Plan Context\\n\\n\")\n\tsb.WriteString(fmt.Sprintf(\"- **Plan:** %s\\n\", planFile))\n\tsb.WriteString(fmt.Sprintf(\"- **Status:** %s\\n\", entry.Status))\n\tif entry.Description != \"\" {\n\t\tsb.WriteString(fmt.Sprintf(\"- **Description:** %s\\n\", entry.Description))\n\t}\n\tif entry.Branch != \"\" {\n\t\tsb.WriteString(fmt.Sprintf(\"- **Branch:** %s\\n\", entry.Branch))\n\t}\n\tif entry.Topic != \"\" {\n\t\tsb.WriteString(fmt.Sprintf(\"- **Topic:** %s\\n\", entry.Topic))\n\t}\n\tsb.WriteString(fmt.Sprintf(\"\\nRetrieve the full plan with `kas task show %s` for details.\\n\\n\", planFile))\n\tsb.WriteString(\"## User Question\\n\\n\")\n\tsb.WriteString(question)\n\treturn sb.String()\n}\n```\n\nUpdate the ClickUp import prompt (around line 1202-1206):\n```go\nprompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan.\n\nDetermine if the task is well-specified enough for implementation or needs further analysis. Write a proper implementation plan with ## Wave sections, task breakdowns, architecture notes, and tech stack. Use the ClickUp subtasks as a starting point but reorganize into waves based on dependencies.\n\nRetrieve the current plan content with: kas task show %s`, filename)\n```\n\n**3b. Update `orchestration/prompt.go`** — modify `BuildWaveAnnotationPrompt`:\n```go\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Write the updated plan to docs/plans/%[1]s\\n\"+\n\t\t\t\"2. Commit: git add docs/plans/%[1]s && git commit -m \\\"plan: add wave headers to %[1]s\\\"\\n\"+\n\t\t\t\"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n```\n\n**3c. Update `app/app_actions.go`** — change `LoadReviewPrompt` call (around line 882) from:\n```go\nreviewPrompt := scaffold.LoadReviewPrompt(\"docs/plans/\"+planFile, planName)\n```\nto:\n```go\nreviewPrompt := scaffold.LoadReviewPrompt(planFile, planName)\n```\n\nAlso update the call in `app/app_state.go` (around line 728) from:\n```go\nplanPath := \"docs/plans/\" + planFile\nprompt := scaffold.LoadReviewPrompt(planPath, planName)\n```\nto:\n```go\nprompt := scaffold.LoadReviewPrompt(planFile, planName)\n```\n\n(Remove the now-unused `planPath` variable.)\n\n**3d. Update `internal/initcmd/scaffold/templates/shared/review-prompt.md`**:\n\nReplace the opening lines:\n```\nReview the implementation of plan: {{PLAN_NAME}}\n\nPlan file: {{PLAN_FILE}}\n\nRead the plan content to understand the goals, architecture, and tasks that were implemented.\n```\n\nWith:\n```\nReview the implementation of plan: {{PLAN_NAME}}\n\nRetrieve the plan content with `kas task show {{PLAN_FILE}}` to understand the goals, architecture, and tasks that were implemented.\n```\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./app/... -run \"TestBuild\" -v\ngo test ./orchestration/... -run \"TestBuild\" -v\n```\n\nexpected: PASS\n\nAlso update the test assertion in `TestSoloActionChecksStoreNotDisk` (around line 633) — change:\n```go\nassert.Contains(t, soloInst.QueuedPrompt, \"docs/plans/\"+planFile, ...)\n```\nto:\n```go\nassert.Contains(t, soloInst.QueuedPrompt, \"kas task show \"+planFile, ...)\n```\n\n**Step 5: commit**\n\n```bash\ngit add app/app_state.go app/app_actions.go app/app_task_actions_test.go orchestration/prompt.go orchestration/prompt_test.go internal/initcmd/scaffold/templates/shared/review-prompt.md\ngit commit -m \"feat(task-2): update all prompt builders to reference kas task show instead of docs/plans/\"\n```\n\n### Task 3: Document `kas task show` in skill files\n\n**Files:**\n- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md`\n- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md`\n- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md`\n- Modify: `.opencode/skills/kasmos-coder/SKILL.md`\n- Modify: `.opencode/skills/kasmos-fixer/SKILL.md`\n- Modify: `.opencode/skills/kasmos-lifecycle/SKILL.md`\n\n**Step 1: write the failing test**\n\nNo unit tests — these are documentation files. Verification is by checking that the new `kas task show` reference exists and stale \"read from disk\" instructions are removed.\n\nBaseline verification:\n\n```bash\nrg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/ -c\n# expected: 0 matches (not added yet)\n```\n\n**Step 2: run verification to confirm stale references exist (baseline)**\n\n```bash\nrg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/\n# expected: no matches\n```\n\n**Step 3: write changes**\n\n**3a. kasmos-coder skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md` and `.opencode/skills/kasmos-coder/SKILL.md`:\n\nUpdate the managed-mode instructions (around line 67) from:\n```\n1. Read the task content from the task store (via `kas task` CLI or the task content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).\n```\nto:\n```\n1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.\n```\n\nUpdate the manual-mode instructions (around line 81) from:\n```\n1. Read the plan. Check its **Size** field to determine wave structure.\n```\nto:\n```\n1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.\n```\n\n**3b. kasmos-fixer skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md` and `.opencode/skills/kasmos-fixer/SKILL.md`:\n\nAdd `kas task show` to the \"Available CLI Commands\" section, after the `### kas task list` entry (around line 286):\n\n```markdown\n### `kas task show <plan-file>`\n\nPrint the plan's full markdown content from the task store. Use this to retrieve plan details\nwithout reading from disk.\n\n\\`\\`\\`bash\nkas task show my-plan.md\n\\`\\`\\`\n```\n\n**3c. kasmos-lifecycle skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md` and `.opencode/skills/kasmos-lifecycle/SKILL.md`:\n\nThis skill is minimal and doesn't have a CLI commands section, but it should mention that plan content is retrieved via `kas task show`, not from disk. Add a sentence after \"Agents only write sentinel files (managed mode) or use `kas task` CLI commands (manual mode).\" (around line 24):\n\n```\nTo retrieve plan content, agents use `kas task show <plan-file>` — never read directly from `docs/plans/` on disk.\n```\n\nUse `sd` for batch replacements across the 6 files where the same change applies to both scaffold and live copies.\n\n**Step 4: run verification**\n\n```bash\nrg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/ -c\n# expected: matches in kasmos-coder, kasmos-fixer, kasmos-lifecycle (both scaffold + live)\n```\n\nVerify scaffold and live copies are identical:\n\n```bash\ndifft .opencode/skills/kasmos-coder/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md\ndifft .opencode/skills/kasmos-fixer/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md\ndifft .opencode/skills/kasmos-lifecycle/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md\n```\n\nexpected: \"No changes.\" for all three pairs\n\n**Step 5: commit**\n\n```bash\ngit add internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md \\\n       internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md \\\n       internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md \\\n       .opencode/skills/kasmos-coder/SKILL.md \\\n       .opencode/skills/kasmos-fixer/SKILL.md \\\n       .opencode/skills/kasmos-lifecycle/SKILL.md\ngit commit -m \"feat(task-3): document kas task show in coder, fixer, and lifecycle skills\"\n```\n",
-              "additions": 483,
-              "deletions": 0,
-              "status": "added"
-            },
-            {
-              "file": "docs/plans/improved-info-tab.md",
-              "before": "",
-              "after": "# Improved Info Tab Implementation Plan\n\n**Goal:** Persist plan subtask statuses and phase timestamps in the database, then overhaul the info pane UI to show plan summary, lifecycle timeline, and all-waves progress with per-task detail.\n\n**Architecture:** Add a `subtasks` table and phase-timestamp columns to the existing SQLite task store. Parse plan content during ingestion to populate subtask rows and extract the goal field. Hook FSM transitions to record phase timestamps and orchestrator state changes to update subtask status. Redesign the info pane to render the new data in a scrollable multi-section layout (metadata → goal → lifecycle → progress → instances).\n\n**Tech Stack:** Go, SQLite (modernc.org/sqlite), bubbletea/lipgloss (charm v2), existing taskstore/taskstate/taskfsm packages.\n\n**Size:** Medium (estimated ~2.5 hours, 4 tasks, 3 waves)\n\n---\n\n## Wave 1: Database Schema and SQLite Store\n\n### Task 1: Subtask Table, Phase Timestamps, and SQLiteStore Methods\n\n**Files:**\n- Modify: `config/taskstore/store.go`\n- Modify: `config/taskstore/sqlite.go`\n- Modify: `config/taskstore/testing.go`\n- Modify: `config/taskstore/sqlite_test.go`\n\n**Step 1: write the failing test**\n\nAdd tests to `sqlite_test.go` that exercise the new subtask and phase-timestamp methods:\n\n```go\nfunc TestSQLiteStore_SubtaskCRUD(t *testing.T) {\n    store := newTestStore(t)\n    project := \"test-project\"\n\n    // Create a plan first.\n    store.Create(project, TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n\n    // SetSubtasks should insert subtask rows.\n    subtasks := []SubtaskEntry{\n        {PlanFilename: \"plan.md\", WaveNumber: 1, TaskNumber: 1, Title: \"schema migration\", Status: SubtaskPending},\n        {PlanFilename: \"plan.md\", WaveNumber: 1, TaskNumber: 2, Title: \"store methods\", Status: SubtaskPending},\n        {PlanFilename: \"plan.md\", WaveNumber: 2, TaskNumber: 3, Title: \"UI overhaul\", Status: SubtaskPending},\n    }\n    require.NoError(t, store.SetSubtasks(project, \"plan.md\", subtasks))\n\n    // GetSubtasks should return them ordered by task_number.\n    got, err := store.GetSubtasks(project, \"plan.md\")\n    require.NoError(t, err)\n    require.Len(t, got, 3)\n    assert.Equal(t, \"schema migration\", got[0].Title)\n    assert.Equal(t, SubtaskPending, got[0].Status)\n    assert.Equal(t, 1, got[0].WaveNumber)\n\n    // UpdateSubtaskStatus should change a single subtask's status.\n    require.NoError(t, store.UpdateSubtaskStatus(project, \"plan.md\", 1, SubtaskComplete))\n    got, _ = store.GetSubtasks(project, \"plan.md\")\n    assert.Equal(t, SubtaskComplete, got[0].Status)\n\n    // SetSubtasks again should replace (upsert) all rows.\n    require.NoError(t, store.SetSubtasks(project, \"plan.md\", subtasks[:1]))\n    got, _ = store.GetSubtasks(project, \"plan.md\")\n    assert.Len(t, got, 1)\n}\n\nfunc TestSQLiteStore_PhaseTimestamps(t *testing.T) {\n    store := newTestStore(t)\n    project := \"test-project\"\n    now := time.Now().UTC().Truncate(time.Millisecond)\n\n    store.Create(project, TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n    require.NoError(t, store.SetPhaseTimestamp(project, \"plan.md\", \"implementing\", now))\n\n    entry, err := store.Get(project, \"plan.md\")\n    require.NoError(t, err)\n    assert.Equal(t, now.Unix(), entry.ImplementingAt.Unix())\n}\n\nfunc TestSQLiteStore_PlanGoal(t *testing.T) {\n    store := newTestStore(t)\n    project := \"test-project\"\n\n    store.Create(project, TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n    require.NoError(t, store.SetPlanGoal(project, \"plan.md\", \"add dark mode\"))\n\n    entry, err := store.Get(project, \"plan.md\")\n    require.NoError(t, err)\n    assert.Equal(t, \"add dark mode\", entry.Goal)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v\n```\n\nexpected: FAIL — `SubtaskEntry` undefined, `SetSubtasks` undefined, etc.\n\n**Step 3: write minimal implementation**\n\nIn `store.go`, add the subtask types and new Store interface methods:\n\n```go\ntype SubtaskStatus string\n\nconst (\n    SubtaskPending  SubtaskStatus = \"pending\"\n    SubtaskRunning  SubtaskStatus = \"running\"\n    SubtaskComplete SubtaskStatus = \"complete\"\n    SubtaskFailed   SubtaskStatus = \"failed\"\n)\n\ntype SubtaskEntry struct {\n    PlanFilename string        `json:\"plan_filename\"`\n    WaveNumber   int           `json:\"wave_number\"`\n    TaskNumber   int           `json:\"task_number\"`\n    Title        string        `json:\"title\"`\n    Status       SubtaskStatus `json:\"status\"`\n    UpdatedAt    time.Time     `json:\"updated_at,omitempty\"`\n}\n```\n\nAdd phase-timestamp fields to `TaskEntry`:\n\n```go\nPlanningAt     time.Time `json:\"planning_at,omitempty\"`\nImplementingAt time.Time `json:\"implementing_at,omitempty\"`\nReviewingAt    time.Time `json:\"reviewing_at,omitempty\"`\nDoneAt         time.Time `json:\"done_at,omitempty\"`\nGoal           string    `json:\"goal,omitempty\"`\n```\n\nAdd new methods to the `Store` interface:\n\n```go\n// Subtask operations\nSetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error\nGetSubtasks(project, planFilename string) ([]SubtaskEntry, error)\nUpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error\n\n// Phase timestamps\nSetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error\n\n// Plan metadata\nSetPlanGoal(project, planFilename, goal string) error\n```\n\nIn `sqlite.go`:\n- Add the `subtasks` table to the schema constant.\n- Add migrations: `subtasksTableMigration`, plus `ALTER TABLE tasks ADD COLUMN` for `planning_at`, `implementing_at`, `reviewing_at`, `done_at`, `goal`.\n- Run migrations in `NewSQLiteStore`.\n- Update `scanTaskEntry`/`scanTaskEntries` to include the 5 new columns.\n- Update `Create`/`Update`/`Get`/`List`/`ListByStatus`/`ListByTopic` queries to include the new columns.\n- Implement `SetSubtasks` (DELETE existing + INSERT new in a transaction).\n- Implement `GetSubtasks` (SELECT ordered by task_number).\n- Implement `UpdateSubtaskStatus` (UPDATE single row).\n- Implement `SetPhaseTimestamp` (UPDATE the appropriate column by phase name).\n- Implement `SetPlanGoal` (UPDATE goal column).\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add config/taskstore/store.go config/taskstore/sqlite.go config/taskstore/sqlite_test.go config/taskstore/testing.go\ngit commit -m \"feat: add subtasks table, phase timestamps, and goal column to task store\"\n```\n\n## Wave 2: HTTP Transport and Data Ingestion Pipeline\n\n> **depends on wave 1:** HTTPStore and server need the Store interface additions from Task 1. Data ingestion needs the SetSubtasks/SetPhaseTimestamp/SetPlanGoal methods.\n\n### Task 2: HTTPStore Client and Server Endpoints\n\n**Files:**\n- Modify: `config/taskstore/http.go`\n- Modify: `config/taskstore/server.go`\n- Modify: `config/taskstore/http_test.go`\n- Modify: `config/taskstore/server_test.go`\n\n**Step 1: write the failing test**\n\nAdd round-trip tests in `http_test.go` using the test server pattern already established in the file:\n\n```go\nfunc TestHTTPStore_SubtaskRoundTrip(t *testing.T) {\n    // Setup: in-memory SQLite behind HTTP server.\n    sqlite := newTestStore(t).(*SQLiteStore)\n    srv := httptest.NewServer(NewHandler(sqlite))\n    defer srv.Close()\n    client := NewHTTPStore(srv.URL, \"proj\")\n\n    sqlite.Create(\"proj\", TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n\n    subtasks := []SubtaskEntry{\n        {PlanFilename: \"plan.md\", WaveNumber: 1, TaskNumber: 1, Title: \"task one\", Status: SubtaskPending},\n        {PlanFilename: \"plan.md\", WaveNumber: 2, TaskNumber: 2, Title: \"task two\", Status: SubtaskPending},\n    }\n    require.NoError(t, client.SetSubtasks(\"proj\", \"plan.md\", subtasks))\n\n    got, err := client.GetSubtasks(\"proj\", \"plan.md\")\n    require.NoError(t, err)\n    require.Len(t, got, 2)\n\n    require.NoError(t, client.UpdateSubtaskStatus(\"proj\", \"plan.md\", 1, SubtaskComplete))\n    got, _ = client.GetSubtasks(\"proj\", \"plan.md\")\n    assert.Equal(t, SubtaskComplete, got[0].Status)\n}\n\nfunc TestHTTPStore_PhaseTimestampRoundTrip(t *testing.T) {\n    sqlite := newTestStore(t).(*SQLiteStore)\n    srv := httptest.NewServer(NewHandler(sqlite))\n    defer srv.Close()\n    client := NewHTTPStore(srv.URL, \"proj\")\n    now := time.Now().UTC().Truncate(time.Millisecond)\n\n    sqlite.Create(\"proj\", TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n\n    require.NoError(t, client.SetPhaseTimestamp(\"proj\", \"plan.md\", \"implementing\", now))\n    entry, err := client.Get(\"proj\", \"plan.md\")\n    require.NoError(t, err)\n    assert.Equal(t, now.Unix(), entry.ImplementingAt.Unix())\n}\n\nfunc TestHTTPStore_PlanGoalRoundTrip(t *testing.T) {\n    sqlite := newTestStore(t).(*SQLiteStore)\n    srv := httptest.NewServer(NewHandler(sqlite))\n    defer srv.Close()\n    client := NewHTTPStore(srv.URL, \"proj\")\n\n    sqlite.Create(\"proj\", TaskEntry{Filename: \"plan.md\", Status: StatusReady})\n\n    require.NoError(t, client.SetPlanGoal(\"proj\", \"plan.md\", \"add dark mode\"))\n    entry, err := client.Get(\"proj\", \"plan.md\")\n    require.NoError(t, err)\n    assert.Equal(t, \"add dark mode\", entry.Goal)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v\n```\n\nexpected: FAIL — `SetSubtasks` not implemented on HTTPStore\n\n**Step 3: write minimal implementation**\n\nIn `server.go`, add 5 new endpoints mirroring existing patterns:\n- `GET /v1/projects/{project}/tasks/{filename}/subtasks` → GetSubtasks\n- `PUT /v1/projects/{project}/tasks/{filename}/subtasks` → SetSubtasks\n- `PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status` → UpdateSubtaskStatus\n- `PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp` → SetPhaseTimestamp\n- `PUT /v1/projects/{project}/tasks/{filename}/goal` → SetPlanGoal\n\nIn `http.go`, implement the corresponding HTTPStore methods using the same `do()`/`decodeError()` pattern as existing methods. Each method builds a URL, marshals JSON, sends the request, and checks the response status.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add config/taskstore/http.go config/taskstore/server.go config/taskstore/http_test.go config/taskstore/server_test.go\ngit commit -m \"feat: add HTTP transport for subtasks, phase timestamps, and plan goal\"\n```\n\n### Task 3: Subtask Ingestion, Phase Timestamps, and Status Persistence\n\n**Files:**\n- Modify: `config/taskstate/taskstate.go`\n- Modify: `config/taskstate/taskstate_test.go`\n- Modify: `config/taskfsm/fsm.go`\n- Modify: `config/taskfsm/fsm_test.go`\n- Modify: `app/wave_orchestrator.go`\n- Modify: `app/wave_orchestrator_test.go`\n\n**Step 1: write the failing test**\n\nIn `config/taskstate/taskstate_test.go`:\n\n```go\nfunc TestTaskState_IngestSubtasks(t *testing.T) {\n    store := taskstore.NewTestSQLiteStore(t)\n    ps, err := taskstate.Load(store, \"proj\", t.TempDir())\n    require.NoError(t, err)\n\n    require.NoError(t, ps.Create(\"plan.md\", \"desc\", \"plan/test\", \"\", time.Now()))\n\n    content := \"# Plan\\n\\n**Goal:** add dark mode\\n\\n## Wave 1\\n\\n### Task 1: Schema\\n\\nbody\\n\\n### Task 2: Store\\n\\nbody\\n\\n## Wave 2\\n\\n### Task 3: UI\\n\\nbody\\n\"\n    require.NoError(t, ps.IngestContent(\"plan.md\", content))\n\n    // Goal should be extracted.\n    entry, _ := ps.Entry(\"plan.md\")\n    assert.Equal(t, \"add dark mode\", entry.Goal)\n\n    // Subtasks should be created.\n    subtasks, err := ps.GetSubtasks(\"plan.md\")\n    require.NoError(t, err)\n    require.Len(t, subtasks, 3)\n    assert.Equal(t, \"Schema\", subtasks[0].Title)\n    assert.Equal(t, 1, subtasks[0].WaveNumber)\n}\n```\n\nIn `config/taskfsm/fsm_test.go`:\n\n```go\nfunc TestFSM_TransitionRecordsPhaseTimestamp(t *testing.T) {\n    store := taskstore.NewTestSQLiteStore(t)\n    store.Create(\"proj\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady})\n    fsm := New(store, \"proj\", t.TempDir())\n\n    require.NoError(t, fsm.Transition(\"plan.md\", ImplementStart))\n\n    entry, err := store.Get(\"proj\", \"plan.md\")\n    require.NoError(t, err)\n    assert.False(t, entry.ImplementingAt.IsZero(), \"implementing_at should be set\")\n}\n```\n\nIn `app/wave_orchestrator_test.go`, add a test for subtask status persistence:\n\n```go\nfunc TestWaveOrchestrator_PersistsSubtaskStatus(t *testing.T) {\n    store := taskstore.NewTestSQLiteStore(t)\n    store.Create(\"proj\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusImplementing})\n    plan := &taskparser.Plan{Waves: []taskparser.Wave{\n        {Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: \"first\"}}},\n    }}\n    orch := NewWaveOrchestrator(\"plan.md\", plan)\n    orch.SetStore(store, \"proj\")\n    orch.StartNextWave()\n    orch.MarkTaskComplete(1)\n\n    subtasks, _ := store.GetSubtasks(\"proj\", \"plan.md\")\n    require.Len(t, subtasks, 1)\n    assert.Equal(t, taskstore.SubtaskComplete, subtasks[0].Status)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./config/taskstate/... -run TestTaskState_IngestSubtasks -v\ngo test ./config/taskfsm/... -run TestFSM_TransitionRecordsPhaseTimestamp -v\ngo test ./app/... -run TestWaveOrchestrator_PersistsSubtaskStatus -v\n```\n\nexpected: FAIL — `IngestContent`, `GetSubtasks`, `SetStore` undefined\n\n**Step 3: write minimal implementation**\n\n**taskstate.go** additions:\n- Add `Goal` field to `taskstate.TaskEntry`, and phase timestamp fields: `PlanningAt`, `ImplementingAt`, `ReviewingAt`, `DoneAt`.\n- Update `Load()` to map new fields from `taskstore.TaskEntry`.\n- Update `toTaskstoreEntry()` to include new fields.\n- Add `IngestContent(filename, content string) error` — calls `taskparser.Parse()`, extracts goal, calls `store.SetPlanGoal()`, builds `[]SubtaskEntry` from parsed waves/tasks, calls `store.SetSubtasks()`, then calls `store.SetContent()`.\n- Add `GetSubtasks(filename string) ([]taskstore.SubtaskEntry, error)` — delegates to store.\n- Add `UpdateSubtaskStatus(filename string, taskNumber int, status taskstore.SubtaskStatus) error` — delegates to store.\n\n**fsm.go** additions:\n- After `ForceSetStatus()` succeeds in `Transition()`, call `store.SetPhaseTimestamp()` with the new status name and `time.Now().UTC()`. Only set for recognized phases: \"planning\", \"implementing\", \"reviewing\", \"done\".\n\n**wave_orchestrator.go** additions:\n- Add optional `store taskstore.Store` and `project string` fields.\n- Add `SetStore(store taskstore.Store, project string)` method.\n- In `MarkTaskComplete()` and `MarkTaskFailed()`, if `store` is non-nil, call `store.UpdateSubtaskStatus()` with the appropriate status.\n- In `StartNextWave()`, if `store` is non-nil, call `store.UpdateSubtaskStatus()` for each task being started (set to `SubtaskRunning`).\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./config/taskstate/... -run TestTaskState_IngestSubtasks -v\ngo test ./config/taskfsm/... -run TestFSM_TransitionRecordsPhaseTimestamp -v\ngo test ./app/... -run TestWaveOrchestrator_PersistsSubtaskStatus -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add config/taskstate/taskstate.go config/taskstate/taskstate_test.go config/taskfsm/fsm.go config/taskfsm/fsm_test.go app/wave_orchestrator.go app/wave_orchestrator_test.go\ngit commit -m \"feat: wire subtask ingestion, phase timestamps, and status persistence\"\n```\n\n## Wave 3: Info Pane UI Overhaul\n\n> **depends on wave 2:** The info pane reads subtask data and phase timestamps populated by the ingestion pipeline (Task 3). The app layer wiring calls store methods added in Tasks 1-2.\n\n### Task 4: Redesign Info Pane with Lifecycle, Progress, and Goal Sections\n\n**Files:**\n- Modify: `ui/info_pane.go`\n- Modify: `ui/info_pane_test.go`\n- Modify: `app/app_state.go`\n\n**Step 1: write the failing test**\n\nAdd tests to `ui/info_pane_test.go`:\n\n```go\nfunc TestInfoPane_PlanSummaryWithGoalAndLifecycle(t *testing.T) {\n    pane := NewInfoPane()\n    pane.SetSize(70, 40)\n    now := time.Now()\n    pane.SetData(InfoData{\n        IsPlanHeaderSelected: true,\n        PlanName:             \"improved-info-tab\",\n        PlanStatus:           \"implementing\",\n        PlanBranch:           \"plan/improved-info-tab\",\n        PlanGoal:             \"persist subtask statuses and redesign the info pane\",\n        PlanningAt:           now.Add(-2 * time.Hour),\n        ImplementingAt:       now.Add(-1 * time.Hour),\n        AllWaveSubtasks: []WaveSubtaskGroup{\n            {WaveNumber: 1, Subtasks: []SubtaskDisplay{\n                {Number: 1, Title: \"schema migration\", Status: \"complete\"},\n                {Number: 2, Title: \"store methods\", Status: \"complete\"},\n            }},\n            {WaveNumber: 2, Subtasks: []SubtaskDisplay{\n                {Number: 3, Title: \"http endpoints\", Status: \"running\"},\n                {Number: 4, Title: \"UI overhaul\", Status: \"pending\"},\n            }},\n        },\n        CompletedTasks: 2,\n        TotalSubtasks:  4,\n    })\n\n    output := pane.String()\n    assert.Contains(t, output, \"persist subtask statuses\")\n    assert.Contains(t, output, \"lifecycle\")\n    assert.Contains(t, output, \"implementing\")\n    assert.Contains(t, output, \"2/4\")\n    assert.Contains(t, output, \"schema migration\")\n    assert.Contains(t, output, \"✓\")\n    assert.Contains(t, output, \"●\")\n    assert.Contains(t, output, \"○\")\n}\n\nfunc TestInfoPane_InstanceWithTaskAssignment(t *testing.T) {\n    pane := NewInfoPane()\n    pane.SetSize(70, 30)\n    pane.SetData(InfoData{\n        HasInstance:    true,\n        HasPlan:        true,\n        Title:          \"my-feature-coder\",\n        Status:         \"running\",\n        PlanName:       \"my-feature\",\n        PlanGoal:       \"add dark mode toggle\",\n        PlanStatus:     \"implementing\",\n        AgentType:      \"coder\",\n        TaskNumber:     3,\n        TotalTasks:     6,\n        TaskTitle:      \"http endpoints\",\n    })\n\n    output := pane.String()\n    assert.Contains(t, output, \"add dark mode toggle\")\n    assert.Contains(t, output, \"task 3 of 6: http endpoints\")\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./ui/... -run 'TestInfoPane_PlanSummaryWithGoalAndLifecycle|TestInfoPane_InstanceWithTaskAssignment' -v\n```\n\nexpected: FAIL — `PlanGoal`, `AllWaveSubtasks`, `WaveSubtaskGroup`, `SubtaskDisplay`, etc. undefined\n\n**Step 3: write minimal implementation**\n\n**ui/info_pane.go** changes:\n\nAdd new types to `InfoData`:\n\n```go\n// New fields on InfoData:\nPlanGoal       string\nTaskTitle      string // task title for the instance's assigned task\n\n// Phase timestamps (zero = not reached yet)\nPlanningAt     time.Time\nImplementingAt time.Time\nReviewingAt    time.Time\nDoneAt         time.Time\n\n// All-waves subtask progress\nAllWaveSubtasks []WaveSubtaskGroup\nCompletedTasks  int\nTotalSubtasks   int\n```\n\nNew types:\n\n```go\ntype SubtaskDisplay struct {\n    Number int\n    Title  string\n    Status string // \"pending\", \"running\", \"complete\", \"failed\"\n}\n\ntype WaveSubtaskGroup struct {\n    WaveNumber int\n    Subtasks   []SubtaskDisplay\n}\n```\n\nRewrite `renderPlanSummary()` to match the approved Mockup A:\n1. **Plan metadata section** — name, status, branch, review cycle (existing, keep).\n2. **Goal section** — new section header \"goal\" + divider + wrapped goal text.\n3. **Lifecycle section** — new section header \"lifecycle\" + divider + phase rows with filled/unfilled bullet and timestamp or \"—\".\n4. **Progress section** — header \"progress\" with inline fraction + ASCII bar + divider + per-wave groups with per-task rows showing glyph + number + title.\n5. **Instances section** — existing instance counts.\n6. **View plan doc button** — existing, keep at bottom.\n\nAdd helper methods:\n- `renderGoalSection()` — renders goal text wrapped to pane width.\n- `renderLifecycleSection()` — renders phase timeline with ● for reached phases (with timestamp) and ○ for unreached.\n- `renderProgressSection()` — renders ASCII progress bar + all-waves task list with status glyphs (✓/●/✗/○).\n\nFor the **instance view**, modify `renderInstanceSection()`:\n- After \"plan name\" row, add a \"goal\" row showing `PlanGoal` (one-liner, truncated to width).\n- Change the \"task\" row from `\"4 of 6\"` to `\"task 4 of 6: http endpoints\"` using the new `TaskTitle` field.\n\n**app/app_state.go** changes:\n\nModify `updateInfoPaneForPlanHeader()`:\n- Load subtasks from store: `subtasks, err := m.taskStore.GetSubtasks(m.taskStoreProject, planFile)`.\n- Group subtasks by wave number into `[]ui.WaveSubtaskGroup`.\n- Count completed tasks for `CompletedTasks`.\n- Read phase timestamps from the `TaskEntry` (update `taskstate.TaskEntry` to carry them — already done in Task 3).\n- Read goal from `TaskEntry.Goal` (already populated by ingestion in Task 3).\n- Populate all new `InfoData` fields.\n\nModify `updateInfoPane()` (instance-selected):\n- Add `data.PlanGoal = entry.Goal` when a plan is bound.\n- Resolve `TaskTitle` from the orchestrator's parsed plan: `orch.plan.Waves[wave].Tasks[task].Title`.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./ui/... -run 'TestInfoPane_PlanSummaryWithGoalAndLifecycle|TestInfoPane_InstanceWithTaskAssignment' -v\n```\n\nexpected: PASS\n\nAlso run the full test suite to verify nothing is broken:\n\n```bash\ngo test ./ui/... ./app/... ./config/... -v -count=1\n```\n\n**Step 5: commit**\n\n```bash\ngit add ui/info_pane.go ui/info_pane_test.go app/app_state.go\ngit commit -m \"feat: redesign info pane with goal, lifecycle timeline, and all-waves progress\"\n```\n",
-              "additions": 569,
-              "deletions": 0,
-              "status": "added"
-            },
-            {
               "file": "docs/plans/safe-kill.md",
               "before": "",
-              "after": "# Safe Kill Implementation Plan\n\n**Goal:** Make kill safe by preserving the git branch and changing all user-facing kill actions (TUI key, context menu, CLI) to pause the instance instead of destroying it, preventing accidental data loss.\n\n**Architecture:** Currently `Kill()` calls `Cleanup()` which deletes both the worktree directory and the git branch. The fix has two parts: (1) change `Kill()` to use `Remove()` + `Prune()` instead of `Cleanup()` so the branch is always preserved even for internal flows (merge, wave abort, failure cleanup), and (2) change all user-facing kill entry points (TUI `K` key, context menu \"kill\", CLI `kas instance kill`) to call `Pause()` instead, keeping the instance in the list as resumable. The existing `Pause()` method already auto-commits dirty changes, removes the worktree, and preserves the branch — it's exactly the safe behavior we want.\n\n**Tech Stack:** Go, bubbletea TUI framework, cobra CLI, git worktrees\n\n**Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)\n\n---\n\n## Wave 1: Safe Kill\n\n### Task 1: Preserve Branch in Kill() Method\n\n**Files:**\n- Modify: `session/instance_lifecycle.go`\n- Test: `session/instance_lifecycle_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test that verifies `Kill()` preserves the git branch. Create a real git repo + worktree, call `Kill()`, then assert the branch still exists:\n\n```go\nfunc TestKill_PreservesBranch(t *testing.T) {\n    repoPath := setupGitRepo(t)\n    inst, err := NewInstance(InstanceOptions{\n        Title:   \"test-safe-kill\",\n        Path:    repoPath,\n        Program: \"opencode\",\n    })\n    require.NoError(t, err)\n\n    cmdExec := cmd_test.MockCmdExec{\n        RunFunc:    func(cmd *exec.Cmd) error { return nil },\n        OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(\"\"), nil },\n    }\n    inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)\n\n    err = inst.StartOnBranch(\"safe-kill-branch\")\n    require.NoError(t, err)\n\n    branchName := inst.Branch\n    require.NotEmpty(t, branchName)\n\n    err = inst.Kill()\n    require.NoError(t, err)\n\n    // Branch must still exist after kill\n    out, gitErr := exec.Command(\"git\", \"-C\", repoPath, \"branch\", \"--list\", branchName).CombinedOutput()\n    require.NoError(t, gitErr)\n    assert.Contains(t, string(out), branchName, \"branch should be preserved after Kill()\")\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./session/... -run TestKill_PreservesBranch -v\n```\n\nexpected: FAIL — `Kill()` calls `Cleanup()` which deletes the branch.\n\n**Step 3: write minimal implementation**\n\nIn `session/instance_lifecycle.go`, change `Kill()` to replace `gitWorktree.Cleanup()` with `gitWorktree.Remove()` + `gitWorktree.Prune()`:\n\n```go\n// In Kill(), replace:\n//   if err := i.gitWorktree.Cleanup(); err != nil {\n//       errs = append(errs, fmt.Errorf(\"failed to cleanup git worktree: %w\", err))\n//   }\n// With:\nif err := i.gitWorktree.Remove(); err != nil {\n    errs = append(errs, fmt.Errorf(\"failed to remove git worktree: %w\", err))\n}\nif err := i.gitWorktree.Prune(); err != nil {\n    errs = append(errs, fmt.Errorf(\"failed to prune git worktrees: %w\", err))\n}\n```\n\nAlso update the Kill() doc comment to reflect the new behavior: branch is preserved.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./session/... -run TestKill_PreservesBranch -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add session/instance_lifecycle.go session/instance_lifecycle_test.go\ngit commit -m \"fix: preserve git branch when killing an instance\"\n```\n\n### Task 2: TUI and CLI Kill Actions Become Pause\n\n**Files:**\n- Modify: `app/app_actions.go`\n- Modify: `app/app_input.go`\n- Modify: `app/app.go`\n- Modify: `app/help.go`\n- Modify: `cmd/instance.go`\n- Test: `cmd/instance_test.go`\n\n**Step 1: write the failing test**\n\nAdd a CLI test that verifies `kas instance kill` now sets the instance to paused instead of removing it from state:\n\n```go\nfunc TestKillCmd_SetsInstanceToPaused(t *testing.T) {\n    rec := fullInstanceRecord(\"kill-target\")\n    rec.Status = instanceRunning\n    other := fullInstanceRecord(\"other\")\n    state := newTestStateFromRecords(t, []instanceRecord{rec, other})\n\n    // Simulate what the new kill logic should do: update to paused, not remove.\n    err := updateInstanceInState(state, \"kill-target\", func(r *instanceRecord) error {\n        r.Status = instancePaused\n        r.Worktree.WorktreePath = \"\"\n        return nil\n    })\n    require.NoError(t, err)\n\n    records, err := loadInstanceRecords(state)\n    require.NoError(t, err)\n    require.Len(t, records, 2, \"kill should NOT remove instance from state\")\n\n    var target instanceRecord\n    for _, r := range records {\n        if r.Title == \"kill-target\" {\n            target = r\n        }\n    }\n    assert.Equal(t, instancePaused, target.Status, \"killed instance should be paused\")\n    assert.Empty(t, target.Worktree.WorktreePath, \"worktree path should be cleared\")\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./cmd/... -run TestKillCmd_SetsInstanceToPaused -v\n```\n\nexpected: PASS immediately (this tests the state update helper, which already works). The real behavioral test is that the kill command handler uses this path instead of `removeInstanceFromState`.\n\n**Step 3: write minimal implementation**\n\n**3a. `cmd/instance.go` — CLI kill becomes pause:**\n\nReplace the kill command's `RunE` body. Instead of removing the instance from state, auto-commit dirty changes, kill tmux, remove worktree (not branch), and set status to paused:\n\n```go\nRunE: func(cmd *cobra.Command, args []string) error {\n    title := args[0]\n    state := config.LoadState()\n    records, err := loadInstanceRecords(state)\n    if err != nil { return err }\n    rec, err := findInstanceData(records, title)\n    if err != nil { return err }\n    if err := validateStatusForAction(rec, \"kill\"); err != nil { return err }\n    // Auto-commit dirty changes before removing worktree.\n    if rec.Worktree.WorktreePath != \"\" {\n        commitMsg := fmt.Sprintf(\"[kas] auto-save from '%s' on %s (killed)\",\n            rec.Title, time.Now().Format(time.RFC822))\n        _ = exec.Command(\"git\", \"-C\", rec.Worktree.WorktreePath, \"add\", \"-A\").Run()\n        _ = exec.Command(\"git\", \"-C\", rec.Worktree.WorktreePath,\n            \"commit\", \"-m\", commitMsg, \"--allow-empty\").Run()\n    }\n    // Kill tmux session (best-effort).\n    _ = exec.Command(\"tmux\", \"kill-session\", \"-t\", kasTmuxName(rec.Title)).Run()\n    // Remove worktree but preserve branch.\n    if rec.Worktree.WorktreePath != \"\" && rec.Worktree.RepoPath != \"\" {\n        _ = exec.Command(\"git\", \"-C\", rec.Worktree.RepoPath,\n            \"worktree\", \"remove\", \"--force\", rec.Worktree.WorktreePath).Run()\n        _ = exec.Command(\"git\", \"-C\", rec.Worktree.RepoPath,\n            \"worktree\", \"prune\").Run()\n    }\n    // Set to paused instead of removing from state.\n    if err := updateInstanceInState(state, rec.Title, func(r *instanceRecord) error {\n        r.Status = instancePaused\n        r.Worktree.WorktreePath = \"\"\n        return nil\n    }); err != nil { return err }\n    fmt.Printf(\"paused: %s (branch preserved)\\n\", rec.Title)\n    return nil\n},\n```\n\n**3b. `app/app_actions.go` — TUI context menu \"kill\" becomes pause:**\n\nReplace the `kill_instance` case to call `selected.Pause()` instead of `nav.Kill()` + `removeFromAllInstances()`:\n\n```go\ncase \"kill_instance\":\n    selected := m.nav.GetSelectedInstance()\n    if selected != nil {\n        if err := selected.Pause(); err != nil {\n            return m, m.handleError(err)\n        }\n        m.audit(auditlog.EventAgentKilled, \"agent stopped (branch preserved)\",\n            auditlog.WithInstance(selected.Title),\n            auditlog.WithAgent(selected.AgentType),\n            auditlog.WithPlan(selected.TaskFile),\n        )\n        m.saveAllInstances()\n        m.updateNavPanelStatus()\n    }\n    return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())\n```\n\n**3c. `app/app_input.go` — Update K key confirmation message:**\n\nChange:\n```go\nmessage := fmt.Sprintf(\"[!] abort session '%s'? this removes the worktree.\", selected.Title)\n```\nTo:\n```go\nmessage := fmt.Sprintf(\"stop session '%s'? branch will be preserved.\", selected.Title)\n```\n\n**3d. `app/app.go` — `killInstanceMsg` handler becomes pause:**\n\nReplace the handler to pause the instance instead of destroying it:\n\n```go\ncase killInstanceMsg:\n    for _, inst := range m.allInstances {\n        if inst.Title == msg.title {\n            if err := inst.Pause(); err != nil {\n                return m, m.handleError(err)\n            }\n            break\n        }\n    }\n    m.saveAllInstances()\n    m.updateNavPanelStatus()\n    return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())\n```\n\n**3e. `app/help.go` — Update help text (2 occurrences):**\n\nChange K key descriptions from:\n```\nK — abort session (removes worktree)\n```\nTo:\n```\nK — stop session (branch preserved)\n```\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./cmd/... -v\ngo test ./app/... -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add app/app_actions.go app/app_input.go app/app.go app/help.go cmd/instance.go cmd/instance_test.go\ngit commit -m \"feat: safe kill — kill now pauses instance and preserves branch\"\n```\n",
-              "additions": 272,
+              "after": "",
+              "additions": 0,
               "deletions": 0,
-              "status": "modified"
+              "status": "deleted"
             }
           ]
         },
@@ -1453,7 +1437,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772598083491
+          "created": 1772598083491,
+          "completed": 1772598090582
         },
         "parentID": "msg_cb7118063001ibMPKs54usteQD",
         "modelID": "claude-opus-4-6",
@@ -1466,15 +1451,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 81835,
+          "input": 1,
+          "output": 148,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 81094,
+            "write": 592
           }
         },
         "variant": "high",
+        "finish": "tool-calls",
         "id": "msg_cb7143fa3001rmqywTaiIMyMMn",
         "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
       },
@@ -1502,22 +1489,1654 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add docs/plans/fix-agents-reading-from-disk.md docs/plans/improved-info-tab.md docs/plans/safe-kill.md && git commit -m \"fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\"",
               "description": "Commit restored plan files"
             },
+            "output": "[plan/safe-kill bfafe248] fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n 3 files changed, 1324 insertions(+)\n create mode 100644 docs/plans/fix-agents-reading-from-disk.md\n create mode 100644 docs/plans/improved-info-tab.md\n create mode 100644 docs/plans/safe-kill.md\n",
+            "title": "Commit restored plan files",
             "metadata": {
-              "output": "",
-              "description": "Commit restored plan files"
+              "output": "[plan/safe-kill bfafe248] fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n 3 files changed, 1324 insertions(+)\n create mode 100644 docs/plans/fix-agents-reading-from-disk.md\n create mode 100644 docs/plans/improved-info-tab.md\n create mode 100644 docs/plans/safe-kill.md\n",
+              "exit": 0,
+              "description": "Commit restored plan files",
+              "truncated": false
             },
             "time": {
-              "start": 1772598087053
+              "start": 1772598087052,
+              "end": 1772598090567
             }
           },
           "id": "prt_cb71448870012g9411PqYRGnpv",
           "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
           "messageID": "msg_cb7143fa3001rmqywTaiIMyMMn"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 81835,
+            "input": 1,
+            "output": 148,
+            "reasoning": 0,
+            "cache": {
+              "read": 81094,
+              "write": 592
+            }
+          },
+          "id": "prt_cb7145b48001Q7Gkf6FD7fM4MI",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7143fa3001rmqywTaiIMyMMn"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598090584,
+          "completed": 1772598094251
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 82120,
+          "input": 1,
+          "output": 170,
+          "reasoning": 0,
+          "cache": {
+            "read": 81686,
+            "write": 263
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7145b58001n4a7b90dzmPN7W",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb714621b001JR36hNn5foRZsS",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7145b58001n4a7b90dzmPN7W"
+        },
+        {
+          "type": "text",
+          "text": "Now let me verify the final branch state has zero diff on the plan files:",
+          "time": {
+            "start": 1772598093254,
+            "end": 1772598093254
+          },
+          "id": "prt_cb714621b002uTf3bKDKDSlsD9",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7145b58001n4a7b90dzmPN7W"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01P6j13NwVbm12B8GfTjNBpX",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD --stat -- docs/plans/",
+              "description": "Verify no plan file changes remain"
+            },
+            "output": "",
+            "title": "Verify no plan file changes remain",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Verify no plan file changes remain",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598093721,
+              "end": 1772598093723
+            }
+          },
+          "id": "prt_cb71465c90011a2XkvLeqqGGP5",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7145b58001n4a7b90dzmPN7W"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD --stat",
+              "description": "Final diff stat for the branch"
+            },
+            "output": " app/app.go                         | 12 +++++++++---\n app/app_actions.go                 | 14 ++++++++------\n app/app_input.go                   |  2 +-\n app/help.go                        |  4 ++--\n cmd/instance.go                    | 29 ++++++++++++++++++++++-------\n cmd/instance_test.go               | 30 ++++++++++++++++++++++++++++++\n cmd/task.go                        | 24 ++++++++++++------------\n session/instance_lifecycle.go      |  8 ++++++--\n session/instance_lifecycle_test.go | 30 ++++++++++++++++++++++++++++++\n 9 files changed, 120 insertions(+), 33 deletions(-)\n",
+            "title": "Final diff stat for the branch",
+            "metadata": {
+              "output": " app/app.go                         | 12 +++++++++---\n app/app_actions.go                 | 14 ++++++++------\n app/app_input.go                   |  2 +-\n app/help.go                        |  4 ++--\n cmd/instance.go                    | 29 ++++++++++++++++++++++-------\n cmd/instance_test.go               | 30 ++++++++++++++++++++++++++++++\n cmd/task.go                        | 24 ++++++++++++------------\n session/instance_lifecycle.go      |  8 ++++++--\n session/instance_lifecycle_test.go | 30 ++++++++++++++++++++++++++++++\n 9 files changed, 120 insertions(+), 33 deletions(-)\n",
+              "exit": 0,
+              "description": "Final diff stat for the branch",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598094211,
+              "end": 1772598094216
+            }
+          },
+          "id": "prt_cb714679b001NGAwQgY4RW4uAo",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7145b58001n4a7b90dzmPN7W"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 82120,
+            "input": 1,
+            "output": 170,
+            "reasoning": 0,
+            "cache": {
+              "read": 81686,
+              "write": 263
+            }
+          },
+          "id": "prt_cb714699c001n3YlU1bsC0yMzS",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7145b58001n4a7b90dzmPN7W"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598094253,
+          "completed": 1772598104141
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 83017,
+          "input": 1,
+          "output": 626,
+          "reasoning": 0,
+          "cache": {
+            "read": 81949,
+            "write": 441
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb71469ad001DlWE5mJ0ckU0bL",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb71470f4001Uivv5UhBg47Nnz",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71469ad001DlWE5mJ0ckU0bL"
+        },
+        {
+          "type": "reasoning",
+          "text": "Wait, there's a new file that appeared: `cmd/task.go | 24 ++++++++++++------------`. This wasn't in the original diff I reviewed. Let me check this — it could be from the `git checkout main --` operation pulling in changes.\n\nActually no, let me look again. The original diff stat showed:```\napp/app.go                                 |  12 +-\napp/app_actions.go                         |  14 +-\napp/app_input.go                           |   2 +-\napp/help.go                                |   4 +-\ncmd/instance.go                            |  29 +-\n\n\ncmd/instance_test.go                       |  30 ++\ndocs/plans/fix-agents-reading-from-disk.md | 483 ---\ndocs/plans/improved-info-tab.md            | 569 ---\ndocs/plans/safe-kill.md                    | 272 ---\nsession/instance_lifecycle.go              |   8 +-\nsession/instance_lifecycle_test.go         |  30 ++\n```\n\nBut now I'm seeing a different set of files in the new diff — the docs/plans files are gone and there are changes to app files with different line counts. Something's shifted in what's being shown.\n\nI notice `cmd/task.go` is now appearing with 24 lines changed, which is odd since it wasn't in the first diff. This suggests the branch might have independent modifications to that file that weren't reverted by the checkout command, so I should investigate what actually changed there.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/YMDQymCW4XwDzLmX/REDACTED/REDACTED/REDACTED/REDACTED/3s9WD/REDACTED/lJ7TsDgHIaw8/CH6j9uW/REDACTED/Vc+qNQFdJS2wrvO/REDACTED/REDACTED/j/0z20FyH/C2wlq/REDACTED/8TJG7EvIoTLtRc7QH20xeadFm/sv9a7boTxrKe/QgIXHdai3cfwv1CTVD/REDACTED/REDACTED/REDACTED/px+sh1CfQ3yu/Wvb6nbGC5k6L1kW3+R4ARH1eidZQs/vbcMmrrrvxgFKK9u4bNUFOUOnavw4/LGMfzFDmh2T8F60jV/REDACTED/S2HiOl0bs/QrUZVx+4raCuB9LIeaMP0F/rpfSAxLKye9/REDACTED/6j90RNpXE/REDACTED/saVEwT/REDACTED/Zcr+D9AxiHdG19/REDACTED/REDACTED/QB7C9SCFV/VqI3Nh1FfRH4xeghdv4z4CByJ0I/REDACTED/REDACTED/REDACTED/0L1pjEFuFgUvs/REDACTED/REDACTED/B2mMoxuhF0/REDACTED/REDACTED/REDACTED/Xw6e0vfNsdG7/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772598096117,
+            "end": 1772598104084
+          },
+          "id": "prt_cb71470f5001hNsi7nWmNpyyEr",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71469ad001DlWE5mJ0ckU0bL"
+        },
+        {
+          "type": "text",
+          "text": "Wait — `cmd/task.go` appeared in the diff that wasn't there before. Let me investigate.",
+          "time": {
+            "start": 1772598104095,
+            "end": 1772598104095
+          },
+          "id": "prt_cb7149018001YR9b8iu1dTC0kW",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71469ad001DlWE5mJ0ckU0bL"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_018N823VY82XVk4ohUuPTF7j",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- cmd/task.go",
+              "description": "Check unexpected cmd/task.go changes"
+            },
+            "output": "diff --git a/cmd/task.go b/cmd/task.go\nindex 5622632f..bccee486 100644\n--- a/cmd/task.go\n+++ b/cmd/task.go\n@@ -427,28 +427,28 @@ func resolveStore(plansDir string) taskstore.Store {\n \treturn nil\n }\n \n-// resolvePlansDir resolves docs/plans/ relative to the main repository root.\n-// It always resolves the repo root first (handling worktrees correctly) so that\n-// projectFromPlansDir derives a consistent project name regardless of whether\n-// the command is run from a worktree or the main checkout.\n+// resolvePlansDir resolves docs/plans/ relative to cwd. When the cwd doesn't\n+// contain docs/plans/ (e.g. when running from a git worktree), it falls back\n+// to resolving the main repo root via resolveRepoRoot and looks for docs/plans/\n+// there.\n func resolvePlansDir() (string, error) {\n \tcwd, err := os.Getwd()\n \tif err != nil {\n \t\treturn \"\", fmt.Errorf(\"get cwd: %w\", err)\n \t}\n \n-\t// Always resolve the main repo root so project name derivation is\n-\t// consistent between worktrees and the main checkout.\n+\t// Fast path: docs/plans/ exists relative to cwd (main repo case).\n+\tdir := filepath.Join(cwd, \"docs\", \"plans\")\n+\tif _, err := os.Stat(dir); err == nil {\n+\t\treturn dir, nil\n+\t}\n+\n+\t// Fallback: resolve the main repo root (worktree case) and try there.\n \troot, err := resolveRepoRoot(cwd)\n \tif err != nil {\n-\t\t// Last resort: try docs/plans/ relative to cwd.\n-\t\tdir := filepath.Join(cwd, \"docs\", \"plans\")\n-\t\tif _, errStat := os.Stat(dir); errStat == nil {\n-\t\t\treturn dir, nil\n-\t\t}\n \t\treturn \"\", fmt.Errorf(\"plans directory not found in cwd and cannot resolve repo root: %w\", err)\n \t}\n-\tdir := filepath.Join(root, \"docs\", \"plans\")\n+\tdir = filepath.Join(root, \"docs\", \"plans\")\n \tif _, err := os.Stat(dir); err != nil {\n \t\treturn \"\", fmt.Errorf(\"plans directory not found: %s\", dir)\n \t}\n",
+            "title": "Check unexpected cmd/task.go changes",
+            "metadata": {
+              "output": "diff --git a/cmd/task.go b/cmd/task.go\nindex 5622632f..bccee486 100644\n--- a/cmd/task.go\n+++ b/cmd/task.go\n@@ -427,28 +427,28 @@ func resolveStore(plansDir string) taskstore.Store {\n \treturn nil\n }\n \n-// resolvePlansDir resolves docs/plans/ relative to the main repository root.\n-// It always resolves the repo root first (handling worktrees correctly) so that\n-// projectFromPlansDir derives a consistent project name regardless of whether\n-// the command is run from a worktree or the main checkout.\n+// resolvePlansDir resolves docs/plans/ relative to cwd. When the cwd doesn't\n+// contain docs/plans/ (e.g. when running from a git worktree), it falls back\n+// to resolving the main repo root via resolveRepoRoot and looks for docs/plans/\n+// there.\n func resolvePlansDir() (string, error) {\n \tcwd, err := os.Getwd()\n \tif err != nil {\n \t\treturn \"\", fmt.Errorf(\"get cwd: %w\", err)\n \t}\n \n-\t// Always resolve the main repo root so project name derivation is\n-\t// consistent between worktrees and the main checkout.\n+\t// Fast path: docs/plans/ exists relative to cwd (main repo case).\n+\tdir := filepath.Join(cwd, \"docs\", \"plans\")\n+\tif _, err := os.Stat(dir); err == nil {\n+\t\treturn dir, nil\n+\t}\n+\n+\t// Fallback: resolve the main repo root (worktree case) and try there.\n \troot, err := resolveRepoRoot(cwd)\n \tif err != nil {\n-\t\t// Last resort: try docs/plans/ relative to cwd.\n-\t\tdir := filepath.Join(cwd, \"docs\", \"plans\")\n-\t\tif _, errStat := os.Stat(dir); errStat == nil {\n-\t\t\treturn dir, nil\n-\t\t}\n \t\treturn \"\", fmt.Errorf(\"plans directory not found in cwd and cannot resolve repo root: %w\", err)\n \t}\n-\tdir := filepath.Join(root, \"docs\", \"plans\")\n+\tdir = filepath.Join(root, \"docs\", \"plans\")\n \tif _, err := os.Stat(dir); err != nil {\n \t\treturn \"\", fmt.Errorf(\"plans directory not found: %s\", dir)\n \t}\n",
+              "exit": 0,
+              "description": "Check unexpected cmd/task.go changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598104110,
+              "end": 1772598104113
+            }
+          },
+          "id": "prt_cb7149020001Vpie057Tk8rRCd",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71469ad001DlWE5mJ0ckU0bL"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 83017,
+            "input": 1,
+            "output": 626,
+            "reasoning": 0,
+            "cache": {
+              "read": 81949,
+              "write": 441
+            }
+          },
+          "id": "prt_cb714903b001yD3oh6xvY44eIQ",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71469ad001DlWE5mJ0ckU0bL"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598104142,
+          "completed": 1772598112799
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 83929,
+          "input": 1,
+          "output": 276,
+          "reasoning": 0,
+          "cache": {
+            "read": 82390,
+            "write": 1262
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb714904e001J5vH6g8J5qhx3q",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714904e001J5vH6g8J5qhx3q"
+        },
+        {
+          "type": "reasoning",
+          "text": "This is a change to `cmd/task.go` that was already on the branch but wasn't visible in the original diff stat because the plan file deletions were masking it. Wait no, it should still have shown. Let me check whether this was in the original commits.\n\nLooking at the commits:```\n1abf21ab fix(task-2): emit audit event before Pause() so TestAuditHomeEmit_AgentKilled passes\na5a455bd fix(task-1): preserve git branch when killing an instance\n1b19a5d7 feat(task-2): safe kill — kill now pauses instance and preserves branch\n\n\n```\n\nNone of these commit messages mention `cmd/task.go`, so I need to figure out which one actually introduced this change.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/M+faGWonLc3SIwV5Ki6dN/BhBgFpfNHD5NvGZXDQZ8lEQ/onR9U9Nh6CmikDI/REDACTED/REDACTED/BkaM+fW/ZEGDgXNMYawoqZ/REDACTED/egbKMw1nZ13etc/ZriRbeoN/ahETQwZlyK4VS6mZ8aIQs6Q/REDACTED/7XabBtPKZZPxT2WdgtO0t6gIEi0NeE1O/REDACTED/REDACTED/REDACTED/REDACTED/4ARRqAQDnhXVFBpvgpf12DOBevGAE="
+            }
+          },
+          "time": {
+            "start": 1772598106251,
+            "end": 1772598112714
+          },
+          "id": "prt_cb714988b001CXOgEfgEimwAJ9",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714904e001J5vH6g8J5qhx3q"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log main..HEAD -- cmd/task.go --oneline",
+              "description": "Find which commit changed cmd/task.go"
+            },
+            "output": "",
+            "title": "Find which commit changed cmd/task.go",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Find which commit changed cmd/task.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598112765,
+              "end": 1772598112769
+            }
+          },
+          "id": "prt_cb714b1cb001onTUV7lfNRBwKT",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714904e001J5vH6g8J5qhx3q"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 83929,
+            "input": 1,
+            "output": 276,
+            "reasoning": 0,
+            "cache": {
+              "read": 82390,
+              "write": 1262
+            }
+          },
+          "id": "prt_cb714b20e001DFUp9FwwiLiUAh",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714904e001J5vH6g8J5qhx3q"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598112801,
+          "completed": 1772598117587
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 84184,
+          "input": 1,
+          "output": 233,
+          "reasoning": 0,
+          "cache": {
+            "read": 83652,
+            "write": 298
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb714b2210010S3oODjF4yZGdg",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb714b7ba001uUSFhiuF6a41CI",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714b2210010S3oODjF4yZGdg"
+        },
+        {
+          "type": "reasoning",
+          "text": "No commits on this branch changed `cmd/task.go`! So the change must have come from... wait, how is there a diff then?\n\nLet me check: it's possible that `cmd/task.go` was changed on main after the branch was created, or that the branch is behind main. Let me check the merge base.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/sDAJD/TQ/C/REDACTED/iUzh7Sr26H/REDACTED/PyBAc4v4wDOMYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772598114235,
+            "end": 1772598116405
+          },
+          "id": "prt_cb714b7bb0017SbLK5WJyu5w5U",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714b2210010S3oODjF4yZGdg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TCWCqFtLZpv8jnZrxcCRRC",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git merge-base main HEAD",
+              "description": "Find merge base between main and branch"
+            },
+            "output": "022788b4ff28d46a00b852aca738fe871adebdf9\n",
+            "title": "Find merge base between main and branch",
+            "metadata": {
+              "output": "022788b4ff28d46a00b852aca738fe871adebdf9\n",
+              "exit": 0,
+              "description": "Find merge base between main and branch",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598117320,
+              "end": 1772598117323
+            }
+          },
+          "id": "prt_cb714c0380017IUJLeunpW9RbW",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714b2210010S3oODjF4yZGdg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_015ACjt7KDZPZxDaZDXJEV3w",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log main --oneline -5",
+              "description": "Check recent main commits"
+            },
+            "output": "b1df4fea fix: resolve plans dir from main repo root, not worktree cwd\na3f64a0f plan: add wave headers to improved-info-tab.md\n4d1efaa6 plan: add wave headers to safe-kill.md\n47c8e0bb plan: fix agents reading from disk — add kas task show CLI and update prompts\n022788b4 fix: correct lipgloss v2 Width/Height semantics and ctrl+space keybind\n",
+            "title": "Check recent main commits",
+            "metadata": {
+              "output": "b1df4fea fix: resolve plans dir from main repo root, not worktree cwd\na3f64a0f plan: add wave headers to improved-info-tab.md\n4d1efaa6 plan: add wave headers to safe-kill.md\n47c8e0bb plan: fix agents reading from disk — add kas task show CLI and update prompts\n022788b4 fix: correct lipgloss v2 Width/Height semantics and ctrl+space keybind\n",
+              "exit": 0,
+              "description": "Check recent main commits",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598117545,
+              "end": 1772598117549
+            }
+          },
+          "id": "prt_cb714c3c9001pXzQcK4vVP7CHY",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714b2210010S3oODjF4yZGdg"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 84184,
+            "input": 1,
+            "output": 233,
+            "reasoning": 0,
+            "cache": {
+              "read": 83652,
+              "write": 298
+            }
+          },
+          "id": "prt_cb714c4c9001mm7Uzl7aXHPC2t",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714b2210010S3oODjF4yZGdg"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598117588,
+          "completed": 1772598130677
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 85065,
+          "input": 1,
+          "output": 681,
+          "reasoning": 0,
+          "cache": {
+            "read": 83950,
+            "write": 433
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb714c4d4001wVE3eJdzc7MK6E",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb714c9fb001xlNdvYyYG6tWlf",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714c4d4001wVE3eJdzc7MK6E"
+        },
+        {
+          "type": "reasoning",
+          "text": "I see! The merge base is `022788b4`, which is the commit before `47c8e0bb`. So main has advanced with 4 more commits after the branch was created:\n\n1. `b1df4fea fix: resolve plans dir from main repo root, not worktree cwd` — this changes `cmd/task.go`\n2. `a3f64a0f plan: add wave headers to improved-info-tab.md`\n3. `4d1efaa6 plan: add wave headers to safe-kill.md`\n4. `47c8e0bb plan: fix agents reading from disk — add kas task show CLI and update prompts`\n \nSo the `cmd/task.go` diff I'm seeing isn't actually from this branch's changes — it's showing up because main moved forward with that fix after the branch point. The branch still has the old version of `resolvePlansDir()` while main has the updated one, which is why the diff looks like the branch \"changed\" something when really it's just behind.\n\nFor the plan files that appear deleted, they actually existed at the branch point too. The new commits on main added wave headers to those files, so they're showing as deletions in the diff because the branch version doesn't have those headers yet. This is just normal branch divergence — nothing to worry about from a review perspective.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqgQCkYICxgCKkDWLmV/REDACTED/x0xVK0QJ9lzxN0L8eolF/REDACTED/REDACTED/REDACTED/leI3HNIdk1OJHa0/fIYuYLNql+y0UPbxkcV0kLwBXc/REDACTED/REDACTED/klzaDpQ0v/IvXvr+/REDACTED/L/EXQgBu5/REDACTED//9wkO5zxLs/T7KvEeU5q+/iPamMgTQ3op/Zxydr9NXJQlvKpy/REDACTED/MriXU/REDACTED/E2Gf5raJSjB5AuXviuRj0ML8/REDACTED/REDACTED/1/XgBdydQSFqoNLq/8h/bpqxTdgVEpyQiQdiAQfuwIWsENZA2/REDACTED/REDACTED/REDACTED/xdLnHqDd/XSt3KrME39Rk1mv3i3QRLIO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/K7MeKOtu/R/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/XHETI3IzSqpaTlnvO44Ncm1f+/cDgb4NudFrgFmAQnMq6wijGAE="
+            }
+          },
+          "time": {
+            "start": 1772598118907,
+            "end": 1772598130573
+          },
+          "id": "prt_cb714c9fb002deN3CwrO0bQQX9",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714c4d4001wVE3eJdzc7MK6E"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_013df6s1p9FvtY3dD1zUvw2J",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log main..HEAD -- docs/plans/fix-agents-reading-from-disk.md docs/plans/improved-info-tab.md docs/plans/safe-kill.md --oneline",
+              "description": "Find which commits touched plan files"
+            },
+            "output": "commit bfafe248b9754fedbc458299839a39df53069481\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 22:21:27 2026 -0600\n\n    fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n    \n    Entire-Checkpoint: 3bc6fcc20421\n",
+            "title": "Find which commits touched plan files",
+            "metadata": {
+              "output": "commit bfafe248b9754fedbc458299839a39df53069481\nAuthor: kas <code@kasthe.dev>\nDate:   Tue Mar 3 22:21:27 2026 -0600\n\n    fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n    \n    Entire-Checkpoint: 3bc6fcc20421\n",
+              "exit": 0,
+              "description": "Find which commits touched plan files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598130642,
+              "end": 1772598130646
+            }
+          },
+          "id": "prt_cb714f792001pE6ea9Op1TOerq",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714c4d4001wVE3eJdzc7MK6E"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 85065,
+            "input": 1,
+            "output": 681,
+            "reasoning": 0,
+            "cache": {
+              "read": 83950,
+              "write": 433
+            }
+          },
+          "id": "prt_cb714f7eb001o7zvgCK3B58dh3",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714c4d4001wVE3eJdzc7MK6E"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598130679,
+          "completed": 1772598142962
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 85758,
+          "input": 1,
+          "output": 596,
+          "reasoning": 0,
+          "cache": {
+            "read": 84383,
+            "write": 778
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb714f7f7001ZTjRVrxSvd3MWV",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714f7f7001ZTjRVrxSvd3MWV"
+        },
+        {
+          "type": "reasoning",
+          "text": "Wait, the only commit that touched the plan files is MY self-fix commit. That means the plan files were NOT deleted by the branch's commits. Let me re-check...\n\nIf the plan files show in `git diff main..HEAD` as deletions BEFORE my self-fix, but no commits on the branch touched them, then the \"deletions\" are because main ADDED new content to these files after the branch point, and the branch doesn't have those additions.\n\nLet me check: at the branch point (`022788b4`), what was the content of these files? And then on main, commits `47c8e0bb`, `4d1efaa6`, and `a3f64a0f` modified them. \n\nSo the diff is showing main's newer versions against the branch's older ones. But the original diff showed `deleted file mode 100644`, which means the files don't exist at HEAD on the branch—yet they did exist at the merge base. That's contradictory unless the files were deleted somewhere on the branch, but `git log main..HEAD` only shows my self-fix commit touching them. I think I'm confusing what `git log main..HEAD` actually returns—it shows commits reachable from HEAD but not from main, which would be everything after the merge base.\n\nLet me verify whether those plan files actually exist at the merge base commit.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/8ckr8uBQuTO1xvFEaJBl3//REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/DuavZ13x9FBbHKSP9lMaJQZk/AkS1Sdaxx7/VawjiZcUr4EAhElBbqfbz0/REDACTED/KeLAD/REDACTED/REDACTED/+uiU/REDACTED/REDACTED/REDACTED/XUk9noK8cnldfFZLxauX95m+Y/REDACTED/2Lih/OR39xJeFYxRN9Yax2JTDBil0/REDACTED/REDACTED/Cg0FgVWiAkbdvnmYK/REDACTED/REDACTED/REDACTED/CeupZVidMZ/oyoVzLvjHn71+kFnJnhkLm4D1PM/REDACTED/REDACTED/uFduaTLxwWp/REDACTED/DhfipYlnygLKAPuGV9sVgt9kN/lMYZ6mYG7D7fZeRjEs18gwHi6GAE="
+            }
+          },
+          "time": {
+            "start": 1772598132329,
+            "end": 1772598142001
+          },
+          "id": "prt_cb714fe69001tgfeSFe7kiXwjB",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714f7f7001ZTjRVrxSvd3MWV"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Fb1tuGQH7eeWmPHiLGKHv1",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git show 022788b4:docs/plans/safe-kill.md | head -5 2>&1",
+              "description": "Check if safe-kill.md existed at branch point"
+            },
+            "output": "fatal: path 'docs/plans/safe-kill.md' exists on disk, but not in '022788b4'\n",
+            "title": "Check if safe-kill.md existed at branch point",
+            "metadata": {
+              "output": "fatal: path 'docs/plans/safe-kill.md' exists on disk, but not in '022788b4'\n",
+              "exit": 0,
+              "description": "Check if safe-kill.md existed at branch point",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598142474,
+              "end": 1772598142477
+            }
+          },
+          "id": "prt_cb7152432001jlvxt2Q6MgLHX2",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714f7f7001ZTjRVrxSvd3MWV"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01UBMtxuWWWVMCdpfUCoGjKh",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --all --oneline -- docs/plans/safe-kill.md | head -10",
+              "description": "Full history of safe-kill.md"
+            },
+            "output": "bfafe248 fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n5bb0795a Claude Code session updates\n4d1efaa6 plan: add wave headers to safe-kill.md\n",
+            "title": "Full history of safe-kill.md",
+            "metadata": {
+              "output": "bfafe248 fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n5bb0795a Claude Code session updates\n4d1efaa6 plan: add wave headers to safe-kill.md\n",
+              "exit": 0,
+              "description": "Full history of safe-kill.md",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598142930,
+              "end": 1772598142947
+            }
+          },
+          "id": "prt_cb715260c001pT6A34snQLBXuR",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714f7f7001ZTjRVrxSvd3MWV"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 85758,
+            "input": 1,
+            "output": 596,
+            "reasoning": 0,
+            "cache": {
+              "read": 84383,
+              "write": 778
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb714f7f7001ZTjRVrxSvd3MWV"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598142965,
+          "completed": 1772598150400
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 86263,
+          "input": 1,
+          "output": 364,
+          "reasoning": 0,
+          "cache": {
+            "read": 85161,
+            "write": 737
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb71527f5001e595Npn4diOD2G",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb7152e35001zpwKrBZb0DRSP4",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71527f5001e595Npn4diOD2G"
+        },
+        {
+          "type": "reasoning",
+          "text": "The plan file `safe-kill.md` did NOT exist at the branch point `022788b4`! It was added on main in commit `4d1efaa6` AFTER the branch was created. So the diff `main..HEAD` showed it as \"deleted\" because it exists on main but not on the branch (before my self-fix).\n\nThis means the plan files were never part of this branch — they were added to main after the branch diverged. My \"self-fix\" was wrong — I incorrectly assumed the branch deleted them, but actually they were just never on this branch.\n\nLet me revert my self-fix. The `git diff main..HEAD` showed them because main has them and the branch doesn't, not because the branch deleted them. \n\nSo this is just a divergence issue. But I should check whether `5bb0795a Claude Code session updates` is actually on this branch.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/1KBIAWyPF+WQWkTBMYTj1elKemFj/REDACTED/3fLNL5a2sH1FpFcpuw/REDACTED/REDACTED/Bqb0YxE0YgVgIkSt6PfyTW/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/eoWC6cQKRPOZeFz9MZnB/zTvemIwWR0C4tUD70u/REDACTED/f+T1uQi/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772598144565,
+            "end": 1772598150159
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71527f5001e595Npn4diOD2G"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Ecwfn5bHPcPu9Ay1H4dEE2",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git show 022788b4:docs/plans/fix-agents-reading-from-disk.md | head -3 2>&1 && echo \"---\" && git show 022788b4:docs/plans/improved-info-tab.md | head -3 2>&1",
+              "description": "Check if other plan files existed at branch point"
+            },
+            "output": "fatal: path 'docs/plans/fix-agents-reading-from-disk.md' exists on disk, but not in '022788b4'\n---\nfatal: path 'docs/plans/improved-info-tab.md' exists on disk, but not in '022788b4'\n",
+            "title": "Check if other plan files existed at branch point",
+            "metadata": {
+              "output": "fatal: path 'docs/plans/fix-agents-reading-from-disk.md' exists on disk, but not in '022788b4'\n---\nfatal: path 'docs/plans/improved-info-tab.md' exists on disk, but not in '022788b4'\n",
+              "exit": 0,
+              "description": "Check if other plan files existed at branch point",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598150349,
+              "end": 1772598150353
+            }
+          },
+          "id": "prt_cb7154412001fK2KemGs2WDXZs",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71527f5001e595Npn4diOD2G"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "cost": 0,
+          "tokens": {
+            "total": 86263,
+            "input": 1,
+            "output": 364,
+            "reasoning": 0,
+            "cache": {
+              "read": 85161,
+              "write": 737
+            }
+          },
+          "id": "prt_cb71544f1001FvMGDXc0G3K2mo",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71527f5001e595Npn4diOD2G"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598150402,
+          "completed": 1772598160438
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 86595,
+          "input": 1,
+          "output": 252,
+          "reasoning": 0,
+          "cache": {
+            "read": 85898,
+            "write": 444
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7154502001AYYrkJbHKMK6V2",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "id": "prt_cb71549f5001z4YbpS3kTSUMK0",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        },
+        {
+          "type": "reasoning",
+          "text": "None of the three plan files existed at the branch point `022788b4`. They were ALL added to main AFTER the branch was created. So the diff `main..HEAD` was showing them as \"deleted\" because they exist on current main but not on the branch — it's a divergence issue, not scope creep.\n\nMy self-fix was incorrect! I added files to the branch that were never part of it. I need to revert my commit.\n\nLet me revert the self-fix commit.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EtcECkYICxgCKkAl3C6Tix5JmVVm8UWz+CkWpk/13ONE3M3zsto2a2oPWb/REDACTED/REDACTED/pWhpGGZjRA0dwWaJ+s+WYXpX5dqc/REDACTED/REDACTED/U/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772598151670,
+            "end": 1772598153866
+          },
+          "id": "prt_cb71549f600184sh918vMoemOK",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        },
+        {
+          "type": "text",
+          "text": "I was wrong — those plan files were added to main AFTER the branch diverged. They were never on this branch. My self-fix introduced files that don't belong. Let me revert it.",
+          "time": {
+            "start": 1772598154766,
+            "end": 1772598154766
+          },
+          "id": "prt_cb715528b001DLYOwKps0FfmIx",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git revert HEAD --no-edit",
+              "description": "Revert incorrect self-fix commit"
+            },
+            "output": "[plan/safe-kill f7dbb724] Revert \"fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\"\n Date: Tue Mar 3 22:22:35 2026 -0600\n 3 files changed, 1324 deletions(-)\n delete mode 100644 docs/plans/fix-agents-reading-from-disk.md\n delete mode 100644 docs/plans/improved-info-tab.md\n delete mode 100644 docs/plans/safe-kill.md\n",
+            "title": "Revert incorrect self-fix commit",
+            "metadata": {
+              "output": "[plan/safe-kill f7dbb724] Revert \"fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\"\n Date: Tue Mar 3 22:22:35 2026 -0600\n 3 files changed, 1324 deletions(-)\n delete mode 100644 docs/plans/fix-agents-reading-from-disk.md\n delete mode 100644 docs/plans/improved-info-tab.md\n delete mode 100644 docs/plans/safe-kill.md\n",
+              "exit": 0,
+              "description": "Revert incorrect self-fix commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598155348,
+              "end": 1772598160426
+            }
+          },
+          "id": "prt_cb7155610001rVea9ImtpOVC2W",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 86595,
+            "input": 1,
+            "output": 252,
+            "reasoning": 0,
+            "cache": {
+              "read": 85898,
+              "write": 444
+            }
+          },
+          "id": "prt_cb7156c2b001i7pzV25paPzENN",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        },
+        {
+          "type": "patch",
+          "hash": "3d43230f108ed77f38166608a568bb8bf4bd90e0",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-safe-kill/docs/plans/fix-agents-reading-from-disk.md",
+            "/home/kas/dev/kasmos/.worktrees/plan-safe-kill/docs/plans/improved-info-tab.md",
+            "/home/kas/dev/kasmos/.worktrees/plan-safe-kill/docs/plans/safe-kill.md"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb7154502001AYYrkJbHKMK6V2"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598160443,
+          "completed": 1772598162857
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 86819,
+          "input": 1,
+          "output": 84,
+          "reasoning": 0,
+          "cache": {
+            "read": 86342,
+            "write": 392
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "prt_cb71572a7001inZ2c10xHrhNye",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RdCVb2oNLfNebpod2sqyaa",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log main..HEAD --oneline",
+              "description": "Verify branch commits after revert"
+            },
+            "output": "f7dbb724 Revert \"fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\"\nbfafe248 fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n1abf21ab fix(task-2): emit audit event before Pause() so TestAuditHomeEmit_AgentKilled passes\na5a455bd fix(task-1): preserve git branch when killing an instance\n1b19a5d7 feat(task-2): safe kill — kill now pauses instance and preserves branch\n",
+            "title": "Verify branch commits after revert",
+            "metadata": {
+              "output": "f7dbb724 Revert \"fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\"\nbfafe248 fix: restore unrelated plan files deleted outside plan scope (reviewer self-fix)\n1abf21ab fix(task-2): emit audit event before Pause() so TestAuditHomeEmit_AgentKilled passes\na5a455bd fix(task-1): preserve git branch when killing an instance\n1b19a5d7 feat(task-2): safe kill — kill now pauses instance and preserves branch\n",
+              "exit": 0,
+              "description": "Verify branch commits after revert",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598162825,
+              "end": 1772598162829
+            }
+          },
+          "id": "prt_cb71572a7002lh1BSqC9RXgMGq",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 86819,
+            "input": 1,
+            "output": 84,
+            "reasoning": 0,
+            "cache": {
+              "read": 86342,
+              "write": 392
+            }
+          },
+          "id": "prt_cb715759f001VZfbxpr8T69v7r",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598162858,
+          "completed": 1772598172709
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 87299,
+          "input": 1,
+          "output": 338,
+          "reasoning": 0,
+          "cache": {
+            "read": 86734,
+            "write": 226
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb71575aa0011rSmpay4m058DA",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "prt_cb7157d20001cA0kqulMnEqgV1",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71575aa0011rSmpay4m058DA"
+        },
+        {
+          "type": "reasoning",
+          "text": "Hmm, now I have two extra commits (my self-fix and its revert) that shouldn't be there. I should clean this up. Let me do an interactive rebase to remove both. Actually, I can't use `-i` (interactive) per the rules. Let me use a hard reset instead to go back to the commit before my self-fix.\n\nWait, the instructions say \"NEVER run destructive/irreversible git commands (like push --force, hard reset, etc) unless the user explicitly requests them\". But these are my own commits that I need to clean up. The commit `1abf21ab` is the last actual implementation commit.\n\n\nActually, thinking about it differently—those two commits are effectively canceling each other out. The first one adds three plan files and the second removes them, so the net effect is zero. That means the diff from main to HEAD should only show the actual safe-kill changes and the `cmd/task.go` divergence. Let me check what that looks like.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/n1g5ET+zj8wEmm7h/REDACTED/REDACTED/1aHq5PX1nve/EZArlEwLUbcPiw6utMNwJKJT6a/4jKdKpGJ/REDACTED/REDACTED/REDACTED/REDACTED/+sH/REDACTED/REDACTED/REDACTED/TRkR7nQRM4TAlrnOoXuL//V/REDACTED/KNRD/REDACTED/1bNz6gaysieNBkfVHdwoC5v4y/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772598164769,
+            "end": 1772598172665
+          },
+          "id": "prt_cb7157d210016PbLOnIMa609yh",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71575aa0011rSmpay4m058DA"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD --stat",
+              "description": "Final diff stat after revert"
+            },
+            "output": " app/app.go                                 |  12 +-\n app/app_actions.go                         |  14 +-\n app/app_input.go                           |   2 +-\n app/help.go                                |   4 +-\n cmd/instance.go                            |  29 +-\n cmd/instance_test.go                       |  30 ++\n cmd/task.go                                |  24 +-\n docs/plans/fix-agents-reading-from-disk.md | 483 ------------------------\n docs/plans/improved-info-tab.md            | 569 -----------------------------\n docs/plans/safe-kill.md                    | 272 --------------\n session/instance_lifecycle.go              |   8 +-\n session/instance_lifecycle_test.go         |  30 ++\n 12 files changed, 120 insertions(+), 1357 deletions(-)\n",
+            "title": "Final diff stat after revert",
+            "metadata": {
+              "output": " app/app.go                                 |  12 +-\n app/app_actions.go                         |  14 +-\n app/app_input.go                           |   2 +-\n app/help.go                                |   4 +-\n cmd/instance.go                            |  29 +-\n cmd/instance_test.go                       |  30 ++\n cmd/task.go                                |  24 +-\n docs/plans/fix-agents-reading-from-disk.md | 483 ------------------------\n docs/plans/improved-info-tab.md            | 569 -----------------------------\n docs/plans/safe-kill.md                    | 272 --------------\n session/instance_lifecycle.go              |   8 +-\n session/instance_lifecycle_test.go         |  30 ++\n 12 files changed, 120 insertions(+), 1357 deletions(-)\n",
+              "exit": 0,
+              "description": "Final diff stat after revert",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598172685,
+              "end": 1772598172689
+            }
+          },
+          "id": "prt_cb7159bfb001SZ0g0vB2qE6gEl",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71575aa0011rSmpay4m058DA"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 87299,
+            "input": 1,
+            "output": 338,
+            "reasoning": 0,
+            "cache": {
+              "read": 86734,
+              "write": 226
+            }
+          },
+          "id": "prt_cb7159c190013TibK3bYRT3zgE",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71575aa0011rSmpay4m058DA"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598172710,
+          "completed": 1772598183463
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 87958,
+          "input": 1,
+          "output": 425,
+          "reasoning": 0,
+          "cache": {
+            "read": 86960,
+            "write": 572
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "The add+revert are a net no-op but still show the plan file deletions in the diff because those files exist on main but not on the branch. This is expected since the files were added to main after the branch diverged.\n\nLet me now properly scope the review. The diff `main..HEAD` includes:\n1. **Implementation changes** (the actual safe-kill work) — in `app/`, `cmd/instance.go`, `cmd/instance_test.go`, `session/`\n2. **Divergence artifacts** — `cmd/task.go` was changed on main, not on this branch. `docs/plans/` files were added on main, not deleted on this branch.\n\n\nI need to isolate just what this branch actually introduced, not the noise from main's forward movement. Using the merge base to compare will show only the branch's commits, though that includes my cleanup work too. Let me focus on reviewing the original implementation commits instead.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/fmIFNzYcyW/REDACTED/mIdwsyfs/REDACTED/REDACTED/SYifCBl83yE/REDACTED/REDACTED/REDACTED/4iasfCdeEs4/REDACTED/REDACTED/REDACTED/REDACTED/GcCBreQxuriydjWN/SSIGAE="
+            }
+          },
+          "time": {
+            "start": 1772598174619,
+            "end": 1772598182968
+          },
+          "id": "prt_cb715a39b001IyGOy0DU76e8jl",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "Let me get the correct diff — only what the branch actually changed from the merge base, excluding my add/revert commits:",
+          "time": {
+            "start": 1772598182977,
+            "end": 1772598182977
+          },
+          "id": "prt_cb715c439001Ia0CIdkqivjVbS",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff 022788b4..1abf21ab --stat",
+              "description": "Diff from merge base to last implementation commit"
+            },
+            "output": " app/app.go                         | 12 +++++++++---\n app/app_actions.go                 | 14 ++++++++------\n app/app_input.go                   |  2 +-\n app/help.go                        |  4 ++--\n cmd/instance.go                    | 29 ++++++++++++++++++++++-------\n cmd/instance_test.go               | 30 ++++++++++++++++++++++++++++++\n session/instance_lifecycle.go      |  8 ++++++--\n session/instance_lifecycle_test.go | 30 ++++++++++++++++++++++++++++++\n 8 files changed, 108 insertions(+), 21 deletions(-)\n",
+            "title": "Diff from merge base to last implementation commit",
+            "metadata": {
+              "output": " app/app.go                         | 12 +++++++++---\n app/app_actions.go                 | 14 ++++++++------\n app/app_input.go                   |  2 +-\n app/help.go                        |  4 ++--\n cmd/instance.go                    | 29 ++++++++++++++++++++++-------\n cmd/instance_test.go               | 30 ++++++++++++++++++++++++++++++\n session/instance_lifecycle.go      |  8 ++++++--\n session/instance_lifecycle_test.go | 30 ++++++++++++++++++++++++++++++\n 8 files changed, 108 insertions(+), 21 deletions(-)\n",
+              "exit": 0,
+              "description": "Diff from merge base to last implementation commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598183435,
+              "end": 1772598183441
+            }
+          },
+          "id": "prt_cb715c442001w9R1whFnPRFib9",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 87958,
+            "input": 1,
+            "output": 425,
+            "reasoning": 0,
+            "cache": {
+              "read": 86960,
+              "write": 572
+            }
+          },
+          "id": "prt_cb715c61c0018VCnzLydvFdvkR",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598183465,
+          "completed": 1772598197294
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 88328,
+          "input": 1,
+          "output": 180,
+          "reasoning": 0,
+          "cache": {
+            "read": 87532,
+            "write": 615
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb715c629001shLjkWqrYsYfuT",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "prt_cb715cd0900167UVYsZGZ7VrPa",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715c629001shLjkWqrYsYfuT"
+        },
+        {
+          "type": "text",
+          "text": "Good — 8 files, exactly matching the plan's scope. The `cmd/task.go` and `docs/plans/` differences are just main divergence, not branch changes. My add+revert commits are noise but don't affect the actual implementation.\n\nNow let me do the final comprehensive review with the correct scope understanding.",
+          "time": {
+            "start": 1772598187476,
+            "end": 1772598187476
+          },
+          "id": "prt_cb715cd09002FqEI1OeSoe7dxM",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715c629001shLjkWqrYsYfuT"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./... -count=1 -timeout 120s 2>&1",
+              "description": "Full test suite",
+              "timeout": 180000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos\t0.017s\nok  \tgithub.com/kastheco/kasmos/app\t7.802s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.019s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.116s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.015s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.005s\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.023s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.044s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.003s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.008s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.110s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.003s\nok  \tgithub.com/kastheco/kasmos/keys\t0.006s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.006s\nok  \tgithub.com/kastheco/kasmos/session\t0.033s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.033s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.812s\nok  \tgithub.com/kastheco/kasmos/ui\t0.029s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.029s\n",
+            "title": "Full test suite",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos\t0.017s\nok  \tgithub.com/kastheco/kasmos/app\t7.802s\nok  \tgithub.com/kastheco/kasmos/cmd\t0.019s\n?   \tgithub.com/kastheco/kasmos/cmd/cmd_test\t[no test files]\nok  \tgithub.com/kastheco/kasmos/config\t0.116s\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t0.009s\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.015s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t0.005s\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.023s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.044s\nok  \tgithub.com/kastheco/kasmos/contracts\t0.003s\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t0.003s\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t0.008s\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t0.005s\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t0.110s\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t0.004s\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t0.003s\nok  \tgithub.com/kastheco/kasmos/keys\t0.006s\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.006s\nok  \tgithub.com/kastheco/kasmos/session\t0.033s\nok  \tgithub.com/kastheco/kasmos/session/git\t0.033s\nok  \tgithub.com/kastheco/kasmos/session/tmux\t2.812s\nok  \tgithub.com/kastheco/kasmos/ui\t0.029s\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t0.029s\n",
+              "exit": 0,
+              "description": "Full test suite",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598188398,
+              "end": 1772598197283
+            }
+          },
+          "id": "prt_cb715d5d6001pspMwdAp4Rbvbs",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715c629001shLjkWqrYsYfuT"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 88328,
+            "input": 1,
+            "output": 180,
+            "reasoning": 0,
+            "cache": {
+              "read": 87532,
+              "write": 615
+            }
+          },
+          "id": "prt_cb715fc24001JgOCv5JLorJhVs",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715c629001shLjkWqrYsYfuT"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598197296,
+          "completed": 1772598215658
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 89713,
+          "input": 1,
+          "output": 694,
+          "reasoning": 0,
+          "cache": {
+            "read": 88147,
+            "write": 871
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb715fc30001VSyKLKiK8WT6sq",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "prt_cb716015a001ufdaHgNbCUGrkR",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715fc30001VSyKLKiK8WT6sq"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass across the entire codebase. Let me now write the final review summary and signal.\n\n## Review Summary\n\n### Spec Compliance\n\n| Check                             | Status                                                                                                                                                                   |\n| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |\n| **Task 1: Preserve Branch in Kill()** | ✅ `Kill()` uses `Remove()` + `Prune()` instead of `Cleanup()`. Doc comment updated. Test added and passing.                                                                     |\n| **Task 2: TUI and CLI Kill → Pause**  | ✅ All 6 files modified per plan. Context menu, `killInstanceMsg`, K key confirmation, help text (2x), and CLI all use `Pause()` instead of destroy. Test added and passing. |\n| **No scope creep**                    | ✅ Changes confined to the 8 files specified in the plan. The `docs/plans/` and `cmd/task.go` diffs are main divergence, not branch changes.                                 |\n| **Plan goal achieved**                | ✅ Kill is now safe — branch preserved, instances paused not destroyed, both TUI and CLI paths covered.                                                                  |\n\n### Code Quality\n\n| Check                | Status                                                                                                                                   |\n| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |\n| **Error handling**       | ✅ Errors returned, not silently dropped. Best-effort operations (tmux kill, git ops in CLI) appropriately use `_ =`.                      |\n| **Edge cases**           | ✅ `Kill()` returns nil for unstarted instances. CLI checks `WorktreePath != \"\"` before git ops. Shared worktrees skipped.                   |\n| **Test coverage**        | ✅ `TestKill_PreservesBranch` exercises the core behavior with real git. `TestKillCmd_SetsInstanceToPaused` verifies CLI state update logic. |\n| **Test quality**         | ✅ Tests use require/assert correctly, test the right thing.                                                                             |\n| **Production readiness** | ✅ No debug prints, no TODOs.                                                                                                            |\n| **Naming**               | ✅ Clear and consistent.                                                                                                                 |\n\n### Deviation from Plan (Acceptable)\n\nThe plan placed the audit call after `Pause()` in `app_actions.go`, but the implementation correctly moved it before `Pause()` (commit `1abf21ab`) with the comment: *\"Emit audit before attempting pause so the event is always recorded even when the instance has not been started.\"* This is a strictly better ordering — the audit event records the intent regardless of whether Pause succeeds.\n\n### Tests\n\nFull suite: **29 packages, all passing, zero failures.**\n\n### Typos\n\nZero typos found in changed files.\n\nNow let me write the approval signal:",
+          "time": {
+            "start": 1772598214972,
+            "end": 1772598214972
+          },
+          "id": "prt_cb716015b001QoAUHsHBeaHdix",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715fc30001VSyKLKiK8WT6sq"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01YTx95GM8DDgLA3yL4oMai9",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals",
+              "description": "Ensure signals directory exists"
+            },
+            "output": "",
+            "title": "Ensure signals directory exists",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Ensure signals directory exists",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598215621,
+              "end": 1772598215625
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715fc30001VSyKLKiK8WT6sq"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 89713,
+            "input": 1,
+            "output": 694,
+            "reasoning": 0,
+            "cache": {
+              "read": 88147,
+              "write": 871
+            }
+          },
+          "id": "prt_cb71643da001OPaVIZIuwBuB7T",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb715fc30001VSyKLKiK8WT6sq"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598215659,
+          "completed": 1772598220734
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 89981,
+          "input": 1,
+          "output": 162,
+          "reasoning": 0,
+          "cache": {
+            "read": 89018,
+            "write": 800
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "REDACTED",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo \"Approved. Both tasks complete — Kill() preserves branches via Remove()+Prune(), and all user-facing kill actions (TUI K key, context menu, CLI) now call Pause() instead of destroying. Full test suite passes (29 packages, 0 failures), no typos, no scope creep.\" > .kasmos/signals/review-approved-safe-kill.md",
+              "description": "Write review-approved signal"
+            },
+            "output": "",
+            "title": "Write review-approved signal",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Write review-approved signal",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772598220687,
+              "end": 1772598220690
+            }
+          },
+          "id": "prt_cb7164d1a002H9772WT2nd0tlx",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 89981,
+            "input": 1,
+            "output": 162,
+            "reasoning": 0,
+            "cache": {
+              "read": 89018,
+              "write": 800
+            }
+          },
+          "id": "prt_cb71657a5001fIsJS8YmnBLzr5",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772598220737,
+          "completed": 1772598224236
+        },
+        "parentID": "msg_cb7118063001ibMPKs54usteQD",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-safe-kill"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 90090,
+          "input": 1,
+          "output": 83,
+          "reasoning": 0,
+          "cache": {
+            "read": 89818,
+            "write": 188
+          }
+        },
+        "variant": "high",
+        "finish": "stop",
+        "id": "msg_cb71657c1001U9Xd5Btc9iXM2z",
+        "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "id": "prt_cb7165def0018DNWgtR0xaic62",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71657c1001U9Xd5Btc9iXM2z"
+        },
+        {
+          "type": "text",
+          "text": "**Review: Approved ✅**\n\nAll implementation matches the plan precisely across both tasks. The one deviation (audit before Pause in `app_actions.go`) is a deliberate improvement over the plan's ordering. Full test suite passes, no typos, no scope creep. Signal written to `.kasmos/signals/review-approved-safe-kill.md`.",
+          "time": {
+            "start": 1772598224205,
+            "end": 1772598224205
+          },
+          "id": "prt_cb7165df0001hru5GwmeL7OHqy",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71657c1001U9Xd5Btc9iXM2z"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "c12446f0a3b1a10716e72cc10e407af947e4ed7e",
+          "cost": 0,
+          "tokens": {
+            "total": 90090,
+            "input": 1,
+            "output": 83,
+            "reasoning": 0,
+            "cache": {
+              "read": 89818,
+              "write": 188
+            }
+          },
+          "id": "prt_cb7166563001WLz5864pMmhv73",
+          "sessionID": "ses_348ee7fb8ffehT5nAVPysgYrog",
+          "messageID": "msg_cb71657c1001U9Xd5Btc9iXM2z"
         }
       ]
     }
