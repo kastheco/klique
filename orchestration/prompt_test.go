@@ -63,3 +63,20 @@ func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "planner-finished-my-feature.md")
 	assert.NotContains(t, prompt, "The plan at docs/plans/")
 }
+
+func TestBuildElaborationPrompt(t *testing.T) {
+	prompt := BuildElaborationPrompt("my-feature.md")
+
+	// Must reference the plan file for retrieval
+	assert.Contains(t, prompt, "kas task show my-feature.md")
+	// Must reference updating the plan
+	assert.Contains(t, prompt, "kas task update-content my-feature.md")
+	// Must reference the signal
+	assert.Contains(t, prompt, "elaborator-finished-my-feature.md")
+	// Must instruct to expand task bodies
+	assert.Contains(t, prompt, "implementation detail")
+	// Must instruct to preserve structure
+	assert.Contains(t, prompt, "preserve")
+	// Must reference reading the codebase
+	assert.Contains(t, prompt, "codebase")
+}

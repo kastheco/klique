@@ -54,6 +54,33 @@ func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, to
 	return sb.String()
 }
 
+// BuildElaborationPrompt returns the prompt for an elaborator agent session.
+// The elaborator reads the plan, deeply reads the codebase for each task's files,
+// and expands task bodies with detailed implementation instructions.
+func BuildElaborationPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"You are the elaborator agent. Your job: enrich a plan's task descriptions with "+
+			"detailed implementation instructions so coder agents make fewer decisions.\n\n"+
+			"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\n\n"+
+			"## Instructions\n\n"+
+			"1. Retrieve the plan: `kas task show %[1]s`\n"+
+			"2. For each task, read the codebase files listed in its **Files:** section. "+
+			"Study existing patterns, interfaces, function signatures, error handling, "+
+			"and data flow in those files and their neighbors.\n"+
+			"3. Expand each task body with concrete implementation detail:\n"+
+			"   - Exact function signatures to create or modify\n"+
+			"   - Existing codebase patterns to follow (with file references)\n"+
+			"   - Edge cases and error handling requirements\n"+
+			"   - Import paths and dependencies\n"+
+			"   - Concrete code snippets where helpful\n"+
+			"4. Preserve the plan structure — do not change wave organization, "+
+			"task numbering, file lists, or the header fields. Only expand task bodies.\n"+
+			"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\n"+
+			"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\n",
+		planFile,
+	)
+}
+
 // BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned
 // to add ## Wave headers to an existing plan that is missing them.
 // It instructs the planner to annotate the plan, commit the change, and write
