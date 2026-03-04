@@ -520,8 +520,8 @@ func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 
 // TestImplementActionReadsFromStore verifies that the "implement" action reads plan
 // content from the task store database, not from a file on disk. The test creates
-// a task entry with valid wave-header content in the store and deliberately omits
-// any .md file in docs/plans/. A non-nil WaveOrchestrator in the home model after
+// a task entry with valid wave-header content in the task store and deliberately omits
+// any .md file on disk. A non-nil WaveOrchestrator in the home model after
 // executeTaskStage proves that the plan was read from the DB and parsed successfully.
 func TestImplementActionReadsFromStore(t *testing.T) {
 	dir := t.TempDir()
@@ -577,7 +577,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 // whether to include a plan file reference in its prompt by checking for content
 // in the task store, rather than checking for a file on disk. The test stores
 // content in the DB without writing any .md file. When the prompt contains
-// "docs/plans/<planFile>", it proves the store check (not os.Stat) was used.
+// "kas task show <planFile>", it proves the store check (not os.Stat) was used.
 func TestSoloActionChecksStoreNotDisk(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

@@ -177,49 +177,46 @@ func TestPlanImplement(t *testing.T) {
 }
 
 func TestPlanRegister(t *testing.T) {
-	store, repoRoot, project := setupTestPlanState(t)
-	// Register still needs docs/plans on disk (it reads .md files).
-	plansDir := filepath.Join(repoRoot, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	store, _, project := setupTestPlanState(t)
 
-	planFile := "new-feature.md"
+	// Write plan file to a temp dir (no docs/plans dependency).
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "new-feature.md")
 	require.NoError(t, os.WriteFile(
-		filepath.Join(plansDir, planFile),
+		planPath,
 		[]byte("# New Feature Plan\n\nSome content."),
 		0o644,
 	))
 
-	err := executeTaskRegister(plansDir, planFile, "", "", "", store)
+	err := executeTaskRegister(project, planPath, "", "", "", store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry(planFile)
+	entry, ok := ps.Entry("new-feature.md")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "New Feature Plan", entry.Description)
 	assert.Equal(t, "plan/new-feature", entry.Branch)
-	assert.Equal(t, "", entry.Topic)
 }
 
 func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
-	store, repoRoot, project := setupTestPlanState(t)
-	plansDir := filepath.Join(repoRoot, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	store, _, project := setupTestPlanState(t)
 
-	planFile := "stub-plan.md"
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "stub-plan.md")
 	require.NoError(t, os.WriteFile(
-		filepath.Join(plansDir, planFile),
+		planPath,
 		[]byte("# Stub Plan\n"),
 		0o644,
 	))
 
-	err := executeTaskRegister(plansDir, planFile, "", "brain phase 1", "Implement circuit breaker", store)
+	err := executeTaskRegister(project, planPath, "", "brain phase 1", "Implement circuit breaker", store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry(planFile)
+	entry, ok := ps.Entry("stub-plan.md")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "Implement circuit breaker", entry.Description)
@@ -357,20 +354,19 @@ func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	// Create a temp plansDir with the expected structure.
-	root := t.TempDir()
-	plansDir := filepath.Join(root, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-
+	// Write plan file to a temp dir (no docs/plans dependency).
+	tmpDir := t.TempDir()
+	project := "test-ingest-project"
 	planContent := "# My Plan\n\n## Wave 1\n\n### Task 1: Do something\n\nDo it.\n"
 	planFile := "my-plan.md"
-	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
+	planPath := filepath.Join(tmpDir, planFile)
+	require.NoError(t, os.WriteFile(planPath, []byte(planContent), 0o644))
 
-	err = executeTaskRegister(plansDir, planFile, "", "", "", store)
+	err = executeTaskRegister(project, planPath, "", "", "", store)
 	require.NoError(t, err)
 
 	// Verify content was ingested into the store.
-	got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)
+	got, err := store.GetContent(project, planFile)
 	require.NoError(t, err)
 	assert.Equal(t, planContent, got)
 }

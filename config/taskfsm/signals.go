@@ -69,8 +69,8 @@ func parseSignal(dir, filename string) (Signal, bool) {
 			if planFile == "" {
 				return Signal{}, false
 			}
-			// Defensive: strip any path prefix (e.g. "docs/plans/") so the
-			// planFile matches plan-state.json keys which are bare filenames.
+			// Defensive: strip any path prefix so the planFile
+			// matches task store keys which are bare filenames.
 			planFile = filepath.Base(planFile)
 			filePath := filepath.Join(dir, filename)
 			body := ""

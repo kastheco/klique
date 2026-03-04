@@ -17,19 +17,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// executeTaskRegister registers a plan file that exists on disk but isn't
-// tracked in task state yet. It extracts a description from the first markdown
-// heading and uses the conventional branch name format.
-func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
-	fullPath := filepath.Join(plansDir, planFile)
-	data, err := os.ReadFile(fullPath)
+// executeTaskRegister registers a plan file into the task store. The filePath
+// is resolved relative to the caller's working directory.
+func executeTaskRegister(project, filePath, branch, topic, description string, store taskstore.Store) error {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("task file not found on disk: %s", fullPath)
+		return fmt.Errorf("task file not found: %s", filePath)
 	}
-	ps, err := loadTaskState(plansDir, store)
+	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
 		return err
 	}
+	planFile := filepath.Base(filePath)
 	if description == "" {
 		description = strings.TrimSuffix(planFile, ".md")
 		for _, line := range strings.Split(string(data), "\n") {
@@ -39,12 +38,11 @@ func executeTaskRegister(plansDir, planFile, branch, topic, description string, 
 			}
 		}
 	}
-	// Default branch: plan/<slug> derived from the plan filename.
 	if branch == "" {
 		slug := strings.TrimSuffix(planFile, ".md")
 		branch = "plan/" + slug
 	}
-	info, _ := os.Stat(fullPath)
+	info, _ := os.Stat(filePath)
 	createdAt := info.ModTime()
 	return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))
 }
@@ -463,14 +461,14 @@ func NewTaskCmd() *cobra.Command {
 		Short: "register an untracked task file (sets status to ready)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plansDir, err := resolvePlansDir()
+			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			if err := executeTaskRegister(plansDir, args[0], branchFlag, topicFlag, descriptionFlag, resolveStore(plansDir)); err != nil {
+			if err := executeTaskRegister(project, args[0], branchFlag, topicFlag, descriptionFlag, resolveStore(project)); err != nil {
 				return err
 			}
-			fmt.Printf("registered: %s → ready\n", args[0])
+			fmt.Printf("registered: %s → ready\n", filepath.Base(args[0]))
 			return nil
 		},
 	}
@@ -787,13 +785,6 @@ func resolveStoreConfig(project string) (taskstore.Store, string) {
 	return store, project
 }
 
-// projectFromPlansDir extracts the repo/project name from a plansDir path.
-// plansDir is typically <repo>/docs/plans — go up two levels.
-// Deprecated: prefer resolveRepoInfo() which derives the project name directly.
-func projectFromPlansDir(plansDir string) string {
-	return filepath.Base(filepath.Dir(filepath.Dir(plansDir)))
-}
-
 // localSQLiteStore opens (or creates) the local SQLite task store at the
 // canonical path returned by taskstore.ResolvedDBPath(). Used as a fallback
 // when no remote store is configured.
@@ -803,13 +794,6 @@ func localSQLiteStore() (taskstore.Store, error) {
 		return nil, fmt.Errorf("create kasmos config dir: %w", err)
 	}
 	return taskstore.NewSQLiteStore(dbPath)
-}
-
-// loadTaskState loads task state using the store backend.
-// When store is nil, falls back to the local SQLite store.
-// Deprecated: use loadTaskStateByProject for new code paths.
-func loadTaskState(plansDir string, store taskstore.Store) (*taskstate.TaskState, error) {
-	return loadTaskStateByProject(projectFromPlansDir(plansDir), store)
 }
 
 // loadTaskStateByProject loads task state using the store backend and a project name.
@@ -823,13 +807,6 @@ func loadTaskStateByProject(project string, store taskstore.Store) (*taskstate.T
 		}
 	}
 	return taskstate.Load(store, project, "")
-}
-
-// newFSM creates a PlanStateMachine backed by the given store.
-// When store is nil, falls back to the local SQLite store.
-// Deprecated: use newFSMByProject for new code paths.
-func newFSM(plansDir string, store taskstore.Store) *taskfsm.TaskStateMachine {
-	return newFSMByProject(projectFromPlansDir(plansDir), store)
 }
 
 // newFSMByProject creates a TaskStateMachine backed by the given store and project name.
@@ -857,9 +834,7 @@ func resolveStore(project string) taskstore.Store {
 
 // resolveRepoInfo resolves the main repository root and derives the project
 // name from it. Handles both regular repos and git worktrees. The project name
-// is the basename of the repo root directory (e.g. "kasai" for /home/kas/dev/kasai).
-//
-// This replaces the legacy resolvePlansDir() which required docs/plans/ to exist.
+// is the basename of the repo root directory (e.g. "kasmos" for /home/kas/dev/kasmos).
 func resolveRepoInfo() (repoRoot, project string, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -871,21 +846,6 @@ func resolveRepoInfo() (repoRoot, project string, err error) {
 		return "", "", fmt.Errorf("cannot resolve repo root: %w", err)
 	}
 	return root, filepath.Base(root), nil
-}
-
-// resolvePlansDir resolves docs/plans/ relative to the main repository root.
-// Deprecated: only used for legacy migration and register (which reads .md from disk).
-// Prefer resolveRepoInfo() for all other operations.
-func resolvePlansDir() (string, error) {
-	root, _, err := resolveRepoInfo()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(root, "docs", "plans")
-	if _, err := os.Stat(dir); err != nil {
-		return "", fmt.Errorf("plans directory not found: %s", dir)
-	}
-	return dir, nil
 }
 
 // resolveRepoRoot returns the root directory of the git repository that owns

@@ -233,7 +233,7 @@ type home struct {
 	previewTerminal         *session.EmbeddedTerminal
 	previewTerminalInstance string // title of the instance the terminal is attached to
 
-	// taskState holds the parsed plan-state.json for the active repo. Nil when missing.
+	// taskState holds the parsed task state from the store for the active repo.
 	taskState *taskstate.TaskState
 	// taskStateDir is the legacy plans directory path. Retained only for JSON migration.
 	// New code should not depend on this path existing on disk.
@@ -310,7 +310,7 @@ type home struct {
 	// without needing to look up the (possibly already removed) instance by title.
 	pendingPlannerTaskFile string
 
-	// fsm is the sole writer of plan-state.json. All plan status mutations flow
+	// fsm is the sole writer of task state. All task status mutations flow
 	// through fsm.Transition — direct SetStatus calls are not allowed.
 	fsm *taskfsm.TaskStateMachine
 

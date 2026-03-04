@@ -38,24 +38,6 @@ func NewSharedTaskWorktree(repoPath, branch string) *GitWorktree {
 	)
 }
 
-// CommitTaskScaffoldOnMain stages the plan stub file and plan-state.json on the
-// main branch (repoPath is the main worktree) and creates a commit.
-func CommitTaskScaffoldOnMain(repoPath, planFile string) error {
-	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
-	planPath := filepath.Join("docs", "plans", planFile)
-	statePath := filepath.Join("docs", "plans", "plan-state.json")
-	if _, err := gt.runGitCommand(repoPath, "add", planPath, statePath); err != nil {
-		return fmt.Errorf("stage plan scaffold: %w", err)
-	}
-	if _, err := gt.runGitCommand(repoPath, "commit", "-m", "feat(plan): add "+taskstate.DisplayName(planFile)+" scaffold"); err != nil {
-		if strings.Contains(err.Error(), "nothing to commit") {
-			return nil
-		}
-		return fmt.Errorf("commit plan scaffold: %w", err)
-	}
-	return nil
-}
-
 // EnsureTaskBranch creates the plan branch off the current HEAD if it doesn't
 // already exist. It is idempotent.
 func EnsureTaskBranch(repoPath, branch string) error {
