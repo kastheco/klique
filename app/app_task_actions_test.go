@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/session"
@@ -517,6 +518,120 @@ func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 	require.True(t, ok, "expected planRenderedMsg, got %T", msg)
 	require.NoError(t, renderedMsg.err)
 	assert.Equal(t, planFile, renderedMsg.planFile)
+}
+
+// TestImplementActionReadsFromStore verifies that the "implement" action reads plan
+// content from the task store database, not from a file on disk. The test creates
+// a task entry with valid wave-header content in the store and deliberately omits
+// any .md file in docs/plans/. A non-nil WaveOrchestrator in the home model after
+// executeTaskStage proves that the plan was read from the DB and parsed successfully.
+func TestImplementActionReadsFromStore(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	const planFile = "test-implement-from-db.md"
+	const planContent = "# Plan\n\n**Goal:** Test DB read\n\n## Wave 1\n\n### Task 1: Do the thing\n\nDo it.\n"
+
+	// Create task in store WITH content and a branch (branch avoids the backfill
+	// path in executeTaskStage that would call store.Update and inadvertently clear
+	// the content field). No file is written to disk.
+	store := taskstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusReady,
+		Branch:   "plan/test-implement-from-db",
+		Content:  planContent,
+	}))
+
+	ps, err := taskstate.Load(store, "proj", plansDir)
+	require.NoError(t, err)
+	fsm := taskfsm.New(store, "proj", plansDir)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:          ps,
+		taskStore:          store,
+		taskStoreProject:   "proj",
+		taskStateDir:       plansDir,
+		fsm:                fsm,
+		nav:                ui.NewNavigationPanel(&sp),
+		menu:               ui.NewMenu(),
+		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:       overlay.NewToastManager(&sp),
+		waveOrchestrators:  make(map[string]*WaveOrchestrator),
+		instanceFinalizers: make(map[*session.Instance]func()),
+		activeRepoPath:     dir,
+		program:            "opencode",
+	}
+
+	// No plan file on disk — content must come from the task store.
+	model, _ := h.executeTaskStage(planFile, "implement")
+	updated := model.(*home)
+
+	// The WaveOrchestrator is created before spawnWaveTasks (which may fail on git).
+	// A non-nil orchestrator proves the plan was read from the DB and parsed successfully.
+	assert.NotNil(t, updated.waveOrchestrators[planFile],
+		"implement action must read plan content from store, not disk")
+}
+
+// TestSoloActionChecksStoreNotDisk verifies that the "solo" action determines
+// whether to include a plan file reference in its prompt by checking for content
+// in the task store, rather than checking for a file on disk. The test stores
+// content in the DB without writing any .md file. When the prompt contains
+// "docs/plans/<planFile>", it proves the store check (not os.Stat) was used.
+func TestSoloActionChecksStoreNotDisk(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	const planFile = "test-solo-from-db.md"
+	const planContent = "# Plan\n\n**Goal:** Test solo DB check\n\n## Wave 1\n\n### Task 1: Solo task\n\nDo it.\n"
+
+	// Create task in store WITH content and a branch (branch avoids the backfill
+	// path in executeTaskStage that would call store.Update and inadvertently clear
+	// the content field). No file is written to disk.
+	store := taskstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusReady,
+		Branch:   "plan/test-solo-from-db",
+		Content:  planContent,
+	}))
+
+	ps, err := taskstate.Load(store, "proj", plansDir)
+	require.NoError(t, err)
+	fsm := taskfsm.New(store, "proj", plansDir)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:          ps,
+		taskStore:          store,
+		taskStoreProject:   "proj",
+		taskStateDir:       plansDir,
+		fsm:                fsm,
+		nav:                ui.NewNavigationPanel(&sp),
+		menu:               ui.NewMenu(),
+		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager:       overlay.NewToastManager(&sp),
+		waveOrchestrators:  make(map[string]*WaveOrchestrator),
+		instanceFinalizers: make(map[*session.Instance]func()),
+		activeRepoPath:     dir,
+		program:            "opencode",
+	}
+
+	// No plan file on disk — the store check must find content and set refFile.
+	model, _ := h.executeTaskStage(planFile, "solo")
+	updated := model.(*home)
+
+	// The solo agent must have been spawned with a prompt referencing docs/plans/<planFile>
+	// because the store has content. If os.Stat were used instead, no disk file means
+	// refFile="" and the prompt would omit the plan file reference.
+	instances := updated.nav.GetInstances()
+	require.NotEmpty(t, instances, "solo stage must spawn an agent instance")
+	soloInst := instances[len(instances)-1]
+	assert.Contains(t, soloInst.QueuedPrompt, "docs/plans/"+planFile,
+		"solo prompt must reference plan file when store has content (not disk)")
 }
 
 func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.T) {

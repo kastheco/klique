@@ -2,9 +2,7 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
@@ -818,6 +816,16 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		m.updateSidebarTasks()
 		return m.spawnTaskAgent(planFile, "plan", buildPlanningPrompt(taskstate.DisplayName(planFile), entry.Description))
 	case "solo":
+		// Check store content before fsmSetImplementing — the FSM transition calls
+		// store.Update which overwrites the content field with an empty string.
+		// Reading before the transition preserves any ingested plan content.
+		planName := taskstate.DisplayName(planFile)
+		refFile := ""
+		if m.taskStore != nil {
+			if c, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && c != "" {
+				refFile = planFile
+			}
+		}
 		if err := m.fsmSetImplementing(planFile); err != nil {
 			return m, m.handleError(err)
 		}
@@ -825,23 +833,19 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadTaskState()
 		m.updateSidebarTasks()
-		// Check if plan .md file exists on disk to decide prompt content.
-		planName := taskstate.DisplayName(planFile)
-		planPath := filepath.Join(m.activeRepoPath, "docs", "plans", planFile)
-		refFile := ""
-		if _, err := os.Stat(planPath); err == nil {
-			refFile = planFile
-		}
 		prompt := buildSoloPrompt(planName, entry.Description, refFile)
 		return m.spawnTaskAgent(planFile, "solo", prompt)
 	case "implement":
-		// Read and parse plan — this also validates wave headers.
-		plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
-		content, err := os.ReadFile(filepath.Join(plansDir, planFile))
-		if err != nil {
-			return m, m.handleError(err)
+		// Read and parse plan from the task store — this also validates wave headers.
+		rawContent := ""
+		if m.taskStore != nil {
+			c, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
+			if err != nil {
+				return m, m.handleError(err)
+			}
+			rawContent = c
 		}
-		plan, err := taskparser.Parse(string(content))
+		plan, err := taskparser.Parse(rawContent)
 		if err != nil {
 			// No wave headers — revert to planning and respawn the planner with a
 			// wave-annotation prompt so the agent adds the required ## Wave sections.
@@ -890,14 +894,10 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// validatePlanHasWaves reads a plan file and checks it has ## Wave headers.
-// Returns an error if the plan lacks wave annotations.
-func validatePlanHasWaves(plansDir, planFile string) error {
-	content, err := os.ReadFile(filepath.Join(plansDir, planFile))
-	if err != nil {
-		return fmt.Errorf("read plan: %w", err)
-	}
-	_, err = taskparser.Parse(string(content))
+// validatePlanContent checks if plan content has ## Wave headers.
+// Returns an error if the plan lacks wave annotations or content is empty.
+func validatePlanContent(content string) error {
+	_, err := taskparser.Parse(content)
 	return err
 }
 

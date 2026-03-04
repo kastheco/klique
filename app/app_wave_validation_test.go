@@ -1,17 +1,12 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestValidatePlanHasWaves_WithWaves(t *testing.T) {
-	dir := t.TempDir()
-	planFile := "test-plan.md"
+func TestValidatePlanContent_WithWaves(t *testing.T) {
 	content := `# Plan
 
 **Goal:** Test
@@ -21,15 +16,11 @@ func TestValidatePlanHasWaves_WithWaves(t *testing.T) {
 
 Do it.
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, planFile), []byte(content), 0o644))
-
-	err := validatePlanHasWaves(dir, planFile)
+	err := validatePlanContent(content)
 	assert.NoError(t, err)
 }
 
-func TestValidatePlanHasWaves_NoWaves(t *testing.T) {
-	dir := t.TempDir()
-	planFile := "test-plan.md"
+func TestValidatePlanContent_NoWaves(t *testing.T) {
 	content := `# Plan
 
 **Goal:** Test
@@ -38,9 +29,7 @@ func TestValidatePlanHasWaves_NoWaves(t *testing.T) {
 
 Do it.
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, planFile), []byte(content), 0o644))
-
-	err := validatePlanHasWaves(dir, planFile)
+	err := validatePlanContent(content)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no wave headers")
 }
