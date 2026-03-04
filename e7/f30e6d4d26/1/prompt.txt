@@ -1,0 +1,9 @@
+make allow always be the preselected default option when showing a permission prompt dialog
+
+---
+
+the functionality or what it sends to the terminal doesnt change - just the display to the user
+
+---
+
+commit and push
