@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d1604dc50f1b",
+  "session_id": "ses_348f351d2ffemCAXtZ65XLPJgD",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T04:14:07.048461948Z",
+  "branch": "plan/fix-agents-reading-from-disk",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/task_test.go",
+    "cmd/task.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "b9f0971e864a",
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 68477,
+    "cache_read_tokens": 750772,
+    "output_tokens": 3238,
+    "api_call_count": 14
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T04:14:06.985102298Z",
+    "agent_lines": 86,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 86,
+    "agent_percentage": 100
+  }
+}

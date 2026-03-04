@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d1604dc50f1b",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-agents-reading-from-disk",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/task.go",
+    "cmd/task_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d1/604dc50f1b/0/metadata.json",
+      "transcript": "/d1/604dc50f1b/0/full.jsonl",
+      "context": "/d1/604dc50f1b/0/context.md",
+      "content_hash": "/d1/604dc50f1b/0/content_hash.txt",
+      "prompt": "/d1/604dc50f1b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 68477,
+    "cache_read_tokens": 750772,
+    "output_tokens": 3238,
+    "api_call_count": 14
+  }
+}
