@@ -48,7 +48,7 @@ func TestContextMenu_HandleKey_NumberShortcut(t *testing.T) {
 func TestContextMenu_HandleKey_Dismiss(t *testing.T) {
 	items := []ContextMenuItem{{Label: "kill", Action: "kill"}}
 	cm := NewContextMenu(items)
-	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.Empty(t, result.Action)
 }

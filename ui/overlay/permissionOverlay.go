@@ -117,7 +117,7 @@ func (p *PermissionOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 		p.confirmed = true
 		action := permissionActionLabels[p.selectedIdx]
 		return Result{Dismissed: true, Submitted: true, Action: action}
-	case tea.KeyEsc:
+	case tea.KeyEscape:
 		return Result{Dismissed: true}
 	}
 	return Result{}

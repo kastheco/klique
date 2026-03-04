@@ -50,7 +50,7 @@ func TestFormOverlay_EmptyNameDoesNotSubmit(t *testing.T) {
 func TestFormOverlay_EscCancels(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 
-	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -212,7 +212,7 @@ func TestFormOverlay_HandleKey_Submit(t *testing.T) {
 
 func TestFormOverlay_HandleKey_Cancel(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
-	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

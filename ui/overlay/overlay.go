@@ -12,7 +12,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// Most of this code is modified from https://charm.land/lipgloss/v2/pull/102
+// Most of this code is modified from https://github.com/charmbracelet/lipgloss/pull/102
 
 // Pre-compiled regexes for ANSI color code replacement in PlaceOverlay.
 var (

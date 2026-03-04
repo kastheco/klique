@@ -35,7 +35,7 @@ func TestPickerOverlay_HandleKey_Filter(t *testing.T) {
 
 func TestPickerOverlay_HandleKey_Cancel(t *testing.T) {
 	p := NewPickerOverlay("pick", []string{"alpha"})
-	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

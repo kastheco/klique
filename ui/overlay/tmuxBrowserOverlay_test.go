@@ -71,7 +71,7 @@ func TestTmuxBrowserOverlay_Actions(t *testing.T) {
 		wantDismissed bool
 		wantAction    string
 	}{
-		{"esc dismisses", tea.KeyPressMsg{Code: tea.KeyEsc}, true, ""},
+		{"esc dismisses", tea.KeyPressMsg{Code: tea.KeyEscape}, true, ""},
 		{"enter attaches", tea.KeyPressMsg{Code: tea.KeyEnter}, true, "attach"},
 		{"k kills when search empty", tea.KeyPressMsg{Code: 'k', Text: "k"}, false, "kill"},
 		{"a adopts when search empty", tea.KeyPressMsg{Code: 'a', Text: "a"}, true, "adopt"},
@@ -188,7 +188,7 @@ func TestTmuxBrowserOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
 	b := NewTmuxBrowserOverlay(nil)
-	result := b.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := b.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.Empty(t, result.Action)
 }

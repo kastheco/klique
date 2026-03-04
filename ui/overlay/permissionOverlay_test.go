@@ -36,7 +36,7 @@ func TestPermissionOverlay_HandleKey_Reject(t *testing.T) {
 
 func TestPermissionOverlay_HandleKey_Dismiss(t *testing.T) {
 	p := NewPermissionOverlay("inst", "run command", "*.sh")
-	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

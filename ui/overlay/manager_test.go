@@ -21,7 +21,7 @@ func TestManager_ShowAndDismiss(t *testing.T) {
 	mgr.Show(&stubOverlay{rendered: "overlay content"})
 	require.True(t, mgr.IsActive())
 
-	result := mgr.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := mgr.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, mgr.IsActive())
 }

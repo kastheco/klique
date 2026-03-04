@@ -29,7 +29,7 @@ func TestConfirmationOverlay_HandleKey_Cancel(t *testing.T) {
 
 func TestConfirmationOverlay_HandleKey_Esc(t *testing.T) {
 	c := NewConfirmationOverlay("delete?")
-	result := c.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := c.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

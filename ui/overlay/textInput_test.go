@@ -38,7 +38,7 @@ func TestTextInputOverlay_MultilineEnterOnButtonSubmits(t *testing.T) {
 func TestTextInputOverlay_MultilineEscCancels(t *testing.T) {
 	ti := NewTextInputOverlay("title", "")
 	ti.SetMultiline(true)
-	result := ti.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := ti.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.True(t, ti.Canceled)
 }
@@ -66,7 +66,7 @@ func TestTextInputOverlay_HandleKey_Submit(t *testing.T) {
 
 func TestTextInputOverlay_HandleKey_Cancel(t *testing.T) {
 	ti := NewTextInputOverlay("title", "")
-	result := ti.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	result := ti.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
