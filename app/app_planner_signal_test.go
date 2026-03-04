@@ -12,6 +12,7 @@ import (
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -63,7 +64,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 		plannerPrompted:       make(map[string]bool),
 		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
-		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		activeRepoPath:        dir,
 		program:               "claude",

@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -56,7 +57,7 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		taskState:         ps,
 		taskStateDir:      plansDir,
 		fsm:               fsm,
-		waveOrchestrators: make(map[string]*WaveOrchestrator),
+		waveOrchestrators: make(map[string]*orchestration.WaveOrchestrator),
 	}
 
 	msg := metadataResultMsg{

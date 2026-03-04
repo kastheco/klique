@@ -12,6 +12,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -62,9 +63,9 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Only task"}}},
 		},
 	}
-	singleOrch := NewWaveOrchestrator("single-wave-plan.md", singleWavePlan)
+	singleOrch := orchestration.NewWaveOrchestrator("single-wave-plan.md", singleWavePlan)
 
-	assert.False(t, shouldPostWaveCompleteComment(singleOrch),
+	assert.False(t, singleOrch.ShouldPostWaveCompleteComment(),
 		"single-wave plans must not emit intermediate wave_complete comments")
 
 	multiWavePlan := &taskparser.Plan{
@@ -73,15 +74,16 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2"}}},
 		},
 	}
-	multiOrch := NewWaveOrchestrator("multi-wave-plan.md", multiWavePlan)
+	multiOrch := orchestration.NewWaveOrchestrator("multi-wave-plan.md", multiWavePlan)
 
-	assert.True(t, shouldPostWaveCompleteComment(multiOrch),
+	assert.True(t, multiOrch.ShouldPostWaveCompleteComment(),
 		"multi-wave plans must emit intermediate wave_complete comments")
 }
 
 // TestShouldPostWaveCompleteCommentNilOrch verifies nil-safety of the guard.
 func TestShouldPostWaveCompleteCommentNilOrch(t *testing.T) {
-	assert.False(t, shouldPostWaveCompleteComment(nil))
+	var nilOrch *orchestration.WaveOrchestrator
+	assert.False(t, nilOrch.ShouldPostWaveCompleteComment())
 }
 
 // TestFixerCompleteHook_ClearsPendingFeedback verifies that when an
@@ -130,7 +132,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: map[string]string{planFile: "fix the auth logic"},
-		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		activeRepoPath:        dir,
 		program:               "claude",
@@ -194,7 +196,7 @@ func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
 		fsm:                   fsm,
 		plannerPrompted:       make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string), // no feedback for this plan
-		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		activeRepoPath:        dir,
 		program:               "claude",

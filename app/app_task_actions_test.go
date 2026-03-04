@@ -13,6 +13,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -35,7 +36,7 @@ func TestBuildPlanPrompt(t *testing.T) {
 }
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
-	prompt := buildWaveAnnotationPrompt("my-feature.md")
+	prompt := orchestration.BuildWaveAnnotationPrompt("my-feature.md")
 	assert.Contains(t, prompt, "kas task show my-feature.md", "prompt must reference kas task show")
 	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
 	assert.Contains(t, prompt, "kas task", "prompt must instruct the planner to store content via kas task")
@@ -44,7 +45,7 @@ func TestBuildWaveAnnotationPrompt(t *testing.T) {
 }
 
 func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
-	prompt := buildWaveAnnotationPrompt("trivial.md")
+	prompt := orchestration.BuildWaveAnnotationPrompt("trivial.md")
 	// Even trivial plans must be wrapped in at least ## Wave 1
 	assert.Contains(t, prompt, "## Wave 1", "prompt must specify ## Wave 1 as the minimum structure")
 }
@@ -381,7 +382,7 @@ func setupTopicConflictHome(t *testing.T) (*home, string) {
 	seedPlanStatus(t, ps, targetPlan, taskstate.StatusReady)
 	seedPlanStatus(t, ps, conflictPlan, taskstate.StatusImplementing)
 
-	h := waveFlowHome(t, ps, plansDir, make(map[string]*WaveOrchestrator))
+	h := waveFlowHome(t, ps, plansDir, make(map[string]*orchestration.WaveOrchestrator))
 	h.fsm = newFSMForTest(t, plansDir).TaskStateMachine
 	h.activeRepoPath = dir
 	h.program = "opencode"
@@ -557,7 +558,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 		menu:               ui.NewMenu(),
 		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:       overlay.NewToastManager(&sp),
-		waveOrchestrators:  make(map[string]*WaveOrchestrator),
+		waveOrchestrators:  make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers: make(map[*session.Instance]func()),
 		activeRepoPath:     dir,
 		program:            "opencode",
@@ -612,7 +613,7 @@ func TestSoloActionChecksStoreNotDisk(t *testing.T) {
 		menu:               ui.NewMenu(),
 		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
 		toastManager:       overlay.NewToastManager(&sp),
-		waveOrchestrators:  make(map[string]*WaveOrchestrator),
+		waveOrchestrators:  make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers: make(map[*session.Instance]func()),
 		activeRepoPath:     dir,
 		program:            "opencode",
