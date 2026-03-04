@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "1f1923f75c95",
+  "session_id": "ses_348fe9f2cffeCRJgSWgGyQuhu3",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T04:09:39.720344463Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/fix-agents-reading-from-disk.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "d4a2e1bca1d5",
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T04:09:39.719934107Z",
+    "agent_lines": 0,
+    "human_added": 483,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 483,
+    "agent_percentage": 0
+  }
+}
