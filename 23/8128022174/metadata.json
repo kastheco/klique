@@ -3,7 +3,7 @@
   "checkpoint_id": "238128022174",
   "strategy": "manual-commit",
   "branch": "plan/charm-v2-upgrade",
-  "checkpoints_count": 2,
+  "checkpoints_count": 6,
   "files_touched": [
     "docs/plans/charm-v2-upgrade.md",
     "ui/overlay/confirmationOverlay_test.go",
@@ -38,6 +38,13 @@
       "context": "/23/8128022174/2/context.md",
       "content_hash": "/23/8128022174/2/content_hash.txt",
       "prompt": "/23/8128022174/2/prompt.txt"
+    },
+    {
+      "metadata": "/23/8128022174/3/metadata.json",
+      "transcript": "/23/8128022174/3/full.jsonl",
+      "context": "",
+      "content_hash": "/23/8128022174/3/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
