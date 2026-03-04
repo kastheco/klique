@@ -1,0 +1,158 @@
+Implement Task 1: Add `kas task show` CLI subcommand
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop agents from reading plan content via disk files at `docs/plans/`. Add a `kas task show` CLI command so agents can retrieve plan content from the database, and update all prompt builders, review templates, and skill documentation to reference the CLI instead of disk paths.
+**Architecture:** Three parallel changes: (1) Add a `kas task show <plan-file>` subcommand to `cmd/task.go` that reads content from the task store and prints raw markdown to stdout — follows the existing `resolvePlansDir()` → `resolveStore()` pattern. (2) Update all prompt-building functions in `app/app_state.go`, `orchestration/prompt.go`, and `app/app_actions.go` to reference `kas task show` instead of `docs/plans/` — also update `review-prompt.md` template and corresponding test assertions. (3) Update skill documentation (scaffold templates + live copies) to document `kas task show` as the standard way agents retrieve plan content.
+**Tech Stack:** Go, cobra (CLI), config/taskstore, config/taskstate, testify, `sd` for batch markdown edits
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/task.go`
+- Test: `cmd/task_test.go`
+
+**Step 1: write the failing test**
+
+Add a test in `cmd/task_test.go` that calls `executeTaskShow` and verifies it returns the stored plan content:
+
+```go
+func TestExecuteTaskShow(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	project := projectFromPlansDir(plansDir)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusReady,
+		Content:  "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n",
+	}))
+
+	content, err := executeTaskShow(plansDir, "my-plan.md", store)
+	require.NoError(t, err)
+	assert.Equal(t, "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n", content)
+}
+
+func TestExecuteTaskShow_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	_, err := executeTaskShow(plansDir, "nonexistent.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskShow_EmptyContent(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	project := projectFromPlansDir(plansDir)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "empty.md",
+		Status:   taskstore.StatusReady,
+	}))
+
+	_, err := executeTaskShow(plansDir, "empty.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no content")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./cmd/... -run "TestExecuteTaskShow" -v
+```
+
+expected: FAIL — `executeTaskShow` is undefined
+
+**Step 3: write minimal implementation**
+
+Add `executeTaskShow` function and the `show` cobra subcommand in `cmd/task.go`:
+
+```go
+// executeTaskShow retrieves plan content from the task store and returns it
+// as raw markdown. Returns an error if the plan doesn't exist or has no content.
+func executeTaskShow(plansDir, planFile string, store taskstore.Store) (string, error) {
+	ps, err := loadTaskState(plansDir, store)
+	if err != nil {
+		return "", err
+	}
+	if _, ok := ps.Entry(planFile); !ok {
+		return "", fmt.Errorf("task not found: %s", planFile)
+	}
+	content, err := ps.GetContent(planFile)
+	if err != nil {
+		return "", fmt.Errorf("get content for %s: %w", planFile, err)
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("no content stored for %s", planFile)
+	}
+	return content, nil
+}
+```
+
+Add the cobra subcommand inside `NewTaskCmd()`, alongside the existing subcommands:
+
+```go
+// kq task show
+showCmd := &cobra.Command{
+	Use:   "show <plan-file>",
+	Short: "print plan content from the task store",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		plansDir, err := resolvePlansDir()
+		if err != nil {
+			return err
+		}
+		content, err := executeTaskShow(plansDir, args[0], resolveStore(plansDir))
+		if err != nil {
+			return err
+		}
+		fmt.Print(content)
+		return nil
+	},
+}
+planCmd.AddCommand(showCmd)
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -run "TestExecuteTaskShow" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/task.go cmd/task_test.go
+git commit -m "feat(task-1): add kas task show subcommand for CLI-based plan content retrieval"
+```
