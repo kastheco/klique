@@ -134,6 +134,13 @@
       "context": "/35/5797df2cb8/17/context.md",
       "content_hash": "/35/5797df2cb8/17/content_hash.txt",
       "prompt": "/35/5797df2cb8/17/prompt.txt"
+    },
+    {
+      "metadata": "/35/5797df2cb8/18/metadata.json",
+      "transcript": "/35/5797df2cb8/18/full.jsonl",
+      "context": "/35/5797df2cb8/18/context.md",
+      "content_hash": "/35/5797df2cb8/18/content_hash.txt",
+      "prompt": "/35/5797df2cb8/18/prompt.txt"
     }
   ],
   "token_usage": {
