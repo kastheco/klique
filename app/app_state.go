@@ -988,7 +988,7 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 // codebase and updates the task store — it does not modify files. When it finishes,
 // it writes an elaborator-finished-<planFile> sentinel that the metadata tick picks up
 // to advance the orchestrator from WaveStateElaborating to wave 1.
-func (m *home) spawnElaborator(planFile string, orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 	planName := taskstate.DisplayName(planFile)
 	prompt := orchestration.BuildElaborationPrompt(planFile)
 

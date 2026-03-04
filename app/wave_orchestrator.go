@@ -52,8 +52,8 @@ func (o *WaveOrchestrator) State() WaveState {
 
 // SetElaborating transitions the orchestrator to the elaborating state.
 // Call this immediately after creating the orchestrator when elaboration is
-// enabled, before wave 1 starts. The elaborator agent will call UpdatePlan
-// with the enriched plan, then the orchestrator is advanced to WaveStateRunning.
+// enabled, before wave 1 starts. When the elaborator finishes, the signal
+// handler calls UpdatePlan (resetting to Idle) then StartNextWave (→ Running).
 func (o *WaveOrchestrator) SetElaborating() {
 	o.state = WaveStateElaborating
 }

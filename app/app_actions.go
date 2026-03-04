@@ -882,7 +882,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 
 		// Elaboration phase: spawn elaborator before starting wave 1.
 		orch.SetElaborating()
-		return m.spawnElaborator(planFile, orch, entry)
+		return m.spawnElaborator(planFile)
 
 	case "implement_direct":
 		// Same as implement but skips the elaboration phase — goes straight to wave 1.
