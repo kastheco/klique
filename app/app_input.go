@@ -481,7 +481,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	// Handle focus mode — forward keys directly to the agent's PTY
 	if m.state == stateFocusAgent {
 		// Ctrl+Space exits focus mode
-		if msg.String() == "ctrl+@" {
+		if msg.String() == "ctrl+space" {
 			m.exitFocusMode()
 			return m, tea.RequestWindowSize
 		}

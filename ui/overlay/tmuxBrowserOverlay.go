@@ -90,7 +90,8 @@ func (b *TmuxBrowserOverlay) render() string {
 	s.WriteString("\n")
 
 	// Search bar
-	innerWidth := b.width - 8
+	// lipgloss v2: Width() = total outer width. FloatingBorder frame = 6.
+	innerWidth := b.width - 6
 	if innerWidth < 10 {
 		innerWidth = 10
 	}

@@ -233,7 +233,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("#", "info tab"),
 	),
 	KeyExitFocus: key.NewBinding(
-		key.WithKeys("ctrl+@"),
+		key.WithKeys("ctrl+space"),
 		key.WithHelp("ctrl+space", "exit focus"),
 	),
 

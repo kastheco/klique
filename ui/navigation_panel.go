@@ -1347,26 +1347,32 @@ func (n *NavigationPanel) String() string {
 		border = border.Border(lipgloss.DoubleBorder()).BorderForeground(ColorIris)
 	}
 
+	// In lipgloss v2, Width/Height specify total outer dimensions (border + padding + content).
+	// The border style has border(2h,2v) + padding(0v,1h each side = 2h) = 4h, 2v frame.
+	// innerWidth is the content area inside the border.
 	innerWidth := n.width - 4
 	if innerWidth < 8 {
 		innerWidth = 8
 	}
-	height := n.height - 2
-	if height < 4 {
-		height = 4
+	innerHeight := n.height - 2
+	if innerHeight < 4 {
+		innerHeight = 4
 	}
 
-	// Content widths: border padding adds 2 chars, row style padding adds 2 more.
-	itemWidth := innerWidth - 2
-	contentWidth := itemWidth - 2
+	// Row styles (navItemStyle etc.) have Padding(0,1) = 2h frame.
+	// In v2, Width(itemWidth) means total = itemWidth, content = itemWidth - 2.
+	// We want the total styled row to be innerWidth wide, so itemWidth = innerWidth.
+	itemWidth := innerWidth
+	contentWidth := itemWidth - 2 // content inside the row padding
 	if contentWidth < 4 {
 		contentWidth = 4
 	}
 
-	// Search bar.
-	searchWidth := innerWidth - 4
-	if searchWidth < 4 {
-		searchWidth = 4
+	// Search bar styles have border(2) + padding(2) = 4h frame.
+	// We want the search box total to be innerWidth wide.
+	searchWidth := innerWidth
+	if searchWidth < 8 {
+		searchWidth = 8
 	}
 	var searchBox string
 	if n.searchActive {
@@ -1494,9 +1500,9 @@ func (n *NavigationPanel) String() string {
 		// Desired audit: 1 header + all content body lines.
 		desiredAudit := 1 + n.auditContentLines
 		// Available space: total height minus nav items, search, legend, and minimum gaps (2).
-		availForAudit := height - topLines - legendLines - 2
+		availForAudit := innerHeight - topLines - legendLines - 2
 		// Cap at 50% of inner height so the task list isn't squished.
-		halfPanel := height / 2
+		halfPanel := innerHeight / 2
 		if availForAudit > halfPanel {
 			availForAudit = halfPanel
 		}
@@ -1541,7 +1547,7 @@ func (n *NavigationPanel) String() string {
 	// Fixed 1-line gaps around the legend; all leftover space goes above
 	// (between nav items and legend) to keep legend pinned near the bottom.
 	const legendGapBelow = 1
-	gapAbove := height - topLines - legendLines - auditLines - legendGapBelow + 1
+	gapAbove := innerHeight - topLines - legendLines - auditLines - legendGapBelow + 1
 	if gapAbove < 1 {
 		gapAbove = 1
 	}
@@ -1551,7 +1557,9 @@ func (n *NavigationPanel) String() string {
 		innerContent += strings.Repeat("\n", legendGapBelow) + auditSection
 	}
 
-	bordered := border.Width(innerWidth).Height(height).Render(innerContent)
+	// In lipgloss v2, Width/Height are total outer dimensions.
+	// Pass the full nav panel dimensions so the border fits exactly.
+	bordered := border.Width(n.width).Height(n.height).Render(innerContent)
 	placed := lipgloss.Place(n.width, n.height, lipgloss.Left, lipgloss.Top, bordered)
 	return zone.Mark(ZoneNavPanel, placed)
 }

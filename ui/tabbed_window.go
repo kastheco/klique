@@ -416,7 +416,8 @@ func (w *TabbedWindow) String() string {
 			border.BottomRight = "┤"
 		}
 		style = style.Border(border)
-		style = style.Width(width - style.GetHorizontalFrameSize())
+		// In lipgloss v2, Width is the total outer dimension (including border).
+		style = style.Width(width)
 
 		var cell string
 		switch {

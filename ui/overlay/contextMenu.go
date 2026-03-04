@@ -164,28 +164,23 @@ func (c *ContextMenu) View() string {
 	st := DefaultStyles()
 	var b strings.Builder
 
-	// Width() sets content width — subtract each component's own
-	// horizontal decorations so the rendered output fits in c.width.
-	// SearchBar: border(2) + padding(2) = 4
-	// Items: padding(2) = 2
-	searchW := c.width - 4
-	if searchW < 6 {
-		searchW = 6
-	}
-	itemW := c.width - 2
-	if itemW < 6 {
-		itemW = 6
+	// lipgloss v2: Width() sets total outer width including border+padding.
+	// FloatingBorder frame = 6 (border 2 + padding 4), so content area = c.width - 6.
+	// Inner components' total outer width must equal that content area.
+	innerW := c.width - 6
+	if innerW < 6 {
+		innerW = 6
 	}
 
 	searchText := c.searchQuery
 	if searchText == "" {
 		searchText = st.Muted.Render("\uf002 Type to filter...")
 	}
-	b.WriteString(st.SearchBar.Width(searchW).Render(searchText))
+	b.WriteString(st.SearchBar.Width(innerW).Render(searchText))
 	b.WriteString("\n")
 
 	if len(c.filtered) == 0 {
-		b.WriteString(st.DisabledItem.Width(itemW).Render("No matches"))
+		b.WriteString(st.DisabledItem.Width(innerW).Render("No matches"))
 	} else {
 		for i, fi := range c.filtered {
 			numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
@@ -193,13 +188,13 @@ func (c *ContextMenu) View() string {
 
 			var line string
 			if fi.item.Disabled {
-				line = st.DisabledItem.Width(itemW).Render(
+				line = st.DisabledItem.Width(innerW).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else if i == c.selectedIdx {
-				line = st.SelectedItem.Width(itemW).Render(
+				line = st.SelectedItem.Width(innerW).Render(
 					fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label))
 			} else {
-				line = st.Item.Width(itemW).Render(numPrefix + label)
+				line = st.Item.Width(innerW).Render(numPrefix + label)
 			}
 			b.WriteString(line)
 			if i < len(c.filtered)-1 {

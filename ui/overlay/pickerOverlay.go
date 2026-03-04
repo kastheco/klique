@@ -139,7 +139,8 @@ func (p *PickerOverlay) View() string {
 	b.WriteString(st.Title.Render(p.title))
 	b.WriteString("\n")
 
-	innerWidth := p.width - 8
+	// lipgloss v2: Width() = total outer width. FloatingBorder frame = 6.
+	innerWidth := p.width - 6
 	if innerWidth < 10 {
 		innerWidth = 10
 	}
