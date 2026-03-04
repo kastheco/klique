@@ -2,7 +2,13 @@ package session
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestAgentTypeElaborator_Constant(t *testing.T) {
+	assert.Equal(t, "elaborator", AgentTypeElaborator)
+}
 
 func TestNewInstance_SetsPlanFile(t *testing.T) {
 	inst, err := NewInstance(InstanceOptions{

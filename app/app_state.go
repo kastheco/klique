@@ -830,6 +830,8 @@ func (m *home) programForAgent(agentType string) string {
 		profile = m.appConfig.ResolveProfile("quality_review", m.program)
 	case session.AgentTypeFixer:
 		profile = m.appConfig.ResolveProfile("fixer", m.program)
+	case session.AgentTypeElaborator:
+		profile = m.appConfig.ResolveProfile("elaborating", m.program)
 	default:
 		// Ad-hoc — use the "chat" profile if available.
 		if p, ok := m.appConfig.Profiles["chat"]; ok && p.Enabled && p.Program != "" {
