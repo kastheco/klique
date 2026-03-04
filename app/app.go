@@ -989,7 +989,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Retry deferred PlannerFinished dialogs — show the first queued plan
 		// whose dialog was skipped because an overlay was active at signal time.
-		m.exitFocusModeForDialog()
+		if len(m.deferredPlannerDialogs) > 0 {
+			m.exitFocusModeForDialog()
+		}
 		if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
 			planFile := m.deferredPlannerDialogs[0]
 			m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
@@ -1261,7 +1263,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Skip when a confirmation overlay is already showing to avoid re-prompting
 			// on every tick while the user is deciding.
 			for _, inst := range m.nav.GetInstances() {
-				m.exitFocusModeForDialog()
 				if m.isUserInOverlay() {
 					break
 				}
@@ -1284,6 +1285,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				// Focus the coder instance so the user can see its output behind the overlay.
+				m.exitFocusModeForDialog()
 				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
 				}
@@ -1317,7 +1319,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Drain deferred all-complete prompts that were blocked by an overlay.
-			m.exitFocusModeForDialog()
+			if len(m.pendingAllComplete) > 0 {
+				m.exitFocusModeForDialog()
+			}
 			if !m.isUserInOverlay() && len(m.pendingAllComplete) > 0 {
 				planFile := m.pendingAllComplete[0]
 				m.pendingAllComplete = m.pendingAllComplete[1:]
@@ -1419,8 +1423,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// orchState must be WaveStateWaveComplete here.
 				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
 				// ResetConfirm on cancel allows the prompt to reappear next tick).
-				m.exitFocusModeForDialog()
-				if !m.isUserInOverlay() && time.Since(m.waveConfirmDismissedAt) > 30*time.Second && orch.NeedsConfirm() {
+				needsConfirm := orch.NeedsConfirm()
+				if needsConfirm {
+					m.exitFocusModeForDialog()
+				}
+				if !m.isUserInOverlay() && time.Since(m.waveConfirmDismissedAt) > 30*time.Second && needsConfirm {
 					waveNum := orch.CurrentWaveNumber()
 					completed := orch.CompletedTaskCount()
 					failed := orch.FailedTaskCount()
