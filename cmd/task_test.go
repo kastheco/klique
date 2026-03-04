@@ -360,8 +360,8 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 	assert.Equal(t, "planning", newStatus)
 }
 
-// TestPlanList_WithStore verifies that executeTaskListWithStore works with a
-// store-backed HTTP server, returning plan entries from the remote store.
+// TestExecuteTaskRegisterIngestsContent verifies that executeTaskRegister reads
+// the plan file from disk and stores its content in the task store database.
 func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 	store, err := taskstore.NewSQLiteStore(":memory:")
 	require.NoError(t, err)
@@ -385,6 +385,8 @@ func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 	assert.Equal(t, planContent, got)
 }
 
+// TestPlanList_WithStore verifies that executeTaskListWithStore works with a
+// store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
 	backend := taskstore.NewTestSQLiteStore(t)
 	srv := httptest.NewServer(taskstore.NewHandler(backend))
