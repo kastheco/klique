@@ -1,0 +1,170 @@
+Implement Task 1: Replace app-internal orchestrator types with orchestration package imports
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Delete the AGPL-tainted `app/wave_orchestrator.go` and `app/wave_prompt.go` and switch all `app/` code to import the clean-room `orchestration/` package, eliminating duplicate types and licensing risk.
+**Architecture:** The `orchestration/` package already contains a complete clean-room rewrite of `WaveOrchestrator`, `WaveState`, `BuildTaskPrompt`, `BuildElaborationPrompt`, `BuildWaveAnnotationPrompt`, `ShouldPostWaveCompleteComment`, and `RestoreToWave`. The `app/` package currently defines its own copies of these types and has one existing import of `orchestration` (for `BuildElaborationPrompt` only). The migration replaces all `app`-internal orchestration types/functions with qualified `orchestration.*` references and deletes the old files.
+**Tech Stack:** Go, `orchestration/` package, `sd`/`comby` for bulk mechanical renames
+
+## Wave 1 of 2
+
+## Task Instructions
+
+**Files:**
+- Delete: `app/wave_orchestrator.go`
+- Delete: `app/wave_prompt.go`
+- Modify: `app/app.go`
+- Modify: `app/app_state.go`
+- Modify: `app/app_actions.go`
+- Modify: `app/clickup_progress.go`
+
+**Step 1: write the failing test**
+
+No new test — this is a mechanical migration. Existing tests in wave 2 serve as the regression suite. Verify the build compiles after changes.
+
+Before editing, capture all compile-time callsites that will break when the two files are deleted:
+
+```bash
+rg '\b(WaveOrchestrator|NewWaveOrchestrator|WaveState[A-Za-z]+|buildTaskPrompt|shouldPostWaveCompleteComment|buildWaveAnnotationPrompt)\b' app --glob '*.go'
+```
+
+This gives you the complete replacement checklist and prevents missing hidden references.
+
+**Step 2: delete the AGPL-tainted files**
+
+```bash
+rm app/wave_orchestrator.go app/wave_prompt.go
+```
+
+The build will now fail because `app/` references types that no longer exist.
+
+**Step 3: add orchestration import and switch types in source files**
+
+Use the clean-room implementations from:
+- `orchestration/engine.go`
+- `orchestration/prompt.go`
+
+Follow existing in-repo import style already used in `app/app_state.go`:
+
+```go
+import (
+    // ...
+    "github.com/kastheco/kasmos/orchestration"
+    // ...
+)
+```
+
+Apply these updates exactly:
+
+1. In `app/app.go`, change orchestrator field types and constructors:
+   - `waveOrchestrators map[string]*WaveOrchestrator` -> `map[string]*orchestration.WaveOrchestrator`
+   - `make(map[string]*WaveOrchestrator)` -> `make(map[string]*orchestration.WaveOrchestrator)`
+   - `NewWaveOrchestrator(planFile, plan)` -> `orchestration.NewWaveOrchestrator(planFile, plan)`
+
+2. In `app/app.go`, prefix all state constants with `orchestration.`:
+   - `WaveStateElaborating`, `WaveStateRunning`, `WaveStateWaveComplete`, `WaveStateAllComplete`
+
+3. In `app/app.go`, replace helper call with method call:
+   - `shouldPostWaveCompleteComment(orch)` -> `orch.ShouldPostWaveCompleteComment()`
+   - This is safe: `(*orchestration.WaveOrchestrator).ShouldPostWaveCompleteComment()` is nil-receiver safe (`o != nil && o.TotalWaves() > 1`) in `orchestration/engine.go`.
+
+4. In `app/app_actions.go`, switch constructor and planner prompt helper:
+   - `NewWaveOrchestrator(...)` -> `orchestration.NewWaveOrchestrator(...)`
+   - `buildWaveAnnotationPrompt(planFile)` -> `orchestration.BuildWaveAnnotationPrompt(planFile)` (both callsites in `executeTaskStage`, parse-failure branches).
+
+5. In `app/app_state.go`, change signatures to the clean type:
+
+```go
+func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd)
+func (m *home) startNextWave(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd)
+func (m *home) retryFailedWaveTasks(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd)
+```
+
+6. In `app/app_state.go`, remove private-field accesses that no longer compile against `orchestration.WaveOrchestrator`:
+   - `orch.taskStates[task.Number]` in `computeStatusBarData`
+   - `orch.currentWave` in `rebuildOrphanedOrchestrators`
+   - `orch.plan` in `spawnWaveTasks`
+
+   Replace with public methods from `orchestration/engine.go`:
+
+```go
+// computeStatusBarData glyph mapping
+switch {
+case orch.IsTaskComplete(task.Number):
+    data.TaskGlyphs[i] = ui.TaskGlyphComplete
+case orch.IsTaskFailed(task.Number):
+    data.TaskGlyphs[i] = ui.TaskGlyphFailed
+case orch.IsTaskRunning(task.Number):
+    data.TaskGlyphs[i] = ui.TaskGlyphRunning
+default:
+    data.TaskGlyphs[i] = ui.TaskGlyphPending
+}
+```
+
+```go
+// rebuildOrphanedOrchestrators
+orch := orchestration.NewWaveOrchestrator(planFile, plan)
+var completedTasks []int
+for _, t := range tasks {
+    if t.waveNumber == targetWave && t.paused {
+        completedTasks = append(completedTasks, t.taskNumber)
+    }
+}
+orch.RestoreToWave(targetWave, completedTasks)
+```
+
+```go
+// spawnWaveTasks prompt building
+prompt := orch.BuildTaskPrompt(task, len(tasks))
+```
+
+7. Keep one small guard in `rebuildOrphanedOrchestrators` for malformed legacy task instances:
+   - If `targetWave <= 0`, skip restore for that plan and log a warning.
+   - This avoids passing an invalid wave number into restore flow when old instances are missing wave metadata.
+
+8. In `app/clickup_progress.go`, delete the now-redundant helper:
+
+```go
+func shouldPostWaveCompleteComment(orch *WaveOrchestrator) bool { ... }
+```
+
+`app/app.go` should now call the method on `orchestration.WaveOrchestrator` directly.
+
+9. Remove dead local duplicate in `app/app_state.go` once callsites are moved:
+   - Delete `buildWaveAnnotationPrompt(planFile string) string`.
+   - The canonical implementation is `orchestration.BuildWaveAnnotationPrompt` in `orchestration/prompt.go`.
+
+10. Use one final sweep before building:
+
+```bash
+rg '\b(WaveOrchestrator|NewWaveOrchestrator|WaveState[A-Za-z]+|buildTaskPrompt\(|shouldPostWaveCompleteComment\(|buildWaveAnnotationPrompt\()' app --glob '*.go'
+```
+
+Expected after task 1:
+- No references from non-test app source files to deleted `app/wave_orchestrator.go`/`app/wave_prompt.go` symbols.
+- Remaining references are either `orchestration.*` or in tests to be migrated in wave 2.
+
+**Step 4: verify the source files compile**
+
+```bash
+go build ./app/...
+```
+
+This will fail on test files (they still reference deleted types), but the source compilation succeeds. Use `go vet` on just the non-test files:
+
+```bash
+go build ./orchestration/... ./app/...
+```
+
+Expected: build errors only from `_test.go` files.
+
+**Step 5: commit**
+
+```bash
+git add app/wave_orchestrator.go app/wave_prompt.go app/app.go app/app_state.go app/app_actions.go app/clickup_progress.go
+git commit -m "refactor(task-1): delete AGPL wave orchestrator, switch app/ source to orchestration package"
+```
+
+---
