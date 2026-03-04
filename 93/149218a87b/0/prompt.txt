@@ -1,0 +1,198 @@
+Implement Task 1: Elaboration Signal Type
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add an automatic elaboration phase between plan-ready and coder-start that expands terse task descriptions into detailed implementation instructions, reducing coder decision-making and improving output quality.
+**Architecture:** When the user triggers "implement", kasmos spawns an elaborator agent before starting wave 1. The elaborator reads the plan from the task store, deeply reads the codebase files referenced by each task, and rewrites each task body with detailed implementation guidance (exact signatures, patterns from existing code, edge cases, error handling). It writes the enriched plan back to the store and signals completion via `elaborator-finished-<planfile>`. kasmos detects this signal, re-parses the updated plan into the wave orchestrator, and starts wave 1 normally. A context menu bypass ("implement directly") skips elaboration. The elaborator uses a configurable agent profile (`"elaborating"` phase) so a strong model can be assigned.
+**Tech Stack:** Go 1.24+, bubbletea v1.3.x, existing kasmos packages (config/taskfsm, config/taskparser, orchestration, session, app)
+
+## Wave 1 of 2
+
+## Parallel Execution
+
+You are Task 1 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `config/taskfsm/elaboration_signal.go`
+- Test: `config/taskfsm/elaboration_signal_test.go`
+
+**Step 1: write the failing test**
+
+```go
+// elaboration_signal_test.go
+package taskfsm
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseElaborationSignal(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		wantOk   bool
+		wantFile string
+	}{
+		{
+			name:     "valid elaboration signal",
+			filename: "elaborator-finished-my-feature.md",
+			wantOk:   true,
+			wantFile: "my-feature.md",
+		},
+		{
+			name:     "not an elaboration signal",
+			filename: "planner-finished-test.md",
+			wantOk:   false,
+		},
+		{
+			name:     "empty plan file",
+			filename: "elaborator-finished-",
+			wantOk:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig, ok := ParseElaborationSignal(tt.filename)
+			assert.Equal(t, tt.wantOk, ok)
+			if ok {
+				assert.Equal(t, tt.wantFile, sig.TaskFile)
+			}
+		})
+	}
+}
+
+func TestScanElaborationSignals(t *testing.T) {
+	dir := t.TempDir()
+	signalsDir := filepath.Join(dir, "signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
+
+	// Write an elaboration signal and a non-matching file
+	require.NoError(t, os.WriteFile(
+		filepath.Join(signalsDir, "elaborator-finished-test.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(signalsDir, "planner-finished-test.md"), nil, 0o644))
+
+	signals := ScanElaborationSignals(signalsDir)
+	require.Len(t, signals, 1)
+	assert.Equal(t, "test.md", signals[0].TaskFile)
+}
+
+func TestConsumeElaborationSignal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "elaborator-finished-test.md")
+	require.NoError(t, os.WriteFile(path, nil, 0o644))
+
+	sig := ElaborationSignal{TaskFile: "test.md", filePath: path}
+	ConsumeElaborationSignal(sig)
+
+	_, err := os.Stat(path)
+	assert.True(t, os.IsNotExist(err))
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/taskfsm/... -run TestParseElaborationSignal -v
+```
+
+expected: FAIL — `ParseElaborationSignal` undefined
+
+**Step 3: write minimal implementation**
+
+Create `config/taskfsm/elaboration_signal.go` following the exact pattern from `wave_signal.go`:
+
+```go
+package taskfsm
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// ElaborationSignal represents a parsed elaborator-finished signal file.
+type ElaborationSignal struct {
+	TaskFile string
+	filePath string // full path for deletion
+}
+
+const elaborationPrefix = "elaborator-finished-"
+
+// ParseElaborationSignal attempts to parse a filename as an elaboration signal.
+func ParseElaborationSignal(filename string) (ElaborationSignal, bool) {
+	if !strings.HasPrefix(filename, elaborationPrefix) {
+		return ElaborationSignal{}, false
+	}
+	planFile := strings.TrimPrefix(filename, elaborationPrefix)
+	if planFile == "" {
+		return ElaborationSignal{}, false
+	}
+	planFile = filepath.Base(planFile)
+	return ElaborationSignal{TaskFile: planFile}, true
+}
+
+// ScanElaborationSignals reads the given signals directory and returns parsed
+// elaboration signals. Like wave signals, these are handled separately from FSM
+// signals — they don't map to state transitions but trigger orchestration actions.
+func ScanElaborationSignals(signalsDir string) []ElaborationSignal {
+	entries, err := os.ReadDir(signalsDir)
+	if err != nil {
+		return nil
+	}
+	var signals []ElaborationSignal
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		es, ok := ParseElaborationSignal(entry.Name())
+		if !ok {
+			continue
+		}
+		es.filePath = filepath.Join(signalsDir, entry.Name())
+		signals = append(signals, es)
+	}
+	return signals
+}
+
+// ConsumeElaborationSignal deletes the signal file after processing.
+func ConsumeElaborationSignal(es ElaborationSignal) {
+	_ = os.Remove(es.filePath)
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./config/taskfsm/... -run "TestParseElaborationSignal|TestScanElaborationSignals|TestConsumeElaborationSignal" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add config/taskfsm/elaboration_signal.go config/taskfsm/elaboration_signal_test.go
+git commit -m "feat(task-1): add elaboration signal type for pre-implementation plan enrichment"
+```
