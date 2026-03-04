@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "e34c1c4161e0",
+  "session_id": "ses_34819c0f4ffeMLtK7q0oy0mGWv",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T08:13:31.738121832Z",
+  "branch": "plan/cli-plan-lifecycle",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/task.go",
+    "cmd/task_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "542fe4d68eff",
+  "token_usage": {
+    "input_tokens": 19,
+    "cache_creation_tokens": 99525,
+    "cache_read_tokens": 1175694,
+    "output_tokens": 10073,
+    "api_call_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T08:13:31.662754345Z",
+    "agent_lines": 0,
+    "human_added": 124,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 124,
+    "agent_percentage": 0
+  }
+}

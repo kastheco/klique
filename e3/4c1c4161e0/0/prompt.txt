@@ -1,0 +1,106 @@
+Implement Task 2: `push` and `pr` commands
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add high-level lifecycle commands (`create`, `start`, `push`, `merge`, `pr`, `start-over`) to `kas task` so users can manage the full plan lifecycle from the CLI without the TUI.
+**Architecture:** All 6 commands are added as cobra subcommands under the existing `kas task` command tree in `cmd/task.go`. Each command has a testable `executeTask*` function that accepts a `taskstore.Store` argument (matching the existing pattern). The commands delegate to existing `session/git` functions (`EnsureTaskBranch`, `MergeTaskBranch`, `ResetTaskBranch`, `NewSharedTaskWorktree`, `Push`, `CreatePR`) for git operations and the existing FSM (`taskfsm.TaskStateMachine`) for state transitions. A shared `resolveTaskEntry` helper reduces duplication across commands.
+**Tech Stack:** Go 1.24+, cobra, `config/taskfsm`, `config/taskstore`, `config/taskstate`, `session/git`
+
+## Wave 2 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/task.go`
+- Modify: `cmd/task_test.go`
+
+**Step 1: write the failing tests**
+
+```go
+// cmd/task_test.go
+
+func TestExecuteTaskPush_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskPush("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskPush_NoBranch(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "push-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "no-branch.md",
+		Status:   taskstore.StatusReady,
+	}))
+	err := executeTaskPush("", project, "no-branch.md", store)
+	// Should resolve the branch but fail on git ops (no real repo).
+	require.Error(t, err)
+}
+
+func TestExecuteTaskPR_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	_, err := executeTaskPR("", "nope", "missing.md", "", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskPR_DefaultTitle(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "pr-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename:    "my-feature.md",
+		Status:      taskstore.StatusImplementing,
+		Description: "add dark mode toggle",
+		Branch:      "plan/my-feature",
+	}))
+	// Will fail on git/gh ops but tests the title derivation logic.
+	_, err := executeTaskPR("", project, "my-feature.md", "", store)
+	require.Error(t, err) // expected: git error (no real repo)
+}
+```
+
+**Step 2: run tests to verify they fail**
+
+```bash
+go test ./cmd/... -run 'TestExecuteTaskPush|TestExecuteTaskPR' -v
+```
+
+expected: FAIL — `executeTaskPush`, `executeTaskPR` undefined
+
+**Step 3: write minimal implementation**
+
+Add to `cmd/task.go`:
+
+1. **`executeTaskPush`** — resolves the task entry and branch, derives the worktree path with `git.TaskWorktreePath`, constructs a `GitWorktree` via `git.NewGitWorktreeFromStorage`, commits dirty changes with `PushChanges`, and pushes to origin.
+
+2. **`executeTaskPR`** — resolves the task entry, derives worktree path, constructs `GitWorktree`, uses the task description as the default PR title (overridable via the `title` parameter), generates a PR body via `GeneratePRBody`, pushes and creates the PR via `CreatePR`. Returns the PR URL from stdout capture.
+
+3. **Cobra subcommands:**
+   - `kas task push <plan-file>` with `--message` flag for custom commit message (default: `"update from kas"`)
+   - `kas task pr <plan-file>` with `--title` flag (default: task description)
+
+**Step 4: run tests to verify they pass**
+
+```bash
+go test ./cmd/... -run 'TestExecuteTaskPush|TestExecuteTaskPR' -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/task.go cmd/task_test.go
+git commit -m "feat: add kas task push and pr CLI commands"
+```
+
+---
+
+pull task info from task data store
+
+---
+
+ignore me continue
