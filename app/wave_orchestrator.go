@@ -60,9 +60,13 @@ func (o *WaveOrchestrator) SetElaborating() {
 
 // UpdatePlan replaces the plan the orchestrator manages. Called after the
 // elaborator agent has enriched task descriptions and written the updated plan
-// back to the task store. The orchestrator must be in WaveStateElaborating.
+// back to the task store. Resets the orchestrator to WaveStateIdle so wave 1
+// can begin normally via StartNextWave.
 func (o *WaveOrchestrator) UpdatePlan(plan *taskparser.Plan) {
 	o.plan = plan
+	o.state = WaveStateIdle
+	o.currentWave = 0
+	o.taskStates = make(map[int]taskStatus)
 }
 
 // TaskFile returns the plan filename this orchestrator manages.
@@ -101,8 +105,11 @@ func (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {
 }
 
 // StartNextWave advances to the next wave and returns its tasks.
-// Returns nil if all waves are complete.
+// Returns nil if all waves are complete or if elaboration is still in progress.
 func (o *WaveOrchestrator) StartNextWave() []taskparser.Task {
+	if o.state == WaveStateElaborating {
+		return nil
+	}
 	if o.state == WaveStateAllComplete {
 		return nil
 	}
