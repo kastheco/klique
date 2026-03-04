@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "3bc6fcc20421",
+  "session_id": "ses_348ee7fb8ffehT5nAVPysgYrog",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T04:21:28.801439923Z",
+  "branch": "plan/safe-kill",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/fix-agents-reading-from-disk.md",
+    "docs/plans/improved-info-tab.md",
+    "docs/plans/safe-kill.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c1813aa39037",
+  "token_usage": {
+    "input_tokens": 11,
+    "cache_creation_tokens": 81094,
+    "cache_read_tokens": 577579,
+    "output_tokens": 6982,
+    "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T04:21:28.719298143Z",
+    "agent_lines": 0,
+    "human_added": 1324,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1324,
+    "agent_percentage": 0
+  }
+}
