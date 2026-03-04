@@ -289,6 +289,57 @@ func TestShouldPostWaveCompleteComment(t *testing.T) {
 	assert.False(t, nilOrch.ShouldPostWaveCompleteComment())
 }
 
+func TestWaveOrchestrator_ElaboratingState(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.SetElaborating()
+	assert.Equal(t, WaveStateElaborating, orch.State())
+
+	// StartNextWave should be blocked while elaborating
+	tasks := orch.StartNextWave()
+	assert.Nil(t, tasks, "must not start waves while elaborating")
+	assert.Equal(t, WaveStateElaborating, orch.State())
+}
+
+func TestWaveOrchestrator_UpdatePlan(t *testing.T) {
+	plan := &taskparser.Plan{
+		Goal: "original",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "terse body"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.SetElaborating()
+
+	updated := &taskparser.Plan{
+		Goal: "original",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "detailed body with signatures and patterns"},
+			}},
+		},
+	}
+	orch.UpdatePlan(updated)
+
+	// Should transition back to Idle so StartNextWave works
+	assert.Equal(t, WaveStateIdle, orch.State())
+
+	// Verify the plan was replaced
+	tasks := orch.StartNextWave()
+	require.Len(t, tasks, 1)
+	assert.Contains(t, tasks[0].Body, "detailed body")
+}
+
 func TestBuildTaskPrompt_Method(t *testing.T) {
 	plan := &taskparser.Plan{
 		Goal: "Test goal",
