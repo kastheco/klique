@@ -95,7 +95,7 @@ func TestStateToAgentConfigs(t *testing.T) {
 
 func TestDefaultAgentRoles(t *testing.T) {
 	roles := DefaultAgentRoles()
-	assert.Equal(t, []string{"coder", "reviewer", "planner", "chat", "fixer"}, roles)
+	assert.Equal(t, []string{"coder", "elaborator", "reviewer", "planner", "chat", "fixer"}, roles)
 }
 
 func TestRoleDefaults(t *testing.T) {
@@ -111,25 +111,33 @@ func TestRoleDefaults(t *testing.T) {
 
 	t.Run("coder defaults", func(t *testing.T) {
 		c := defaults["coder"]
-		assert.Equal(t, "anthropic/claude-sonnet-4-6", c.Model)
-		assert.Equal(t, "medium", c.Effort)
+		assert.Equal(t, "openai/gpt-5.3-codex", c.Model)
+		assert.Equal(t, "low", c.Effort)
 		assert.Equal(t, "0.1", c.Temperature)
 		assert.True(t, c.Enabled)
+	})
+
+	t.Run("elaborator defaults", func(t *testing.T) {
+		e := defaults["elaborator"]
+		assert.Equal(t, "openai/gpt-5.3-codex", e.Model)
+		assert.Equal(t, "high", e.Effort)
+		assert.Equal(t, "0.1", e.Temperature)
+		assert.True(t, e.Enabled)
 	})
 
 	t.Run("planner defaults", func(t *testing.T) {
 		p := defaults["planner"]
 		assert.Equal(t, "anthropic/claude-opus-4-6", p.Model)
-		assert.Equal(t, "max", p.Effort)
-		assert.Equal(t, "0.5", p.Temperature)
+		assert.Equal(t, "high", p.Effort)
+		assert.Equal(t, "0.3", p.Temperature)
 		assert.True(t, p.Enabled)
 	})
 
 	t.Run("reviewer defaults", func(t *testing.T) {
 		r := defaults["reviewer"]
 		assert.Equal(t, "openai/gpt-5.3-codex", r.Model)
-		assert.Equal(t, "xhigh", r.Effort)
-		assert.Equal(t, "0.2", r.Temperature)
+		assert.Equal(t, "medium", r.Effort)
+		assert.Equal(t, "0.1", r.Temperature)
 		assert.True(t, r.Enabled)
 	})
 
