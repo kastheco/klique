@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "2d140bfae7a2",
+  "strategy": "manual-commit",
+  "branch": "plan/safe-kill",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/fix-agents-reading-from-disk.md",
+    "docs/plans/improved-info-tab.md",
+    "docs/plans/safe-kill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/2d/140bfae7a2/0/metadata.json",
+      "transcript": "/2d/140bfae7a2/0/full.jsonl",
+      "context": "/2d/140bfae7a2/0/context.md",
+      "content_hash": "/2d/140bfae7a2/0/content_hash.txt",
+      "prompt": "/2d/140bfae7a2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 4212,
+    "cache_read_tokens": 583171,
+    "output_tokens": 2946,
+    "api_call_count": 8
+  }
+}
