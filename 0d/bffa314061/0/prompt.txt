@@ -1,0 +1,175 @@
+Implement Task 1: Update skills, docs, and remove legacy artifacts
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Remove every `docs/plans` reference from the codebase and ensure agent/skill files teach the task store CLI (`kas task`) as the single source of truth — no agent should ever look for, read from, or write to a `docs/plans/` directory.
+**Architecture:** Two parallel cleanup tracks: (1) update all skill files, agent configs, README, gitignore, and remove the legacy `docs/plans/` directory + `contrib/import-plans.sh`; (2) remove deprecated Go functions (`resolvePlansDir`, `projectFromPlansDir`, `loadTaskState(plansDir)`, `newFSM(plansDir)`, `CommitTaskScaffoldOnMain`), update the `register` CLI command to read plan files from CWD instead of `docs/plans/`, and fix stale comments/test assertions. Both tracks touch disjoint file sets.
+**Tech Stack:** Go, markdown (skill files), shell (gitignore)
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `.agents/skills/kasmos-planner/SKILL.md`
+- Modify: `.agents/skills/kasmos-lifecycle/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md`
+- Modify: `.codex/AGENTS.md`
+- Modify: `README.md`
+- Modify: `.gitignore`
+- Delete: `contrib/import-plans.sh`
+- Delete: `docs/plans/` (entire directory via `git rm -r`)
+
+**Step 1: write the failing test**
+
+No Go tests — these are documentation and config files. Verification is via `rg 'docs/plans' <file>` returning zero matches after each edit. This task has no testable Go logic.
+
+**Step 2: run test to verify it fails**
+
+```bash
+rg 'docs/plans' .agents/skills/ internal/initcmd/scaffold/templates/skills/ .codex/ README.md .gitignore contrib/
+```
+
+expected: FAIL — multiple matches in each file
+
+**Step 3: write minimal implementation**
+
+**3a. `.agents/skills/kasmos-planner/SKILL.md` and `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`** (identical changes to both files)
+
+Replace lines 138-143 (the plan document format storage section) with:
+
+```markdown
+Plans are stored in the **task store** (SQLite database or remote HTTP API), not as files on disk.
+
+**CLI commands for plan content:**
+- **read** existing plan content: `kas task show <plan-file>`
+- **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)
+- **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)
+
+**Full task lifecycle CLI:**
+| Command | Purpose |
+|---------|---------|
+| `kas task list [--status <s>]` | list all tasks, optionally filtered by status |
+| `kas task show <file>` | print plan content from the task store |
+| `kas task create <name>` | create a new task entry (`--content`, `--description`, `--branch`, `--topic`) |
+| `kas task register <file>` | register a plan file from disk into the store |
+| `kas task update-content <file>` | replace plan content (reads stdin or `--file`) |
+| `kas task set-status <file> <s>` | force-override status (requires `--force`) |
+| `kas task transition <file> <event>` | apply FSM event (e.g. `plan_start`, `review_approved`) |
+| `kas task start <file>` | transition to implementing + set up worktree |
+| `kas task start-over <file>` | reset branch, transition back to planning |
+| `kas task push <file>` | commit dirty changes + push task branch |
+| `kas task pr <file>` | push + open a pull request |
+| `kas task merge <file>` | merge branch into main, transition to done |
+| `kas task implement <file> [--wave N]` | trigger wave implementation |
+```
+
+**3b. `.agents/skills/kasmos-lifecycle/SKILL.md` and `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md`** (identical changes to both files)
+
+Replace line 24. Change:
+```
+State is persisted in the **task store** — ... To retrieve plan content, agents use `kas task show <plan-file>` — never read directly from `docs/plans/` on disk.
+```
+To:
+```
+State is persisted in the **task store** — a SQLite database (`~/.config/kasmos/kasmos.db` locally) or a remote HTTP API server. Agents never write to the store directly — kasmos owns state transitions. Agents only write sentinel files (managed mode) or use `kas task` CLI commands (manual mode). To retrieve plan content, agents use `kas task show <plan-file>`.
+```
+(Remove the trailing ` — never read directly from \`docs/plans/\` on disk` clause.)
+
+**3c. `.codex/AGENTS.md`**
+
+Replace the entire "Plan State (CRITICAL)" section (lines 22-27) with:
+
+```markdown
+## Task Store (CRITICAL)
+Task state lives in the task store — a SQLite database (`~/.config/kasmos/kasmos.db`) or a remote HTTP API.
+Use `kas task` CLI commands for all lifecycle operations:
+- `kas task list` — list tasks and statuses
+- `kas task show <file>` — read plan content
+- `kas task create <name>` — create a new task
+- `kas task register <file>` — register a plan file from disk
+- `kas task update-content <file>` — update plan content
+- `kas task transition <file> <event>` — FSM state transition
+- `kas task set-status <file> <status> --force` — force override
+Never modify task state directly. Unregistered plans are invisible in the kasmos sidebar.
+Valid statuses: `ready` → `planning` → `implementing` → `reviewing` → `done`.
+```
+
+**3d. `README.md`**
+
+Rewrite lines 119 and 127-172 (the "how it works" bullet and the "plan store" section):
+
+Line 119: change to:
+```
+1. **tasks** are tracked in the task store (SQLite database) — use `kas task list` to see all tasks and `kas task show <file>` to read plan content
+```
+
+Replace the "plan store (remote state)" section (lines 127-172) with updated text that describes:
+- The embedded SQLite store that starts automatically on boot (`~/.config/kasmos/kasmos.db`)
+- The `kas task` CLI commands as the interface
+- Optional remote store via `plan_store = "http://..."` in config.toml for multi-machine access
+- Remove all references to `docs/plans/plan-state.json` and the legacy JSON file approach
+- Remove the `contrib/import-plans.sh` migration instructions (script is being deleted)
+
+**3e. `.gitignore`**
+
+Remove lines 12-15:
+```
+docs/plans/.signals/
+docs/plans/.plan-state.lock
+docs/plans/plan-state.json
+docs/plans/plan-state.json.migrated
+```
+
+**3f. Delete `contrib/import-plans.sh`**
+
+```bash
+git rm contrib/import-plans.sh
+```
+
+**3g. Delete `docs/plans/` directory**
+
+```bash
+git rm -r docs/plans/
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+rg 'docs/plans' .agents/skills/ internal/initcmd/scaffold/templates/skills/ .codex/ README.md .gitignore 2>&1
+# Also confirm the directory and script are gone:
+ls docs/plans/ 2>&1  # should error "No such file or directory"
+ls contrib/import-plans.sh 2>&1  # should error
+# Verify Go compilation unaffected:
+go build ./...
+```
+
+expected: zero matches, directory gone, build passes
+
+**Step 5: commit**
+
+```bash
+git add -A
+git commit -m "docs: remove all docs/plans references from skills, README, and config"
+```
+
+---
