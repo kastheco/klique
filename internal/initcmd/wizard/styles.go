@@ -1,6 +1,6 @@
 package wizard
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // Rose Pine Moon - self-contained copy (no ui/ import).
 var (

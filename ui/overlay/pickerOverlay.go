@@ -3,7 +3,7 @@ package overlay
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // PickerOverlay shows a searchable list of options for selection.

@@ -1,6 +1,6 @@
 package overlay
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Result is returned by Overlay.HandleKey to signal what happened.
 type Result struct {

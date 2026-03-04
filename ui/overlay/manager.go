@@ -1,6 +1,6 @@
 package overlay
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Manager manages the active modal overlay and composites it onto the background.
 type Manager struct {

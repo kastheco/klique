@@ -1,8 +1,8 @@
 package overlay
 
 import (
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/huh/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Styles holds the shared lipgloss styles used by all overlay types.

@@ -1,7 +1,7 @@
 package overlay
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TextOverlay represents a text screen overlay.

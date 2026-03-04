@@ -3,8 +3,8 @@ package overlay
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/huh/v2"
 )
 
 // FormOverlay is a multi-field form overlay backed by huh.Form.

@@ -15,7 +15,7 @@ import (
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	"github.com/atotto/clipboard"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // executeContextAction performs the action selected from a context menu.
