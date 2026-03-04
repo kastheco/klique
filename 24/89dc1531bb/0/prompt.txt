@@ -1,0 +1,90 @@
+Implement Task 2: Add project skills section to `skills list`
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Fix `kas skills list` bug where symlinked skill directories are silently skipped due to `DirEntry.IsDir()` returning false for symlinks, and add project-level skill listing.
+**Architecture:** The `skills list` command in `skills.go` uses `os.ReadDir` + `entry.IsDir()` which filters out symlinks-to-directories before the symlink detection code can run. Fix by also accepting symlink entries that resolve to directories. Extend the command to optionally show project-level skills (`.agents/skills/`) in addition to global ones.
+**Tech Stack:** Go 1.24+, cobra, os/filepath, testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `skills.go`
+- Test: `skills_test.go`
+
+**Step 1: write the failing test**
+
+```go
+func TestRunSkillsList_ShowsProjectSkills(t *testing.T) {
+    home := t.TempDir()
+    t.Setenv("HOME", home)
+
+    // Create global skill
+    globalSkills := filepath.Join(home, ".agents", "skills")
+    require.NoError(t, os.MkdirAll(filepath.Join(globalSkills, "global-skill"), 0o755))
+
+    // Create project skill in cwd
+    projectDir := t.TempDir()
+    t.Chdir(projectDir)
+    projectSkills := filepath.Join(projectDir, ".agents", "skills")
+    require.NoError(t, os.MkdirAll(filepath.Join(projectSkills, "project-skill"), 0o755))
+
+    var buf bytes.Buffer
+    cmd := newSkillsListCmd()
+    cmd.SetOut(&buf)
+    err := cmd.Execute()
+    require.NoError(t, err)
+
+    output := buf.String()
+    assert.Contains(t, output, "global-skill")
+    assert.Contains(t, output, "project-skill")
+    assert.Contains(t, output, "Project skills")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./... -run TestRunSkillsList_ShowsProjectSkills -v
+```
+
+expected: FAIL — no project skills section in output
+
+**Step 3: write minimal implementation**
+
+After printing global skills, detect if cwd has `.agents/skills/` and list project-level skills in a second section. Reuse the same entry-listing logic (extract helper function `listSkillEntries(dir string, out io.Writer)`) for both global and project skill dirs. Print a `"\nProject skills in <dir>:\n"` header before project entries.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./... -run TestRunSkillsList_ShowsProjectSkills -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add skills.go skills_test.go
+git commit -m "feat: skills list shows project-level skills when in a kas project"
+```
