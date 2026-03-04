@@ -6,12 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
+	git "github.com/kastheco/kasmos/session/git"
 	"github.com/spf13/cobra"
 )
 
@@ -226,6 +228,90 @@ func executeTaskLinkClickUp(project string, store taskstore.Store) (int, error) 
 	return updated, nil
 }
 
+// resolveTaskEntry loads task state for the given project, looks up the entry
+// by filename, and backfills the branch name if it is empty (using
+// git.TaskBranchFromFile). Returns an error if the entry is not found.
+func resolveTaskEntry(project, filename string, store taskstore.Store) (taskstate.TaskEntry, error) {
+	ps, err := loadTaskStateByProject(project, store)
+	if err != nil {
+		return taskstate.TaskEntry{}, err
+	}
+	entry, ok := ps.Entry(filename)
+	if !ok {
+		return taskstate.TaskEntry{}, fmt.Errorf("task not found: %s", filename)
+	}
+	if entry.Branch == "" {
+		entry.Branch = git.TaskBranchFromFile(filename)
+	}
+	return entry, nil
+}
+
+// executeTaskCreate creates a new task entry in the store. name is the plan
+// name without the .md extension. branch defaults to "plan/<name>" when empty.
+// If content is non-empty, it is stored alongside the metadata.
+func executeTaskCreate(project, name, description, branch, topic, content string, store taskstore.Store) error {
+	filename := name + ".md"
+	if branch == "" {
+		branch = "plan/" + name
+	}
+	ps, err := loadTaskStateByProject(project, store)
+	if err != nil {
+		return err
+	}
+	createdAt := time.Now()
+	if content != "" {
+		return ps.CreateWithContent(filename, description, branch, topic, createdAt, content)
+	}
+	return ps.Create(filename, description, branch, topic, createdAt)
+}
+
+// executeTaskStart transitions a plan to implementing status and sets up the
+// git branch + worktree. It walks planning → ready → implementing via the FSM
+// if the plan is currently in planning state. Returns the worktree path.
+func executeTaskStart(repoRoot, project, planFile string, store taskstore.Store) (string, error) {
+	fsm := newFSMByProject(project, store)
+
+	ps, err := loadTaskStateByProject(project, store)
+	if err != nil {
+		return "", err
+	}
+	entry, ok := ps.Entry(planFile)
+	if !ok {
+		return "", fmt.Errorf("task not found: %s", planFile)
+	}
+
+	current := taskfsm.Status(entry.Status)
+	// Walk planning → ready first if needed.
+	if current == taskfsm.StatusPlanning {
+		if err := fsm.Transition(planFile, taskfsm.PlannerFinished); err != nil {
+			return "", err
+		}
+		current = taskfsm.StatusReady
+	}
+	// Advance to implementing.
+	if current != taskfsm.StatusImplementing {
+		if err := fsm.Transition(planFile, taskfsm.ImplementStart); err != nil {
+			return "", err
+		}
+	}
+
+	// Resolve branch — backfill if not set.
+	branch := entry.Branch
+	if branch == "" {
+		branch = git.TaskBranchFromFile(planFile)
+	}
+
+	// Set up the git branch and worktree.
+	if err := git.EnsureTaskBranch(repoRoot, branch); err != nil {
+		return "", fmt.Errorf("ensure task branch: %w", err)
+	}
+	wt := git.NewSharedTaskWorktree(repoRoot, branch)
+	if err := wt.Setup(); err != nil {
+		return "", fmt.Errorf("setup worktree: %w", err)
+	}
+	return wt.GetWorktreePath(), nil
+}
+
 // NewTaskCmd builds the `kq plan` cobra command tree.
 func NewTaskCmd() *cobra.Command {
 	planCmd := &cobra.Command{
@@ -397,6 +483,56 @@ func NewTaskCmd() *cobra.Command {
 	}
 	updateContentCmd.Flags().String("file", "", "read content from file instead of stdin")
 	planCmd.AddCommand(updateContentCmd)
+
+	// kas task create
+	var (
+		createDescription string
+		createBranch      string
+		createTopic       string
+		createContent     string
+	)
+	createCmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "create a new task entry in the store",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			name := args[0]
+			if err := executeTaskCreate(project, name, createDescription, createBranch, createTopic, createContent, resolveStore(project)); err != nil {
+				return err
+			}
+			fmt.Printf("created: %s.md → ready\n", name)
+			return nil
+		},
+	}
+	createCmd.Flags().StringVar(&createDescription, "description", "", "task description")
+	createCmd.Flags().StringVar(&createBranch, "branch", "", "git branch name (default: plan/<name>)")
+	createCmd.Flags().StringVar(&createTopic, "topic", "", "topic group")
+	createCmd.Flags().StringVar(&createContent, "content", "", "initial plan content (markdown)")
+	planCmd.AddCommand(createCmd)
+
+	// kas task start
+	startCmd := &cobra.Command{
+		Use:   "start <plan-file>",
+		Short: "transition a task to implementing and set up the git worktree",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			worktreePath, err := executeTaskStart(repoRoot, project, args[0], resolveStore(project))
+			if err != nil {
+				return err
+			}
+			fmt.Printf("started: %s → implementing\nworktree: %s\n", args[0], worktreePath)
+			return nil
+		},
+	}
+	planCmd.AddCommand(startCmd)
 
 	// kq plan link-clickup
 	var linkProject string
