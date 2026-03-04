@@ -20,7 +20,8 @@ import (
 // heading and uses the conventional branch name format.
 func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
 	fullPath := filepath.Join(plansDir, planFile)
-	if _, err := os.Stat(fullPath); err != nil {
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
 		return fmt.Errorf("task file not found on disk: %s", fullPath)
 	}
 	ps, err := loadTaskState(plansDir, store)
@@ -28,10 +29,6 @@ func executeTaskRegister(plansDir, planFile, branch, topic, description string, 
 		return err
 	}
 	if description == "" {
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			return err
-		}
 		description = strings.TrimSuffix(planFile, ".md")
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.HasPrefix(line, "# ") {
@@ -47,7 +44,7 @@ func executeTaskRegister(plansDir, planFile, branch, topic, description string, 
 	}
 	info, _ := os.Stat(fullPath)
 	createdAt := info.ModTime()
-	return ps.Create(planFile, description, branch, topic, createdAt)
+	return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))
 }
 
 // executeTaskList returns a formatted string listing all plans, optionally

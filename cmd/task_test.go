@@ -362,6 +362,29 @@ func TestPlanCLI_FromWorktreeContext(t *testing.T) {
 
 // TestPlanList_WithStore verifies that executeTaskListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
+func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
+	store, err := taskstore.NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Create a temp plansDir with the expected structure.
+	root := t.TempDir()
+	plansDir := filepath.Join(root, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	planContent := "# My Plan\n\n## Wave 1\n\n### Task 1: Do something\n\nDo it.\n"
+	planFile := "my-plan.md"
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644))
+
+	err = executeTaskRegister(plansDir, planFile, "", "", "", store)
+	require.NoError(t, err)
+
+	// Verify content was ingested into the store.
+	got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)
+	require.NoError(t, err)
+	assert.Equal(t, planContent, got)
+}
+
 func TestPlanList_WithStore(t *testing.T) {
 	backend := taskstore.NewTestSQLiteStore(t)
 	srv := httptest.NewServer(taskstore.NewHandler(backend))
