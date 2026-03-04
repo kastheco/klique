@@ -172,3 +172,33 @@ func TestStartOnBranch_SetsFields(t *testing.T) {
 	assert.True(t, inst.Started())
 	assert.NotEqual(t, "", inst.GetWorktreePath(), fmt.Sprintf("worktree path should be set for %s", inst.Title))
 }
+
+func TestKill_PreservesBranch(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	inst, err := NewInstance(InstanceOptions{
+		Title:   "test-safe-kill",
+		Path:    repoPath,
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+
+	err = inst.StartOnBranch("safe-kill-branch")
+	require.NoError(t, err)
+
+	branchName := inst.Branch
+	require.NotEmpty(t, branchName)
+
+	err = inst.Kill()
+	require.NoError(t, err)
+
+	// Branch must still exist after kill
+	out, gitErr := exec.Command("git", "-C", repoPath, "branch", "--list", branchName).CombinedOutput()
+	require.NoError(t, gitErr)
+	assert.Contains(t, string(out), branchName, "branch should be preserved after Kill()")
+}

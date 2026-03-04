@@ -292,6 +292,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 
 // Kill terminates the tmux session and removes the git worktree. If the worktree
 // has uncommitted changes they are committed first to prevent data loss.
+// The git branch is preserved so the instance can be inspected or resumed later.
 // Returns nil for instances that were never started.
 func (i *Instance) Kill() error {
 	if !i.started {
@@ -315,8 +316,11 @@ func (i *Instance) Kill() error {
 				errs = append(errs, fmt.Errorf("failed to auto-commit before kill: %w", commitErr))
 			}
 		}
-		if err := i.gitWorktree.Cleanup(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to cleanup git worktree: %w", err))
+		if err := i.gitWorktree.Remove(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
+		}
+		if err := i.gitWorktree.Prune(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
 		}
 	}
 
