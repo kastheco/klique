@@ -98,6 +98,13 @@
       "context": "/1f/1923f75c95/12/context.md",
       "content_hash": "/1f/1923f75c95/12/content_hash.txt",
       "prompt": "/1f/1923f75c95/12/prompt.txt"
+    },
+    {
+      "metadata": "/1f/1923f75c95/13/metadata.json",
+      "transcript": "/1f/1923f75c95/13/full.jsonl",
+      "context": "/1f/1923f75c95/13/context.md",
+      "content_hash": "/1f/1923f75c95/13/content_hash.txt",
+      "prompt": "/1f/1923f75c95/13/prompt.txt"
     }
   ],
   "token_usage": {
