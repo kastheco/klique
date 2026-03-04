@@ -326,6 +326,83 @@ func executeTaskPush(repoRoot, project, planFile string, store taskstore.Store) 
 	return wt.PushChanges("update from kas", false)
 }
 
+// executeTaskMerge merges the plan branch into the current branch (typically
+// main), then walks the FSM to done. If the task is not yet in reviewing state,
+// it transitions through ImplementFinished first. Returns an error if the git
+// merge fails.
+func executeTaskMerge(repoRoot, project, planFile string, store taskstore.Store) error {
+	entry, err := resolveTaskEntry(project, planFile, store)
+	if err != nil {
+		return err
+	}
+	branch := entry.Branch
+
+	// Validate repoRoot before attempting git operations.
+	if _, serr := os.Stat(repoRoot); serr != nil {
+		return fmt.Errorf("invalid repo root %q: %w", repoRoot, serr)
+	}
+
+	// Git merge first — only advance the FSM on success.
+	if err := git.MergeTaskBranch(repoRoot, branch); err != nil {
+		return err
+	}
+
+	// Walk FSM to done.
+	fsm := newFSMByProject(project, store)
+	current := taskfsm.Status(entry.Status)
+	if current != taskfsm.StatusReviewing {
+		if current == taskfsm.StatusImplementing {
+			if err := fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
+				return err
+			}
+		} else {
+			// Force to reviewing so ReviewApproved can proceed.
+			ps, lerr := loadTaskStateByProject(project, store)
+			if lerr != nil {
+				return lerr
+			}
+			if ferr := ps.ForceSetStatus(planFile, taskstate.StatusReviewing); ferr != nil {
+				return ferr
+			}
+		}
+	}
+	return fsm.Transition(planFile, taskfsm.ReviewApproved)
+}
+
+// executeTaskStartOver removes the plan worktree, deletes and recreates the
+// branch from HEAD (via git.ResetTaskBranch), then transitions the FSM to
+// planning. Uses StartOver FSM event for states where it is valid; falls back
+// to ForceSetStatus for all other states.
+func executeTaskStartOver(repoRoot, project, planFile string, store taskstore.Store) error {
+	entry, err := resolveTaskEntry(project, planFile, store)
+	if err != nil {
+		return err
+	}
+	branch := entry.Branch
+
+	// Validate repoRoot before attempting git operations.
+	if _, serr := os.Stat(repoRoot); serr != nil {
+		return fmt.Errorf("invalid repo root %q: %w", repoRoot, serr)
+	}
+
+	// Git reset first — only touch FSM on success.
+	if err := git.ResetTaskBranch(repoRoot, branch); err != nil {
+		return err
+	}
+
+	// Try the FSM StartOver event; fall back to ForceSetStatus if not valid
+	// from the current state (StartOver is only defined from done in the FSM).
+	fsm := newFSMByProject(project, store)
+	if ferr := fsm.Transition(planFile, taskfsm.StartOver); ferr != nil {
+		ps, lerr := loadTaskStateByProject(project, store)
+		if lerr != nil {
+			return lerr
+		}
+		return ps.ForceSetStatus(planFile, taskstate.StatusPlanning)
+	}
+	return nil
+}
+
 // executeTaskPR resolves the task entry, derives the PR title from the task
 // description when title is empty, generates a PR body from the git log, and
 // creates (or reopens) the PR via the GitHub CLI. Returns the PR URL on success.
@@ -617,6 +694,44 @@ func NewTaskCmd() *cobra.Command {
 	}
 	prCmd.Flags().StringVar(&prTitle, "title", "", "PR title (default: task description)")
 	planCmd.AddCommand(prCmd)
+
+	// kas task merge
+	mergeCmd := &cobra.Command{
+		Use:   "merge <plan-file>",
+		Short: "merge the task branch into main and transition to done",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			if err := executeTaskMerge(repoRoot, project, args[0], resolveStore(project)); err != nil {
+				return err
+			}
+			fmt.Printf("merged: %s → done\n", args[0])
+			return nil
+		},
+	}
+	planCmd.AddCommand(mergeCmd)
+
+	// kas task start-over
+	startOverCmd := &cobra.Command{
+		Use:   "start-over <plan-file>",
+		Short: "reset the task branch and transition back to planning",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			if err := executeTaskStartOver(repoRoot, project, args[0], resolveStore(project)); err != nil {
+				return err
+			}
+			fmt.Printf("reset: %s → planning\n", args[0])
+			return nil
+		},
+	}
+	planCmd.AddCommand(startOverCmd)
 
 	// kq plan link-clickup
 	var linkProject string

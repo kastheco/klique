@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -561,6 +563,132 @@ func TestExecuteTaskPR_DefaultTitle(t *testing.T) {
 	// Will fail on git/gh ops but tests the title derivation logic.
 	_, err := executeTaskPR("", project, "my-feature.md", "", store)
 	require.Error(t, err) // expected: git error (no real repo)
+}
+
+func TestExecuteTaskMerge_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskMerge("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskMerge_TransitionsToDone(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "merge-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "merge-me.md",
+		Status:   taskstore.Status("reviewing"),
+		Branch:   "plan/merge-me",
+	}))
+	// Will fail on git merge (no real repo) but the error is from git, not FSM.
+	err := executeTaskMerge("", project, "merge-me.md", store)
+	require.Error(t, err) // expected: git error
+}
+
+func TestExecuteTaskStartOver_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskStartOver("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskStartOver_TransitionsToPlanning(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "startover-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "redo.md",
+		Status:   taskstore.Status("done"),
+		Branch:   "plan/redo",
+	}))
+	// Will fail on git reset (no real repo) but tests FSM logic.
+	err := executeTaskStartOver("", project, "redo.md", store)
+	require.Error(t, err) // expected: git error
+}
+
+func TestExecuteTaskMerge_IntegrationWithRealRepo(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "merge-integration"
+	branch := "plan/int-merge"
+
+	// Create a real git repo.
+	repo := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@test.com")
+	runGit("config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("init\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+
+	// Create the plan branch with a commit.
+	runGit("branch", branch)
+	runGit("checkout", branch)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "feature.go"), []byte("package feature\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "add feature")
+	runGit("checkout", "main")
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "int-merge.md",
+		Status:   taskstore.Status("reviewing"),
+		Branch:   branch,
+	}))
+
+	err := executeTaskMerge(repo, project, "int-merge.md", store)
+	require.NoError(t, err)
+
+	// Verify FSM transitioned to done.
+	ps, _ := taskstate.Load(store, project, "")
+	entry, _ := ps.Entry("int-merge.md")
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
+
+	// Verify branch was deleted.
+	out, _ := exec.Command("git", "-C", repo, "branch", "--list", branch).CombinedOutput()
+	assert.Empty(t, strings.TrimSpace(string(out)))
+}
+
+func TestExecuteTaskStartOver_IntegrationWithRealRepo(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "startover-integration"
+	branch := "plan/int-redo"
+
+	repo := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	runGit("init", "-b", "main")
+	runGit("config", "user.email", "test@test.com")
+	runGit("config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("init\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+	runGit("branch", branch)
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "int-redo.md",
+		Status:   taskstore.Status("done"),
+		Branch:   branch,
+	}))
+
+	err := executeTaskStartOver(repo, project, "int-redo.md", store)
+	require.NoError(t, err)
+
+	// Verify FSM transitioned to planning.
+	ps, _ := taskstate.Load(store, project, "")
+	entry, _ := ps.Entry("int-redo.md")
+	assert.Equal(t, taskstate.StatusPlanning, entry.Status)
+
+	// Verify branch still exists (recreated from HEAD).
+	out, _ := exec.Command("git", "-C", repo, "branch", "--list", branch).CombinedOutput()
+	assert.Contains(t, string(out), "int-redo")
 }
 
 // TestPlanList_WithStore verifies that executeTaskListWithStore works with a
