@@ -9,6 +9,7 @@ type WaveState int
 
 const (
 	WaveStateIdle         WaveState = iota // Not started
+	WaveStateElaborating                   // Waiting for elaborator to enrich task descriptions
 	WaveStateRunning                       // Current wave's tasks are running
 	WaveStateWaveComplete                  // Current wave finished, awaiting user confirmation
 	WaveStateAllComplete                   // All waves finished
@@ -84,9 +85,28 @@ func (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {
 	return o.plan.Waves[o.currentWave].Tasks
 }
 
+// SetElaborating puts the orchestrator into the elaborating state.
+// StartNextWave is blocked until UpdatePlan is called.
+func (o *WaveOrchestrator) SetElaborating() {
+	o.state = WaveStateElaborating
+}
+
+// UpdatePlan replaces the plan with an elaborated version and resets the
+// orchestrator to Idle so waves can begin. Task states are cleared since
+// no tasks have started yet.
+func (o *WaveOrchestrator) UpdatePlan(plan *taskparser.Plan) {
+	o.plan = plan
+	o.state = WaveStateIdle
+	o.currentWave = 0
+	o.taskStates = make(map[int]taskStatus)
+}
+
 // StartNextWave advances to the next wave and returns its tasks.
-// Returns nil if all waves are complete.
+// Returns nil if all waves are complete or if elaboration is in progress.
 func (o *WaveOrchestrator) StartNextWave() []taskparser.Task {
+	if o.state == WaveStateElaborating {
+		return nil
+	}
 	if o.state == WaveStateAllComplete {
 		return nil
 	}
