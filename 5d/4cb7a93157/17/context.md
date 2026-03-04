@@ -1,0 +1,10 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan plan-status-cli-bugs. Goal: plan-status-cli-bugs
+
+plan status isn't changing from planning to implementing and even once i killed planning because it was done, it is still stuck in planning status and wont start a coder. the agents/skills instruct agents to use kas cli for plan state management but it's CRITICAL that they perform those actions from the repo root and not within a worktree. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grou...
+
