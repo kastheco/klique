@@ -1,0 +1,21 @@
+You are answering a question about the plan 'improved-info-tab'.
+
+## Plan Context
+
+- **File:** docs/plans/improved-info-tab.md
+- **Status:** planning
+- **Description:** improved-info-tab
+
+store plan metadata and statuses (including subtasks) in the database. then, improve the info tabs ui to be much more useful and informative, tracking the whole dev lifecycle for a plan instead of an incomplete instances count and repeated text. i want to be able to see a summary about the plan, detailed information about what's been implemented / progress that's been made. we should brainstorm and generate mockups before beginning implementation.
+- **Branch:** plan/improved-info-tab
+- **Topic:** v2.0
+
+Read the plan file at docs/plans/improved-info-tab.md for full details.
+
+## User Question
+
+im trying to start implement but it says plan is missing wave headers. it should be reading the plan from repo root not from the worktree
+
+---
+
+commit and push this fix
