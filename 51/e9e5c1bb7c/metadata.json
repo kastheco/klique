@@ -5,6 +5,7 @@
   "branch": "plan/fix-agent-skills-cli",
   "checkpoints_count": 0,
   "files_touched": [
+    "skills.go",
     "skills_test.go"
   ],
   "sessions": [
@@ -14,13 +15,20 @@
       "context": "/51/e9e5c1bb7c/0/context.md",
       "content_hash": "/51/e9e5c1bb7c/0/content_hash.txt",
       "prompt": "/51/e9e5c1bb7c/0/prompt.txt"
+    },
+    {
+      "metadata": "/51/e9e5c1bb7c/1/metadata.json",
+      "transcript": "/51/e9e5c1bb7c/1/full.jsonl",
+      "context": "/51/e9e5c1bb7c/1/context.md",
+      "content_hash": "/51/e9e5c1bb7c/1/content_hash.txt",
+      "prompt": "/51/e9e5c1bb7c/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 6,
-    "cache_creation_tokens": 52561,
-    "cache_read_tokens": 192433,
-    "output_tokens": 1823,
-    "api_call_count": 6
+    "input_tokens": 15,
+    "cache_creation_tokens": 108854,
+    "cache_read_tokens": 545637,
+    "output_tokens": 4635,
+    "api_call_count": 15
   }
 }
