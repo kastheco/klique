@@ -1,0 +1,131 @@
+Implement Task 3: Document `kas task show` in skill files
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop agents from reading plan content via disk files at `docs/plans/`. Add a `kas task show` CLI command so agents can retrieve plan content from the database, and update all prompt builders, review templates, and skill documentation to reference the CLI instead of disk paths.
+**Architecture:** Three parallel changes: (1) Add a `kas task show <plan-file>` subcommand to `cmd/task.go` that reads content from the task store and prints raw markdown to stdout — follows the existing `resolvePlansDir()` → `resolveStore()` pattern. (2) Update all prompt-building functions in `app/app_state.go`, `orchestration/prompt.go`, and `app/app_actions.go` to reference `kas task show` instead of `docs/plans/` — also update `review-prompt.md` template and corresponding test assertions. (3) Update skill documentation (scaffold templates + live copies) to document `kas task show` as the standard way agents retrieve plan content.
+**Tech Stack:** Go, cobra (CLI), config/taskstore, config/taskstate, testify, `sd` for batch markdown edits
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 3 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md`
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md`
+- Modify: `.opencode/skills/kasmos-coder/SKILL.md`
+- Modify: `.opencode/skills/kasmos-fixer/SKILL.md`
+- Modify: `.opencode/skills/kasmos-lifecycle/SKILL.md`
+
+**Step 1: write the failing test**
+
+No unit tests — these are documentation files. Verification is by checking that the new `kas task show` reference exists and stale "read from disk" instructions are removed.
+
+Baseline verification:
+
+```bash
+rg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/ -c
+# expected: 0 matches (not added yet)
+```
+
+**Step 2: run verification to confirm stale references exist (baseline)**
+
+```bash
+rg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/
+# expected: no matches
+```
+
+**Step 3: write changes**
+
+**3a. kasmos-coder skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md` and `.opencode/skills/kasmos-coder/SKILL.md`:
+
+Update the managed-mode instructions (around line 67) from:
+```
+1. Read the task content from the task store (via `kas task` CLI or the task content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
+```
+to:
+```
+1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.
+```
+
+Update the manual-mode instructions (around line 81) from:
+```
+1. Read the plan. Check its **Size** field to determine wave structure.
+```
+to:
+```
+1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.
+```
+
+**3b. kasmos-fixer skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md` and `.opencode/skills/kasmos-fixer/SKILL.md`:
+
+Add `kas task show` to the "Available CLI Commands" section, after the `### kas task list` entry (around line 286):
+
+```markdown
+### `kas task show <plan-file>`
+
+Print the plan's full markdown content from the task store. Use this to retrieve plan details
+without reading from disk.
+
+\`\`\`bash
+kas task show my-plan.md
+\`\`\`
+```
+
+**3c. kasmos-lifecycle skill** — In both `internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md` and `.opencode/skills/kasmos-lifecycle/SKILL.md`:
+
+This skill is minimal and doesn't have a CLI commands section, but it should mention that plan content is retrieved via `kas task show`, not from disk. Add a sentence after "Agents only write sentinel files (managed mode) or use `kas task` CLI commands (manual mode)." (around line 24):
+
+```
+To retrieve plan content, agents use `kas task show <plan-file>` — never read directly from `docs/plans/` on disk.
+```
+
+Use `sd` for batch replacements across the 6 files where the same change applies to both scaffold and live copies.
+
+**Step 4: run verification**
+
+```bash
+rg 'kas task show' internal/initcmd/scaffold/templates/skills/ .opencode/skills/ -c
+# expected: matches in kasmos-coder, kasmos-fixer, kasmos-lifecycle (both scaffold + live)
+```
+
+Verify scaffold and live copies are identical:
+
+```bash
+difft .opencode/skills/kasmos-coder/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md
+difft .opencode/skills/kasmos-fixer/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md
+difft .opencode/skills/kasmos-lifecycle/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md
+```
+
+expected: "No changes." for all three pairs
+
+**Step 5: commit**
+
+```bash
+git add internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md \
+       internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md \
+       internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md \
+       .opencode/skills/kasmos-coder/SKILL.md \
+       .opencode/skills/kasmos-fixer/SKILL.md \
+       .opencode/skills/kasmos-lifecycle/SKILL.md
+git commit -m "feat(task-3): document kas task show in coder, fixer, and lifecycle skills"
+```
