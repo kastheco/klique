@@ -37,31 +37,41 @@ func runSkillsList(cmd *cobra.Command, args []string) error {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("No personal skills found. Install skills to ~/.agents/skills/")
+			fmt.Fprintln(cmd.OutOrStdout(), "No personal skills found. Install skills to ~/.agents/skills/")
 			return nil
 		}
 		return err
 	}
 
-	fmt.Printf("Personal skills in %s:\n\n", skillsDir)
+	fmt.Fprintf(cmd.OutOrStdout(), "Personal skills in %s:\n\n", skillsDir)
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
 		name := entry.Name()
+		fullPath := filepath.Join(skillsDir, name)
 
-		// Check if it's a symlink (externally managed)
-		fi, err := os.Lstat(filepath.Join(skillsDir, name))
+		// Accept real dirs and symlinks-to-dirs; skip plain files.
+		fi, err := os.Lstat(fullPath)
 		if err != nil {
 			continue
 		}
+		isSymlink := fi.Mode()&os.ModeSymlink != 0
+		if !entry.IsDir() && !isSymlink {
+			continue // plain file
+		}
+		// If symlink, verify target is a directory
+		if isSymlink {
+			targetInfo, err := os.Stat(fullPath) // follows symlink
+			if err != nil || !targetInfo.IsDir() {
+				continue
+			}
+		}
+
 		managed := ""
-		if fi.Mode()&os.ModeSymlink != 0 {
-			target, _ := os.Readlink(filepath.Join(skillsDir, name))
+		if isSymlink {
+			target, _ := os.Readlink(fullPath)
 			managed = fmt.Sprintf(" -> %s (external)", target)
 		}
 
-		fmt.Printf("  %-30s%s\n", name, managed)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %-30s%s\n", name, managed)
 	}
 
 	return nil
