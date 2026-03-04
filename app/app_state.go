@@ -724,8 +724,7 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		}
 	}
 	planName := taskstate.DisplayName(planFile)
-	planPath := "docs/plans/" + planFile
-	prompt := scaffold.LoadReviewPrompt(planPath, planName)
+	prompt := scaffold.LoadReviewPrompt(planFile, planName)
 
 	// Kill any previous reviewer for this plan so the new session gets a fresh
 	// tmux session instead of reattaching to a stale/errored one.
@@ -1199,11 +1198,11 @@ func (m *home) importClickUpTask(task *clickup.Task) (tea.Model, tea.Cmd) {
 	m.loadTaskState()
 	m.updateSidebarTasks()
 
-	prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan file.
+	prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan.
 
 Determine if the task is well-specified enough for implementation or needs further analysis. Write a proper implementation plan with ## Wave sections, task breakdowns, architecture notes, and tech stack. Use the ClickUp subtasks as a starting point but reorganize into waves based on dependencies.
 
-The plan file is at: docs/plans/%s`, filename)
+Retrieve the current plan content with: kas task show %s`, filename)
 
 	m.toastManager.Success("imported! spawning planner...")
 	model, cmd := m.spawnTaskAgent(filename, "plan", prompt)
@@ -1340,41 +1339,50 @@ func buildPlanningPrompt(planName, description string) string {
 // the sentinel signal so kasmos can resume the implementation flow.
 func buildWaveAnnotationPrompt(planFile string) string {
 	return fmt.Sprintf(
-		"The plan at docs/plans/%[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
-			"Please annotate the plan by wrapping all tasks under ## Wave N sections. "+
+		"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
+			"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping "+
+			"all tasks under ## Wave N sections. "+
 			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
 			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
 			"After annotating:\n"+
-			"1. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
-			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
+			"1. Write the updated plan to docs/plans/%[1]s\n"+
+			"2. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
+			"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
 			"Do not edit plan-state.json directly.",
 		planFile,
 	)
 }
 
 // buildImplementPrompt returns the prompt for a coder agent session.
-// The plan file is materialized to docs/plans/<planFile> in the agent's worktree
-// by the TUI before the agent starts. Agents write sentinel signals to
-// .kasmos/signals/ in their worktree; the TUI ingests them on completion.
+// Agents retrieve plan content from the task store via `kas task show` and write
+// sentinel signals to .kasmos/signals/ in their worktree; the TUI ingests them on completion.
 func buildImplementPrompt(planFile string) string {
 	return fmt.Sprintf(
-		"Implement docs/plans/%s using the `kasmos-coder` skill. Execute all tasks sequentially.",
-		planFile,
+		"Implement %s using the `kasmos-coder` skill. "+
+			"Retrieve the full plan with `kas task show %s` and execute all tasks sequentially.",
+		planFile, planFile,
 	)
 }
 
 // buildSoloPrompt returns a minimal prompt for a solo agent session.
-// If planFile is non-empty, it references the plan file. Otherwise just name + description.
+// If planFile is non-empty, it references the plan via kas task show. Otherwise just name + description.
 func buildSoloPrompt(planName, description, planFile string) string {
 	if planFile != "" {
-		return fmt.Sprintf("Implement %s. Goal: %s. Plan: docs/plans/%s", planName, description, planFile)
+		return fmt.Sprintf(
+			"Implement %s. Goal: %s. Retrieve the full plan with `kas task show %s`.",
+			planName, description, planFile,
+		)
 	}
 	return fmt.Sprintf("Implement %s. Goal: %s.", planName, description)
 }
 
 // buildModifyTaskPrompt returns the prompt for modifying an existing plan.
 func buildModifyTaskPrompt(planFile string) string {
-	return fmt.Sprintf("Modify existing plan at docs/plans/%s. Keep the same filename and update only what changed.", planFile)
+	return fmt.Sprintf(
+		"Modify existing plan %s. Retrieve current content with `kas task show %s`. "+
+			"Keep the same filename and update only what changed.",
+		planFile, planFile,
+	)
 }
 
 // agentTypeForSubItem maps a sidebar stage name to the corresponding AgentType constant.
@@ -1784,7 +1792,7 @@ func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, questi
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("You are answering a question about the plan '%s'.\n\n", name))
 	sb.WriteString("## Plan Context\n\n")
-	sb.WriteString(fmt.Sprintf("- **File:** docs/plans/%s\n", planFile))
+	sb.WriteString(fmt.Sprintf("- **Plan:** %s\n", planFile))
 	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", entry.Status))
 	if entry.Description != "" {
 		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", entry.Description))
@@ -1795,7 +1803,7 @@ func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, questi
 	if entry.Topic != "" {
 		sb.WriteString(fmt.Sprintf("- **Topic:** %s\n", entry.Topic))
 	}
-	sb.WriteString(fmt.Sprintf("\nRead the plan file at docs/plans/%s for full details.\n\n", planFile))
+	sb.WriteString(fmt.Sprintf("\nRetrieve the full plan with `kas task show %s` for details.\n\n", planFile))
 	sb.WriteString("## User Question\n\n")
 	sb.WriteString(question)
 	return sb.String()

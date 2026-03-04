@@ -36,10 +36,11 @@ func TestBuildPlanPrompt(t *testing.T) {
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	prompt := buildWaveAnnotationPrompt("my-feature.md")
-	assert.Contains(t, prompt, "my-feature.md", "prompt must reference the plan file")
+	assert.Contains(t, prompt, "kas task show my-feature.md", "prompt must reference kas task show")
 	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
 	assert.Contains(t, prompt, "commit", "prompt must instruct the planner to commit after annotation")
 	assert.Contains(t, prompt, "planner-finished-", "prompt must include the signal file instruction")
+	assert.NotContains(t, prompt, "The plan at docs/plans/", "prompt must not reference disk path for reading")
 }
 
 func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
@@ -50,22 +51,19 @@ func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
 
 func TestBuildImplementPrompt(t *testing.T) {
 	prompt := buildImplementPrompt("auth-refactor.md")
-	if !strings.Contains(prompt, "Implement docs/plans/auth-refactor.md") {
-		t.Fatalf("prompt missing plan path")
-	}
+	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	assert.NotContains(t, prompt, "docs/plans/")
 }
 
 func TestBuildSoloPrompt_WithDescription(t *testing.T) {
 	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
-	assert.Contains(t, prompt, "Implement auth-refactor")
-	assert.Contains(t, prompt, "Goal: Refactor JWT auth")
-	assert.Contains(t, prompt, "docs/plans/auth-refactor.md")
+	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	assert.NotContains(t, prompt, "docs/plans/")
 }
 
 func TestBuildSoloPrompt_StubOnly(t *testing.T) {
 	prompt := buildSoloPrompt("quick-fix", "Fix the login bug", "")
-	assert.Contains(t, prompt, "Implement quick-fix")
-	assert.Contains(t, prompt, "Goal: Fix the login bug")
+	assert.NotContains(t, prompt, "kas task show")
 	assert.NotContains(t, prompt, "docs/plans/")
 }
 
@@ -624,13 +622,13 @@ func TestSoloActionChecksStoreNotDisk(t *testing.T) {
 	model, _ := h.executeTaskStage(planFile, "solo")
 	updated := model.(*home)
 
-	// The solo agent must have been spawned with a prompt referencing docs/plans/<planFile>
+	// The solo agent must have been spawned with a prompt referencing kas task show <planFile>
 	// because the store has content. If os.Stat were used instead, no disk file means
 	// refFile="" and the prompt would omit the plan file reference.
 	instances := updated.nav.GetInstances()
 	require.NotEmpty(t, instances, "solo stage must spawn an agent instance")
 	soloInst := instances[len(instances)-1]
-	assert.Contains(t, soloInst.QueuedPrompt, "docs/plans/"+planFile,
+	assert.Contains(t, soloInst.QueuedPrompt, "kas task show "+planFile,
 		"solo prompt must reference plan file when store has content (not disk)")
 }
 

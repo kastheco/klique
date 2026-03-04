@@ -58,7 +58,8 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	prompt := BuildWaveAnnotationPrompt("my-feature.md")
+	assert.Contains(t, prompt, "kas task show my-feature.md")
 	assert.Contains(t, prompt, "## Wave")
-	assert.Contains(t, prompt, "my-feature.md")
 	assert.Contains(t, prompt, "planner-finished-my-feature.md")
+	assert.NotContains(t, prompt, "The plan at docs/plans/")
 }
