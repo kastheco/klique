@@ -1,0 +1,161 @@
+Implement Task 2: WaveOrchestrator Elaboration State
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add an automatic elaboration phase between plan-ready and coder-start that expands terse task descriptions into detailed implementation instructions, reducing coder decision-making and improving output quality.
+**Architecture:** When the user triggers "implement", kasmos spawns an elaborator agent before starting wave 1. The elaborator reads the plan from the task store, deeply reads the codebase files referenced by each task, and rewrites each task body with detailed implementation guidance (exact signatures, patterns from existing code, edge cases, error handling). It writes the enriched plan back to the store and signals completion via `elaborator-finished-<planfile>`. kasmos detects this signal, re-parses the updated plan into the wave orchestrator, and starts wave 1 normally. A context menu bypass ("implement directly") skips elaboration. The elaborator uses a configurable agent profile (`"elaborating"` phase) so a strong model can be assigned.
+**Tech Stack:** Go 1.24+, bubbletea v1.3.x, existing kasmos packages (config/taskfsm, config/taskparser, orchestration, session, app)
+
+## Wave 1 of 2
+
+## Parallel Execution
+
+You are Task 2 of 5 in Wave 1. 4 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `orchestration/engine.go`
+- Test: `orchestration/engine_test.go`
+
+**Step 1: write the failing test**
+
+Add to `engine_test.go`:
+
+```go
+func TestWaveOrchestrator_ElaboratingState(t *testing.T) {
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "do first"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.SetElaborating()
+	assert.Equal(t, WaveStateElaborating, orch.State())
+
+	// StartNextWave should be blocked while elaborating
+	tasks := orch.StartNextWave()
+	assert.Nil(t, tasks, "must not start waves while elaborating")
+	assert.Equal(t, WaveStateElaborating, orch.State())
+}
+
+func TestWaveOrchestrator_UpdatePlan(t *testing.T) {
+	plan := &taskparser.Plan{
+		Goal: "original",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "terse body"},
+			}},
+		},
+	}
+
+	orch := NewWaveOrchestrator("plan.md", plan)
+	orch.SetElaborating()
+
+	updated := &taskparser.Plan{
+		Goal: "original",
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "First", Body: "detailed body with signatures and patterns"},
+			}},
+		},
+	}
+	orch.UpdatePlan(updated)
+
+	// Should transition back to Idle so StartNextWave works
+	assert.Equal(t, WaveStateIdle, orch.State())
+
+	// Verify the plan was replaced
+	tasks := orch.StartNextWave()
+	require.Len(t, tasks, 1)
+	assert.Contains(t, tasks[0].Body, "detailed body")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./orchestration/... -run "TestWaveOrchestrator_ElaboratingState|TestWaveOrchestrator_UpdatePlan" -v
+```
+
+expected: FAIL — `WaveStateElaborating` undefined
+
+**Step 3: write minimal implementation**
+
+Add to `orchestration/engine.go`:
+
+1. Add `WaveStateElaborating` to the `WaveState` const block (after `WaveStateIdle`):
+
+```go
+WaveStateElaborating              // Waiting for elaborator to enrich task descriptions
+```
+
+2. Add `SetElaborating()` method:
+
+```go
+// SetElaborating puts the orchestrator into the elaborating state.
+// StartNextWave is blocked until UpdatePlan is called.
+func (o *WaveOrchestrator) SetElaborating() {
+	o.state = WaveStateElaborating
+}
+```
+
+3. Add `UpdatePlan()` method:
+
+```go
+// UpdatePlan replaces the plan with an elaborated version and resets the
+// orchestrator to Idle so waves can begin. Task states are cleared since
+// no tasks have started yet.
+func (o *WaveOrchestrator) UpdatePlan(plan *taskparser.Plan) {
+	o.plan = plan
+	o.state = WaveStateIdle
+	o.currentWave = 0
+	o.taskStates = make(map[int]taskStatus)
+}
+```
+
+4. Guard `StartNextWave()` — add at the top of the method:
+
+```go
+if o.state == WaveStateElaborating {
+	return nil
+}
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./orchestration/... -run "TestWaveOrchestrator_ElaboratingState|TestWaveOrchestrator_UpdatePlan" -v
+```
+
+expected: PASS
+
+Also verify no regressions:
+
+```bash
+go test ./orchestration/... -v
+```
+
+**Step 5: commit**
+
+```bash
+git add orchestration/engine.go orchestration/engine_test.go
+git commit -m "feat(task-2): add WaveStateElaborating and UpdatePlan to orchestrator"
+```
