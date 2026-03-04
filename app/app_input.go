@@ -1303,7 +1303,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] abort session '%s'? this removes the worktree.", selected.Title)
+		message := fmt.Sprintf("stop session '%s'? branch will be preserved.", selected.Title)
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.nav.GetSelectedInstance()

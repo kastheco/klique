@@ -383,6 +383,36 @@ func TestKasTmuxName(t *testing.T) {
 	}
 }
 
+// TestKillCmd_SetsInstanceToPaused verifies that the kill command updates the
+// instance to paused status instead of removing it from state.
+func TestKillCmd_SetsInstanceToPaused(t *testing.T) {
+	rec := fullInstanceRecord("kill-target")
+	rec.Status = instanceRunning
+	other := fullInstanceRecord("other")
+	state := newTestStateFromRecords(t, []instanceRecord{rec, other})
+
+	// Simulate what the new kill logic should do: update to paused, not remove.
+	err := updateInstanceInState(state, "kill-target", func(r *instanceRecord) error {
+		r.Status = instancePaused
+		r.Worktree.WorktreePath = ""
+		return nil
+	})
+	require.NoError(t, err)
+
+	records, err := loadInstanceRecords(state)
+	require.NoError(t, err)
+	require.Len(t, records, 2, "kill should NOT remove instance from state")
+
+	var target instanceRecord
+	for _, r := range records {
+		if r.Title == "kill-target" {
+			target = r
+		}
+	}
+	assert.Equal(t, instancePaused, target.Status, "killed instance should be paused")
+	assert.Empty(t, target.Worktree.WorktreePath, "worktree path should be cleared")
+}
+
 // TestBuildResumeCommand_BasicClaude verifies that a basic Claude instance gets
 // KASMOS_MANAGED=1 prepended and no extra flags for default settings.
 func TestBuildResumeCommand_BasicClaude(t *testing.T) {

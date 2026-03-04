@@ -1449,9 +1449,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewTerminalInstance = msg.instanceTitle
 		return m, nil
 	case killInstanceMsg:
-		// Async pre-kill checks passed — safe to mutate model in Update.
-		m.nav.Kill()
-		m.removeFromAllInstances(msg.title)
+		// Async pre-kill checks passed — pause instead of destroying (branch preserved).
+		for _, inst := range m.allInstances {
+			if inst.Title == msg.title {
+				if err := inst.Pause(); err != nil {
+					return m, m.handleError(err)
+				}
+				break
+			}
+		}
 		m.saveAllInstances()
 		m.updateNavPanelStatus()
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())

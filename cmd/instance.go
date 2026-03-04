@@ -410,7 +410,7 @@ func NewInstanceCmd() *cobra.Command {
 	// kas instance kill <title>
 	killCmd := &cobra.Command{
 		Use:   "kill <title>",
-		Short: "kill an agent instance and remove it from state",
+		Short: "pause an agent instance and preserve its branch (safe kill)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title := args[0]
@@ -426,17 +426,32 @@ func NewInstanceCmd() *cobra.Command {
 			if err := validateStatusForAction(rec, "kill"); err != nil {
 				return err
 			}
-			// Kill tmux session using the kas_-prefixed name (best-effort — may already be dead).
-			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
-			// Remove git worktree if present.
-			if rec.Worktree.WorktreePath != "" && rec.Worktree.RepoPath != "" {
-				_ = exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "remove", "--force", rec.Worktree.WorktreePath).Run()
-				_ = exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "prune").Run()
+			// Auto-commit dirty changes before removing worktree.
+			if rec.Worktree.WorktreePath != "" {
+				commitMsg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)",
+					rec.Title, time.Now().Format(time.RFC822))
+				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "add", "-A").Run()
+				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath,
+					"commit", "-m", commitMsg, "--allow-empty").Run()
 			}
-			if err := removeInstanceFromState(state, rec.Title); err != nil {
+			// Kill tmux session (best-effort).
+			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
+			// Remove worktree but preserve branch.
+			if rec.Worktree.WorktreePath != "" && rec.Worktree.RepoPath != "" {
+				_ = exec.Command("git", "-C", rec.Worktree.RepoPath,
+					"worktree", "remove", "--force", rec.Worktree.WorktreePath).Run()
+				_ = exec.Command("git", "-C", rec.Worktree.RepoPath,
+					"worktree", "prune").Run()
+			}
+			// Set to paused instead of removing from state.
+			if err := updateInstanceInState(state, rec.Title, func(r *instanceRecord) error {
+				r.Status = instancePaused
+				r.Worktree.WorktreePath = ""
+				return nil
+			}); err != nil {
 				return err
 			}
-			fmt.Printf("killed: %s\n", rec.Title)
+			fmt.Printf("paused: %s (branch preserved)\n", rec.Title)
 			return nil
 		},
 	}
