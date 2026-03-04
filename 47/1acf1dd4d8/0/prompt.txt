@@ -1,0 +1,184 @@
+Implement Task 3: `merge` and `start-over` commands
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add high-level lifecycle commands (`create`, `start`, `push`, `merge`, `pr`, `start-over`) to `kas task` so users can manage the full plan lifecycle from the CLI without the TUI.
+**Architecture:** All 6 commands are added as cobra subcommands under the existing `kas task` command tree in `cmd/task.go`. Each command has a testable `executeTask*` function that accepts a `taskstore.Store` argument (matching the existing pattern). The commands delegate to existing `session/git` functions (`EnsureTaskBranch`, `MergeTaskBranch`, `ResetTaskBranch`, `NewSharedTaskWorktree`, `Push`, `CreatePR`) for git operations and the existing FSM (`taskfsm.TaskStateMachine`) for state transitions. A shared `resolveTaskEntry` helper reduces duplication across commands.
+**Tech Stack:** Go 1.24+, cobra, `config/taskfsm`, `config/taskstore`, `config/taskstate`, `session/git`
+
+## Wave 3 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/task.go`
+- Modify: `cmd/task_test.go`
+
+**Step 1: write the failing tests**
+
+```go
+// cmd/task_test.go
+
+func TestExecuteTaskMerge_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskMerge("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskMerge_TransitionsToDone(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "merge-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "merge-me.md",
+		Status:   taskstore.Status("reviewing"),
+		Branch:   "plan/merge-me",
+	}))
+	// Will fail on git merge (no real repo) but the error is from git, not FSM.
+	err := executeTaskMerge("", project, "merge-me.md", store)
+	require.Error(t, err) // expected: git error
+}
+
+func TestExecuteTaskStartOver_TaskNotFound(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	err := executeTaskStartOver("", "nope", "missing.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskStartOver_TransitionsToPlanning(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "startover-test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "redo.md",
+		Status:   taskstore.Status("done"),
+		Branch:   "plan/redo",
+	}))
+	// Will fail on git reset (no real repo) but tests FSM logic.
+	err := executeTaskStartOver("", project, "redo.md", store)
+	require.Error(t, err) // expected: git error
+}
+
+func TestExecuteTaskMerge_IntegrationWithRealRepo(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "merge-integration"
+	branch := "plan/int-merge"
+
+	// Create a real git repo.
+	repo := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@test.com")
+	runGit("config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("init\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+
+	// Create the plan branch with a commit.
+	runGit("branch", branch)
+	runGit("checkout", branch)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "feature.go"), []byte("package feature\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "add feature")
+	runGit("checkout", "main")
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "int-merge.md",
+		Status:   taskstore.Status("reviewing"),
+		Branch:   branch,
+	}))
+
+	err := executeTaskMerge(repo, project, "int-merge.md", store)
+	require.NoError(t, err)
+
+	// Verify FSM transitioned to done.
+	ps, _ := taskstate.Load(store, project, "")
+	entry, _ := ps.Entry("int-merge.md")
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
+
+	// Verify branch was deleted.
+	out, _ := exec.Command("git", "-C", repo, "branch", "--list", branch).CombinedOutput()
+	assert.Empty(t, strings.TrimSpace(string(out)))
+}
+
+func TestExecuteTaskStartOver_IntegrationWithRealRepo(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "startover-integration"
+	branch := "plan/int-redo"
+
+	repo := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@test.com")
+	runGit("config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("init\n"), 0644))
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+	runGit("branch", branch)
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "int-redo.md",
+		Status:   taskstore.Status("done"),
+		Branch:   branch,
+	}))
+
+	err := executeTaskStartOver(repo, project, "int-redo.md", store)
+	require.NoError(t, err)
+
+	// Verify FSM transitioned to planning.
+	ps, _ := taskstate.Load(store, project, "")
+	entry, _ := ps.Entry("int-redo.md")
+	assert.Equal(t, taskstate.StatusPlanning, entry.Status)
+
+	// Verify branch still exists (recreated from HEAD).
+	out, _ := exec.Command("git", "-C", repo, "branch", "--list", branch).CombinedOutput()
+	assert.Contains(t, string(out), "int-redo")
+}
+```
+
+**Step 2: run tests to verify they fail**
+
+```bash
+go test ./cmd/... -run 'TestExecuteTaskMerge|TestExecuteTaskStartOver' -v
+```
+
+expected: FAIL — `executeTaskMerge`, `executeTaskStartOver` undefined
+
+**Step 3: write minimal implementation**
+
+Add to `cmd/task.go`:
+
+1. **`executeTaskMerge`** — resolves the task entry, calls `git.MergeTaskBranch(repoRoot, branch)` to merge the plan branch into main (this also removes the worktree and deletes the branch). After a successful merge, walks the FSM to done: if not in reviewing, transitions through `ImplementFinished` first, then `ReviewApproved`. Returns the new status.
+
+2. **`executeTaskStartOver`** — resolves the task entry, calls `git.ResetTaskBranch(repoRoot, branch)` to remove the worktree, delete the branch, and recreate it from HEAD. Then transitions the FSM via `StartOver` event (which moves to planning from done/reviewing/implementing). For states where `StartOver` isn't valid, uses `ForceSetStatus` to "planning" as a fallback.
+
+3. **Cobra subcommands:**
+   - `kas task merge <plan-file>` with no flags
+   - `kas task start-over <plan-file>` with no flags
+
+**Step 4: run tests to verify they pass**
+
+```bash
+go test ./cmd/... -run 'TestExecuteTaskMerge|TestExecuteTaskStartOver' -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/task.go cmd/task_test.go
+git commit -m "feat: add kas task merge and start-over CLI commands"
+```
