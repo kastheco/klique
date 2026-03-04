@@ -25,10 +25,11 @@ const (
 
 // AgentType constants identify the role of an agent session within a plan lifecycle.
 const (
-	AgentTypePlanner  = "planner"
-	AgentTypeCoder    = "coder"
-	AgentTypeReviewer = "reviewer"
-	AgentTypeFixer    = "fixer"
+	AgentTypePlanner    = "planner"
+	AgentTypeCoder      = "coder"
+	AgentTypeReviewer   = "reviewer"
+	AgentTypeFixer      = "fixer"
+	AgentTypeElaborator = "elaborator"
 )
 
 // Instance represents a managed agent session with its associated tmux and git state.
