@@ -1,0 +1,10 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Plan safe-kill. Goal: safe-kill
+
+disable removing worktree when killing an agent. just save the branch and pause the agent instance. i dont want to risk losing work. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
