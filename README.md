@@ -116,7 +116,7 @@ flags:
 
 ## how it works
 
-1. **plans** live in `docs/plans/` as markdown files — kasmos tracks state in a local json file or a remote [plan store](#plan-store-remote-state)
+1. **tasks** are tracked in the task store (SQLite database) — use `kas task list` to see all tasks and `kas task show <file>` to read plan content
 2. **topics** group related plans and act as collision domains (only one plan per topic can implement at a time)
 3. **waves** divide implementation into phases — kasmos parses `## Wave N` headers and runs each wave's tasks in parallel
 4. **agents** are spawned in isolated tmux sessions with dedicated git worktrees; the TUI shows live output in the preview pane
@@ -124,51 +124,37 @@ flags:
 
 ---
 
-## plan store (remote state)
+## task store
 
-by default, plan state lives in a local `docs/plans/plan-state.json` file — git-tracked, which can cause merge conflicts when running parallel worktrees or working across machines. the plan store replaces this with a sqlite-backed http server.
+task state is stored in an embedded SQLite database (`~/.config/kasmos/kasmos.db`) that starts automatically when kasmos boots — no server required.
 
-#### start the server
+#### managing tasks
 
-```bash
-kas serve
-```
-
-defaults to `0.0.0.0:7433` with the database at `~/.config/kasmos/planstore.db`. override with flags:
+use the `kas task` CLI:
 
 ```bash
-kas serve --port 8080 --db /path/to/planstore.db --bind 127.0.0.1
+kas task list                          # list all tasks
+kas task list --status implementing    # filter by status
+kas task show <file>                   # read plan content
+kas task create <name>                 # create a new task
+kas task register <file>               # register a plan file from disk
+kas task update-content <file>         # update plan content (reads stdin)
+kas task set-status <file> done --force  # force-override status
+kas task transition <file> <event>     # apply FSM event
 ```
 
-#### connect kasmos to the store
+#### optional remote store
 
-add one line to `~/.config/kasmos/config.toml`:
-
-```toml
-plan_store = "http://localhost:7433"
-```
-
-for cross-machine access (e.g. over tailscale):
+for multi-machine access (e.g. over tailscale or a team server), add one line to `~/.config/kasmos/config.toml`:
 
 ```toml
 plan_store = "http://your-desktop:7433"
 ```
 
-on startup, kasmos pings the store — if unreachable it falls back to the local json file with a toast warning. no data loss either way.
-
-#### migrate existing plans
-
-a migration script is included in `contrib/`. it's insert-only — existing entries in the store are skipped:
+start the remote server with:
 
 ```bash
-# start the server first, then:
-./contrib/import-plans.sh
-```
-
-the script auto-detects `docs/plans/plan-state.json`, the default store url, and the project name from git. all three can be overridden:
-
-```bash
-./contrib/import-plans.sh path/to/plan-state.json http://host:7433 my-project
+kas serve --port 7433 --db /path/to/kasmos.db
 ```
 
 #### run as a systemd service

@@ -135,8 +135,29 @@ approach, update your recommendation and confirm before proceeding.
 
 **plan naming convention:** `<feature-name>.md`
 
-Plans are stored in the **task store** (SQLite database or HTTP API), not as files on disk.
-Use `kas task register` to register plans after writing content.
+Plans are stored in the **task store** (SQLite database or remote HTTP API), not as files on disk.
+
+**CLI commands for plan content:**
+- **read** existing plan content: `kas task show <plan-file>`
+- **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)
+- **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)
+
+**Full task lifecycle CLI:**
+| Command | Purpose |
+|---------|---------|
+| `kas task list [--status <s>]` | list all tasks, optionally filtered by status |
+| `kas task show <file>` | print plan content from the task store |
+| `kas task create <name>` | create a new task entry (`--content`, `--description`, `--branch`, `--topic`) |
+| `kas task register <file>` | register a plan file from disk into the store |
+| `kas task update-content <file>` | replace plan content (reads stdin or `--file`) |
+| `kas task set-status <file> <s>` | force-override status (requires `--force`) |
+| `kas task transition <file> <event>` | apply FSM event (e.g. `plan_start`, `review_approved`) |
+| `kas task start <file>` | transition to implementing + set up worktree |
+| `kas task start-over <file>` | reset branch, transition back to planning |
+| `kas task push <file>` | commit dirty changes + push task branch |
+| `kas task pr <file>` | push + open a pull request |
+| `kas task merge <file>` | merge branch into main, transition to done |
+| `kas task implement <file> [--wave N]` | trigger wave implementation |
 
 ### required header
 
@@ -382,8 +403,7 @@ kas task register <feature-name>.md
 ```
 
 this creates an entry in the task store with status `ready`. the task content should be
-written to the store via `kas task` or committed as a `.md` file in `docs/plans/` for
-`kas task register` to pick up.
+written to the store via `kas task register`.
 
 then offer execution choices:
 

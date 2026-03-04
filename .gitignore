@@ -9,10 +9,6 @@ kas
 .worktrees/
 .kasmos/
 dist/
-docs/plans/.signals/
-docs/plans/.plan-state.lock
-docs/plans/plan-state.json
-docs/plans/plan-state.json.migrated
 *.bak
 *.test
 .mcp.json

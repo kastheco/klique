@@ -19,12 +19,18 @@ Use `scc` for codebase metrics when scoping work.
 Load superpowers skills: `brainstorming`, `writing-plans`.
 Load project skills: `tui-design` (always for TUI work), `tmux-orchestration` (when task involves tmux/worker lifecycle).
 
-## Plan State (CRITICAL)
-Plans live in `docs/plans/`. State tracked in `docs/plans/plan-state.json`.
-Never modify plan files for state tracking. **You MUST register every plan** by adding
-an entry to `plan-state.json` with `"status": "ready"` immediately after writing the `.md` file.
-Unregistered plans are invisible in the kasmos sidebar.
-Valid statuses: `ready` → `in_progress` → `done`. Only kasmos transitions beyond `done`.
+## Task Store (CRITICAL)
+Task state lives in the task store — a SQLite database (`~/.config/kasmos/kasmos.db`) or a remote HTTP API.
+Use `kas task` CLI commands for all lifecycle operations:
+- `kas task list` — list tasks and statuses
+- `kas task show <file>` — read plan content
+- `kas task create <name>` — create a new task
+- `kas task register <file>` — register a plan file from disk
+- `kas task update-content <file>` — update plan content
+- `kas task transition <file> <event>` — FSM state transition
+- `kas task set-status <file> <status> --force` — force override
+Never modify task state directly. Unregistered plans are invisible in the kasmos sidebar.
+Valid statuses: `ready` → `planning` → `implementing` → `reviewing` → `done`.
 
 ## CLI Tools
 
