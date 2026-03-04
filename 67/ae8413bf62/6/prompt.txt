@@ -1,0 +1,21 @@
+Plan 01a-rewrite-tmux-layer. Goal: Rewrite Tmux Layer Implementation Plan. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
+---
+
+a i guess, the goal is to remove agpl tainted code and rebuild this layer form scratch
+
+---
+
+it can be redesigned if worthwhile
+
+---
+
+dont worry about that in this
+
+---
+
+opencode+claude only if it's easier
+
+---
+
+idk whatever u recommend
