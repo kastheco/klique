@@ -14,8 +14,8 @@ import (
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/ui/overlay"
 
-	"github.com/atotto/clipboard"
 	tea "charm.land/bubbletea/v2"
+	"github.com/atotto/clipboard"
 )
 
 // executeContextAction performs the action selected from a context menu.
@@ -879,7 +879,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		m.loadTaskState()
 		m.updateSidebarTasks()
 		planName := taskstate.DisplayName(planFile)
-		reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
+		reviewPrompt := scaffold.LoadReviewPrompt(planFile, planName)
 		return m.spawnTaskAgent(planFile, "review", reviewPrompt)
 	}
 

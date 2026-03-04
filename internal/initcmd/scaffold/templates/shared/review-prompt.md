@@ -1,8 +1,6 @@
 Review the implementation of plan: {{PLAN_NAME}}
 
-Plan file: {{PLAN_FILE}}
-
-Read the plan content to understand the goals, architecture, and tasks that were implemented.
+Retrieve the plan content with `kas task show {{PLAN_FILE}}` to understand the goals, architecture, and tasks that were implemented.
 
 IMPORTANT: Only review changes from this branch. Use `git diff main..HEAD` to see exactly
 what was changed by the implementation — do NOT review code that was inherited from main.
