@@ -355,6 +355,49 @@ func NewTaskCmd() *cobra.Command {
 	}
 	planCmd.AddCommand(showCmd)
 
+	// kq task update-content <plan-file> < content.md
+	updateContentCmd := &cobra.Command{
+		Use:   "update-content <plan-file>",
+		Short: "replace plan content in the task store (reads from stdin or --file)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			store, storeProject := resolveStoreConfig(project)
+			if store == nil {
+				store, err = localSQLiteStore()
+				if err != nil {
+					return fmt.Errorf("open local task store: %w", err)
+				}
+				defer store.Close()
+				storeProject = project
+			}
+			filename := args[0]
+			if !strings.HasSuffix(filename, ".md") {
+				filename += ".md"
+			}
+			contentFile, _ := cmd.Flags().GetString("file")
+			var data []byte
+			if contentFile != "" {
+				data, err = os.ReadFile(contentFile)
+			} else {
+				data, err = os.ReadFile("/dev/stdin")
+			}
+			if err != nil {
+				return fmt.Errorf("read content: %w", err)
+			}
+			if err := store.SetContent(storeProject, filename, string(data)); err != nil {
+				return err
+			}
+			fmt.Printf("updated content for %s\n", filename)
+			return nil
+		},
+	}
+	updateContentCmd.Flags().String("file", "", "read content from file instead of stdin")
+	planCmd.AddCommand(updateContentCmd)
+
 	// kq plan link-clickup
 	var linkProject string
 	linkClickUpCmd := &cobra.Command{
