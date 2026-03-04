@@ -1,0 +1,132 @@
+Implement Task 1: Migrate App Layer Plan Reads from Disk to Database
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.
+**Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the "implement" action, `validatePlanHasWaves`, and the "solo" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.
+**Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `app/app_actions.go`
+- Modify: `app/app_wave_validation_test.go`
+- Test: `app/app_task_actions_test.go`
+
+**Step 1: write the failing test**
+
+Add a test in `app/app_task_actions_test.go` that verifies the "implement" action reads plan content from the task store, not from disk. The test should:
+- Create a task entry in the store with content containing valid wave headers
+- NOT write any `.md` file to disk in `docs/plans/`
+- Trigger the implement action and verify it succeeds (proving it read from DB, not disk)
+
+Also add a test for the "solo" action that verifies it checks for content in the store rather than checking disk file existence.
+
+```go
+func TestImplementActionReadsFromStore(t *testing.T) {
+    // Setup: create task entry with content in store, no file on disk
+    // Trigger implement action
+    // Assert: orchestrator was created successfully (content was read from DB)
+}
+
+func TestSoloActionChecksStoreNotDisk(t *testing.T) {
+    // Setup: create task entry with content in store, no file on disk
+    // Trigger solo action
+    // Assert: prompt includes plan file reference (content was found in DB)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./app/... -run TestImplementActionReadsFromStore -v
+go test ./app/... -run TestSoloActionChecksStoreNotDisk -v
+```
+
+expected: FAIL — the implement action reads from disk (finds no file, returns error); the solo action checks `os.Stat` on disk
+
+**Step 3: write minimal implementation**
+
+**3a. Migrate "implement" action** in `app/app_actions.go` (around line 837-856):
+
+Replace the disk read:
+```go
+plansDir := filepath.Join(m.activeRepoPath, "docs", "plans")
+content, err := os.ReadFile(filepath.Join(plansDir, planFile))
+```
+with a database read:
+```go
+content, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
+```
+
+This matches the pattern already used at `app/app.go:1013` for wave signal processing.
+
+**3b. Migrate "solo" action** in `app/app_actions.go` (around line 828-834):
+
+Replace the `os.Stat` disk check:
+```go
+planPath := filepath.Join(m.activeRepoPath, "docs", "plans", planFile)
+refFile := ""
+if _, err := os.Stat(planPath); err == nil {
+    refFile = planFile
+}
+```
+with a store content check:
+```go
+refFile := ""
+if m.taskStore != nil {
+    if c, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && c != "" {
+        refFile = planFile
+    }
+}
+```
+
+**3c. Replace `validatePlanHasWaves`** in `app/app_actions.go` (line 893-902):
+
+The function currently reads from disk. It is only called from `app/app_wave_validation_test.go`. Replace it with a content-accepting variant:
+
+```go
+func validatePlanContent(content string) error {
+    _, err := taskparser.Parse(content)
+    return err
+}
+```
+
+Update `app/app_wave_validation_test.go` to pass content strings directly to `validatePlanContent` instead of writing temp files and calling `validatePlanHasWaves`.
+
+**3d. Clean up dead imports** — remove `os` and `filepath` imports if no longer needed in the modified sections. (`os` may still be needed elsewhere in the file — check before removing.)
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./app/... -run "TestImplementActionReadsFromStore|TestSoloActionChecksStoreNotDisk|TestValidatePlan" -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add app/app_actions.go app/app_wave_validation_test.go app/app_task_actions_test.go
+git commit -m "feat: migrate implement/solo actions and wave validation from disk to database"
+```
