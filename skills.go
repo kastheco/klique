@@ -23,7 +23,7 @@ func newSkillsCmd() *cobra.Command {
 func newSkillsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List personal skills in ~/.agents/skills/",
+		Short: "List installed skills (personal and project-level)",
 		RunE:  runSkillsList,
 	}
 }
