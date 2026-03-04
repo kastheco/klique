@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "34a24be70b61",
+  "strategy": "manual-commit",
+  "branch": "plan/fix-agents-reading-from-disk",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".agents/skills/kasmos-coder/SKILL.md",
+    ".agents/skills/kasmos-fixer/SKILL.md",
+    ".agents/skills/kasmos-lifecycle/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-coder/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md",
+    "internal/initcmd/scaffold/templates/skills/kasmos-lifecycle/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/34/a24be70b61/0/metadata.json",
+      "transcript": "/34/a24be70b61/0/full.jsonl",
+      "context": "/34/a24be70b61/0/context.md",
+      "content_hash": "/34/a24be70b61/0/content_hash.txt",
+      "prompt": "/34/a24be70b61/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}

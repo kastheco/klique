@@ -1,0 +1,262 @@
+Implement Task 2: Update prompt builders and review template to reference `kas task show`
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Stop agents from reading plan content via disk files at `docs/plans/`. Add a `kas task show` CLI command so agents can retrieve plan content from the database, and update all prompt builders, review templates, and skill documentation to reference the CLI instead of disk paths.
+**Architecture:** Three parallel changes: (1) Add a `kas task show <plan-file>` subcommand to `cmd/task.go` that reads content from the task store and prints raw markdown to stdout — follows the existing `resolvePlansDir()` → `resolveStore()` pattern. (2) Update all prompt-building functions in `app/app_state.go`, `orchestration/prompt.go`, and `app/app_actions.go` to reference `kas task show` instead of `docs/plans/` — also update `review-prompt.md` template and corresponding test assertions. (3) Update skill documentation (scaffold templates + live copies) to document `kas task show` as the standard way agents retrieve plan content.
+**Tech Stack:** Go, cobra (CLI), config/taskstore, config/taskstate, testify, `sd` for batch markdown edits
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `app/app_state.go`
+- Modify: `app/app_actions.go`
+- Modify: `orchestration/prompt.go`
+- Modify: `internal/initcmd/scaffold/templates/shared/review-prompt.md`
+- Test: `app/app_task_actions_test.go`
+- Test: `orchestration/prompt_test.go`
+
+**Step 1: write the failing test**
+
+Update existing tests in `app/app_task_actions_test.go` to assert prompts reference `kas task show` instead of `docs/plans/`:
+
+```go
+// TestBuildImplementPrompt — assert prompt says "kas task show" not "docs/plans/"
+func TestBuildImplementPrompt(t *testing.T) {
+	prompt := buildImplementPrompt("auth-refactor.md")
+	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	assert.NotContains(t, prompt, "docs/plans/")
+}
+
+// TestBuildSoloPrompt_WithDescription — assert prompt says "kas task show" not "docs/plans/"
+func TestBuildSoloPrompt_WithDescription(t *testing.T) {
+	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
+	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	assert.NotContains(t, prompt, "docs/plans/")
+}
+
+// TestBuildSoloPrompt_StubOnly — no plan file, no kas task show reference
+func TestBuildSoloPrompt_StubOnly(t *testing.T) {
+	prompt := buildSoloPrompt("quick-fix", "Fix the login bug", "")
+	assert.NotContains(t, prompt, "kas task show")
+	assert.NotContains(t, prompt, "docs/plans/")
+}
+```
+
+Update `orchestration/prompt_test.go` for `BuildWaveAnnotationPrompt`:
+
+```go
+func TestBuildWaveAnnotationPrompt(t *testing.T) {
+	prompt := BuildWaveAnnotationPrompt("my-feature.md")
+	assert.Contains(t, prompt, "kas task show my-feature.md")
+	assert.Contains(t, prompt, "## Wave")
+	assert.Contains(t, prompt, "planner-finished-my-feature.md")
+	assert.NotContains(t, prompt, "The plan at docs/plans/")
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./app/... -run "TestBuildImplementPrompt|TestBuildSoloPrompt" -v
+go test ./orchestration/... -run "TestBuildWaveAnnotationPrompt" -v
+```
+
+expected: FAIL — prompts still reference `docs/plans/`
+
+**Step 3: write minimal implementation**
+
+**3a. Update `app/app_state.go`** — modify these functions:
+
+`buildImplementPrompt`:
+```go
+func buildImplementPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"Implement %s using the `kasmos-coder` skill. "+
+			"Retrieve the full plan with `kas task show %s` and execute all tasks sequentially.",
+		planFile, planFile,
+	)
+}
+```
+
+`buildSoloPrompt`:
+```go
+func buildSoloPrompt(planName, description, planFile string) string {
+	if planFile != "" {
+		return fmt.Sprintf(
+			"Implement %s. Goal: %s. Retrieve the full plan with `kas task show %s`.",
+			planName, description, planFile,
+		)
+	}
+	return fmt.Sprintf("Implement %s. Goal: %s.", planName, description)
+}
+```
+
+`buildModifyTaskPrompt`:
+```go
+func buildModifyTaskPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"Modify existing plan %s. Retrieve current content with `kas task show %s`. "+
+			"Keep the same filename and update only what changed.",
+		planFile, planFile,
+	)
+}
+```
+
+`buildWaveAnnotationPrompt` in `app/app_state.go`:
+```go
+func buildWaveAnnotationPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
+			"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping "+
+			"all tasks under ## Wave N sections. "+
+			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
+			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
+			"After annotating:\n"+
+			"1. Write the updated plan to docs/plans/%[1]s\n"+
+			"2. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
+			"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
+			"Do not edit plan-state.json directly.",
+		planFile,
+	)
+}
+```
+
+Note: The annotation prompt still references `docs/plans/` for the *write* path (commit step). The plan is read via CLI, written to disk for git commit, and the TUI ingests the committed content. This is correct — the goal is to stop agents from *reading* from disk, not from *writing* for commits.
+
+`buildChatAboutTaskPrompt`:
+```go
+func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, question string) string {
+	name := taskstate.DisplayName(planFile)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("You are answering a question about the plan '%s'.\n\n", name))
+	sb.WriteString("## Plan Context\n\n")
+	sb.WriteString(fmt.Sprintf("- **Plan:** %s\n", planFile))
+	sb.WriteString(fmt.Sprintf("- **Status:** %s\n", entry.Status))
+	if entry.Description != "" {
+		sb.WriteString(fmt.Sprintf("- **Description:** %s\n", entry.Description))
+	}
+	if entry.Branch != "" {
+		sb.WriteString(fmt.Sprintf("- **Branch:** %s\n", entry.Branch))
+	}
+	if entry.Topic != "" {
+		sb.WriteString(fmt.Sprintf("- **Topic:** %s\n", entry.Topic))
+	}
+	sb.WriteString(fmt.Sprintf("\nRetrieve the full plan with `kas task show %s` for details.\n\n", planFile))
+	sb.WriteString("## User Question\n\n")
+	sb.WriteString(question)
+	return sb.String()
+}
+```
+
+Update the ClickUp import prompt (around line 1202-1206):
+```go
+prompt := fmt.Sprintf(`Analyze this imported ClickUp task. The task details and subtasks are included as reference in the plan.
+
+Determine if the task is well-specified enough for implementation or needs further analysis. Write a proper implementation plan with ## Wave sections, task breakdowns, architecture notes, and tech stack. Use the ClickUp subtasks as a starting point but reorganize into waves based on dependencies.
+
+Retrieve the current plan content with: kas task show %s`, filename)
+```
+
+**3b. Update `orchestration/prompt.go`** — modify `BuildWaveAnnotationPrompt`:
+```go
+func BuildWaveAnnotationPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
+			"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping "+
+			"all tasks under ## Wave N sections. "+
+			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
+			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
+			"After annotating:\n"+
+			"1. Write the updated plan to docs/plans/%[1]s\n"+
+			"2. Commit: git add docs/plans/%[1]s && git commit -m \"plan: add wave headers to %[1]s\"\n"+
+			"3. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
+			"Do not edit plan-state.json directly.",
+		planFile,
+	)
+}
+```
+
+**3c. Update `app/app_actions.go`** — change `LoadReviewPrompt` call (around line 882) from:
+```go
+reviewPrompt := scaffold.LoadReviewPrompt("docs/plans/"+planFile, planName)
+```
+to:
+```go
+reviewPrompt := scaffold.LoadReviewPrompt(planFile, planName)
+```
+
+Also update the call in `app/app_state.go` (around line 728) from:
+```go
+planPath := "docs/plans/" + planFile
+prompt := scaffold.LoadReviewPrompt(planPath, planName)
+```
+to:
+```go
+prompt := scaffold.LoadReviewPrompt(planFile, planName)
+```
+
+(Remove the now-unused `planPath` variable.)
+
+**3d. Update `internal/initcmd/scaffold/templates/shared/review-prompt.md`**:
+
+Replace the opening lines:
+```
+Review the implementation of plan: {{PLAN_NAME}}
+
+Plan file: {{PLAN_FILE}}
+
+Read the plan content to understand the goals, architecture, and tasks that were implemented.
+```
+
+With:
+```
+Review the implementation of plan: {{PLAN_NAME}}
+
+Retrieve the plan content with `kas task show {{PLAN_FILE}}` to understand the goals, architecture, and tasks that were implemented.
+```
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./app/... -run "TestBuild" -v
+go test ./orchestration/... -run "TestBuild" -v
+```
+
+expected: PASS
+
+Also update the test assertion in `TestSoloActionChecksStoreNotDisk` (around line 633) — change:
+```go
+assert.Contains(t, soloInst.QueuedPrompt, "docs/plans/"+planFile, ...)
+```
+to:
+```go
+assert.Contains(t, soloInst.QueuedPrompt, "kas task show "+planFile, ...)
+```
+
+**Step 5: commit**
+
+```bash
+git add app/app_state.go app/app_actions.go app/app_task_actions_test.go orchestration/prompt.go orchestration/prompt_test.go internal/initcmd/scaffold/templates/shared/review-prompt.md
+git commit -m "feat(task-2): update all prompt builders to reference kas task show instead of docs/plans/"
+```
