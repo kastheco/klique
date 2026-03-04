@@ -1,0 +1,654 @@
+{
+  "info": {
+    "id": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+    "slug": "playful-forest",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Add wave headers to plan-content-to-database.md",
+    "version": "1.2.16",
+    "summary": {
+      "additions": 207,
+      "deletions": 0,
+      "files": 1
+    },
+    "time": {
+      "created": 1772586947961,
+      "updated": 1772586992901
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772586948011
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "docs/plans/plan-content-to-database.md",
+              "before": "",
+              "after": "# Migrate Plan Content to Database Implementation Plan\n\n**Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.\n\n**Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the \"implement\" action, `validatePlanHasWaves`, and the \"solo\" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.\n\n**Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify\n\n**Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)\n\n---\n\n## Wave 1: Migrate Disk Reads to Database\n\n### Task 1: Migrate App Layer Plan Reads from Disk to Database\n\n**Files:**\n- Modify: `app/app_actions.go`\n- Modify: `app/app_wave_validation_test.go`\n- Test: `app/app_task_actions_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test in `app/app_task_actions_test.go` that verifies the \"implement\" action reads plan content from the task store, not from disk. The test should:\n- Create a task entry in the store with content containing valid wave headers\n- NOT write any `.md` file to disk in `docs/plans/`\n- Trigger the implement action and verify it succeeds (proving it read from DB, not disk)\n\nAlso add a test for the \"solo\" action that verifies it checks for content in the store rather than checking disk file existence.\n\n```go\nfunc TestImplementActionReadsFromStore(t *testing.T) {\n    // Setup: create task entry with content in store, no file on disk\n    // Trigger implement action\n    // Assert: orchestrator was created successfully (content was read from DB)\n}\n\nfunc TestSoloActionChecksStoreNotDisk(t *testing.T) {\n    // Setup: create task entry with content in store, no file on disk\n    // Trigger solo action\n    // Assert: prompt includes plan file reference (content was found in DB)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./app/... -run TestImplementActionReadsFromStore -v\ngo test ./app/... -run TestSoloActionChecksStoreNotDisk -v\n```\n\nexpected: FAIL — the implement action reads from disk (finds no file, returns error); the solo action checks `os.Stat` on disk\n\n**Step 3: write minimal implementation**\n\n**3a. Migrate \"implement\" action** in `app/app_actions.go` (around line 837-856):\n\nReplace the disk read:\n```go\nplansDir := filepath.Join(m.activeRepoPath, \"docs\", \"plans\")\ncontent, err := os.ReadFile(filepath.Join(plansDir, planFile))\n```\nwith a database read:\n```go\ncontent, err := m.taskStore.GetContent(m.taskStoreProject, planFile)\n```\n\nThis matches the pattern already used at `app/app.go:1013` for wave signal processing.\n\n**3b. Migrate \"solo\" action** in `app/app_actions.go` (around line 828-834):\n\nReplace the `os.Stat` disk check:\n```go\nplanPath := filepath.Join(m.activeRepoPath, \"docs\", \"plans\", planFile)\nrefFile := \"\"\nif _, err := os.Stat(planPath); err == nil {\n    refFile = planFile\n}\n```\nwith a store content check:\n```go\nrefFile := \"\"\nif m.taskStore != nil {\n    if c, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && c != \"\" {\n        refFile = planFile\n    }\n}\n```\n\n**3c. Replace `validatePlanHasWaves`** in `app/app_actions.go` (line 893-902):\n\nThe function currently reads from disk. It is only called from `app/app_wave_validation_test.go`. Replace it with a content-accepting variant:\n\n```go\nfunc validatePlanContent(content string) error {\n    _, err := taskparser.Parse(content)\n    return err\n}\n```\n\nUpdate `app/app_wave_validation_test.go` to pass content strings directly to `validatePlanContent` instead of writing temp files and calling `validatePlanHasWaves`.\n\n**3d. Clean up dead imports** — remove `os` and `filepath` imports if no longer needed in the modified sections. (`os` may still be needed elsewhere in the file — check before removing.)\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./app/... -run \"TestImplementActionReadsFromStore|TestSoloActionChecksStoreNotDisk|TestValidatePlan\" -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add app/app_actions.go app/app_wave_validation_test.go app/app_task_actions_test.go\ngit commit -m \"feat: migrate implement/solo actions and wave validation from disk to database\"\n```\n\n### Task 2: Ingest Content During CLI Registration\n\n**Files:**\n- Modify: `cmd/task.go`\n- Test: `cmd/task_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test in `cmd/task_test.go` that verifies `executeTaskRegister` ingests the `.md` file content into the store's content field after creating the entry:\n\n```go\nfunc TestExecuteTaskRegisterIngestsContent(t *testing.T) {\n    // Setup: create a temp plansDir, write a .md file with known content\n    store, _ := taskstore.NewSQLiteStore(\":memory:\")\n    defer store.Close()\n\n    planContent := \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do something\\n\\nDo it.\\n\"\n    planFile := \"my-plan.md\"\n    os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644)\n\n    err := executeTaskRegister(plansDir, planFile, \"\", \"\", \"\", store)\n    require.NoError(t, err)\n\n    // Verify content was ingested\n    got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)\n    require.NoError(t, err)\n    assert.Equal(t, planContent, got)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n```\n\nexpected: FAIL — current `executeTaskRegister` calls `ps.Create()` without ingesting content\n\n**Step 3: write minimal implementation**\n\nModify `executeTaskRegister` in `cmd/task.go` to always read the file content and use `CreateWithContent` instead of `Create`:\n\n```go\nfunc executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {\n    fullPath := filepath.Join(plansDir, planFile)\n    data, err := os.ReadFile(fullPath)\n    if err != nil {\n        return fmt.Errorf(\"task file not found on disk: %s\", fullPath)\n    }\n    ps, err := loadTaskState(plansDir, store)\n    if err != nil {\n        return err\n    }\n    if description == \"\" {\n        description = strings.TrimSuffix(planFile, \".md\")\n        for _, line := range strings.Split(string(data), \"\\n\") {\n            if strings.HasPrefix(line, \"# \") {\n                description = strings.TrimPrefix(line, \"# \")\n                break\n            }\n        }\n    }\n    if branch == \"\" {\n        slug := strings.TrimSuffix(planFile, \".md\")\n        branch = \"plan/\" + slug\n    }\n    info, _ := os.Stat(fullPath)\n    createdAt := info.ModTime()\n    return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))\n}\n```\n\nThe key change: replace `ps.Create(...)` with `ps.CreateWithContent(...)` which stores both the metadata and the file content in the database in a single operation. The `CreateWithContent` method already exists in `config/taskstate/taskstate.go` (line 328).\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add cmd/task.go cmd/task_test.go\ngit commit -m \"feat: ingest plan file content into database during kas task register\"\n```\n",
+              "additions": 207,
+              "deletions": 0,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "variant": "high",
+        "id": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "The plan at docs/plans/plan-content-to-database.md is missing ## Wave N headers required for kasmos wave orchestration. Please annotate the plan by wrapping all tasks under ## Wave N sections. Every plan needs at least ## Wave 1 — even single-task trivial plans. Keep all existing task content intact; only add the ## Wave headers.\n\nAfter annotating:\n1. Commit: git add docs/plans/plan-content-to-database.md && git commit -m \"plan: add wave headers to plan-content-to-database.md\"\n2. Signal completion: touch .kasmos/signals/planner-finished-plan-content-to-database.md\nDo not edit plan-state.json directly.",
+          "id": "prt_cb66a5591002kn5eCdPD6a5Vvq",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a5591001FEIQm3INMNiJXg"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772586948019,
+          "completed": 1772586952682
+        },
+        "parentID": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40209,
+          "input": 3,
+          "output": 173,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 40033
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb66a55b3001cTPpXmifbrCR6d",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "id": "REDACTED",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        },
+        {
+          "type": "text",
+          "text": "\n\nLet me start by loading the required skills and reading the plan file.",
+          "time": {
+            "start": 1772586951679,
+            "end": 1772586951679
+          },
+          "id": "prt_cb66a6039001mcCr4WimBR0KYZ",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01LoX4oUzviKBCJHaefJowwb",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the task status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `<feature-name>.md`\n\nPlans are stored in the **task store** (SQLite database or HTTP API), not as files on disk.\nUse `kas task register` to register plans after writing content.\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it\nin the task store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas task register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-<feature-name>.md\n```\n\nthe filename must match the task filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify task state directly** — kasmos manages the task store.\n\nannounce completion and stop:\n\n> \"plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the task store using the CLI:\n\n```bash\nkas task register <feature-name>.md\n```\n\nthis creates an entry in the task store with status `ready`. the task content should be\nwritten to the store via `kas task` or committed as a `.md` file in `docs/plans/` for\n`kas task register` to pick up.\n\nthen offer execution choices:\n\n> \"plan complete: `<feature-name>.md` (registered in task store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772586952181,
+              "end": 1772586952186
+            }
+          },
+          "id": "prt_cb66a6401001lCJvoO18AQqals",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01CpMEHm5gEDxCivb5NAqt2o",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772586952184,
+              "end": 1772586952187
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01CZw39rv7FxT6xi6xaSxtPA",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md</path>\n<type>file</type>\n<content>\n\n(End of file - total 0 lines)\n</content>",
+            "title": "docs/plans/plan-content-to-database.md",
+            "metadata": {
+              "preview": "",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772586952643,
+              "end": 1772586952646
+            }
+          },
+          "id": "prt_cb66a65f90011MRcsZ0qeq0Eoe",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "cost": 0,
+          "tokens": {
+            "total": 40209,
+            "input": 3,
+            "output": 173,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 40033
+            }
+          },
+          "id": "prt_cb66a67d8001ga6Gawj7qYoYn2",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a55b3001cTPpXmifbrCR6d"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772586952683,
+          "completed": 1772586956974
+        },
+        "parentID": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48407,
+          "input": 1,
+          "output": 202,
+          "reasoning": 0,
+          "cache": {
+            "read": 40033,
+            "write": 8171
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb66a67eb001AQ7CLbDkZET7rm",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "id": "prt_cb66a6ec7001roi64cGlK3h1U6",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        },
+        {
+          "type": "reasoning",
+          "text": "The file is empty. Let me check if it exists with a different encoding or if there's something else going on.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772586954440,
+            "end": 1772586956396
+          },
+          "id": "prt_cb66a6ec8001W0Q7MezWtTtCkz",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        },
+        {
+          "type": "text",
+          "text": "The file is empty (0 lines). Let me check if there's a different version or if the plan content exists elsewhere.",
+          "time": {
+            "start": 1772586956547,
+            "end": 1772586956547
+          },
+          "id": "prt_cb66a767300103Zh6CZULPL75O",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Xjo8Be4modf41DEYSgtVKp",
+          "tool": "glob",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "**/plan-content-to-database*"
+            },
+            "output": "/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md\n/home/kas/dev/kasmos/plan-content-to-database.md",
+            "title": "",
+            "metadata": {
+              "count": 2,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772586956676,
+              "end": 1772586956681
+            }
+          },
+          "id": "prt_cb66a7709001YR6kFNaZIgRlo7",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_012nvVRJPxRPJDS1W3cS3ALn",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls -la docs/plans/plan-content-to-database.md",
+              "description": "Check file size and metadata"
+            },
+            "output": "-rw-r--r-- 1 kas kas 0 Mar  3 19:15 docs/plans/plan-content-to-database.md\n",
+            "title": "Check file size and metadata",
+            "metadata": {
+              "output": "-rw-r--r-- 1 kas kas 0 Mar  3 19:15 docs/plans/plan-content-to-database.md\n",
+              "exit": 0,
+              "description": "Check file size and metadata",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772586956883,
+              "end": 1772586956895
+            }
+          },
+          "id": "prt_cb66a7788001q3GzNbp3FNnTu3",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "cost": 0,
+          "tokens": {
+            "total": 48407,
+            "input": 1,
+            "output": 202,
+            "reasoning": 0,
+            "cache": {
+              "read": 40033,
+              "write": 8171
+            }
+          },
+          "id": "prt_cb66a78a400186wwIw1TRgyrJu",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a67eb001AQ7CLbDkZET7rm"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772586956974,
+          "completed": 1772586960835
+        },
+        "parentID": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48706,
+          "input": 1,
+          "output": 154,
+          "reasoning": 0,
+          "cache": {
+            "read": 48204,
+            "write": 347
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb66a78ae001ZnjndCZ7qkfrsZ",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "id": "prt_cb66a7fbb001CzJY2CHlLRVni1",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a78ae001ZnjndCZ7qkfrsZ"
+        },
+        {
+          "type": "reasoning",
+          "text": "There's a copy at the root: `/home/kas/dev/kasmos/plan-content-to-database.md`. Let me read that one — it likely has the actual content.",
+          "metadata": {
+            "anthropic": {
+              "signature": "ErMCCkYICxgCKkBajRHFHei7L/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772586958780,
+            "end": 1772586959612
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a78ae001ZnjndCZ7qkfrsZ"
+        },
+        {
+          "type": "text",
+          "text": "The `docs/plans/` copy is empty but there's one at the repo root. Let me read it.",
+          "time": {
+            "start": 1772586960501,
+            "end": 1772586960501
+          },
+          "id": "prt_cb66a82ff001nhVXMc26Rd5p2l",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a78ae001ZnjndCZ7qkfrsZ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01EBCo151jXQmJMT1X379xiK",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/plan-content-to-database.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/plan-content-to-database.md</path>\n<type>file</type>\n<content>1: # Migrate Plan Content to Database Implementation Plan\n2: \n3: **Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.\n4: \n5: **Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the \"implement\" action, `validatePlanHasWaves`, and the \"solo\" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.\n6: \n7: **Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify\n8: \n9: **Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)\n10: \n11: ---\n12: \n13: ## Wave 1: Migrate Disk Reads to Database\n14: \n15: ### Task 1: Migrate App Layer Plan Reads from Disk to Database\n16: \n17: **Files:**\n18: - Modify: `app/app_actions.go`\n19: - Modify: `app/app_wave_validation_test.go`\n20: - Test: `app/app_task_actions_test.go`\n21: \n22: **Step 1: write the failing test**\n23: \n24: Add a test in `app/app_task_actions_test.go` that verifies the \"implement\" action reads plan content from the task store, not from disk. The test should:\n25: - Create a task entry in the store with content containing valid wave headers\n26: - NOT write any `.md` file to disk in `docs/plans/`\n27: - Trigger the implement action and verify it succeeds (proving it read from DB, not disk)\n28: \n29: Also add a test for the \"solo\" action that verifies it checks for content in the store rather than checking disk file existence.\n30: \n31: ```go\n32: func TestImplementActionReadsFromStore(t *testing.T) {\n33:     // Setup: create task entry with content in store, no file on disk\n34:     // Trigger implement action\n35:     // Assert: orchestrator was created successfully (content was read from DB)\n36: }\n37: \n38: func TestSoloActionChecksStoreNotDisk(t *testing.T) {\n39:     // Setup: create task entry with content in store, no file on disk\n40:     // Trigger solo action\n41:     // Assert: prompt includes plan file reference (content was found in DB)\n42: }\n43: ```\n44: \n45: **Step 2: run test to verify it fails**\n46: \n47: ```bash\n48: go test ./app/... -run TestImplementActionReadsFromStore -v\n49: go test ./app/... -run TestSoloActionChecksStoreNotDisk -v\n50: ```\n51: \n52: expected: FAIL — the implement action reads from disk (finds no file, returns error); the solo action checks `os.Stat` on disk\n53: \n54: **Step 3: write minimal implementation**\n55: \n56: **3a. Migrate \"implement\" action** in `app/app_actions.go` (around line 837-856):\n57: \n58: Replace the disk read:\n59: ```go\n60: plansDir := filepath.Join(m.activeRepoPath, \"docs\", \"plans\")\n61: content, err := os.ReadFile(filepath.Join(plansDir, planFile))\n62: ```\n63: with a database read:\n64: ```go\n65: content, err := m.taskStore.GetContent(m.taskStoreProject, planFile)\n66: ```\n67: \n68: This matches the pattern already used at `app/app.go:1013` for wave signal processing.\n69: \n70: **3b. Migrate \"solo\" action** in `app/app_actions.go` (around line 828-834):\n71: \n72: Replace the `os.Stat` disk check:\n73: ```go\n74: planPath := filepath.Join(m.activeRepoPath, \"docs\", \"plans\", planFile)\n75: refFile := \"\"\n76: if _, err := os.Stat(planPath); err == nil {\n77:     refFile = planFile\n78: }\n79: ```\n80: with a store content check:\n81: ```go\n82: refFile := \"\"\n83: if m.taskStore != nil {\n84:     if c, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && c != \"\" {\n85:         refFile = planFile\n86:     }\n87: }\n88: ```\n89: \n90: **3c. Replace `validatePlanHasWaves`** in `app/app_actions.go` (line 893-902):\n91: \n92: The function currently reads from disk. It is only called from `app/app_wave_validation_test.go`. Replace it with a content-accepting variant:\n93: \n94: ```go\n95: func validatePlanContent(content string) error {\n96:     _, err := taskparser.Parse(content)\n97:     return err\n98: }\n99: ```\n100: \n101: Update `app/app_wave_validation_test.go` to pass content strings directly to `validatePlanContent` instead of writing temp files and calling `validatePlanHasWaves`.\n102: \n103: **3d. Clean up dead imports** — remove `os` and `filepath` imports if no longer needed in the modified sections. (`os` may still be needed elsewhere in the file — check before removing.)\n104: \n105: **Step 4: run test to verify it passes**\n106: \n107: ```bash\n108: go test ./app/... -run \"TestImplementActionReadsFromStore|TestSoloActionChecksStoreNotDisk|TestValidatePlan\" -v\n109: ```\n110: \n111: expected: PASS\n112: \n113: **Step 5: commit**\n114: \n115: ```bash\n116: git add app/app_actions.go app/app_wave_validation_test.go app/app_task_actions_test.go\n117: git commit -m \"feat: migrate implement/solo actions and wave validation from disk to database\"\n118: ```\n119: \n120: ### Task 2: Ingest Content During CLI Registration\n121: \n122: **Files:**\n123: - Modify: `cmd/task.go`\n124: - Test: `cmd/task_test.go`\n125: \n126: **Step 1: write the failing test**\n127: \n128: Add a test in `cmd/task_test.go` that verifies `executeTaskRegister` ingests the `.md` file content into the store's content field after creating the entry:\n129: \n130: ```go\n131: func TestExecuteTaskRegisterIngestsContent(t *testing.T) {\n132:     // Setup: create a temp plansDir, write a .md file with known content\n133:     store, _ := taskstore.NewSQLiteStore(\":memory:\")\n134:     defer store.Close()\n135: \n136:     planContent := \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do something\\n\\nDo it.\\n\"\n137:     planFile := \"my-plan.md\"\n138:     os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644)\n139: \n140:     err := executeTaskRegister(plansDir, planFile, \"\", \"\", \"\", store)\n141:     require.NoError(t, err)\n142: \n143:     // Verify content was ingested\n144:     got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)\n145:     require.NoError(t, err)\n146:     assert.Equal(t, planContent, got)\n147: }\n148: ```\n149: \n150: **Step 2: run test to verify it fails**\n151: \n152: ```bash\n153: go test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n154: ```\n155: \n156: expected: FAIL — current `executeTaskRegister` calls `ps.Create()` without ingesting content\n157: \n158: **Step 3: write minimal implementation**\n159: \n160: Modify `executeTaskRegister` in `cmd/task.go` to always read the file content and use `CreateWithContent` instead of `Create`:\n161: \n162: ```go\n163: func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {\n164:     fullPath := filepath.Join(plansDir, planFile)\n165:     data, err := os.ReadFile(fullPath)\n166:     if err != nil {\n167:         return fmt.Errorf(\"task file not found on disk: %s\", fullPath)\n168:     }\n169:     ps, err := loadTaskState(plansDir, store)\n170:     if err != nil {\n171:         return err\n172:     }\n173:     if description == \"\" {\n174:         description = strings.TrimSuffix(planFile, \".md\")\n175:         for _, line := range strings.Split(string(data), \"\\n\") {\n176:             if strings.HasPrefix(line, \"# \") {\n177:                 description = strings.TrimPrefix(line, \"# \")\n178:                 break\n179:             }\n180:         }\n181:     }\n182:     if branch == \"\" {\n183:         slug := strings.TrimSuffix(planFile, \".md\")\n184:         branch = \"plan/\" + slug\n185:     }\n186:     info, _ := os.Stat(fullPath)\n187:     createdAt := info.ModTime()\n188:     return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))\n189: }\n190: ```\n191: \n192: The key change: replace `ps.Create(...)` with `ps.CreateWithContent(...)` which stores both the metadata and the file content in the database in a single operation. The `CreateWithContent` method already exists in `config/taskstate/taskstate.go` (line 328).\n193: \n194: **Step 4: run test to verify it passes**\n195: \n196: ```bash\n197: go test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n198: ```\n199: \n200: expected: PASS\n201: \n202: **Step 5: commit**\n203: \n204: ```bash\n205: git add cmd/task.go cmd/task_test.go\n206: git commit -m \"feat: ingest plan file content into database during kas task register\"\n207: ```\n\n(End of file - total 207 lines)\n</content>",
+            "title": "plan-content-to-database.md",
+            "metadata": {
+              "preview": "# Migrate Plan Content to Database Implementation Plan\n\n**Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.\n\n**Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the \"implement\" action, `validatePlanHasWaves`, and the \"solo\" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.\n\n**Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify\n\n**Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)\n\n---\n\n## Wave 1: Migrate Disk Reads to Database\n\n### Task 1: Migrate App Layer Plan Reads from Disk to Database\n\n**Files:**\n- Modify: `app/app_actions.go`\n- Modify: `app/app_wave_validation_test.go`\n- Test: `app/app_task_actions_test.go`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772586960788,
+              "end": 1772586960792
+            }
+          },
+          "id": "prt_cb66a8677001Q9pP6F13NHT7LK",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a78ae001ZnjndCZ7qkfrsZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "cost": 0,
+          "tokens": {
+            "total": 48706,
+            "input": 1,
+            "output": 154,
+            "reasoning": 0,
+            "cache": {
+              "read": 48204,
+              "write": 347
+            }
+          },
+          "id": "prt_cb66a87bc001V7o1Z5m358biqx",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a78ae001ZnjndCZ7qkfrsZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772586960836,
+          "completed": 1772586992891
+        },
+        "parentID": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 54670,
+          "input": 1,
+          "output": 3105,
+          "reasoning": 0,
+          "cache": {
+            "read": 48551,
+            "write": 3013
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb66a87c4001OhVihlxPHieaql",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "id": "prt_cb66a8e640017FEzSm6jOU1zD9",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        },
+        {
+          "type": "reasoning",
+          "text": "The root-level file has the actual plan content. And looking at it, it already has `## Wave 1: Migrate Disk Reads to Database` on line 13. So the plan already has wave headers! The issue is that the `docs/plans/plan-content-to-database.md` is an empty file (0 bytes).\n\nThe user wants me to annotate the plan at `docs/plans/plan-content-to-database.md` — which is currently empty. The actual content is at the root. I need to copy the content to `docs/plans/plan-content-to-database.md`.\n\nWait, let me re-read the user's request: \"The plan at docs/plans/plan-content-to-database.md is missing ## Wave N headers required for kasmos wave orchestration.\"\n\n\nThe root copy already has the wave headers in place, so I just need to populate the empty `docs/plans/` version with that content.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqYPCkYICxgCKkA7rFYwaAh4CT/hX/8P/pAIf03OUwX4uuw/QiEoE+N/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/gyBLPZx8qfBypyE/REDACTED/REDACTED/REDACTED/vCedXKPRK8SQk/REDACTED/REDACTED/REDACTED/iZk/REDACTED/REDACTED/qU3jZ5iCRLFq7/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/L3yS3e5sZqTrXmhXSSKKKW3/REDACTED/REDACTED/REDACTED/Yd5/ogsIDT4f7h0F8G8l/REDACTED/REDACTED/drDzW3C/REDACTED/REDACTED/QDXhT3y9WpWuSlXxnRIeNapRsYI3X/hOZyncu1MU8YAQ=="
+            }
+          },
+          "time": {
+            "start": 1772586962533,
+            "end": 1772586972518
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        },
+        {
+          "type": "text",
+          "text": "i'm using the kasmos-planner skill to design and plan this feature.\n\nThe `docs/plans/plan-content-to-database.md` is empty (0 bytes), but the actual plan content exists at the repo root `/home/kas/dev/kasmos/plan-content-to-database.md` — and it already has proper `## Wave 1` headers. I need to populate the `docs/plans/` copy with the full content from the root file.\n\nLet me verify the root file's wave structure is correct before writing:\n- Line 13: `## Wave 1: Migrate Disk Reads to Database` ✓\n- Line 15: `### Task 1: Migrate App Layer Plan Reads from Disk to Database` ✓ \n- Line 120: `### Task 2: Ingest Content During CLI Registration` ✓\n- Required header fields: Goal, Architecture, Tech Stack, Size — all present ✓\n\nThe plan already has proper wave headers. I'll write it to `docs/plans/`, commit, and signal.",
+          "time": {
+            "start": 1772586976154,
+            "end": 1772586976154
+          },
+          "id": "prt_cb66ab567001bIjKOW8UbBmyMW",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01HawCnPLyp6rFBBng5VBRpy",
+          "tool": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md",
+              "content": "# Migrate Plan Content to Database Implementation Plan\n\n**Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.\n\n**Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the \"implement\" action, `validatePlanHasWaves`, and the \"solo\" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.\n\n**Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify\n\n**Size:** Small (estimated ~1.5 hours, 2 tasks, 1 wave)\n\n---\n\n## Wave 1: Migrate Disk Reads to Database\n\n### Task 1: Migrate App Layer Plan Reads from Disk to Database\n\n**Files:**\n- Modify: `app/app_actions.go`\n- Modify: `app/app_wave_validation_test.go`\n- Test: `app/app_task_actions_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test in `app/app_task_actions_test.go` that verifies the \"implement\" action reads plan content from the task store, not from disk. The test should:\n- Create a task entry in the store with content containing valid wave headers\n- NOT write any `.md` file to disk in `docs/plans/`\n- Trigger the implement action and verify it succeeds (proving it read from DB, not disk)\n\nAlso add a test for the \"solo\" action that verifies it checks for content in the store rather than checking disk file existence.\n\n```go\nfunc TestImplementActionReadsFromStore(t *testing.T) {\n    // Setup: create task entry with content in store, no file on disk\n    // Trigger implement action\n    // Assert: orchestrator was created successfully (content was read from DB)\n}\n\nfunc TestSoloActionChecksStoreNotDisk(t *testing.T) {\n    // Setup: create task entry with content in store, no file on disk\n    // Trigger solo action\n    // Assert: prompt includes plan file reference (content was found in DB)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./app/... -run TestImplementActionReadsFromStore -v\ngo test ./app/... -run TestSoloActionChecksStoreNotDisk -v\n```\n\nexpected: FAIL — the implement action reads from disk (finds no file, returns error); the solo action checks `os.Stat` on disk\n\n**Step 3: write minimal implementation**\n\n**3a. Migrate \"implement\" action** in `app/app_actions.go` (around line 837-856):\n\nReplace the disk read:\n```go\nplansDir := filepath.Join(m.activeRepoPath, \"docs\", \"plans\")\ncontent, err := os.ReadFile(filepath.Join(plansDir, planFile))\n```\nwith a database read:\n```go\ncontent, err := m.taskStore.GetContent(m.taskStoreProject, planFile)\n```\n\nThis matches the pattern already used at `app/app.go:1013` for wave signal processing.\n\n**3b. Migrate \"solo\" action** in `app/app_actions.go` (around line 828-834):\n\nReplace the `os.Stat` disk check:\n```go\nplanPath := filepath.Join(m.activeRepoPath, \"docs\", \"plans\", planFile)\nrefFile := \"\"\nif _, err := os.Stat(planPath); err == nil {\n    refFile = planFile\n}\n```\nwith a store content check:\n```go\nrefFile := \"\"\nif m.taskStore != nil {\n    if c, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && c != \"\" {\n        refFile = planFile\n    }\n}\n```\n\n**3c. Replace `validatePlanHasWaves`** in `app/app_actions.go` (line 893-902):\n\nThe function currently reads from disk. It is only called from `app/app_wave_validation_test.go`. Replace it with a content-accepting variant:\n\n```go\nfunc validatePlanContent(content string) error {\n    _, err := taskparser.Parse(content)\n    return err\n}\n```\n\nUpdate `app/app_wave_validation_test.go` to pass content strings directly to `validatePlanContent` instead of writing temp files and calling `validatePlanHasWaves`.\n\n**3d. Clean up dead imports** — remove `os` and `filepath` imports if no longer needed in the modified sections. (`os` may still be needed elsewhere in the file — check before removing.)\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./app/... -run \"TestImplementActionReadsFromStore|TestSoloActionChecksStoreNotDisk|TestValidatePlan\" -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add app/app_actions.go app/app_wave_validation_test.go app/app_task_actions_test.go\ngit commit -m \"feat: migrate implement/solo actions and wave validation from disk to database\"\n```\n\n### Task 2: Ingest Content During CLI Registration\n\n**Files:**\n- Modify: `cmd/task.go`\n- Test: `cmd/task_test.go`\n\n**Step 1: write the failing test**\n\nAdd a test in `cmd/task_test.go` that verifies `executeTaskRegister` ingests the `.md` file content into the store's content field after creating the entry:\n\n```go\nfunc TestExecuteTaskRegisterIngestsContent(t *testing.T) {\n    // Setup: create a temp plansDir, write a .md file with known content\n    store, _ := taskstore.NewSQLiteStore(\":memory:\")\n    defer store.Close()\n\n    planContent := \"# My Plan\\n\\n## Wave 1\\n\\n### Task 1: Do something\\n\\nDo it.\\n\"\n    planFile := \"my-plan.md\"\n    os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644)\n\n    err := executeTaskRegister(plansDir, planFile, \"\", \"\", \"\", store)\n    require.NoError(t, err)\n\n    // Verify content was ingested\n    got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)\n    require.NoError(t, err)\n    assert.Equal(t, planContent, got)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n```\n\nexpected: FAIL — current `executeTaskRegister` calls `ps.Create()` without ingesting content\n\n**Step 3: write minimal implementation**\n\nModify `executeTaskRegister` in `cmd/task.go` to always read the file content and use `CreateWithContent` instead of `Create`:\n\n```go\nfunc executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {\n    fullPath := filepath.Join(plansDir, planFile)\n    data, err := os.ReadFile(fullPath)\n    if err != nil {\n        return fmt.Errorf(\"task file not found on disk: %s\", fullPath)\n    }\n    ps, err := loadTaskState(plansDir, store)\n    if err != nil {\n        return err\n    }\n    if description == \"\" {\n        description = strings.TrimSuffix(planFile, \".md\")\n        for _, line := range strings.Split(string(data), \"\\n\") {\n            if strings.HasPrefix(line, \"# \") {\n                description = strings.TrimPrefix(line, \"# \")\n                break\n            }\n        }\n    }\n    if branch == \"\" {\n        slug := strings.TrimSuffix(planFile, \".md\")\n        branch = \"plan/\" + slug\n    }\n    info, _ := os.Stat(fullPath)\n    createdAt := info.ModTime()\n    return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))\n}\n```\n\nThe key change: replace `ps.Create(...)` with `ps.CreateWithContent(...)` which stores both the metadata and the file content in the database in a single operation. The `CreateWithContent` method already exists in `config/taskstate/taskstate.go` (line 328).\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add cmd/task.go cmd/task_test.go\ngit commit -m \"feat: ingest plan file content into database during kas task register\"\n```\n"
+            },
+            "output": "Wrote file successfully.",
+            "title": "docs/plans/plan-content-to-database.md",
+            "metadata": {
+              "diagnostics": {},
+              "filepath": "/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md",
+              "exists": true,
+              "truncated": false
+            },
+            "time": {
+              "start": 1772586992809,
+              "end": 1772586992815
+            }
+          },
+          "id": "prt_cb66ac39b0013sI1YGj6zRU1zC",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "593d9b006a472ae3ad7ed0235d155a6d5d87feab",
+          "cost": 0,
+          "tokens": {
+            "total": 54670,
+            "input": 1,
+            "output": 3105,
+            "reasoning": 0,
+            "cache": {
+              "read": 48551,
+              "write": 3013
+            }
+          },
+          "id": "prt_cb66b04f0001GjINDxboX1NXHh",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        },
+        {
+          "type": "patch",
+          "hash": "3d33caa12437c331403a8c9f2f60179dac259001",
+          "files": [
+            "/home/kas/dev/kasmos/docs/plans/plan-content-to-database.md"
+          ],
+          "id": "prt_cb66b04f9001xmigCq1pH3gm4Q",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66a87c4001OhVihlxPHieaql"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772586992892
+        },
+        "parentID": "msg_cb66a5591001FEIQm3INMNiJXg",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cb66b04fc001SC5C1lPGQoWOVo",
+        "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "593d9b006a472ae3ad7ed0235d155a6d5d87feab",
+          "id": "prt_cb66b0cd0001BlL1u9UUQ2h9lJ",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66b04fc001SC5C1lPGQoWOVo"
+        },
+        {
+          "type": "text",
+          "text": "Now commit and signal:",
+          "time": {
+            "start": 1772586995372,
+            "end": 1772586995372
+          },
+          "id": "prt_cb66b0cd0002aJFp8kccWiDepR",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66b04fc001SC5C1lPGQoWOVo"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TFecmZd9cYBsp7GFDoY3K3",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git add docs/plans/plan-content-to-database.md && git commit -m \"plan: add wave headers to plan-content-to-database.md\"",
+              "description": "Commit annotated plan file"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit annotated plan file"
+            },
+            "time": {
+              "start": 1772586996361
+            }
+          },
+          "id": "prt_cb66b0ead0018Da15gEsp7388P",
+          "sessionID": "ses_34995aa86ffeFFpx7MfDQPjVSG",
+          "messageID": "msg_cb66b04fc001SC5C1lPGQoWOVo"
+        }
+      ]
+    }
+  ]
+}
