@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772582344799,
-      "updated": 1772582696581
+      "updated": 1772582713687
     }
   },
   "messages": [
@@ -3098,7 +3098,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772582696563
+          "created": 1772582696563,
+          "completed": 1772582710624
         },
         "parentID": "msg_cb6241879001idv7ABiFs9pBhr",
         "modelID": "claude-sonnet-4-6",
@@ -3111,15 +3112,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 102846,
+          "input": 1,
+          "output": 527,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 101832,
+            "write": 486
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cb6297673001tZtsOzpL4LdzeV",
         "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05"
       },
@@ -3136,22 +3139,255 @@
           "callID": "toolu_01NU1HJyr6fCXpXBnkkQKuNf",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "cd /home/kas/dev/kasmos/.worktrees/plan-instance-management-cli && git add cmd/instance.go cmd/instance_test.go && git commit -m \"fix(instance-cli): fix data loss, wrong tmux names, and degraded resume\n\n- Expand instanceRecord to mirror all session.InstanceData fields (Height,\n  Width, UpdatedAt, AutoYes, SkipPermissions, TaskNumber, WaveNumber,\n  PeerCount, IsReviewer, ImplementationComplete, SoloAgent, QueuedPrompt,\n  ReviewCycle, DiffStats) and expand instanceWorktree to include SessionName\n  and BaseCommitSHA — fixing silent data loss when removeInstanceFromState\n  or updateInstanceInState rewrote the state file after a kill/pause/resume.\n\n- Add UnmarshalJSON to instanceRecord mirroring the plan_file→task_file\n  migration in session.InstanceData.UnmarshalJSON.\n\n- Add kasTmuxName() helper that replicates the kas_-prefix logic from\n  session/tmux without creating an import cycle; fix all four tmux\n  invocations (kill, pause, resume, send) to use kasTmuxName(rec.Title)\n  instead of the bare title.\n\n- Add buildResumeCommand() that reconstructs the full tmux program string\n  (KASMOS_MANAGED=1, --dangerously-skip-permissions, --agent, opencode log\n  redirect, KASMOS_TASK/WAVE/PEERS env vars) so resumed sessions are\n  indistinguishable from freshly started ones.\n\n- Add TestRemoveInstanceFromState_PreservesFields and\n  TestUpdateInstanceInState_PreservesFields that exercise the complete\n  field round-trip; add TestInstanceRecord_PlanFileMigration,\n  TestKasTmuxName, and TestBuildResumeCommand_* tests.\"",
               "description": "Commit all fixes"
             },
+            "output": "[plan/instance-management-cli cb13c64] fix(instance-cli): fix data loss, wrong tmux names, and degraded resume\n 2 files changed, 420 insertions(+), 26 deletions(-)\n",
+            "title": "Commit all fixes",
             "metadata": {
-              "output": "",
-              "description": "Commit all fixes"
+              "output": "[plan/instance-management-cli cb13c64] fix(instance-cli): fix data loss, wrong tmux names, and degraded resume\n 2 files changed, 420 insertions(+), 26 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit all fixes",
+              "truncated": false
             },
             "time": {
-              "start": 1772582708473
+              "start": 1772582708471,
+              "end": 1772582710616
             }
           },
           "id": "REDACTED",
           "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
           "messageID": "msg_cb6297673001tZtsOzpL4LdzeV"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "2460605ff69ee9942341d957833a66f2eccd7232",
+          "cost": 0,
+          "tokens": {
+            "total": 102846,
+            "input": 1,
+            "output": 527,
+            "reasoning": 0,
+            "cache": {
+              "read": 101832,
+              "write": 486
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "msg_cb6297673001tZtsOzpL4LdzeV"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772582710627,
+          "completed": 1772582713677
+        },
+        "parentID": "msg_cb6241879001idv7ABiFs9pBhr",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 103146,
+          "input": 1,
+          "output": 234,
+          "reasoning": 0,
+          "cache": {
+            "read": 102318,
+            "write": 593
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "2460605ff69ee9942341d957833a66f2eccd7232",
+          "id": "REDACTED",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01DkbhyAZo9JJCzFfd5L9Cno",
+          "tool": "todowrite",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "Add all missing fields to instanceRecord/instanceWorktree + UnmarshalJSON for plan_file migration",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Add kasTmuxName helper + fix all 4 tmux command calls to use kas_ prefix",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Fix resume to build proper session command with KASMOS_MANAGED=1 and stored flags",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write field-preservation tests for removeInstanceFromState and updateInstanceInState",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Verify build + tests pass, then commit",
+                  "status": "completed",
+                  "priority": "high"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"Add all missing fields to instanceRecord/instanceWorktree + UnmarshalJSON for plan_file migration\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Add kasTmuxName helper + fix all 4 tmux command calls to use kas_ prefix\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Fix resume to build proper session command with KASMOS_MANAGED=1 and stored flags\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write field-preservation tests for removeInstanceFromState and updateInstanceInState\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify build + tests pass, then commit\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  }\n]",
+            "title": "0 todos",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "Add all missing fields to instanceRecord/instanceWorktree + UnmarshalJSON for plan_file migration",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Add kasTmuxName helper + fix all 4 tmux command calls to use kas_ prefix",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Fix resume to build proper session command with KASMOS_MANAGED=1 and stored flags",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write field-preservation tests for removeInstanceFromState and updateInstanceInState",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Verify build + tests pass, then commit",
+                  "status": "completed",
+                  "priority": "high"
+                }
+              ],
+              "truncated": false
+            },
+            "time": {
+              "start": 1772582713652,
+              "end": 1772582713653
+            }
+          },
+          "id": "prt_cb629b316001JWeKkSGbS5GfGf",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "2460605ff69ee9942341d957833a66f2eccd7232",
+          "cost": 0,
+          "tokens": {
+            "total": 103146,
+            "input": 1,
+            "output": 234,
+            "reasoning": 0,
+            "cache": {
+              "read": 102318,
+              "write": 593
+            }
+          },
+          "id": "prt_cb629b944001N3nBL71WmhCF40",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772582713679,
+          "completed": 1772582724007
+        },
+        "parentID": "msg_cb6241879001idv7ABiFs9pBhr",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-instance-management-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 103971,
+          "input": 1,
+          "output": 577,
+          "reasoning": 0,
+          "cache": {
+            "read": 102911,
+            "write": 482
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cb629b94f001l2w1p6NgEgUAyW",
+        "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "2460605ff69ee9942341d957833a66f2eccd7232",
+          "id": "prt_cb629bdb7001rWgitFHfIzgQgj",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "msg_cb629b94f001l2w1p6NgEgUAyW"
+        },
+        {
+          "type": "text",
+          "text": "All reviewer feedback has been addressed and committed. Here's a summary of every change:\n\n## Changes Made (`cmd/instance.go` + `cmd/instance_test.go`)\n\n### Critical fixes\n\n**Data loss in `removeInstanceFromState` / `updateInstanceInState`** — Root cause: `instanceRecord` was missing ~15 fields from `session.InstanceData`, so every load/save cycle silently dropped them. Fix: expanded `instanceRecord` to mirror **all** fields of `InstanceData` — `Height`, `Width`, `UpdatedAt`, `AutoYes`, `SkipPermissions`, `TaskNumber`, `WaveNumber`, `PeerCount`, `IsReviewer`, `ImplementationComplete`, `SoloAgent`, `QueuedPrompt`, `ReviewCycle`, `DiffStats`. Also expanded `instanceWorktree` to include `SessionName` and `BaseCommitSHA`.\n\n**Wrong tmux session name** — Added `kasTmuxName(title string) string` that replicates the `kas_`-prefix + whitespace-strip + dot-to-underscore logic from `session/tmux.toKasTmuxName`, without importing that package (which would create an import cycle). All four tmux invocations (`kill`, `pause`, `resume`, `send`) now use `kasTmuxName(rec.Title)`.\n\n**Degraded resume session** — Added `buildResumeCommand(rec, worktreePath)` that reconstructs the full program command string: `KASMOS_MANAGED=1`, `--dangerously-skip-permissions` (when enabled for Claude), `--agent <type>` (when set), opencode log redirection, and `KASMOS_TASK`/`KASMOS_WAVE`/`KASMOS_PEERS` env vars (when `TaskNumber > 0`).\n\n### Important: test coverage\n\nAdded tests for all the above — `TestRemoveInstanceFromState_PreservesFields`, `TestUpdateInstanceInState_PreservesFields`, `TestUpdateInstanceInState_NotFound`, `TestKasTmuxName`, `TestBuildResumeCommand_*` (4 cases), and `TestInstanceRecord_PlanFileMigration`.\n\n### Minor: plan_file migration\n\nAdded `UnmarshalJSON` to `instanceRecord` mirroring `session.InstanceData.UnmarshalJSON` — migrates legacy `plan_file` key to `task_file` transparently.",
+          "time": {
+            "start": 1772582723966,
+            "end": 1772582723966
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "msg_cb629b94f001l2w1p6NgEgUAyW"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "2460605ff69ee9942341d957833a66f2eccd7232",
+          "cost": 0,
+          "tokens": {
+            "total": 103971,
+            "input": 1,
+            "output": 577,
+            "reasoning": 0,
+            "cache": {
+              "read": 102911,
+              "write": 482
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_349dbe7a0ffePAobiyV63J9l05",
+          "messageID": "msg_cb629b94f001l2w1p6NgEgUAyW"
         }
       ]
     }
