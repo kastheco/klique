@@ -3,7 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -26,27 +29,78 @@ const (
 )
 
 // instanceWorktree holds the git worktree metadata needed for lifecycle commands.
-// It mirrors the relevant fields of session.GitWorktreeData.
+// It fully mirrors session.GitWorktreeData so round-trip serialisation is lossless.
 type instanceWorktree struct {
-	RepoPath     string `json:"repo_path"`
-	WorktreePath string `json:"worktree_path"`
-	BranchName   string `json:"branch_name"`
+	RepoPath      string `json:"repo_path"`
+	WorktreePath  string `json:"worktree_path"`
+	SessionName   string `json:"session_name"`
+	BranchName    string `json:"branch_name"`
+	BaseCommitSHA string `json:"base_commit_sha"`
 }
 
-// instanceRecord is a local mirror of session.InstanceData containing only
-// the fields needed for the list and lifecycle commands. Using a local type avoids
-// the import cycle that arises because session/tmux imports cmd for the Executor
-// interface.
+// instanceDiffStats holds the git diff statistics for an instance.
+// It fully mirrors session.DiffStatsData so round-trip serialisation is lossless.
+type instanceDiffStats struct {
+	Added   int    `json:"added"`
+	Removed int    `json:"removed"`
+	Content string `json:"content"`
+}
+
+// instanceRecord is a local mirror of session.InstanceData containing all fields
+// required for lossless round-trip serialisation.  Every field present in
+// InstanceData must appear here; omitting a field causes silent data loss when
+// the state file is rewritten by kill/pause/resume.
+//
+// Using a local type avoids the import cycle that arises because session/tmux
+// imports cmd for the Executor interface — so cmd cannot import session/tmux.
 type instanceRecord struct {
-	Title     string           `json:"title"`
-	Status    instanceStatus   `json:"status"`
-	Branch    string           `json:"branch"`
-	Program   string           `json:"program"`
-	TaskFile  string           `json:"task_file,omitempty"`
-	AgentType string           `json:"agent_type,omitempty"`
-	CreatedAt time.Time        `json:"created_at"`
-	Path      string           `json:"path,omitempty"`
-	Worktree  instanceWorktree `json:"worktree"`
+	Title     string         `json:"title"`
+	Path      string         `json:"path,omitempty"`
+	Branch    string         `json:"branch"`
+	Status    instanceStatus `json:"status"`
+	Height    int            `json:"height"`
+	Width     int            `json:"width"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	Program   string         `json:"program"`
+	AutoYes   bool           `json:"auto_yes"`
+
+	// SkipPermissions, when true, passes --dangerously-skip-permissions to Claude.
+	SkipPermissions bool `json:"skip_permissions"`
+
+	// Optional plan/orchestration fields — must stay in sync with InstanceData.
+	TaskFile               string `json:"task_file,omitempty"`
+	AgentType              string `json:"agent_type,omitempty"`
+	TaskNumber             int    `json:"task_number,omitempty"`
+	WaveNumber             int    `json:"wave_number,omitempty"`
+	PeerCount              int    `json:"peer_count,omitempty"`
+	IsReviewer             bool   `json:"is_reviewer,omitempty"`
+	ImplementationComplete bool   `json:"implementation_complete,omitempty"`
+	SoloAgent              bool   `json:"solo_agent,omitempty"`
+	QueuedPrompt           string `json:"queued_prompt,omitempty"`
+	ReviewCycle            int    `json:"review_cycle,omitempty"`
+
+	Worktree  instanceWorktree  `json:"worktree"`
+	DiffStats instanceDiffStats `json:"diff_stats"`
+}
+
+// UnmarshalJSON implements a custom unmarshaler that handles the historical rename
+// from the "plan_file" JSON key to "task_file", mirroring session.InstanceData.UnmarshalJSON.
+func (r *instanceRecord) UnmarshalJSON(data []byte) error {
+	type Alias instanceRecord
+	aux := &struct {
+		*Alias
+		PlanFile string `json:"plan_file,omitempty"`
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if r.TaskFile == "" && aux.PlanFile != "" {
+		r.TaskFile = aux.PlanFile
+	}
+	return nil
 }
 
 // statusLabel converts an instanceStatus to a lowercase text label.
@@ -63,6 +117,56 @@ func statusLabel(s instanceStatus) string {
 	default:
 		return fmt.Sprintf("unknown(%d)", s)
 	}
+}
+
+// whiteSpaceRe matches one or more whitespace characters for session name sanitisation.
+var whiteSpaceRe = regexp.MustCompile(`\s+`)
+
+// kasTmuxName converts a human-readable instance title to the kas_-prefixed tmux
+// session name used by the session package.  It replicates toKasTmuxName from
+// session/tmux without importing that package (which would create a cycle:
+// session/tmux → cmd → session/tmux).
+func kasTmuxName(title string) string {
+	name := whiteSpaceRe.ReplaceAllString(title, "")
+	name = strings.ReplaceAll(name, ".", "_")
+	return "kas_" + name
+}
+
+// buildResumeCommand reconstructs the tmux program command string for a resumed
+// instance.  It mirrors the env-var and flag injection performed by TmuxSession.Start()
+// so that the resumed agent is indistinguishable from a freshly started one.
+func buildResumeCommand(rec instanceRecord, worktreePath string) string {
+	program := rec.Program
+
+	// Append --dangerously-skip-permissions for Claude if originally enabled.
+	if rec.SkipPermissions && strings.HasSuffix(program, "claude") {
+		program += " --dangerously-skip-permissions"
+	}
+
+	// Append --agent flag for typed roles (planner, coder, reviewer, fixer).
+	if rec.AgentType != "" && !strings.Contains(program, "--agent") {
+		program += " --agent " + rec.AgentType
+	}
+
+	// Append opencode log redirection so debug logs are preserved.
+	if strings.HasSuffix(program, "opencode") {
+		logDir := filepath.Join(worktreePath, ".kasmos", "logs")
+		if err := os.MkdirAll(logDir, 0o755); err == nil {
+			logFile := filepath.Join(logDir, kasTmuxName(rec.Title)+".log")
+			program += " --print-logs 2>>'" + logFile + "'"
+		}
+	}
+
+	// Prepend KASMOS_MANAGED=1 so the agent knows it is managed by kasmos.
+	program = "KASMOS_MANAGED=1 " + program
+
+	// Prepend task identity env vars for parallel wave execution.
+	if rec.TaskNumber > 0 {
+		program = fmt.Sprintf("KASMOS_TASK=%d KASMOS_WAVE=%d KASMOS_PEERS=%d %s",
+			rec.TaskNumber, rec.WaveNumber, rec.PeerCount, program)
+	}
+
+	return program
 }
 
 // executeInstanceList reads raw InstancesData from state, optionally filters by
@@ -226,6 +330,7 @@ func validateStatusForAction(data instanceRecord, action string) error {
 }
 
 // removeInstanceFromState removes the named instance from persisted state.
+// All remaining instance records are preserved verbatim — no fields are dropped.
 func removeInstanceFromState(state config.StateManager, title string) error {
 	records, err := loadInstanceRecords(state)
 	if err != nil {
@@ -246,6 +351,7 @@ func removeInstanceFromState(state config.StateManager, title string) error {
 
 // updateInstanceInState finds the named instance, applies updater to a copy,
 // and persists the modified list back to state.
+// All fields of every record (including unmodified ones) are preserved verbatim.
 func updateInstanceInState(state config.StateManager, title string, updater func(*instanceRecord) error) error {
 	records, err := loadInstanceRecords(state)
 	if err != nil {
@@ -317,8 +423,8 @@ func NewInstanceCmd() *cobra.Command {
 			if err := validateStatusForAction(rec, "kill"); err != nil {
 				return err
 			}
-			// Kill tmux session (best-effort — may already be dead).
-			_ = exec.Command("tmux", "kill-session", "-t", rec.Title).Run()
+			// Kill tmux session using the kas_-prefixed name (best-effort — may already be dead).
+			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
 			// Remove git worktree if present.
 			if rec.Worktree.WorktreePath != "" && rec.Worktree.RepoPath != "" {
 				_ = exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "remove", "--force", rec.Worktree.WorktreePath).Run()
@@ -358,8 +464,8 @@ func NewInstanceCmd() *cobra.Command {
 				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "add", "-A").Run()
 				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "commit", "-m", commitMsg, "--allow-empty").Run()
 			}
-			// Kill the tmux session.
-			_ = exec.Command("tmux", "kill-session", "-t", rec.Title).Run()
+			// Kill the tmux session using the kas_-prefixed name.
+			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
 			// Remove the worktree (preserve the branch).
 			if rec.Worktree.WorktreePath != "" && rec.Worktree.RepoPath != "" {
 				if err := exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "remove", "--force", rec.Worktree.WorktreePath).Run(); err != nil {
@@ -367,7 +473,7 @@ func NewInstanceCmd() *cobra.Command {
 				}
 				_ = exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "prune").Run()
 			}
-			// Update state: mark as paused.
+			// Update state: mark as paused and clear the worktree path.
 			if err := updateInstanceInState(state, rec.Title, func(r *instanceRecord) error {
 				r.Status = instancePaused
 				r.Worktree.WorktreePath = ""
@@ -413,11 +519,14 @@ func NewInstanceCmd() *cobra.Command {
 			if err := exec.Command("git", "-C", rec.Worktree.RepoPath, "worktree", "add", worktreePath, rec.Worktree.BranchName).Run(); err != nil {
 				return fmt.Errorf("recreate worktree: %w", err)
 			}
-			// Start a new tmux session in the worktree directory.
-			if err := exec.Command("tmux", "new-session", "-d", "-s", rec.Title, "-c", worktreePath, rec.Program).Run(); err != nil {
+			// Reconstruct the full program command (env vars + flags) matching the original session.
+			program := buildResumeCommand(rec, worktreePath)
+			// Start a new tmux session using the kas_-prefixed name.
+			sessionName := kasTmuxName(rec.Title)
+			if err := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktreePath, program).Run(); err != nil {
 				return fmt.Errorf("start tmux session: %w", err)
 			}
-			// Update state: mark as running.
+			// Update state: mark as running and store the restored worktree path.
 			if err := updateInstanceInState(state, rec.Title, func(r *instanceRecord) error {
 				r.Status = instanceRunning
 				r.Worktree.WorktreePath = worktreePath
@@ -451,7 +560,8 @@ func NewInstanceCmd() *cobra.Command {
 			if err := validateStatusForAction(rec, "send"); err != nil {
 				return err
 			}
-			if err := exec.Command("tmux", "send-keys", "-t", rec.Title, prompt, "Enter").Run(); err != nil {
+			// Use kas_-prefixed session name to match how the session was created.
+			if err := exec.Command("tmux", "send-keys", "-t", kasTmuxName(rec.Title), prompt, "Enter").Run(); err != nil {
 				return fmt.Errorf("send keys: %w", err)
 			}
 			fmt.Printf("sent to %s\n", rec.Title)
