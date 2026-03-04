@@ -64,7 +64,7 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 kasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:
 
-1. Read the task content from the task store (via `kas task` CLI or the task content API). Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`).
+1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.
 2. Implement that single task following TDD discipline below.
 3. Commit your work with task number in the commit message.
 4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
@@ -78,7 +78,7 @@ from a task agent prematurely triggers review and breaks wave orchestration.
 
 You execute the full plan sequentially, wave by wave:
 
-1. Read the plan. Check its **Size** field to determine wave structure.
+1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.
 2. Create a todo list with one item per task (all `pending`), then begin.
 3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.
 4. After each wave completes, self-review before starting the next wave.
