@@ -385,6 +385,52 @@ func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 	assert.Equal(t, planContent, got)
 }
 
+func TestExecuteTaskShow(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	project := projectFromPlansDir(plansDir)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusReady,
+		Content:  "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n",
+	}))
+
+	content, err := executeTaskShow(plansDir, "my-plan.md", store)
+	require.NoError(t, err)
+	assert.Equal(t, "# My Plan\n\n## Wave 1\n\n### Task 1: Do it\n\nDo the thing.\n", content)
+}
+
+func TestExecuteTaskShow_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	_, err := executeTaskShow(plansDir, "nonexistent.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExecuteTaskShow_EmptyContent(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	project := projectFromPlansDir(plansDir)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "empty.md",
+		Status:   taskstore.StatusReady,
+	}))
+
+	_, err := executeTaskShow(plansDir, "empty.md", store)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no content")
+}
+
 // TestPlanList_WithStore verifies that executeTaskListWithStore works with a
 // store-backed HTTP server, returning plan entries from the remote store.
 func TestPlanList_WithStore(t *testing.T) {
