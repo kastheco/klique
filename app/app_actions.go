@@ -847,6 +847,20 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		prompt := buildSoloPrompt(planName, entry.Description, refFile)
 		return m.spawnTaskAgent(planFile, "solo", prompt)
 	case "implement":
+		// If an orchestrator already exists (e.g. elaboration finished, or waves
+		// are in progress), resume from where it left off instead of re-creating.
+		if existingOrch, ok := m.waveOrchestrators[planFile]; ok {
+			state := existingOrch.State()
+			if state != orchestration.WaveStateElaborating {
+				// Elaboration already done or waves running — start/resume next wave.
+				mdl, cmd := m.startNextWave(existingOrch, entry)
+				return mdl, cmd
+			}
+			// Still elaborating — don't re-spawn, just inform.
+			m.toastManager.Info("elaboration still in progress — waiting for elaborator to finish.")
+			return m, nil
+		}
+
 		// Read and parse plan from the task store — this also validates wave headers.
 		rawContent := ""
 		if m.taskStore != nil {
