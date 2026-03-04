@@ -1,0 +1,22 @@
+Implement docs/plans/instance-management-cli.md using the `kasmos-coder` skill. Execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+round 1 — changes required.
+
+## critical
+
+- `cmd/instance.go:229-244` — **data loss on state write-back in removeInstanceFromState**: `instanceRecord` is missing ~15 fields present in `session.InstanceData` (`Height`, `Width`, `UpdatedAt`, `AutoYes`, `SkipPermissions`, `TaskNumber`, `WaveNumber`, `PeerCount`, `IsReviewer`, `ImplementationComplete`, `SoloAgent`, `QueuedPrompt`, `ReviewCycle`, `DiffStats`, plus `SessionName`/`BaseCommitSHA` in the worktree sub-struct). both `removeInstanceFromState` and `updateInstanceInState` deserialize ALL instances through `instanceRecord`, then serialize back — silently dropping these fields from EVERY instance in state. running `kas instance kill foo` would corrupt state for all surviving instances. fix: either use `json.RawMessage` slices to preserve unmodified records, or add all missing fields to the mirror types so they round-trip safely.
+
+- `cmd/instance.go:249-272` — **same data loss bug in updateInstanceInState**: the `pause` and `resume` commands use `updateInstanceInState` which has the same deserialize-all/serialize-all pattern. a single `kas instance pause bar` would strip orchestration fields (`TaskNumber`, `WaveNumber`, `PeerCount`, `ReviewCycle`, etc.) and operational flags (`AutoYes`, `SkipPermissions`) from every instance in the state file, breaking the TUI and kasmos orchestrator.
+
+- `cmd/instance.go:321,362,417,454` — **wrong tmux session name**: all tmux commands use `rec.Title` (raw name, e.g. `"my-instance"`) but the actual tmux sessions are created by the session package with a `kas_` prefix via `toKasTmuxName()` (e.g. `kas_my-instance`). result: `kill` and `pause` silently fail to kill the tmux session (error is discarded). `resume` creates a new session without the `kas_` prefix, so the TUI won't recognize it. `send` fails because the target session doesn't exist. fix: replicate the prefix logic or extract `toKasTmuxName`/`ToKasTmuxNamePublic` into a shared package that `cmd` can import without creating a cycle (currently `session/tmux` imports `cmd` for the `Executor` interface).
+
+- `cmd/instance.go:413-418` — **resume creates a degraded session**: resume starts tmux with just `rec.Program` (e.g. `"claude"`), but the original session started by the session package includes: `KASMOS_MANAGED=1` env var, `--dangerously-skip-permissions` flag (when enabled), `--agent <type>` flag, task env vars (`KASMOS_TASK`, `KASMOS_WAVE`, `KASMOS_PEERS`), opencode log redirection, and PTY-based attach flow. the resumed agent won't know it's in managed mode and will lack its original configuration. at minimum, `KASMOS_MANAGED=1` must be prepended and stored flags (`SkipPermissions`, `AgentType`, `TaskNumber`, etc.) must be injected — but `instanceRecord` doesn't even have those fields (see data loss issue above).
+
+## important
+
+- `cmd/instance_test.go` — **no tests for state-modifying functions**: `removeInstanceFromState` and `updateInstanceInState` — the functions with the critical data loss bug — have zero test coverage. these are core to the `kill`, `pause`, and `resume` commands. add tests that verify field preservation during round-trip serialization (i.e., marshal test data with all `InstanceData` fields, run the state modifier, verify no fields were dropped in the output).
+
+## minor
+
+- `cmd/instance.go:40-49` — **missing plan_file migration**: `instanceRecord` doesn't implement the custom `UnmarshalJSON` that `session.InstanceData` has for migrating legacy `plan_file` to `task_file`. if a user upgrades and runs the CLI before the TUI migrates state, `task_file` will show empty for instances using the old field name. low likelihood edge case but should be handled for consistency.
