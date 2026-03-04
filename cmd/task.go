@@ -13,7 +13,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
-	git "github.com/kastheco/kasmos/session/git"
+	"github.com/kastheco/kasmos/session/git"
 	"github.com/spf13/cobra"
 )
 
@@ -314,8 +314,11 @@ func executeTaskStart(repoRoot, project, planFile string, store taskstore.Store)
 
 // executeTaskPush resolves the task entry and its branch, constructs a
 // GitWorktree from stored state, commits any dirty changes, and pushes to
-// origin. The commit message is fixed to "update from kas".
-func executeTaskPush(repoRoot, project, planFile string, store taskstore.Store) error {
+// origin. The commit message defaults to "update from kas" when empty.
+func executeTaskPush(repoRoot, project, planFile, message string, store taskstore.Store) error {
+	if message == "" {
+		message = "update from kas"
+	}
 	entry, err := resolveTaskEntry(project, planFile, store)
 	if err != nil {
 		return err
@@ -323,7 +326,7 @@ func executeTaskPush(repoRoot, project, planFile string, store taskstore.Store) 
 	branch := entry.Branch
 	worktreePath := git.TaskWorktreePath(repoRoot, branch)
 	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "push", branch, "")
-	return wt.PushChanges("update from kas", false)
+	return wt.PushChanges(message, false)
 }
 
 // executeTaskMerge merges the plan branch into the current branch (typically
@@ -405,7 +408,8 @@ func executeTaskStartOver(repoRoot, project, planFile string, store taskstore.St
 
 // executeTaskPR resolves the task entry, derives the PR title from the task
 // description when title is empty, generates a PR body from the git log, and
-// creates (or reopens) the PR via the GitHub CLI. Returns the PR URL on success.
+// creates (or reopens) the PR via the GitHub CLI. The PR URL is printed to
+// stdout by the gh CLI; the returned string is currently always empty.
 func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.Store) (string, error) {
 	entry, err := resolveTaskEntry(project, planFile, store)
 	if err != nil {
@@ -661,7 +665,7 @@ func NewTaskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := executeTaskPush(repoRoot, project, args[0], resolveStore(project)); err != nil {
+			if err := executeTaskPush(repoRoot, project, args[0], pushMessage, resolveStore(project)); err != nil {
 				return err
 			}
 			fmt.Printf("pushed: %s\n", args[0])

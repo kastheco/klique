@@ -527,7 +527,7 @@ func TestExecuteTaskStart_FromPlanning(t *testing.T) {
 
 func TestExecuteTaskPush_TaskNotFound(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
-	err := executeTaskPush("", "nope", "missing.md", store)
+	err := executeTaskPush("", "nope", "missing.md", "", store)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -539,7 +539,7 @@ func TestExecuteTaskPush_NoBranch(t *testing.T) {
 		Filename: "no-branch.md",
 		Status:   taskstore.StatusReady,
 	}))
-	err := executeTaskPush("", project, "no-branch.md", store)
+	err := executeTaskPush("", project, "no-branch.md", "", store)
 	// Should resolve the branch but fail on git ops (no real repo).
 	require.Error(t, err)
 }
