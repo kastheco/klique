@@ -1,0 +1,9 @@
+move current main branch to v1 (local and remote) in case bugfixes are needed then make v2 the new main branch going forward (rename it to main)
+
+---
+
+yeah that's what i meant
+
+---
+
+close that pr it's stale
