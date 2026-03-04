@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "0342e5dd5162",
+  "session_id": "ses_34e0dc314ffeu3xqecIvTwyq9q",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T03:48:23.429958012Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/tabbed_window.go",
+    "app/app_input.go",
+    "keys/keys.go",
+    "ui/navigation_panel.go",
+    "ui/overlay/contextMenu.go",
+    "ui/overlay/pickerOverlay.go",
+    "ui/overlay/tmuxBrowserOverlay.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "269619f319b3",
+  "checkpoint_transcript_start": 36,
+  "transcript_lines_at_start": 36,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T03:48:23.247708819Z",
+    "agent_lines": 200,
+    "human_added": 7553,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 7753,
+    "agent_percentage": 2.5796465884173867
+  }
+}
