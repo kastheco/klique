@@ -149,7 +149,10 @@ func buildResumeCommand(rec instanceRecord, worktreePath string) string {
 	}
 
 	// Append opencode log redirection so debug logs are preserved.
-	if strings.HasSuffix(program, "opencode") {
+	// Use rec.Program (the unmodified base) for the suffix check, matching
+	// TmuxSession.Start() which uses t.program — the local `program` variable
+	// may already have --agent appended, changing the suffix.
+	if strings.HasSuffix(rec.Program, "opencode") {
 		logDir := filepath.Join(worktreePath, ".kasmos", "logs")
 		if err := os.MkdirAll(logDir, 0o755); err == nil {
 			logFile := filepath.Join(logDir, kasTmuxName(rec.Title)+".log")

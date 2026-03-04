@@ -417,6 +417,22 @@ func TestBuildResumeCommand_AgentType(t *testing.T) {
 	assert.Contains(t, got, "--agent coder")
 }
 
+// TestBuildResumeCommand_OpencodeWithAgent verifies that opencode log redirection
+// is included even when --agent is appended (regression: the suffix check must
+// use the unmodified base program, not the local variable).
+func TestBuildResumeCommand_OpencodeWithAgent(t *testing.T) {
+	workdir := t.TempDir()
+	rec := instanceRecord{
+		Title:     "my-planner",
+		Program:   "opencode",
+		AgentType: "planner",
+	}
+	got := buildResumeCommand(rec, workdir)
+	assert.Contains(t, got, "--agent planner")
+	assert.Contains(t, got, "--print-logs")
+	assert.Contains(t, got, "KASMOS_MANAGED=1")
+}
+
 // TestBuildResumeCommand_TaskEnvVars verifies task identity env vars are prepended.
 func TestBuildResumeCommand_TaskEnvVars(t *testing.T) {
 	rec := instanceRecord{
