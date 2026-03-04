@@ -223,7 +223,7 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	const q = `
 		UPDATE tasks
-		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, content = ?, clickup_task_id = ?, review_cycle = ?
+		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, clickup_task_id = ?, review_cycle = ?
 		WHERE project = ? AND filename = ?
 	`
 	result, err := s.db.Exec(q,
@@ -233,7 +233,6 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 		entry.Topic,
 		formatTime(entry.CreatedAt),
 		entry.Implemented,
-		entry.Content,
 		entry.ClickUpTaskID,
 		entry.ReviewCycle,
 		project,

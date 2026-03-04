@@ -77,6 +77,29 @@ func TestSQLiteStore_Update(t *testing.T) {
 	assert.Equal(t, "updated description", got.Description)
 }
 
+// TestSQLiteStore_UpdatePreservesContent verifies that Update does not
+// overwrite content stored via SetContent. This is a regression test for a bug
+// where every FSM status transition would nuke the content column because
+// Update included content in its SET clause and callers passed empty content.
+func TestSQLiteStore_UpdatePreservesContent(t *testing.T) {
+	store := newTestStore(t)
+	entry := taskstore.TaskEntry{
+		Filename: "content-preserve.md",
+		Status:   taskstore.StatusPlanning,
+		Branch:   "plan/content-preserve",
+	}
+	require.NoError(t, store.Create("kasmos", entry))
+	require.NoError(t, store.SetContent("kasmos", "content-preserve.md", "# My Plan\n\n## Wave 1\n"))
+
+	// Simulate an FSM transition: update status without setting content.
+	entry.Status = taskstore.StatusReady
+	require.NoError(t, store.Update("kasmos", "content-preserve.md", entry))
+
+	content, err := store.GetContent("kasmos", "content-preserve.md")
+	require.NoError(t, err)
+	assert.Equal(t, "# My Plan\n\n## Wave 1\n", content, "content must survive a metadata-only Update")
+}
+
 func TestSQLiteStore_Rename(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
