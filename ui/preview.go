@@ -54,7 +54,7 @@ type PreviewPane struct {
 // NewPreviewPane constructs a PreviewPane with initial fallback state.
 func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
-		viewport:   viewport.New(0, 0),
+		viewport:   viewport.New(),
 		springAnim: NewSpringAnim(6.0, 15),
 		previewState: previewState{
 			fallback:    true,
@@ -84,8 +84,8 @@ func (p *PreviewPane) SetRawContent(content string) {
 func (p *PreviewPane) SetSize(width, maxHeight int) {
 	p.width = width
 	p.height = maxHeight
-	p.viewport.Width = max(0, width-1)
-	p.viewport.Height = maxHeight
+	p.viewport.SetWidth(max(0, width-1))
+	p.viewport.SetHeight(maxHeight)
 }
 
 // setFallbackState puts the pane into banner+message fallback mode.
@@ -234,7 +234,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	}
 
 	// If in scroll mode but haven't loaded content yet, capture full history now.
-	if p.isScrolling && p.viewport.Height > 0 && len(p.viewport.View()) == 0 {
+	if p.isScrolling && p.viewport.Height() > 0 && len(p.viewport.View()) == 0 {
 		content, err := instance.PreviewFullHistory()
 		if err != nil {
 			return err
@@ -253,7 +253,7 @@ func (p *PreviewPane) renderScrollbar(height int) string {
 		return ""
 	}
 	// Hide scrollbar when everything fits on one screen.
-	if p.viewport.AtBottom() && p.viewport.YOffset == 0 {
+	if p.viewport.AtBottom() && p.viewport.YOffset() == 0 {
 		return ""
 	}
 
@@ -294,7 +294,7 @@ func (p *PreviewPane) String() string {
 	// Document or scroll mode: render via viewport + optional scrollbar.
 	if p.isDocument || p.isScrolling {
 		viewContent := p.viewport.View()
-		scrollbar := p.renderScrollbar(p.viewport.Height)
+		scrollbar := p.renderScrollbar(p.viewport.Height())
 		if scrollbar == "" {
 			return viewContent
 		}
@@ -442,7 +442,7 @@ func (p *PreviewPane) enterScrollMode(instance *session.Instance) error {
 // ScrollUp scrolls the preview up one line. Enters scroll mode on first call.
 func (p *PreviewPane) ScrollUp(instance *session.Instance) error {
 	if p.isDocument {
-		p.viewport.LineUp(1)
+		p.viewport.ScrollUp(1)
 		return nil
 	}
 	if instance == nil || instance.Status == session.Paused {
@@ -454,14 +454,14 @@ func (p *PreviewPane) ScrollUp(instance *session.Instance) error {
 		}
 		return nil
 	}
-	p.viewport.LineUp(1)
+	p.viewport.ScrollUp(1)
 	return nil
 }
 
 // ScrollDown scrolls the preview down one line. Enters scroll mode on first call.
 func (p *PreviewPane) ScrollDown(instance *session.Instance) error {
 	if p.isDocument {
-		p.viewport.LineDown(1)
+		p.viewport.ScrollDown(1)
 		return nil
 	}
 	if instance == nil || instance.Status == session.Paused {
@@ -473,14 +473,14 @@ func (p *PreviewPane) ScrollDown(instance *session.Instance) error {
 		}
 		return nil
 	}
-	p.viewport.LineDown(1)
+	p.viewport.ScrollDown(1)
 	return nil
 }
 
 // HalfPageUp scrolls up half a viewport height. Enters scroll mode on first call.
 func (p *PreviewPane) HalfPageUp(instance *session.Instance) error {
 	if p.isDocument {
-		p.viewport.HalfViewUp()
+		p.viewport.HalfPageUp()
 		return nil
 	}
 	if instance == nil || instance.Status == session.Paused {
@@ -491,14 +491,14 @@ func (p *PreviewPane) HalfPageUp(instance *session.Instance) error {
 			return err
 		}
 	}
-	p.viewport.HalfViewUp()
+	p.viewport.HalfPageUp()
 	return nil
 }
 
 // HalfPageDown scrolls down half a viewport height. Enters scroll mode on first call.
 func (p *PreviewPane) HalfPageDown(instance *session.Instance) error {
 	if p.isDocument {
-		p.viewport.HalfViewDown()
+		p.viewport.HalfPageDown()
 		return nil
 	}
 	if instance == nil || instance.Status == session.Paused {
@@ -509,7 +509,7 @@ func (p *PreviewPane) HalfPageDown(instance *session.Instance) error {
 			return err
 		}
 	}
-	p.viewport.HalfViewDown()
+	p.viewport.HalfPageDown()
 	return nil
 }
 

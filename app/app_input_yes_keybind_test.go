@@ -24,7 +24,7 @@ func TestHandleKeyPress_YesKeyQueuesPromptForPromptDetectedInstance(t *testing.T
 	h.nav.SetSelectedInstance(0)
 	h.keySent = true
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	require.IsType(t, &home{}, model)
 	assert.Nil(t, cmd)
 	assert.Equal(t, "yes", inst.QueuedPrompt)
@@ -43,7 +43,7 @@ func TestHandleKeyPress_YesKeyIgnoredWhenInstanceIsNotPromptDetected(t *testing.
 	h.nav.SetSelectedInstance(0)
 	h.keySent = true
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	require.IsType(t, &home{}, model)
 	assert.Nil(t, cmd)
 	assert.Empty(t, inst.QueuedPrompt)

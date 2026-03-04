@@ -26,7 +26,9 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	ti.Focus()
 	ti.ShowLineNumbers = false
 	ti.Prompt = ""
-	ti.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	s := ti.Styles()
+	s.Focused.CursorLine = lipgloss.NewStyle()
+	ti.SetStyles(s)
 
 	// Ensure no character limit
 	ti.CharLimit = 0
@@ -70,9 +72,9 @@ func (t *TextInputOverlay) Height() int { return t.height }
 
 // HandleKey processes a key event and returns the result.
 // Implements the Overlay interface.
-func (t *TextInputOverlay) HandleKey(msg tea.KeyMsg) Result {
-	switch msg.Type {
-	case tea.KeyTab, tea.KeyShiftTab:
+func (t *TextInputOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	switch msg.String() {
+	case "tab", "shift+tab":
 		t.FocusIndex = (t.FocusIndex + 1) % 2
 		if t.FocusIndex == 0 {
 			t.textarea.Focus()
@@ -80,10 +82,10 @@ func (t *TextInputOverlay) HandleKey(msg tea.KeyMsg) Result {
 			t.textarea.Blur()
 		}
 		return Result{}
-	case tea.KeyEsc:
+	case "esc":
 		t.Canceled = true
 		return Result{Dismissed: true, Submitted: false}
-	case tea.KeyEnter:
+	case "enter":
 		if t.multiline && t.FocusIndex == 0 {
 			// In multiline mode, Enter inserts a newline when textarea is focused
 			t.textarea, _ = t.textarea.Update(msg)

@@ -41,7 +41,7 @@ func NewConfirmationOverlay(message string) *ConfirmationOverlay {
 
 // HandleKey processes a key event and returns the result.
 // Implements the Overlay interface.
-func (c *ConfirmationOverlay) HandleKey(msg tea.KeyMsg) Result {
+func (c *ConfirmationOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	key := msg.String()
 	switch key {
 	case c.ConfirmKey:

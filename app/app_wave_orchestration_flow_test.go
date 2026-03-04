@@ -75,7 +75,7 @@ func TestWaveMonitor_CancelWaveAdvanceRePrompts(t *testing.T) {
 	}
 
 	// Press 'n' (cancel key = default "n")
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	_, _ = h.handleKeyPress(keyMsg)
 
 	// Orchestrator latch must be reset so the next tick can re-prompt
@@ -223,7 +223,7 @@ func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
 	}
 
 	// Press 'a' for abort
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}
+	keyMsg := tea.KeyPressMsg{Code: 'a', Text: "a"}
 	model, cmd := h.handleKeyPress(keyMsg)
 	updated := model.(*home)
 
@@ -642,7 +642,7 @@ func TestPlannerExit_CancelKillsInstanceAndMarksPrompted(t *testing.T) {
 	_ = h.nav.AddInstance(inst)
 
 	// Press 'n' (cancel key — default for confirmation overlay)
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	model, _ := h.handleKeyPress(keyMsg)
 	updated := model.(*home)
 

@@ -101,8 +101,8 @@ func (p *PermissionOverlay) render() string {
 var permissionActionLabels = []string{"allow_once", "allow_always", "reject"}
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
-func (p *PermissionOverlay) HandleKey(msg tea.KeyMsg) Result {
-	switch msg.Type {
+func (p *PermissionOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	switch msg.Code {
 	case tea.KeyLeft:
 		if p.selectedIdx > 0 {
 			p.selectedIdx--

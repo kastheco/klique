@@ -13,7 +13,7 @@ func TestConfirmationOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestConfirmationOverlay_HandleKey_Confirm(t *testing.T) {
 	c := NewConfirmationOverlay("delete?")
-	result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result := c.HandleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "y", result.Action)
@@ -21,7 +21,7 @@ func TestConfirmationOverlay_HandleKey_Confirm(t *testing.T) {
 
 func TestConfirmationOverlay_HandleKey_Cancel(t *testing.T) {
 	c := NewConfirmationOverlay("delete?")
-	result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	result := c.HandleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 	assert.Equal(t, "n", result.Action)
@@ -29,7 +29,7 @@ func TestConfirmationOverlay_HandleKey_Cancel(t *testing.T) {
 
 func TestConfirmationOverlay_HandleKey_Esc(t *testing.T) {
 	c := NewConfirmationOverlay("delete?")
-	result := c.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := c.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -38,7 +38,7 @@ func TestConfirmationOverlay_HandleKey_CustomKeys(t *testing.T) {
 	c := NewConfirmationOverlay("retry?")
 	c.ConfirmKey = "r"
 	c.CancelKey = "n"
-	result := c.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result := c.HandleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "r", result.Action)

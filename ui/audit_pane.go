@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -10,12 +11,12 @@ import (
 
 // AuditEventDisplay is a pre-formatted event record for the audit pane.
 type AuditEventDisplay struct {
-	Time    string         // wall-clock time formatted as "HH:MM"
-	Kind    string         // event kind string (e.g. "agent_spawned")
-	Icon    string         // single-character icon glyph
-	Message string         // human-readable event description
-	Color   lipgloss.Color // icon foreground colour
-	Level   string         // "info", "warn", or "error"
+	Time    string      // wall-clock time formatted as "HH:MM"
+	Kind    string      // event kind string (e.g. "agent_spawned")
+	Icon    string      // single-character icon glyph
+	Message string      // human-readable event description
+	Color   color.Color // icon foreground colour
+	Level   string      // "info", "warn", or "error"
 }
 
 // AuditPane renders a chronological, scrollable activity feed.
@@ -32,7 +33,7 @@ type AuditPane struct {
 func NewAuditPane() *AuditPane {
 	return &AuditPane{
 		visible:  true,
-		viewport: viewport.New(0, 0),
+		viewport: viewport.New(),
 	}
 }
 
@@ -45,8 +46,8 @@ func (p *AuditPane) SetSize(w, h int) {
 	if bodyH < 0 {
 		bodyH = 0
 	}
-	p.viewport.Width = w
-	p.viewport.Height = bodyH
+	p.viewport.SetWidth(w)
+	p.viewport.SetHeight(bodyH)
 	p.viewport.SetContent(p.renderBody())
 }
 
@@ -65,12 +66,12 @@ func (p *AuditPane) Events() []AuditEventDisplay {
 
 // ScrollDown advances the viewport by n lines.
 func (p *AuditPane) ScrollDown(n int) {
-	p.viewport.LineDown(n)
+	p.viewport.ScrollDown(n)
 }
 
 // ScrollUp retreats the viewport by n lines.
 func (p *AuditPane) ScrollUp(n int) {
-	p.viewport.LineUp(n)
+	p.viewport.ScrollUp(n)
 }
 
 // Visible reports whether the pane is shown.
@@ -196,7 +197,7 @@ func (p *AuditPane) renderBody() string {
 
 // EventKindIcon maps an event kind string to a display glyph and colour.
 // Used by the app layer when constructing AuditEventDisplay values.
-func EventKindIcon(kind string) (icon string, color lipgloss.Color) {
+func EventKindIcon(kind string) (icon string, clr color.Color) {
 	switch kind {
 	case "agent_spawned":
 		return "◆", ColorFoam

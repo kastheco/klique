@@ -38,7 +38,7 @@ func TestReviewStep_FormatSummaryLine(t *testing.T) {
 
 func TestReviewStep_QReturnsStepCancelMsg(t *testing.T) {
 	r := newReviewStep(nil, nil)
-	next, cmd := r.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	next, cmd := r.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	require.NotNil(t, cmd)
 	_, ok := next.(*reviewStep)
 	require.True(t, ok)

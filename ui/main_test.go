@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // TestMain initializes package-level state needed by all ui tests.

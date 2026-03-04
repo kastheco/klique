@@ -32,7 +32,7 @@ func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 				keySent:      true,
 			}
 
-			model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyDown})
+			model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyDown})
 			homeModel, ok := model.(*home)
 			require.True(t, ok)
 			assert.Equal(t, slotNav, homeModel.focusSlot, "Down must focus nav")
@@ -55,7 +55,7 @@ func TestHandleKeyPress_UpKeyAlwaysFocusesNav(t *testing.T) {
 				keySent:      true,
 			}
 
-			model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyUp})
+			model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyUp})
 			homeModel, ok := model.(*home)
 			require.True(t, ok)
 			assert.Equal(t, slotNav, homeModel.focusSlot, "Up must focus nav")

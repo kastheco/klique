@@ -16,11 +16,11 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mattn/go-runewidth"
 )
 
-func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly bool) {
+func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnEarly bool) {
 	// Handle menu highlighting when you press a button. We intercept it here and immediately return to
 	// update the ui while re-sending the keypress. Then, on the next call to this, we actually handle the keypress.
 	if m.keySent {
@@ -52,33 +52,29 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keydownCallback(name)), true
 }
 
-// handleMouse processes mouse events for click and scroll interactions.
-func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if msg.Action != tea.MouseActionPress {
-		return m, nil
-	}
-
-	// Handle scroll wheel — always scrolls content (never navigates files)
-	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-		selected := m.nav.GetSelectedInstance()
-		if selected != nil && selected.Status != session.Paused {
-			switch msg.Button {
-			case tea.MouseButtonWheelUp:
-				m.tabbedWindow.ContentScrollUp()
-			case tea.MouseButtonWheelDown:
-				m.tabbedWindow.ContentScrollDown()
-			}
+// handleMouseWheel processes mouse wheel events for scrolling.
+func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	selected := m.nav.GetSelectedInstance()
+	if selected != nil && selected.Status != session.Paused {
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.tabbedWindow.ContentScrollUp()
+		case tea.MouseWheelDown:
+			m.tabbedWindow.ContentScrollDown()
 		}
-		return m, nil
 	}
+	return m, nil
+}
 
+// handleMouseClick processes mouse click events for left/right click interactions.
+func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Dismiss overlays on click-outside
-	if m.state == stateContextMenu && msg.Button == tea.MouseButtonLeft {
+	if m.state == stateContextMenu && msg.Button == tea.MouseLeft {
 		m.overlays.Dismiss()
 		m.state = stateDefault
 		return m, nil
 	}
-	if m.state == stateTmuxBrowser && msg.Button == tea.MouseButtonLeft {
+	if m.state == stateTmuxBrowser && msg.Button == tea.MouseLeft {
 		m.overlays.Dismiss()
 		m.state = stateDefault
 		return m, nil
@@ -88,12 +84,12 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Right-click: show context menu
-	if msg.Button == tea.MouseButtonRight {
+	if msg.Button == tea.MouseRight {
 		return m.handleRightClick(msg)
 	}
 
 	// Only handle left clicks from here
-	if msg.Button != tea.MouseButtonLeft {
+	if msg.Button != tea.MouseLeft {
 		return m, nil
 	}
 
@@ -137,7 +133,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleRightClick builds and shows a context menu based on what was right-clicked.
-func (m *home) handleRightClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m *home) handleRightClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Right-click in nav panel: select the clicked row then show context menu
 	if zone.Get(ui.ZoneNavPanel).InBounds(msg) {
 		for i := range m.nav.RowCount() {
@@ -154,7 +150,7 @@ func (m *home) handleRightClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) {
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
@@ -188,7 +184,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.promptAfterName = false
 			m.nav.Kill()
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				tea.RequestWindowSize,
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					return nil
@@ -203,7 +199,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.menu.SetState(ui.StateDefault)
 			return m, nil
 		}
-		switch msg.Type {
+		switch msg.Code {
 		// Start the instance (enable previews etc) and go back to the main menu state.
 		case tea.KeyEnter:
 			if len(instance.Title) == 0 {
@@ -231,14 +227,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return instanceStartedMsg{instance: instance, err: instance.Start(true)}
 			}
 
-			return m, tea.Batch(tea.WindowSize(), startCmd)
-		case tea.KeyRunes:
-			if runewidth.StringWidth(instance.Title) >= 32 {
-				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
-			}
-			if err := instance.SetTitle(instance.Title + string(msg.Runes)); err != nil {
-				return m, m.handleError(err)
-			}
+			return m, tea.Batch(tea.RequestWindowSize, startCmd)
 		case tea.KeyBackspace:
 			runes := []rune(instance.Title)
 			if len(runes) == 0 {
@@ -251,20 +240,28 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := instance.SetTitle(instance.Title + " "); err != nil {
 				return m, m.handleError(err)
 			}
-		case tea.KeyEsc:
+		case tea.KeyEscape:
 			m.nav.Kill()
 			m.state = stateDefault
 			m.newInstance = nil
 			m.instanceChanged()
 
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				tea.RequestWindowSize,
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					return nil
 				},
 			)
 		default:
+			if len(msg.Text) > 0 {
+				if runewidth.StringWidth(instance.Title) >= 32 {
+					return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
+				}
+				if err := instance.SetTitle(instance.Title + msg.Text); err != nil {
+					return m, m.handleError(err)
+				}
+			}
 		}
 		return m, nil
 	} else if m.state == statePrompt {
@@ -297,7 +294,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// Close the overlay and reset state
 			m.state = stateDefault
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				tea.RequestWindowSize,
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					m.showHelpScreen(helpStart(selected), nil)
@@ -343,7 +340,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -368,7 +365,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					prToastID := m.pendingPRToastID
 					capturedTitle := selected.Title
 					capturedPRTitle := prTitle
-					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
+					return m, tea.Batch(tea.RequestWindowSize, func() tea.Msg {
 						commitMsg := fmt.Sprintf("[kas] update from '%s' on %s", capturedTitle, time.Now().Format(time.RFC822))
 						worktree, err := selected.GetGitWorktree()
 						if err != nil {
@@ -384,7 +381,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.pendingPRTitle = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -407,7 +404,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -449,7 +446,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -471,12 +468,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				if planFile != "" && question != "" {
 					return m.spawnChatAboutTask(planFile, question)
 				}
-				return m, tea.WindowSize()
+				return m, tea.RequestWindowSize
 			}
 			m.pendingChatAboutTask = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -484,14 +481,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Handle focus mode — forward keys directly to the agent's PTY
 	if m.state == stateFocusAgent {
 		// Ctrl+Space exits focus mode
-		if msg.Type == tea.KeyCtrlAt {
+		if msg.String() == "ctrl+@" {
 			m.exitFocusMode()
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 
 		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
-		if msg.Type == tea.KeyCtrlUp || msg.Type == tea.KeyCtrlDown {
-			if msg.Type == tea.KeyCtrlUp {
+		if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) || msg.Code == tea.KeyDown && msg.Mod.Contains(tea.ModCtrl) {
+			if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) {
 				m.nav.CyclePrevActive()
 			} else {
 				m.nav.CycleNextActive()
@@ -547,7 +544,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -572,9 +569,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Pre-intercept 'enter' as an alias for the confirm key.
 		// ConfirmationOverlay.HandleKey only handles ConfirmKey ("y"/"r"), not "enter".
 		effectiveMsg := msg
-		if msg.Type == tea.KeyEnter {
+		if msg.Code == tea.KeyEnter {
 			if co, ok := m.overlays.Current().(*overlay.ConfirmationOverlay); ok {
-				effectiveMsg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(co.ConfirmKey)}
+				effectiveMsg = tea.KeyPressMsg{Text: co.ConfirmKey, Code: rune(co.ConfirmKey[0])}
 			}
 		}
 		result := m.overlays.HandleKey(effectiveMsg)
@@ -778,14 +775,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
 
 	// Handle deriving state — waiting for AI title before showing topic picker
 	if m.state == stateNewPlanDeriving {
-		if msg.Type == tea.KeyEscape {
+		if msg.Code == tea.KeyEscape {
 			m.state = stateDefault
 			m.pendingPlanName = ""
 			m.pendingPlanDesc = ""
@@ -824,7 +821,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.menu.SetState(ui.StateDefault)
 			m.pendingPlanName = ""
 			m.pendingPlanDesc = ""
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -854,7 +851,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -883,7 +880,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.state = stateDefault
 			m.pendingChangeTopicTask = ""
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -913,12 +910,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.toastManager.Success(fmt.Sprintf("status → %s", picked))
 					m.state = stateDefault
 					m.pendingSetStatusTask = ""
-					return m, tea.Batch(tea.WindowSize(), m.toastTickCmd())
+					return m, tea.Batch(tea.RequestWindowSize, m.toastTickCmd())
 				}
 			}
 			m.state = stateDefault
 			m.pendingSetStatusTask = ""
-			return m, tea.WindowSize()
+			return m, tea.RequestWindowSize
 		}
 		return m, nil
 	}
@@ -1048,18 +1045,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		case msg.String() == "down":
 			m.nav.Down()
 			return m, m.instanceChanged()
-		case msg.Type == tea.KeyBackspace:
+		case msg.Code == tea.KeyBackspace:
 			q := m.nav.GetSearchQuery()
 			if len(q) > 0 {
 				runes := []rune(q)
 				m.nav.SetSearchQuery(string(runes[:len(runes)-1]))
 			}
 			return m, nil
-		case msg.Type == tea.KeySpace:
+		case msg.Code == tea.KeySpace:
 			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + " ")
 			return m, nil
-		case msg.Type == tea.KeyRunes:
-			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + string(msg.Runes))
+		case len(msg.Text) > 0:
+			m.nav.SetSearchQuery(m.nav.GetSearchQuery() + msg.Text)
 			return m, nil
 		}
 		return m, nil
@@ -1068,7 +1065,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
 	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
-	if msg.Type == tea.KeyEsc {
+	if msg.Code == tea.KeyEscape {
 		// Exit document mode (plan viewer) on Esc
 		if m.tabbedWindow.IsDocumentMode() {
 			m.tabbedWindow.ClearDocumentMode()
@@ -1093,7 +1090,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		cmd := m.tabbedWindow.ViewportUpdate(msg)
 
 		// Keep existing shift+up/down behavior as fallback handlers.
-		if msg.Type != tea.KeyShiftUp && msg.Type != tea.KeyShiftDown {
+		if msg.String() != "shift+up" && msg.String() != "shift+down" {
 			if m.tabbedWindow.ViewportHandlesKey(msg) {
 				return m, cmd
 			}
@@ -1105,8 +1102,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	// Ctrl+Up/Down: cycle through active instances (wrapping)
-	if msg.Type == tea.KeyCtrlUp || msg.Type == tea.KeyCtrlDown {
-		if msg.Type == tea.KeyCtrlUp {
+	if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) || msg.Code == tea.KeyDown && msg.Mod.Contains(tea.ModCtrl) {
+		if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) {
 			m.nav.CyclePrevActive()
 		} else {
 			m.nav.CycleNextActive()
@@ -1115,8 +1112,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	// Ctrl+U/D: half-page scroll in agent session preview
-	if msg.Type == tea.KeyCtrlU || msg.Type == tea.KeyCtrlD {
-		if msg.Type == tea.KeyCtrlU {
+	if msg.Code == 'u' && msg.Mod.Contains(tea.ModCtrl) || msg.Code == 'd' && msg.Mod.Contains(tea.ModCtrl) {
+		if msg.Code == 'u' && msg.Mod.Contains(tea.ModCtrl) {
 			m.tabbedWindow.HalfPageUp()
 		} else {
 			m.tabbedWindow.HalfPageDown()
@@ -1130,13 +1127,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	// Shift+Tab: reverse focus ring cycle (don't call instanceChanged — it auto-switches tabs)
-	if msg.Type == tea.KeyShiftTab {
+	if msg.String() == "shift+tab" {
 		m.prevFocusSlot()
 		return m, nil
 	}
 
 	// Delete key: dismiss a finished (non-running) instance from the list.
-	if msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace {
+	if msg.Code == tea.KeyDelete || msg.Code == tea.KeyBackspace {
 		selected := m.nav.GetSelectedInstance()
 		if selected != nil && (selected.Exited || (selected.Status != session.Running && selected.Status != session.Loading)) {
 			title := selected.Title
@@ -1144,7 +1141,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.removeFromAllInstances(title)
 			_ = m.saveAllInstances()
 			m.updateNavPanelStatus()
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 		}
 		return m, nil
 	}
@@ -1363,7 +1360,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err := selected.Resume(); err != nil {
 			return m, m.handleError(err)
 		}
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 	case keys.KeyEnter:
 		// Sidebar always has focus: handle plan/instance interactions first.
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
@@ -1422,12 +1419,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.setFocusSlot(slotAgent)
 			}
 		}
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 	case keys.KeyAuditToggle:
 		if m.auditPane != nil {
 			m.auditPane.ToggleVisible()
 		}
-		return m, tea.WindowSize()
+		return m, tea.RequestWindowSize
 	case keys.KeyArrowLeft:
 		// Sidebar always has focus — no-op.
 		return m, nil
@@ -1477,13 +1474,43 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 }
 
 // keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.
-func keyToBytes(msg tea.KeyMsg) []byte {
-	switch msg.Type {
-	case tea.KeyRunes:
-		if msg.Alt {
-			return append([]byte{0x1b}, []byte(string(msg.Runes))...)
+func keyToBytes(msg tea.KeyPressMsg) []byte {
+	// Handle modifier combinations first.
+	if msg.Mod.Contains(tea.ModCtrl) {
+		// Ctrl+letter → raw control character byte (0x01..0x1A).
+		if msg.Code >= 'a' && msg.Code <= 'z' {
+			return []byte{byte(msg.Code - 'a' + 1)}
 		}
-		return []byte(string(msg.Runes))
+	}
+	if msg.Mod.Contains(tea.ModShift) {
+		switch msg.Code {
+		case tea.KeyTab:
+			return []byte("\x1b[Z")
+		case tea.KeyUp:
+			return []byte("\x1b[1;2A")
+		case tea.KeyDown:
+			return []byte("\x1b[1;2B")
+		case tea.KeyRight:
+			return []byte("\x1b[1;2C")
+		case tea.KeyLeft:
+			return []byte("\x1b[1;2D")
+		case tea.KeyHome:
+			return []byte("\x1b[1;2H")
+		case tea.KeyEnd:
+			return []byte("\x1b[1;2F")
+		}
+	}
+	if msg.Mod.Contains(tea.ModAlt) && len(msg.Text) > 0 {
+		return append([]byte{0x1b}, []byte(msg.Text)...)
+	}
+
+	// Printable text with no modifiers.
+	if len(msg.Text) > 0 {
+		return []byte(msg.Text)
+	}
+
+	// Special keys (no modifiers).
+	switch msg.Code {
 	case tea.KeyEnter:
 		return []byte{0x0D}
 	case tea.KeyBackspace:
@@ -1500,46 +1527,11 @@ func keyToBytes(msg tea.KeyMsg) []byte {
 		return []byte("\x1b[C")
 	case tea.KeyLeft:
 		return []byte("\x1b[D")
-	case tea.KeyCtrlC:
-		return []byte{0x03}
-	case tea.KeyCtrlD:
-		return []byte{0x04}
-	case tea.KeyCtrlA:
-		return []byte{0x01}
-	case tea.KeyCtrlE:
-		return []byte{0x05}
-	case tea.KeyCtrlL:
-		return []byte{0x0C}
-	case tea.KeyCtrlU:
-		return []byte{0x15}
-	case tea.KeyCtrlK:
-		return []byte{0x0B}
-	case tea.KeyCtrlW:
-		return []byte{0x17}
 	case tea.KeyDelete:
 		return []byte("\x1b[3~")
-	case tea.KeyEsc:
+	case tea.KeyEscape:
 		return []byte{0x1b}
-	case tea.KeyShiftTab:
-		return []byte("\x1b[Z")
-	case tea.KeyShiftUp:
-		return []byte("\x1b[1;2A")
-	case tea.KeyShiftDown:
-		return []byte("\x1b[1;2B")
-	case tea.KeyShiftRight:
-		return []byte("\x1b[1;2C")
-	case tea.KeyShiftLeft:
-		return []byte("\x1b[1;2D")
-	case tea.KeyShiftHome:
-		return []byte("\x1b[1;2H")
-	case tea.KeyShiftEnd:
-		return []byte("\x1b[1;2F")
 	default:
-		// Forward any ctrl+letter key as its raw control character byte.
-		// bubbletea KeyCtrlA..KeyCtrlZ have sequential values 0x01..0x1A.
-		if msg.Type >= tea.KeyCtrlA && msg.Type <= tea.KeyCtrlZ {
-			return []byte{byte(msg.Type)}
-		}
 		return nil
 	}
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -81,7 +82,7 @@ var statusBarProjectDirStyle = lipgloss.NewStyle().
 
 // planStatusStyle returns a styled version of status using semantic colors.
 func planStatusStyle(status string) string {
-	var fg lipgloss.TerminalColor
+	var fg color.Color
 	switch status {
 	case "implementing", "planning":
 		fg = ColorFoam

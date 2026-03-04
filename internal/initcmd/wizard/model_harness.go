@@ -37,7 +37,7 @@ func (h *harnessStep) Init() tea.Cmd {
 }
 
 func (h *harnessStep) Update(msg tea.Msg) (stepModel, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return h, nil
 	}

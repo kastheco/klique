@@ -18,13 +18,13 @@ func TestAuditPaneToggle(t *testing.T) {
 
 	// Simulate 'L' keybind to toggle (keySent=true skips menu highlight animation)
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 'L', Text: "L"})
 	updated := model.(*home)
 	assert.False(t, updated.auditPane.Visible())
 
 	// Toggle back
 	updated.keySent = true
-	model2, _ := updated.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	model2, _ := updated.handleKeyPress(tea.KeyPressMsg{Code: 'L', Text: "L"})
 	updated2 := model2.(*home)
 	assert.True(t, updated2.auditPane.Visible())
 }

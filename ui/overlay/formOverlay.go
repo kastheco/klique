@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/huh/v2"
+	"charm.land/huh/v2"
 )
 
 // FormOverlay is a multi-field form overlay backed by huh.Form.
@@ -131,20 +131,20 @@ func (f *FormOverlay) WorkPath() string {
 }
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
-func (f *FormOverlay) HandleKey(msg tea.KeyMsg) Result {
-	switch msg.Type {
-	case tea.KeyEsc:
+func (f *FormOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	switch msg.String() {
+	case "esc":
 		f.canceled = true
 		return Result{Dismissed: true}
 
-	case tea.KeyEnter:
+	case "enter":
 		if strings.TrimSpace(f.nameVal) == "" {
 			return Result{}
 		}
 		f.submitted = true
 		return Result{Dismissed: true, Submitted: true, Value: f.Name()}
 
-	case tea.KeyTab, tea.KeyDown:
+	case "tab", "down":
 		focused := f.focusedKey()
 		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[len(f.fieldKeys)-1] {
 			for i := 0; i < len(f.fieldKeys)-1; i++ {
@@ -155,7 +155,7 @@ func (f *FormOverlay) HandleKey(msg tea.KeyMsg) Result {
 		f.updateForm(huh.NextField())
 		return Result{}
 
-	case tea.KeyShiftTab, tea.KeyUp:
+	case "shift+tab", "up":
 		focused := f.focusedKey()
 		if len(f.fieldKeys) > 0 && focused == f.fieldKeys[0] {
 			for i := 0; i < len(f.fieldKeys)-1; i++ {

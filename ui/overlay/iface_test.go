@@ -14,12 +14,12 @@ type stubOverlay struct {
 	w, h      int
 }
 
-func (s *stubOverlay) HandleKey(msg tea.KeyMsg) Result {
-	if msg.Type == tea.KeyEsc {
+func (s *stubOverlay) HandleKey(msg tea.KeyPressMsg) Result {
+	if msg.Code == tea.KeyEscape {
 		s.dismissed = true
 		return Result{Dismissed: true}
 	}
-	if msg.Type == tea.KeyEnter {
+	if msg.Code == tea.KeyEnter {
 		return Result{Dismissed: true, Submitted: true, Value: "test-value"}
 	}
 	return Result{}
@@ -30,14 +30,14 @@ func (s *stubOverlay) SetSize(w, h int) { s.w = w; s.h = h }
 
 func TestOverlayInterface_Dismiss(t *testing.T) {
 	var o Overlay = &stubOverlay{rendered: "hello"}
-	result := o.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := o.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
 
 func TestOverlayInterface_Submit(t *testing.T) {
 	var o Overlay = &stubOverlay{rendered: "hello"}
-	result := o.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := o.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "test-value", result.Value)

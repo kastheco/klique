@@ -13,7 +13,7 @@ func TestTextOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestTextOverlay_HandleKey_AnyKeyDismisses(t *testing.T) {
 	o := NewTextOverlay("help text")
-	result := o.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	result := o.HandleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	assert.True(t, result.Dismissed)
 }
 

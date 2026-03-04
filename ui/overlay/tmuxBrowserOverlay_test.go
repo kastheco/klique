@@ -34,13 +34,13 @@ func TestTmuxBrowserOverlay_Navigation(t *testing.T) {
 
 	assert.Equal(t, 0, b.selectedIdx)
 
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	assert.Equal(t, 1, b.selectedIdx)
 
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	assert.Equal(t, 2, b.selectedIdx)
 
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
+	b.HandleKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	assert.Equal(t, 1, b.selectedIdx)
 }
 
@@ -54,8 +54,8 @@ func TestTmuxBrowserOverlay_SearchFilter(t *testing.T) {
 
 	// Type "db" to filter — note: "a" and "k" are action keys when search is empty,
 	// so we use "d" then "b" (non-action-key characters) to enter search mode safely.
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	b.HandleKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	b.HandleKey(tea.KeyPressMsg{Code: 'b', Text: "b"})
 	assert.Len(t, b.filtered, 1)
 	assert.Equal(t, 1, b.filtered[0]) // index of "db"
 }
@@ -67,15 +67,15 @@ func TestTmuxBrowserOverlay_Actions(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		key           tea.KeyMsg
+		key           tea.KeyPressMsg
 		wantDismissed bool
 		wantAction    string
 	}{
-		{"esc dismisses", tea.KeyMsg{Type: tea.KeyEsc}, true, ""},
-		{"enter attaches", tea.KeyMsg{Type: tea.KeyEnter}, true, "attach"},
-		{"k kills when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, false, "kill"},
-		{"a adopts when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, true, "adopt"},
-		{"o attaches when search empty", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")}, true, "attach"},
+		{"esc dismisses", tea.KeyPressMsg{Code: tea.KeyEsc}, true, ""},
+		{"enter attaches", tea.KeyPressMsg{Code: tea.KeyEnter}, true, "attach"},
+		{"k kills when search empty", tea.KeyPressMsg{Code: 'k', Text: "k"}, false, "kill"},
+		{"a adopts when search empty", tea.KeyPressMsg{Code: 'a', Text: "a"}, true, "adopt"},
+		{"o attaches when search empty", tea.KeyPressMsg{Code: 'o', Text: "o"}, true, "attach"},
 	}
 
 	for _, tt := range tests {
@@ -95,11 +95,11 @@ func TestTmuxBrowserOverlay_ActionKeysTypeWhenSearchActive(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 
 	// Type "x" to enter search mode
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	b.HandleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	assert.Equal(t, "x", b.searchQuery)
 
 	// Now "k" should type into search, not kill
-	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	result := b.HandleKey(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	assert.False(t, result.Dismissed)
 	assert.Equal(t, "xk", b.searchQuery)
 }
@@ -112,7 +112,7 @@ func TestTmuxBrowserOverlay_SelectedItem(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 	assert.Equal(t, "kas_a", b.SelectedItem().Name)
 
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	b.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	assert.Equal(t, "kas_b", b.SelectedItem().Name)
 }
 
@@ -123,7 +123,7 @@ func TestTmuxBrowserOverlay_RemoveItem(t *testing.T) {
 		{Name: "kas_c", Title: "c", Created: time.Now()},
 	}
 	b := NewTmuxBrowserOverlay(items)
-	b.HandleKey(tea.KeyMsg{Type: tea.KeyDown}) // select "b"
+	b.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown}) // select "b"
 
 	b.RemoveSelected()
 	assert.Len(t, b.sessions, 2)
@@ -145,7 +145,7 @@ func TestTmuxBrowserOverlay_ManagedItemBlocksAdopt(t *testing.T) {
 	b := NewTmuxBrowserOverlay(items)
 
 	// "a" should be a no-op for managed items — not dismissed, no action
-	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	result := b.HandleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	assert.False(t, result.Dismissed)
 	assert.Empty(t, result.Action)
 }
@@ -156,7 +156,7 @@ func TestTmuxBrowserOverlay_OrphanItemAllowsAdopt(t *testing.T) {
 	}
 	b := NewTmuxBrowserOverlay(items)
 
-	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	result := b.HandleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	assert.True(t, result.Dismissed)
 	assert.Equal(t, "adopt", result.Action)
 }
@@ -188,7 +188,7 @@ func TestTmuxBrowserOverlay_ImplementsOverlay(t *testing.T) {
 
 func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
 	b := NewTmuxBrowserOverlay(nil)
-	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := b.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 	assert.True(t, result.Dismissed)
 	assert.Empty(t, result.Action)
 }
@@ -196,7 +196,7 @@ func TestTmuxBrowserOverlay_HandleKey_Dismiss(t *testing.T) {
 func TestTmuxBrowserOverlay_HandleKey_Attach(t *testing.T) {
 	items := []TmuxBrowserItem{{Name: "sess", Title: "my-session"}}
 	b := NewTmuxBrowserOverlay(items)
-	result := b.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := b.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.Equal(t, "attach", result.Action)
 }

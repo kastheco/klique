@@ -8,7 +8,7 @@ import (
 )
 
 func TestKeyToBytes_ForwardsAltRuneAsEscapeSequence(t *testing.T) {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}, Alt: true}
+	msg := tea.KeyPressMsg{Code: 'v', Text: "v", Mod: tea.ModAlt}
 
 	got := keyToBytes(msg)
 
@@ -16,7 +16,7 @@ func TestKeyToBytes_ForwardsAltRuneAsEscapeSequence(t *testing.T) {
 }
 
 func TestKeyToBytes_ForwardsPlainRuneWithoutEscapePrefix(t *testing.T) {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}
+	msg := tea.KeyPressMsg{Code: 'v', Text: "v"}
 
 	got := keyToBytes(msg)
 

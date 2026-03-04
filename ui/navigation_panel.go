@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/session"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mattn/go-runewidth"
 )
 

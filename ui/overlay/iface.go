@@ -18,7 +18,7 @@ type Result struct {
 // Every overlay type in the package implements this interface.
 type Overlay interface {
 	// HandleKey processes a key event and returns the result.
-	HandleKey(msg tea.KeyMsg) Result
+	HandleKey(msg tea.KeyPressMsg) Result
 	// View renders the overlay content (without the PlaceOverlay compositing).
 	View() string
 	// SetSize updates the available dimensions for the overlay.

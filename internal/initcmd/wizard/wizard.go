@@ -102,7 +102,7 @@ func IsCustomized(a AgentState, defaultHarness string) bool {
 // If existing is non-nil, pre-populates forms from existing config.
 func Run(registry *harness.Registry, existing *config.TOMLConfigResult) (*State, error) {
 	m := newRootModel(registry, existing)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, err

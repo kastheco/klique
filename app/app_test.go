@@ -18,7 +18,7 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +93,7 @@ func TestSpawnAdHocAgent_PathOverride(t *testing.T) {
 func TestSpawnAgent_KeyOpensFormOverlay(t *testing.T) {
 	h := newTestHome()
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: 's', Text: "s"})
 	updated := model.(*home)
 	require.Equal(t, stateSpawnAgent, updated.state)
 	require.True(t, updated.overlays.IsActive(), "form overlay must be set")
@@ -107,7 +107,7 @@ func TestSpawnAgent_EscCancels(t *testing.T) {
 	h.overlays.Show(overlay.NewSpawnFormOverlay("spawn agent", 60))
 
 	h.keySent = true
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEsc})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := model.(*home)
 	assert.Equal(t, stateDefault, updated.state)
 	assert.False(t, updated.overlays.IsActive())
@@ -118,18 +118,18 @@ func TestSpawnAgent_SubmitCreatesInstance(t *testing.T) {
 	h.state = stateSpawnAgent
 	h.overlays.Show(overlay.NewSpawnFormOverlay("spawn agent", 60))
 
-	press := func(msg tea.KeyMsg) {
+	press := func(msg tea.KeyPressMsg) {
 		h.keySent = true
 		handleModel, _ := h.handleKeyPress(msg)
 		h = handleModel.(*home)
 	}
 
 	for _, r := range "test-agent" {
-		press(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		press(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
 	h.keySent = true
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})
 	updated := model.(*home)
 	assert.Equal(t, stateDefault, updated.state)
 	assert.False(t, updated.overlays.IsActive())
@@ -177,7 +177,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 		h.overlays.Show(co)
 
 		// Simulate pressing 'y' using HandleKeyPress
-		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+		keyMsg := tea.KeyPressMsg{Code: 'y', Text: "y"}
 		result := h.overlays.HandleKey(keyMsg)
 		if result.Dismissed {
 			h.state = stateDefault
@@ -193,7 +193,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 		h.overlays.Show(overlay.NewConfirmationOverlay("Test confirmation"))
 
 		// Simulate pressing 'n' using HandleKeyPress
-		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+		keyMsg := tea.KeyPressMsg{Code: 'n', Text: "n"}
 		result := h.overlays.HandleKey(keyMsg)
 		if result.Dismissed {
 			h.state = stateDefault
@@ -209,7 +209,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 		h.overlays.Show(overlay.NewConfirmationOverlay("Test confirmation"))
 
 		// Simulate pressing ESC using HandleKeyPress
-		keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		keyMsg := tea.KeyPressMsg{Code: tea.KeyEscape}
 		result := h.overlays.HandleKey(keyMsg)
 		if result.Dismissed {
 			h.state = stateDefault
@@ -276,11 +276,11 @@ func TestConfirmationModalKeyHandling(t *testing.T) {
 			h.overlays.Show(overlay.NewConfirmationOverlay("Kill session?"))
 
 			// Create key message
-			var keyMsg tea.KeyMsg
+			var keyMsg tea.KeyPressMsg
 			if tc.key == "esc" {
-				keyMsg = tea.KeyMsg{Type: tea.KeyEscape}
+				keyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}
 			} else {
-				keyMsg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.key)}
+				keyMsg = tea.KeyPressMsg{Code: rune(tc.key[0]), Text: tc.key}
 			}
 
 			// Call handleKeyPress
@@ -421,7 +421,7 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 	assert.NotNil(t, co1.OnConfirm)
 
 	// Cancel first confirmation (simulate pressing 'n')
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	result1 := co1.HandleKey(keyMsg)
 	assert.True(t, result1.Dismissed, "pressing 'n' must dismiss the overlay")
 
@@ -499,7 +499,7 @@ func TestFocusRing(t *testing.T) {
 		h.nav.AddInstance(inst)()
 	}
 
-	handle := func(t *testing.T, h *home, msg tea.KeyMsg) *home {
+	handle := func(t *testing.T, h *home, msg tea.KeyPressMsg) *home {
 		t.Helper()
 		h.keySent = true
 		model, _ := h.handleKeyPress(msg)
@@ -514,7 +514,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to agent")
@@ -524,7 +524,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to diff")
@@ -534,7 +534,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.DiffTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to info")
@@ -544,7 +544,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to info")
@@ -554,7 +554,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.DiffTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to agent")
@@ -564,7 +564,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyShiftTab})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to diff")
@@ -575,7 +575,7 @@ func TestFocusRing(t *testing.T) {
 		addTestInstance(t, h)
 		h.setFocusSlot(slotAgent)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: "T"})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot)
 	})
@@ -586,7 +586,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: '!', Text: "!"})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "! must switch to agent tab")
@@ -596,7 +596,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: '@', Text: "@"})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "@ must switch to diff tab")
@@ -606,7 +606,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: '#', Text: "#"})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "# must switch to info tab")
@@ -616,7 +616,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.setFocusSlot(slotNav)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot)
 	})
@@ -626,7 +626,7 @@ func TestFocusRing(t *testing.T) {
 		h.sidebarHidden = true
 		h.setFocusSlot(slotNav)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
 
 		assert.True(t, homeModel.sidebarHidden)
 		assert.Equal(t, slotNav, homeModel.focusSlot)
@@ -639,7 +639,7 @@ func TestFocusRing(t *testing.T) {
 		h.sidebarHidden = false
 		h.setFocusSlot(slotNav)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 
 		assert.True(t, homeModel.sidebarHidden)
 		assert.Equal(t, slotAgent, homeModel.focusSlot)
@@ -650,7 +650,7 @@ func TestFocusRing(t *testing.T) {
 		h.sidebarHidden = false
 		h.setFocusSlot(slotAgent)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 
 		assert.True(t, homeModel.sidebarHidden)
 		assert.Equal(t, slotAgent, homeModel.focusSlot)
@@ -661,7 +661,7 @@ func TestFocusRing(t *testing.T) {
 		h.sidebarHidden = true
 		h.setFocusSlot(slotNav)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlS})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 
 		assert.False(t, homeModel.sidebarHidden)
 		assert.Equal(t, slotNav, homeModel.focusSlot)
@@ -673,7 +673,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyLeft})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyLeft})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must remain focused after ←")
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must not change on ←")
@@ -683,7 +683,7 @@ func TestFocusRing(t *testing.T) {
 		h := newTestHome()
 		// Without a plan header selected, ToggleSelectedExpand returns false,
 		// so → is effectively a no-op — sidebar stays focused.
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyRight})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyRight})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus after →")
 	})
@@ -699,7 +699,7 @@ func TestFocusRing(t *testing.T) {
 		addTestInstance(t, h)
 		h.nav.SetSelectedInstance(0)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlDown})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 1, homeModel.nav.SelectedIndex())
 	})
@@ -711,7 +711,7 @@ func TestFocusRing(t *testing.T) {
 		addTestInstance(t, h)
 		h.nav.SetSelectedInstance(2)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlDown})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 0, homeModel.nav.SelectedIndex())
 	})
@@ -723,7 +723,7 @@ func TestFocusRing(t *testing.T) {
 		addTestInstance(t, h)
 		h.nav.SetSelectedInstance(2)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlUp})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 1, homeModel.nav.SelectedIndex())
 	})
@@ -735,7 +735,7 @@ func TestFocusRing(t *testing.T) {
 		addTestInstance(t, h)
 		h.nav.SetSelectedInstance(0)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlUp})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 2, homeModel.nav.SelectedIndex())
 	})
@@ -748,7 +748,7 @@ func TestFocusRing(t *testing.T) {
 		h.nav.GetInstances()[1].Status = session.Paused
 		h.nav.SetSelectedInstance(0)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlDown})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 2, homeModel.nav.SelectedIndex())
 	})
@@ -761,7 +761,7 @@ func TestFocusRing(t *testing.T) {
 		h.nav.GetInstances()[1].Status = session.Paused
 		h.nav.SetSelectedInstance(2)
 
-		homeModel := handle(t, h, tea.KeyMsg{Type: tea.KeyCtrlUp})
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
 
 		assert.Equal(t, 0, homeModel.nav.SelectedIndex())
 	})
@@ -1407,7 +1407,7 @@ func TestDeleteKey_AllowsRemovalOfExitedRunningInstance(t *testing.T) {
 	h.nav.SelectInstance(inst)
 	h.allInstances = append(h.allInstances, inst)
 
-	msg := tea.KeyMsg{Type: tea.KeyDelete}
+	msg := tea.KeyPressMsg{Code: tea.KeyDelete}
 	_, _ = h.handleKeyPress(msg)
 
 	assert.Equal(t, 0, h.nav.TotalInstances(),
@@ -1425,7 +1425,7 @@ func TestKillKey_NoopsOnExitedInstance(t *testing.T) {
 	h.nav.SelectInstance(inst)
 
 	h.keySent = true
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	msg := tea.KeyPressMsg{Code: 'k', Text: "k"}
 	_, cmd := h.handleKeyPress(msg)
 
 	assert.Nil(t, cmd, "k should no-op on an already-exited instance")

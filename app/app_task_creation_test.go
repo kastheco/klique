@@ -64,7 +64,7 @@ func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 		overlays:     overlay.NewManager(),
 	}
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	require.Nil(t, cmd)
 
 	updated, ok := model.(*home)
@@ -76,7 +76,7 @@ func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 func TestHandleKeyPressNewPlanWithoutOverlayReturnsDefault(t *testing.T) {
 	h := &home{state: stateNewPlan}
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	require.Nil(t, cmd)
 
 	updated, ok := model.(*home)
@@ -95,8 +95,8 @@ func TestNewPlanSubmitShowsTopicPicker(t *testing.T) {
 	}
 
 	// Tab to submit button, then Enter
-	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyTab})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)
@@ -115,7 +115,7 @@ func TestHandleKeyPressNewPlanTopicWithoutPickerClearsPendingValues(t *testing.T
 		pendingPlanDesc: "Refactor JWT auth",
 	}
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	require.Nil(t, cmd)
 
 	updated, ok := model.(*home)
@@ -136,8 +136,8 @@ func TestNewPlanTopicPickerShowsPendingPlanName(t *testing.T) {
 	}
 
 	// Tab to button, then Enter to submit — enters deriving state
-	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyTab})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)
@@ -151,7 +151,10 @@ func TestNewPlanTopicPickerShowsPendingPlanName(t *testing.T) {
 	require.True(t, updated2.overlays.IsActive())
 	po2, ok2 := updated2.overlays.Current().(*overlay.PickerOverlay)
 	require.True(t, ok2, "current overlay must be a PickerOverlay")
-	require.Contains(t, strings.ToLower(po2.View()), "auth refactor")
+	// Check both words are present (may be split across lines by lipgloss wrapping).
+	viewLower := strings.ToLower(po2.View())
+	require.Contains(t, viewLower, "auth")
+	require.Contains(t, viewLower, "refactor")
 }
 
 func TestNewPlanSubmitEntersDerivingState(t *testing.T) {
@@ -164,8 +167,8 @@ func TestNewPlanSubmitEntersDerivingState(t *testing.T) {
 		overlays: mgr3,
 	}
 
-	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyTab})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)
@@ -216,7 +219,7 @@ func TestDerivingStateBlocksKeyInput(t *testing.T) {
 		pendingPlanDesc: "test desc",
 	}
 
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "x"})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)
@@ -231,7 +234,7 @@ func TestDerivingStateEscapeCancels(t *testing.T) {
 		pendingPlanDesc: "test desc",
 	}
 
-	model, _ := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEscape})
+	model, _ := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)
@@ -272,8 +275,8 @@ func TestNewPlanSubmitSkipsAIWhenFirstLineIsViableSlug(t *testing.T) {
 	}
 
 	// Tab to submit button, then Enter
-	h.handleKeyPress(tea.KeyMsg{Type: tea.KeyTab})
-	model, cmd := h.handleKeyPress(tea.KeyMsg{Type: tea.KeyEnter})
+	h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyTab})
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	updated, ok := model.(*home)
 	require.True(t, ok)

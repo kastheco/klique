@@ -11,10 +11,10 @@ import (
 func TestFormOverlay_SubmitWithName(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "auth-refactor" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "auth-refactor", f.Name())
@@ -24,15 +24,15 @@ func TestFormOverlay_SubmitWithName(t *testing.T) {
 func TestFormOverlay_SubmitWithNameAndDescription(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "auth" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "refactor jwt" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "auth", f.Name())
@@ -42,7 +42,7 @@ func TestFormOverlay_SubmitWithNameAndDescription(t *testing.T) {
 func TestFormOverlay_EmptyNameDoesNotSubmit(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.False(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -50,7 +50,7 @@ func TestFormOverlay_EmptyNameDoesNotSubmit(t *testing.T) {
 func TestFormOverlay_EscCancels(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -58,15 +58,15 @@ func TestFormOverlay_EscCancels(t *testing.T) {
 func TestFormOverlay_ArrowDownNavigates(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "test" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	for _, r := range "desc" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.True(t, result.Dismissed)
 	assert.Equal(t, "test", f.Name())
 	assert.Equal(t, "desc", f.Description())
@@ -75,20 +75,20 @@ func TestFormOverlay_ArrowDownNavigates(t *testing.T) {
 func TestFormOverlay_TabCyclesFromDescriptionBackToName(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "a" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "b" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "c" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.True(t, result.Dismissed)
 	assert.Equal(t, "ac", f.Name())
 	assert.Equal(t, "b", f.Description())
@@ -97,15 +97,15 @@ func TestFormOverlay_TabCyclesFromDescriptionBackToName(t *testing.T) {
 func TestFormOverlay_ShiftTabCyclesFromNameToDescription(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "a" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	for _, r := range "b" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.True(t, result.Dismissed)
 	assert.Equal(t, "a", f.Name())
 	assert.Equal(t, "b", f.Description())
@@ -114,10 +114,10 @@ func TestFormOverlay_ShiftTabCyclesFromNameToDescription(t *testing.T) {
 func TestSpawnFormOverlay_SubmitWithNameOnly(t *testing.T) {
 	f := NewSpawnFormOverlay("spawn agent", 60)
 	for _, r := range "my-task" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "my-task", f.Name())
@@ -128,20 +128,20 @@ func TestSpawnFormOverlay_SubmitWithNameOnly(t *testing.T) {
 func TestSpawnFormOverlay_SubmitWithAllFields(t *testing.T) {
 	f := NewSpawnFormOverlay("spawn agent", 60)
 	for _, r := range "task" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "feature/login" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "/tmp/worktree" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "task", f.Name())
@@ -151,7 +151,7 @@ func TestSpawnFormOverlay_SubmitWithAllFields(t *testing.T) {
 
 func TestSpawnFormOverlay_EmptyNameDoesNotSubmit(t *testing.T) {
 	f := NewSpawnFormOverlay("spawn agent", 60)
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.False(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }
@@ -159,28 +159,28 @@ func TestSpawnFormOverlay_EmptyNameDoesNotSubmit(t *testing.T) {
 func TestSpawnFormOverlay_TabCyclesThreeFields(t *testing.T) {
 	f := NewSpawnFormOverlay("spawn agent", 60)
 	for _, r := range "n" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
 	// Tab to branch
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "b" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
 	// Tab to path
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "p" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
 	// Tab wraps to name
-	f.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	f.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	for _, r := range "!" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.True(t, result.Dismissed)
 	assert.Equal(t, "n!", f.Name())
 	assert.Equal(t, "b", f.Branch())
@@ -202,9 +202,9 @@ func TestFormOverlay_ImplementsOverlay(t *testing.T) {
 func TestFormOverlay_HandleKey_Submit(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
 	for _, r := range "test-name" {
-		f.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		f.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "test-name", result.Value)
@@ -212,7 +212,7 @@ func TestFormOverlay_HandleKey_Submit(t *testing.T) {
 
 func TestFormOverlay_HandleKey_Cancel(t *testing.T) {
 	f := NewFormOverlay("new plan", 60)
-	result := f.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := f.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 	assert.True(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

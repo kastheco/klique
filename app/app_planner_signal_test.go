@@ -161,7 +161,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 	}
 
 	// Press "n" (cancel).
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
+	keyMsg := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	model, _ := h.handleKeyPress(keyMsg)
 	updated := model.(*home)
 

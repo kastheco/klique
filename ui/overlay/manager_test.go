@@ -21,7 +21,7 @@ func TestManager_ShowAndDismiss(t *testing.T) {
 	mgr.Show(&stubOverlay{rendered: "overlay content"})
 	require.True(t, mgr.IsActive())
 
-	result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result := mgr.HandleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 	assert.True(t, result.Dismissed)
 	assert.False(t, mgr.IsActive())
 }
@@ -30,7 +30,7 @@ func TestManager_Submit(t *testing.T) {
 	mgr := NewManager()
 	mgr.Show(&stubOverlay{rendered: "form"})
 
-	result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := mgr.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Submitted)
 	assert.Equal(t, "test-value", result.Value)
 	assert.False(t, mgr.IsActive(), "overlay should be dismissed after submit")
@@ -38,7 +38,7 @@ func TestManager_Submit(t *testing.T) {
 
 func TestManager_HandleKeyWhenInactive(t *testing.T) {
 	mgr := NewManager()
-	result := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result := mgr.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.False(t, result.Dismissed)
 	assert.False(t, result.Submitted)
 }

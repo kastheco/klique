@@ -97,7 +97,7 @@ func (c *ContextMenu) skipToNonDisabled(direction int) {
 
 // HandleKey implements Overlay. It processes a key event and returns a Result
 // indicating whether the menu should close and which action was selected.
-func (c *ContextMenu) HandleKey(msg tea.KeyMsg) Result {
+func (c *ContextMenu) HandleKey(msg tea.KeyPressMsg) Result {
 	switch msg.String() {
 	case "esc":
 		return Result{Dismissed: true}
@@ -139,8 +139,8 @@ func (c *ContextMenu) HandleKey(msg tea.KeyMsg) Result {
 			c.applyFilter()
 		}
 	default:
-		if msg.Type == tea.KeyRunes {
-			r := msg.Runes[0]
+		if len(msg.Text) > 0 {
+			r := rune(msg.Text[0])
 			// Number shortcut (1-9) when search is empty
 			if r >= '1' && r <= '9' && c.searchQuery == "" {
 				num := int(r - '0')
@@ -152,7 +152,7 @@ func (c *ContextMenu) HandleKey(msg tea.KeyMsg) Result {
 				}
 				return Result{}
 			}
-			c.searchQuery += string(msg.Runes)
+			c.searchQuery += msg.Text
 			c.applyFilter()
 		}
 	}

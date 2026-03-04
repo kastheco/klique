@@ -111,7 +111,7 @@ func (m *agentStepModel) Init() tea.Cmd {
 }
 
 func (m *agentStepModel) Update(msg tea.Msg) (stepModel, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
@@ -124,7 +124,7 @@ func (m *agentStepModel) Update(msg tea.Msg) (stepModel, tea.Cmd) {
 		m.cursorUp()
 	case "down", "j":
 		m.cursorDown()
-	case " ":
+	case "space":
 		m.toggleEnabled()
 	case "enter":
 		m.enterEditMode()
@@ -376,7 +376,7 @@ func (m *agentStepModel) cycleFieldValue(direction int) {
 	}
 }
 
-func (m *agentStepModel) updateEditMode(keyMsg tea.KeyMsg) (stepModel, tea.Cmd) {
+func (m *agentStepModel) updateEditMode(keyMsg tea.KeyPressMsg) (stepModel, tea.Cmd) {
 	if keyMsg.String() == "q" {
 		return m, func() tea.Msg { return stepCancelMsg{} }
 	}
@@ -422,8 +422,8 @@ func (m *agentStepModel) updateEditMode(keyMsg tea.KeyMsg) (stepModel, tea.Cmd) 
 			}
 			return m, nil
 		}
-		if m.filtering && keyMsg.Type == tea.KeyRunes {
-			m.filterText += string(keyMsg.Runes)
+		if m.filtering && len(keyMsg.Text) > 0 {
+			m.filterText += keyMsg.Text
 			m.applyModelFilter()
 			return m, nil
 		}
