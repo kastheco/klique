@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "238128022174",
+  "strategy": "manual-commit",
+  "branch": "plan/charm-v2-upgrade",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/charm-v2-upgrade.md",
+    "ui/overlay/confirmationOverlay_test.go",
+    "ui/overlay/contextMenu_test.go",
+    "ui/overlay/formOverlay_test.go",
+    "ui/overlay/manager_test.go",
+    "ui/overlay/overlay.go",
+    "ui/overlay/permissionOverlay.go",
+    "ui/overlay/permissionOverlay_test.go",
+    "ui/overlay/pickerOverlay_test.go",
+    "ui/overlay/textInput_test.go",
+    "ui/overlay/tmuxBrowserOverlay_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/8128022174/0/metadata.json",
+      "transcript": "/23/8128022174/0/full.jsonl",
+      "context": "/23/8128022174/0/context.md",
+      "content_hash": "/23/8128022174/0/content_hash.txt",
+      "prompt": "/23/8128022174/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 28,
+    "cache_creation_tokens": 132869,
+    "cache_read_tokens": 2775062,
+    "output_tokens": 8552,
+    "api_call_count": 28
+  }
+}
