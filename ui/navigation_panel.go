@@ -1108,6 +1108,9 @@ func navInstanceTitle(inst *session.Instance) string {
 	case inst.SoloAgent && inst.TaskFile != "":
 		return taskstate.DisplayName(inst.TaskFile)
 	case inst.AgentType == session.AgentTypeCoder && inst.TaskFile != "" && inst.WaveNumber == 0:
+		if inst.ReviewCycle > 0 {
+			return fmt.Sprintf("applying fixes #%d", inst.ReviewCycle)
+		}
 		return "applying fixes"
 	default:
 		return inst.Title
