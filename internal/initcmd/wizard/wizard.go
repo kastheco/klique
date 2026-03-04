@@ -38,7 +38,7 @@ type AgentState struct {
 
 // DefaultAgentRoles returns the built-in agent role names.
 func DefaultAgentRoles() []string {
-	return []string{"coder", "reviewer", "planner", "chat", "fixer"}
+	return []string{"coder", "elaborator", "reviewer", "planner", "chat", "fixer"}
 }
 
 // RoleDefaults returns sensible per-role defaults for fresh inits.
@@ -47,23 +47,30 @@ func RoleDefaults() map[string]AgentState {
 	return map[string]AgentState{
 		"coder": {
 			Role:        "coder",
-			Model:       "anthropic/claude-sonnet-4-6",
-			Effort:      "medium",
+			Model:       "openai/gpt-5.3-codex",
+			Effort:      "low",
+			Temperature: "0.1",
+			Enabled:     true,
+		},
+		"elaborator": {
+			Role:        "elaborator",
+			Model:       "openai/gpt-5.3-codex",
+			Effort:      "high",
 			Temperature: "0.1",
 			Enabled:     true,
 		},
 		"planner": {
 			Role:        "planner",
 			Model:       "anthropic/claude-opus-4-6",
-			Effort:      "max",
-			Temperature: "0.5",
+			Effort:      "high",
+			Temperature: "0.3",
 			Enabled:     true,
 		},
 		"reviewer": {
 			Role:        "reviewer",
 			Model:       "openai/gpt-5.3-codex",
-			Effort:      "xhigh",
-			Temperature: "0.2",
+			Effort:      "medium",
+			Temperature: "0.1",
 			Enabled:     true,
 		},
 		"chat": {
@@ -75,8 +82,8 @@ func RoleDefaults() map[string]AgentState {
 		},
 		"fixer": {
 			Role:        "fixer",
-			Model:       "anthropic/claude-sonnet-4-6",
-			Effort:      "low",
+			Model:       "openai/gpt-5.3-codex",
+			Effort:      "medium",
 			Temperature: "0.1",
 			Enabled:     true,
 		},
