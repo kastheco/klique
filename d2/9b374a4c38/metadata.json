@@ -3,7 +3,7 @@
   "checkpoint_id": "d29b374a4c38",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     "cmd/task.go",
     "docs/plans/cli-clickup-integration.md",
@@ -62,13 +62,20 @@
       "context": "/d2/9b374a4c38/6/context.md",
       "content_hash": "/d2/9b374a4c38/6/content_hash.txt",
       "prompt": "/d2/9b374a4c38/6/prompt.txt"
+    },
+    {
+      "metadata": "/d2/9b374a4c38/7/metadata.json",
+      "transcript": "/d2/9b374a4c38/7/full.jsonl",
+      "context": "/d2/9b374a4c38/7/context.md",
+      "content_hash": "/d2/9b374a4c38/7/content_hash.txt",
+      "prompt": "/d2/9b374a4c38/7/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 89,
-    "cache_creation_tokens": 317781,
+    "input_tokens": 90,
+    "cache_creation_tokens": 384981,
     "cache_read_tokens": 5218433,
-    "output_tokens": 25212,
-    "api_call_count": 75
+    "output_tokens": 25356,
+    "api_call_count": 76
   }
 }

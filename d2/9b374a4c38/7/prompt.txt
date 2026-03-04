@@ -1,0 +1,6 @@
+The plan at docs/plans/safe-kill.md is missing ## Wave N headers required for kasmos wave orchestration. Please annotate the plan by wrapping all tasks under ## Wave N sections. Every plan needs at least ## Wave 1 — even single-task trivial plans. Keep all existing task content intact; only add the ## Wave headers.
+
+After annotating:
+1. Commit: git add docs/plans/safe-kill.md && git commit -m "plan: add wave headers to safe-kill.md"
+2. Signal completion: touch .kasmos/signals/planner-finished-safe-kill.md
+Do not edit plan-state.json directly.
