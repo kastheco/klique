@@ -76,7 +76,7 @@ func TestBuildElaborationPrompt(t *testing.T) {
 	// Must instruct to expand task bodies
 	assert.Contains(t, prompt, "implementation detail")
 	// Must instruct to preserve structure
-	assert.Contains(t, prompt, "preserve")
+	assert.Contains(t, prompt, "Preserve")
 	// Must reference reading the codebase
 	assert.Contains(t, prompt, "codebase")
 }
