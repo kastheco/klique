@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "d29b374a4c38",
+  "session_id": "ses_3496b3803ffeig1OgxUL3QZL0V",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T07:37:11.738794891Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/plans/improved-info-tab.md",
+    "improved-info-tab.md",
+    "cmd/task.go",
+    "docs/plans/cli-clickup-integration.md",
+    "docs/plans/cli-monitoring.md",
+    "docs/plans/cli-plan-lifecycle.md",
+    "docs/plans/cli-signal-processing.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "a15de530829a",
+  "checkpoint_transcript_start": 22,
+  "transcript_lines_at_start": 22,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T07:37:11.481538486Z",
+    "agent_lines": 865,
+    "human_added": 388,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1253,
+    "agent_percentage": 69.0343176376696
+  }
+}
