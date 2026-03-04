@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "238128022174",
+  "session_id": "ses_34952a21affeL41yASOt2ZIIsa",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T03:26:56.297547207Z",
+  "branch": "plan/charm-v2-upgrade",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/plans/charm-v2-upgrade.md"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "9a857fe02956",
+  "checkpoint_transcript_start": 26,
+  "transcript_lines_at_start": 26,
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 373,
+    "cache_read_tokens": 65582,
+    "output_tokens": 397,
+    "api_call_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T03:26:55.793425788Z",
+    "agent_lines": 0,
+    "human_added": 6061,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 6061,
+    "agent_percentage": 0
+  }
+}

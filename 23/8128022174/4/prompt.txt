@@ -1,0 +1,59 @@
+Implement Task 1: Update go.mod and Batch-Rewrite All Import Paths
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Migrate klique from Charm v1 (bubbletea v1.3, lipgloss v1.1, bubbles v0.21) to Charm v2 (bubbletea v2, lipgloss v2, bubbles v2) — adopting the new declarative View API, restructured key/mouse events, and getter/setter component patterns.
+**Architecture:** All three core Charm libraries must upgrade atomically since they share types at module boundaries. The migration rewrites import paths (`charm.land/*/v2`), converts `View() string` to `View() tea.View`, replaces `tea.KeyMsg` struct matching with `tea.KeyPressMsg`, moves program options into declarative View fields, and updates bubbles component APIs to use getter/setter methods. huh v2 (experimental branch) replaces huh v0.8. glamour and harmonica remain at current versions.
+**Tech Stack:** Go 1.24+, charm.land/bubbletea/v2, charm.land/lipgloss/v2, charm.land/bubbles/v2, charm.land/huh/v2 (v2-exp branch), charmbracelet/glamour v0.10, charmbracelet/harmonica v0.2
+
+## Wave 1 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `go.mod`
+- Modify: all `*.go` files (import blocks only — ~70 files)
+
+> TDD note: Steps 1-2 omitted — this is a config/import-only task with no testable logic. Module resolution and compilation in subsequent tasks serve as verification.
+
+**Step 3: write minimal implementation**
+
+1. Update `go.mod` — add charm.land v2 modules:
+   ```bash
+   go get charm.land/bubbletea/v2@latest
+   go get charm.land/lipgloss/v2@latest
+   go get charm.land/bubbles/v2@latest
+   go get charm.land/huh/v2@latest   # use v2-exp tag if stable tag not yet available
+   go mod tidy
+   ```
+
+2. Batch-rewrite all import paths using `sd`:
+   ```bash
+   sd 'github.com/charmbracelet/bubbletea' 'charm.land/bubbletea/v2' $(fd -e go)
+   sd 'github.com/charmbracelet/lipgloss' 'charm.land/lipgloss/v2' $(fd -e go)
+   sd 'github.com/charmbracelet/bubbles/' 'charm.land/bubbles/v2/' $(fd -e go)
+   sd 'github.com/charmbracelet/huh' 'charm.land/huh/v2' $(fd -e go)
+   ```
+
+3. Do NOT change `glamour` or `harmonica` imports — they remain on `github.com/charmbracelet/`.
+
+4. Run `go mod tidy` to resolve the dependency graph.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go mod tidy && echo "module resolution OK"
+```
+
+expected: module resolution succeeds (code won't fully compile until wave 2)
+
+**Step 5: commit**
+
+```bash
+git add go.mod go.sum $(fd -e go)
+git commit -m "refactor: rewrite charm import paths from github.com to charm.land/v2"
+```
+
+---
