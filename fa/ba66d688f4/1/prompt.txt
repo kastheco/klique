@@ -1,0 +1,9 @@
+this plan is stuck in a planning replanning loop because it thinks wave headers are missing but they're in the db store
+
+---
+
+you've told me it was never written like 5 times now
+
+---
+
+commit the fix
