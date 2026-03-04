@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "c0363096ce99",
+  "session_id": "ses_3456ce797ffezJPFMMGFy5Yb8o",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-04T21:12:08.276406985Z",
+  "branch": "plan/increase-plan-detail",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/wave_orchestrator.go",
+    "skills.go",
+    "skills_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "8245f232db8a",
+  "initial_attribution": {
+    "calculated_at": "2026-03-04T21:12:08.276172215Z",
+    "agent_lines": 134,
+    "human_added": 988,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1122,
+    "agent_percentage": 11.942959001782532
+  }
+}
