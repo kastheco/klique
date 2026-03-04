@@ -1,0 +1,116 @@
+Implement Task 2: Ingest Content During CLI Registration
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Eliminate remaining disk reads of plan `.md` files in the TUI app layer, making the task store database the single source of truth for plan content. Three production callsites in `app/` still read plan content from `docs/plans/` on disk instead of the database — migrate them to use `m.taskStore.GetContent()`.
+**Architecture:** The task store (SQLite via `config/taskstore`) already has a `content` column and `GetContent`/`SetContent` methods. Most callsites already use the DB — the preview renderer, wave signal handler, and orphaned orchestrator rebuilder all call `m.taskStore.GetContent()`. Three callsites remain on disk: the "implement" action, `validatePlanHasWaves`, and the "solo" action's disk-existence check. Additionally, `kas task register` (CLI) creates entries without ingesting content. This plan migrates all remaining disk reads and adds content ingestion to the register flow.
+**Tech Stack:** Go, SQLite (modernc.org/sqlite), config/taskstore, config/taskstate, config/taskparser, testify
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `cmd/task.go`
+- Test: `cmd/task_test.go`
+
+**Step 1: write the failing test**
+
+Add a test in `cmd/task_test.go` that verifies `executeTaskRegister` ingests the `.md` file content into the store's content field after creating the entry:
+
+```go
+func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
+    // Setup: create a temp plansDir, write a .md file with known content
+    store, _ := taskstore.NewSQLiteStore(":memory:")
+    defer store.Close()
+
+    planContent := "# My Plan\n\n## Wave 1\n\n### Task 1: Do something\n\nDo it.\n"
+    planFile := "my-plan.md"
+    os.WriteFile(filepath.Join(plansDir, planFile), []byte(planContent), 0o644)
+
+    err := executeTaskRegister(plansDir, planFile, "", "", "", store)
+    require.NoError(t, err)
+
+    // Verify content was ingested
+    got, err := store.GetContent(projectFromPlansDir(plansDir), planFile)
+    require.NoError(t, err)
+    assert.Equal(t, planContent, got)
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v
+```
+
+expected: FAIL — current `executeTaskRegister` calls `ps.Create()` without ingesting content
+
+**Step 3: write minimal implementation**
+
+Modify `executeTaskRegister` in `cmd/task.go` to always read the file content and use `CreateWithContent` instead of `Create`:
+
+```go
+func executeTaskRegister(plansDir, planFile, branch, topic, description string, store taskstore.Store) error {
+    fullPath := filepath.Join(plansDir, planFile)
+    data, err := os.ReadFile(fullPath)
+    if err != nil {
+        return fmt.Errorf("task file not found on disk: %s", fullPath)
+    }
+    ps, err := loadTaskState(plansDir, store)
+    if err != nil {
+        return err
+    }
+    if description == "" {
+        description = strings.TrimSuffix(planFile, ".md")
+        for _, line := range strings.Split(string(data), "\n") {
+            if strings.HasPrefix(line, "# ") {
+                description = strings.TrimPrefix(line, "# ")
+                break
+            }
+        }
+    }
+    if branch == "" {
+        slug := strings.TrimSuffix(planFile, ".md")
+        branch = "plan/" + slug
+    }
+    info, _ := os.Stat(fullPath)
+    createdAt := info.ModTime()
+    return ps.CreateWithContent(planFile, description, branch, topic, createdAt, string(data))
+}
+```
+
+The key change: replace `ps.Create(...)` with `ps.CreateWithContent(...)` which stores both the metadata and the file content in the database in a single operation. The `CreateWithContent` method already exists in `config/taskstate/taskstate.go` (line 328).
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./cmd/... -run TestExecuteTaskRegisterIngestsContent -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add cmd/task.go cmd/task_test.go
+git commit -m "feat: ingest plan file content into database during kas task register"
+```
