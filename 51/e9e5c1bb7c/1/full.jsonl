@@ -7,13 +7,13 @@
     "title": "kas: implement fix-agent-skills-cli w1/t1",
     "version": "1.2.17",
     "summary": {
-      "additions": 51,
+      "additions": 77,
       "deletions": 10,
       "files": 2
     },
     "time": {
       "created": 1772656127303,
-      "updated": 1772656176313
+      "updated": 1772656187887
     }
   },
   "messages": [
@@ -36,8 +36,8 @@
             {
               "file": "skills_test.go",
               "before": "package main\n\nimport (\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestSkillsSyncCommand(t *testing.T) {\n\t// Verify the command exists and has correct metadata\n\tcmd := newSkillsSyncCmd()\n\tassert.Equal(t, \"sync\", cmd.Use)\n\tassert.Contains(t, cmd.Short, \"skill\")\n}\n",
-              "after": "package main\n\nimport (\n\t\"bytes\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestSkillsSyncCommand(t *testing.T) {\n\t// Verify the command exists and has correct metadata\n\tcmd := newSkillsSyncCmd()\n\tassert.Equal(t, \"sync\", cmd.Use)\n\tassert.Contains(t, cmd.Short, \"skill\")\n}\n\nfunc TestRunSkillsList_IncludesSymlinkedDirs(t *testing.T) {\n\thome := t.TempDir()\n\tt.Setenv(\"HOME\", home)\n\n\tskillsDir := filepath.Join(home, \".agents\", \"skills\")\n\trequire.NoError(t, os.MkdirAll(skillsDir, 0o755))\n\n\t// Real directory skill\n\trequire.NoError(t, os.MkdirAll(filepath.Join(skillsDir, \"real-skill\"), 0o755))\n\n\t// Symlink-to-directory skill (externally managed)\n\textRepo := filepath.Join(home, \"external-repo\", \"my-skill\")\n\trequire.NoError(t, os.MkdirAll(extRepo, 0o755))\n\trequire.NoError(t, os.Symlink(extRepo, filepath.Join(skillsDir, \"ext-skill\")))\n\n\tvar buf bytes.Buffer\n\tcmd := newSkillsListCmd()\n\tcmd.SetOut(&buf)\n\terr := cmd.Execute()\n\trequire.NoError(t, err)\n\n\toutput := buf.String()\n\tassert.Contains(t, output, \"real-skill\")\n\tassert.Contains(t, output, \"ext-skill\")\n\tassert.Contains(t, output, \"external\")\n}\n",
-              "additions": 31,
+              "after": "package main\n\nimport (\n\t\"bytes\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestSkillsSyncCommand(t *testing.T) {\n\t// Verify the command exists and has correct metadata\n\tcmd := newSkillsSyncCmd()\n\tassert.Equal(t, \"sync\", cmd.Use)\n\tassert.Contains(t, cmd.Short, \"skill\")\n}\n\nfunc TestRunSkillsList_IncludesSymlinkedDirs(t *testing.T) {\n\thome := t.TempDir()\n\tt.Setenv(\"HOME\", home)\n\n\tskillsDir := filepath.Join(home, \".agents\", \"skills\")\n\trequire.NoError(t, os.MkdirAll(skillsDir, 0o755))\n\n\t// Real directory skill\n\trequire.NoError(t, os.MkdirAll(filepath.Join(skillsDir, \"real-skill\"), 0o755))\n\n\t// Symlink-to-directory skill (externally managed)\n\textRepo := filepath.Join(home, \"external-repo\", \"my-skill\")\n\trequire.NoError(t, os.MkdirAll(extRepo, 0o755))\n\trequire.NoError(t, os.Symlink(extRepo, filepath.Join(skillsDir, \"ext-skill\")))\n\n\tvar buf bytes.Buffer\n\tcmd := newSkillsListCmd()\n\tcmd.SetOut(&buf)\n\terr := cmd.Execute()\n\trequire.NoError(t, err)\n\n\toutput := buf.String()\n\tassert.Contains(t, output, \"real-skill\")\n\tassert.Contains(t, output, \"ext-skill\")\n\tassert.Contains(t, output, \"external\")\n}\n\nfunc TestRunSkillsList_ShowsProjectSkills(t *testing.T) {\n\thome := t.TempDir()\n\tt.Setenv(\"HOME\", home)\n\n\t// Create global skill\n\tglobalSkills := filepath.Join(home, \".agents\", \"skills\")\n\trequire.NoError(t, os.MkdirAll(filepath.Join(globalSkills, \"global-skill\"), 0o755))\n\n\t// Create project skill in cwd\n\tprojectDir := t.TempDir()\n\tt.Chdir(projectDir)\n\tprojectSkills := filepath.Join(projectDir, \".agents\", \"skills\")\n\trequire.NoError(t, os.MkdirAll(filepath.Join(projectSkills, \"project-skill\"), 0o755))\n\n\tvar buf bytes.Buffer\n\tcmd := newSkillsListCmd()\n\tcmd.SetOut(&buf)\n\terr := cmd.Execute()\n\trequire.NoError(t, err)\n\n\toutput := buf.String()\n\tassert.Contains(t, output, \"global-skill\")\n\tassert.Contains(t, output, \"project-skill\")\n\tassert.Contains(t, output, \"Project skills\")\n}\n",
+              "additions": 57,
               "deletions": 0,
               "status": "modified"
             }
@@ -985,7 +985,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772656176304
+          "created": 1772656176304,
+          "completed": 1772656187880
         },
         "parentID": "msg_cba89ed4e001ne7WZ9too9hNzx",
         "modelID": "claude-sonnet-4-6",
@@ -998,15 +999,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 56987,
+          "input": 1,
+          "output": 187,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 56293,
+            "write": 506
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "msg_cba8aacb0001IuWMUUicEnNN3S",
         "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B"
       },
@@ -1034,22 +1037,128 @@
           "callID": "toolu_01PQZcZYdHQ1swutRidxi7w7",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add skills.go skills_test.go && git commit -m \"fix(task-1): skills list now includes symlinked skill directories\n\n- Replace entry.IsDir() guard with Lstat-based check that accepts\n  both real directories and symlinks-to-directories\n- Route output through cmd.OutOrStdout() so tests can capture it\n- Symlinked skills show '-> <target> (external)' annotation\"",
               "description": "Commit the fix with task number in message"
             },
+            "output": "[plan/fix-agent-skills-cli c228b35d] fix(task-1): skills list now includes symlinked skill directories\n 2 files changed, 77 insertions(+), 10 deletions(-)\n",
+            "title": "Commit the fix with task number in message",
             "metadata": {
-              "output": "",
-              "description": "Commit the fix with task number in message"
+              "output": "[plan/fix-agent-skills-cli c228b35d] fix(task-1): skills list now includes symlinked skill directories\n 2 files changed, 77 insertions(+), 10 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit the fix with task number in message",
+              "truncated": false
             },
             "time": {
-              "start": 1772656182553
+              "start": 1772656182552,
+              "end": 1772656187873
             }
           },
           "id": "REDACTED",
           "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
           "messageID": "msg_cba8aacb0001IuWMUUicEnNN3S"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "ff06ee0ac42f17a011d8d4cc0f4527f668655280",
+          "cost": 0,
+          "tokens": {
+            "total": 56987,
+            "input": 1,
+            "output": 187,
+            "reasoning": 0,
+            "cache": {
+              "read": 56293,
+              "write": 506
+            }
+          },
+          "id": "prt_cba8ad9e1001zWUghrx6bf99np",
+          "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
+          "messageID": "msg_cba8aacb0001IuWMUUicEnNN3S"
+        },
+        {
+          "type": "patch",
+          "hash": "c680beae02066ebedc9b2e24e9ddd913e0f28d3c",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-fix-agent-skills-cli/skills_test.go"
+          ],
+          "id": "prt_cba8ad9e7001eOQ3sNPy00enPi",
+          "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
+          "messageID": "msg_cba8aacb0001IuWMUUicEnNN3S"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772656187881,
+          "completed": 1772656194420
+        },
+        "parentID": "msg_cba89ed4e001ne7WZ9too9hNzx",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-fix-agent-skills-cli",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-fix-agent-skills-cli"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 57300,
+          "input": 1,
+          "output": 248,
+          "reasoning": 0,
+          "cache": {
+            "read": 56799,
+            "write": 252
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cba8ad9e9001VQyM8LC0gZ4eWL",
+        "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "ff06ee0ac42f17a011d8d4cc0f4527f668655280",
+          "id": "prt_cba8adef00013oRPS3woGbD4Tb",
+          "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
+          "messageID": "msg_cba8ad9e9001VQyM8LC0gZ4eWL"
+        },
+        {
+          "type": "text",
+          "text": "Done. Here's what was implemented:\n\n**Root cause:** `entry.IsDir()` at line 48 returned `false` for symlinks, so symlinked skill directories were filtered out before the symlink detection code (`os.Lstat`) could ever run.\n\n**Fix in `skills.go`:**\n- Replaced the `!entry.IsDir()` early-continue with an `os.Lstat`-based check that accepts both real directories and symlinks (rejecting plain files only)\n- Added a secondary `os.Stat` (follows symlink) to verify the symlink target is actually a directory — dangling or file symlinks are skipped\n- Routed all output through `cmd.OutOrStdout()` instead of `fmt.Printf` so tests can capture output via `cmd.SetOut(&buf)`\n\n**Test in `skills_test.go`:** `TestRunSkillsList_IncludesSymlinkedDirs` creates a real directory skill and a symlink-to-directory skill, then asserts both appear in the output with \"external\" annotation.",
+          "time": {
+            "start": 1772656194390,
+            "end": 1772656194390
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
+          "messageID": "msg_cba8ad9e9001VQyM8LC0gZ4eWL"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "ff06ee0ac42f17a011d8d4cc0f4527f668655280",
+          "cost": 0,
+          "tokens": {
+            "total": 57300,
+            "input": 1,
+            "output": 248,
+            "reasoning": 0,
+            "cache": {
+              "read": 56799,
+              "write": 252
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_3457612b9ffeNFJR2SVVInW29B",
+          "messageID": "msg_cba8ad9e9001VQyM8LC0gZ4eWL"
         }
       ]
     }
