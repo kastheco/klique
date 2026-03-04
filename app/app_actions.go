@@ -24,14 +24,16 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "kill_instance":
 		selected := m.nav.GetSelectedInstance()
 		if selected != nil {
-			if err := selected.Pause(); err != nil {
-				return m, m.handleError(err)
-			}
+			// Emit audit before attempting pause so the event is always recorded
+			// even when the instance has not been started (e.g. exited, loading).
 			m.audit(auditlog.EventAgentKilled, "agent stopped (branch preserved)",
 				auditlog.WithInstance(selected.Title),
 				auditlog.WithAgent(selected.AgentType),
 				auditlog.WithPlan(selected.TaskFile),
 			)
+			if err := selected.Pause(); err != nil {
+				return m, m.handleError(err)
+			}
 			m.saveAllInstances()
 			m.updateNavPanelStatus()
 		}
