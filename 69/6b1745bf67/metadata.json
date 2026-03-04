@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "696b1745bf67",
+  "strategy": "manual-commit",
+  "branch": "plan/purge-agpl-orchestrator",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/clickup_progress_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/69/6b1745bf67/0/metadata.json",
+      "transcript": "/69/6b1745bf67/0/full.jsonl",
+      "context": "/69/6b1745bf67/0/context.md",
+      "content_hash": "/69/6b1745bf67/0/content_hash.txt",
+      "prompt": "/69/6b1745bf67/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 22,
+    "cache_creation_tokens": 93430,
+    "cache_read_tokens": 1578628,
+    "output_tokens": 8038,
+    "api_call_count": 22
+  }
+}
