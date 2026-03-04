@@ -10,6 +10,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -865,11 +866,11 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			m.loadTaskState()
 			m.updateSidebarTasks()
 			m.toastManager.Info("task needs ## Wave headers — respawning planner to annotate.")
-			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildWaveAnnotationPrompt(planFile))
+			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", orchestration.BuildWaveAnnotationPrompt(planFile))
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}
 
-		orch := NewWaveOrchestrator(planFile, plan)
+		orch := orchestration.NewWaveOrchestrator(planFile, plan)
 		m.waveOrchestrators[planFile] = orch
 
 		if err := m.fsmSetImplementing(planFile); err != nil {
@@ -903,11 +904,11 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			m.loadTaskState()
 			m.updateSidebarTasks()
 			m.toastManager.Info("task needs ## Wave headers — respawning planner to annotate.")
-			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildWaveAnnotationPrompt(planFile))
+			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", orchestration.BuildWaveAnnotationPrompt(planFile))
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}
 
-		orch := NewWaveOrchestrator(planFile, plan)
+		orch := orchestration.NewWaveOrchestrator(planFile, plan)
 		m.waveOrchestrators[planFile] = orch
 
 		if err := m.fsmSetImplementing(planFile); err != nil {

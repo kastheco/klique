@@ -19,14 +19,6 @@ func resolveClickUpTaskID(entry taskstate.TaskEntry, content string) string {
 	return clickup.ParseClickUpTaskID(content)
 }
 
-// shouldPostWaveCompleteComment returns true when an intermediate wave_complete
-// comment should be posted to ClickUp. Single-wave plans always return false —
-// they use the "all waves complete" event instead so they don't get a redundant
-// notification for every wave.
-func shouldPostWaveCompleteComment(orch *WaveOrchestrator) bool {
-	return orch != nil && orch.TotalWaves() > 1
-}
-
 // postClickUpProgress creates a fire-and-forget tea.Cmd that posts a markdown
 // progress comment to the ClickUp task linked to the given taskID.
 // Returns nil (no-op) when taskID is empty or commenter is nil.

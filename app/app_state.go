@@ -92,12 +92,12 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 					tasks := orch.CurrentWaveTasks()
 					data.TaskGlyphs = make([]ui.TaskGlyph, len(tasks))
 					for i, task := range tasks {
-						switch orch.taskStates[task.Number] {
-						case taskComplete:
+						switch {
+						case orch.IsTaskComplete(task.Number):
 							data.TaskGlyphs[i] = ui.TaskGlyphComplete
-						case taskFailed:
+						case orch.IsTaskFailed(task.Number):
 							data.TaskGlyphs[i] = ui.TaskGlyphFailed
-						case taskRunning:
+						case orch.IsTaskRunning(task.Number):
 							data.TaskGlyphs[i] = ui.TaskGlyphRunning
 						default:
 							data.TaskGlyphs[i] = ui.TaskGlyphPending
@@ -1384,25 +1384,6 @@ func buildPlanningPrompt(planName, description string) string {
 	)
 }
 
-// buildWaveAnnotationPrompt returns the prompt used when a planner is respawned
-// to add ## Wave headers to an existing plan that is missing them.
-// It instructs the planner to annotate the plan, commit the change, and write
-// the sentinel signal so kasmos can resume the implementation flow.
-func buildWaveAnnotationPrompt(planFile string) string {
-	return fmt.Sprintf(
-		"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. "+
-			"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping "+
-			"all tasks under ## Wave N sections. "+
-			"Every plan needs at least ## Wave 1 — even single-task trivial plans. "+
-			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
-			"After annotating:\n"+
-			"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\n"+
-			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
-			"Do not edit plan-state.json directly.",
-		planFile,
-	)
-}
-
 // buildImplementPrompt returns the prompt for a coder agent session.
 // Agents retrieve plan content from the task store via `kas task show` and write
 // sentinel signals to .kasmos/signals/ in their worktree; the TUI ingests them on completion.
@@ -1680,8 +1661,6 @@ func (m *home) rebuildOrphanedOrchestrators() {
 			continue
 		}
 
-		orch := NewWaveOrchestrator(planFile, plan)
-
 		// Determine which wave the instances are on (use the max wave number seen).
 		targetWave := 0
 		for _, t := range tasks {
@@ -1690,29 +1669,25 @@ func (m *home) rebuildOrphanedOrchestrators() {
 			}
 		}
 
-		// Fast-forward the orchestrator wave-by-wave up to the target wave.
-		// Waves before the target are considered fully complete.
-		for orch.currentWave < len(plan.Waves) {
-			orch.StartNextWave()
-			if orch.CurrentWaveNumber() == targetWave {
-				break
-			}
-			// Mark all tasks in this earlier wave as complete to advance.
-			for _, t := range plan.Waves[orch.currentWave].Tasks {
-				orch.MarkTaskComplete(t.Number)
+		// Guard against malformed legacy task instances with no wave metadata.
+		if targetWave <= 0 {
+			log.WarningLog.Printf("rebuildOrphanedOrchestrators: skipping %s — invalid target wave %d", planFile, targetWave)
+			continue
+		}
+
+		orch := orchestration.NewWaveOrchestrator(planFile, plan)
+
+		// Collect completed tasks for the target wave.
+		var completedTasks []int
+		for _, t := range tasks {
+			if t.waveNumber == targetWave && t.paused {
+				completedTasks = append(completedTasks, t.taskNumber)
 			}
 		}
 
-		// Now apply the actual task states for the current wave.
-		for _, t := range tasks {
-			if t.waveNumber != targetWave {
-				continue
-			}
-			if t.paused {
-				orch.MarkTaskComplete(t.taskNumber)
-			}
-			// Running tasks stay in taskRunning — metadata tick handles them.
-		}
+		// Fast-forward the orchestrator to the target wave, marking earlier waves
+		// as complete and applying actual task states for the target wave.
+		orch.RestoreToWave(targetWave, completedTasks)
 
 		m.waveOrchestrators[planFile] = orch
 		log.WarningLog.Printf("rebuildOrphanedOrchestrators: restored orchestrator for %s (wave %d, %d tasks)",
@@ -1722,7 +1697,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 
 // spawnWaveTasks creates and starts instances for the given task list within an orchestrator.
 // Used by both startNextWave (initial spawn) and retryFailedWaveTasks (re-spawn failed tasks).
-func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	planFile := orch.TaskFile()
 	planName := taskstate.DisplayName(planFile)
 
@@ -1734,7 +1709,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, e
 
 	var cmds []tea.Cmd
 	for _, task := range tasks {
-		prompt := buildTaskPrompt(orch.plan, task, orch.CurrentWaveNumber(), orch.TotalWaves(), len(tasks))
+		prompt := orch.BuildTaskPrompt(task, len(tasks))
 
 		inst, err := session.NewInstance(session.InstanceOptions{
 			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
@@ -1773,7 +1748,7 @@ func (m *home) spawnWaveTasks(orch *WaveOrchestrator, tasks []taskparser.Task, e
 }
 
 // startNextWave advances the orchestrator to the next wave and spawns its task instances.
-func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+func (m *home) startNextWave(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.StartNextWave()
 	if tasks == nil {
 		return m, nil
@@ -1791,7 +1766,7 @@ func (m *home) startNextWave(orch *WaveOrchestrator, entry taskstate.TaskEntry) 
 // retryFailedWaveTasks retries all failed tasks in the current wave by re-spawning them.
 // Old failed instances are removed first to prevent ghost duplicates that accumulate
 // across retries and all get marked ImplementationComplete when waves finish.
-func (m *home) retryFailedWaveTasks(orch *WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+func (m *home) retryFailedWaveTasks(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.RetryFailedTasks()
 	if len(tasks) == 0 {
 		return m, nil

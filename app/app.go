@@ -17,6 +17,7 @@ import (
 	"github.com/kastheco/kasmos/internal/mcpclient"
 	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
 	"github.com/kastheco/kasmos/log"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -262,7 +263,7 @@ type home struct {
 	cachedPlanRendered string
 
 	// waveOrchestrators tracks active wave orchestrations by plan filename.
-	waveOrchestrators map[string]*WaveOrchestrator
+	waveOrchestrators map[string]*orchestration.WaveOrchestrator
 
 	// pendingAllComplete holds plan files whose all-waves-complete prompt was
 	// deferred because an overlay was active when the orchestrator finished.
@@ -376,7 +377,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
 		taskStoreProject:      project,
 		instanceFinalizers:    make(map[*session.Instance]func()),
-		waveOrchestrators:     make(map[string]*WaveOrchestrator),
+		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
 		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
@@ -1048,7 +1049,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			orch := NewWaveOrchestrator(ws.TaskFile, plan)
+			orch := orchestration.NewWaveOrchestrator(ws.TaskFile, plan)
 			m.waveOrchestrators[ws.TaskFile] = orch
 
 			// Fast-forward to the requested wave
@@ -1075,7 +1076,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			taskfsm.ConsumeElaborationSignal(es)
 
 			orch, exists := m.waveOrchestrators[es.TaskFile]
-			if !exists || orch.State() != WaveStateElaborating {
+			if !exists || orch.State() != orchestration.WaveStateElaborating {
 				log.WarningLog.Printf("ignoring elaborator-finished signal for %q — no active elaboration", es.TaskFile)
 				continue
 			}
@@ -1336,15 +1337,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Wave completion monitoring: check task completion and trigger wave transitions.
-			// We process both WaveStateRunning (check task statuses) and WaveStateWaveComplete
+			// We process both orchestration.WaveStateRunning (check task statuses) and orchestration.WaveStateWaveComplete
 			// (re-show confirm dialog after user cancelled, resetting the latch via ResetConfirm).
 			for planFile, orch := range m.waveOrchestrators {
 				orchState := orch.State()
-				if orchState != WaveStateRunning && orchState != WaveStateWaveComplete {
+				if orchState != orchestration.WaveStateRunning && orchState != orchestration.WaveStateWaveComplete {
 					continue
 				}
 
-				if orchState == WaveStateRunning {
+				if orchState == orchestration.WaveStateRunning {
 					// Check task status updates only while the wave is actively running.
 					planName := taskstate.DisplayName(planFile)
 					for _, task := range orch.CurrentWaveTasks() {
@@ -1375,7 +1376,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// All waves complete — pause the last wave's tasks, prompt for review.
-				if orchState == WaveStateAllComplete {
+				if orchState == orchestration.WaveStateAllComplete {
 					capturedPlanFile := planFile
 					planName := taskstate.DisplayName(planFile)
 					totalWaves := orch.TotalWaves()
@@ -1394,7 +1395,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.audit(auditlog.EventWaveCompleted, "all waves complete: "+planName,
 						auditlog.WithPlan(capturedPlanFile))
 					// Post wave complete comment to ClickUp for multi-wave plans.
-					if shouldPostWaveCompleteComment(orch) {
+					if orch.ShouldPostWaveCompleteComment() {
 						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNumFinal, totalWaves, completedFinal, totalFinal)
 						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
 							asyncCmds = append(asyncCmds, cmd)
@@ -1420,7 +1421,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 
-				// orchState must be WaveStateWaveComplete here.
+				// orchState must be orchestration.WaveStateWaveComplete here.
 				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
 				// ResetConfirm on cancel allows the prompt to reappear next tick).
 				needsConfirm := orch.NeedsConfirm()
@@ -1440,7 +1441,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Post intermediate wave complete comment to ClickUp for
 					// multi-wave plans with no failures.
-					if failed == 0 && shouldPostWaveCompleteComment(orch) {
+					if failed == 0 && orch.ShouldPostWaveCompleteComment() {
 						detail := fmt.Sprintf("%d/%d: %d/%d tasks", waveNum, orch.TotalWaves(), completed, total)
 						if cmd := m.postClickUpProgress(capturedPlanFile, "wave_complete", detail); cmd != nil {
 							asyncCmds = append(asyncCmds, cmd)
