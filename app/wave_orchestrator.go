@@ -9,6 +9,7 @@ type WaveState int
 
 const (
 	WaveStateIdle         WaveState = iota // Not started
+	WaveStateElaborating                   // Elaborator agent is enriching the plan; wave 1 has not started yet
 	WaveStateRunning                       // Current wave's tasks are running
 	WaveStateWaveComplete                  // Current wave finished, awaiting user confirmation
 	WaveStateAllComplete                   // All waves finished
@@ -47,6 +48,21 @@ func NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrat
 // State returns the current orchestration state.
 func (o *WaveOrchestrator) State() WaveState {
 	return o.state
+}
+
+// SetElaborating transitions the orchestrator to the elaborating state.
+// Call this immediately after creating the orchestrator when elaboration is
+// enabled, before wave 1 starts. The elaborator agent will call UpdatePlan
+// with the enriched plan, then the orchestrator is advanced to WaveStateRunning.
+func (o *WaveOrchestrator) SetElaborating() {
+	o.state = WaveStateElaborating
+}
+
+// UpdatePlan replaces the plan the orchestrator manages. Called after the
+// elaborator agent has enriched task descriptions and written the updated plan
+// back to the task store. The orchestrator must be in WaveStateElaborating.
+func (o *WaveOrchestrator) UpdatePlan(plan *taskparser.Plan) {
+	o.plan = plan
 }
 
 // TaskFile returns the plan filename this orchestrator manages.

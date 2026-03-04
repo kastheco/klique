@@ -192,6 +192,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m.triggerTaskStage(planFile, "implement")
 
+	case "start_implement_direct":
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" {
+			return m, nil
+		}
+		return m.triggerTaskStage(planFile, "implement_direct")
+
 	case "start_solo":
 		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
@@ -662,6 +669,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start planning", Action: "start_plan"},
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
+					overlay.ContextMenuItem{Label: "implement directly", Action: "start_implement_direct"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
@@ -871,6 +879,44 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadTaskState()
 		m.updateSidebarTasks()
+
+		// Elaboration phase: spawn elaborator before starting wave 1.
+		orch.SetElaborating()
+		return m.spawnElaborator(planFile, orch, entry)
+
+	case "implement_direct":
+		// Same as implement but skips the elaboration phase — goes straight to wave 1.
+		rawContent := ""
+		if m.taskStore != nil {
+			c, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
+			if err != nil {
+				return m, m.handleError(err)
+			}
+			rawContent = c
+		}
+		plan, err := taskparser.Parse(rawContent)
+		if err != nil {
+			// No wave headers — revert to planning and respawn the planner.
+			if setErr := m.fsmRevertToPlanning(planFile); setErr != nil {
+				return m, m.handleError(setErr)
+			}
+			m.loadTaskState()
+			m.updateSidebarTasks()
+			m.toastManager.Info("task needs ## Wave headers — respawning planner to annotate.")
+			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildWaveAnnotationPrompt(planFile))
+			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
+		}
+
+		orch := NewWaveOrchestrator(planFile, plan)
+		m.waveOrchestrators[planFile] = orch
+
+		if err := m.fsmSetImplementing(planFile); err != nil {
+			return m, m.handleError(err)
+		}
+		m.audit(auditlog.EventPlanTransition, string(entry.Status)+" → implementing (direct)",
+			auditlog.WithPlan(planFile))
+		m.loadTaskState()
+		m.updateSidebarTasks()
 		return m.startNextWave(orch, entry)
 	case "review":
 		if err := m.fsmSetReviewing(planFile); err != nil {
@@ -971,7 +1017,7 @@ func (m *home) handleTmuxBrowserAction(browser *overlay.TmuxBrowserOverlay, acti
 // guards against truly nonsensical transitions (e.g. marking "finished" when already done).
 func isLocked(status taskstate.Status, stage string) bool {
 	switch stage {
-	case "plan", "implement", "solo", "review":
+	case "plan", "implement", "implement_direct", "solo", "review":
 		// Forward progression is always allowed — the FSM helpers
 		// (fsmSetImplementing, fsmSetReviewing) walk through intermediate states.
 		return false
