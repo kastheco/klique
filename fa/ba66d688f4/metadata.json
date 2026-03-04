@@ -3,7 +3,7 @@
   "checkpoint_id": "faba66d688f4",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 1,
+  "checkpoints_count": 5,
   "files_touched": [
     "app/app_input.go"
   ],
@@ -21,13 +21,20 @@
       "context": "/fa/ba66d688f4/1/context.md",
       "content_hash": "/fa/ba66d688f4/1/content_hash.txt",
       "prompt": "/fa/ba66d688f4/1/prompt.txt"
+    },
+    {
+      "metadata": "/fa/ba66d688f4/2/metadata.json",
+      "transcript": "/fa/ba66d688f4/2/full.jsonl",
+      "context": "/fa/ba66d688f4/2/context.md",
+      "content_hash": "/fa/ba66d688f4/2/content_hash.txt",
+      "prompt": "/fa/ba66d688f4/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 33,
-    "cache_creation_tokens": 75164,
-    "cache_read_tokens": 1653136,
-    "output_tokens": 8021,
-    "api_call_count": 28
+    "input_tokens": 42,
+    "cache_creation_tokens": 96191,
+    "cache_read_tokens": 2016168,
+    "output_tokens": 9921,
+    "api_call_count": 36
   }
 }

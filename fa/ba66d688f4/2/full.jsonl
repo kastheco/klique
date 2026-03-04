@@ -1,0 +1,1091 @@
+{
+  "info": {
+    "id": "ses_34836f61cffecH5TM8791aZaZa",
+    "slug": "silent-comet",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "cli-plan-lifecycle.md wave headers annotation",
+    "version": "1.2.16",
+    "summary": {
+      "additions": 18,
+      "deletions": 0,
+      "files": 1
+    },
+    "time": {
+      "created": 1772609931747,
+      "updated": 1772609997496
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772609931766
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "variant": "high",
+        "id": "msg_cb7c909ee001BlSJMrX01HvrlE",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "The plan cli-plan-lifecycle.md is missing ## Wave N headers required for kasmos wave orchestration. Retrieve the plan content with `kas task show cli-plan-lifecycle.md`, then annotate it by wrapping all tasks under ## Wave N sections. Every plan needs at least ## Wave 1 — even single-task trivial plans. Keep all existing task content intact; only add the ## Wave headers.\n\nAfter annotating:\n1. Store the updated plan via `kas task update-content cli-plan-lifecycle.md` (pipe the content)\n2. Signal completion: touch .kasmos/signals/planner-finished-cli-plan-lifecycle.md\nDo not edit plan-state.json directly.",
+          "id": "prt_cb7c909ee00254IXHcDLm6aCDC",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c909ee001BlSJMrX01HvrlE"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609931774,
+          "completed": 1772609944746
+        },
+        "error": {
+          "name": "MessageAbortedError",
+          "data": {
+            "message": "The operation was aborted."
+          }
+        },
+        "parentID": "msg_cb7c909ee001BlSJMrX01HvrlE",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cb7c909fe001ypvNJ0USRn68nK",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "16cb9c3b2a9d637cdca9f66f8d40612a926d7a5d",
+          "id": "prt_cb7c91640001BS1DNnnIbjcLSu",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c909fe001ypvNJ0USRn68nK"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1772609934913
+          },
+          "id": "prt_cb7c916410012epHQ2gqKulkiU",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c909fe001ypvNJ0USRn68nK"
+        },
+        {
+          "type": "patch",
+          "hash": "16cb9c3b2a9d637cdca9f66f8d40612a926d7a5d",
+          "files": [
+            "/home/kas/dev/kasmos/.entire/logs/entire.log"
+          ],
+          "id": "prt_cb7c93ca8001pPv2AJrYG5wb5i",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c909fe001ypvNJ0USRn68nK"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772609953676
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "planner",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-6"
+        },
+        "variant": "high",
+        "id": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "this plan exists already literally just fucking confirmed it in the data store. why does start implement keep opening another planning session?",
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f830011rDF5xUYDrFU7h"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609953680,
+          "completed": 1772609960178
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 40367,
+          "input": 3,
+          "output": 317,
+          "reasoning": 0,
+          "cache": {
+            "read": 40023,
+            "write": 24
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c95f90001sTmOtBg3FDPsSh",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7c9690f0016fVOKT32fpEu6t",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "reasoning",
+          "text": "The user is frustrated because kasmos keeps opening planning sessions for a plan that already exists. They want me to:\n\n1. Retrieve the plan content with `kas task show cli-plan-lifecycle.md`\n2. Add `## Wave N` headers around the existing tasks\n3. Update the plan via `kas task update-content cli-plan-lifecycle.md`\n4. Signal completion by touching `.kasmos/signals/planner-finished-cli-plan-lifecycle.md`\n\nLet me load the required skills first, then get to work.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/aSJTacq9zg1N1QrSeRVY/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/K9t8sxESHvav6pEevphgB"
+            }
+          },
+          "time": {
+            "start": 1772609956111,
+            "end": 1772609958324
+          },
+          "id": "prt_cb7c9690f002am4P00tfUzucos",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "text",
+          "text": "Let me load the required skills and get the plan content immediately.",
+          "time": {
+            "start": 1772609958822,
+            "end": 1772609958822
+          },
+          "id": "prt_cb7c971b4001g4WzyStc5B8DW1",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-planner"
+            },
+            "output": "<skill_content name=\"kasmos-planner\">\n# Skill: kasmos-planner\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the task status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `<feature-name>.md`\n\nPlans are stored in the **task store** (SQLite database), not as files on disk.\nDo NOT look for or create `.md` files in `docs/plans/` or anywhere else.\n\n- **read** existing plan content: `kas task show <plan-file>`\n- **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)\n- there is no `kas task update-content` command — if you need to modify existing plan content, read it with `kas task show`, then re-register or signal via sentinel\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it\nin the task store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas task register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-<feature-name>.md\n```\n\nthe filename must match the task filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify task state directly** — kasmos manages the task store.\n\nannounce completion and stop:\n\n> \"plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the task store using the CLI:\n\n```bash\nkas task register <feature-name>.md\n```\n\nthis creates an entry in the task store with status `ready`. the plan content is stored\ndirectly in the database — do not commit `.md` plan files to the repo.\n\nthen offer execution choices:\n\n> \"plan complete: `<feature-name>.md` (registered in task store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-planner\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-planner",
+            "metadata": {
+              "name": "kasmos-planner",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-planner",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609959333,
+              "end": 1772609959339
+            }
+          },
+          "id": "prt_cb7c973a90018goW4RDaSu1FK8",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RT6XieGiRkAi1CWQR7NMSd",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609959900,
+              "end": 1772609959905
+            }
+          },
+          "id": "prt_cb7c975a6001RVyGBZB52BE2OM",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task show cli-plan-lifecycle.md 2>&1",
+              "description": "Retrieve existing plan content"
+            },
+            "output": "Error: no content stored for cli-plan-lifecycle.md\nUsage:\n  kas task show <plan-file> [flags]\n\nFlags:\n  -h, --help   help for show\n\nno content stored for cli-plan-lifecycle.md\n",
+            "title": "Retrieve existing plan content",
+            "metadata": {
+              "output": "Error: no content stored for cli-plan-lifecycle.md\nUsage:\n  kas task show <plan-file> [flags]\n\nFlags:\n  -h, --help   help for show\n\nno content stored for cli-plan-lifecycle.md\n",
+              "exit": 0,
+              "description": "Retrieve existing plan content",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609960132,
+              "end": 1772609960159
+            }
+          },
+          "id": "prt_cb7c977de001MgK8o0f5Gsl1ai",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 40367,
+            "input": 3,
+            "output": 317,
+            "reasoning": 0,
+            "cache": {
+              "read": 40023,
+              "write": 24
+            }
+          },
+          "id": "prt_cb7c978e00013dqxbH2aHccqY7",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c95f90001sTmOtBg3FDPsSh"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609960180,
+          "completed": 1772609967711
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 48832,
+          "input": 1,
+          "output": 395,
+          "reasoning": 0,
+          "cache": {
+            "read": 40047,
+            "write": 8389
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c978f4001ssFNnBmhftkf6n",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7c98067001Wly1EIdSUtUkSd",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "reasoning",
+          "text": "The `kas task show` says \"no content stored\" — meaning the task entry exists in the store but has no content body. Let me check the task status and what's in the store, and also look if there's a file on disk.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/5W4Or9Egzk57hPzbQSAUmb/REDACTED/xAVOlW+d/REDACTED/REDACTED/i73ILN40FU0/REDACTED/cQYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772609962088,
+            "end": 1772609963805
+          },
+          "id": "prt_cb7c98068001aX35bR1dwN9Odr",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "text",
+          "text": "The task entry exists in the store but has no content body — that's why kasmos keeps re-opening planning. Let me check what state it's in and find the actual plan file.",
+          "time": {
+            "start": 1772609964722,
+            "end": 1772609964722
+          },
+          "id": "prt_cb7c9871e001A46JTCnky6dX8r",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01XYMHoM74DNvZ18541szMjt",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task list 2>&1",
+              "description": "List all tasks in store"
+            },
+            "output": "cancelled      01-rewrite-tmux-layer.md                           plan/01-rewrite-tmux-layer\ndone           01a-rewrite-tmux-layer.md                          plan/01a-rewrite-tmux-layer\ndone           01b-rewrite-git-layer.md                           plan/01b-rewrite-git-layer\ncancelled      02-rewrite-git-layer.md                            plan/02-rewrite-git-layer\ndone           02a-rewrite-session-core.md                        plan/02a-rewrite-session-core\ndone           02b-rewrite-overlay-ui.md                          plan/02b-rewrite-overlay-ui\ncancelled      03-rewrite-session-core.md                         plan/03-rewrite-session-core\ndone           03-rewrite-ui-panels.md                            plan/03-rewrite-ui-panels\ncancelled      04-rewrite-overlay-ui.md                           plan/04-rewrite-overlay-ui\ndone           04-rewrite-plumbing.md                             plan/04-rewrite-plumbing\ncancelled      05-rewrite-ui-panels.md                            plan/05-rewrite-ui-panels\ncancelled      06-rewrite-plumbing.md                             plan/06-rewrite-plumbing\ndone           1a-tree-renderer.md                                kas/1a-tree-renderer-plan\ndone           1b-tree-navigation.md                              kas/1b-tree-navigation-plan\ndone           1c-highlight-boost-list.md                         plan/1c-highlight-boost-list\ndone           2-tree-mode-wiring.md                              plan/2-tree-mode-wiring\ncancelled      add-episodic-memory.md                             plan/add-episodic-memory\nready          add-log-actions.md                                 plan/add-log-actions\ndone           agent-customize-gate.md\ndone           ai-slugs-not-working.md                            plan/ai-slugs-not-working\ndone           alt-v-not-working.md                               plan/alt-v-not-working\ndone           always-focus-sidebar.md                            plan/always-focus-sidebar\ndone           async-metadata-tick.md\ndone           audit-log.md                                       plan/audit-log\ndone           auto-advance-waves.md                              plan/auto-advance-waves\ndone           automatic-session-naming.md                        plan/automatic-session-naming\ndone           bubblezone-mouse.md                                plan/bubblezone\ndone           bug-menu-width.md                                  plan/bug-menu-width\ncancelled      build-custom-skills-replaced.md                    plan/build-custom-skills\ndone           canceled-plans-delay-removal.md                    plan/canceled-plans-delay-removal\nready          cant-see-successful-review.md                      plan/cant-see-successful-review\ndone           center-col-v-align.md                              plan/center-col-v-align\ncancelled      center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\ndone           charm-v2-upgrade.md                                plan/charm-v2-upgrade\ndone           chat-about-this-menu-option-that-opens-up.md       plan/chat-about-this-menu-option-that-opens-up\ndone           chat-and-custodial-customizations.md               plan/chat-and-custodial-customizations\nready          cleanup-prompts.md                                 plan/cleanup-prompts\ndone           cleanup-superpowers-cmds.md                        plan/cleanup-superpowers-cmds\nready          cleanup-tracked-state.md                           plan/cleanup-tracked-state\nready          cli-clickup-integration.md                         plan/cli-clickup-integration\nready          cli-monitoring.md                                  plan/cli-monitoring\nplanning       cli-plan-lifecycle.md                              plan/cli-plan-lifecycle\nready          cli-signal-processing.md                           plan/cli-signal-processing\ncancelled      click-events-interactive.md                        plan/click-events-interactive\ndone           clickup-import.md                                  plan/clickup-import\ndone           contextual-status-bar.md                           plan/contextual-status-bar\ndone           create-fix-agent-and-skill.md                      plan/create-a-debugging-skill-and-agent-type-should\ndone           create-kasmos-custodial-agent.md                   plan/create-kasmos-custodial-agent\ncancelled      ctrl-ud-pagination.md                              plan/ctrl-ud-pagination\ndone           custodian-version-bump.md\ndone           customize-superpowers.md                           plan/customize-superpowers\ndone           details-tab.md                                     plan/details-tab\ndone           detect-allow-perms.md                              plan/detect-allow-perms\ncancelled      detect-permissions-needed.md                       plan/detect-permissions-needed\ndone           disable-cache-focused.md                           plan/disable-cache-focused\ndone           disable-cla-for-prs.md                             plan/disable-cla-for-prs\ndone           dupe-task-after-plan-change.md                     plan/dupe-task-after-plan-change\ndone           enforce-cli-tools.md                               plan/enforce-cli-tools\ndone           enter-not-reachable.md                             plan/enter-not-reachable\ndone           extract-orchestrator.md                            plan/extract-orchestrator\ndone           fix-agents-reading-from-disk.md                    plan/fix-agents-reading-from-disk\nready          fix-history-toggle.md                              plan/fix-history-toggle\ndone           fix-kas-task-usage.md                              plan/fix-kas-task-usage\ndone           fix-naming-and-toast-wrap.md\ndone           fix-plan-state-machine.md\ndone           fix-planner-missing-waves.md                       plan/fix-planner-missing-waves\ndone           fix-wave-header-generation.md                      plan/fix-wave-header-generation\ndone           generate-opencode-jsonc-design.md\ndone           generate-opencode-jsonc.md\ndone           global-skill-sync.md\ndone           have-to-kill-twice.md                              plan/have-to-kill-twice\ncancelled      implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\nready          imports-not-checked-for-waves.md                   plan/imports-not-checked-for-waves\ndone           improve-cli-tools.md                               plan/improve-cli-tools\ndone           improve-plan-storage-system.md                     plan/improve-plan-storage-system\ncancelled      improve-planner-to-implementation.md               plan/improve-planner-to-implementation\nready          improved-info-tab.md                               plan/improved-info-tab\nready          increase-plan-detail.md                            plan/increase-plan-detail\ndone           init-wizard-refinements.md\ndone           instance-management-cli.md                         plan/instance-management-cli\ncancelled      kas-cli-plans.md                                   plan/kas-cli-plans\ndone           kas-verify-loop.md                                 plan/kas-verify-loop\ndone           kasmos-custom-skills.md                            plan/kasmos-custom-skills\ndone           kasmos-native-skills-design.md\ndone           kasmos-native-skills.md\ndone           kq-check.md\ndone           kq-init-design.md\ndone           legend-spacing-issue.md                            plan/legend-spacing-issue\ndone           live-preview-terminal.md                           plan/live-preview-terminal\ncancelled      new-plan-cli-command.md                            plan/new-cli-command\ndone           new-plan-issues.md                                 plan/new-plan-issues\ndone           new-plan-tab-cycle.md                              plan/new-plan-tab-cycle\ncancelled      no-plan-to-implement-prompt.md                     plan/no-plan-to-implement-prompt\ndone           opencode-default-harness.md                        plan/opencode-default-harness\ncancelled      orphan-session-recovery.md                         plan/orphan-session-recovery\ndone           osc11-terminal-bg-design.md\ndone           osc11-terminal-bg.md\ncancelled      parallel-fix-agents.md                             plan/parallel-fix-agents\ncancelled      parallelize-superpowers.md                         plan/parallelize-superpowers\ncancelled      plan-centric-sidebar.md\ndone           plan-cli-repo-flag-and-templates.md                plan/plan-cli-repo-flag-and-templates\ndone           plan-content-to-database.md                        plan/plan-content-to-database\ndone           plan-instance-grouping.md\ndone           plan-lifecycle-sessions.md\ndone           plan-orchestration-design.md\ndone           plan-orchestration.md\ndone           plan-review.md                                     plan/plan-review\ndone           plan-state-machine.md                              plan/plan-state-machine\ndone           plan-status-cli-bugs.md                            plan/plan-status-cli-bugs\ndone           planner-exit-prompt.md\ncancelled      preview-plan-broken.md                             plan/preview-plan-broken\ndone           project-dir-missing-from-status.md                 plan/project-dir-missing-from-status\ndone           project-skills-distribution.md\ndone           prompt-via-cli.md                                  plan/prompt-via-cli\ndone           quit-confirmation-dialog.md                        plan/quit-confirmation-dialog\ndone           redesign-instance-list.md\ncancelled      reintegrate-auto-accept.md                         plan/reintegrate-auto-accept\ndone           release-1-0-0-failures.md                          plan/release-1-0-0-failures\ndone           release-v1-0-0.md                                  plan/release-v1-0-0\ndone           release-v1-1.md                                    plan/release-v1-1\ndone           reliable-planner-completion.md                     plan/reliable-planner-completion\ndone           remove-date-from-plan-slugs.md                     plan/remove-date-from-plan-slugs\ndone           remove-right-sidbar-right-to-focus-session.md      plan/remove-right-sidbar-right-to-focus-session\ndone           rename-plan-menu.md                                plan/rename-plan-menu\ndone           rename-plan-to-task.md                             plan/rename-plan-to-task\ndone           rename-to-kasmos.md                                plan/rename-to-kasmos\ndone           restart-agent.md                                   plan/restart-agent\ndone           review-approval-gate.md                            plan/review-approval-gate\ndone           review-cycle-count-should-be-included.md           plan/review-cycle-count-should-be-included\ndone           review-didnt-autostart.md                          plan/review-didnt-autostart\nready          review-start-causes-freeze.md                      plan/review-start-causes-freeze\nready          review-use-kas-verify.md                           plan/review-use-kas-verify\ndone           rose-pine-moon-design.md\ndone           rose-pine-moon.md\ndone           safe-kill.md                                       plan/safe-kill\ndone           scroll-overflow.md                                 plan/scroll-overflow\nready          scrub-docs-plans.md                                plan/scrub-docs-plans\nready          sentry-analysis.md                                 plan/sentry-analysis\ndone           sentry-integration.md                              plan/sentry-integration\ndone           separate-logs-by-minute.md                         plan/separate-logs-by-minute\ndone           set-status-context-menu.md                         plan/set-status-context-menu\ndone           shorten-cta.md                                     plan/shorten-cta\ndone           show-plan-name-for-topics.md                       plan/show-plan-name-for-topics\ndone           sidebar-nav-showhide.md\ndone           sidebar-toggle-design.md\ndone           sidebar-toggle.md\ndone           simplify-new-plan.md                               plan/simplify-new-plan\ndone           simplify-plan-creation.md                          plan/simplify-plan-creation\ndone           skip-plan-slug-ai-generation.md                    plan/skip-plan-slug-ai-generation\ndone           solo-agent-mode.md                                 plan/solo-agent-mode\ndone           spawn-agent.md                                     plan/spawn-agent\ndone           spring.md                                          plan/spring\nready          status-cli-command.md                              plan/status-cli-command\ndone           stepthrough-worktrees.md                           plan/stepthrough-worktrees\ndone           tab-focus-ring.md\ndone           task-orchestration-design.md\ndone           task-orchestration.md\ndone           tmux-session-browser.md                            plan/tmux-session-browser\ndone           tmux-session-summary.md                            plan/tmux-session-summary\ndone           tool-discovery-design.md\ndone           topics-as-collision-domains-design.md\ndone           topics-collision-domains.md\nready          trigger-dialog-in-focus-mode.md                    plan/trigger-dialog-in-focus-mode\ndone           update-ascii-art.md                                plan/update-ascii-art\ndone           update-clickup-with-progress.md                    plan/update-clickup-with-progress\ndone           update-shortcut-hints.md                           plan/update-shortcut-hints\ncancelled      validate-recent-merges.md                          plan/validate-recent-merges\ndone           wave-orchestration.md                              plan/wave-orchestration\nready          web-ui.md                                          plan/web-ui\ndone           wizard-tui-redesign.md                             plan/wizard-tui-redesign\ndone           wizard-ux-design.md\ndone           wizard-ux.md\ndone           yes-keybind.md                                     plan/yes-keybind\n",
+            "title": "List all tasks in store",
+            "metadata": {
+              "output": "cancelled      01-rewrite-tmux-layer.md                           plan/01-rewrite-tmux-layer\ndone           01a-rewrite-tmux-layer.md                          plan/01a-rewrite-tmux-layer\ndone           01b-rewrite-git-layer.md                           plan/01b-rewrite-git-layer\ncancelled      02-rewrite-git-layer.md                            plan/02-rewrite-git-layer\ndone           02a-rewrite-session-core.md                        plan/02a-rewrite-session-core\ndone           02b-rewrite-overlay-ui.md                          plan/02b-rewrite-overlay-ui\ncancelled      03-rewrite-session-core.md                         plan/03-rewrite-session-core\ndone           03-rewrite-ui-panels.md                            plan/03-rewrite-ui-panels\ncancelled      04-rewrite-overlay-ui.md                           plan/04-rewrite-overlay-ui\ndone           04-rewrite-plumbing.md                             plan/04-rewrite-plumbing\ncancelled      05-rewrite-ui-panels.md                            plan/05-rewrite-ui-panels\ncancelled      06-rewrite-plumbing.md                             plan/06-rewrite-plumbing\ndone           1a-tree-renderer.md                                kas/1a-tree-renderer-plan\ndone           1b-tree-navigation.md                              kas/1b-tree-navigation-plan\ndone           1c-highlight-boost-list.md                         plan/1c-highlight-boost-list\ndone           2-tree-mode-wiring.md                              plan/2-tree-mode-wiring\ncancelled      add-episodic-memory.md                             plan/add-episodic-memory\nready          add-log-actions.md                                 plan/add-log-actions\ndone           agent-customize-gate.md\ndone           ai-slugs-not-working.md                            plan/ai-slugs-not-working\ndone           alt-v-not-working.md                               plan/alt-v-not-working\ndone           always-focus-sidebar.md                            plan/always-focus-sidebar\ndone           async-metadata-tick.md\ndone           audit-log.md                                       plan/audit-log\ndone           auto-advance-waves.md                              plan/auto-advance-waves\ndone           automatic-session-naming.md                        plan/automatic-session-naming\ndone           bubblezone-mouse.md                                plan/bubblezone\ndone           bug-menu-width.md                                  plan/bug-menu-width\ncancelled      build-custom-skills-replaced.md                    plan/build-custom-skills\ndone           canceled-plans-delay-removal.md                    plan/canceled-plans-delay-removal\nready          cant-see-successful-review.md                      plan/cant-see-successful-review\ndone           center-col-v-align.md                              plan/center-col-v-align\ncancelled      center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet.md plan/center-pane-scrolled-up-slightly-and-isn-t-aligned-with-bottom-yet\ndone           charm-v2-upgrade.md                                plan/charm-v2-upgrade\ndone           chat-about-this-menu-option-that-opens-up.md       plan/chat-about-this-menu-option-that-opens-up\ndone           chat-and-custodial-customizations.md               plan/chat-and-custodial-customizations\nready          cleanup-prompts.md                                 plan/cleanup-prompts\ndone           cleanup-superpowers-cmds.md                        plan/cleanup-superpowers-cmds\nready          cleanup-tracked-state.md                           plan/cleanup-tracked-state\nready          cli-clickup-integration.md                         plan/cli-clickup-integration\nready          cli-monitoring.md                                  plan/cli-monitoring\nplanning       cli-plan-lifecycle.md                              plan/cli-plan-lifecycle\nready          cli-signal-processing.md                           plan/cli-signal-processing\ncancelled      click-events-interactive.md                        plan/click-events-interactive\ndone           clickup-import.md                                  plan/clickup-import\ndone           contextual-status-bar.md                           plan/contextual-status-bar\ndone           create-fix-agent-and-skill.md                      plan/create-a-debugging-skill-and-agent-type-should\ndone           create-kasmos-custodial-agent.md                   plan/create-kasmos-custodial-agent\ncancelled      ctrl-ud-pagination.md                              plan/ctrl-ud-pagination\ndone           custodian-version-bump.md\ndone           customize-superpowers.md                           plan/customize-superpowers\ndone           details-tab.md                                     plan/details-tab\ndone           detect-allow-perms.md                              plan/detect-allow-perms\ncancelled      detect-permissions-needed.md                       plan/detect-permissions-needed\ndone           disable-cache-focused.md                           plan/disable-cache-focused\ndone           disable-cla-for-prs.md                             plan/disable-cla-for-prs\ndone           dupe-task-after-plan-change.md                     plan/dupe-task-after-plan-change\ndone           enforce-cli-tools.md                               plan/enforce-cli-tools\ndone           enter-not-reachable.md                             plan/enter-not-reachable\ndone           extract-orchestrator.md                            plan/extract-orchestrator\ndone           fix-agents-reading-from-disk.md                    plan/fix-agents-reading-from-disk\nready          fix-history-toggle.md                              plan/fix-history-toggle\ndone           fix-kas-task-usage.md                              plan/fix-kas-task-usage\ndone           fix-naming-and-toast-wrap.md\ndone           fix-plan-state-machine.md\ndone           fix-planner-missing-waves.md                       plan/fix-planner-missing-waves\ndone           fix-wave-header-generation.md                      plan/fix-wave-header-generation\ndone           generate-opencode-jsonc-design.md\ndone           generate-opencode-jsonc.md\ndone           global-skill-sync.md\ndone           have-to-kill-twice.md                              plan/have-to-kill-twice\ncancelled      implement-a-custom-kas-verify-tiered-review-process-for.md plan/implement-a-custom-kas-verify-tiered-review-process-for\nready          imports-not-checked-for-waves.md                   plan/imports-not-checked-for-waves\ndone           improve-cli-tools.md                               plan/improve-cli-tools\ndone           improve-plan-storage-system.md                     plan/improve-plan-storage-system\ncancelled      improve-planner-to-implementation.md               plan/improve-planner-to-implementation\nready          improved-info-tab.md                               plan/improved-info-tab\nready          increase-plan-detail.md                            plan/increase-plan-detail\ndone           init-wizard-refinements.md\ndone           instance-management-cli.md                         plan/instance-management-cli\ncancelled      kas-cli-plans.md                                   plan/kas-cli-plans\ndone           kas-verify-loop.md                                 plan/kas-verify-loop\ndone           kasmos-custom-skills.md                            plan/kasmos-custom-skills\ndone           kasmos-native-skills-design.md\ndone           kasmos-native-skills.md\ndone           kq-check.md\ndone           kq-init-design.md\ndone           legend-spacing-issue.md                            plan/legend-spacing-issue\ndone           live-preview-terminal.md                           plan/live-preview-terminal\ncancelled      new-plan-cli-command.md                            plan/new-cli-command\ndone           new-plan-issues.md                                 plan/new-plan-issues\ndone           new-plan-tab-cycle.md                              plan/new-plan-tab-cycle\ncancelled      no-plan-to-implement-prompt.md                     plan/no-plan-to-implement-prompt\ndone           opencode-default-harness.md                        plan/opencode-default-harness\ncancelled      orphan-session-recovery.md                         plan/orphan-session-recovery\ndone           osc11-terminal-bg-design.md\ndone           osc11-terminal-bg.md\ncancelled      parallel-fix-agents.md                             plan/parallel-fix-agents\ncancelled      parallelize-superpowers.md                         plan/parallelize-superpowers\ncancelled      plan-centric-sidebar.md\ndone           plan-cli-repo-flag-and-templates.md                plan/plan-cli-repo-flag-and-templates\ndone           plan-content-to-database.md                        plan/plan-content-to-database\ndone           plan-instance-grouping.md\ndone           plan-lifecycle-sessions.md\ndone           plan-orchestration-design.md\ndone           plan-orchestration.md\ndone           plan-review.md                                     plan/plan-review\ndone           plan-state-machine.md                              plan/plan-state-machine\ndone           plan-status-cli-bugs.md                            plan/plan-status-cli-bugs\ndone           planner-exit-prompt.md\ncancelled      preview-plan-broken.md                             plan/preview-plan-broken\ndone           project-dir-missing-from-status.md                 plan/project-dir-missing-from-status\ndone           project-skills-distribution.md\ndone           prompt-via-cli.md                                  plan/prompt-via-cli\ndone           quit-confirmation-dialog.md                        plan/quit-confirmation-dialog\ndone           redesign-instance-list.md\ncancelled      reintegrate-auto-accept.md                         plan/reintegrate-auto-accept\ndone           release-1-0-0-failures.md                          plan/release-1-0-0-failures\ndone           release-v1-0-0.md                                  plan/release-v1-0-0\ndone           release-v1-1.md                                    plan/release-v1-1\ndone           reliable-planner-completion.md                     plan/reliable-planner-completion\ndone           remove-date-from-plan-slugs.md                     plan/remove-date-from-plan-slugs\ndone           remove-right-sidbar-right-to-focus-session.md      plan/remove-right-sidbar-right-to-focus-session\ndone           rename-plan-menu.md                                plan/rename-plan-menu\ndone           rename-plan-to-task.md                             plan/rename-plan-to-task\ndone           rename-to-kasmos.md                                plan/rename-to-kasmos\ndone           restart-agent.md                                   plan/restart-agent\ndone           review-approval-gate.md                            plan/review-approval-gate\ndone           review-cycle-count-should-be-included.md           plan/review-cycle-count-should-be-included\ndone           review-didnt-autostart.md                          plan/review-didnt-autostart\nready          review-start-causes-freeze.md                      plan/review-start-causes-freeze\nready          review-use-kas-verify.md                           plan/review-use-kas-verify\ndone           rose-pine-moon-design.md\ndone           rose-pine-moon.md\ndone           safe-kill.md                                       plan/safe-kill\ndone           scroll-overflow.md                                 plan/scroll-overflow\nready          scrub-docs-plans.md                                plan/scrub-docs-plans\nready          sentry-analysis.md                                 plan/sentry-analysis\ndone           sentry-integration.md                              plan/sentry-integration\ndone           separate-logs-by-minute.md                         plan/separate-logs-by-minute\ndone           set-status-context-menu.md                         plan/set-status-context-menu\ndone           shorten-cta.md                                     plan/shorten-cta\ndone           show-plan-name-for-topics.md                       plan/show-plan-name-for-topics\ndone           sidebar-nav-showhide.md\ndone           sidebar-toggle-design.md\ndone           sidebar-toggle.md\ndone           simplify-new-plan.md                               plan/simplify-new-plan\ndone           simplify-plan-creation.md                          plan/simplify-plan-creation\ndone           skip-plan-slug-ai-generation.md                    plan/skip-plan-slug-ai-generation\ndone           solo-agent-mode.md                                 plan/solo-agent-mode\ndone           spawn-agent.md                                     plan/spawn-agent\ndone           spring.md                                          plan/spring\nready          status-cli-command.md                              plan/status-cli-command\ndone           stepthrough-worktrees.md                           plan/stepthrough-worktrees\ndone           tab-focus-ring.md\ndone           task-orchestration-design.md\ndone           task-orchestration.md\ndone           tmux-session-browser.md                            plan/tmux-session-browser\ndone           tmux-session-summary.md                            plan/tmux-session-summary\ndone           tool-discovery-design.md\ndone           topics-as-collision-domains-design.md\ndone           topics-collision-domains.md\nready          trigger-dialog-in-focus-mode.md                    plan/trigger-dialog-in-focus-mode\ndone           update-ascii-art.md                                plan/update-ascii-art\ndone           update-clickup-with-progress.md                    plan/update-clickup-with-progress\ndone           update-shortcut-hints.md                           plan/update-shortcut-hints\ncancelled      validate-recent-merges.md                          plan/validate-recent-merges\ndone           wave-orchestration.md                              plan/wave-orchestration\nready          web-ui.md                                          plan/web-ui\ndone           wizard-tui-redesign.md                             plan/wizard-tui-redesign\ndone           wizard-ux-design.md\ndone           wizard-ux.md\ndone           yes-keybind.md                                     plan/yes-keybind\n",
+              "exit": 0,
+              "description": "List all tasks in store",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609965691,
+              "end": 1772609965705
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task status cli-plan-lifecycle.md 2>&1",
+              "description": "Check task status"
+            },
+            "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement      trigger implementation of a specific wave\n  link-clickup   backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list           list all tasks with status\n  register       register an untracked task file (sets status to ready)\n  set-status     force-override a task's status (bypasses FSM)\n  show           print plan content from the task store\n  transition     apply an FSM event to a task\n  update-content replace plan content in the task store (reads from stdin or --file)\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+            "title": "Check task status",
+            "metadata": {
+              "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement      trigger implementation of a specific wave\n  link-clickup   backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list           list all tasks with status\n  register       register an untracked task file (sets status to ready)\n  set-status     force-override a task's status (bypasses FSM)\n  show           print plan content from the task store\n  transition     apply an FSM event to a task\n  update-content replace plan content in the task store (reads from stdin or --file)\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+              "exit": 0,
+              "description": "Check task status",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609966598,
+              "end": 1772609966609
+            }
+          },
+          "id": "prt_cb7c98e8c001u93SGitsHbOZp3",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01F7pQVPCpWsaotQfauZ9YRV",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "fd 'cli-plan-lifecycle' --type f 2>&1",
+              "description": "Find plan file on disk"
+            },
+            "output": "cli-plan-lifecycle.md\ndocs/plans/cli-plan-lifecycle.md\n",
+            "title": "Find plan file on disk",
+            "metadata": {
+              "output": "cli-plan-lifecycle.md\ndocs/plans/cli-plan-lifecycle.md\n",
+              "exit": 0,
+              "description": "Find plan file on disk",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609967061,
+              "end": 1772609967066
+            }
+          },
+          "id": "prt_cb7c99207001fuDUH24tPFJWCN",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Cgbhchgu6h8qzUQ9gSYiTX",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task --help 2>&1",
+              "description": "Check available task subcommands"
+            },
+            "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement      trigger implementation of a specific wave\n  link-clickup   backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list           list all tasks with status\n  register       register an untracked task file (sets status to ready)\n  set-status     force-override a task's status (bypasses FSM)\n  show           print plan content from the task store\n  transition     apply an FSM event to a task\n  update-content replace plan content in the task store (reads from stdin or --file)\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+            "title": "Check available task subcommands",
+            "metadata": {
+              "output": "manage task lifecycle (list, set-status, transition, implement)\n\nUsage:\n  kas task [command]\n\nAvailable Commands:\n  implement      trigger implementation of a specific wave\n  link-clickup   backfill ClickUp task IDs from task content (parses **Source:** ClickUp <ID> lines)\n  list           list all tasks with status\n  register       register an untracked task file (sets status to ready)\n  set-status     force-override a task's status (bypasses FSM)\n  show           print plan content from the task store\n  transition     apply an FSM event to a task\n  update-content replace plan content in the task store (reads from stdin or --file)\n\nFlags:\n  -h, --help   help for task\n\nUse \"kas task [command] --help\" for more information about a command.\n",
+              "exit": 0,
+              "description": "Check available task subcommands",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609967678,
+              "end": 1772609967691
+            }
+          },
+          "id": "prt_cb7c993db001ipdPsDA68ebI6q",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 48832,
+            "input": 1,
+            "output": 395,
+            "reasoning": 0,
+            "cache": {
+              "read": 40047,
+              "write": 8389
+            }
+          },
+          "id": "prt_cb7c996550017VReMrerqynYmf",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c978f4001ssFNnBmhftkf6n"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609967712,
+          "completed": 1772609974985
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 53146,
+          "input": 1,
+          "output": 315,
+          "reasoning": 0,
+          "cache": {
+            "read": 48436,
+            "write": 4394
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c99660001x5002Kz6bTjgxQ",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "reasoning",
+          "text": "Found it. The task is in `planning` status but has no content in the store. The file exists at both `cli-plan-lifecycle.md` (root) and `docs/plans/cli-plan-lifecycle.md`. Let me read both to see which has the actual plan content.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/5bxnsSp//0BKqV8wk7hbXfzKvUBR8wzt0/763hOTwHvd//REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772609969911,
+            "end": 1772609972085
+          },
+          "id": "prt_cb7c99ef7001lx5FN7Fk7RbtNR",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "text",
+          "text": "Found the issue — task is in `planning` status but the store has no content body. The file exists on disk though. Let me read it and check `update-content` usage.",
+          "time": {
+            "start": 1772609973433,
+            "end": 1772609973433
+          },
+          "id": "prt_cb7c9a776001i80KaGQqxchwuU",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/cli-plan-lifecycle.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/cli-plan-lifecycle.md</path>\n<type>file</type>\n<content>1: # CLI Plan Lifecycle Commands Implementation Plan\n2: \n3: **Goal:** Add high-level lifecycle commands (`create`, `start`, `push`, `merge`, `pr`, `start-over`) to `kas task` so users can manage the full plan lifecycle from the CLI without the TUI.\n4: \n5: **Architecture:** All 6 commands are added as cobra subcommands under the existing `kas task` command tree in `cmd/task.go`. Each command has a testable `executeTask*` function that accepts a `taskstore.Store` argument (matching the existing pattern). The commands delegate to existing `session/git` functions (`EnsureTaskBranch`, `MergeTaskBranch`, `ResetTaskBranch`, `NewSharedTaskWorktree`, `Push`, `CreatePR`) for git operations and the existing FSM (`taskfsm.TaskStateMachine`) for state transitions. A shared `resolveTaskEntry` helper reduces duplication across commands.\n6: \n7: **Tech Stack:** Go 1.24+, cobra, `config/taskfsm`, `config/taskstore`, `config/taskstate`, `session/git`\n8: \n9: **Size:** Medium (estimated ~3 hours, 3 tasks, 3 waves)\n10: \n11: ---\n12: \n13: ## Wave 1: Foundation — `create`, `start`, and shared helper\n14: \n15: ### Task 1: `create`, `start` commands and `resolveTaskEntry` helper\n16: \n17: **Files:**\n18: - Modify: `cmd/task.go`\n19: - Modify: `cmd/task_test.go`\n20: \n21: **Step 1: write the failing tests**\n22: \n23: ```go\n24: // cmd/task_test.go\n25: \n26: func TestExecuteTaskCreate(t *testing.T) {\n27: \tstore := taskstore.NewTestSQLiteStore(t)\n28: \tproject := \"test-create\"\n29: \n30: \terr := executeTaskCreate(project, \"my-feature\", \"add dark mode\", \"plan/my-feature\", \"ui-work\", \"\", store)\n31: \trequire.NoError(t, err)\n32: \n33: \tps, err := taskstate.Load(store, project, \"\")\n34: \trequire.NoError(t, err)\n35: \tentry, ok := ps.Entry(\"my-feature.md\")\n36: \trequire.True(t, ok)\n37: \tassert.Equal(t, taskstate.StatusReady, entry.Status)\n38: \tassert.Equal(t, \"add dark mode\", entry.Description)\n39: \tassert.Equal(t, \"plan/my-feature\", entry.Branch)\n40: \tassert.Equal(t, \"ui-work\", entry.Topic)\n41: }\n42: \n43: func TestExecuteTaskCreate_WithContent(t *testing.T) {\n44: \tstore := taskstore.NewTestSQLiteStore(t)\n45: \tproject := \"test-create-content\"\n46: \tcontent := \"# My Feature\\n\\n## Wave 1\\n\\n### Task 1: Do it\\n\"\n47: \n48: \terr := executeTaskCreate(project, \"content-plan\", \"\", \"\", \"\", content, store)\n49: \trequire.NoError(t, err)\n50: \n51: \tgot, err := store.GetContent(project, \"content-plan.md\")\n52: \trequire.NoError(t, err)\n53: \tassert.Equal(t, content, got)\n54: }\n55: \n56: func TestExecuteTaskCreate_Duplicate(t *testing.T) {\n57: \tstore := taskstore.NewTestSQLiteStore(t)\n58: \tproject := \"test-dup\"\n59: \trequire.NoError(t, executeTaskCreate(project, \"dup\", \"\", \"\", \"\", \"\", store))\n60: \terr := executeTaskCreate(project, \"dup\", \"\", \"\", \"\", \"\", store)\n61: \tassert.Error(t, err)\n62: \tassert.Contains(t, err.Error(), \"already exists\")\n63: }\n64: \n65: func TestExecuteTaskCreate_DefaultBranch(t *testing.T) {\n66: \tstore := taskstore.NewTestSQLiteStore(t)\n67: \tproject := \"test-defaults\"\n68: \trequire.NoError(t, executeTaskCreate(project, \"auto-branch\", \"\", \"\", \"\", \"\", store))\n69: \tps, _ := taskstate.Load(store, project, \"\")\n70: \tentry, _ := ps.Entry(\"auto-branch.md\")\n71: \tassert.Equal(t, \"plan/auto-branch\", entry.Branch)\n72: }\n73: \n74: func TestResolveTaskEntry(t *testing.T) {\n75: \tstore, _, project := setupTestPlanState(t)\n76: \tentry, err := resolveTaskEntry(project, \"test-plan.md\", store)\n77: \trequire.NoError(t, err)\n78: \tassert.Equal(t, taskstate.StatusReady, entry.Status)\n79: \tassert.Equal(t, \"plan/test-plan\", entry.Branch)\n80: }\n81: \n82: func TestResolveTaskEntry_NotFound(t *testing.T) {\n83: \tstore := taskstore.NewTestSQLiteStore(t)\n84: \t_, err := resolveTaskEntry(\"proj\", \"nope.md\", store)\n85: \trequire.Error(t, err)\n86: \tassert.Contains(t, err.Error(), \"not found\")\n87: }\n88: \n89: func TestResolveTaskEntry_BackfillsBranch(t *testing.T) {\n90: \tstore := taskstore.NewTestSQLiteStore(t)\n91: \tproject := \"backfill\"\n92: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n93: \t\tFilename: \"no-branch.md\",\n94: \t\tStatus:   taskstore.StatusReady,\n95: \t}))\n96: \tentry, err := resolveTaskEntry(project, \"no-branch.md\", store)\n97: \trequire.NoError(t, err)\n98: \tassert.Equal(t, \"plan/no-branch\", entry.Branch)\n99: }\n100: \n101: func TestExecuteTaskStart(t *testing.T) {\n102: \tstore := taskstore.NewTestSQLiteStore(t)\n103: \tproject := \"test-start\"\n104: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n105: \t\tFilename: \"start-plan.md\",\n106: \t\tStatus:   taskstore.StatusReady,\n107: \t\tBranch:   \"plan/start-plan\",\n108: \t}))\n109: \n110: \t// Pass empty repoRoot to test FSM-only path (git ops will be skipped\n111: \t// by the test since we don't have a real repo).\n112: \tworktreePath, err := executeTaskStart(\"\", project, \"start-plan.md\", store)\n113: \t// Expect a git error since repoRoot is empty — but FSM should have transitioned.\n114: \tassert.Error(t, err)\n115: \n116: \t// Verify the FSM transitioned to implementing before the git error.\n117: \tps, _ := taskstate.Load(store, project, \"\")\n118: \tentry, _ := ps.Entry(\"start-plan.md\")\n119: \tassert.Equal(t, taskstate.StatusImplementing, entry.Status)\n120: \n121: \t_ = worktreePath // not usable without a real repo\n122: }\n123: \n124: func TestExecuteTaskStart_FromPlanning(t *testing.T) {\n125: \tstore := taskstore.NewTestSQLiteStore(t)\n126: \tproject := \"test-start-planning\"\n127: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n128: \t\tFilename: \"planning.md\",\n129: \t\tStatus:   taskstore.Status(\"planning\"),\n130: \t\tBranch:   \"plan/planning\",\n131: \t}))\n132: \n133: \t_, err := executeTaskStart(\"\", project, \"planning.md\", store)\n134: \tassert.Error(t, err) // git error expected\n135: \n136: \t// Verify FSM walked through planning → ready → implementing.\n137: \tps, _ := taskstate.Load(store, project, \"\")\n138: \tentry, _ := ps.Entry(\"planning.md\")\n139: \tassert.Equal(t, taskstate.StatusImplementing, entry.Status)\n140: }\n141: ```\n142: \n143: **Step 2: run tests to verify they fail**\n144: \n145: ```bash\n146: go test ./cmd/... -run 'TestExecuteTaskCreate|TestResolveTaskEntry|TestExecuteTaskStart' -v\n147: ```\n148: \n149: expected: FAIL — `executeTaskCreate`, `resolveTaskEntry`, `executeTaskStart` undefined\n150: \n151: **Step 3: write minimal implementation**\n152: \n153: Add to `cmd/task.go`:\n154: \n155: 1. **`resolveTaskEntry`** — shared helper that loads task state, looks up the entry by filename, backfills the branch name if empty (using `git.TaskBranchFromFile`), and returns the entry. This replaces the repeated lookup+backfill pattern across all commands.\n156: \n157: 2. **`executeTaskCreate`** — creates a new task entry in the store. Accepts name (without `.md`), description, branch, topic, and optional content. Appends `.md` to the filename, defaults branch to `plan/<name>` if empty. Uses `taskstate.CreateWithContent` when content is provided, `taskstate.Create` otherwise.\n158: \n159: 3. **`executeTaskStart`** — transitions the FSM to implementing (walking through `planning → ready` if needed via `PlannerFinished`, then `ready → implementing` via `ImplementStart`). After the FSM transition, creates the git branch with `git.EnsureTaskBranch` and sets up the worktree with `git.NewSharedTaskWorktree` + `Setup()`. Returns the worktree path.\n160: \n161: 4. **Cobra subcommands:**\n162:    - `kas task create <name>` with `--description`, `--branch`, `--topic`, `--content` flags\n163:    - `kas task start <plan-file>` with no flags (derives everything from the task entry)\n164: \n165: **Step 4: run tests to verify they pass**\n166: \n167: ```bash\n168: go test ./cmd/... -run 'TestExecuteTaskCreate|TestResolveTaskEntry|TestExecuteTaskStart' -v\n169: ```\n170: \n171: expected: PASS\n172: \n173: **Step 5: commit**\n174: \n175: ```bash\n176: git add cmd/task.go cmd/task_test.go\n177: git commit -m \"feat: add kas task create and start CLI commands\"\n178: ```\n179: \n180: ---\n181: \n182: ## Wave 2: Git lifecycle — `push`, `merge`, `pr`, `start-over`\n183: \n184: > **depends on wave 1:** uses the `resolveTaskEntry` helper added in Task 1 for consistent task lookup and branch backfill across all commands.\n185: \n186: ### Task 2: `push` and `pr` commands\n187: \n188: **Files:**\n189: - Modify: `cmd/task.go`\n190: - Modify: `cmd/task_test.go`\n191: \n192: **Step 1: write the failing tests**\n193: \n194: ```go\n195: // cmd/task_test.go\n196: \n197: func TestExecuteTaskPush_TaskNotFound(t *testing.T) {\n198: \tstore := taskstore.NewTestSQLiteStore(t)\n199: \terr := executeTaskPush(\"\", \"nope\", \"missing.md\", store)\n200: \trequire.Error(t, err)\n201: \tassert.Contains(t, err.Error(), \"not found\")\n202: }\n203: \n204: func TestExecuteTaskPush_NoBranch(t *testing.T) {\n205: \tstore := taskstore.NewTestSQLiteStore(t)\n206: \tproject := \"push-test\"\n207: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n208: \t\tFilename: \"no-branch.md\",\n209: \t\tStatus:   taskstore.StatusReady,\n210: \t}))\n211: \terr := executeTaskPush(\"\", project, \"no-branch.md\", store)\n212: \t// Should resolve the branch but fail on git ops (no real repo).\n213: \trequire.Error(t, err)\n214: }\n215: \n216: func TestExecuteTaskPR_TaskNotFound(t *testing.T) {\n217: \tstore := taskstore.NewTestSQLiteStore(t)\n218: \t_, err := executeTaskPR(\"\", \"nope\", \"missing.md\", \"\", store)\n219: \trequire.Error(t, err)\n220: \tassert.Contains(t, err.Error(), \"not found\")\n221: }\n222: \n223: func TestExecuteTaskPR_DefaultTitle(t *testing.T) {\n224: \tstore := taskstore.NewTestSQLiteStore(t)\n225: \tproject := \"pr-test\"\n226: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n227: \t\tFilename:    \"my-feature.md\",\n228: \t\tStatus:      taskstore.StatusImplementing,\n229: \t\tDescription: \"add dark mode toggle\",\n230: \t\tBranch:      \"plan/my-feature\",\n231: \t}))\n232: \t// Will fail on git/gh ops but tests the title derivation logic.\n233: \t_, err := executeTaskPR(\"\", project, \"my-feature.md\", \"\", store)\n234: \trequire.Error(t, err) // expected: git error (no real repo)\n235: }\n236: ```\n237: \n238: **Step 2: run tests to verify they fail**\n239: \n240: ```bash\n241: go test ./cmd/... -run 'TestExecuteTaskPush|TestExecuteTaskPR' -v\n242: ```\n243: \n244: expected: FAIL — `executeTaskPush`, `executeTaskPR` undefined\n245: \n246: **Step 3: write minimal implementation**\n247: \n248: Add to `cmd/task.go`:\n249: \n250: 1. **`executeTaskPush`** — resolves the task entry and branch, derives the worktree path with `git.TaskWorktreePath`, constructs a `GitWorktree` via `git.NewGitWorktreeFromStorage`, commits dirty changes with `PushChanges`, and pushes to origin.\n251: \n252: 2. **`executeTaskPR`** — resolves the task entry, derives worktree path, constructs `GitWorktree`, uses the task description as the default PR title (overridable via the `title` parameter), generates a PR body via `GeneratePRBody`, pushes and creates the PR via `CreatePR`. Returns the PR URL from stdout capture.\n253: \n254: 3. **Cobra subcommands:**\n255:    - `kas task push <plan-file>` with `--message` flag for custom commit message (default: `\"update from kas\"`)\n256:    - `kas task pr <plan-file>` with `--title` flag (default: task description)\n257: \n258: **Step 4: run tests to verify they pass**\n259: \n260: ```bash\n261: go test ./cmd/... -run 'TestExecuteTaskPush|TestExecuteTaskPR' -v\n262: ```\n263: \n264: expected: PASS\n265: \n266: **Step 5: commit**\n267: \n268: ```bash\n269: git add cmd/task.go cmd/task_test.go\n270: git commit -m \"feat: add kas task push and pr CLI commands\"\n271: ```\n272: \n273: ## Wave 3: Branch finalization — `merge` and `start-over`\n274: \n275: > **depends on wave 2:** uses the same `resolveTaskEntry` helper and follows the same `executeTask*` pattern established in waves 1–2. No code output dependency, but modifies the same files.\n276: \n277: ### Task 3: `merge` and `start-over` commands\n278: \n279: **Files:**\n280: - Modify: `cmd/task.go`\n281: - Modify: `cmd/task_test.go`\n282: \n283: **Step 1: write the failing tests**\n284: \n285: ```go\n286: // cmd/task_test.go\n287: \n288: func TestExecuteTaskMerge_TaskNotFound(t *testing.T) {\n289: \tstore := taskstore.NewTestSQLiteStore(t)\n290: \terr := executeTaskMerge(\"\", \"nope\", \"missing.md\", store)\n291: \trequire.Error(t, err)\n292: \tassert.Contains(t, err.Error(), \"not found\")\n293: }\n294: \n295: func TestExecuteTaskMerge_TransitionsToDone(t *testing.T) {\n296: \tstore := taskstore.NewTestSQLiteStore(t)\n297: \tproject := \"merge-test\"\n298: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n299: \t\tFilename: \"merge-me.md\",\n300: \t\tStatus:   taskstore.Status(\"reviewing\"),\n301: \t\tBranch:   \"plan/merge-me\",\n302: \t}))\n303: \t// Will fail on git merge (no real repo) but the error is from git, not FSM.\n304: \terr := executeTaskMerge(\"\", project, \"merge-me.md\", store)\n305: \trequire.Error(t, err) // expected: git error\n306: }\n307: \n308: func TestExecuteTaskStartOver_TaskNotFound(t *testing.T) {\n309: \tstore := taskstore.NewTestSQLiteStore(t)\n310: \terr := executeTaskStartOver(\"\", \"nope\", \"missing.md\", store)\n311: \trequire.Error(t, err)\n312: \tassert.Contains(t, err.Error(), \"not found\")\n313: }\n314: \n315: func TestExecuteTaskStartOver_TransitionsToPlanning(t *testing.T) {\n316: \tstore := taskstore.NewTestSQLiteStore(t)\n317: \tproject := \"startover-test\"\n318: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n319: \t\tFilename: \"redo.md\",\n320: \t\tStatus:   taskstore.Status(\"done\"),\n321: \t\tBranch:   \"plan/redo\",\n322: \t}))\n323: \t// Will fail on git reset (no real repo) but tests FSM logic.\n324: \terr := executeTaskStartOver(\"\", project, \"redo.md\", store)\n325: \trequire.Error(t, err) // expected: git error\n326: }\n327: \n328: func TestExecuteTaskMerge_IntegrationWithRealRepo(t *testing.T) {\n329: \tstore := taskstore.NewTestSQLiteStore(t)\n330: \tproject := \"merge-integration\"\n331: \tbranch := \"plan/int-merge\"\n332: \n333: \t// Create a real git repo.\n334: \trepo := t.TempDir()\n335: \trunGit := func(args ...string) {\n336: \t\tt.Helper()\n337: \t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repo}, args...)...)\n338: \t\tout, err := cmd.CombinedOutput()\n339: \t\trequire.NoErrorf(t, err, \"git %v: %s\", args, out)\n340: \t}\n341: \trunGit(\"init\")\n342: \trunGit(\"config\", \"user.email\", \"test@test.com\")\n343: \trunGit(\"config\", \"user.name\", \"test\")\n344: \trequire.NoError(t, os.WriteFile(filepath.Join(repo, \"README.md\"), []byte(\"init\\n\"), 0644))\n345: \trunGit(\"add\", \".\")\n346: \trunGit(\"commit\", \"-m\", \"initial\")\n347: \n348: \t// Create the plan branch with a commit.\n349: \trunGit(\"branch\", branch)\n350: \trunGit(\"checkout\", branch)\n351: \trequire.NoError(t, os.WriteFile(filepath.Join(repo, \"feature.go\"), []byte(\"package feature\\n\"), 0644))\n352: \trunGit(\"add\", \".\")\n353: \trunGit(\"commit\", \"-m\", \"add feature\")\n354: \trunGit(\"checkout\", \"main\")\n355: \n356: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n357: \t\tFilename: \"int-merge.md\",\n358: \t\tStatus:   taskstore.Status(\"reviewing\"),\n359: \t\tBranch:   branch,\n360: \t}))\n361: \n362: \terr := executeTaskMerge(repo, project, \"int-merge.md\", store)\n363: \trequire.NoError(t, err)\n364: \n365: \t// Verify FSM transitioned to done.\n366: \tps, _ := taskstate.Load(store, project, \"\")\n367: \tentry, _ := ps.Entry(\"int-merge.md\")\n368: \tassert.Equal(t, taskstate.StatusDone, entry.Status)\n369: \n370: \t// Verify branch was deleted.\n371: \tout, _ := exec.Command(\"git\", \"-C\", repo, \"branch\", \"--list\", branch).CombinedOutput()\n372: \tassert.Empty(t, strings.TrimSpace(string(out)))\n373: }\n374: \n375: func TestExecuteTaskStartOver_IntegrationWithRealRepo(t *testing.T) {\n376: \tstore := taskstore.NewTestSQLiteStore(t)\n377: \tproject := \"startover-integration\"\n378: \tbranch := \"plan/int-redo\"\n379: \n380: \trepo := t.TempDir()\n381: \trunGit := func(args ...string) {\n382: \t\tt.Helper()\n383: \t\tcmd := exec.Command(\"git\", append([]string{\"-C\", repo}, args...)...)\n384: \t\tout, err := cmd.CombinedOutput()\n385: \t\trequire.NoErrorf(t, err, \"git %v: %s\", args, out)\n386: \t}\n387: \trunGit(\"init\")\n388: \trunGit(\"config\", \"user.email\", \"test@test.com\")\n389: \trunGit(\"config\", \"user.name\", \"test\")\n390: \trequire.NoError(t, os.WriteFile(filepath.Join(repo, \"README.md\"), []byte(\"init\\n\"), 0644))\n391: \trunGit(\"add\", \".\")\n392: \trunGit(\"commit\", \"-m\", \"initial\")\n393: \trunGit(\"branch\", branch)\n394: \n395: \trequire.NoError(t, store.Create(project, taskstore.TaskEntry{\n396: \t\tFilename: \"int-redo.md\",\n397: \t\tStatus:   taskstore.Status(\"done\"),\n398: \t\tBranch:   branch,\n399: \t}))\n400: \n401: \terr := executeTaskStartOver(repo, project, \"int-redo.md\", store)\n402: \trequire.NoError(t, err)\n403: \n404: \t// Verify FSM transitioned to planning.\n405: \tps, _ := taskstate.Load(store, project, \"\")\n406: \tentry, _ := ps.Entry(\"int-redo.md\")\n407: \tassert.Equal(t, taskstate.StatusPlanning, entry.Status)\n408: \n409: \t// Verify branch still exists (recreated from HEAD).\n410: \tout, _ := exec.Command(\"git\", \"-C\", repo, \"branch\", \"--list\", branch).CombinedOutput()\n411: \tassert.Contains(t, string(out), \"int-redo\")\n412: }\n413: ```\n414: \n415: **Step 2: run tests to verify they fail**\n416: \n417: ```bash\n418: go test ./cmd/... -run 'TestExecuteTaskMerge|TestExecuteTaskStartOver' -v\n419: ```\n420: \n421: expected: FAIL — `executeTaskMerge`, `executeTaskStartOver` undefined\n422: \n423: **Step 3: write minimal implementation**\n424: \n425: Add to `cmd/task.go`:\n426: \n427: 1. **`executeTaskMerge`** — resolves the task entry, calls `git.MergeTaskBranch(repoRoot, branch)` to merge the plan branch into main (this also removes the worktree and deletes the branch). After a successful merge, walks the FSM to done: if not in reviewing, transitions through `ImplementFinished` first, then `ReviewApproved`. Returns the new status.\n428: \n429: 2. **`executeTaskStartOver`** — resolves the task entry, calls `git.ResetTaskBranch(repoRoot, branch)` to remove the worktree, delete the branch, and recreate it from HEAD. Then transitions the FSM via `StartOver` event (which moves to planning from done/reviewing/implementing). For states where `StartOver` isn't valid, uses `ForceSetStatus` to \"planning\" as a fallback.\n430: \n431: 3. **Cobra subcommands:**\n432:    - `kas task merge <plan-file>` with no flags\n433:    - `kas task start-over <plan-file>` with no flags\n434: \n435: **Step 4: run tests to verify they pass**\n436: \n437: ```bash\n438: go test ./cmd/... -run 'TestExecuteTaskMerge|TestExecuteTaskStartOver' -v\n439: ```\n440: \n441: expected: PASS\n442: \n443: **Step 5: commit**\n444: \n445: ```bash\n446: git add cmd/task.go cmd/task_test.go\n447: git commit -m \"feat: add kas task merge and start-over CLI commands\"\n448: ```\n\n(End of file - total 448 lines)\n</content>",
+            "title": "cli-plan-lifecycle.md",
+            "metadata": {
+              "preview": "# CLI Plan Lifecycle Commands Implementation Plan\n\n**Goal:** Add high-level lifecycle commands (`create`, `start`, `push`, `merge`, `pr`, `start-over`) to `kas task` so users can manage the full plan lifecycle from the CLI without the TUI.\n\n**Architecture:** All 6 commands are added as cobra subcommands under the existing `kas task` command tree in `cmd/task.go`. Each command has a testable `executeTask*` function that accepts a `taskstore.Store` argument (matching the existing pattern). The commands delegate to existing `session/git` functions (`EnsureTaskBranch`, `MergeTaskBranch`, `ResetTaskBranch`, `NewSharedTaskWorktree`, `Push`, `CreatePR`) for git operations and the existing FSM (`taskfsm.TaskStateMachine`) for state transitions. A shared `resolveTaskEntry` helper reduces duplication across commands.\n\n**Tech Stack:** Go 1.24+, cobra, `config/taskfsm`, `config/taskstore`, `config/taskstate`, `session/git`\n\n**Size:** Medium (estimated ~3 hours, 3 tasks, 3 waves)\n\n---\n\n## Wave 1: Foundation — `create`, `start`, and shared helper\n\n### Task 1: `create`, `start` commands and `resolveTaskEntry` helper\n\n**Files:**\n- Modify: `cmd/task.go`\n- Modify: `cmd/task_test.go`\n",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772609973907,
+              "end": 1772609973915
+            }
+          },
+          "id": "prt_cb7c9acba001RrarHGEyfGoGRL",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01WgGE1gJS8P2PkFGrQ9TPUJ",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/docs/plans/cli-plan-lifecycle.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/docs/plans/cli-plan-lifecycle.md</path>\n<type>file</type>\n<content>\n\n(End of file - total 0 lines)\n</content>",
+            "title": "docs/plans/cli-plan-lifecycle.md",
+            "metadata": {
+              "preview": "",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772609974428,
+              "end": 1772609974430
+            }
+          },
+          "id": "prt_cb7c9ae96001U0x7VBux7ZzrFy",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task update-content --help 2>&1",
+              "description": "Check update-content usage"
+            },
+            "output": "replace plan content in the task store (reads from stdin or --file)\n\nUsage:\n  kas task update-content <plan-file> [flags]\n\nFlags:\n      --file string   read content from file instead of stdin\n  -h, --help          help for update-content\n",
+            "title": "Check update-content usage",
+            "metadata": {
+              "output": "replace plan content in the task store (reads from stdin or --file)\n\nUsage:\n  kas task update-content <plan-file> [flags]\n\nFlags:\n      --file string   read content from file instead of stdin\n  -h, --help          help for update-content\n",
+              "exit": 0,
+              "description": "Check update-content usage",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609974948,
+              "end": 1772609974962
+            }
+          },
+          "id": "prt_cb7c9b09e001PkrAcSNDznuypX",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 53146,
+            "input": 1,
+            "output": 315,
+            "reasoning": 0,
+            "cache": {
+              "read": 48436,
+              "write": 4394
+            }
+          },
+          "id": "prt_cb7c9b2bc001dEfeWiBom2x1uZ",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c99660001x5002Kz6bTjgxQ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609974986,
+          "completed": 1772609985287
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 60573,
+          "input": 1,
+          "output": 368,
+          "reasoning": 0,
+          "cache": {
+            "read": 52830,
+            "write": 7374
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c9b2ca001phZGwnCxO7Qnia",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7c9ba26001coIxzyOvyt1wee",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9b2ca001phZGwnCxO7Qnia"
+        },
+        {
+          "type": "reasoning",
+          "text": "The plan already has `## Wave` headers — Wave 1, Wave 2, Wave 3. The problem is that the content isn't in the task store (the store has no content for this entry). The file at `cli-plan-lifecycle.md` in the root has the full plan with waves already present.\n\nSo the issue is simple: the plan content was never stored in the database. kasmos sees `planning` status + no content = \"needs planning\". I need to:\n\n1. Pipe the existing content into `kas task update-content cli-plan-lifecycle.md`\n2. Transition from `planning` to `ready` (or signal planner-finished)\n\n\n3. Touch the sentinel file to mark completion\n\nI'll push the content into the store and signal that planning is done — the Wave headers are already there, so no additional annotation is needed.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/qibvPPMqMlFtjMWS7m66yETRqPW/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/hviLICLJLq25af/REDACTED/REDACTED/qCPCLUqOxKS48kny/U/lEU8/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772609976871,
+            "end": 1772609983166
+          },
+          "id": "prt_cb7c9ba27001GnIIx2iQRpGuVX",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9b2ca001phZGwnCxO7Qnia"
+        },
+        {
+          "type": "text",
+          "text": "The plan already has proper `## Wave 1/2/3` headers — the actual problem is that the content was never stored in the database. kasmos sees `planning` status + empty content = \"needs planning\", so it keeps spawning planner sessions. The fix is straightforward: push the existing content into the store and signal completion.",
+          "time": {
+            "start": 1772609984430,
+            "end": 1772609984430
+          },
+          "id": "prt_cb7c9d2c1001toBjm8z78eF5jK",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9b2ca001phZGwnCxO7Qnia"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_0192Lc6bcr452PyC2Ac5Spnj",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task update-content cli-plan-lifecycle.md --file cli-plan-lifecycle.md 2>&1",
+              "description": "Store plan content in task database"
+            },
+            "output": "updated content for cli-plan-lifecycle.md\n",
+            "title": "Store plan content in task database",
+            "metadata": {
+              "output": "updated content for cli-plan-lifecycle.md\n",
+              "exit": 0,
+              "description": "Store plan content in task database",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609985245,
+              "end": 1772609985263
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9b2ca001phZGwnCxO7Qnia"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 60573,
+            "input": 1,
+            "output": 368,
+            "reasoning": 0,
+            "cache": {
+              "read": 52830,
+              "write": 7374
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9b2ca001phZGwnCxO7Qnia"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609985289,
+          "completed": 1772609993909
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 60775,
+          "input": 1,
+          "output": 182,
+          "reasoning": 0,
+          "cache": {
+            "read": 60204,
+            "write": 388
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c9db09001NVABKetrmh3QoJ",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7c9f2fd001b0Ln3j5JE0PUoX",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9db09001NVABKetrmh3QoJ"
+        },
+        {
+          "type": "text",
+          "text": "Content stored. Now verify it round-trips correctly, then signal completion:",
+          "time": {
+            "start": 1772609992343,
+            "end": 1772609992343
+          },
+          "id": "prt_cb7c9f2fd002P7zIrUNJBZK5Db",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9db09001NVABKetrmh3QoJ"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011kP5nN9TvYvjMo1iJPHZPj",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task show cli-plan-lifecycle.md 2>&1 | rg '^## Wave' ",
+              "description": "Verify wave headers in stored content"
+            },
+            "output": "## Wave 1: Foundation — `create`, `start`, and shared helper\n## Wave 2: Git lifecycle — `push`, `merge`, `pr`, `start-over`\n## Wave 3: Branch finalization — `merge` and `start-over`\n",
+            "title": "Verify wave headers in stored content",
+            "metadata": {
+              "output": "## Wave 1: Foundation — `create`, `start`, and shared helper\n## Wave 2: Git lifecycle — `push`, `merge`, `pr`, `start-over`\n## Wave 3: Branch finalization — `merge` and `start-over`\n",
+              "exit": 0,
+              "description": "Verify wave headers in stored content",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609993306,
+              "end": 1772609993320
+            }
+          },
+          "id": "prt_cb7c9f698001N5pLLI15L9TG7p",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9db09001NVABKetrmh3QoJ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo \"${KASMOS_MANAGED:-}\"",
+              "description": "Check if running managed mode"
+            },
+            "output": "1\n",
+            "title": "Check if running managed mode",
+            "metadata": {
+              "output": "1\n",
+              "exit": 0,
+              "description": "Check if running managed mode",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609993876,
+              "end": 1772609993879
+            }
+          },
+          "id": "prt_cb7c9fa5c001mu8JSiu0aK0rWQ",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9db09001NVABKetrmh3QoJ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 60775,
+            "input": 1,
+            "output": 182,
+            "reasoning": 0,
+            "cache": {
+              "read": 60204,
+              "write": 388
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9db09001NVABKetrmh3QoJ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609993911,
+          "completed": 1772609997484
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61025,
+          "input": 1,
+          "output": 124,
+          "reasoning": 0,
+          "cache": {
+            "read": 60592,
+            "write": 308
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cb7c9fcb7001Dsv9fMpFp82Hfv",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7ca0384001cmCr0xu5wF1sEN",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9fcb7001Dsv9fMpFp82Hfv"
+        },
+        {
+          "type": "text",
+          "text": "Content stored correctly with all 3 waves. Managed mode — signaling via sentinel:",
+          "time": {
+            "start": 1772609996581,
+            "end": 1772609996581
+          },
+          "id": "prt_cb7ca0385001nV0hB5mwOvQLvI",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9fcb7001Dsv9fMpFp82Hfv"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01HaNzqWJzBkyNRYSua7rWEH",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals && touch .kasmos/signals/planner-finished-cli-plan-lifecycle.md",
+              "description": "Signal planner completion to kasmos"
+            },
+            "output": "",
+            "title": "Signal planner completion to kasmos",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Signal planner completion to kasmos",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772609997461,
+              "end": 1772609997465
+            }
+          },
+          "id": "prt_cb7ca0726001panXubmSR3Xo6v",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9fcb7001Dsv9fMpFp82Hfv"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "cost": 0,
+          "tokens": {
+            "total": 61025,
+            "input": 1,
+            "output": 124,
+            "reasoning": 0,
+            "cache": {
+              "read": 60592,
+              "write": 308
+            }
+          },
+          "id": "prt_cb7ca0aa4001mMSys6awktFziP",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7c9fcb7001Dsv9fMpFp82Hfv"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772609997486,
+          "completed": 1772610012184
+        },
+        "parentID": "msg_cb7c95f830011rDF5xUYDrFU7h",
+        "modelID": "claude-opus-4-6",
+        "providerID": "anthropic",
+        "mode": "planner",
+        "agent": "planner",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 61250,
+          "input": 1,
+          "output": 199,
+          "reasoning": 0,
+          "cache": {
+            "read": 60900,
+            "write": 150
+          }
+        },
+        "variant": "high",
+        "finish": "stop",
+        "id": "msg_cb7ca0aad001zDxoEB250lTSBy",
+        "sessionID": "ses_34836f61cffecH5TM8791aZaZa"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "id": "prt_cb7ca33300016YdEltFoschnkO",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7ca0aad001zDxoEB250lTSBy"
+        },
+        {
+          "type": "text",
+          "text": "Done. Here's what happened:\n\n**Root cause:** The task `cli-plan-lifecycle.md` was in `planning` status with an **empty content body** in the task store. The plan file existed on disk (with all 3 wave headers already present), but kasmos only checks the database — so it kept seeing \"planning + no content\" and re-spawning the planner.\n\n**Fix:**\n1. Piped the existing `cli-plan-lifecycle.md` file into `kas task update-content` — the store now has the full plan with `## Wave 1`, `## Wave 2`, `## Wave 3`\n2. Touched `.kasmos/signals/planner-finished-cli-plan-lifecycle.md` to tell kasmos the plan is complete\n\nplan complete: `cli-plan-lifecycle.md`. kasmos will prompt you to start implementation.",
+          "time": {
+            "start": 1772610012147,
+            "end": 1772610012147
+          },
+          "id": "prt_cb7ca33310015JXn2XL4UhLxPS",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7ca0aad001zDxoEB250lTSBy"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "afb9b8732024ddbfa651829f267f0135e6f2c14b",
+          "cost": 0,
+          "tokens": {
+            "total": 61250,
+            "input": 1,
+            "output": 199,
+            "reasoning": 0,
+            "cache": {
+              "read": 60900,
+              "write": 150
+            }
+          },
+          "id": "prt_cb7ca4409001wa9Z9S2WOZvsLd",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7ca0aad001zDxoEB250lTSBy"
+        },
+        {
+          "type": "patch",
+          "hash": "48bc44e1753bcdb65faa2a764c987eef55d7564b",
+          "files": [
+            "/home/kas/dev/kasmos/.entire/logs/entire.log"
+          ],
+          "id": "prt_cb7ca4416001Gr3f4YLsimwumy",
+          "sessionID": "ses_34836f61cffecH5TM8791aZaZa",
+          "messageID": "msg_cb7ca0aad001zDxoEB250lTSBy"
+        }
+      ]
+    }
+  ]
+}
