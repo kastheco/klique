@@ -120,15 +120,15 @@ func (g *GitWorktree) syncBranchWithRemote() {
 		return
 	}
 
-	// Histories have diverged — attempt a rebase.
-	log.InfoLog.Printf("syncBranchWithRemote: %s diverged from %s, rebasing", g.branchName, remote)
-	if _, rebaseErr := g.runGitCommand(g.repoPath, "rebase", "--onto", remote, remote, g.branchName); rebaseErr != nil {
-		_, _ = g.runGitCommand(g.repoPath, "rebase", "--abort")
-		log.WarningLog.Printf(
-			"syncBranchWithRemote: rebase of %s onto %s failed (conflicts?), leaving diverged: %v",
-			g.branchName, remote, rebaseErr,
-		)
-	}
+	// Histories have diverged — do NOT rebase from the main worktree.
+	// Running `git rebase ... <branch>` checks out <branch> in the current
+	// worktree as a side effect, which would poison the main worktree by
+	// switching it away from its own branch. Instead, leave the branch as-is
+	// and let the caller handle the divergence after the worktree is created.
+	log.WarningLog.Printf(
+		"syncBranchWithRemote: %s has diverged from %s — leaving as-is to avoid poisoning the main worktree",
+		g.branchName, remote,
+	)
 }
 
 // setupNewWorktree creates a brand-new branch from the current HEAD and adds
