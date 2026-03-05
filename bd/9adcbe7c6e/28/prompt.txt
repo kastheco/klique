@@ -1,0 +1,41 @@
+the logo animation and call to action don't show on startup anymore. it drops me into the info tab of a random plan
+
+---
+
+it's in ansi shadow block art
+
+---
+
+i'd prefer to keep info the default but show the logo until they navigate in teh sidebar
+
+---
+
+why am i getting notifications for focus-wave-W1-T1 finishing when you stop working?
+
+---
+
+commit both separately and push a new version v1.1.4
+
+---
+
+remove the coming soon for homebrew in the readme, commit and push
+
+---
+
+=== RUN   TestToastSmallScreenClamp
+--- PASS: TestToastSmallScreenClamp (0.00s)
+PASS
+ok  	github.com/kastheco/kasmos/ui/overlay	0.018s
+FAIL
+
+---
+
+what's the change and can it be easily fixed?
+
+---
+
+i think we actually want the plan review that was something i was working on today
+
+---
+
+yes and make that the v1.1.4 release instead
