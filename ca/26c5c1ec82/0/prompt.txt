@@ -1,0 +1,180 @@
+Implement Task 1: `kas audit` subcommand
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add CLI commands for querying the audit log, managing orphaned tmux sessions, and viewing instance status summaries. Closes Category 5 (Monitoring & Observability) in the UI/CLI feature parity report.
+**Architecture:** Three independent subcommand groups:
+**Tech Stack:** Go, cobra, `config/auditlog`, `session/tmux`, `config.State`
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+Add `kas audit list` cobra command that queries the existing SQLite audit log.
+
+**Files:**
+- `cmd/audit.go` — new cobra command: `kas audit list [--limit=N] [--event=X]`
+- `cmd/audit_test.go` — table-driven tests for flag parsing, output format, empty log
+
+**Details:**
+- Implement these top-level functions in `cmd/audit.go`:
+
+```go
+func NewAuditCmd() *cobra.Command
+func executeAuditList(logger auditlog.Logger, project string, limit int, event string) (string, error)
+func openAuditLogger() (*auditlog.SQLiteLogger, error)
+```
+
+- Follow the existing cmd-layer pattern from `cmd/instance.go` and `cmd/task.go`: keep cobra `RunE` thin, put deterministic logic in `execute...` helpers, and wrap operational errors with `%w` context (`fmt.Errorf("query audit events: %w", err)`).
+- Use `resolveRepoInfo()` (already in `cmd/task.go`) to derive `project`; query only that project via `auditlog.QueryFilter{Project: project, Limit: limit}` so output mirrors the active repo context used by the TUI.
+- Build event filtering by setting `Kinds` only when `--event` is non-empty:
+
+```go
+filter := auditlog.QueryFilter{Project: project, Limit: limit}
+if event != "" {
+	filter.Kinds = []auditlog.EventKind{auditlog.EventKind(event)}
+}
+```
+
+- Use `taskstore.ResolvedDBPath()` in `openAuditLogger()` (same shared DB path used in `app/app.go` when initializing the audit logger), then `auditlog.NewSQLiteLogger(dbPath)`.
+- Keep `--limit` default at 50; reject non-positive values in command argument handling (return a validation error before querying).
+- Format output with `text/tabwriter` using columns: `TIME`, `EVENT`, `DETAILS`. Derive `DETAILS` as `Message` plus `Detail` when present (for richer context). Timestamp format should be stable and sortable (e.g. `2006-01-02 15:04:05`).
+- Empty-state behavior must exactly print `no audit entries found` (lowercase, no punctuation), then return nil error.
+- Required imports for `cmd/audit.go`:
+
+```go
+import (
+	"fmt"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/kastheco/kasmos/config/auditlog"
+	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/spf13/cobra"
+)
+```
+
+- Testing guidance for `cmd/audit_test.go`: use in-memory logger (`auditlog.NewSQLiteLogger(":memory:")`), seed mixed events, and table-drive cases for default limit, `--event` filter, table output shape, and empty log output.
+
+- Command wiring should mirror the existing thin `RunE` style in `cmd/task.go:547` and `cmd/instance.go:396`:
+
+```go
+func NewAuditCmd() *cobra.Command {
+	auditCmd := &cobra.Command{Use: "audit", Short: "query audit events"}
+	var limit int
+	var event string
+	listCmd := &cobra.Command{
+		Use:  "list",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if limit <= 0 {
+				return fmt.Errorf("limit must be > 0")
+			}
+			_, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+			logger, err := openAuditLogger()
+			if err != nil {
+				return err
+			}
+			defer logger.Close()
+			out, err := executeAuditList(logger, project, limit, event)
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+			return nil
+		},
+	}
+	listCmd.Flags().IntVar(&limit, "limit", 50, "max rows")
+	listCmd.Flags().StringVar(&event, "event", "", "event kind filter")
+	auditCmd.AddCommand(listCmd)
+	return auditCmd
+}
+```
+
+- `executeAuditList` should be deterministic and pure (string builder + filter construction only):
+  - Build filter from arguments first, then call `logger.Query(filter)`.
+  - For each event row, format `TIME` with local display format `2006-01-02 15:04:05`.
+  - Build `DETAILS` as:
+    - `Message` when `Detail == ""`
+    - `Message + " | " + Detail` when both are non-empty
+    - `Detail` when `Message == ""`
+  - Return wrapped query errors exactly as `fmt.Errorf("query audit events: %w", err)` (pattern from `config/auditlog/sqlite.go:142`).
+
+- Edge cases to handle explicitly:
+  - `limit <= 0` should fail fast in `RunE` before opening DB (no side effects).
+  - `logger.Query` returning empty slice should produce exactly `no audit entries found\n`.
+  - Unknown `--event` values are not validated in cmd layer; they map to `auditlog.EventKind(event)` and naturally return zero rows.
+  - `openAuditLogger()` should only wrap initialization failures (`open sqlite db for audit log`, `run audit log schema`) and not swallow them.
+
+- Test function layout (table-driven, testify) in `cmd/audit_test.go`:
+  - `TestAuditList_FormatsTable`
+  - `TestAuditList_Empty`
+  - `TestAuditList_EventFilter`
+  - `TestAuditCmd_RejectsNonPositiveLimit`
+  - Use `auditlog.NewSQLiteLogger(":memory:")`, seed with at least two different kinds, and assert header row includes `TIME\tEVENT\tDETAILS`.
+
+
+- Codebase anchors to mirror while implementing:
+  - `cmd/task.go:543` (`show`) and `cmd/task.go:563` (`update-content`) demonstrate the preferred cmd pattern here: resolve repo context, call a pure helper, print returned string, and keep side effects localized.
+  - `app/app.go:388` and `app/app.go:435` confirm audit logging uses the same DB file as taskstore via `taskstore.ResolvedDBPath()`; `openAuditLogger()` should follow that exact path source.
+  - `config/auditlog/sqlite.go:92` already guarantees `ORDER BY timestamp DESC`; keep cmd output in query order (no extra sorting).
+- Root wiring requirement so the command is reachable: extend `NewRootCmd()` in `cmd/cmd.go` to register `NewAuditCmd()` alongside existing subcommands.
+- Keep `executeAuditList` deterministic by isolating formatting helpers inside `cmd/audit.go` (no stdout writes in helpers):
+
+```go
+func formatAuditDetails(message, detail string) string
+func renderAuditRows(events []auditlog.Event) string
+```
+
+- Testing specifics from current patterns:
+  - Follow `cmd/instance_test.go` style (`assert` + `require`, table-driven cases, helper constructors).
+  - In seeded events, set explicit `Timestamp` values so assertions on table row ordering are deterministic even when rows are emitted rapidly.
+  - Add one invalid-limit command execution test that asserts the exact error text `limit must be > 0` before any DB open attempt.
+- Keep `openAuditLogger()` intentionally thin so upstream error text from `auditlog.NewSQLiteLogger` remains intact for assertions:
+
+```go
+func openAuditLogger() (*auditlog.SQLiteLogger, error) {
+	return auditlog.NewSQLiteLogger(taskstore.ResolvedDBPath())
+}
+```
+
+- Add command reachability coverage (same style as `cmd/serve_test.go`) to avoid wiring regressions:
+  - `cmd, _, err := NewRootCmd().Find([]string{"audit", "list"})`
+  - assert `err == nil` and `cmd.Name() == "list"`.
+
+- Additional implementation guardrails from codebase reads:
+  - Keep cobra/output boundaries identical to `cmd/task.go:543` and `cmd/task.go:552`: `RunE` does repo resolution + dependency setup, while `executeAuditList` returns `(string, error)` with zero stdout writes.
+  - Render timestamps with `event.Timestamp.Local().Format("2006-01-02 15:04:05")` so CLI output aligns with existing UI display behavior in `app/app_state.go:1967`; storage remains UTC via `auditFormatTime` in `config/auditlog/sqlite.go:186`.
+  - Preserve query ordering as returned (already DESC in `config/auditlog/sqlite.go:138`), and avoid re-sorting in cmd helpers.
+  - Add tiny pure-helper tests to lock behavior without cobra plumbing:
+
+```go
+func TestFormatAuditDetails(t *testing.T)
+func TestRenderAuditRows_HeaderAndOrder(t *testing.T)
+```
+
+**Tests:**
+- `go test ./cmd/... -run TestAudit -count=1`
+
+---
