@@ -46,6 +46,26 @@ func (s *HTTPStore) taskContentURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/content", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
+// taskSubtasksURL builds the URL for a task's subtasks endpoint.
+func (s *HTTPStore) taskSubtasksURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/subtasks", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
+// taskSubtaskStatusURL builds the URL for a specific task's subtask status endpoint.
+func (s *HTTPStore) taskSubtaskStatusURL(project, filename string, taskNumber int) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/subtasks/%d/status", s.baseURL, url.PathEscape(project), url.PathEscape(filename), taskNumber)
+}
+
+// taskPhaseTimestampURL builds the URL for phase timestamp updates.
+func (s *HTTPStore) taskPhaseTimestampURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/phase-timestamp", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
+// taskGoalURL builds the URL for a plan goal update.
+func (s *HTTPStore) taskGoalURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/goal", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
 // topicURL builds the base URL for a project's topics endpoint.
 func (s *HTTPStore) topicURL(project string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/topics", s.baseURL, url.PathEscape(project))
@@ -221,6 +241,110 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("task store: plan not found: %s", filename)
 	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// GetSubtasks sends the request to the server over HTTP.
+func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {
+	req, err := http.NewRequest(http.MethodGet, s.taskSubtasksURL(project, filename), nil)
+	if err != nil {
+		return nil, fmt.Errorf("task store: build request: %w", err)
+	}
+
+	resp, err := s.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, decodeError(resp)
+	}
+
+	var subtasks []SubtaskEntry
+	if err := json.NewDecoder(resp.Body).Decode(&subtasks); err != nil {
+		return nil, fmt.Errorf("task store: decode subtasks: %w", err)
+	}
+	return subtasks, nil
+}
+
+// SetSubtasks sends the request to the server over HTTP.
+func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {
+	if subtasks == nil {
+		subtasks = []SubtaskEntry{}
+	}
+	body, err := json.Marshal(subtasks)
+	if err != nil {
+		return fmt.Errorf("task store: marshal subtasks: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskSubtasksURL(project, filename), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// UpdateSubtaskStatus sends the request to the server over HTTP.
+func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {
+	body, err := json.Marshal(struct {
+		Status SubtaskStatus `json:"status"`
+	}{Status: status})
+	if err != nil {
+		return fmt.Errorf("task store: marshal subtask status payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskSubtaskStatusURL(project, filename, taskNumber), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// SetPhaseTimestamp sends the request to the server over HTTP.
+func (s *HTTPStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {
+	body, err := json.Marshal(struct {
+		Phase string    `json:"phase"`
+		TS    time.Time `json:"timestamp,omitempty"`
+	}{Phase: phase, TS: ts})
+	if err != nil {
+		return fmt.Errorf("task store: marshal phase timestamp payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskPhaseTimestampURL(project, filename), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
 	}
@@ -416,6 +540,32 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("task store: plan not found: %s", filename)
 	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// SetPlanGoal sends the request to the server over HTTP.
+func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {
+	body, err := json.Marshal(struct {
+		Goal string `json:"goal"`
+	}{Goal: goal})
+	if err != nil {
+		return fmt.Errorf("task store: marshal plan goal payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskGoalURL(project, filename), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
 	}

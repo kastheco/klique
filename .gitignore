@@ -9,6 +9,13 @@ kas
 .worktrees/
 /.kasmos/*
 !/.kasmos/config.toml
+# Ignore nested .kasmos runtime state in any subdirectory
+**/.kasmos/state.json
+**/.kasmos/taskstore.db
+**/.kasmos/taskstore.db-shm
+**/.kasmos/taskstore.db-wal
+**/.kasmos/config.json
+**/.kasmos/config.toml
 dist/
 *.bak
 *.test

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstore"
 )
 
@@ -25,14 +26,19 @@ const (
 )
 
 type TaskEntry struct {
-	Status        Status    `json:"status"`
-	Description   string    `json:"description,omitempty"`
-	Branch        string    `json:"branch,omitempty"`
-	Topic         string    `json:"topic,omitempty"`
-	CreatedAt     time.Time `json:"created_at,omitempty"`
-	Implemented   string    `json:"implemented,omitempty"`
-	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
-	ReviewCycle   int       `json:"review_cycle,omitempty"`
+	Status         Status    `json:"status"`
+	Description    string    `json:"description,omitempty"`
+	Branch         string    `json:"branch,omitempty"`
+	Topic          string    `json:"topic,omitempty"`
+	CreatedAt      time.Time `json:"created_at,omitempty"`
+	Implemented    string    `json:"implemented,omitempty"`
+	PlanningAt     time.Time `json:"planning_at,omitempty"`
+	ImplementingAt time.Time `json:"implementing_at,omitempty"`
+	ReviewingAt    time.Time `json:"reviewing_at,omitempty"`
+	DoneAt         time.Time `json:"done_at,omitempty"`
+	Goal           string    `json:"goal,omitempty"`
+	ClickUpTaskID  string    `json:"clickup_task_id,omitempty"`
+	ReviewCycle    int       `json:"review_cycle,omitempty"`
 }
 
 type TopicEntry struct {
@@ -85,14 +91,19 @@ func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 
 	for _, e := range plans {
 		ps.Plans[e.Filename] = TaskEntry{
-			Status:        Status(e.Status),
-			Description:   e.Description,
-			Branch:        e.Branch,
-			Topic:         e.Topic,
-			CreatedAt:     e.CreatedAt,
-			Implemented:   e.Implemented,
-			ClickUpTaskID: e.ClickUpTaskID,
-			ReviewCycle:   e.ReviewCycle,
+			Status:         Status(e.Status),
+			Description:    e.Description,
+			Branch:         e.Branch,
+			Topic:          e.Topic,
+			CreatedAt:      e.CreatedAt,
+			Implemented:    e.Implemented,
+			PlanningAt:     e.PlanningAt,
+			ImplementingAt: e.ImplementingAt,
+			ReviewingAt:    e.ReviewingAt,
+			DoneAt:         e.DoneAt,
+			Goal:           e.Goal,
+			ClickUpTaskID:  e.ClickUpTaskID,
+			ReviewCycle:    e.ReviewCycle,
 		}
 	}
 
@@ -345,6 +356,57 @@ func (ps *TaskState) SetContent(filename, content string) error {
 	return ps.store.SetContent(ps.project, filename, content)
 }
 
+// IngestContent stores plan content and parses metadata for goal/subtasks.
+// Content is always persisted even when parsing fails.
+func (ps *TaskState) IngestContent(filename, content string) error {
+	if _, ok := ps.Plans[filename]; !ok {
+		return fmt.Errorf("plan not found: %s", filename)
+	}
+
+	if err := ps.store.SetContent(ps.project, filename, content); err != nil {
+		return fmt.Errorf("task store set content: %w", err)
+	}
+
+	plan, err := taskparser.Parse(content)
+	if err != nil {
+		return fmt.Errorf("parse plan content: %w", err)
+	}
+
+	if err := ps.store.SetPlanGoal(ps.project, filename, plan.Goal); err != nil {
+		return fmt.Errorf("task store set plan goal: %w", err)
+	}
+
+	subtasks := make([]taskstore.SubtaskEntry, 0)
+	for _, wave := range plan.Waves {
+		for _, task := range wave.Tasks {
+			subtasks = append(subtasks, taskstore.SubtaskEntry{
+				TaskNumber: task.Number,
+				Title:      task.Title,
+				Status:     taskstore.SubtaskStatusPending,
+			})
+		}
+	}
+	if err := ps.store.SetSubtasks(ps.project, filename, subtasks); err != nil {
+		return fmt.Errorf("task store set subtasks: %w", err)
+	}
+
+	entry := ps.Plans[filename]
+	entry.Goal = plan.Goal
+	ps.Plans[filename] = entry
+
+	return nil
+}
+
+// GetSubtasks returns persisted subtasks for the given plan.
+func (ps *TaskState) GetSubtasks(filename string) ([]taskstore.SubtaskEntry, error) {
+	return ps.store.GetSubtasks(ps.project, filename)
+}
+
+// UpdateSubtaskStatus updates one persisted subtask status.
+func (ps *TaskState) UpdateSubtaskStatus(filename string, taskNumber int, status taskstore.SubtaskStatus) error {
+	return ps.store.UpdateSubtaskStatus(ps.project, filename, taskNumber, status)
+}
+
 // Create adds a new plan entry to the state and auto-creates the topic if needed.
 func (ps *TaskState) Create(filename, description, branch, topic string, createdAt time.Time) error {
 	if ps.Plans == nil {
@@ -557,15 +619,20 @@ func isAlreadyExistsError(err error) bool {
 // writing to the store.
 func (ps *TaskState) toTaskstoreEntry(filename string, e TaskEntry) taskstore.TaskEntry {
 	return taskstore.TaskEntry{
-		Filename:      filename,
-		Status:        taskstore.Status(e.Status),
-		Description:   e.Description,
-		Branch:        e.Branch,
-		Topic:         e.Topic,
-		CreatedAt:     e.CreatedAt,
-		Implemented:   e.Implemented,
-		ClickUpTaskID: e.ClickUpTaskID,
-		ReviewCycle:   e.ReviewCycle,
+		Filename:       filename,
+		Status:         taskstore.Status(e.Status),
+		Description:    e.Description,
+		Branch:         e.Branch,
+		Topic:          e.Topic,
+		CreatedAt:      e.CreatedAt,
+		Implemented:    e.Implemented,
+		PlanningAt:     e.PlanningAt,
+		ImplementingAt: e.ImplementingAt,
+		ReviewingAt:    e.ReviewingAt,
+		DoneAt:         e.DoneAt,
+		Goal:           e.Goal,
+		ClickUpTaskID:  e.ClickUpTaskID,
+		ReviewCycle:    e.ReviewCycle,
 	}
 }
 

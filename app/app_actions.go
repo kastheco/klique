@@ -851,6 +851,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		// If an orchestrator already exists (e.g. elaboration finished, or waves
 		// are in progress), resume from where it left off instead of re-creating.
 		if existingOrch, ok := m.waveOrchestrators[planFile]; ok {
+			existingOrch.SetStore(m.taskStore, m.taskStoreProject)
 			state := existingOrch.State()
 			if state != orchestration.WaveStateElaborating {
 				// Elaboration already done or waves running — start/resume next wave.
@@ -886,6 +887,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)
+		orch.SetStore(m.taskStore, m.taskStoreProject)
 		m.waveOrchestrators[planFile] = orch
 
 		if err := m.fsmSetImplementing(planFile); err != nil {
@@ -937,6 +939,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 		}
 
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)
+		orch.SetStore(m.taskStore, m.taskStoreProject)
 		m.waveOrchestrators[planFile] = orch
 
 		if err := m.fsmSetImplementing(planFile); err != nil {

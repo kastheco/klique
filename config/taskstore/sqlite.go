@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS tasks (
 	topic       TEXT    NOT NULL DEFAULT '',
 	created_at  TEXT    NOT NULL DEFAULT '',
 	implemented TEXT    NOT NULL DEFAULT '',
+	planning_at  TEXT    NOT NULL DEFAULT '',
+	implementing_at TEXT NOT NULL DEFAULT '',
+	reviewing_at TEXT    NOT NULL DEFAULT '',
+	done_at     TEXT    NOT NULL DEFAULT '',
+	goal        TEXT    NOT NULL DEFAULT '',
 	UNIQUE(project, filename)
 );
 
@@ -32,8 +37,37 @@ CREATE TABLE IF NOT EXISTS topics (
 );
 `
 
+// subtasksTableMigration creates the subtasks table for persisted plan subtasks.
+const subtasksTableMigration = `
+	CREATE TABLE IF NOT EXISTS subtasks (
+		id INTEGER PRIMARY KEY,
+		project TEXT NOT NULL,
+		plan_filename TEXT NOT NULL,
+		task_number INTEGER NOT NULL,
+		title TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'pending',
+		UNIQUE(project, plan_filename, task_number),
+		FOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE
+	)
+`
+
 // contentMigration adds the content column to existing databases that predate it.
 const contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`
+
+// planningAtMigration adds planning_at to existing databases.
+const planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`
+
+// implementingAtMigration adds implementing_at to existing databases.
+const implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`
+
+// reviewingAtMigration adds reviewing_at to existing databases.
+const reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`
+
+// doneAtMigration adds done_at to existing databases.
+const doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`
+
+// goalMigration adds goal to existing databases.
+const goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`
 
 // clickupTaskIDMigration adds the clickup_task_id column to existing databases.
 const clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`
@@ -105,6 +139,34 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	if err := migrateAddColumn(db, "review_cycle", reviewCycleMigration); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate review_cycle column: %w", err)
+	}
+
+	// Add new task lifecycle phase timestamp and goal columns.
+	if err := migrateAddColumn(db, "planning_at", planningAtMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate planning_at column: %w", err)
+	}
+	if err := migrateAddColumn(db, "implementing_at", implementingAtMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate implementing_at column: %w", err)
+	}
+	if err := migrateAddColumn(db, "reviewing_at", reviewingAtMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate reviewing_at column: %w", err)
+	}
+	if err := migrateAddColumn(db, "done_at", doneAtMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate done_at column: %w", err)
+	}
+	if err := migrateAddColumn(db, "goal", goalMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate goal column: %w", err)
+	}
+
+	// Create subtasks table if missing.
+	if _, err := db.Exec(subtasksTableMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create subtasks table: %w", err)
 	}
 
 	return &SQLiteStore{db: db}, nil
@@ -181,8 +243,8 @@ func (s *SQLiteStore) Ping() error {
 // Returns an error if a task with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	const q = `
-		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(q,
 		project,
@@ -193,6 +255,11 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 		entry.Topic,
 		formatTime(entry.CreatedAt),
 		entry.Implemented,
+		formatTime(entry.PlanningAt),
+		formatTime(entry.ImplementingAt),
+		formatTime(entry.ReviewingAt),
+		formatTime(entry.DoneAt),
+		entry.Goal,
 		entry.Content,
 		entry.ClickUpTaskID,
 		entry.ReviewCycle,
@@ -210,7 +277,7 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 // Returns an error if the task is not found.
 func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
 		FROM tasks
 		WHERE project = ? AND filename = ?
 	`
@@ -223,7 +290,7 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 	const q = `
 		UPDATE tasks
-		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, clickup_task_id = ?, review_cycle = ?
+		SET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?
 		WHERE project = ? AND filename = ?
 	`
 	result, err := s.db.Exec(q,
@@ -233,6 +300,11 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {
 		entry.Topic,
 		formatTime(entry.CreatedAt),
 		entry.Implemented,
+		formatTime(entry.PlanningAt),
+		formatTime(entry.ImplementingAt),
+		formatTime(entry.ReviewingAt),
+		formatTime(entry.DoneAt),
+		entry.Goal,
 		entry.ClickUpTaskID,
 		entry.ReviewCycle,
 		project,
@@ -279,7 +351,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 // List returns all task entries for the given project, sorted by filename.
 func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
 		FROM tasks
 		WHERE project = ?
 		ORDER BY filename ASC
@@ -308,7 +380,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 	}
 
 	q := fmt.Sprintf(`
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
 		FROM tasks
 		WHERE project = ? AND status IN (%s)
 		ORDER BY filename ASC
@@ -326,7 +398,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 // sorted by filename.
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
 		FROM tasks
 		WHERE project = ? AND topic = ?
 		ORDER BY filename ASC
@@ -456,27 +528,181 @@ func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {
 	return nil
 }
 
+// SetSubtasks replaces all subtasks for a plan in a transaction.
+// Existing subtasks are removed before inserting the supplied rows.
+func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin subtasks transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.Exec("DELETE FROM subtasks WHERE project = ? AND plan_filename = ?", project, filename); err != nil {
+		return fmt.Errorf("delete subtasks: %w", err)
+	}
+
+	for _, st := range subtasks {
+		if _, err = tx.Exec(
+			"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)",
+			project, filename, st.TaskNumber, st.Title, string(st.Status),
+		); err != nil {
+			return fmt.Errorf("insert subtask: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit subtasks: %w", err)
+	}
+	return nil
+}
+
+// GetSubtasks returns all subtasks for a plan, sorted by task_number.
+func (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,
+		project,
+		filename,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list subtasks: %w", err)
+	}
+	defer rows.Close()
+
+	var subtasks []SubtaskEntry
+	for rows.Next() {
+		var taskNumber int
+		var title, status string
+		if err := rows.Scan(&taskNumber, &title, &status); err != nil {
+			return nil, fmt.Errorf("scan subtask: %w", err)
+		}
+		subtasks = append(subtasks, SubtaskEntry{
+			TaskNumber: taskNumber,
+			Title:      title,
+			Status:     SubtaskStatus(status),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate subtasks: %w", err)
+	}
+	return subtasks, nil
+}
+
+// UpdateSubtaskStatus updates the status of a specific subtask.
+func (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {
+	const q = `
+		UPDATE subtasks
+		SET status = ?
+		WHERE project = ? AND plan_filename = ? AND task_number = ?
+	`
+	result, err := s.db.Exec(q, string(status), project, filename, taskNumber)
+	if err != nil {
+		return fmt.Errorf("update subtask status: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update subtask status rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("subtask not found: %s/%s#%d", project, filename, taskNumber)
+	}
+	return nil
+}
+
+// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.
+// Known phases are: planning, implementing, reviewing, done.
+func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {
+	var column string
+	switch phase {
+	case "planning":
+		column = "planning_at"
+	case "implementing":
+		column = "implementing_at"
+	case "reviewing":
+		column = "reviewing_at"
+	case "done":
+		column = "done_at"
+	default:
+		return fmt.Errorf("unknown phase: %s", phase)
+	}
+
+	query := fmt.Sprintf("UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?", column)
+	result, err := s.db.Exec(query, formatTime(ts), project, filename)
+	if err != nil {
+		return fmt.Errorf("set phase timestamp: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set phase timestamp rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
+// SetPlanGoal sets the goal text for a plan.
+func (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {
+	const q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`
+	result, err := s.db.Exec(q, goal, project, filename)
+	if err != nil {
+		return fmt.Errorf("set plan goal: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set plan goal rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
 // scanTaskEntry scans a single row into a TaskEntry.
 func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
-	var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
+	var filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string
 	var reviewCycle int
-	if err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
+	if err := row.Scan(
+		&filename,
+		&status,
+		&description,
+		&branch,
+		&topic,
+		&createdAt,
+		&implemented,
+		&planningAt,
+		&implementingAt,
+		&reviewingAt,
+		&doneAt,
+		&goal,
+		&content,
+		&clickupTaskID,
+		&reviewCycle,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return TaskEntry{}, fmt.Errorf("plan not found")
 		}
 		return TaskEntry{}, fmt.Errorf("scan plan: %w", err)
 	}
 	return TaskEntry{
-		Filename:      filename,
-		Status:        Status(status),
-		Description:   description,
-		Branch:        branch,
-		Topic:         topic,
-		CreatedAt:     parseTime(createdAt),
-		Implemented:   implemented,
-		Content:       content,
-		ClickUpTaskID: clickupTaskID,
-		ReviewCycle:   reviewCycle,
+		Filename:       filename,
+		Status:         Status(status),
+		Description:    description,
+		Branch:         branch,
+		Topic:          topic,
+		CreatedAt:      parseTime(createdAt),
+		Implemented:    implemented,
+		PlanningAt:     parseTime(planningAt),
+		ImplementingAt: parseTime(implementingAt),
+		ReviewingAt:    parseTime(reviewingAt),
+		DoneAt:         parseTime(doneAt),
+		Goal:           goal,
+		Content:        content,
+		ClickUpTaskID:  clickupTaskID,
+		ReviewCycle:    reviewCycle,
 	}, nil
 }
 
@@ -484,22 +710,43 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {
 	var entries []TaskEntry
 	for rows.Next() {
-		var filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string
+		var filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string
 		var reviewCycle int
-		if err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {
+		if err := rows.Scan(
+			&filename,
+			&status,
+			&description,
+			&branch,
+			&topic,
+			&createdAt,
+			&implemented,
+			&planningAt,
+			&implementingAt,
+			&reviewingAt,
+			&doneAt,
+			&goal,
+			&content,
+			&clickupTaskID,
+			&reviewCycle,
+		); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
 		entries = append(entries, TaskEntry{
-			Filename:      filename,
-			Status:        Status(status),
-			Description:   description,
-			Branch:        branch,
-			Topic:         topic,
-			CreatedAt:     parseTime(createdAt),
-			Implemented:   implemented,
-			Content:       content,
-			ClickUpTaskID: clickupTaskID,
-			ReviewCycle:   reviewCycle,
+			Filename:       filename,
+			Status:         Status(status),
+			Description:    description,
+			Branch:         branch,
+			Topic:          topic,
+			CreatedAt:      parseTime(createdAt),
+			Implemented:    implemented,
+			PlanningAt:     parseTime(planningAt),
+			ImplementingAt: parseTime(implementingAt),
+			ReviewingAt:    parseTime(reviewingAt),
+			DoneAt:         parseTime(doneAt),
+			Goal:           goal,
+			Content:        content,
+			ClickUpTaskID:  clickupTaskID,
+			ReviewCycle:    reviewCycle,
 		})
 	}
 	if err := rows.Err(); err != nil {

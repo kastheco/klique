@@ -21,16 +21,42 @@ const (
 
 // TaskEntry holds the persisted metadata for a single plan.
 type TaskEntry struct {
-	Filename      string    `json:"filename"`
-	Status        Status    `json:"status"`
-	Description   string    `json:"description,omitempty"`
-	Branch        string    `json:"branch,omitempty"`
-	Topic         string    `json:"topic,omitempty"`
-	CreatedAt     time.Time `json:"created_at,omitempty"`
-	Implemented   string    `json:"implemented,omitempty"`
-	Content       string    `json:"content,omitempty"`
-	ClickUpTaskID string    `json:"clickup_task_id,omitempty"`
-	ReviewCycle   int       `json:"review_cycle,omitempty"`
+	Filename       string    `json:"filename"`
+	Status         Status    `json:"status"`
+	Description    string    `json:"description,omitempty"`
+	Branch         string    `json:"branch,omitempty"`
+	Topic          string    `json:"topic,omitempty"`
+	CreatedAt      time.Time `json:"created_at,omitempty"`
+	Implemented    string    `json:"implemented,omitempty"`
+	PlanningAt     time.Time `json:"planning_at,omitempty"`
+	ImplementingAt time.Time `json:"implementing_at,omitempty"`
+	ReviewingAt    time.Time `json:"reviewing_at,omitempty"`
+	DoneAt         time.Time `json:"done_at,omitempty"`
+	Goal           string    `json:"goal,omitempty"`
+	Content        string    `json:"content,omitempty"`
+	ClickUpTaskID  string    `json:"clickup_task_id,omitempty"`
+	ReviewCycle    int       `json:"review_cycle,omitempty"`
+}
+
+// SubtaskStatus represents the lifecycle state of a subtask.
+type SubtaskStatus string
+
+const (
+	SubtaskStatusPending  SubtaskStatus = "pending"
+	SubtaskStatusRunning  SubtaskStatus = "running"
+	SubtaskStatusComplete SubtaskStatus = "complete"
+	SubtaskStatusFailed   SubtaskStatus = "failed"
+	SubtaskStatusClosed   SubtaskStatus = "closed"
+	SubtaskStatusDone     SubtaskStatus = "done"
+	SubtaskStatusBlocked  SubtaskStatus = "blocked"
+	SubtaskStatusInReview SubtaskStatus = "in_review"
+)
+
+// SubtaskEntry holds a persisted subtask for a single plan.
+type SubtaskEntry struct {
+	TaskNumber int           `json:"task_number"`
+	Title      string        `json:"title"`
+	Status     SubtaskStatus `json:"status"`
 }
 
 // TopicEntry holds the persisted metadata for a topic grouping.
@@ -53,11 +79,22 @@ type Store interface {
 	GetContent(project, filename string) (string, error)
 	SetContent(project, filename, content string) error
 
+	// Subtasks
+	SetSubtasks(project, filename string, subtasks []SubtaskEntry) error
+	GetSubtasks(project, filename string) ([]SubtaskEntry, error)
+	UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error
+
+	// Phase timestamps
+	SetPhaseTimestamp(project, filename, phase string, ts time.Time) error
+
 	// ClickUp integration
 	SetClickUpTaskID(project, filename, taskID string) error
 
 	// Review cycle
 	IncrementReviewCycle(project, filename string) error
+
+	// Plan goals
+	SetPlanGoal(project, filename, goal string) error
 
 	// Queries
 	List(project string) ([]TaskEntry, error)

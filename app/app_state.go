@@ -17,6 +17,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/keys"
@@ -422,6 +423,82 @@ func (m *home) focusPlanInstanceForOverlay(planFile string) tea.Cmd {
 	return m.focusInstanceForOverlay(best)
 }
 
+// findTaskTitle returns the title of the task with the given number in the plan, or "".
+func findTaskTitle(plan *taskparser.Plan, taskNumber int) string {
+	if plan == nil || taskNumber == 0 {
+		return ""
+	}
+	for _, wave := range plan.Waves {
+		for _, task := range wave.Tasks {
+			if task.Number == taskNumber {
+				return task.Title
+			}
+		}
+	}
+	return ""
+}
+
+// buildSubtaskProgress fetches subtasks from the store and groups them by wave using the
+// orchestrator's plan structure. On error, prior* values are returned unchanged so that a
+// transient store failure does not blank out previously displayed subtask data.
+func (m *home) buildSubtaskProgress(
+	planFile string,
+	orch *orchestration.WaveOrchestrator,
+	priorCompleted, priorTotal int,
+	priorGroups []ui.WaveSubtaskGroup,
+) (completed, total int, groups []ui.WaveSubtaskGroup) {
+	if m.taskState == nil || orch == nil {
+		return priorCompleted, priorTotal, priorGroups
+	}
+	subtasks, err := m.taskState.GetSubtasks(planFile)
+	if err != nil {
+		log.WarningLog.Printf("updateInfoPane: could not read subtasks for %q: %v", planFile, err)
+		return priorCompleted, priorTotal, priorGroups
+	}
+
+	// Index subtasks by task number.
+	byNumber := make(map[int]taskstore.SubtaskEntry, len(subtasks))
+	for _, s := range subtasks {
+		byNumber[s.TaskNumber] = s
+	}
+
+	plan := orch.Plan()
+	if plan == nil {
+		return priorCompleted, priorTotal, priorGroups
+	}
+
+	total = len(subtasks)
+	for _, s := range subtasks {
+		switch string(s.Status) {
+		case "complete", "done", "closed":
+			completed++
+		}
+	}
+
+	groups = make([]ui.WaveSubtaskGroup, 0, len(plan.Waves))
+	for _, wave := range plan.Waves {
+		group := ui.WaveSubtaskGroup{WaveNumber: wave.Number}
+		for _, task := range wave.Tasks {
+			entry, ok := byNumber[task.Number]
+			statusStr := "pending"
+			if ok {
+				statusStr = string(entry.Status)
+			}
+			title := task.Title
+			if ok && entry.Title != "" {
+				title = entry.Title
+			}
+			group.Subtasks = append(group.Subtasks, ui.SubtaskDisplay{
+				Number: task.Number,
+				Title:  title,
+				Status: statusStr,
+			})
+		}
+		groups = append(groups, group)
+	}
+	return completed, total, groups
+}
+
 func statusString(s session.Status) string {
 	switch s {
 	case session.Running:
@@ -475,8 +552,17 @@ func (m *home) updateInfoPaneForPlanHeader() {
 			data.PlanReadyCount++
 		}
 	}
+	// Enrich with goal and lifecycle timestamps.
+	data.PlanGoal = entry.Goal
+	data.PlanningAt = entry.PlanningAt
+	data.ImplementingAt = entry.ImplementingAt
+	data.ReviewingAt = entry.ReviewingAt
+	data.DoneAt = entry.DoneAt
+
 	// Include wave progress if an orchestrator exists for this plan.
-	if orch, ok := m.waveOrchestrators[planFile]; ok {
+	var orch *orchestration.WaveOrchestrator
+	if o, ok := m.waveOrchestrators[planFile]; ok {
+		orch = o
 		data.TotalWaves = orch.TotalWaves()
 		data.TotalTasks = orch.TotalTasks()
 		tasks := orch.CurrentWaveTasks()
@@ -493,6 +579,11 @@ func (m *home) updateInfoPaneForPlanHeader() {
 			data.WaveTasks[i] = ui.WaveTaskInfo{Number: task.Number, State: state}
 		}
 	}
+
+	// Subtask progress (preserve prior zeros as initial values — plan header has no prior state).
+	data.CompletedTasks, data.TotalSubtasks, data.AllWaveSubtasks =
+		m.buildSubtaskProgress(planFile, orch, 0, 0, nil)
+
 	m.tabbedWindow.SetInfoData(data)
 }
 
@@ -525,7 +616,11 @@ func (m *home) updateInfoPane() {
 		data.Created = selected.CreatedAt.Format("2006-01-02 15:04")
 	}
 
+	// Capture prior subtask data from the current pane so we can preserve it on error.
+	prior := m.tabbedWindow.GetInfoData()
+
 	if selected.TaskFile != "" {
+		var orch *orchestration.WaveOrchestrator
 		if m.taskState != nil {
 			entry, ok := m.taskState.Entry(selected.TaskFile)
 			if ok {
@@ -538,10 +633,17 @@ func (m *home) updateInfoPane() {
 				if !entry.CreatedAt.IsZero() {
 					data.PlanCreated = entry.CreatedAt.Format("2006-01-02")
 				}
+				// Enrich with goal and lifecycle timestamps.
+				data.PlanGoal = entry.Goal
+				data.PlanningAt = entry.PlanningAt
+				data.ImplementingAt = entry.ImplementingAt
+				data.ReviewingAt = entry.ReviewingAt
+				data.DoneAt = entry.DoneAt
 			}
 		}
 
-		if orch, ok := m.waveOrchestrators[selected.TaskFile]; ok {
+		if o, ok := m.waveOrchestrators[selected.TaskFile]; ok {
+			orch = o
 			data.TotalWaves = orch.TotalWaves()
 			data.TotalTasks = orch.TotalTasks()
 			tasks := orch.CurrentWaveTasks()
@@ -557,7 +659,14 @@ func (m *home) updateInfoPane() {
 				}
 				data.WaveTasks[i] = ui.WaveTaskInfo{Number: task.Number, State: state}
 			}
+			// Populate TaskTitle from the plan structure.
+			data.TaskTitle = findTaskTitle(orch.Plan(), selected.TaskNumber)
 		}
+
+		// Subtask progress — preserve prior values if GetSubtasks fails.
+		data.CompletedTasks, data.TotalSubtasks, data.AllWaveSubtasks =
+			m.buildSubtaskProgress(selected.TaskFile, orch,
+				prior.CompletedTasks, prior.TotalSubtasks, prior.AllWaveSubtasks)
 	}
 
 	m.tabbedWindow.SetInfoData(data)
@@ -1064,8 +1173,8 @@ func (m *home) ingestTaskContent(planFile, repoPath string) {
 			return
 		}
 	}
-	if err := m.taskState.SetContent(planFile, string(data)); err != nil {
-		log.WarningLog.Printf("ingestTaskContent: cannot store content for %s: %v", planFile, err)
+	if err := m.taskState.IngestContent(planFile, string(data)); err != nil {
+		log.WarningLog.Printf("ingestTaskContent: cannot ingest content for %s: %v", planFile, err)
 	}
 }
 
@@ -1676,6 +1785,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 		}
 
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)
+		orch.SetStore(m.taskStore, m.taskStoreProject)
 
 		// Collect completed tasks for the target wave.
 		var completedTasks []int

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"sort"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
@@ -33,9 +35,14 @@ type InfoData struct {
 	PlanName        string
 	PlanDescription string
 	PlanStatus      string
+	PlanGoal        string
 	PlanTopic       string
 	PlanBranch      string
 	PlanCreated     string
+	PlanningAt      time.Time
+	ImplementingAt  time.Time
+	ReviewingAt     time.Time
+	DoneAt          time.Time
 
 	// Plan summary fields (rendered when plan header row is selected)
 	PlanInstanceCount int
@@ -44,6 +51,9 @@ type InfoData struct {
 	PlanPausedCount   int
 	PlanAddedLines    int
 	PlanRemovedLines  int
+	CompletedTasks    int
+	TotalSubtasks     int
+	AllWaveSubtasks   []WaveSubtaskGroup
 
 	// Resource utilisation
 	CPUPercent float64
@@ -56,6 +66,7 @@ type InfoData struct {
 	TaskNumber int
 	TotalTasks int
 	WaveTasks  []WaveTaskInfo
+	TaskTitle  string
 
 	// Selection state flags
 	HasPlan              bool
@@ -67,6 +78,19 @@ type InfoData struct {
 type WaveTaskInfo struct {
 	Number int
 	State  string // "complete", "running", "failed", or "pending"
+}
+
+// SubtaskDisplay describes a parsed subtask in all-wave progress rendering.
+type SubtaskDisplay struct {
+	Number int
+	Title  string
+	Status string
+}
+
+// WaveSubtaskGroup groups subtasks by wave number.
+type WaveSubtaskGroup struct {
+	WaveNumber int
+	Subtasks   []SubtaskDisplay
 }
 
 // InfoPane renders instance and plan metadata inside a scrollable viewport.
@@ -158,6 +182,57 @@ func (p *InfoPane) renderStatusRow(label, value string) string {
 	)
 }
 
+func statusToGlyph(status string) (string, color.Color) {
+	switch status {
+	case "complete":
+		return "✓", ColorFoam
+	case "running":
+		return "●", ColorIris
+	case "failed":
+		return "✗", ColorLove
+	case "closed", "done":
+		return "✓", ColorFoam
+	default:
+		return "○", ColorMuted
+	}
+}
+
+func formatPhaseTime(ts time.Time) string {
+	if ts.IsZero() {
+		return "—"
+	}
+	return ts.Format("2006-01-02 15:04")
+}
+
+func (p *InfoPane) wrapText(text string) []string {
+	if text == "" {
+		return nil
+	}
+	maxWidth := p.width - lipgloss.Width(infoLabelStyle.Render("goal")) - 1
+	if maxWidth < 10 {
+		maxWidth = 10
+	}
+	var lines []string
+	words := strings.Fields(text)
+	current := ""
+	for _, word := range words {
+		if current == "" {
+			current = word
+			continue
+		}
+		if lipgloss.Width(current)+1+lipgloss.Width(word) <= maxWidth {
+			current += " " + word
+		} else {
+			lines = append(lines, p.renderRow("", current))
+			current = word
+		}
+	}
+	if current != "" {
+		lines = append(lines, p.renderRow("", current))
+	}
+	return lines
+}
+
 // renderDivider renders a horizontal rule sized to the pane width.
 func (p *InfoPane) renderDivider() string {
 	w := p.width - 4
@@ -165,6 +240,83 @@ func (p *InfoPane) renderDivider() string {
 		w = 10
 	}
 	return infoDividerStyle.Render(strings.Repeat("-", w))
+}
+
+func (p *InfoPane) renderGoalSection() string {
+	rows := []string{
+		infoSectionStyle.Render("goal"),
+		p.renderDivider(),
+	}
+	if p.data.PlanGoal == "" {
+		return strings.Join(rows, "\n")
+	}
+	rows = append(rows, p.wrapText(p.data.PlanGoal)...)
+	return strings.Join(rows, "\n")
+}
+
+func (p *InfoPane) renderLifecycleSection() string {
+	rows := []string{
+		infoSectionStyle.Render("lifecycle"),
+		p.renderDivider(),
+	}
+	phases := []struct {
+		label   string
+		time    time.Time
+		reached bool
+	}{
+		{"planning", p.data.PlanningAt, !p.data.PlanningAt.IsZero()},
+		{"implementing", p.data.ImplementingAt, !p.data.ImplementingAt.IsZero()},
+		{"reviewing", p.data.ReviewingAt, !p.data.ReviewingAt.IsZero()},
+		{"done", p.data.DoneAt, !p.data.DoneAt.IsZero()},
+	}
+	for _, phase := range phases {
+		glyph := "○"
+		if phase.reached {
+			glyph = "●"
+		}
+		rows = append(rows, p.renderRow(phase.label, fmt.Sprintf("%s %s", glyph, formatPhaseTime(phase.time))))
+	}
+
+	return strings.Join(rows, "\n")
+}
+
+func asciiProgressBar(total, done int) string {
+	barWidth := 10
+	if total <= 0 {
+		return "[          ]"
+	}
+	if done < 0 {
+		done = 0
+	}
+	if done > total {
+		done = total
+	}
+	filled := int(float64(done) / float64(total) * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat("-", barWidth-filled) + "]"
+}
+
+func (p *InfoPane) renderProgressSection() string {
+	rows := []string{
+		infoSectionStyle.Render("progress"),
+		p.renderDivider(),
+		p.renderRow("subtasks", fmt.Sprintf("%d/%d %s", p.data.CompletedTasks, p.data.TotalSubtasks, asciiProgressBar(p.data.TotalSubtasks, p.data.CompletedTasks))),
+	}
+
+	groups := append([]WaveSubtaskGroup{}, p.data.AllWaveSubtasks...)
+	sort.Slice(groups, func(i, j int) bool { return groups[i].WaveNumber < groups[j].WaveNumber })
+	for _, group := range groups {
+		rows = append(rows, p.renderRow(fmt.Sprintf("wave %d", group.WaveNumber), ""))
+		for _, task := range group.Subtasks {
+			glyph, col := statusToGlyph(task.Status)
+			icon := lipgloss.NewStyle().Foreground(col).Render(glyph)
+			taskLine := fmt.Sprintf("%s task %d: %s", icon, task.Number, task.Title)
+			rows = append(rows, infoValueStyle.Render(taskLine))
+		}
+	}
+	return strings.Join(rows, "\n")
 }
 
 // renderPlanSection renders the plan metadata block for instance-bound views.
@@ -221,11 +373,18 @@ func (p *InfoPane) renderInstanceSection() string {
 	if p.data.Created != "" {
 		rows = append(rows, p.renderRow("created", p.data.Created))
 	}
+	if p.data.PlanGoal != "" {
+		rows = append(rows, p.renderRow("goal", p.data.PlanGoal))
+	}
 	if p.data.WaveNumber > 0 {
 		rows = append(rows, p.renderRow("wave", fmt.Sprintf("%d/%d", p.data.WaveNumber, p.data.TotalWaves)))
 	}
 	if p.data.TaskNumber > 0 {
-		rows = append(rows, p.renderRow("task", fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)))
+		taskText := fmt.Sprintf("%d of %d", p.data.TaskNumber, p.data.TotalTasks)
+		if p.data.TaskTitle != "" {
+			taskText = fmt.Sprintf("%d of %d: %s", p.data.TaskNumber, p.data.TotalTasks, p.data.TaskTitle)
+		}
+		rows = append(rows, p.renderRow("task", taskText))
 	}
 	if p.data.CPUPercent > 0 || p.data.MemMB > 0 {
 		rows = append(rows, p.renderRow("cpu", fmt.Sprintf("%.0f%%", math.Round(p.data.CPUPercent))))
@@ -237,28 +396,12 @@ func (p *InfoPane) renderInstanceSection() string {
 // renderPlanSummary renders the plan header view: metadata, instance counts,
 // line-change totals, and a "view plan doc" action button.
 func (p *InfoPane) renderPlanSummary() string {
-	rows := []string{
-		infoSectionStyle.Render("plan"),
-		p.renderDivider(),
-	}
-	if p.data.PlanName != "" {
-		rows = append(rows, p.renderRow("name", p.data.PlanName))
-	}
-	if p.data.PlanStatus != "" {
-		rows = append(rows, p.renderStatusRow("status", p.data.PlanStatus))
-	}
-	if p.data.PlanTopic != "" {
-		rows = append(rows, p.renderRow("topic", p.data.PlanTopic))
-	}
-	if p.data.PlanBranch != "" {
-		rows = append(rows, p.renderRow("branch", p.data.PlanBranch))
-	}
-	if p.data.PlanCreated != "" {
-		rows = append(rows, p.renderRow("created", p.data.PlanCreated))
-	}
-
+	rows := []string{p.renderPlanSection()}
+	rows = append(rows, p.renderGoalSection())
+	rows = append(rows, p.renderLifecycleSection())
+	rows = append(rows, p.renderProgressSection())
 	if p.data.PlanInstanceCount > 0 {
-		summary := fmt.Sprintf("%d", p.data.PlanInstanceCount)
+		instanceSummary := fmt.Sprintf("%d", p.data.PlanInstanceCount)
 		var parts []string
 		if p.data.PlanRunningCount > 0 {
 			parts = append(parts, fmt.Sprintf("%d running", p.data.PlanRunningCount))
@@ -270,16 +413,10 @@ func (p *InfoPane) renderPlanSummary() string {
 			parts = append(parts, fmt.Sprintf("%d paused", p.data.PlanPausedCount))
 		}
 		if len(parts) > 0 {
-			summary += " (" + strings.Join(parts, ", ") + ")"
+			instanceSummary += " (" + strings.Join(parts, ", ") + ")"
 		}
-		rows = append(rows, p.renderRow("instances", summary))
+		rows = append(rows, infoSectionStyle.Render("instances"), p.renderDivider(), p.renderRow("instances", instanceSummary))
 	}
-
-	if p.data.PlanAddedLines > 0 || p.data.PlanRemovedLines > 0 {
-		rows = append(rows, p.renderRow("lines changed",
-			fmt.Sprintf("+%d -%d", p.data.PlanAddedLines, p.data.PlanRemovedLines)))
-	}
-
 	btnStyle := lipgloss.NewStyle().
 		Foreground(ColorFoam).
 		Border(lipgloss.RoundedBorder()).
@@ -288,7 +425,7 @@ func (p *InfoPane) renderPlanSummary() string {
 	rows = append(rows, "")
 	rows = append(rows, zone.Mark(ZoneViewPlan, btnStyle.Render("view plan doc")))
 
-	return strings.Join(rows, "\n")
+	return strings.Join(rows, "\n\n")
 }
 
 // renderWaveSection renders the task-state grid for the current wave.

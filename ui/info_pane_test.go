@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -133,6 +135,65 @@ func TestInfoPane_PlanSummary(t *testing.T) {
 	assert.Contains(t, output, "implementing")
 	assert.Contains(t, output, "3 (2 running, 1 ready)")
 	assert.Contains(t, output, "view plan doc")
+}
+
+func TestInfoPane_PlanSummaryWithGoalAndLifecycle(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(70, 40)
+	now := time.Now()
+	pane.SetData(InfoData{
+		IsPlanHeaderSelected: true,
+		PlanName:             "improved-info-tab",
+		PlanStatus:           "implementing",
+		PlanBranch:           "plan/improved-info-tab",
+		PlanGoal:             "persist subtask statuses and redesign the info pane",
+		PlanningAt:           now.Add(-2 * time.Hour),
+		ImplementingAt:       now.Add(-1 * time.Hour),
+		AllWaveSubtasks: []WaveSubtaskGroup{
+			{WaveNumber: 1, Subtasks: []SubtaskDisplay{
+				{Number: 1, Title: "schema migration", Status: "complete"},
+				{Number: 2, Title: "store methods", Status: "complete"},
+			}},
+			{WaveNumber: 2, Subtasks: []SubtaskDisplay{
+				{Number: 3, Title: "http endpoints", Status: "running"},
+				{Number: 4, Title: "UI overhaul", Status: "pending"},
+			}},
+		},
+		CompletedTasks: 2,
+		TotalSubtasks:  4,
+	})
+
+	output := pane.String()
+	assert.Contains(t, output, "persist subtask statuses")
+	assert.Contains(t, output, "lifecycle")
+	assert.Contains(t, output, "implementing")
+	assert.Contains(t, output, "2/4")
+	assert.Contains(t, output, "schema migration")
+	assert.Contains(t, output, "✓")
+	assert.Contains(t, output, "●")
+	assert.Contains(t, output, "○")
+}
+
+func TestInfoPane_InstanceWithTaskAssignment(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(70, 30)
+	pane.SetData(InfoData{
+		HasInstance: true,
+		HasPlan:     true,
+		Title:       "my-feature-coder",
+		Status:      "running",
+		PlanName:    "my-feature",
+		PlanGoal:    "add dark mode toggle",
+		PlanStatus:  "implementing",
+		AgentType:   "coder",
+		TaskNumber:  3,
+		TotalTasks:  6,
+		TaskTitle:   "http endpoints",
+	})
+
+	output := pane.String()
+	assert.Contains(t, output, "add dark mode toggle")
+	assert.Contains(t, output, "3 of 6: http endpoints")
 }
 
 func TestInfoPane_InstanceWithResources(t *testing.T) {

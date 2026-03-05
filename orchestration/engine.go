@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstore"
 )
 
 // WaveState represents the current state of wave orchestration for a plan.
@@ -29,6 +30,8 @@ const (
 type WaveOrchestrator struct {
 	taskFile          string
 	plan              *taskparser.Plan
+	store             taskstore.Store
+	project           string
 	state             WaveState
 	currentWave       int                // 0-indexed into plan.Waves
 	taskStates        map[int]taskStatus // task number → status
@@ -90,6 +93,12 @@ func (o *WaveOrchestrator) Plan() *taskparser.Plan {
 	return o.plan
 }
 
+// SetStore enables best-effort subtask status persistence.
+func (o *WaveOrchestrator) SetStore(store taskstore.Store, project string) {
+	o.store = store
+	o.project = project
+}
+
 // SetElaborating puts the orchestrator into the elaborating state.
 // StartNextWave is blocked until UpdatePlan is called.
 func (o *WaveOrchestrator) SetElaborating() {
@@ -128,6 +137,7 @@ func (o *WaveOrchestrator) StartNextWave() []taskparser.Task {
 	tasks := o.plan.Waves[o.currentWave].Tasks
 	for _, t := range tasks {
 		o.taskStates[t.Number] = taskRunning
+		o.persistTaskStatus(t.Number, taskstore.SubtaskStatusRunning)
 	}
 	return tasks
 }
@@ -140,6 +150,7 @@ func (o *WaveOrchestrator) MarkTaskComplete(taskNumber int) {
 		return
 	}
 	o.taskStates[taskNumber] = taskComplete
+	o.persistTaskStatus(taskNumber, taskstore.SubtaskStatusComplete)
 	o.checkWaveComplete()
 }
 
@@ -151,6 +162,7 @@ func (o *WaveOrchestrator) MarkTaskFailed(taskNumber int) {
 		return
 	}
 	o.taskStates[taskNumber] = taskFailed
+	o.persistTaskStatus(taskNumber, taskstore.SubtaskStatusFailed)
 	o.checkWaveComplete()
 }
 
@@ -182,6 +194,7 @@ func (o *WaveOrchestrator) RetryFailedTasks() []taskparser.Task {
 	for _, t := range o.plan.Waves[o.currentWave].Tasks {
 		if o.taskStates[t.Number] == taskFailed {
 			o.taskStates[t.Number] = taskRunning
+			o.persistTaskStatus(t.Number, taskstore.SubtaskStatusRunning)
 			tasks = append(tasks, t)
 		}
 	}
@@ -301,4 +314,11 @@ func (o *WaveOrchestrator) countCurrentWaveByStatus(s taskStatus) int {
 		}
 	}
 	return count
+}
+
+func (o *WaveOrchestrator) persistTaskStatus(taskNumber int, status taskstore.SubtaskStatus) {
+	if o.store == nil || o.project == "" {
+		return
+	}
+	_ = o.store.UpdateSubtaskStatus(o.project, o.taskFile, taskNumber, status)
 }
