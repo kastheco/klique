@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // NewHandler returns an http.Handler that exposes the Store over HTTP.
@@ -131,6 +133,140 @@ func NewHandler(store Store) http.Handler {
 		if err := store.SetContent(project, filename, string(body)); err != nil {
 			if isNotFound(err) {
 				writeError(w, http.StatusNotFound, "task not found: "+filename)
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Get subtasks
+	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}/subtasks", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		if _, err := store.Get(project, filename); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		subtasks, err := store.GetSubtasks(project, filename)
+		if err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, subtasks)
+	})
+
+	// Set subtasks
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/subtasks", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		if _, err := store.Get(project, filename); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		var req []SubtaskEntry
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+		if err := store.SetSubtasks(project, filename, req); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Update a subtask status
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		taskNumberRaw := r.PathValue("taskNumber")
+		taskNumber, err := strconv.Atoi(taskNumberRaw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid task number: "+err.Error())
+			return
+		}
+
+		type updateSubtaskStatusRequest struct {
+			Status SubtaskStatus `json:"status"`
+		}
+		var req updateSubtaskStatusRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+
+		if err := store.UpdateSubtaskStatus(project, filename, taskNumber, req.Status); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Set a phase timestamp
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+
+		type setPhaseTimestampRequest struct {
+			Phase string    `json:"phase"`
+			TS    time.Time `json:"timestamp"`
+		}
+		var req setPhaseTimestampRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+
+		if err := store.SetPhaseTimestamp(project, filename, req.Phase, req.TS); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Set a plan goal
+	mux.HandleFunc("PUT /v1/projects/{project}/tasks/{filename}/goal", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+
+		type setPlanGoalRequest struct {
+			Goal string `json:"goal"`
+		}
+		var req setPlanGoalRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+
+		if err := store.SetPlanGoal(project, filename, req.Goal); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())

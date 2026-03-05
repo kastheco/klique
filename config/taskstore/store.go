@@ -82,7 +82,7 @@ type Store interface {
 	UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error
 
 	// Phase timestamps
-	SetPhaseTimestamp(project, filename, phase string) error
+	SetPhaseTimestamp(project, filename, phase string, ts time.Time) error
 
 	// ClickUp integration
 	SetClickUpTaskID(project, filename, taskID string) error

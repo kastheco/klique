@@ -321,10 +321,10 @@ func TestSQLiteStore_PhaseTimestamps(t *testing.T) {
 	store := newTestStore(t)
 	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
 
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "planning"))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "implementing"))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "reviewing"))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "done"))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "planning", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "implementing", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "reviewing", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "done", time.Now().UTC()))
 
 	got, err := store.Get("kasmos", "plan.md")
 	require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestSQLiteStore_PhaseTimestamps(t *testing.T) {
 	assert.False(t, got.ReviewingAt.IsZero())
 	assert.False(t, got.DoneAt.IsZero())
 
-	err = store.SetPhaseTimestamp("kasmos", "plan.md", "unknown")
+	err = store.SetPhaseTimestamp("kasmos", "plan.md", "unknown", time.Now().UTC())
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "unknown phase"))
 }

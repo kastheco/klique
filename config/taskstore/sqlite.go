@@ -617,7 +617,7 @@ func (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber i
 
 // SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.
 // Known phases are: planning, implementing, reviewing, done.
-func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string) error {
+func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {
 	var column string
 	switch phase {
 	case "planning":
@@ -633,7 +633,7 @@ func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string) error {
 	}
 
 	query := fmt.Sprintf("UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?", column)
-	result, err := s.db.Exec(query, formatTime(time.Now().UTC()), project, filename)
+	result, err := s.db.Exec(query, formatTime(ts), project, filename)
 	if err != nil {
 		return fmt.Errorf("set phase timestamp: %w", err)
 	}
