@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "0687d154f0c7",
+  "session_id": "ses_34088e1d9ffeCNk1V7tNAKvrm9",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T19:26:48.044964612Z",
+  "branch": "plan/fix-history-toggle",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ui/nav_panel_test.go",
+    "ui/navigation_panel.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "3ddbe318c915",
+  "token_usage": {
+    "input_tokens": 58118,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 517760,
+    "output_tokens": 2077,
+    "api_call_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T19:26:47.918095286Z",
+    "agent_lines": 23,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 23,
+    "agent_percentage": 100
+  }
+}

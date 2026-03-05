@@ -1,0 +1,123 @@
+Implement Task 1: Add missing else-branch and test for history toggle Right()
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Fix the history toggle in the sidebar navigation panel so that pressing Right on an expanded history section descends into the first child row, matching the behavior of plan headers and the dead toggle.
+**Architecture:** The `Right()` method in `ui/navigation_panel.go` handles arrow-key expansion/descent for collapsible rows. The `navRowHistoryToggle` case is missing the `else { n.Down() }` branch that `navRowPlanHeader` and `navRowDeadToggle` both have. Adding the missing branch and a test covers the fix.
+**Tech Stack:** Go, bubbletea/v2, testify
+
+## Wave 1 of 1
+
+## Task Instructions
+
+**Files:**
+- Modify: `ui/navigation_panel.go`
+- Test: `ui/nav_panel_test.go`
+
+Implement this task by mirroring the existing navigation contract already used in `Right()` for `navRowPlanHeader` and `navRowDeadToggle` in `ui/navigation_panel.go`.
+
+Required signatures to use/modify:
+
+```go
+func (n *NavigationPanel) Right()
+func TestRight_HistoryToggle_ExpandedDescendsIntoChild(t *testing.T)
+```
+
+Pattern to follow (already in `Right()`):
+
+```go
+case navRowDeadToggle:
+    if row.Collapsed {
+        n.ToggleSelectedExpand()
+    } else {
+        n.Down()
+    }
+```
+
+Apply the same expanded-row descent behavior to `navRowHistoryToggle`.
+
+Edge cases to preserve:
+- Keep the existing out-of-bounds guard (`selectedIdx < 0 || selectedIdx >= len(n.rows)`) untouched.
+- Keep collapsed behavior unchanged: Right on a collapsed history toggle still expands it.
+- When expanded and no selectable child is available, `n.Down()` must safely leave selection unchanged (existing `Down()` behavior).
+- Do not alter `ToggleSelectedExpand()` semantics for space/arrow-right handlers; this task is isolated to `Right()` behavior.
+
+**Step 1: write the failing test**
+
+Add this test near the existing navigation tests in `ui/nav_panel_test.go` (close to `TestNavigation_RightExpandsAndDescends`) and reuse existing helpers `newTestPanel()` and `SetData(...)`:
+
+```go
+func TestRight_HistoryToggle_ExpandedDescendsIntoChild(t *testing.T) {
+	n := newTestPanel()
+	history := []PlanDisplay{
+		{Filename: "old-a.md"},
+		{Filename: "old-b.md"},
+	}
+	n.SetData(nil, nil, history, nil, nil)
+
+	// Expand history section first.
+	n.selectedIdx = 0
+	n.ToggleSelectedExpand()
+	require.True(t, n.historyExpanded)
+	require.Len(t, n.rows, 3) // toggle + 2 history plans
+
+	// Select the toggle row again and press Right — should descend.
+	n.selectedIdx = 0
+	n.Right()
+	assert.Equal(t, 1, n.selectedIdx, "Right on expanded history toggle should move to first child")
+	assert.Equal(t, navRowHistoryPlan, n.rows[n.selectedIdx].Kind)
+}
+```
+
+Notes for imports: no new imports are needed beyond what `ui/nav_panel_test.go` already uses (`testing`, `session`, `assert`, `require`).
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./ui/... -run TestRight_HistoryToggle_ExpandedDescendsIntoChild -v
+```
+
+expected: FAIL — `Right()` on expanded history toggle does not move selection (selectedIdx stays 0)
+
+**Step 3: write minimal implementation**
+
+In `ui/navigation_panel.go`, update only the `navRowHistoryToggle` branch inside `func (n *NavigationPanel) Right()` so it matches the expand-or-descend pattern already used by plan/dead rows.
+
+Change from:
+
+```go
+case navRowHistoryToggle:
+    if row.Collapsed {
+        n.ToggleSelectedExpand()
+    }
+```
+
+to:
+
+```go
+case navRowHistoryToggle:
+    if row.Collapsed {
+        n.ToggleSelectedExpand()
+    } else {
+        n.Down()
+    }
+```
+
+Do not change any other `switch` branch, row-kind constants, or rebuild logic.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./ui/... -run TestRight_HistoryToggle_ExpandedDescendsIntoChild -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add ui/navigation_panel.go ui/nav_panel_test.go
+git commit -m "fix: history toggle Right() now descends into first child when expanded"
+```
