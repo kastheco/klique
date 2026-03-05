@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "dea8eb0f218d",
+  "session_id": "ses_34efa7aedffe6zluHTcKq5jtyi",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T18:02:40.241148448Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".kasmos/config.toml",
+    "app/app.go",
+    "app/app_state.go",
+    "session/cli_prompt.go",
+    "session/cli_prompt_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "47286cedeb5a",
+  "checkpoint_transcript_start": 83,
+  "transcript_lines_at_start": 83,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T18:02:39.857081112Z",
+    "agent_lines": 38,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 38,
+    "agent_percentage": 100
+  }
+}

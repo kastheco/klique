@@ -200,6 +200,13 @@
       "context": "/de/a8eb0f218d/26/context.md",
       "content_hash": "/de/a8eb0f218d/26/content_hash.txt",
       "prompt": "/de/a8eb0f218d/26/prompt.txt"
+    },
+    {
+      "metadata": "/de/a8eb0f218d/27/metadata.json",
+      "transcript": "/de/a8eb0f218d/27/full.jsonl",
+      "context": "/de/a8eb0f218d/27/context.md",
+      "content_hash": "/de/a8eb0f218d/27/content_hash.txt",
+      "prompt": "/de/a8eb0f218d/27/prompt.txt"
     }
   ],
   "token_usage": {
