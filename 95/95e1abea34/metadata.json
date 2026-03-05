@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "9595e1abea34",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".gitignore",
+    "app/app.go",
+    "app/app_state.go",
+    "docs/plans/cli-monitoring.md",
+    "docs/plans/improved-info-tab.md",
+    "docs/plans/increase-plan-detail.md",
+    "docs/plans/move-default-config.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/95/95e1abea34/0/metadata.json",
+      "transcript": "/95/95e1abea34/0/full.jsonl",
+      "context": "",
+      "content_hash": "/95/95e1abea34/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
