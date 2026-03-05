@@ -2,6 +2,7 @@ package taskstore
 
 import (
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,4 +31,15 @@ func TestNewStoreFromConfig_Unreachable(t *testing.T) {
 	// Factory succeeds (lazy connect) but Ping fails
 	require.NoError(t, err)
 	require.Error(t, store.Ping())
+}
+
+func TestResolvedDBPath(t *testing.T) {
+	t.Run("returns taskstore.db under .kasmos in working directory", func(t *testing.T) {
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
+
+		dbPath := ResolvedDBPath()
+
+		assert.Equal(t, filepath.Join(projectDir, ".kasmos", "taskstore.db"), dbPath)
+	})
 }
