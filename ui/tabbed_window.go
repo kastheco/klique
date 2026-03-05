@@ -258,6 +258,10 @@ func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 // SetInfoData updates the metadata shown in the info pane.
 func (w *TabbedWindow) SetInfoData(data InfoData) { w.info.SetData(data) }
 
+// GetInfoData returns the current InfoData held by the info pane.
+// Intended for use in tests to inspect what the app layer set.
+func (w *TabbedWindow) GetInfoData() InfoData { return w.info.data }
+
 // ── Scroll / pagination ───────────────────────────────────────────────────────
 
 // ScrollUp scrolls the active pane upward. In the diff tab, navigates to the
