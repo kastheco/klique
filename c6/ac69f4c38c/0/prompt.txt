@@ -1,0 +1,178 @@
+Implement Task 3: `kas instance status` subcommand
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add CLI commands for querying the audit log, managing orphaned tmux sessions, and viewing instance status summaries. Closes Category 5 (Monitoring & Observability) in the UI/CLI feature parity report.
+**Architecture:** Three independent subcommand groups:
+**Tech Stack:** Go, cobra, `config/auditlog`, `session/tmux`, `config.State`
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 3 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+Add `kas instance status` summary command showing running/ready/paused/killed instance counts.
+
+**Files:**
+- `cmd/instance.go` — new or extend existing cobra command: `kas instance status`
+- `cmd/instance_test.go` — tests for status aggregation and output format
+
+**Details:**
+- Extend `NewInstanceCmd()` in `cmd/instance.go` with a new `status` subcommand (`Use: "status"`, `Args: cobra.NoArgs`) that reads state via `config.LoadState()` and delegates to a pure helper.
+- Implement these signatures:
+
+```go
+type instanceStatusSummary struct {
+	Running int
+	Ready   int
+	Paused  int
+	Killed  int
+}
+
+func summarizeInstanceStatus(records []instanceRecord) instanceStatusSummary
+func executeInstanceStatus(state config.StateManager) (string, error)
+```
+
+- Reuse `loadInstanceRecords(state)` for JSON parsing; keep parse errors wrapped with `parse instances: %w` convention already used in `cmd/instance.go`.
+- Aggregation rules should mirror existing app summary semantics (`app/app_state.go`):
+  - `running`: statuses `instanceRunning` and `instanceLoading`
+  - `ready`: status `instanceReady`
+  - `paused`: status `instancePaused`
+  - `killed`: any unknown status value (future-proof bucket for stale/invalid state)
+- Output format: tabwriter table with two columns (`STATE`, `COUNT`) and rows in fixed order: running, ready, paused, killed.
+- Empty-state behavior must exactly print `no instances found` and return nil error.
+- Keep existing `kas instance list` behavior untouched; `status` is additive, not a list replacement.
+- Testing guidance for `cmd/instance_test.go`:
+  - Add table-driven coverage for mixed statuses including `instanceLoading` and an unknown status value.
+  - Verify empty-state string.
+  - Verify deterministic row order in text output.
+  - Verify subcommand registration by checking `NewInstanceCmd().Find([]string{"status"})`.
+
+- Subcommand wiring should follow existing `list` command structure in `cmd/instance.go:393`:
+
+```go
+statusCmd := &cobra.Command{
+	Use:   "status",
+	Short: "show status summary for all instances",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		out, err := executeInstanceStatus(config.LoadState())
+		if err != nil {
+			return err
+		}
+		fmt.Print(out)
+		return nil
+	},
+}
+instanceCmd.AddCommand(statusCmd)
+```
+
+- `summarizeInstanceStatus(records []instanceRecord)` should contain only aggregation logic (no I/O, no formatting):
+  - `instanceRunning` and `instanceLoading` increment `Running`.
+  - `instanceReady` increments `Ready`.
+  - `instancePaused` increments `Paused`.
+  - default branch increments `Killed`.
+  - This matches existing app counting in `app/app_state.go:469` where running includes loading.
+
+- `executeInstanceStatus(state config.StateManager)` should:
+  - Call `loadInstanceRecords(state)` and propagate parse failures (`parse instances: %w`) unchanged.
+  - Return `no instances found\n` when `len(records) == 0`.
+  - Format table via `tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)` with fixed row order:
+    1. `running`
+    2. `ready`
+    3. `paused`
+    4. `killed`
+  - Return `(sb.String(), nil)` for deterministic output tests.
+
+- Edge cases to cover explicitly:
+  - Unknown persisted status values (e.g. `-1`, `99`) go to `killed`, not dropped.
+  - Records with zero-value fields other than `Status` still count normally.
+  - Invalid JSON in `state.InstancesData` returns error, does not fall back silently.
+
+- Concrete tests to add to `cmd/instance_test.go`:
+  - `TestSummarizeInstanceStatus_Mixed`
+  - `TestExecuteInstanceStatus_Empty`
+  - `TestExecuteInstanceStatus_OutputOrder`
+  - `TestExecuteInstanceStatus_ParseError`
+  - `TestNewInstanceCmd_HasStatusSubcommand` (same style as `cmd/serve_test.go:10`).
+
+
+- Codebase anchors to mirror while implementing:
+  - `app/app_state.go:470` is the existing status-summary semantic source: running includes both running and loading.
+  - `cmd/instance.go:262` (`loadInstanceRecords`) is the canonical parse path; preserve its wrapped error contract (`parse instances: %w`).
+  - `cmd/instance.go:393` shows current subcommand wiring style to replicate for `status`.
+- Keep `summarizeInstanceStatus` strictly pure and exhaustive over known local enum values:
+
+```go
+func summarizeInstanceStatus(records []instanceRecord) instanceStatusSummary {
+    var s instanceStatusSummary
+    for _, r := range records {
+        switch r.Status {
+        case instanceRunning, instanceLoading:
+            s.Running++
+        case instanceReady:
+            s.Ready++
+        case instancePaused:
+            s.Paused++
+        default:
+            s.Killed++
+        }
+    }
+    return s
+}
+```
+
+- `executeInstanceStatus` should follow existing formatter style in this file:
+  - `tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)`
+  - fixed header `STATE\tCOUNT`
+  - fixed row order `running`, `ready`, `paused`, `killed`
+  - exact empty-state text `no instances found\n`
+- Testing specifics from current patterns:
+  - Add a subcommand registration test using `cmd, _, err := NewInstanceCmd().Find([]string{"status"})` (same shape as `cmd/serve_test.go:11`).
+  - Add a parse-error test by setting `state.InstancesData` to invalid JSON and asserting `executeInstanceStatus` returns an error containing `parse instances`.
+  - Add an unknown-status aggregation case (for example `instanceStatus(99)`) and assert it increments `Killed`.
+- Keep rendering deterministic and local to `executeInstanceStatus` (no shared global writer), following existing table style in this package:
+
+```go
+fmt.Fprintln(w, "STATE\tCOUNT")
+fmt.Fprintf(w, "running\t%d\n", summary.Running)
+fmt.Fprintf(w, "ready\t%d\n", summary.Ready)
+fmt.Fprintf(w, "paused\t%d\n", summary.Paused)
+fmt.Fprintf(w, "killed\t%d\n", summary.Killed)
+```
+
+- Add root-level command wiring coverage in addition to `NewInstanceCmd()` coverage:
+  - `cmd, _, err := NewRootCmd().Find([]string{"instance", "status"})`
+  - assert `err == nil` and `cmd.Name() == "status"`.
+
+- Additional implementation guardrails from codebase reads:
+  - Keep status semantics aligned with existing app behavior in `app/app_state.go:470`: `loading` contributes to the running bucket.
+  - Reuse parsing path `loadInstanceRecords(state)` (`cmd/instance.go:262`) so malformed JSON still returns the established wrapped error prefix `parse instances:`.
+  - Keep rendering style consistent with existing cmd tables in `cmd/instance.go:245` (`tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)`) and return newline-terminated output strings for stable snapshot assertions.
+  - Add an explicit unknown-status case using the local enum type cast:
+
+```go
+records := []instanceRecord{{Title: "stale", Status: instanceStatus(99)}}
+summary := summarizeInstanceStatus(records)
+assert.Equal(t, 1, summary.Killed)
+```
+
+**Tests:**
+- `go test ./cmd/... -run TestInstance -count=1`
