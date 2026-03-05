@@ -50,5 +50,6 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewServeCmd())
 	root.AddCommand(NewInstanceCmd())
 	root.AddCommand(NewAuditCmd())
+	root.AddCommand(NewTmuxCmd())
 	return root
 }
