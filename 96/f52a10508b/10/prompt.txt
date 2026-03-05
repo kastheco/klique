@@ -1,0 +1,3 @@
+Plan trigger-dialog-in-focus-mode. Goal: trigger-dialog-in-focus-mode
+
+dialogs should still steal focus and show when user is in interactive mode. currently they sit and wait until you leave interactive mode then show. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
