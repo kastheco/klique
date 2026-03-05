@@ -221,6 +221,13 @@
       "context": "/de/a8eb0f218d/29/context.md",
       "content_hash": "/de/a8eb0f218d/29/content_hash.txt",
       "prompt": "/de/a8eb0f218d/29/prompt.txt"
+    },
+    {
+      "metadata": "/de/a8eb0f218d/30/metadata.json",
+      "transcript": "/de/a8eb0f218d/30/full.jsonl",
+      "context": "/de/a8eb0f218d/30/context.md",
+      "content_hash": "/de/a8eb0f218d/30/content_hash.txt",
+      "prompt": "/de/a8eb0f218d/30/prompt.txt"
     }
   ],
   "token_usage": {
