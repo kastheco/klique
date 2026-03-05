@@ -123,6 +123,37 @@ func TestParsePlan_TaskHeaderSeparatorVariants(t *testing.T) {
 	}
 }
 
+func TestParsePlan_H3WaveHeaders(t *testing.T) {
+	input := `# Plan
+
+**Goal:** Sync config
+
+### Wave 1
+
+#### Task 1: Patch opencode.jsonc
+
+Body of task 1.
+
+#### Task 2: Patch main branch
+
+Body of task 2.
+
+### Wave 2
+
+#### Task 3: Tests
+
+Body of task 3.
+`
+	plan, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, plan.Waves, 2)
+	require.Len(t, plan.Waves[0].Tasks, 2)
+	assert.Equal(t, "Patch opencode.jsonc", plan.Waves[0].Tasks[0].Title)
+	assert.Equal(t, "Patch main branch", plan.Waves[0].Tasks[1].Title)
+	require.Len(t, plan.Waves[1].Tasks, 1)
+	assert.Equal(t, "Tests", plan.Waves[1].Tasks[0].Title)
+}
+
 func TestParsePlan_HeaderExtraction(t *testing.T) {
 	input := `# Plan
 
