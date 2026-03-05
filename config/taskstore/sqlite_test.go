@@ -1,7 +1,6 @@
 package taskstore_test
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -335,7 +334,7 @@ func TestSQLiteStore_PhaseTimestamps(t *testing.T) {
 
 	err = store.SetPhaseTimestamp("kasmos", "plan.md", "unknown", time.Now().UTC())
 	require.Error(t, err)
-	assert.True(t, strings.Contains(err.Error(), "unknown phase"))
+	assert.Contains(t, err.Error(), "unknown phase")
 }
 
 func TestSQLiteStore_PlanGoal(t *testing.T) {

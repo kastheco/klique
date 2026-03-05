@@ -343,9 +343,6 @@ func (p *InfoPane) renderPlanSection() string {
 	if p.data.PlanCreated != "" {
 		rows = append(rows, p.renderRow("created", p.data.PlanCreated))
 	}
-	if p.data.PlanGoal != "" {
-		rows = append(rows, p.renderRow("goal", p.data.PlanGoal))
-	}
 	return strings.Join(rows, "\n")
 }
 
@@ -375,6 +372,9 @@ func (p *InfoPane) renderInstanceSection() string {
 	}
 	if p.data.Created != "" {
 		rows = append(rows, p.renderRow("created", p.data.Created))
+	}
+	if p.data.PlanGoal != "" {
+		rows = append(rows, p.renderRow("goal", p.data.PlanGoal))
 	}
 	if p.data.WaveNumber > 0 {
 		rows = append(rows, p.renderRow("wave", fmt.Sprintf("%d/%d", p.data.WaveNumber, p.data.TotalWaves)))
