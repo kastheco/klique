@@ -86,7 +86,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 	return result, nil
 }
 
-// LoadTOMLConfig loads the TOML config from the default location (~/.config/kasmos/config.toml).
+// LoadTOMLConfig loads the TOML config from the project-local config directory (<cwd>/.kasmos/config.toml).
 // Returns nil, nil if the file does not exist.
 func LoadTOMLConfig() (*TOMLConfigResult, error) {
 	configDir, err := GetConfigDir()
@@ -135,7 +135,7 @@ func SaveTOMLConfigTo(tc *TOMLConfig, path string) (retErr error) {
 	return nil
 }
 
-// SaveTOMLConfig writes to the default location (~/.config/kasmos/config.toml).
+// SaveTOMLConfig writes to the project-local config directory (<cwd>/.kasmos/config.toml).
 func SaveTOMLConfig(tc *TOMLConfig) error {
 	configDir, err := GetConfigDir()
 	if err != nil {

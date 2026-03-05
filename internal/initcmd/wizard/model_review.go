@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const reviewConfigPath = "~/.config/kasmos/config.toml"
+const reviewConfigPath = ".kasmos/config.toml"
 
 type reviewStep struct {
 	agents    []AgentState

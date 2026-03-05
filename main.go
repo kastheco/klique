@@ -190,7 +190,7 @@ func init() {
   1. Detect and select agent CLIs (claude, opencode, codex)
   2. Configure agent roles (coder, reviewer, planner) with model and tuning
   3. Install cli-tools enforcement hooks into each harness
-  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,
+  4. Write .kasmos/config.toml and scaffold project-level agent files`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return initcmd.Run(initcmd.Options{
 				Force: forceFlag,
