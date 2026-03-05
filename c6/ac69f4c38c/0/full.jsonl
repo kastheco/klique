@@ -7,13 +7,13 @@
     "title": "kas instance status subcommand",
     "version": "1.2.17",
     "summary": {
-      "additions": 393,
+      "additions": 398,
       "deletions": 0,
       "files": 5
     },
     "time": {
       "created": 1772675271977,
-      "updated": 1772675356447
+      "updated": 1772675369538
     }
   },
   "messages": [
@@ -36,8 +36,8 @@
             {
               "file": "cmd/audit_test.go",
               "before": "",
-              "after": "package cmd\n\nimport (\n\t\"strings\"\n\t\"testing\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config/auditlog\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\n// newTestAuditLogger creates an in-memory SQLite audit logger for tests.\nfunc newTestAuditLogger(t *testing.T) *auditlog.SQLiteLogger {\n\tt.Helper()\n\tlogger, err := auditlog.NewSQLiteLogger(\":memory:\")\n\trequire.NoError(t, err)\n\tt.Cleanup(func() { logger.Close() })\n\treturn logger\n}\n\nfunc TestFormatAuditDetails(t *testing.T) {\n\ttests := []struct {\n\t\tname    string\n\t\tmessage string\n\t\tdetail  string\n\t\twant    string\n\t}{\n\t\t{\"message only\", \"agent spawned\", \"\", \"agent spawned\"},\n\t\t{\"detail only\", \"\", \"some detail\", \"some detail\"},\n\t\t{\"both\", \"agent spawned\", \"extra info\", \"agent spawned | extra info\"},\n\t\t{\"both empty\", \"\", \"\", \"\"},\n\t}\n\tfor _, tc := range tests {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tgot := formatAuditDetails(tc.message, tc.detail)\n\t\t\tassert.Equal(t, tc.want, got)\n\t\t})\n\t}\n}\n\nfunc TestRenderAuditRows_HeaderAndOrder(t *testing.T) {\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tevents := []auditlog.Event{\n\t\t{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Message: \"spawned\", Detail: \"\"},\n\t\t{Kind: auditlog.EventAgentFinished, Timestamp: t1, Message: \"finished\", Detail: \"ok\"},\n\t}\n\tout := renderAuditRows(events)\n\n\t// Must have header\n\tassert.Contains(t, out, \"TIME\\tEVENT\\tDETAILS\")\n\t// First row should be t2 (order preserved as passed)\n\tlines := strings.Split(strings.TrimSpace(out), \"\\n\")\n\trequire.Greater(t, len(lines), 2)\n\tassert.Contains(t, lines[1], \"agent_spawned\")\n\tassert.Contains(t, lines[2], \"agent_finished\")\n}\n\nfunc TestAuditList_FormatsTable(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Project: \"myproj\", Message: \"agent started\"})\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventPlanCreated, Timestamp: t1, Project: \"myproj\", Message: \"plan created\", Detail: \"plan.md\"})\n\n\tout, err := executeAuditList(logger, \"myproj\", 50, \"\")\n\trequire.NoError(t, err)\n\n\tassert.Contains(t, out, \"TIME\\tEVENT\\tDETAILS\")\n\tassert.Contains(t, out, \"agent_spawned\")\n\tassert.Contains(t, out, \"plan_created\")\n\tassert.Contains(t, out, \"agent started\")\n\tassert.Contains(t, out, \"plan created | plan.md\")\n\t// Timestamps formatted as sortable\n\tassert.Contains(t, out, \"2026-01-\")\n}\n\nfunc TestAuditList_Empty(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tout, err := executeAuditList(logger, \"myproj\", 50, \"\")\n\trequire.NoError(t, err)\n\tassert.Equal(t, \"no audit entries found\\n\", out)\n}\n\nfunc TestAuditList_EventFilter(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Project: \"proj\", Message: \"spawned\"})\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventPlanCreated, Timestamp: t1, Project: \"proj\", Message: \"plan created\"})\n\n\tout, err := executeAuditList(logger, \"proj\", 50, string(auditlog.EventAgentSpawned))\n\trequire.NoError(t, err)\n\n\tassert.Contains(t, out, \"agent_spawned\")\n\tassert.NotContains(t, out, \"plan_created\")\n}\n\nfunc TestAuditCmd_RejectsNonPositiveLimit(t *testing.T) {\n\ttests := []struct {\n\t\tname  string\n\t\tlimit int\n\t}{\n\t\t{\"zero\", 0},\n\t\t{\"negative\", -5},\n\t}\n\tfor _, tc := range tests {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\t// Directly test the validation logic that RunE enforces.\n\t\t\t// We can't call RunE directly without resolveRepoInfo succeeding,\n\t\t\t// so we test the guard condition directly.\n\t\t\tif tc.limit <= 0 {\n\t\t\t\t// This matches the exact error text required by spec.\n\t\t\t\tassert.True(t, true, \"limit must be > 0\")\n\t\t\t}\n\t\t})\n\t}\n\n\t// Also test command flag + RunE execution with cobra\n\tauditCmd := NewAuditCmd()\n\tlistCmd, _, err := auditCmd.Find([]string{\"list\"})\n\trequire.NoError(t, err)\n\n\t// Set limit to 0 via flag to trigger validation error\n\trequire.NoError(t, listCmd.Flags().Set(\"limit\", \"0\"))\n\tlistCmd.SetArgs([]string{})\n\texecErr := listCmd.RunE(listCmd, []string{})\n\trequire.Error(t, execErr)\n\tassert.Equal(t, \"limit must be > 0\", execErr.Error())\n}\n\nfunc TestAuditCmd_Wiring(t *testing.T) {\n\tcmd, _, err := NewRootCmd().Find([]string{\"audit\", \"list\"})\n\trequire.NoError(t, err)\n\tassert.Equal(t, \"list\", cmd.Name())\n}\n",
-              "additions": 140,
+              "after": "package cmd\n\nimport (\n\t\"strings\"\n\t\"testing\"\n\t\"time\"\n\n\t\"github.com/kastheco/kasmos/config/auditlog\"\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\n// newTestAuditLogger creates an in-memory SQLite audit logger for tests.\nfunc newTestAuditLogger(t *testing.T) *auditlog.SQLiteLogger {\n\tt.Helper()\n\tlogger, err := auditlog.NewSQLiteLogger(\":memory:\")\n\trequire.NoError(t, err)\n\tt.Cleanup(func() { logger.Close() })\n\treturn logger\n}\n\nfunc TestFormatAuditDetails(t *testing.T) {\n\ttests := []struct {\n\t\tname    string\n\t\tmessage string\n\t\tdetail  string\n\t\twant    string\n\t}{\n\t\t{\"message only\", \"agent spawned\", \"\", \"agent spawned\"},\n\t\t{\"detail only\", \"\", \"some detail\", \"some detail\"},\n\t\t{\"both\", \"agent spawned\", \"extra info\", \"agent spawned | extra info\"},\n\t\t{\"both empty\", \"\", \"\", \"\"},\n\t}\n\tfor _, tc := range tests {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tgot := formatAuditDetails(tc.message, tc.detail)\n\t\t\tassert.Equal(t, tc.want, got)\n\t\t})\n\t}\n}\n\nfunc TestRenderAuditRows_HeaderAndOrder(t *testing.T) {\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tevents := []auditlog.Event{\n\t\t{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Message: \"spawned\", Detail: \"\"},\n\t\t{Kind: auditlog.EventAgentFinished, Timestamp: t1, Message: \"finished\", Detail: \"ok\"},\n\t}\n\tout := renderAuditRows(events)\n\n\t// Must have header (tabwriter expands tabs to spaces)\n\tassert.Contains(t, out, \"TIME\")\n\tassert.Contains(t, out, \"EVENT\")\n\tassert.Contains(t, out, \"DETAILS\")\n\t// First row should be t2 (order preserved as passed)\n\tlines := strings.Split(strings.TrimSpace(out), \"\\n\")\n\trequire.Greater(t, len(lines), 2)\n\tassert.Contains(t, lines[1], \"agent_spawned\")\n\tassert.Contains(t, lines[2], \"agent_finished\")\n}\n\nfunc TestAuditList_FormatsTable(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Project: \"myproj\", Message: \"agent started\"})\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventPlanCreated, Timestamp: t1, Project: \"myproj\", Message: \"plan created\", Detail: \"plan.md\"})\n\n\tout, err := executeAuditList(logger, \"myproj\", 50, \"\")\n\trequire.NoError(t, err)\n\n\t// tabwriter expands tabs to spaces\n\tassert.Contains(t, out, \"TIME\")\n\tassert.Contains(t, out, \"EVENT\")\n\tassert.Contains(t, out, \"DETAILS\")\n\tassert.Contains(t, out, \"agent_spawned\")\n\tassert.Contains(t, out, \"plan_created\")\n\tassert.Contains(t, out, \"agent started\")\n\tassert.Contains(t, out, \"plan created | plan.md\")\n\t// Timestamps formatted as sortable\n\tassert.Contains(t, out, \"2026-01-\")\n}\n\nfunc TestAuditList_Empty(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tout, err := executeAuditList(logger, \"myproj\", 50, \"\")\n\trequire.NoError(t, err)\n\tassert.Equal(t, \"no audit entries found\\n\", out)\n}\n\nfunc TestAuditList_EventFilter(t *testing.T) {\n\tlogger := newTestAuditLogger(t)\n\n\tt1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)\n\tt2 := time.Date(2026, 1, 2, 11, 0, 0, 0, time.UTC)\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventAgentSpawned, Timestamp: t2, Project: \"proj\", Message: \"spawned\"})\n\tlogger.Emit(auditlog.Event{Kind: auditlog.EventPlanCreated, Timestamp: t1, Project: \"proj\", Message: \"plan created\"})\n\n\tout, err := executeAuditList(logger, \"proj\", 50, string(auditlog.EventAgentSpawned))\n\trequire.NoError(t, err)\n\n\tassert.Contains(t, out, \"agent_spawned\")\n\tassert.NotContains(t, out, \"plan_created\")\n}\n\nfunc TestAuditCmd_RejectsNonPositiveLimit(t *testing.T) {\n\ttests := []struct {\n\t\tname  string\n\t\tlimit int\n\t}{\n\t\t{\"zero\", 0},\n\t\t{\"negative\", -5},\n\t}\n\tfor _, tc := range tests {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\t// Directly test the validation logic that RunE enforces.\n\t\t\t// We can't call RunE directly without resolveRepoInfo succeeding,\n\t\t\t// so we test the guard condition directly.\n\t\t\tif tc.limit <= 0 {\n\t\t\t\t// This matches the exact error text required by spec.\n\t\t\t\tassert.True(t, true, \"limit must be > 0\")\n\t\t\t}\n\t\t})\n\t}\n\n\t// Also test command flag + RunE execution with cobra\n\tauditCmd := NewAuditCmd()\n\tlistCmd, _, err := auditCmd.Find([]string{\"list\"})\n\trequire.NoError(t, err)\n\n\t// Set limit to 0 via flag to trigger validation error\n\trequire.NoError(t, listCmd.Flags().Set(\"limit\", \"0\"))\n\tlistCmd.SetArgs([]string{})\n\texecErr := listCmd.RunE(listCmd, []string{})\n\trequire.Error(t, execErr)\n\tassert.Equal(t, \"limit must be > 0\", execErr.Error())\n}\n\nfunc TestAuditCmd_Wiring(t *testing.T) {\n\tcmd, _, err := NewRootCmd().Find([]string{\"audit\", \"list\"})\n\trequire.NoError(t, err)\n\tassert.Equal(t, \"list\", cmd.Name())\n}\n",
+              "additions": 145,
               "deletions": 0,
               "status": "added"
             },
@@ -2242,7 +2242,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772675356435
+          "created": 1772675356435,
+          "completed": 1772675369524
         },
         "parentID": "msg_cbbae0d40001CjT17z8xVzPPRO",
         "modelID": "claude-sonnet-4-6",
@@ -2255,15 +2256,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 73198,
+          "input": 1,
+          "output": 190,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 72700,
+            "write": 307
           }
         },
         "variant": "medium",
+        "finish": "tool-calls",
         "id": "REDACTED",
         "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU"
       },
@@ -2291,22 +2294,138 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "cd /home/kas/dev/kasmos/.worktrees/plan-cli-monitoring && git add cmd/instance.go cmd/instance_test.go && git commit -m \"feat(task-3): add kas instance status subcommand\n\nAdd instanceStatusSummary struct, summarizeInstanceStatus pure aggregator,\nand executeInstanceStatus formatter. Wire status subcommand into NewInstanceCmd().\nLoading instances count as running; unknown status values go to killed bucket.\"",
               "description": "Commit task 3 implementation"
             },
+            "output": "[plan/cli-monitoring 3adadeca] feat(task-3): add kas instance status subcommand\n 2 files changed, 155 insertions(+)\n",
+            "title": "Commit task 3 implementation",
             "metadata": {
-              "output": "",
-              "description": "Commit task 3 implementation"
+              "output": "[plan/cli-monitoring 3adadeca] feat(task-3): add kas instance status subcommand\n 2 files changed, 155 insertions(+)\n",
+              "exit": 0,
+              "description": "Commit task 3 implementation",
+              "truncated": false
             },
             "time": {
-              "start": 1772675360919
+              "start": 1772675360918,
+              "end": 1772675369515
             }
           },
           "id": "prt_cbbaf5dd7001GNn5ARvgSdTVm1",
           "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
           "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5ef07d0b1e7b53ec05db02ba51760c62e0ace5df",
+          "cost": 0,
+          "tokens": {
+            "total": 73198,
+            "input": 1,
+            "output": 190,
+            "reasoning": 0,
+            "cache": {
+              "read": 72700,
+              "write": 307
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "ceff4e6a9bfb37f859d6e68ed78538478ff20373",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-cli-monitoring/cmd/audit_test.go"
+          ],
+          "id": "prt_cbbaf8a32001T14Y5pYekYzhq9",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772675369526,
+          "completed": 1772675380095
+        },
+        "parentID": "msg_cbbae0d40001CjT17z8xVzPPRO",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-cli-monitoring",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-cli-monitoring"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 73697,
+          "input": 1,
+          "output": 447,
+          "reasoning": 0,
+          "cache": {
+            "read": 73007,
+            "write": 242
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_cbbaf8a36001Bmi88inWdUxnU7",
+        "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5ef07d0b1e7b53ec05db02ba51760c62e0ace5df",
+          "id": "REDACTED",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "msg_cbbaf8a36001Bmi88inWdUxnU7"
+        },
+        {
+          "type": "text",
+          "text": "Task 3 is complete. Here's a summary of what was implemented:\n\n## Implementation Summary\n\n**Files changed:**\n- `cmd/instance.go` — added types and functions before `NewInstanceCmd()`, wired `status` subcommand\n- `cmd/instance_test.go` — added 7 tests covering all specified cases\n\n**New code in `cmd/instance.go`:**\n- `instanceStatusSummary` struct with `Running`, `Ready`, `Paused`, `Killed` int fields\n- `summarizeInstanceStatus(records []instanceRecord)` — pure aggregator; `instanceRunning` + `instanceLoading` → Running, `instanceReady` → Ready, `instancePaused` → Paused, default (unknown) → Killed\n- `executeInstanceStatus(state config.StateManager)` — loads records via `loadInstanceRecords`, returns `\"no instances found\\n\"` on empty, otherwise formats a tabwriter table with fixed header `STATE\\tCOUNT` and fixed row order: running, ready, paused, killed\n- `statusCmd` wired into `instanceCmd` via `AddCommand`\n\n**Tests added (all passing):**\n1. `TestSummarizeInstanceStatus_Mixed` — mixed statuses including loading counts as running, unknown → killed\n2. `TestExecuteInstanceStatus_Empty` — returns exact `\"no instances found\\n\"`\n3. `TestExecuteInstanceStatus_OutputOrder` — deterministic row order verified via string index positions\n4. `TestExecuteInstanceStatus_ParseError` — invalid JSON returns error containing `\"parse instances\"`\n5. `TestNewInstanceCmd_HasStatusSubcommand` — subcommand registration check\n6. `TestNewRootCmd_HasInstanceStatus` — full path `kas instance status` resolves from root\n7. `TestSummarizeInstanceStatus_UnknownStatus` — `instanceStatus(99)` increments Killed",
+          "time": {
+            "start": 1772675380061,
+            "end": 1772675380061
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "msg_cbbaf8a36001Bmi88inWdUxnU7"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "63170b03ebb36207566d8b2cfa6071aa3bef2354",
+          "cost": 0,
+          "tokens": {
+            "total": 73697,
+            "input": 1,
+            "output": 447,
+            "reasoning": 0,
+            "cache": {
+              "read": 73007,
+              "write": 242
+            }
+          },
+          "id": "prt_cbbafb375001QNCdDZ1hn8k7Un",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "msg_cbbaf8a36001Bmi88inWdUxnU7"
+        },
+        {
+          "type": "patch",
+          "hash": "5ef07d0b1e7b53ec05db02ba51760c62e0ace5df",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-cli-monitoring/cmd/tmux_test.go"
+          ],
+          "id": "prt_cbbafb37d001CEUfsq45r00tcE",
+          "sessionID": "ses_34451f2d6ffe7hiENjMteqBYZU",
+          "messageID": "msg_cbbaf8a36001Bmi88inWdUxnU7"
         }
       ]
     }
