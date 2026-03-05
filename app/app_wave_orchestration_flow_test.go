@@ -1265,6 +1265,121 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 		"orchestrator must be deleted after HasWorked is set and task completes")
 }
 
+// TestWaveTaskCompletion_IgnoresPromptEchoUpdates verifies that a wave task is
+// not marked complete when metadata shows an update while already at prompt
+// (prompt-echo / startup noise). Completion must wait for non-prompt output.
+func TestWaveTaskCompletion_IgnoresPromptEchoUpdates(t *testing.T) {
+	const planFile = "prompt-echo-guard.md"
+
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "do work"}}},
+		},
+	}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "prompt echo guard test", "plan/prompt-echo-guard", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "prompt-echo-guard-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst.QueuedPrompt = "do the task"
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(inst)
+
+	// First tick: prompt gets dispatched (PromptDetected path), task should remain running.
+	firstMsg := metadataResultMsg{
+		Results: []instanceMetadata{{
+			Title:           "prompt-echo-guard-W1-T1",
+			ContentCaptured: true,
+			Updated:         false,
+			HasPrompt:       true,
+			TmuxAlive:       true,
+		}},
+		PlanState: ps,
+	}
+	model, _ := h.Update(firstMsg)
+	updated := model.(*home)
+	require.Len(t, updated.waveOrchestrators, 1)
+
+	// Second tick: updated+prompt (echo/startup noise) must NOT set HasWorked.
+	secondMsg := metadataResultMsg{
+		Results: []instanceMetadata{{
+			Title:           "prompt-echo-guard-W1-T1",
+			ContentCaptured: true,
+			Updated:         true,
+			HasPrompt:       true,
+			TmuxAlive:       true,
+		}},
+		PlanState: ps,
+	}
+	model2, _ := updated.Update(secondMsg)
+	updated2 := model2.(*home)
+	assert.False(t, inst.HasWorked, "prompt-echo update must not count as real work")
+	require.Len(t, updated2.waveOrchestrators, 1)
+
+	// Third tick: still at prompt must not complete while HasWorked=false.
+	thirdMsg := metadataResultMsg{
+		Results: []instanceMetadata{{
+			Title:           "prompt-echo-guard-W1-T1",
+			ContentCaptured: true,
+			Updated:         false,
+			HasPrompt:       true,
+			TmuxAlive:       true,
+		}},
+		PlanState: ps,
+	}
+	model3, _ := updated2.Update(thirdMsg)
+	updated3 := model3.(*home)
+	require.Len(t, updated3.waveOrchestrators, 1,
+		"task must not auto-complete on prompt echo/startup output")
+
+	// Fourth tick: non-prompt update counts as real work.
+	fourthMsg := metadataResultMsg{
+		Results: []instanceMetadata{{
+			Title:           "prompt-echo-guard-W1-T1",
+			ContentCaptured: true,
+			Updated:         true,
+			HasPrompt:       false,
+			TmuxAlive:       true,
+		}},
+		PlanState: ps,
+	}
+	model4, _ := updated3.Update(fourthMsg)
+	updated4 := model4.(*home)
+	assert.True(t, inst.HasWorked, "non-prompt update must count as real work")
+
+	// Fifth tick: back at prompt after real work should complete.
+	fifthMsg := metadataResultMsg{
+		Results: []instanceMetadata{{
+			Title:           "prompt-echo-guard-W1-T1",
+			ContentCaptured: true,
+			Updated:         false,
+			HasPrompt:       true,
+			TmuxAlive:       true,
+		}},
+		PlanState: ps,
+	}
+	model5, _ := updated4.Update(fifthMsg)
+	updated5 := model5.(*home)
+	assert.Empty(t, updated5.waveOrchestrators,
+		"task should complete only after non-prompt work output")
+}
+
 // ---------------------------------------------------------------------------
 // Elaboration phase tests
 // ---------------------------------------------------------------------------

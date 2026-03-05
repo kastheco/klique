@@ -1137,10 +1137,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if md.Updated {
 					inst.SetStatus(session.Running)
 					inst.PromptDetected = false
-					// Mark that the agent has produced real work. Wave task
-					// completion requires this to avoid permission prompts or
-					// early prompt returns from prematurely finishing a wave.
-					if inst.TaskNumber > 0 && !inst.AwaitingWork {
+					// Mark that the agent has produced real work only after the
+					// queued task prompt has been dispatched and we observe
+					// non-prompt output. This prevents startup/prologue output and
+					// prompt-echo ticks from prematurely completing wave tasks.
+					if inst.TaskNumber > 0 && !inst.HasWorked && inst.QueuedPrompt == "" && !md.HasPrompt {
 						inst.HasWorked = true
 					}
 					if md.Content != "" {
