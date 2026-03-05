@@ -1,0 +1,711 @@
+{
+  "info": {
+    "id": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+    "slug": "sunny-tiger",
+    "projectID": "f517a0bef81c29b0d2894d744fb137e5c4dc0dfc",
+    "directory": "/home/kas/dev/kasmos",
+    "title": "Release v1.1.2",
+    "version": "1.2.15",
+    "summary": {
+      "additions": 1,
+      "deletions": 1,
+      "files": 1
+    },
+    "time": {
+      "created": 1772232170531,
+      "updated": 1772232201646
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772232170554
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "main.go",
+              "before": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/app\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/daemon\"\n\tinitcmd \"github.com/kastheco/kasmos/internal/initcmd\"\n\tsentrypkg \"github.com/kastheco/kasmos/internal/sentry\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/spf13/cobra\"\n)\n\nvar (\n\tversion     = \"1.1.0\"\n\tprogramFlag string\n\tautoYesFlag bool\n\tdaemonFlag  bool\n\trootCmd     = &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tctx := context.Background()\n\n\t\t\tcfg := config.LoadConfig()\n\t\t\tif err := sentrypkg.Init(version, cfg.IsTelemetryEnabled()); err != nil {\n\t\t\t\t// Non-fatal: sentry failure should not prevent startup\n\t\t\t\t_ = err\n\t\t\t}\n\t\t\tdefer sentrypkg.Flush()\n\t\t\tdefer sentrypkg.RecoverPanic()\n\n\t\t\tlog.Initialize(daemonFlag, cfg.IsTelemetryEnabled())\n\t\t\tdefer log.Close()\n\n\t\t\tif daemonFlag {\n\t\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\t\t\t\tif err := daemon.RunDaemon(cfg); err != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to start daemon: %v\", err)\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\t// Check if we're in a git repository\n\t\t\tcurrentDir, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\n\t\t\tif !git.IsGitRepo(currentDir) {\n\t\t\t\treturn fmt.Errorf(\"error: kas must be run from within a git repository\")\n\t\t\t}\n\n\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\n\t\t\t// Program flag overrides config\n\t\t\tprogram := cfg.DefaultProgram\n\t\t\tif programFlag != \"\" {\n\t\t\t\tprogram = programFlag\n\t\t\t}\n\t\t\t// AutoYes flag overrides config\n\t\t\tautoYes := cfg.AutoYes\n\t\t\tif autoYesFlag {\n\t\t\t\tautoYes = true\n\t\t\t}\n\n\t\t\tsentrypkg.SetContext(program, autoYes, filepath.Base(currentDir))\n\n\t\t\tif autoYes {\n\t\t\t\tdefer func() {\n\t\t\t\t\tif err := daemon.LaunchDaemon(); err != nil {\n\t\t\t\t\t\tlog.ErrorLog.Printf(\"failed to launch daemon: %v\", err)\n\t\t\t\t\t}\n\t\t\t\t}()\n\t\t\t}\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to stop daemon: %v\", err)\n\t\t\t}\n\n\t\t\treturn app.Run(ctx, program, autoYes)\n\t\t},\n\t}\n\n\tresetCmd = &cobra.Command{\n\t\tUse:   \"reset\",\n\t\tShort: \"Reset all stored instances\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tstate := config.LoadState()\n\t\t\tstorage, err := session.NewStorage(state)\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to initialize storage: %w\", err)\n\t\t\t}\n\t\t\tif err := storage.DeleteAllInstances(); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to reset storage: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Storage has been reset successfully\")\n\n\t\t\tif err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup tmux sessions: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Tmux sessions have been cleaned up\")\n\n\t\t\tcwd, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\t\t\tif err := git.CleanupWorktrees(cwd); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup worktrees: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Worktrees have been cleaned up\")\n\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tfmt.Println(\"daemon has been stopped\")\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tdebugCmd = &cobra.Command{\n\t\tUse:   \"debug\",\n\t\tShort: \"Print debug information like config paths\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tcfg := config.LoadConfig()\n\n\t\t\tconfigDir, err := config.GetConfigDir()\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t\t\t}\n\t\t\tconfigJson, _ := json.MarshalIndent(cfg, \"\", \"  \")\n\n\t\t\tfmt.Printf(\"Config: %s\\n%s\\n\", filepath.Join(configDir, config.ConfigFileName), configJson)\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tversionCmd = &cobra.Command{\n\t\tUse:   \"version\",\n\t\tShort: \"Print the version number of kas\",\n\t\tRun: func(cmd *cobra.Command, args []string) {\n\t\t\tfmt.Printf(\"kas version %s\\n\", version)\n\t\t\tfmt.Printf(\"https://github.com/kastheco/kasmos/releases/tag/v%s\\n\", version)\n\t\t},\n\t}\n)\n\nfunc init() {\n\trootCmd.Flags().StringVarP(&programFlag, \"program\", \"p\", \"\",\n\t\t\"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')\")\n\trootCmd.Flags().BoolVarP(&autoYesFlag, \"autoyes\", \"y\", false,\n\t\t\"[experimental] If enabled, all instances will automatically accept prompts\")\n\trootCmd.Flags().BoolVar(&daemonFlag, \"daemon\", false, \"Run a program that loads all sessions\"+\n\t\t\" and runs autoyes mode on them.\")\n\n\t// Hide the daemonFlag as it's only for internal use\n\terr := rootCmd.Flags().MarkHidden(\"daemon\")\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tvar forceFlag bool\n\tvar cleanFlag bool\n\n\tkasSetupCmd := &cobra.Command{\n\t\tUse:     \"setup\",\n\t\tAliases: []string{\"init\"},\n\t\tShort:   \"Configure agent harnesses and scaffold project files\",\n\t\tLong: `Run an interactive wizard to:\n  1. Detect and select agent CLIs (claude, opencode, codex)\n  2. Configure agent roles (coder, reviewer, planner) with model and tuning\n  3. Install cli-tools enforcement hooks into each harness\n  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\treturn initcmd.Run(initcmd.Options{\n\t\t\t\tForce: forceFlag,\n\t\t\t\tClean: cleanFlag,\n\t\t\t})\n\t\t},\n\t}\n\n\tkasSetupCmd.Flags().BoolVar(&forceFlag, \"force\", false, \"Overwrite existing project scaffold files\")\n\tkasSetupCmd.Flags().BoolVar(&cleanFlag, \"clean\", false, \"Ignore existing config, start with factory defaults\")\n\n\trootCmd.AddCommand(debugCmd)\n\trootCmd.AddCommand(versionCmd)\n\trootCmd.AddCommand(resetCmd)\n\trootCmd.AddCommand(kasSetupCmd)\n\trootCmd.AddCommand(cmd2.NewPlanCmd())\n}\n\nfunc main() {\n\tif err := rootCmd.Execute(); err != nil {\n\t\tif errors.Is(err, errUnhealthy) {\n\t\t\tos.Exit(1)\n\t\t}\n\t\tfmt.Println(err)\n\t}\n}\n",
+              "after": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\n\t\"github.com/kastheco/kasmos/app\"\n\tcmd2 \"github.com/kastheco/kasmos/cmd\"\n\t\"github.com/kastheco/kasmos/config\"\n\t\"github.com/kastheco/kasmos/daemon\"\n\tinitcmd \"github.com/kastheco/kasmos/internal/initcmd\"\n\tsentrypkg \"github.com/kastheco/kasmos/internal/sentry\"\n\t\"github.com/kastheco/kasmos/log\"\n\t\"github.com/kastheco/kasmos/session\"\n\t\"github.com/kastheco/kasmos/session/git\"\n\t\"github.com/kastheco/kasmos/session/tmux\"\n\t\"github.com/spf13/cobra\"\n)\n\nvar (\n\tversion     = \"1.1.2\"\n\tprogramFlag string\n\tautoYesFlag bool\n\tdaemonFlag  bool\n\trootCmd     = &cobra.Command{\n\t\tUse:   \"kas\",\n\t\tShort: \"kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tctx := context.Background()\n\n\t\t\tcfg := config.LoadConfig()\n\t\t\tif err := sentrypkg.Init(version, cfg.IsTelemetryEnabled()); err != nil {\n\t\t\t\t// Non-fatal: sentry failure should not prevent startup\n\t\t\t\t_ = err\n\t\t\t}\n\t\t\tdefer sentrypkg.Flush()\n\t\t\tdefer sentrypkg.RecoverPanic()\n\n\t\t\tlog.Initialize(daemonFlag, cfg.IsTelemetryEnabled())\n\t\t\tdefer log.Close()\n\n\t\t\tif daemonFlag {\n\t\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\t\t\t\tif err := daemon.RunDaemon(cfg); err != nil {\n\t\t\t\t\tlog.ErrorLog.Printf(\"failed to start daemon: %v\", err)\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\t// Check if we're in a git repository\n\t\t\tcurrentDir, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\n\t\t\tif !git.IsGitRepo(currentDir) {\n\t\t\t\treturn fmt.Errorf(\"error: kas must be run from within a git repository\")\n\t\t\t}\n\n\t\t\tsession.NotificationsEnabled = cfg.AreNotificationsEnabled()\n\n\t\t\t// Program flag overrides config\n\t\t\tprogram := cfg.DefaultProgram\n\t\t\tif programFlag != \"\" {\n\t\t\t\tprogram = programFlag\n\t\t\t}\n\t\t\t// AutoYes flag overrides config\n\t\t\tautoYes := cfg.AutoYes\n\t\t\tif autoYesFlag {\n\t\t\t\tautoYes = true\n\t\t\t}\n\n\t\t\tsentrypkg.SetContext(program, autoYes, filepath.Base(currentDir))\n\n\t\t\tif autoYes {\n\t\t\t\tdefer func() {\n\t\t\t\t\tif err := daemon.LaunchDaemon(); err != nil {\n\t\t\t\t\t\tlog.ErrorLog.Printf(\"failed to launch daemon: %v\", err)\n\t\t\t\t\t}\n\t\t\t\t}()\n\t\t\t}\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\tlog.ErrorLog.Printf(\"failed to stop daemon: %v\", err)\n\t\t\t}\n\n\t\t\treturn app.Run(ctx, program, autoYes)\n\t\t},\n\t}\n\n\tresetCmd = &cobra.Command{\n\t\tUse:   \"reset\",\n\t\tShort: \"Reset all stored instances\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tstate := config.LoadState()\n\t\t\tstorage, err := session.NewStorage(state)\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to initialize storage: %w\", err)\n\t\t\t}\n\t\t\tif err := storage.DeleteAllInstances(); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to reset storage: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Storage has been reset successfully\")\n\n\t\t\tif err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup tmux sessions: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Tmux sessions have been cleaned up\")\n\n\t\t\tcwd, err := filepath.Abs(\".\")\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get current directory: %w\", err)\n\t\t\t}\n\t\t\tif err := git.CleanupWorktrees(cwd); err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to cleanup worktrees: %w\", err)\n\t\t\t}\n\t\t\tfmt.Println(\"Worktrees have been cleaned up\")\n\n\t\t\t// Kill any daemon that's running.\n\t\t\tif err := daemon.StopDaemon(); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tfmt.Println(\"daemon has been stopped\")\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tdebugCmd = &cobra.Command{\n\t\tUse:   \"debug\",\n\t\tShort: \"Print debug information like config paths\",\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\tlog.Initialize(false)\n\t\t\tdefer log.Close()\n\n\t\t\tcfg := config.LoadConfig()\n\n\t\t\tconfigDir, err := config.GetConfigDir()\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"failed to get config directory: %w\", err)\n\t\t\t}\n\t\t\tconfigJson, _ := json.MarshalIndent(cfg, \"\", \"  \")\n\n\t\t\tfmt.Printf(\"Config: %s\\n%s\\n\", filepath.Join(configDir, config.ConfigFileName), configJson)\n\n\t\t\treturn nil\n\t\t},\n\t}\n\n\tversionCmd = &cobra.Command{\n\t\tUse:   \"version\",\n\t\tShort: \"Print the version number of kas\",\n\t\tRun: func(cmd *cobra.Command, args []string) {\n\t\t\tfmt.Printf(\"kas version %s\\n\", version)\n\t\t\tfmt.Printf(\"https://github.com/kastheco/kasmos/releases/tag/v%s\\n\", version)\n\t\t},\n\t}\n)\n\nfunc init() {\n\trootCmd.Flags().StringVarP(&programFlag, \"program\", \"p\", \"\",\n\t\t\"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')\")\n\trootCmd.Flags().BoolVarP(&autoYesFlag, \"autoyes\", \"y\", false,\n\t\t\"[experimental] If enabled, all instances will automatically accept prompts\")\n\trootCmd.Flags().BoolVar(&daemonFlag, \"daemon\", false, \"Run a program that loads all sessions\"+\n\t\t\" and runs autoyes mode on them.\")\n\n\t// Hide the daemonFlag as it's only for internal use\n\terr := rootCmd.Flags().MarkHidden(\"daemon\")\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tvar forceFlag bool\n\tvar cleanFlag bool\n\n\tkasSetupCmd := &cobra.Command{\n\t\tUse:     \"setup\",\n\t\tAliases: []string{\"init\"},\n\t\tShort:   \"Configure agent harnesses and scaffold project files\",\n\t\tLong: `Run an interactive wizard to:\n  1. Detect and select agent CLIs (claude, opencode, codex)\n  2. Configure agent roles (coder, reviewer, planner) with model and tuning\n  3. Install cli-tools enforcement hooks into each harness\n  4. Write ~/.config/kasmos/config.toml and scaffold project-level agent files`,\n\t\tRunE: func(cmd *cobra.Command, args []string) error {\n\t\t\treturn initcmd.Run(initcmd.Options{\n\t\t\t\tForce: forceFlag,\n\t\t\t\tClean: cleanFlag,\n\t\t\t})\n\t\t},\n\t}\n\n\tkasSetupCmd.Flags().BoolVar(&forceFlag, \"force\", false, \"Overwrite existing project scaffold files\")\n\tkasSetupCmd.Flags().BoolVar(&cleanFlag, \"clean\", false, \"Ignore existing config, start with factory defaults\")\n\n\trootCmd.AddCommand(debugCmd)\n\trootCmd.AddCommand(versionCmd)\n\trootCmd.AddCommand(resetCmd)\n\trootCmd.AddCommand(kasSetupCmd)\n\trootCmd.AddCommand(cmd2.NewPlanCmd())\n}\n\nfunc main() {\n\tif err := rootCmd.Execute(); err != nil {\n\t\tif errors.Is(err, errUnhealthy) {\n\t\t\tos.Exit(1)\n\t\t}\n\t\tfmt.Println(err)\n\t}\n}\n",
+              "additions": 1,
+              "deletions": 1,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "custodian",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "medium",
+        "id": "REDACTED",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "release v1.1.2",
+          "id": "prt_ca144dc26001D5c1TOdmEm1Uiq",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232170561,
+          "completed": 1772232173896
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 27645,
+          "input": 3,
+          "output": 158,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 27484
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca144dc41001t1NvvGN8LhxDgi",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "id": "prt_ca144e14c001lbyvK5DhMeP38d",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144dc41001t1NvvGN8LhxDgi"
+        },
+        {
+          "type": "reasoning",
+          "text": "The user wants to release v1.1.2. Let me load the kasmos-custodian skill first, and also check the cli-tools skill as required. Then I'll follow the release operations procedure.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/k6iWfNWyzyq2SV/j7o6d703332X5cH/Ij4lORgBLUcTWxg/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772232171853,
+            "end": 1772232173286
+          },
+          "id": "prt_ca144e14d001fPII0PQvR4m02c",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144dc41001t1NvvGN8LhxDgi"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01CvCN7pVqT1XoK1h5KooW2s",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-custodian"
+            },
+            "output": "<skill_content name=\"kasmos-custodian\">\n# Skill: kasmos-custodian\n\n# kasmos-custodian\n\nYou are the **custodian agent** — the operational janitor of the kasmos system. You fix stuck states,\nclean up stale resources, trigger wave execution, and triage plans. You do **not** write features,\nimplement plans, or make architectural decisions.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions.\n</HARD-GATE>\n\n## Where You Fit\n\nYou are the **ops/janitor** role. Your scope is strictly operational:\n\n| You do | You don't do |\n|--------|-------------|\n| Fix plans stuck in wrong states | Write code or implement features |\n| Clean stale worktrees and branches | Review code or approve PRs |\n| Trigger wave execution via `kas plan implement` | Write or modify plan files |\n| Triage plans and report status | Make architectural decisions |\n| Merge or PR completed branches | Modify plan file **content** |\n| Recover from failed or aborted runs | Start new plans or features |\n\n**If asked to do feature work:** decline and redirect to the planner or coder role.\n\n### Plan lifecycle (reference)\n\n```\nready → planning → implementing → reviewing → done\n                                            ↑\n                                      cancelled (from any state)\n```\n\nYour typical intervention points: plans stuck in `implementing` or `reviewing`, plans that\nfinished but weren't transitioned to `done`, or plans in `ready` that need a wave kicked off.\n\n---\n\n## Available CLI Commands\n\nAll state mutations go through the `kas` binary. Use `kas`, not `kq`.\n\n### `kas plan list [--status <status>]`\n\nList all plans with their status, branch, and topic. Supports status filter.\n\n```bash\nkas plan list                        # all plans\nkas plan list --status implementing  # only implementing plans\nkas plan list --status ready         # plans waiting to start\n```\n\n### `kas plan set-status <plan-file> <status> --force`\n\nForce-override a plan's status, bypassing the FSM transition table. Requires `--force`.\nValid statuses: `ready`, `planning`, `implementing`, `reviewing`, `done`, `cancelled`.\n\n```bash\nkas plan set-status docs/plans/2026-02-27-my-plan.md done --force\n```\n\nUse only when FSM transitions are blocked (e.g., a plan stuck with no valid event).\nAlways confirm with the user before executing.\n\n### `kas plan transition <plan-file> <event>`\n\nApply a named FSM event. Respects the transition table. Preferred over `set-status` when\na valid event exists.\n\nValid events: `plan_start`, `implement_start`, `review_start`, `review_approved`,\n`review_changes`, `cancel`, `reopen`\n\n```bash\nkas plan transition docs/plans/2026-02-27-my-plan.md review_approved\n```\n\nPrints resulting status on success. On failure, prints current status + valid events.\n\n### `kas plan implement <plan-file> [--wave N]`\n\nTransition plan to `implementing` and write a wave signal file so the TUI spawns the\nwave orchestrator. Default wave is 1.\n\n```bash\nkas plan implement docs/plans/2026-02-27-my-plan.md          # wave 1\nkas plan implement docs/plans/2026-02-27-my-plan.md --wave 3  # specific wave\n```\n\n---\n\n## Available Slash Commands\n\nThese one-shot commands are usable from any agent context:\n\n| Command | Purpose |\n|---------|---------|\n| `/kas.reset-plan <plan-file> <status>` | Force-override plan status (calls `kas plan set-status --force`). Shows before/after. |\n| `/kas.finish-branch [plan-file]` | Merge or PR a plan's branch. Infers plan from current branch if omitted. |\n| `/kas.cleanup [--dry-run]` | Three-pass cleanup: stale worktrees → orphan branches → ghost entries. Default dry-run. |\n| `/kas.implement <plan-file> [--wave N]` | Set plan to implementing, write wave signal. |\n| `/kas.triage` | Scan non-done/cancelled plans, show status + branch + last commit + worktree. Group by status. |\n\n---\n\n## Cleanup Protocol\n\nRun `/kas.cleanup` or perform the three-pass cleanup manually. **Always dry-run first.**\n\n### Pass 1 — Stale Worktrees\n\nFind git worktrees whose associated plan is `done` or `cancelled`:\n\n```bash\ngit worktree list --porcelain\nkas plan list --status done\nkas plan list --status cancelled\n```\n\nCross-reference. For each stale worktree:\n1. Confirm with user: \"remove worktree for plan `<name>` (status: done)?\"\n2. `git worktree remove <path>` (add `--force` only if user confirms dirty state)\n\n### Pass 2 — Orphan Branches\n\nFind local `plan/*` branches with no corresponding entry in `docs/plans/plan-state.json`:\n\n```bash\ngit branch --list 'plan/*'\n```\n\nFor each branch not in plan-state.json:\n1. Show: branch name, last commit, commits-ahead-of-main count\n2. Confirm: \"delete orphan branch `<branch>`?\"\n3. `git branch -d <branch>` (use `-D` only if user confirms)\n\n### Pass 3 — Ghost Plan Entries\n\nFind entries in `docs/plans/plan-state.json` with no corresponding `.md` file:\n\n```bash\n# read plan-state.json, cross-reference with fd output\nfd -e md . docs/plans/\n```\n\nFor each ghost entry:\n1. Show: plan key, status, branch\n2. Confirm: \"remove ghost entry `<key>` from plan-state.json?\"\n3. Edit plan-state.json to remove the entry (use `jq` or direct edit, preserve formatting)\n\n---\n\n## Release Version Bump\n\nThe GitHub Actions `Release` workflow (`.github/workflows/release.yml`) validates that the git tag\nmatches the `version` constant in `main.go` (line 25). If they don't match, the build fails:\n\n```\nERROR: Tag version (1.1.1) does not match version in main.go (1.1.0)\nPlease ensure the tag matches the version defined in main.go\n```\n\n**Before creating any `v*` tag**, always bump `main.go` first:\n\n```bash\n# 1. decide the new version\nNEW_VERSION=\"X.Y.Z\"\n\n# 2. update main.go\nsd 'version\\s*=\\s*\"[^\"]*\"' \"version     = \\\"${NEW_VERSION}\\\"\" main.go\n\n# 3. verify the change\nrg '^\\s*version\\s*=' main.go\n# expected output: version     = \"X.Y.Z\"\n\n# 4. commit on main\ngit add main.go\ngit commit -m \"chore: bump version to ${NEW_VERSION}\"\n\n# 5. create tag and push both\ngit tag \"v${NEW_VERSION}\"\ngit push origin main \"v${NEW_VERSION}\"\n```\n\n**Pre-flight check:** before pushing a tag, always run:\n\n```bash\nrg '^\\s*version\\s*=' main.go\n```\n\nand confirm the version string matches the tag (without the `v` prefix).\n\n**Never push a `v*` tag without this check.** The CI step `Validate tag matches version in main.go`\nwill reject the build if they diverge.\n\n---\n\n## Safety Rules\n\n1. **`--force` required for status overrides** — `kas plan set-status` without `--force` is an error.\n   Never add `--force` without user confirmation.\n\n2. **Confirm before destructive ops** — worktree removal, branch deletion, and plan-state edits\n   are irreversible. Always show what will change and get explicit confirmation.\n\n3. **Never modify plan file content** — plan `.md` files are the source of truth authored by the\n   planner. You update status in `plan-state.json` via `kas` commands only. Never edit plan `.md`\n   content.\n\n4. **FSM transitions validate state** — prefer `kas plan transition` over `set-status`. The FSM\n   ensures consistent state. Use `set-status --force` only when a plan is genuinely stuck with no\n   valid FSM event.\n\n5. **Dry-run by default** — cleanup operations default to reporting what would change. Execute only\n   after the user reviews the dry-run output and confirms.\n\n6. **Shared worktree safety** — if `KASMOS_PEERS` is set, other agents may be writing files.\n   Never run `git add -A`, `git reset`, or formatters across the whole project.\n\n---\n\n## Mode Signaling\n\n### Managed mode (`KASMOS_MANAGED=1`)\n\nYou are running as a kasmos-spawned instance. After completing an operation:\n\n1. Write a sentinel in `docs/plans/.signals/`:\n   - cleanup: `custodian-cleanup-<timestamp>.md`\n   - triage: `custodian-triage-<timestamp>.md`\n   - general: `custodian-done-<timestamp>.md`\n2. **Stop.** Do not proceed further. Kasmos will handle next steps.\n\n### Manual mode (`KASMOS_MANAGED` unset)\n\nYou are running in a raw terminal session. After completing an operation:\n\n1. Report what changed (plans updated, worktrees removed, branches deleted)\n2. Ask: \"anything else to clean up?\"\n3. Offer next steps if relevant (e.g., \"ready to trigger wave implementation?\")\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/kasmos-custodian\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-custodian",
+            "metadata": {
+              "name": "kasmos-custodian",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/kasmos-custodian",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232173616,
+              "end": 1772232173622
+            }
+          },
+          "id": "prt_ca144e6e7001pur8Kh2DwLpKnh",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144dc41001t1NvvGN8LhxDgi"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.opencode/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/ast-grep.md</file>\n<file>/home/kas/dev/kasmos/.opencode/skills/cli-tools/resources/rg.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.opencode/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232173854,
+              "end": 1772232173860
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144dc41001t1NvvGN8LhxDgi"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "cost": 0,
+          "tokens": {
+            "total": 27645,
+            "input": 3,
+            "output": 158,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 27484
+            }
+          },
+          "id": "prt_ca144e937001zcAUGUms40uwkQ",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144dc41001t1NvvGN8LhxDgi"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232173897,
+          "completed": 1772232179538
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 33861,
+          "input": 1,
+          "output": 290,
+          "reasoning": 0,
+          "cache": {
+            "read": 27484,
+            "write": 6086
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca144e949001AGArUvMG3adEp8",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "id": "prt_ca144ecc00017jX1s5In7WuWbJ",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now I'll follow the release protocol from the kasmos-custodian skill. Let me:\n\n1. Check current state (branch, any pending changes)\n2. Verify current version in main.go\n3. Bump to v1.1.2 using `sd`\n4. Verify the change\n5. Commit, tag, and push\n\nLet me start by checking the current state.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/aVyrSIwPr+d0IS47G/REDACTED/MaD2XYPIARhDswFxIzXGNxF/q6TwugV7vLnD2+fGx/6jvbBOotubk53wN2pMC/REDACTED/REDACTED/5+iFp/REDACTED/REDACTED/35BZEF/IYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772232174785,
+            "end": 1772232177117
+          },
+          "id": "prt_ca144ecc1001ClHsfHyzgslsRV",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        },
+        {
+          "type": "text",
+          "text": "Releasing v1.1.2. Pre-flight: check current branch, status, and version in `main.go`.",
+          "time": {
+            "start": 1772232178079,
+            "end": 1772232178079
+          },
+          "id": "prt_ca144f5de001eN1fvEvmrdDr25",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RoCa6VQdtMFXmspE6CgdfS",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git status --short && git branch --show-current",
+              "description": "Check git status and current branch"
+            },
+            "output": " M .agents/skills/kasmos-planner/SKILL.md\n M .codex/AGENTS.md\n D .opencode/agents/custodial.md\n M .opencode/agents/planner.md\n M .opencode/opencode.jsonc\n?? .claude/settings.json\n?? .entire/\n?? .opencode/plugins/\nmain\n",
+            "title": "Check git status and current branch",
+            "metadata": {
+              "output": " M .agents/skills/kasmos-planner/SKILL.md\n M .codex/AGENTS.md\n D .opencode/agents/custodial.md\n M .opencode/agents/planner.md\n M .opencode/opencode.jsonc\n?? .claude/settings.json\n?? .entire/\n?? .opencode/plugins/\nmain\n",
+              "exit": 0,
+              "description": "Check git status and current branch",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232178866,
+              "end": 1772232178882
+            }
+          },
+          "id": "prt_ca144f9a0001mjFHuzKjidtK63",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg '^\\s*version\\s*=' main.go",
+              "description": "Check current version in main.go"
+            },
+            "output": "\tversion     = \"1.1.0\"\n",
+            "title": "Check current version in main.go",
+            "metadata": {
+              "output": "\tversion     = \"1.1.0\"\n",
+              "exit": 0,
+              "description": "Check current version in main.go",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232179510,
+              "end": 1772232179513
+            }
+          },
+          "id": "prt_ca144fcb4001BokcE1lQU0iI60",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "cost": 0,
+          "tokens": {
+            "total": 33861,
+            "input": 1,
+            "output": 290,
+            "reasoning": 0,
+            "cache": {
+              "read": 27484,
+              "write": 6086
+            }
+          },
+          "id": "prt_ca144ff4a001bpsgRUWDvkNf5l",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144e949001AGArUvMG3adEp8"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232179539,
+          "completed": 1772232185863
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34369,
+          "input": 1,
+          "output": 342,
+          "reasoning": 0,
+          "cache": {
+            "read": 33570,
+            "write": 456
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca144ff53001wAdSmoiD79opdA",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "id": "prt_ca145043a001nqYIkojjhVYcsz",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        },
+        {
+          "type": "reasoning",
+          "text": "Current version is 1.1.0, we need to bump to 1.1.2. There are some uncommitted changes in the repo - I should note these but the release protocol says to bump main.go, commit, tag, and push. The uncommitted changes are to agent/skill files and config files. I should not commit those as part of the release bump.\n\nLet me proceed with the release: bump main.go from 1.1.0 to 1.1.2, commit just that change, tag, and push.\n\nNote: There are some uncommitted changes. I'll just commit the main.go change for the release.",
+          "metadata": {
+            "anthropic": {
+              "signature": "EqkFCkYICxgCKkCH5v5TBaRNR/97DagD/REDACTED/REDACTED/ZKpAEQ9SMBi/REDACTED/REDACTED/6WY0GQCpluh3Yo0fl/REDACTED/A1KBgzOjEadEYOhh0FCXCcxgI6BgbJ/REDACTED/REDACTED/LENwQfKZWYVcODXDdPL4KQGU/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772232180794,
+            "end": 1772232183313
+          },
+          "id": "prt_ca145043a002M0XIuvyBrMgCkm",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        },
+        {
+          "type": "text",
+          "text": "Current version is `1.1.0` on `main`. There are some uncommitted files — I'll commit only the version bump. Proceeding:\n\n**Step 1: bump `main.go` to `1.1.2`**",
+          "time": {
+            "start": 1772232184506,
+            "end": 1772232184506
+          },
+          "id": "prt_ca1450e120016wqDK0SEYf5FYk",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_019EBEVVtaAMm5fdB8jmdcAP",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "sd 'version\\s*=\\s*\"[^\"]*\"' 'version     = \"1.1.2\"' main.go && rg '^\\s*version\\s*=' main.go",
+              "description": "Bump version to 1.1.2 and verify"
+            },
+            "output": "\tversion     = \"1.1.2\"\n",
+            "title": "Bump version to 1.1.2 and verify",
+            "metadata": {
+              "output": "\tversion     = \"1.1.2\"\n",
+              "exit": 0,
+              "description": "Bump version to 1.1.2 and verify",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232185752,
+              "end": 1772232185758
+            }
+          },
+          "id": "prt_ca14512bc001v2YEZE3jAScDiL",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34369,
+            "input": 1,
+            "output": 342,
+            "reasoning": 0,
+            "cache": {
+              "read": 33570,
+              "write": 456
+            }
+          },
+          "id": "prt_ca14517fd001pwblEwds88BsWN",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        },
+        {
+          "type": "patch",
+          "hash": "b613de69dfb38a016718074ad4492f98fdb9b34e",
+          "files": [
+            "/home/kas/dev/kasmos/main.go"
+          ],
+          "id": "prt_ca1451805001VaSxLJVk2PZpGM",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca144ff53001wAdSmoiD79opdA"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232185864,
+          "completed": 1772232197587
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34500,
+          "input": 1,
+          "output": 109,
+          "reasoning": 0,
+          "cache": {
+            "read": 34026,
+            "write": 364
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca1451808001OHM5NG7X0XBz7B",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "id": "prt_ca1451b60001cBSlJGn3CuCAMC",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        },
+        {
+          "type": "text",
+          "text": "**Step 2: commit, tag, push**",
+          "time": {
+            "start": 1772232187020,
+            "end": 1772232187020
+          },
+          "id": "prt_ca1451b610014sLcMxeXbZ7K6d",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add main.go && git commit -m \"chore: bump version to 1.1.2\"",
+              "description": "Commit version bump"
+            },
+            "output": "[main 37bd29c] chore: bump version to 1.1.2\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+            "title": "Commit version bump",
+            "metadata": {
+              "output": "[main 37bd29c] chore: bump version to 1.1.2\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+              "exit": 0,
+              "description": "Commit version bump",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232187777,
+              "end": 1772232197578
+            }
+          },
+          "id": "prt_ca1451c8d001DGzjWGhKn0i4Pj",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34500,
+            "input": 1,
+            "output": 109,
+            "reasoning": 0,
+            "cache": {
+              "read": 34026,
+              "write": 364
+            }
+          },
+          "id": "prt_ca14545cb001q915Mm5f6BKNiN",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca1451808001OHM5NG7X0XBz7B"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232197588,
+          "completed": 1772232201638
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34656,
+          "input": 1,
+          "output": 104,
+          "reasoning": 0,
+          "cache": {
+            "read": 34390,
+            "write": 161
+          }
+        },
+        "variant": "medium",
+        "finish": "tool-calls",
+        "id": "msg_ca14545d4001kstJ6gK0e7JkTp",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "id": "prt_ca1454a6e001OW2vHxKNxqxP6q",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01TQLE8sXrcguGcScPTjLSXz",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git tag \"v1.1.2\" && git push origin main \"v1.1.2\"",
+              "description": "Tag v1.1.2 and push to remote"
+            },
+            "output": "[entire] Pushing session logs to origin...\nTo github.com:kastheco/kasmos.git\n   f588508..37bd29c  main -> main\n * [new tag]         v1.1.2 -> v1.1.2\n",
+            "title": "Tag v1.1.2 and push to remote",
+            "metadata": {
+              "output": "[entire] Pushing session logs to origin...\nTo github.com:kastheco/kasmos.git\n   f588508..37bd29c  main -> main\n * [new tag]         v1.1.2 -> v1.1.2\n",
+              "exit": 0,
+              "description": "Tag v1.1.2 and push to remote",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772232199438,
+              "end": 1772232201629
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34656,
+            "input": 1,
+            "output": 104,
+            "reasoning": 0,
+            "cache": {
+              "read": 34390,
+              "write": 161
+            }
+          },
+          "id": "prt_ca145559e001vqmnvgVKTaDLsK",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14545d4001kstJ6gK0e7JkTp"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772232201638,
+          "completed": 1772232203828
+        },
+        "parentID": "REDACTED",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "custodian",
+        "agent": "custodian",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos",
+          "root": "/home/kas/dev/kasmos"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 34813,
+          "input": 1,
+          "output": 85,
+          "reasoning": 0,
+          "cache": {
+            "read": 34551,
+            "write": 176
+          }
+        },
+        "variant": "medium",
+        "finish": "stop",
+        "id": "msg_ca14555a6001MwmdNltOcQ3TGO",
+        "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "id": "prt_ca1455898001HOLjG1y4RThhh6",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
+        },
+        {
+          "type": "text",
+          "text": "Done. Released `v1.1.2`:\n\n- `main.go` bumped: `1.1.0` → `1.1.2`\n- Commit: `37bd29c` — `chore: bump version to 1.1.2`\n- Tag `v1.1.2` pushed → CI `Release` workflow will trigger",
+          "time": {
+            "start": 1772232203800,
+            "end": 1772232203800
+          },
+          "id": "prt_ca1455899001UWpgzWbfnYkybu",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "8c8e4f14fdbf7e65f4a0712effdd431c68cee86e",
+          "cost": 0,
+          "tokens": {
+            "total": 34813,
+            "input": 1,
+            "output": 85,
+            "reasoning": 0,
+            "cache": {
+              "read": 34551,
+              "write": 176
+            }
+          },
+          "id": "prt_ca1455e2c001uVixtbuyqHYtzt",
+          "sessionID": "ses_35ebb23dcffeVYSkVP2yS9yNJG",
+          "messageID": "msg_ca14555a6001MwmdNltOcQ3TGO"
+        }
+      ]
+    }
+  ]
+}
