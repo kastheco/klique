@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "3a386b1022fc",
+  "strategy": "manual-commit",
+  "branch": "plan/create-kasmos-cli-skill",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".agents/skills/kasmos-cli/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3a/386b1022fc/0/metadata.json",
+      "transcript": "/3a/386b1022fc/0/full.jsonl",
+      "context": "/3a/386b1022fc/0/context.md",
+      "content_hash": "/3a/386b1022fc/0/content_hash.txt",
+      "prompt": "/3a/386b1022fc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 182925,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1671424,
+    "output_tokens": 14406,
+    "api_call_count": 35
+  }
+}

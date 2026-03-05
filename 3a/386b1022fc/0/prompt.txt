@@ -1,0 +1,131 @@
+Implement Task 1: Write the kasmos-cli SKILL.md
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Create a `kasmos-cli` skill that teaches agents the full `kas` command surface — task lifecycle, instance management, skills sync, and setup — so every role-specific skill can reference it instead of duplicating CLI docs.
+**Architecture:** Single SKILL.md file in `.agents/skills/kasmos-cli/` with frontmatter, command reference tables, workflow recipes, and anti-patterns. Symlinked into `.opencode/skills/` for project-level availability. Each role skill (planner, coder, reviewer, fixer) already embeds partial CLI knowledge; this skill centralizes it and the role skills can cross-reference it.
+**Tech Stack:** Markdown (SKILL.md), kas CLI (Go/cobra), opencode skill loading
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `.agents/skills/kasmos-cli/SKILL.md`
+
+**Step 1: write the failing test**
+
+No unit test — this is a documentation/skill artifact. Verification is structural: the skill must load via opencode's skill loader and `kas skills list` must show it after sync.
+
+Before writing content, derive the command surface from code, not memory:
+- `func NewTaskCmd() *cobra.Command` in `cmd/task.go`
+- `func NewInstanceCmd() *cobra.Command` in `cmd/instance.go`
+- `func newSkillsCmd() *cobra.Command` in `skills.go`
+- `func NewServeCmd() *cobra.Command` in `cmd/serve.go`
+- `func newCheckCmd() *cobra.Command` in `check.go`
+- `func init()` root registration in `main.go` for `kas setup` (alias `init`)
+
+Use the existing skill format as the template source:
+- Frontmatter + top-level heading pattern in `.agents/skills/kasmos-planner/SKILL.md`
+- Hard-gate/table style in `.agents/skills/kasmos-coder/SKILL.md`
+
+**Step 2: run test to verify it fails**
+
+```bash
+kas skills list | rg 'kasmos-cli'
+```
+
+expected: FAIL — no output (skill doesn't exist yet)
+
+Also treat `rg` exit code 1 (no match) as the expected failing condition.
+
+**Step 3: write minimal implementation**
+
+Create `.agents/skills/kasmos-cli/SKILL.md` with concrete, code-backed content.
+
+Required frontmatter/signature block:
+
+```md
+---
+name: kasmos-cli
+description: Use when an agent needs exact `kas` command syntax, flags, lifecycle transitions, or troubleshooting for task/instance/skills/setup/check/serve workflows.
+---
+
+# kasmos-cli
+```
+
+Build command reference sections from the live Cobra tree (run `kas <group> --help` and subcommand `--help`; do not copy stale `kas plan` docs):
+1. **`kas task`**
+   - Cover: `list`, `show`, `create`, `register`, `update-content`, `set-status`, `transition`, `implement`, `start`, `start-over`, `push`, `pr`, `merge`, `link-clickup`
+   - Include real flags from `cmd/task.go` (`--status`, `--force`, `--wave`, `--file`, `--message`, `--title`, `--branch`, `--description`, `--topic`, `--content`, `--project`)
+   - Include the exact transition event names from `executeTaskTransition` in `cmd/task.go`:
+     `plan_start`, `planner_finished`, `implement_start`, `implement_finished`, `review_approved`, `review_changes`, `request_review`, `start_over`, `reimplement`, `cancel`, `reopen`
+2. **`kas instance`**
+   - Cover: `list`, `kill`, `pause`, `resume`, `send`, `status`
+   - Include behavior constraints from `validateStatusForAction` in `cmd/instance.go` (cannot resume non-paused, cannot send to paused, etc.)
+3. **`kas skills`**
+   - Cover: `list`, `sync`
+   - Document that `skills list` shows personal + project skills and annotates symlinked entries as `(external)` (see `listSkillEntries` in `skills.go`)
+4. **`kas setup`**
+   - Include alias `init` and flags `--force`, `--clean` from `main.go`
+5. **`kas check`**
+   - Include `-v/--verbose` and health semantics: exit code is non-zero when health < 100% (see `check.go`)
+6. **`kas serve`**
+   - Include `--bind`, `--db`, `--port` and default port `7433` from `cmd/serve.go`
+
+Task lifecycle recipes must be executable copy/paste sequences with exact commands from this repo, including:
+- create + register/show/update lifecycle
+- branch/worktree lifecycle (`start`, `push`, `pr`, `merge`, `start-over`)
+- FSM-first flow (`transition`) vs override flow (`set-status --force`)
+
+Explicit edge cases/error-handling section (required):
+- `kas task set-status` fails without `--force` (`executeTaskSetStatus`)
+- `kas task implement --wave` rejects values `< 1` (`executeTaskImplement`)
+- `kas task update-content` reads stdin unless `--file` is provided; passing neither file nor piped stdin will block waiting for input (`cmd/task.go` update-content handler)
+- `kas task show` errors for missing task or empty stored content (`executeTaskShow`)
+- `kas check` may print useful output and still exit non-zero when health is not 100%
+
+Anti-patterns section must call out concrete mistakes observed in current skills/docs:
+- Using deprecated `kas plan ...` command forms instead of `kas task ...`
+- Editing task store state files directly instead of using `kas task` commands
+- Using `set-status` for normal transitions when `transition` event exists
+- Assuming `kas skills sync` syncs project `.opencode/skills` symlinks (it syncs personal `~/.agents/skills` to harness global dirs)
+
+No Go imports are needed; this task is markdown-only.
+
+**Step 4: run test to verify it passes**
+
+```bash
+kas skills list | rg 'kasmos-cli'
+```
+
+expected: PASS — skill appears in the list after sync
+
+**Step 5: commit**
+
+```bash
+git add .agents/skills/kasmos-cli/SKILL.md
+git commit -m "feat: add kasmos-cli skill with full kas command reference"
+```
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
