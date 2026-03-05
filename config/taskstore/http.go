@@ -247,7 +247,7 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 	return nil
 }
 
-// GetSubtasks is currently not implemented over HTTP.
+// GetSubtasks sends the request to the server over HTTP.
 func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskSubtasksURL(project, filename), nil)
 	if err != nil {
@@ -271,7 +271,7 @@ func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error
 	return subtasks, nil
 }
 
-// SetSubtasks is currently not implemented over HTTP.
+// SetSubtasks sends the request to the server over HTTP.
 func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {
 	if subtasks == nil {
 		subtasks = []SubtaskEntry{}
@@ -298,7 +298,7 @@ func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntr
 	return nil
 }
 
-// UpdateSubtaskStatus is currently not implemented over HTTP.
+// UpdateSubtaskStatus sends the request to the server over HTTP.
 func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {
 	body, err := json.Marshal(struct {
 		Status SubtaskStatus `json:"status"`
@@ -324,7 +324,7 @@ func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int
 	return nil
 }
 
-// SetPhaseTimestamp is currently not implemented over HTTP.
+// SetPhaseTimestamp sends the request to the server over HTTP.
 func (s *HTTPStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {
 	body, err := json.Marshal(struct {
 		Phase string    `json:"phase"`
@@ -546,7 +546,7 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 	return nil
 }
 
-// SetPlanGoal is currently not implemented over HTTP.
+// SetPlanGoal sends the request to the server over HTTP.
 func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {
 	body, err := json.Marshal(struct {
 		Goal string `json:"goal"`

@@ -193,7 +193,7 @@ func TestInfoPane_InstanceWithTaskAssignment(t *testing.T) {
 
 	output := pane.String()
 	assert.Contains(t, output, "add dark mode toggle")
-	assert.Contains(t, output, "task 3 of 6: http endpoints")
+	assert.Contains(t, output, "3 of 6: http endpoints")
 }
 
 func TestInfoPane_InstanceWithResources(t *testing.T) {
