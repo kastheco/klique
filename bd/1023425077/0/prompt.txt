@@ -1,0 +1,15 @@
+Implement move-default-config.md using the `kasmos-coder` skill. Retrieve the full plan with `kas task show move-default-config.md` and execute all tasks sequentially.
+
+Reviewer feedback from previous round:
+Round 1 — changes required.
+
+## critical
+
+- `internal/initcmd/initcmd_test.go:27,60-65` — `TestWritePhase` regression: test creates config dir at `filepath.Join(tmpHome, ".config", "kasmos")` and asserts `config.toml` exists there (line 60), but `GetConfigDir()` now returns `<cwd>/.kasmos/` so `SaveTOMLConfig` writes elsewhere. Fix: add `t.Chdir(projectDir)` to control CWD, update `configDir` and `tomlPath` assertions to use `.kasmos` under the project dir, and set `HOME` to an empty temp dir to avoid accidental migration. Run `go test ./internal/initcmd/...` to confirm.
+
+## self-fixed (no action needed)
+
+- `config/toml.go:89` — stale doc comment on `LoadTOMLConfig` still referenced `~/.config/kasmos/config.toml`; updated to `<cwd>/.kasmos/config.toml`
+- `config/toml.go:138` — stale doc comment on `SaveTOMLConfig` same issue; updated
+- `internal/initcmd/wizard/model_review.go:11` — user-visible `reviewConfigPath` const still said `~/.config/kasmos/config.toml`; updated to `.kasmos/config.toml`
+- `main.go:193` — `kas setup` help text still said `~/.config/kasmos/config.toml`; updated to `.kasmos/config.toml`
