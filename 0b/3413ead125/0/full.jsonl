@@ -1,0 +1,887 @@
+{
+  "info": {
+    "id": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+    "slug": "glowing-circuit",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+    "title": "kas: review #4 improved-info-tab",
+    "version": "1.2.17",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "time": {
+      "created": 1772697592439,
+      "updated": 1772697626198
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772697592455
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "reviewer",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-4-6"
+        },
+        "variant": "high",
+        "id": "msg_cbd02a280001680rHRjHgvFl2k",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Review the implementation of plan: improved-info-tab\n\nRetrieve the plan content with `kas task show improved-info-tab.md` to understand the goals, architecture, and tasks that were implemented.\n\nIMPORTANT: Only review changes from this branch. Use `git diff main..HEAD` to see exactly\nwhat was changed by the implementation — do NOT review code that was inherited from main.\nFiles may contain code from main that is outside the scope of this plan.\n\nUse the `kasmos-reviewer` skill for structured review methodology.\n\nFocus areas:\n- Does the implementation match the plan's stated goals and architecture?\n- Were any tasks implemented incorrectly or incompletely?\n- Code quality, error handling, test coverage\n- Regressions or unintended side effects introduced by this branch's changes\n\n## All severity tiers are blocking\n\nEvery issue you find — Critical, Important, or Minor — must be resolved before approval.\nThere is no \"note for later\" or \"nice to have\" category. If you flag it, it gets fixed.\n\n## Self-fix protocol\n\nFor trivial issues, fix them yourself instead of kicking back to the coder:\n\n**Self-fix (commit directly):**\n- Typos in code, comments, or strings\n- Missing or wrong doc comments\n- Obvious one-liner fixes (wrong constant name, missing return)\n- Import cleanup\n- Trivial formatting the linter missed\n\n**Kick to coder (write review-changes signal):**\n- Anything requiring debugging or investigation\n- Logic changes, even small ones\n- Missing test coverage\n- Architectural concerns\n- Anything where the right fix isn't immediately obvious\n\nIf only self-fixable issues remain, fix them all and write review-approved.\nIf any coder-required issues exist, self-fix what you can first, then write review-changes.\n\n## When you are done\n\nYou MUST write a signal file to indicate your verdict. Without this, the orchestrator\ncannot progress the plan lifecycle.\n\nIf approved (zero issues remaining after self-fixes):\n```\necho \"Approved. <brief summary>\" > .kasmos/signals/review-approved-improved-info-tab.md\n```\n\nIf changes are required (issues that need a coder):\n```\ncat > .kasmos/signals/review-changes-improved-info-tab.md << 'SIGNAL'\n## review round N\n\n### critical\n- [file:line] description — why it matters\n\n### important\n- [file:line] description — why it matters\n\n### minor\n- [file:line] description — why it matters\n\n### self-fixed (no action needed)\n- [file:line] what was fixed\nSIGNAL\n```\n\nUse the structured format above. Include the round number (1 for first review, 2 for re-review\nafter fixes, etc.). Omit empty tiers. Every item must have a file:line reference.\n\nWrite exactly one of these signal files before you finish.\n",
+          "id": "prt_cbd02a280002y37m2EO4lT5MAJ",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a280001680rHRjHgvFl2k"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697592463,
+          "completed": 1772697596820
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 31037,
+          "input": 2,
+          "output": 125,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 30910
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd02a28f001Qh4uahxhjMxDX1",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd02af22001Ig7JEHEQydACv9",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a28f001Qh4uahxhjMxDX1"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me start by loading the required skills and then reviewing the implementation.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/voVYk3bZKfbGEjkwzYDYdEZQvnj2A0HfjjYy2oMYr/cIVQbjA8/9ydb0BOqyBh6j6hgB"
+            }
+          },
+          "time": {
+            "start": 1772697595682,
+            "end": 1772697596503
+          },
+          "id": "prt_cbd02af22002WziQvV0l2IDAR2",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a28f001Qh4uahxhjMxDX1"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-reviewer"
+            },
+            "output": "<skill_content name=\"kasmos-reviewer\">\n# Skill: kasmos-reviewer\n\n# kasmos reviewer\n\nYou are the reviewer. Your job is to audit the implementation branch against the plan, enforce\nquality standards, and either approve or request changes. You do not implement features.\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it is a git subcommand, not standalone `diff`. Use\n`GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and\nuse the replacement. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` |\n| Find literal string | `rg` | `grep` |\n| Find files by name/extension | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Review code changes | `GIT_EXTERNAL_DIFF=difft git diff` | standalone `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n## Where You Fit\n\nYou review the implementation branch **after coders finish**. Your scope is the diff between\nthe base branch and HEAD — nothing more.\n\n```bash\n# See all changes since branching from main\nGIT_EXTERNAL_DIFF=difft git diff main..HEAD\n\n# Or by file for targeted review\nGIT_EXTERNAL_DIFF=difft git diff main..HEAD -- path/to/file.go\n```\n\nIn **managed mode** (`KASMOS_MANAGED=1`): kasmos spawned you after receiving the\n`coder-finished-<planfile>` sentinel. Review, signal outcome, and stop. Do not merge,\npush, or create PRs — kasmos handles post-approval actions.\n\nIn **manual mode** (unset): you were invoked directly or self-dispatched. After signaling,\nadditionally offer merge/PR/keep/discard options (see Signal Format section).\n\n## Review Checklist\n\nWork through these in order. Cite `file:line` for every finding.\n\n### Spec Compliance\n\n- [ ] All tasks in the plan are present and complete — check each `### Task N:` entry\n- [ ] No scope creep — changes are confined to what the plan describes\n- [ ] Task requirements met — not just \"something was written\" but the _right_ thing\n- [ ] Wave structure respected — tasks from later waves don't depend on earlier unfinished work\n- [ ] Plan goal achieved — step back and verify the top-level `Goal:` is satisfied\n\n### Code Quality\n\n- [ ] Error handling — errors returned, not silently dropped; no bare `panic` in library code\n- [ ] DRY — no copy-paste logic that should be shared; helper functions extracted where useful\n- [ ] Edge cases — nil inputs, empty slices, zero values, concurrent access if applicable\n- [ ] Test coverage — new logic has tests; tests actually exercise the code, not just call it\n- [ ] Test quality — table-driven where appropriate, no test helpers that hide assertions\n- [ ] Production readiness — no debug prints, no TODO comments left in critical paths\n- [ ] Naming — exported names are clear, unexported names are concise; no abbreviation soup\n- [ ] Imports — no unused imports, no import cycles introduced\n- [ ] Documentation — exported types and functions have doc comments\n\n### Running Tests\n\nRun the full test suite before approving. Do not approve on a failing test run.\n\n```bash\ngo test ./...\n```\n\nIf tests are slow, at minimum run tests for changed packages:\n\n```bash\n# Identify changed packages\ngit diff main..HEAD --name-only | rg '\\.go$' | sd '/[^/]+\\.go$' '' | sort -u\n\n# Run them\ngo test ./path/to/changed/... ./other/changed/...\n```\n\n## Self-Fix Protocol\n\nNot everything requires kicking back to the coder. Use judgment:\n\n### Fix it yourself (commit directly)\n\n- Typos in strings, comments, doc comments\n- Missing or incorrect doc comment on an exported symbol\n- Obvious import cleanup (unused import, wrong order)\n- Trivial one-liner corrections (off-by-one in a constant, wrong format verb)\n- Spell check fixes: `typos --write-changes`\n\nWhen self-fixing, commit with `fix: <description> (reviewer self-fix)` before signaling.\n\n### Kick to coder\n\n- Any logic error or incorrect algorithm\n- Missing tests or tests that don't cover the stated case\n- Architectural concerns (wrong abstraction, wrong package boundary)\n- Debugging work (flaky test, subtle race condition, unclear root cause)\n- Anything requiring more than ~10 lines of new code\n\nWhen kicking to coder, write a `review-changes` signal (see Signal Format). Be specific —\nthe coder should not have to guess what you want.\n\n## All Tiers Are Blocking\n\nEvery finding must be resolved before approval. There is no \"approved with comments.\"\n\n| Severity | Definition | Examples |\n|----------|-----------|---------|\n| **Critical** | Correctness, security, or data integrity at risk | panic in production path, data race, wrong algorithm, missing error check on DB write |\n| **Important** | Quality or maintainability significantly degraded | missing tests for new logic, copy-paste logic across 3+ sites, exported function without doc |\n| **Minor** | Small issues that accumulate into tech debt | typo in comment, inconsistent naming in a single file, magic number without const |\n\nAll three tiers must reach zero before you write a `review-approved` signal.\n\n### Round Tracking\n\nEach review cycle is one round. Track rounds explicitly in your signal output.\n\n- **Round 1** — initial review of the branch\n- **Round 2** — re-review after coder addressed Round 1 feedback\n- **Round N** — subsequent re-reviews\n\nRe-review only the items from the previous round plus any regressions introduced by fixes.\nDo not re-litigate closed items.\n\n## Verification Before Approval\n\nBefore writing `review-approved`:\n\n1. `go test ./...` passes with zero failures\n2. `typos` finds no spelling errors in changed files\n3. All checklist items resolved\n4. All previous round findings confirmed fixed (cite file:line)\n5. No new issues introduced by fixes\n\n```bash\n# Confirm test pass\ngo test ./... 2>&1\n\n# Confirm no typos in changed files\ngit diff main..HEAD --name-only | xargs typos\n```\n\n## Signal Format\n\n### Approved\n\n```bash\nmkdir -p .kasmos/signals\necho \"Approved. <one-sentence summary of what was reviewed and confirmed>\" \\\n  > .kasmos/signals/review-approved-<planfile>\n```\n\nExample:\n```bash\necho \"Approved. all 4 tasks complete, tests pass, no issues found.\" \\\n  > .kasmos/signals/review-approved-2026-02-27-feature.md\n```\n\n### Changes Needed\n\nWrite a structured heredoc signal. Include the round number, all findings grouped by severity,\nand file:line citations for every item.\n\n```bash\nmkdir -p .kasmos/signals\ncat > .kasmos/signals/review-changes-<planfile> << 'EOF'\nRound N — changes required.\n\n## critical\n\n- `path/to/file.go:42` — <description of issue and what correct behavior should be>\n\n## important\n\n- `path/to/file.go:88` — <description>\n- `other/file.go:15-23` — <description>\n\n## minor\n\n- `path/to/file.go:100` — <description>\n\n## self-fixed\n\n- typo in `path/to/file.go:77` — fixed directly (committed)\n\nitems in \"self-fixed\" are already resolved. only items in critical/important/minor require\ncoder action.\nEOF\n```\n\nIf there are no findings in a tier, omit that tier header entirely.\n\n### Mode-Specific Behavior\n\n**Managed mode** (`KASMOS_MANAGED=1`):\nWrite the signal file and stop. Do not merge, push, or create PRs.\nkasmos reads the sentinel and handles the next step (spawning another coder wave or\npresenting merge options to the user).\n\n```bash\n# After writing signal:\nexit 0  # stop here\n```\n\n**Manual mode** (unset):\nWrite the signal file, then additionally offer the following options to the user:\n\n- If approved: offer to merge to main, create a PR, keep the branch, or discard it\n- If changes needed: offer to switch back to the coder role, or handle the fixes yourself\n\nPresent options concisely, wait for user input before taking any action.\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/kasmos-reviewer\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-reviewer",
+            "metadata": {
+              "name": "kasmos-reviewer",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/kasmos-reviewer",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697596765,
+              "end": 1772697596769
+            }
+          },
+          "id": "prt_cbd02b257001YXEUDNjjSt5e4q",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a28f001Qh4uahxhjMxDX1"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_013sC7RRa5aYp17pGrmoNViu",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697596791,
+              "end": 1772697596794
+            }
+          },
+          "id": "prt_cbd02b35e001xrTTaxJkbCBUwu",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a28f001Qh4uahxhjMxDX1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 31037,
+            "input": 2,
+            "output": 125,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 30910
+            }
+          },
+          "id": "prt_cbd02b388001up7PlxGRtps3or",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02a28f001Qh4uahxhjMxDX1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697596820,
+          "completed": 1772697601874
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 37430,
+          "input": 1,
+          "output": 204,
+          "reasoning": 0,
+          "cache": {
+            "read": 30910,
+            "write": 6315
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd02bd14001M749y0i73vBTuh",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me retrieve the plan content and look at the git diff to understand what was implemented.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/Thxr76DBX19VUf/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772697599252,
+            "end": 1772697600019
+          },
+          "id": "prt_cbd02bd14002S62JKTkBAQUiot",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "Now let me retrieve the plan and examine the implementation diff.",
+          "time": {
+            "start": 1772697600793,
+            "end": 1772697600793
+          },
+          "id": "prt_cbd02c014001TfmK49prs8kLOm",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "kas task show improved-info-tab.md 2>&1",
+              "description": "Retrieve the plan content"
+            },
+            "output": "Error: task not found: improved-info-tab.md\nUsage:\n  kas task show <plan-file> [flags]\n\nFlags:\n  -h, --help   help for show\n\ntask not found: improved-info-tab.md\n",
+            "title": "Retrieve the plan content",
+            "metadata": {
+              "output": "Error: task not found: improved-info-tab.md\nUsage:\n  kas task show <plan-file> [flags]\n\nFlags:\n  -h, --help   help for show\n\ntask not found: improved-info-tab.md\n",
+              "exit": 0,
+              "description": "Retrieve the plan content",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697601237,
+              "end": 1772697601316
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_013zRX7phaw9P8RHmapFhstF",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git log --oneline main..HEAD 2>&1",
+              "description": "Show commits on this branch"
+            },
+            "output": "a6c3673a fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\n4614a8f2 fix: clean up SetSubtasks transaction — remove redundant rollback and err=nil (reviewer self-fix)\n491f0898 fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\n23846ead fix: correct test assertion and doc comments (reviewer self-fix)\n49f2e8a6 [kas] update from 'improved-info-tab-W3-T4' on 05 Mar 26 01:17 CST (paused)\n3d8b4177 feat(task-4): enrich info pane with goal, lifecycle timestamps, and subtask progress\ncf5be550 feat(task-3): persist ingestion metadata and wave subtask states\ndcd7509b feat(task-2): add taskstore subtasks and metadata endpoints\na06ba32d feat(task-1): persist subtasks, phase timestamps, and goals\n",
+            "title": "Show commits on this branch",
+            "metadata": {
+              "output": "a6c3673a fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\n4614a8f2 fix: clean up SetSubtasks transaction — remove redundant rollback and err=nil (reviewer self-fix)\n491f0898 fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\n23846ead fix: correct test assertion and doc comments (reviewer self-fix)\n49f2e8a6 [kas] update from 'improved-info-tab-W3-T4' on 05 Mar 26 01:17 CST (paused)\n3d8b4177 feat(task-4): enrich info pane with goal, lifecycle timestamps, and subtask progress\ncf5be550 feat(task-3): persist ingestion metadata and wave subtask states\ndcd7509b feat(task-2): add taskstore subtasks and metadata endpoints\na06ba32d feat(task-1): persist subtasks, phase timestamps, and goals\n",
+              "exit": 0,
+              "description": "Show commits on this branch",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697601849,
+              "end": 1772697601852
+            }
+          },
+          "id": "prt_cbd02c4d6001Ho7WsWIOLIj8Mp",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 37430,
+            "input": 1,
+            "output": 204,
+            "reasoning": 0,
+            "cache": {
+              "read": 30910,
+              "write": 6315
+            }
+          },
+          "id": "prt_cbd02c74b001CimrwMwTWPwYpf",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697601874,
+          "completed": 1772697607206
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 37970,
+          "input": 1,
+          "output": 173,
+          "reasoning": 0,
+          "cache": {
+            "read": 37225,
+            "write": 571
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd02c752001GrWFHjy6YV0iBs",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd02d44a001uCDc7isePuqctl",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02c752001GrWFHjy6YV0iBs"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls .kasmos/plans/ 2>/dev/null || ls .kasmos/ 2>/dev/null",
+              "description": "Find plan files in kasmos directory"
+            },
+            "output": "config.json\nconfig.toml\nlogs\ntaskstore.db\ntaskstore.db-shm\ntaskstore.db-wal\n",
+            "title": "Find plan files in kasmos directory",
+            "metadata": {
+              "output": "config.json\nconfig.toml\nlogs\ntaskstore.db\ntaskstore.db-shm\ntaskstore.db-wal\n",
+              "exit": 0,
+              "description": "Find plan files in kasmos directory",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697606013,
+              "end": 1772697606015
+            }
+          },
+          "id": "prt_cbd02d44b001wGwsB62IAEP0MW",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02c752001GrWFHjy6YV0iBs"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff --stat main..HEAD 2>&1 | head -60",
+              "description": "Show changed files overview"
+            },
+            "output": " .agents/skills/kasmos-cli/SKILL.md | 248 ----------------\n .gitignore                         |   7 +\n .kasmos/config.toml                |   1 -\n .opencode/skills/kasmos-cli        |   1 -\n app/app.go                         |   1 +\n app/app_actions.go                 |   3 +\n app/app_info_pane_test.go          | 350 ++++++++++++++++++++++\n app/app_input.go                   |  10 +-\n app/app_input_keybytes_test.go     |   8 -\n app/app_state.go                   | 118 +++++++-\n config/taskfsm/fsm.go              |  26 +-\n config/taskfsm/fsm_test.go         |  44 +++\n config/taskstate/taskstate.go      | 117 ++++++--\n config/taskstate/taskstate_test.go |  77 +++++\n config/taskstore/http.go           | 150 ++++++++++\n config/taskstore/http_test.go      |  85 ++++++\n config/taskstore/server.go         | 136 +++++++++\n config/taskstore/server_test.go    | 189 ++++++++++++\n config/taskstore/sqlite.go         | 309 ++++++++++++++++++--\n config/taskstore/sqlite_test.go    |  63 ++++\n config/taskstore/store.go          |  57 +++-\n docs/plans/improved-info-tab.md    | 582 +++++++++++++++++++++++++++++++++++++\n orchestration/engine.go            |  20 ++\n orchestration/engine_test.go       |  36 +++\n ui/info_pane.go                    | 199 +++++++++++--\n ui/info_pane_test.go               |  61 ++++\n ui/tabbed_window.go                |   4 +\n 27 files changed, 2534 insertions(+), 368 deletions(-)\n",
+            "title": "Show changed files overview",
+            "metadata": {
+              "output": " .agents/skills/kasmos-cli/SKILL.md | 248 ----------------\n .gitignore                         |   7 +\n .kasmos/config.toml                |   1 -\n .opencode/skills/kasmos-cli        |   1 -\n app/app.go                         |   1 +\n app/app_actions.go                 |   3 +\n app/app_info_pane_test.go          | 350 ++++++++++++++++++++++\n app/app_input.go                   |  10 +-\n app/app_input_keybytes_test.go     |   8 -\n app/app_state.go                   | 118 +++++++-\n config/taskfsm/fsm.go              |  26 +-\n config/taskfsm/fsm_test.go         |  44 +++\n config/taskstate/taskstate.go      | 117 ++++++--\n config/taskstate/taskstate_test.go |  77 +++++\n config/taskstore/http.go           | 150 ++++++++++\n config/taskstore/http_test.go      |  85 ++++++\n config/taskstore/server.go         | 136 +++++++++\n config/taskstore/server_test.go    | 189 ++++++++++++\n config/taskstore/sqlite.go         | 309 ++++++++++++++++++--\n config/taskstore/sqlite_test.go    |  63 ++++\n config/taskstore/store.go          |  57 +++-\n docs/plans/improved-info-tab.md    | 582 +++++++++++++++++++++++++++++++++++++\n orchestration/engine.go            |  20 ++\n orchestration/engine_test.go       |  36 +++\n ui/info_pane.go                    | 199 +++++++++++--\n ui/info_pane_test.go               |  61 ++++\n ui/tabbed_window.go                |   4 +\n 27 files changed, 2534 insertions(+), 368 deletions(-)\n",
+              "exit": 0,
+              "description": "Show changed files overview",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697607073,
+              "end": 1772697607079
+            }
+          },
+          "id": "prt_cbd02d77e001wjIS3OQ24AHxb4",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02c752001GrWFHjy6YV0iBs"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 37970,
+            "input": 1,
+            "output": 173,
+            "reasoning": 0,
+            "cache": {
+              "read": 37225,
+              "write": 571
+            }
+          },
+          "id": "prt_cbd02dc1e001QEBafTssNhgidI",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02c752001GrWFHjy6YV0iBs"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697607207,
+          "completed": 1772697611113
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 38695,
+          "input": 1,
+          "output": 87,
+          "reasoning": 0,
+          "cache": {
+            "read": 37796,
+            "write": 811
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd02dc27001y8gUZnJBWbFsQo",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd02e89d001G7kNYt2Koa4sdZ",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02dc27001y8gUZnJBWbFsQo"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01Bj26vmtNTDHQ3ZNd6VRtkN",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/docs/plans/improved-info-tab.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/docs/plans/improved-info-tab.md</path>\n<type>file</type>\n<content>1: # Improved Info Tab Implementation Plan\n2: \n3: **Goal:** Persist plan subtask statuses and phase timestamps in the database, then overhaul the info pane UI to show plan summary, lifecycle timeline, and all-waves progress with per-task detail.\n4: \n5: **Architecture:** Add a `subtasks` table and phase-timestamp columns to the existing SQLite task store. Parse plan content during ingestion to populate subtask rows and extract the goal field. Hook FSM transitions to record phase timestamps and orchestrator state changes to update subtask status. Redesign the info pane to render the new data in a scrollable multi-section layout (metadata → goal → lifecycle → progress → instances).\n6: \n7: **Tech Stack:** Go, SQLite (modernc.org/sqlite), bubbletea/lipgloss (charm v2), existing taskstore/taskstate/taskfsm packages.\n8: \n9: **Size:** Medium (estimated ~2.5 hours, 4 tasks, 3 waves)\n10: \n11: ---\n12: \n13: ## Wave 1: Database Schema and SQLite Store\n14: \n15: ### Task 1: Subtask Table, Phase Timestamps, and SQLiteStore Methods\n16: \n17: **Files:**\n18: - Modify: `config/taskstore/store.go`\n19: - Modify: `config/taskstore/sqlite.go`\n20: - Modify: `config/taskstore/testing.go`\n21: - Modify: `config/taskstore/sqlite_test.go`\n22: \n23: **Step 1: write the failing test**\n24: \n25: Add tests to `sqlite_test.go` that exercise subtask CRUD, phase timestamps, and goal persistence using the same assert style already used in this file (`require.NoError`, then `assert.Equal`). Keep names stable so Step 2/4 regexes keep working:\n26: \n27: ```go\n28: func TestSQLiteStore_SubtaskCRUD(t *testing.T)\n29: func TestSQLiteStore_PhaseTimestamps(t *testing.T)\n30: func TestSQLiteStore_PlanGoal(t *testing.T)\n31: ```\n32: \n33: In `TestSQLiteStore_SubtaskCRUD`, assert all of these explicitly:\n34: - `SetSubtasks` replaces prior rows for the same `(project, plan)` (delete + insert semantics).\n35: - `GetSubtasks` ordering is deterministic by `wave_number`, then `task_number`.\n36: - `UpdateSubtaskStatus` updates one task row only and persists `updated_at` non-zero.\n37: \n38: In `TestSQLiteStore_PhaseTimestamps`, also assert unknown phase handling:\n39: \n40: ```go\n41: err := store.SetPhaseTimestamp(project, \"plan.md\", \"invalid-phase\", now)\n42: require.Error(t, err)\n43: assert.Contains(t, err.Error(), \"unknown phase\")\n44: ```\n45: \n46: **Step 2: run test to verify it fails**\n47: \n48: ```bash\n49: go test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v\n50: ```\n51: \n52: expected: FAIL — new types/methods/columns not implemented yet.\n53: \n54: **Step 3: write minimal implementation**\n55: \n56: Implement concrete signatures first, then wire SQL.\n57: \n58: In `store.go`:\n59: - Add `SubtaskStatus` and `SubtaskEntry`:\n60: \n61: ```go\n62: type SubtaskStatus string\n63: \n64: type SubtaskEntry struct {\n65:     PlanFilename string        `json:\"plan_filename\"`\n66:     WaveNumber   int           `json:\"wave_number\"`\n67:     TaskNumber   int           `json:\"task_number\"`\n68:     Title        string        `json:\"title\"`\n69:     Status       SubtaskStatus `json:\"status\"`\n70:     UpdatedAt    time.Time     `json:\"updated_at,omitempty\"`\n71: }\n72: ```\n73: \n74: - Add `TaskEntry` fields (all optional/zero-safe):\n75: \n76: ```go\n77: PlanningAt     time.Time `json:\"planning_at,omitempty\"`\n78: ImplementingAt time.Time `json:\"implementing_at,omitempty\"`\n79: ReviewingAt    time.Time `json:\"reviewing_at,omitempty\"`\n80: DoneAt         time.Time `json:\"done_at,omitempty\"`\n81: Goal           string    `json:\"goal,omitempty\"`\n82: ```\n83: \n84: - Extend `Store` with exact signatures:\n85: \n86: ```go\n87: SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error\n88: GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)\n89: UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error\n90: SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error\n91: SetPlanGoal(project, planFilename, goal string) error\n92: ```\n93: \n94: In `sqlite.go`, follow existing patterns already used by this package:\n95: - Error wrapping pattern: `fmt.Errorf(\"<operation>: %w\", err)`.\n96: - Not-found detection pattern: `RowsAffected()==0` -> `fmt.Errorf(\"plan not found: %s/%s\", project, filename)`.\n97: - Time storage pattern: `formatTime`/`parseTime` (RFC3339Nano text columns).\n98: \n99: Add schema + migrations:\n100: - Create `subtasks` table in `schema` with unique key `(project, plan_filename, task_number)`.\n101: - Add tasks columns via `migrateAddColumn` constants:\n102:   - `planning_at`, `implementing_at`, `reviewing_at`, `done_at`, `goal`.\n103: - Add a `subtasksTableMigration` constant and execute `CREATE TABLE IF NOT EXISTS subtasks (...)` in `NewSQLiteStore` after base `schema` exec.\n104: \n105: Update task queries/scanners:\n106: - `Create`, `Get`, `Update`, `List`, `ListByStatus`, `ListByTopic`, `scanTaskEntry`, `scanTaskEntries` must include the new five task columns.\n107: - Keep `Update` behavior consistent with existing content-preservation test: do not re-add `content` into `UPDATE ... SET ...`.\n108: \n109: Implement methods with transactional safety:\n110: \n111: ```go\n112: func (s *SQLiteStore) SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error\n113: func (s *SQLiteStore) GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)\n114: func (s *SQLiteStore) UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error\n115: func (s *SQLiteStore) SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error\n116: func (s *SQLiteStore) SetPlanGoal(project, planFilename, goal string) error\n117: ```\n118: \n119: `SetSubtasks` must:\n120: - begin transaction,\n121: - delete existing rows for `(project, plan_filename)`,\n122: - insert all provided rows,\n123: - commit.\n124: \n125: `SetPhaseTimestamp` should map phase -> column with a closed switch (no dynamic SQL from user input):\n126: - `planning` -> `planning_at`\n127: - `implementing` -> `implementing_at`\n128: - `reviewing` -> `reviewing_at`\n129: - `done` -> `done_at`\n130: - otherwise return `fmt.Errorf(\"unknown phase: %s\", phase)`\n131: \n132: For `config/taskstore/testing.go`, keep return type as `Store`, but ensure compile remains clean with the expanded interface (no behavior change needed).\n133: \n134: **Step 4: run test to verify it passes**\n135: \n136: ```bash\n137: go test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v\n138: ```\n139: \n140: expected: PASS\n141: \n142: **Step 5: commit**\n143: \n144: ```bash\n145: git add config/taskstore/store.go config/taskstore/sqlite.go config/taskstore/sqlite_test.go config/taskstore/testing.go\n146: git commit -m \"feat: add subtasks table, phase timestamps, and goal column to task store\"\n147: ```\n148: \n149: ## Wave 2: HTTP Transport and Data Ingestion Pipeline\n150: \n151: > **depends on wave 1:** HTTPStore and server need the Store interface additions from Task 1. Data ingestion needs the SetSubtasks/SetPhaseTimestamp/SetPlanGoal methods.\n152: \n153: ### Task 2: HTTPStore Client and Server Endpoints\n154: \n155: **Files:**\n156: - Modify: `config/taskstore/http.go`\n157: - Modify: `config/taskstore/server.go`\n158: - Modify: `config/taskstore/http_test.go`\n159: - Modify: `config/taskstore/server_test.go`\n160: \n161: **Step 1: write the failing test**\n162: \n163: Add round-trip tests to `http_test.go` and endpoint contract tests to `server_test.go`, following existing server setup pattern (`httptest.NewServer(taskstore.NewHandler(...))`).\n164: \n165: Use these method signatures in tests so compiler drives implementation:\n166: \n167: ```go\n168: func (s *HTTPStore) SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error\n169: func (s *HTTPStore) GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)\n170: func (s *HTTPStore) UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error\n171: func (s *HTTPStore) SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error\n172: func (s *HTTPStore) SetPlanGoal(project, planFilename, goal string) error\n173: ```\n174: \n175: Also add server-only tests that validate:\n176: - `400` for malformed JSON,\n177: - `404` when task/subtask not found,\n178: - `200` for success,\n179: - JSON error body shape remains `{ \"error\": \"...\" }` (existing `writeError` contract).\n180: \n181: **Step 2: run test to verify it fails**\n182: \n183: ```bash\n184: go test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v\n185: ```\n186: \n187: expected: FAIL — HTTP methods/routes missing.\n188: \n189: **Step 3: write minimal implementation**\n190: \n191: Keep parity with existing transport conventions in `http.go` and `server.go`:\n192: - client methods call `do(req)` and use `decodeError(resp)` for non-success status.\n193: - handlers use `writeError(...)` and `writeJSON(...)`.\n194: - not-found detection remains `isNotFound(err)`.\n195: \n196: Add server endpoints in `server.go`:\n197: - `GET /v1/projects/{project}/tasks/{filename}/subtasks`\n198: - `PUT /v1/projects/{project}/tasks/{filename}/subtasks`\n199: - `PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status`\n200: - `PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp`\n201: - `PUT /v1/projects/{project}/tasks/{filename}/goal`\n202: \n203: Request payloads (explicit structs in handler scope):\n204: \n205: ```go\n206: type updateSubtaskStatusRequest struct {\n207:     Status SubtaskStatus `json:\"status\"`\n208: }\n209: \n210: type setPhaseTimestampRequest struct {\n211:     Phase string    `json:\"phase\"`\n212:     TS    time.Time `json:\"timestamp\"`\n213: }\n214: \n215: type setPlanGoalRequest struct {\n216:     Goal string `json:\"goal\"`\n217: }\n218: ```\n219: \n220: Use `strconv.Atoi(r.PathValue(\"taskNumber\"))` for the path param; return `400` on parse failure.\n221: \n222: Add HTTPStore URL helpers in `http.go` to avoid duplicated path formatting:\n223: \n224: ```go\n225: func (s *HTTPStore) taskSubtasksURL(project, filename string) string\n226: func (s *HTTPStore) taskSubtaskStatusURL(project, filename string, taskNumber int) string\n227: func (s *HTTPStore) taskPhaseTimestampURL(project, filename string) string\n228: func (s *HTTPStore) taskGoalURL(project, filename string) string\n229: ```\n230: \n231: Then implement the 5 Store methods using those helpers.\n232: \n233: Edge cases to lock down:\n234: - `SetSubtasks(..., nil)` should still clear existing subtasks (send empty JSON array).\n235: - `SetPhaseTimestamp` with zero `time.Time` should still serialize and store empty-string timestamp via SQLite `formatTime`.\n236: - `UpdateSubtaskStatus` must return not-found if row absent (propagate server error body).\n237: \n238: **Step 4: run test to verify it passes**\n239: \n240: ```bash\n241: go test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v\n242: ```\n243: \n244: expected: PASS\n245: \n246: **Step 5: commit**\n247: \n248: ```bash\n249: git add config/taskstore/http.go config/taskstore/server.go config/taskstore/http_test.go config/taskstore/server_test.go\n250: git commit -m \"feat: add HTTP transport for subtasks, phase timestamps, and plan goal\"\n251: ```\n252: \n253: ### Task 3: Subtask Ingestion, Phase Timestamps, and Status Persistence\n254: \n255: **Files:**\n256: - Modify: `config/taskstate/taskstate.go`\n257: - Modify: `config/taskstate/taskstate_test.go`\n258: - Modify: `config/taskfsm/fsm.go`\n259: - Modify: `config/taskfsm/fsm_test.go`\n260: - Modify: `app/wave_orchestrator.go`\n261: - Modify: `app/wave_orchestrator_test.go`\n262: \n263: **Step 1: write the failing test**\n264: \n265: `app/wave_orchestrator.go`/`app/wave_orchestrator_test.go` are legacy paths in this repo; wave orchestration currently lives in `orchestration/engine.go` and `orchestration/engine_test.go`. Keep plan metadata unchanged, but implement/test the orchestrator portion in those real files.\n266: \n267: Add tests in `config/taskstate/taskstate_test.go`:\n268: \n269: ```go\n270: func TestTaskState_IngestContent_PopulatesGoalAndSubtasks(t *testing.T)\n271: func TestTaskState_IngestContent_ParseFailureStillStoresContent(t *testing.T)\n272: ```\n273: \n274: `PopulateGoalAndSubtasks` should assert:\n275: - `entry.Goal` is populated from `**Goal:**`.\n276: - `GetSubtasks` returns wave/task/title/status rows (`pending` default).\n277: \n278: `ParseFailureStillStoresContent` should assert:\n279: - content is still persisted in store,\n280: - method returns parse error for missing wave headers,\n281: - subtasks are not overwritten on parse failure.\n282: \n283: Add in `config/taskfsm/fsm_test.go`:\n284: \n285: ```go\n286: func TestFSM_TransitionRecordsPhaseTimestamp(t *testing.T)\n287: func TestFSM_TransitionSkipsTimestampForNonPhaseStatuses(t *testing.T)\n288: ```\n289: \n290: For orchestrator persistence, add in `orchestration/engine_test.go`:\n291: \n292: ```go\n293: func TestWaveOrchestrator_PersistsSubtaskStatus(t *testing.T)\n294: ```\n295: \n296: This test should set a test store via `SetStore(...)`, then assert:\n297: - `StartNextWave` marks tasks `running`.\n298: - `MarkTaskComplete` writes `complete`.\n299: - `MarkTaskFailed` writes `failed`.\n300: \n301: **Step 2: run test to verify it fails**\n302: \n303: ```bash\n304: go test ./config/taskstate/... -run TestTaskState_IngestContent -v\n305: go test ./config/taskfsm/... -run TestFSM_TransitionRecordsPhaseTimestamp -v\n306: go test ./orchestration/... -run TestWaveOrchestrator_PersistsSubtaskStatus -v\n307: ```\n308: \n309: expected: FAIL — ingestion/status persistence/timestamp hooks missing.\n310: \n311: **Step 3: write minimal implementation**\n312: \n313: `config/taskstate/taskstate.go`:\n314: 1. Extend `TaskEntry` with:\n315: \n316: ```go\n317: Goal           string\n318: PlanningAt     time.Time\n319: ImplementingAt time.Time\n320: ReviewingAt    time.Time\n321: DoneAt         time.Time\n322: ```\n323: \n324: 2. Update `Load(...)` and `toTaskstoreEntry(...)` mappings for those fields.\n325: 3. Add exact methods:\n326: \n327: ```go\n328: func (ps *TaskState) IngestContent(filename, content string) error\n329: func (ps *TaskState) GetSubtasks(filename string) ([]taskstore.SubtaskEntry, error)\n330: func (ps *TaskState) UpdateSubtaskStatus(filename string, taskNumber int, status taskstore.SubtaskStatus) error\n331: ```\n332: \n333: Implementation contract for `IngestContent`:\n334: - validate plan exists in `ps.Plans` (same `plan not found` wording used elsewhere),\n335: - always call `ps.store.SetContent(...)` first,\n336: - parse with `taskparser.Parse(content)`,\n337: - on parse success: call `SetPlanGoal`, build subtasks from parsed waves/tasks, call `SetSubtasks`, update in-memory `ps.Plans[filename]` goal,\n338: - on parse error: return wrapped error `fmt.Errorf(\"parse plan content: %w\", err)` while keeping content persisted.\n339: \n340: Required imports:\n341: \n342: ```go\n343: import (\n344:     ...\n345:     \"github.com/kastheco/kasmos/config/taskparser\"\n346: )\n347: ```\n348: \n349: `config/taskfsm/fsm.go`:\n350: - add `time` import,\n351: - after successful `ForceSetStatus`, set phase timestamp for phase statuses.\n352: \n353: Add helper:\n354: \n355: ```go\n356: func phaseNameForStatus(s Status) (string, bool)\n357: ```\n358: \n359: and use:\n360: \n361: ```go\n362: if phase, ok := phaseNameForStatus(newStatus); ok {\n363:     if err := m.store.SetPhaseTimestamp(m.project, planFile, phase, time.Now().UTC()); err != nil {\n364:         return fmt.Errorf(\"set phase timestamp: %w\", err)\n365:     }\n366: }\n367: ```\n368: \n369: `orchestration/engine.go` (actual wave orchestrator implementation):\n370: - add optional persistence fields:\n371: \n372: ```go\n373: store   taskstore.Store\n374: project string\n375: ```\n376: \n377: - add method:\n378: \n379: ```go\n380: func (o *WaveOrchestrator) SetStore(store taskstore.Store, project string)\n381: ```\n382: \n383: - add internal helper:\n384: \n385: ```go\n386: func (o *WaveOrchestrator) persistTaskStatus(taskNumber int, status taskstore.SubtaskStatus)\n387: ```\n388: \n389: and call it from:\n390: - `StartNextWave` -> `running`\n391: - `MarkTaskComplete` -> `complete`\n392: - `MarkTaskFailed` -> `failed`\n393: - `RetryFailedTasks` -> `running`\n394: \n395: Use best-effort semantics (do not change existing method signatures): if persistence fails, leave in-memory wave state transitions intact.\n396: \n397: Wire store into orchestrators at creation/recovery points in app flow (neighbor files):\n398: - `app/app_actions.go` when creating orchestrators in `executeTaskStage` (`implement`, `implement_direct`),\n399: - `app/app.go` when creating from wave signals,\n400: - `app/app_state.go` in `rebuildOrphanedOrchestrators`.\n401: \n402: Also switch planner ingestion to the new method in `app/app_state.go`:\n403: \n404: ```go\n405: if err := m.taskState.IngestContent(planFile, string(data)); err != nil {\n406:     log.WarningLog.Printf(\"ingestTaskContent: ... %v\", err)\n407: }\n408: ```\n409: \n410: Then add one recovery path in `app/app_actions.go` (`implement` existing orchestrator case): if the orchestrator exists but has no store wired (e.g. after restart), call `SetStore(m.taskStore, m.taskStoreProject)` before resuming.\n411: \n412: **Step 4: run test to verify it passes**\n413: \n414: ```bash\n415: go test ./config/taskstate/... -run TestTaskState_IngestContent -v\n416: go test ./config/taskfsm/... -run TestFSM_TransitionRecordsPhaseTimestamp -v\n417: go test ./orchestration/... -run TestWaveOrchestrator_PersistsSubtaskStatus -v\n418: go test ./app/... -run 'TestTriggerPlanStage_Implement|TestWaveMonitor' -v\n419: ```\n420: \n421: expected: PASS\n422: \n423: **Step 5: commit**\n424: \n425: ```bash\n426: git add config/taskstate/taskstate.go config/taskstate/taskstate_test.go config/taskfsm/fsm.go config/taskfsm/fsm_test.go app/wave_orchestrator.go app/wave_orchestrator_test.go\n427: git commit -m \"feat: wire subtask ingestion, phase timestamps, and status persistence\"\n428: ```\n429: \n430: ## Wave 3: Info Pane UI Overhaul\n431: \n432: > **depends on wave 2:** The info pane reads subtask data and phase timestamps populated by the ingestion pipeline (Task 3). The app layer wiring calls store methods added in Tasks 1-2.\n433: \n434: ### Task 4: Redesign Info Pane with Lifecycle, Progress, and Goal Sections\n435: \n436: **Files:**\n437: - Modify: `ui/info_pane.go`\n438: - Modify: `ui/info_pane_test.go`\n439: - Modify: `app/app_state.go`\n440: \n441: **Step 1: write the failing test**\n442: \n443: Add tests in `ui/info_pane_test.go` that pin the new rendering contract and preserve lowercase section labels (project standard).\n444: \n445: Add:\n446: \n447: ```go\n448: func TestInfoPane_PlanSummaryWithGoalAndLifecycle(t *testing.T)\n449: func TestInfoPane_InstanceWithTaskAssignment(t *testing.T)\n450: func TestInfoPane_ProgressGroupsByWave(t *testing.T)\n451: ```\n452: \n453: Assertions to include:\n454: - plan header view contains section labels: `goal`, `lifecycle`, `progress`, `instances`.\n455: - lifecycle shows reached/unreached glyphs (`●`, `○`) and timestamps/`—`.\n456: - progress shows fraction (`2/4`), bar, and per-wave task lines with glyphs (`✓`, `●`, `✗`, `○`).\n457: - instance view shows `goal` row and `task N of M: <title>` format.\n458: \n459: **Step 2: run test to verify it fails**\n460: \n461: ```bash\n462: go test ./ui/... -run 'TestInfoPane_PlanSummaryWithGoalAndLifecycle|TestInfoPane_InstanceWithTaskAssignment|TestInfoPane_ProgressGroupsByWave' -v\n463: ```\n464: \n465: expected: FAIL — new `InfoData` fields/types/sections not implemented.\n466: \n467: **Step 3: write minimal implementation**\n468: \n469: `ui/info_pane.go`:\n470: 1. Extend `InfoData` with:\n471: \n472: ```go\n473: PlanGoal string\n474: TaskTitle string\n475: \n476: PlanningAt     time.Time\n477: ImplementingAt time.Time\n478: ReviewingAt    time.Time\n479: DoneAt         time.Time\n480: \n481: AllWaveSubtasks []WaveSubtaskGroup\n482: CompletedTasks  int\n483: TotalSubtasks   int\n484: ```\n485: \n486: 2. Add display types:\n487: \n488: ```go\n489: type SubtaskDisplay struct {\n490:     Number int\n491:     Title  string\n492:     Status string // pending|running|complete|failed\n493: }\n494: \n495: type WaveSubtaskGroup struct {\n496:     WaveNumber int\n497:     Subtasks   []SubtaskDisplay\n498: }\n499: ```\n500: \n501: 3. Keep existing behavior intact:\n502: - `ZoneViewPlan` button still rendered in plan-header view.\n503: - fallback `\"no instance selected\"` unchanged.\n504: - existing status colors remain via `statusColor`.\n505: \n506: 4. Refactor `renderPlanSummary()` into ordered sections:\n507: - metadata (existing rows),\n508: - goal (`renderGoalSection()`),\n509: - lifecycle (`renderLifecycleSection()`),\n510: - progress (`renderProgressSection()`),\n511: - instances summary,\n512: - button.\n513: \n514: 5. Add helpers with exact signatures:\n515: \n516: ```go\n517: func (p *InfoPane) renderGoalSection() string\n518: func (p *InfoPane) renderLifecycleSection() string\n519: func (p *InfoPane) renderProgressSection() string\n520: func (p *InfoPane) subtaskGlyph(status string) (string, color.Color)\n521: ```\n522: \n523: Use ASCII for bar body to avoid glyph width issues in viewport:\n524: - e.g. `[####----]` with width based on available pane width.\n525: \n526: 6. Update `renderInstanceSection()`:\n527: - insert `goal` row when `PlanGoal != \"\"`.\n528: - render task row as `task 3 of 6: http endpoints` when `TaskTitle != \"\"`; fallback to old `3 of 6` format if title missing.\n529: \n530: Required imports for `ui/info_pane.go`:\n531: \n532: ```go\n533: import (\n534:     ...\n535:     \"time\"\n536: )\n537: ```\n538: \n539: `app/app_state.go`:\n540: 1. In `updateInfoPaneForPlanHeader()`:\n541: - set `PlanGoal`, `PlanningAt`, `ImplementingAt`, `ReviewingAt`, `DoneAt` from `taskstate.TaskEntry`.\n542: - fetch subtasks from store (`m.taskStore.GetSubtasks(...)`) when store is non-nil.\n543: - group by wave into `[]ui.WaveSubtaskGroup` sorted ascending wave then task number.\n544: - compute `CompletedTasks` and `TotalSubtasks`.\n545: - keep existing instance counters (`PlanInstanceCount`, etc.).\n546: \n547: 2. In `updateInfoPane()` (instance-selected):\n548: - set `data.PlanGoal = entry.Goal`.\n549: - resolve `TaskTitle` from orchestrator plan (use `orch.Plan()` and search all waves by task number, not only current wave).\n550: \n551: Add local helpers in `app/app_state.go` to keep logic testable and deterministic:\n552: \n553: ```go\n554: func groupSubtasksByWave(subtasks []taskstore.SubtaskEntry) ([]ui.WaveSubtaskGroup, int)\n555: func findTaskTitle(plan *taskparser.Plan, taskNumber int) string\n556: ```\n557: \n558: Edge cases:\n559: - if `GetSubtasks` errors, log warning and render without progress groups (do not clear pane).\n560: - if `TotalSubtasks == 0`, render progress as `0/0` and a fully empty bar.\n561: - unknown status strings map to pending glyph/color.\n562: \n563: **Step 4: run test to verify it passes**\n564: \n565: ```bash\n566: go test ./ui/... -run 'TestInfoPane_PlanSummaryWithGoalAndLifecycle|TestInfoPane_InstanceWithTaskAssignment|TestInfoPane_ProgressGroupsByWave' -v\n567: ```\n568: \n569: expected: PASS\n570: \n571: Also run the full test suite to verify nothing is broken:\n572: \n573: ```bash\n574: go test ./ui/... ./app/... ./config/... -v -count=1\n575: ```\n576: \n577: **Step 5: commit**\n578: \n579: ```bash\n580: git add ui/info_pane.go ui/info_pane_test.go app/app_state.go\n581: git commit -m \"feat: redesign info pane with goal, lifecycle timeline, and all-waves progress\"\n582: ```\n\n(End of file - total 582 lines)\n</content>",
+            "title": "docs/plans/improved-info-tab.md",
+            "metadata": {
+              "preview": "# Improved Info Tab Implementation Plan\n\n**Goal:** Persist plan subtask statuses and phase timestamps in the database, then overhaul the info pane UI to show plan summary, lifecycle timeline, and all-waves progress with per-task detail.\n\n**Architecture:** Add a `subtasks` table and phase-timestamp columns to the existing SQLite task store. Parse plan content during ingestion to populate subtask rows and extract the goal field. Hook FSM transitions to record phase timestamps and orchestrator state changes to update subtask status. Redesign the info pane to render the new data in a scrollable multi-section layout (metadata → goal → lifecycle → progress → instances).\n\n**Tech Stack:** Go, SQLite (modernc.org/sqlite), bubbletea/lipgloss (charm v2), existing taskstore/taskstate/taskfsm packages.\n\n**Size:** Medium (estimated ~2.5 hours, 4 tasks, 3 waves)\n\n---\n\n## Wave 1: Database Schema and SQLite Store\n\n### Task 1: Subtask Table, Phase Timestamps, and SQLiteStore Methods\n\n**Files:**\n- Modify: `config/taskstore/store.go`\n- Modify: `config/taskstore/sqlite.go`\n- Modify: `config/taskstore/testing.go`",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772697611068,
+              "end": 1772697611072
+            }
+          },
+          "id": "prt_cbd02e89e00164i28gIm6P6jjv",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02dc27001y8gUZnJBWbFsQo"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 38695,
+            "input": 1,
+            "output": 87,
+            "reasoning": 0,
+            "cache": {
+              "read": 37796,
+              "write": 811
+            }
+          },
+          "id": "prt_cbd02eb61001jI7jVfKpwO1HTI",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02dc27001y8gUZnJBWbFsQo"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697611114,
+          "completed": 1772697615627
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 46839,
+          "input": 1,
+          "output": 203,
+          "reasoning": 0,
+          "cache": {
+            "read": 38607,
+            "write": 8028
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd02eb6a001hA73n1vzggjY2C",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd02f446001e6jnY3z1Ij4g8F",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me look at the implementation diff in detail.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED//REDACTED/PpXiFUYAQ=="
+            }
+          },
+          "time": {
+            "start": 1772697613383,
+            "end": 1772697613746
+          },
+          "id": "prt_cbd02f447001DfLEEf6YOmQ9QY",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        },
+        {
+          "type": "text",
+          "text": "Now let me review the actual implementation changes:",
+          "time": {
+            "start": 1772697614509,
+            "end": 1772697614509
+          },
+          "id": "prt_cbd02f5b3001Tan3TTMNdLcJz1",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_014o6riGZPQBfzsGKGmL6idZ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- config/taskstore/store.go 2>&1",
+              "description": "Review store.go changes"
+            },
+            "output": "diff --git a/config/taskstore/store.go b/config/taskstore/store.go\nindex bc80bd62..4bacd1d7 100644\n--- a/config/taskstore/store.go\n+++ b/config/taskstore/store.go\n@@ -21,16 +21,42 @@ const (\n \n // TaskEntry holds the persisted metadata for a single plan.\n type TaskEntry struct {\n-\tFilename      string    `json:\"filename\"`\n-\tStatus        Status    `json:\"status\"`\n-\tDescription   string    `json:\"description,omitempty\"`\n-\tBranch        string    `json:\"branch,omitempty\"`\n-\tTopic         string    `json:\"topic,omitempty\"`\n-\tCreatedAt     time.Time `json:\"created_at,omitempty\"`\n-\tImplemented   string    `json:\"implemented,omitempty\"`\n-\tContent       string    `json:\"content,omitempty\"`\n-\tClickUpTaskID string    `json:\"clickup_task_id,omitempty\"`\n-\tReviewCycle   int       `json:\"review_cycle,omitempty\"`\n+\tFilename       string    `json:\"filename\"`\n+\tStatus         Status    `json:\"status\"`\n+\tDescription    string    `json:\"description,omitempty\"`\n+\tBranch         string    `json:\"branch,omitempty\"`\n+\tTopic          string    `json:\"topic,omitempty\"`\n+\tCreatedAt      time.Time `json:\"created_at,omitempty\"`\n+\tImplemented    string    `json:\"implemented,omitempty\"`\n+\tPlanningAt     time.Time `json:\"planning_at,omitempty\"`\n+\tImplementingAt time.Time `json:\"implementing_at,omitempty\"`\n+\tReviewingAt    time.Time `json:\"reviewing_at,omitempty\"`\n+\tDoneAt         time.Time `json:\"done_at,omitempty\"`\n+\tGoal           string    `json:\"goal,omitempty\"`\n+\tContent        string    `json:\"content,omitempty\"`\n+\tClickUpTaskID  string    `json:\"clickup_task_id,omitempty\"`\n+\tReviewCycle    int       `json:\"review_cycle,omitempty\"`\n+}\n+\n+// SubtaskStatus represents the lifecycle state of a subtask.\n+type SubtaskStatus string\n+\n+const (\n+\tSubtaskStatusPending  SubtaskStatus = \"pending\"\n+\tSubtaskStatusRunning  SubtaskStatus = \"running\"\n+\tSubtaskStatusComplete SubtaskStatus = \"complete\"\n+\tSubtaskStatusFailed   SubtaskStatus = \"failed\"\n+\tSubtaskStatusClosed   SubtaskStatus = \"closed\"\n+\tSubtaskStatusDone     SubtaskStatus = \"done\"\n+\tSubtaskStatusBlocked  SubtaskStatus = \"blocked\"\n+\tSubtaskStatusInReview SubtaskStatus = \"in_review\"\n+)\n+\n+// SubtaskEntry holds a persisted subtask for a single plan.\n+type SubtaskEntry struct {\n+\tTaskNumber int           `json:\"task_number\"`\n+\tTitle      string        `json:\"title\"`\n+\tStatus     SubtaskStatus `json:\"status\"`\n }\n \n // TopicEntry holds the persisted metadata for a topic grouping.\n@@ -53,12 +79,23 @@ type Store interface {\n \tGetContent(project, filename string) (string, error)\n \tSetContent(project, filename, content string) error\n \n+\t// Subtasks\n+\tSetSubtasks(project, filename string, subtasks []SubtaskEntry) error\n+\tGetSubtasks(project, filename string) ([]SubtaskEntry, error)\n+\tUpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error\n+\n+\t// Phase timestamps\n+\tSetPhaseTimestamp(project, filename, phase string, ts time.Time) error\n+\n \t// ClickUp integration\n \tSetClickUpTaskID(project, filename, taskID string) error\n \n \t// Review cycle\n \tIncrementReviewCycle(project, filename string) error\n \n+\t// Plan goals\n+\tSetPlanGoal(project, filename, goal string) error\n+\n \t// Queries\n \tList(project string) ([]TaskEntry, error)\n \tListByStatus(project string, statuses ...Status) ([]TaskEntry, error)\n",
+            "title": "Review store.go changes",
+            "metadata": {
+              "output": "diff --git a/config/taskstore/store.go b/config/taskstore/store.go\nindex bc80bd62..4bacd1d7 100644\n--- a/config/taskstore/store.go\n+++ b/config/taskstore/store.go\n@@ -21,16 +21,42 @@ const (\n \n // TaskEntry holds the persisted metadata for a single plan.\n type TaskEntry struct {\n-\tFilename      string    `json:\"filename\"`\n-\tStatus        Status    `json:\"status\"`\n-\tDescription   string    `json:\"description,omitempty\"`\n-\tBranch        string    `json:\"branch,omitempty\"`\n-\tTopic         string    `json:\"topic,omitempty\"`\n-\tCreatedAt     time.Time `json:\"created_at,omitempty\"`\n-\tImplemented   string    `json:\"implemented,omitempty\"`\n-\tContent       string    `json:\"content,omitempty\"`\n-\tClickUpTaskID string    `json:\"clickup_task_id,omitempty\"`\n-\tReviewCycle   int       `json:\"review_cycle,omitempty\"`\n+\tFilename       string    `json:\"filename\"`\n+\tStatus         Status    `json:\"status\"`\n+\tDescription    string    `json:\"description,omitempty\"`\n+\tBranch         string    `json:\"branch,omitempty\"`\n+\tTopic          string    `json:\"topic,omitempty\"`\n+\tCreatedAt      time.Time `json:\"created_at,omitempty\"`\n+\tImplemented    string    `json:\"implemented,omitempty\"`\n+\tPlanningAt     time.Time `json:\"planning_at,omitempty\"`\n+\tImplementingAt time.Time `json:\"implementing_at,omitempty\"`\n+\tReviewingAt    time.Time `json:\"reviewing_at,omitempty\"`\n+\tDoneAt         time.Time `json:\"done_at,omitempty\"`\n+\tGoal           string    `json:\"goal,omitempty\"`\n+\tContent        string    `json:\"content,omitempty\"`\n+\tClickUpTaskID  string    `json:\"clickup_task_id,omitempty\"`\n+\tReviewCycle    int       `json:\"review_cycle,omitempty\"`\n+}\n+\n+// SubtaskStatus represents the lifecycle state of a subtask.\n+type SubtaskStatus string\n+\n+const (\n+\tSubtaskStatusPending  SubtaskStatus = \"pending\"\n+\tSubtaskStatusRunning  SubtaskStatus = \"running\"\n+\tSubtaskStatusComplete SubtaskStatus = \"complete\"\n+\tSubtaskStatusFailed   SubtaskStatus = \"failed\"\n+\tSubtaskStatusClosed   SubtaskStatus = \"closed\"\n+\tSubtaskStatusDone     SubtaskStatus = \"done\"\n+\tSubtaskStatusBlocked  SubtaskStatus = \"blocked\"\n+\tSubtaskStatusInReview SubtaskStatus = \"in_review\"\n+)\n+\n+// SubtaskEntry holds a persisted subtask for a single plan.\n+type SubtaskEntry struct {\n+\tTaskNumber int           `json:\"task_number\"`\n+\tTitle      string        `json:\"title\"`\n+\tStatus     SubtaskStatus `json:\"status\"`\n }\n \n // TopicEntry holds the persisted metadata for a topic grouping.\n@@ -53,12 +79,23 @@ type Store interface {\n \tGetContent(project, filename string) (string, error)\n \tSetContent(project, filename, content string) error\n \n+\t// Subtasks\n+\tSetSubtasks(project, filename string, subtasks []SubtaskEntry) error\n+\tGetSubtasks(project, filename string) ([]SubtaskEntry, error)\n+\tUpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error\n+\n+\t// Phase timestamps\n+\tSetPhaseTimestamp(project, filename, phase string, ts time.Time) error\n+\n \t// ClickUp integration\n \tSetClickUpTaskID(project, filename, taskID string) error\n \n \t// Review cycle\n \tIncrementReviewCycle(project, filename string) error\n \n+\t// Plan goals\n+\tSetPlanGoal(project, filename, goal string) error\n+\n \t// Queries\n \tList(project string) ([]TaskEntry, error)\n \tListByStatus(project string, statuses ...Status) ([]TaskEntry, error)\n",
+              "exit": 0,
+              "description": "Review store.go changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697615330,
+              "end": 1772697615334
+            }
+          },
+          "id": "prt_cbd02f8ad001aeDhkgZWYzpSB2",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01XizyWWFnZ7y12YfHpko7yS",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- config/taskstore/sqlite.go 2>&1",
+              "description": "Review sqlite.go changes"
+            },
+            "output": "diff --git a/config/taskstore/sqlite.go b/config/taskstore/sqlite.go\nindex 54131bb9..bd98aa83 100644\n--- a/config/taskstore/sqlite.go\n+++ b/config/taskstore/sqlite.go\n@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS tasks (\n \ttopic       TEXT    NOT NULL DEFAULT '',\n \tcreated_at  TEXT    NOT NULL DEFAULT '',\n \timplemented TEXT    NOT NULL DEFAULT '',\n+\tplanning_at  TEXT    NOT NULL DEFAULT '',\n+\timplementing_at TEXT NOT NULL DEFAULT '',\n+\treviewing_at TEXT    NOT NULL DEFAULT '',\n+\tdone_at     TEXT    NOT NULL DEFAULT '',\n+\tgoal        TEXT    NOT NULL DEFAULT '',\n \tUNIQUE(project, filename)\n );\n \n@@ -32,9 +37,38 @@ CREATE TABLE IF NOT EXISTS topics (\n );\n `\n \n+// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\n+const subtasksTableMigration = `\n+\tCREATE TABLE IF NOT EXISTS subtasks (\n+\t\tid INTEGER PRIMARY KEY,\n+\t\tproject TEXT NOT NULL,\n+\t\tplan_filename TEXT NOT NULL,\n+\t\ttask_number INTEGER NOT NULL,\n+\t\ttitle TEXT NOT NULL DEFAULT '',\n+\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n+\t\tUNIQUE(project, plan_filename, task_number),\n+\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n+\t)\n+`\n+\n // contentMigration adds the content column to existing databases that predate it.\n const contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n \n+// planningAtMigration adds planning_at to existing databases.\n+const planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n+\n+// implementingAtMigration adds implementing_at to existing databases.\n+const implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n+\n+// reviewingAtMigration adds reviewing_at to existing databases.\n+const reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n+\n+// doneAtMigration adds done_at to existing databases.\n+const doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n+\n+// goalMigration adds goal to existing databases.\n+const goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n+\n // clickupTaskIDMigration adds the clickup_task_id column to existing databases.\n const clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n \n@@ -107,6 +141,34 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n \t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n \t}\n \n+\t// Add new task lifecycle phase timestamp and goal columns.\n+\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n+\t}\n+\n+\t// Create subtasks table if missing.\n+\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n+\t}\n+\n \treturn &SQLiteStore{db: db}, nil\n }\n \n@@ -181,8 +243,8 @@ func (s *SQLiteStore) Ping() error {\n // Returns an error if a task with the same filename already exists in the project.\n func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n \tconst q = `\n-\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)\n-\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n+\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n+\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n \t`\n \t_, err := s.db.Exec(q,\n \t\tproject,\n@@ -193,6 +255,11 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n \t\tentry.Topic,\n \t\tformatTime(entry.CreatedAt),\n \t\tentry.Implemented,\n+\t\tformatTime(entry.PlanningAt),\n+\t\tformatTime(entry.ImplementingAt),\n+\t\tformatTime(entry.ReviewingAt),\n+\t\tformatTime(entry.DoneAt),\n+\t\tentry.Goal,\n \t\tentry.Content,\n \t\tentry.ClickUpTaskID,\n \t\tentry.ReviewCycle,\n@@ -210,7 +277,7 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n // Returns an error if the task is not found.\n func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND filename = ?\n \t`\n@@ -223,7 +290,7 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n \tconst q = `\n \t\tUPDATE tasks\n-\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, clickup_task_id = ?, review_cycle = ?\n+\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n \t\tWHERE project = ? AND filename = ?\n \t`\n \tresult, err := s.db.Exec(q,\n@@ -233,6 +300,11 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n \t\tentry.Topic,\n \t\tformatTime(entry.CreatedAt),\n \t\tentry.Implemented,\n+\t\tformatTime(entry.PlanningAt),\n+\t\tformatTime(entry.ImplementingAt),\n+\t\tformatTime(entry.ReviewingAt),\n+\t\tformatTime(entry.DoneAt),\n+\t\tentry.Goal,\n \t\tentry.ClickUpTaskID,\n \t\tentry.ReviewCycle,\n \t\tproject,\n@@ -279,7 +351,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n // List returns all task entries for the given project, sorted by filename.\n func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ?\n \t\tORDER BY filename ASC\n@@ -308,7 +380,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn\n \t}\n \n \tq := fmt.Sprintf(`\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND status IN (%s)\n \t\tORDER BY filename ASC\n@@ -326,7 +398,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn\n // sorted by filename.\n func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND topic = ?\n \t\tORDER BY filename ASC\n@@ -456,27 +528,181 @@ func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n \treturn nil\n }\n \n+// SetSubtasks replaces all subtasks for a plan in a transaction.\n+// Existing subtasks are removed before inserting the supplied rows.\n+func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n+\ttx, err := s.db.Begin()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n+\t}\n+\tdefer func() {\n+\t\tif err != nil {\n+\t\t\t_ = tx.Rollback()\n+\t\t}\n+\t}()\n+\n+\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n+\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n+\t}\n+\n+\tfor _, st := range subtasks {\n+\t\tif _, err = tx.Exec(\n+\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n+\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n+\t\t); err != nil {\n+\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n+\t\t}\n+\t}\n+\n+\tif err = tx.Commit(); err != nil {\n+\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n+\t}\n+\treturn nil\n+}\n+\n+// GetSubtasks returns all subtasks for a plan, sorted by task_number.\n+func (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n+\trows, err := s.db.Query(\n+\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n+\t\tproject,\n+\t\tfilename,\n+\t)\n+\tif err != nil {\n+\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n+\t}\n+\tdefer rows.Close()\n+\n+\tvar subtasks []SubtaskEntry\n+\tfor rows.Next() {\n+\t\tvar taskNumber int\n+\t\tvar title, status string\n+\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n+\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n+\t\t}\n+\t\tsubtasks = append(subtasks, SubtaskEntry{\n+\t\t\tTaskNumber: taskNumber,\n+\t\t\tTitle:      title,\n+\t\t\tStatus:     SubtaskStatus(status),\n+\t\t})\n+\t}\n+\tif err := rows.Err(); err != nil {\n+\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n+\t}\n+\treturn subtasks, nil\n+}\n+\n+// UpdateSubtaskStatus updates the status of a specific subtask.\n+func (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n+\tconst q = `\n+\t\tUPDATE subtasks\n+\t\tSET status = ?\n+\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n+\t`\n+\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n+// Known phases are: planning, implementing, reviewing, done.\n+func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n+\tvar column string\n+\tswitch phase {\n+\tcase \"planning\":\n+\t\tcolumn = \"planning_at\"\n+\tcase \"implementing\":\n+\t\tcolumn = \"implementing_at\"\n+\tcase \"reviewing\":\n+\t\tcolumn = \"reviewing_at\"\n+\tcase \"done\":\n+\t\tcolumn = \"done_at\"\n+\tdefault:\n+\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n+\t}\n+\n+\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n+\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPlanGoal sets the goal text for a plan.\n+func (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n+\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n+\tresult, err := s.db.Exec(q, goal, project, filename)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n+\t}\n+\treturn nil\n+}\n+\n // scanTaskEntry scans a single row into a TaskEntry.\n func scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n-\tvar filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string\n+\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n \tvar reviewCycle int\n-\tif err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {\n+\tif err := row.Scan(\n+\t\t&filename,\n+\t\t&status,\n+\t\t&description,\n+\t\t&branch,\n+\t\t&topic,\n+\t\t&createdAt,\n+\t\t&implemented,\n+\t\t&planningAt,\n+\t\t&implementingAt,\n+\t\t&reviewingAt,\n+\t\t&doneAt,\n+\t\t&goal,\n+\t\t&content,\n+\t\t&clickupTaskID,\n+\t\t&reviewCycle,\n+\t); err != nil {\n \t\tif err == sql.ErrNoRows {\n \t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n \t\t}\n \t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n \t}\n \treturn TaskEntry{\n-\t\tFilename:      filename,\n-\t\tStatus:        Status(status),\n-\t\tDescription:   description,\n-\t\tBranch:        branch,\n-\t\tTopic:         topic,\n-\t\tCreatedAt:     parseTime(createdAt),\n-\t\tImplemented:   implemented,\n-\t\tContent:       content,\n-\t\tClickUpTaskID: clickupTaskID,\n-\t\tReviewCycle:   reviewCycle,\n+\t\tFilename:       filename,\n+\t\tStatus:         Status(status),\n+\t\tDescription:    description,\n+\t\tBranch:         branch,\n+\t\tTopic:          topic,\n+\t\tCreatedAt:      parseTime(createdAt),\n+\t\tImplemented:    implemented,\n+\t\tPlanningAt:     parseTime(planningAt),\n+\t\tImplementingAt: parseTime(implementingAt),\n+\t\tReviewingAt:    parseTime(reviewingAt),\n+\t\tDoneAt:         parseTime(doneAt),\n+\t\tGoal:           goal,\n+\t\tContent:        content,\n+\t\tClickUpTaskID:  clickupTaskID,\n+\t\tReviewCycle:    reviewCycle,\n \t}, nil\n }\n \n@@ -484,22 +710,43 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n \tvar entries []TaskEntry\n \tfor rows.Next() {\n-\t\tvar filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string\n+\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n \t\tvar reviewCycle int\n-\t\tif err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {\n+\t\tif err := rows.Scan(\n+\t\t\t&filename,\n+\t\t\t&status,\n+\t\t\t&description,\n+\t\t\t&branch,\n+\t\t\t&topic,\n+\t\t\t&createdAt,\n+\t\t\t&implemented,\n+\t\t\t&planningAt,\n+\t\t\t&implementingAt,\n+\t\t\t&reviewingAt,\n+\t\t\t&doneAt,\n+\t\t\t&goal,\n+\t\t\t&content,\n+\t\t\t&clickupTaskID,\n+\t\t\t&reviewCycle,\n+\t\t); err != nil {\n \t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n \t\t}\n \t\tentries = append(entries, TaskEntry{\n-\t\t\tFilename:      filename,\n-\t\t\tStatus:        Status(status),\n-\t\t\tDescription:   description,\n-\t\t\tBranch:        branch,\n-\t\t\tTopic:         topic,\n-\t\t\tCreatedAt:     parseTime(createdAt),\n-\t\t\tImplemented:   implemented,\n-\t\t\tContent:       content,\n-\t\t\tClickUpTaskID: clickupTaskID,\n-\t\t\tReviewCycle:   reviewCycle,\n+\t\t\tFilename:       filename,\n+\t\t\tStatus:         Status(status),\n+\t\t\tDescription:    description,\n+\t\t\tBranch:         branch,\n+\t\t\tTopic:          topic,\n+\t\t\tCreatedAt:      parseTime(createdAt),\n+\t\t\tImplemented:    implemented,\n+\t\t\tPlanningAt:     parseTime(planningAt),\n+\t\t\tImplementingAt: parseTime(implementingAt),\n+\t\t\tReviewingAt:    parseTime(reviewingAt),\n+\t\t\tDoneAt:         parseTime(doneAt),\n+\t\t\tGoal:           goal,\n+\t\t\tContent:        content,\n+\t\t\tClickUpTaskID:  clickupTaskID,\n+\t\t\tReviewCycle:    reviewCycle,\n \t\t})\n \t}\n \tif err := rows.Err(); err != nil {\n",
+            "title": "Review sqlite.go changes",
+            "metadata": {
+              "output": "diff --git a/config/taskstore/sqlite.go b/config/taskstore/sqlite.go\nindex 54131bb9..bd98aa83 100644\n--- a/config/taskstore/sqlite.go\n+++ b/config/taskstore/sqlite.go\n@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS tasks (\n \ttopic       TEXT    NOT NULL DEFAULT '',\n \tcreated_at  TEXT    NOT NULL DEFAULT '',\n \timplemented TEXT    NOT NULL DEFAULT '',\n+\tplanning_at  TEXT    NOT NULL DEFAULT '',\n+\timplementing_at TEXT NOT NULL DEFAULT '',\n+\treviewing_at TEXT    NOT NULL DEFAULT '',\n+\tdone_at     TEXT    NOT NULL DEFAULT '',\n+\tgoal        TEXT    NOT NULL DEFAULT '',\n \tUNIQUE(project, filename)\n );\n \n@@ -32,9 +37,38 @@ CREATE TABLE IF NOT EXISTS topics (\n );\n `\n \n+// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\n+const subtasksTableMigration = `\n+\tCREATE TABLE IF NOT EXISTS subtasks (\n+\t\tid INTEGER PRIMARY KEY,\n+\t\tproject TEXT NOT NULL,\n+\t\tplan_filename TEXT NOT NULL,\n+\t\ttask_number INTEGER NOT NULL,\n+\t\ttitle TEXT NOT NULL DEFAULT '',\n+\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n+\t\tUNIQUE(project, plan_filename, task_number),\n+\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n+\t)\n+`\n+\n // contentMigration adds the content column to existing databases that predate it.\n const contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n \n+// planningAtMigration adds planning_at to existing databases.\n+const planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n+\n+// implementingAtMigration adds implementing_at to existing databases.\n+const implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n+\n+// reviewingAtMigration adds reviewing_at to existing databases.\n+const reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n+\n+// doneAtMigration adds done_at to existing databases.\n+const doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n+\n+// goalMigration adds goal to existing databases.\n+const goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n+\n // clickupTaskIDMigration adds the clickup_task_id column to existing databases.\n const clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n \n@@ -107,6 +141,34 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n \t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n \t}\n \n+\t// Add new task lifecycle phase timestamp and goal columns.\n+\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n+\t}\n+\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n+\t}\n+\n+\t// Create subtasks table if missing.\n+\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n+\t\tdb.Close()\n+\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n+\t}\n+\n \treturn &SQLiteStore{db: db}, nil\n }\n \n@@ -181,8 +243,8 @@ func (s *SQLiteStore) Ping() error {\n // Returns an error if a task with the same filename already exists in the project.\n func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n \tconst q = `\n-\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle)\n-\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n+\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n+\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n \t`\n \t_, err := s.db.Exec(q,\n \t\tproject,\n@@ -193,6 +255,11 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n \t\tentry.Topic,\n \t\tformatTime(entry.CreatedAt),\n \t\tentry.Implemented,\n+\t\tformatTime(entry.PlanningAt),\n+\t\tformatTime(entry.ImplementingAt),\n+\t\tformatTime(entry.ReviewingAt),\n+\t\tformatTime(entry.DoneAt),\n+\t\tentry.Goal,\n \t\tentry.Content,\n \t\tentry.ClickUpTaskID,\n \t\tentry.ReviewCycle,\n@@ -210,7 +277,7 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n // Returns an error if the task is not found.\n func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND filename = ?\n \t`\n@@ -223,7 +290,7 @@ func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n \tconst q = `\n \t\tUPDATE tasks\n-\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, clickup_task_id = ?, review_cycle = ?\n+\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n \t\tWHERE project = ? AND filename = ?\n \t`\n \tresult, err := s.db.Exec(q,\n@@ -233,6 +300,11 @@ func (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n \t\tentry.Topic,\n \t\tformatTime(entry.CreatedAt),\n \t\tentry.Implemented,\n+\t\tformatTime(entry.PlanningAt),\n+\t\tformatTime(entry.ImplementingAt),\n+\t\tformatTime(entry.ReviewingAt),\n+\t\tformatTime(entry.DoneAt),\n+\t\tentry.Goal,\n \t\tentry.ClickUpTaskID,\n \t\tentry.ReviewCycle,\n \t\tproject,\n@@ -279,7 +351,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n // List returns all task entries for the given project, sorted by filename.\n func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ?\n \t\tORDER BY filename ASC\n@@ -308,7 +380,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn\n \t}\n \n \tq := fmt.Sprintf(`\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND status IN (%s)\n \t\tORDER BY filename ASC\n@@ -326,7 +398,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn\n // sorted by filename.\n func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n \tconst q = `\n-\t\tSELECT filename, status, description, branch, topic, created_at, implemented, content, clickup_task_id, review_cycle\n+\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n \t\tFROM tasks\n \t\tWHERE project = ? AND topic = ?\n \t\tORDER BY filename ASC\n@@ -456,27 +528,181 @@ func (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n \treturn nil\n }\n \n+// SetSubtasks replaces all subtasks for a plan in a transaction.\n+// Existing subtasks are removed before inserting the supplied rows.\n+func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n+\ttx, err := s.db.Begin()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n+\t}\n+\tdefer func() {\n+\t\tif err != nil {\n+\t\t\t_ = tx.Rollback()\n+\t\t}\n+\t}()\n+\n+\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n+\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n+\t}\n+\n+\tfor _, st := range subtasks {\n+\t\tif _, err = tx.Exec(\n+\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n+\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n+\t\t); err != nil {\n+\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n+\t\t}\n+\t}\n+\n+\tif err = tx.Commit(); err != nil {\n+\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n+\t}\n+\treturn nil\n+}\n+\n+// GetSubtasks returns all subtasks for a plan, sorted by task_number.\n+func (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n+\trows, err := s.db.Query(\n+\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n+\t\tproject,\n+\t\tfilename,\n+\t)\n+\tif err != nil {\n+\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n+\t}\n+\tdefer rows.Close()\n+\n+\tvar subtasks []SubtaskEntry\n+\tfor rows.Next() {\n+\t\tvar taskNumber int\n+\t\tvar title, status string\n+\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n+\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n+\t\t}\n+\t\tsubtasks = append(subtasks, SubtaskEntry{\n+\t\t\tTaskNumber: taskNumber,\n+\t\t\tTitle:      title,\n+\t\t\tStatus:     SubtaskStatus(status),\n+\t\t})\n+\t}\n+\tif err := rows.Err(); err != nil {\n+\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n+\t}\n+\treturn subtasks, nil\n+}\n+\n+// UpdateSubtaskStatus updates the status of a specific subtask.\n+func (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n+\tconst q = `\n+\t\tUPDATE subtasks\n+\t\tSET status = ?\n+\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n+\t`\n+\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n+// Known phases are: planning, implementing, reviewing, done.\n+func (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n+\tvar column string\n+\tswitch phase {\n+\tcase \"planning\":\n+\t\tcolumn = \"planning_at\"\n+\tcase \"implementing\":\n+\t\tcolumn = \"implementing_at\"\n+\tcase \"reviewing\":\n+\t\tcolumn = \"reviewing_at\"\n+\tcase \"done\":\n+\t\tcolumn = \"done_at\"\n+\tdefault:\n+\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n+\t}\n+\n+\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n+\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPlanGoal sets the goal text for a plan.\n+func (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n+\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n+\tresult, err := s.db.Exec(q, goal, project, filename)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n+\t}\n+\tn, err := result.RowsAffected()\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n+\t}\n+\tif n == 0 {\n+\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n+\t}\n+\treturn nil\n+}\n+\n // scanTaskEntry scans a single row into a TaskEntry.\n func scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n-\tvar filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string\n+\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n \tvar reviewCycle int\n-\tif err := row.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {\n+\tif err := row.Scan(\n+\t\t&filename,\n+\t\t&status,\n+\t\t&description,\n+\t\t&branch,\n+\t\t&topic,\n+\t\t&createdAt,\n+\t\t&implemented,\n+\t\t&planningAt,\n+\t\t&implementingAt,\n+\t\t&reviewingAt,\n+\t\t&doneAt,\n+\t\t&goal,\n+\t\t&content,\n+\t\t&clickupTaskID,\n+\t\t&reviewCycle,\n+\t); err != nil {\n \t\tif err == sql.ErrNoRows {\n \t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n \t\t}\n \t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n \t}\n \treturn TaskEntry{\n-\t\tFilename:      filename,\n-\t\tStatus:        Status(status),\n-\t\tDescription:   description,\n-\t\tBranch:        branch,\n-\t\tTopic:         topic,\n-\t\tCreatedAt:     parseTime(createdAt),\n-\t\tImplemented:   implemented,\n-\t\tContent:       content,\n-\t\tClickUpTaskID: clickupTaskID,\n-\t\tReviewCycle:   reviewCycle,\n+\t\tFilename:       filename,\n+\t\tStatus:         Status(status),\n+\t\tDescription:    description,\n+\t\tBranch:         branch,\n+\t\tTopic:          topic,\n+\t\tCreatedAt:      parseTime(createdAt),\n+\t\tImplemented:    implemented,\n+\t\tPlanningAt:     parseTime(planningAt),\n+\t\tImplementingAt: parseTime(implementingAt),\n+\t\tReviewingAt:    parseTime(reviewingAt),\n+\t\tDoneAt:         parseTime(doneAt),\n+\t\tGoal:           goal,\n+\t\tContent:        content,\n+\t\tClickUpTaskID:  clickupTaskID,\n+\t\tReviewCycle:    reviewCycle,\n \t}, nil\n }\n \n@@ -484,22 +710,43 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n \tvar entries []TaskEntry\n \tfor rows.Next() {\n-\t\tvar filename, status, description, branch, topic, createdAt, implemented, content, clickupTaskID string\n+\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n \t\tvar reviewCycle int\n-\t\tif err := rows.Scan(&filename, &status, &description, &branch, &topic, &createdAt, &implemented, &content, &clickupTaskID, &reviewCycle); err != nil {\n+\t\tif err := rows.Scan(\n+\t\t\t&filename,\n+\t\t\t&status,\n+\t\t\t&description,\n+\t\t\t&branch,\n+\t\t\t&topic,\n+\t\t\t&createdAt,\n+\t\t\t&implemented,\n+\t\t\t&planningAt,\n+\t\t\t&implementingAt,\n+\t\t\t&reviewingAt,\n+\t\t\t&doneAt,\n+\t\t\t&goal,\n+\t\t\t&content,\n+\t\t\t&clickupTaskID,\n+\t\t\t&reviewCycle,\n+\t\t); err != nil {\n \t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n \t\t}\n \t\tentries = append(entries, TaskEntry{\n-\t\t\tFilename:      filename,\n-\t\t\tStatus:        Status(status),\n-\t\t\tDescription:   description,\n-\t\t\tBranch:        branch,\n-\t\t\tTopic:         topic,\n-\t\t\tCreatedAt:     parseTime(createdAt),\n-\t\t\tImplemented:   implemented,\n-\t\t\tContent:       content,\n-\t\t\tClickUpTaskID: clickupTaskID,\n-\t\t\tReviewCycle:   reviewCycle,\n+\t\t\tFilename:       filename,\n+\t\t\tStatus:         Status(status),\n+\t\t\tDescription:    description,\n+\t\t\tBranch:         branch,\n+\t\t\tTopic:          topic,\n+\t\t\tCreatedAt:      parseTime(createdAt),\n+\t\t\tImplemented:    implemented,\n+\t\t\tPlanningAt:     parseTime(planningAt),\n+\t\t\tImplementingAt: parseTime(implementingAt),\n+\t\t\tReviewingAt:    parseTime(reviewingAt),\n+\t\t\tDoneAt:         parseTime(doneAt),\n+\t\t\tGoal:           goal,\n+\t\t\tContent:        content,\n+\t\t\tClickUpTaskID:  clickupTaskID,\n+\t\t\tReviewCycle:    reviewCycle,\n \t\t})\n \t}\n \tif err := rows.Err(); err != nil {\n",
+              "exit": 0,
+              "description": "Review sqlite.go changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697615578,
+              "end": 1772697615581
+            }
+          },
+          "id": "prt_cbd02fbe400102gcLSaZ9kIFzg",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 46839,
+            "input": 1,
+            "output": 203,
+            "reasoning": 0,
+            "cache": {
+              "read": 38607,
+              "write": 8028
+            }
+          },
+          "id": "prt_cbd02fd04001NVMOvVsBUoRrvb",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02eb6a001hA73n1vzggjY2C"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697615628,
+          "completed": 1772697626192
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 54098,
+          "input": 1,
+          "output": 550,
+          "reasoning": 0,
+          "cache": {
+            "read": 46635,
+            "write": 6912
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd02fd0c0019aM97uPkI57Uc2",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd03071f0015ncvXgO6TaMbRx",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02fd0c0019aM97uPkI57Uc2"
+        },
+        {
+          "type": "reasoning",
+          "text": "Let me continue reviewing the implementation. I need to check store.go for missing fields in SubtaskEntry (the plan requires `WaveNumber` but I see the implementation has something different). Let me check...\n\nLooking at the plan:\n```go\ntype SubtaskEntry struct {\n    PlanFilename string        `json:\"plan_filename\"`\n    WaveNumber   int           `json:\"wave_number\"`\n    TaskNumber   int           `json:\"task_number\"`\n    Title        string        `json:\"title\"`\n    Status       SubtaskStatus `json:\"status\"`\n    UpdatedAt    time.Time     `json:\"updated_at,omitempty\"`\n\n\n}\n```\n\nAnd the implementation in store.go:\n```go\ntype SubtaskEntry struct {\n    TaskNumber int           `json:\"task_number\"`\n    Title      string        `json:\"title\"`\n    Status     SubtaskStatus `json:\"status\"`\n}\n```\n\nThis is missing `PlanFilename`, `WaveNumber`, and `UpdatedAt`. Let me check how this affects the rest of the implementation... In the plan's Task 4 it references `WaveNumber` from the SubtaskEntry to group by wave. Let me look at how grouping actually works in app_state.go.\n\nAlso, the GetSubtasks query...\n\nI'm noticing the SQL query only orders by task_number, but the plan specifies it should order deterministically by wave_number first, then task_number. This is a mismatch I need to track down across the other files.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/xQxS4yFx+mhJ5kmqPwIXbDoBAx29/UM5TrgoCHF/SP3h7Lxbg/REDACTED/Mx2W0SXAa9CwB5KXBQMvOXOvDtb/REDACTED/REDACTED/REDACTED/REDACTED/444O2byPN2oxw24P40e9kQS/REDACTED/i8TLOq0AyQQtHXoDL3yLc/vYaH/CDBKWddKgs3K2wLrd7A73xC+gSZUx+w53P3/ZbkI7RHw4yzs2hM+dgeS/REDACTED/REDACTED/REDACTED/SGiCVdkOBacHg6T/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772697618208,
+            "end": 1772697624963
+          },
+          "id": "prt_cbd030720001avkoLdbvPplBNU",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02fd0c0019aM97uPkI57Uc2"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- config/taskstore/sqlite_test.go 2>&1",
+              "description": "Review sqlite_test.go changes"
+            },
+            "output": "diff --git a/config/taskstore/sqlite_test.go b/config/taskstore/sqlite_test.go\nindex 5f9422c7..39c5bb21 100644\n--- a/config/taskstore/sqlite_test.go\n+++ b/config/taskstore/sqlite_test.go\n@@ -1,6 +1,7 @@\n package taskstore_test\n \n import (\n+\t\"strings\"\n \t\"testing\"\n \t\"time\"\n \n@@ -285,3 +286,65 @@ func TestSQLiteStore_ReviewCycle(t *testing.T) {\n \trequire.NoError(t, err)\n \tassert.Equal(t, 2, got.ReviewCycle)\n }\n+\n+func TestSQLiteStore_SubtaskCRUD(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetSubtasks(\"kasmos\", \"plan.md\", []taskstore.SubtaskEntry{\n+\t\t{TaskNumber: 1, Title: \"one\", Status: taskstore.SubtaskStatusPending},\n+\t\t{TaskNumber: 2, Title: \"two\", Status: taskstore.SubtaskStatusPending},\n+\t}))\n+\n+\tgot, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Len(t, got, 2)\n+\tassert.Equal(t, 1, got[0].TaskNumber)\n+\tassert.Equal(t, taskstore.SubtaskStatusPending, got[0].Status)\n+\n+\trequire.NoError(t, store.UpdateSubtaskStatus(\"kasmos\", \"plan.md\", 1, taskstore.SubtaskStatusClosed))\n+\tupdated, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Equal(t, taskstore.SubtaskStatusClosed, updated[0].Status)\n+\n+\trequire.NoError(t, store.SetSubtasks(\"kasmos\", \"plan.md\", []taskstore.SubtaskEntry{\n+\t\t{TaskNumber: 2, Title: \"replacement\", Status: taskstore.SubtaskStatusDone},\n+\t}))\n+\treplaced, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Len(t, replaced, 1)\n+\tassert.Equal(t, \"replacement\", replaced[0].Title)\n+\tassert.Equal(t, taskstore.SubtaskStatusDone, replaced[0].Status)\n+}\n+\n+func TestSQLiteStore_PhaseTimestamps(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"planning\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"implementing\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"reviewing\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"done\", time.Now().UTC()))\n+\n+\tgot, err := store.Get(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.False(t, got.PlanningAt.IsZero())\n+\tassert.False(t, got.ImplementingAt.IsZero())\n+\tassert.False(t, got.ReviewingAt.IsZero())\n+\tassert.False(t, got.DoneAt.IsZero())\n+\n+\terr = store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"unknown\", time.Now().UTC())\n+\trequire.Error(t, err)\n+\tassert.True(t, strings.Contains(err.Error(), \"unknown phase\"))\n+}\n+\n+func TestSQLiteStore_PlanGoal(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetPlanGoal(\"kasmos\", \"plan.md\", \"ship resilient workflow\"))\n+\n+\tgot, err := store.Get(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Equal(t, \"ship resilient workflow\", got.Goal)\n+}\n",
+            "title": "Review sqlite_test.go changes",
+            "metadata": {
+              "output": "diff --git a/config/taskstore/sqlite_test.go b/config/taskstore/sqlite_test.go\nindex 5f9422c7..39c5bb21 100644\n--- a/config/taskstore/sqlite_test.go\n+++ b/config/taskstore/sqlite_test.go\n@@ -1,6 +1,7 @@\n package taskstore_test\n \n import (\n+\t\"strings\"\n \t\"testing\"\n \t\"time\"\n \n@@ -285,3 +286,65 @@ func TestSQLiteStore_ReviewCycle(t *testing.T) {\n \trequire.NoError(t, err)\n \tassert.Equal(t, 2, got.ReviewCycle)\n }\n+\n+func TestSQLiteStore_SubtaskCRUD(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetSubtasks(\"kasmos\", \"plan.md\", []taskstore.SubtaskEntry{\n+\t\t{TaskNumber: 1, Title: \"one\", Status: taskstore.SubtaskStatusPending},\n+\t\t{TaskNumber: 2, Title: \"two\", Status: taskstore.SubtaskStatusPending},\n+\t}))\n+\n+\tgot, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Len(t, got, 2)\n+\tassert.Equal(t, 1, got[0].TaskNumber)\n+\tassert.Equal(t, taskstore.SubtaskStatusPending, got[0].Status)\n+\n+\trequire.NoError(t, store.UpdateSubtaskStatus(\"kasmos\", \"plan.md\", 1, taskstore.SubtaskStatusClosed))\n+\tupdated, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Equal(t, taskstore.SubtaskStatusClosed, updated[0].Status)\n+\n+\trequire.NoError(t, store.SetSubtasks(\"kasmos\", \"plan.md\", []taskstore.SubtaskEntry{\n+\t\t{TaskNumber: 2, Title: \"replacement\", Status: taskstore.SubtaskStatusDone},\n+\t}))\n+\treplaced, err := store.GetSubtasks(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Len(t, replaced, 1)\n+\tassert.Equal(t, \"replacement\", replaced[0].Title)\n+\tassert.Equal(t, taskstore.SubtaskStatusDone, replaced[0].Status)\n+}\n+\n+func TestSQLiteStore_PhaseTimestamps(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"planning\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"implementing\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"reviewing\", time.Now().UTC()))\n+\trequire.NoError(t, store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"done\", time.Now().UTC()))\n+\n+\tgot, err := store.Get(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.False(t, got.PlanningAt.IsZero())\n+\tassert.False(t, got.ImplementingAt.IsZero())\n+\tassert.False(t, got.ReviewingAt.IsZero())\n+\tassert.False(t, got.DoneAt.IsZero())\n+\n+\terr = store.SetPhaseTimestamp(\"kasmos\", \"plan.md\", \"unknown\", time.Now().UTC())\n+\trequire.Error(t, err)\n+\tassert.True(t, strings.Contains(err.Error(), \"unknown phase\"))\n+}\n+\n+func TestSQLiteStore_PlanGoal(t *testing.T) {\n+\tstore := newTestStore(t)\n+\trequire.NoError(t, store.Create(\"kasmos\", taskstore.TaskEntry{Filename: \"plan.md\", Status: taskstore.StatusReady}))\n+\n+\trequire.NoError(t, store.SetPlanGoal(\"kasmos\", \"plan.md\", \"ship resilient workflow\"))\n+\n+\tgot, err := store.Get(\"kasmos\", \"plan.md\")\n+\trequire.NoError(t, err)\n+\tassert.Equal(t, \"ship resilient workflow\", got.Goal)\n+}\n",
+              "exit": 0,
+              "description": "Review sqlite_test.go changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697625704,
+              "end": 1772697625707
+            }
+          },
+          "id": "prt_cbd0321840019YRzn68k0J6ty6",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02fd0c0019aM97uPkI57Uc2"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011f27YZKiCWyLDR2tJ56WCZ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- config/taskstore/http.go config/taskstore/server.go 2>&1",
+              "description": "Review HTTP transport changes"
+            },
+            "output": "diff --git a/config/taskstore/http.go b/config/taskstore/http.go\nindex 1803d84b..fe07558e 100644\n--- a/config/taskstore/http.go\n+++ b/config/taskstore/http.go\n@@ -46,6 +46,26 @@ func (s *HTTPStore) taskContentURL(project, filename string) string {\n \treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/content\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n }\n \n+// taskSubtasksURL builds the URL for a task's subtasks endpoint.\n+func (s *HTTPStore) taskSubtasksURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/subtasks\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n+// taskSubtaskStatusURL builds the URL for a specific task's subtask status endpoint.\n+func (s *HTTPStore) taskSubtaskStatusURL(project, filename string, taskNumber int) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/subtasks/%d/status\", s.baseURL, url.PathEscape(project), url.PathEscape(filename), taskNumber)\n+}\n+\n+// taskPhaseTimestampURL builds the URL for phase timestamp updates.\n+func (s *HTTPStore) taskPhaseTimestampURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/phase-timestamp\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n+// taskGoalURL builds the URL for a plan goal update.\n+func (s *HTTPStore) taskGoalURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/goal\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n // topicURL builds the base URL for a project's topics endpoint.\n func (s *HTTPStore) topicURL(project string) string {\n \treturn fmt.Sprintf(\"%s/v1/projects/%s/topics\", s.baseURL, url.PathEscape(project))\n@@ -227,6 +247,110 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {\n \treturn nil\n }\n \n+// GetSubtasks sends the request to the server over HTTP.\n+func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n+\treq, err := http.NewRequest(http.MethodGet, s.taskSubtasksURL(project, filename), nil)\n+\tif err != nil {\n+\t\treturn nil, fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn nil, err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn nil, decodeError(resp)\n+\t}\n+\n+\tvar subtasks []SubtaskEntry\n+\tif err := json.NewDecoder(resp.Body).Decode(&subtasks); err != nil {\n+\t\treturn nil, fmt.Errorf(\"task store: decode subtasks: %w\", err)\n+\t}\n+\treturn subtasks, nil\n+}\n+\n+// SetSubtasks sends the request to the server over HTTP.\n+func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n+\tif subtasks == nil {\n+\t\tsubtasks = []SubtaskEntry{}\n+\t}\n+\tbody, err := json.Marshal(subtasks)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal subtasks: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskSubtasksURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n+// UpdateSubtaskStatus sends the request to the server over HTTP.\n+func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tStatus SubtaskStatus `json:\"status\"`\n+\t}{Status: status})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal subtask status payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskSubtaskStatusURL(project, filename, taskNumber), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPhaseTimestamp sends the request to the server over HTTP.\n+func (s *HTTPStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tPhase string    `json:\"phase\"`\n+\t\tTS    time.Time `json:\"timestamp,omitempty\"`\n+\t}{Phase: phase, TS: ts})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal phase timestamp payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskPhaseTimestampURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n // List returns all task entries for the given project.\n func (s *HTTPStore) List(project string) ([]TaskEntry, error) {\n \treq, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)\n@@ -422,6 +546,32 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {\n \treturn nil\n }\n \n+// SetPlanGoal sends the request to the server over HTTP.\n+func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tGoal string `json:\"goal\"`\n+\t}{Goal: goal})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal plan goal payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskGoalURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n // Close is a no-op for HTTPStore — the HTTP client has no persistent connection\n // to release. It exists to satisfy the Store interface.\n func (s *HTTPStore) Close() error {\ndiff --git a/config/taskstore/server.go b/config/taskstore/server.go\nindex fd51d01a..d83ed2e3 100644\n--- a/config/taskstore/server.go\n+++ b/config/taskstore/server.go\n@@ -4,7 +4,9 @@ import (\n \t\"encoding/json\"\n \t\"io\"\n \t\"net/http\"\n+\t\"strconv\"\n \t\"strings\"\n+\t\"time\"\n )\n \n // NewHandler returns an http.Handler that exposes the Store over HTTP.\n@@ -139,6 +141,140 @@ func NewHandler(store Store) http.Handler {\n \t\tw.WriteHeader(http.StatusOK)\n \t})\n \n+\t// Get subtasks\n+\tmux.HandleFunc(\"GET /v1/projects/{project}/tasks/{filename}/subtasks\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\tif _, err := store.Get(project, filename); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tsubtasks, err := store.GetSubtasks(project, filename)\n+\t\tif err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\twriteJSON(w, http.StatusOK, subtasks)\n+\t})\n+\n+\t// Set subtasks\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/subtasks\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\tif _, err := store.Get(project, filename); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tvar req []SubtaskEntry\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tif err := store.SetSubtasks(project, filename, req); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Update a subtask status\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\ttaskNumberRaw := r.PathValue(\"taskNumber\")\n+\t\ttaskNumber, err := strconv.Atoi(taskNumberRaw)\n+\t\tif err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid task number: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\ttype updateSubtaskStatusRequest struct {\n+\t\t\tStatus SubtaskStatus `json:\"status\"`\n+\t\t}\n+\t\tvar req updateSubtaskStatusRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.UpdateSubtaskStatus(project, filename, taskNumber, req.Status); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Set a phase timestamp\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\n+\t\ttype setPhaseTimestampRequest struct {\n+\t\t\tPhase string    `json:\"phase\"`\n+\t\t\tTS    time.Time `json:\"timestamp\"`\n+\t\t}\n+\t\tvar req setPhaseTimestampRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.SetPhaseTimestamp(project, filename, req.Phase, req.TS); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Set a plan goal\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/goal\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\n+\t\ttype setPlanGoalRequest struct {\n+\t\t\tGoal string `json:\"goal\"`\n+\t\t}\n+\t\tvar req setPlanGoalRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.SetPlanGoal(project, filename, req.Goal); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n \t// Set ClickUp task ID\n \tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/clickup-task-id\", func(w http.ResponseWriter, r *http.Request) {\n \t\tproject := r.PathValue(\"project\")\n",
+            "title": "Review HTTP transport changes",
+            "metadata": {
+              "output": "diff --git a/config/taskstore/http.go b/config/taskstore/http.go\nindex 1803d84b..fe07558e 100644\n--- a/config/taskstore/http.go\n+++ b/config/taskstore/http.go\n@@ -46,6 +46,26 @@ func (s *HTTPStore) taskContentURL(project, filename string) string {\n \treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/content\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n }\n \n+// taskSubtasksURL builds the URL for a task's subtasks endpoint.\n+func (s *HTTPStore) taskSubtasksURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/subtasks\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n+// taskSubtaskStatusURL builds the URL for a specific task's subtask status endpoint.\n+func (s *HTTPStore) taskSubtaskStatusURL(project, filename string, taskNumber int) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/subtasks/%d/status\", s.baseURL, url.PathEscape(project), url.PathEscape(filename), taskNumber)\n+}\n+\n+// taskPhaseTimestampURL builds the URL for phase timestamp updates.\n+func (s *HTTPStore) taskPhaseTimestampURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/phase-timestamp\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n+// taskGoalURL builds the URL for a plan goal update.\n+func (s *HTTPStore) taskGoalURL(project, filename string) string {\n+\treturn fmt.Sprintf(\"%s/v1/projects/%s/tasks/%s/goal\", s.baseURL, url.PathEscape(project), url.PathEscape(filename))\n+}\n+\n // topicURL builds the base URL for a project's topics endpoint.\n func (s *HTTPStore) topicURL(project string) string {\n \treturn fmt.Sprintf(\"%s/v1/projects/%s/topics\", s.baseURL, url.PathEscape(project))\n@@ -227,6 +247,110 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {\n \treturn nil\n }\n \n+// GetSubtasks sends the request to the server over HTTP.\n+func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n+\treq, err := http.NewRequest(http.MethodGet, s.taskSubtasksURL(project, filename), nil)\n+\tif err != nil {\n+\t\treturn nil, fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn nil, err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn nil, decodeError(resp)\n+\t}\n+\n+\tvar subtasks []SubtaskEntry\n+\tif err := json.NewDecoder(resp.Body).Decode(&subtasks); err != nil {\n+\t\treturn nil, fmt.Errorf(\"task store: decode subtasks: %w\", err)\n+\t}\n+\treturn subtasks, nil\n+}\n+\n+// SetSubtasks sends the request to the server over HTTP.\n+func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n+\tif subtasks == nil {\n+\t\tsubtasks = []SubtaskEntry{}\n+\t}\n+\tbody, err := json.Marshal(subtasks)\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal subtasks: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskSubtasksURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n+// UpdateSubtaskStatus sends the request to the server over HTTP.\n+func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tStatus SubtaskStatus `json:\"status\"`\n+\t}{Status: status})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal subtask status payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskSubtaskStatusURL(project, filename, taskNumber), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n+// SetPhaseTimestamp sends the request to the server over HTTP.\n+func (s *HTTPStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tPhase string    `json:\"phase\"`\n+\t\tTS    time.Time `json:\"timestamp,omitempty\"`\n+\t}{Phase: phase, TS: ts})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal phase timestamp payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskPhaseTimestampURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n // List returns all task entries for the given project.\n func (s *HTTPStore) List(project string) ([]TaskEntry, error) {\n \treq, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)\n@@ -422,6 +546,32 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {\n \treturn nil\n }\n \n+// SetPlanGoal sends the request to the server over HTTP.\n+func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {\n+\tbody, err := json.Marshal(struct {\n+\t\tGoal string `json:\"goal\"`\n+\t}{Goal: goal})\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: marshal plan goal payload: %w\", err)\n+\t}\n+\treq, err := http.NewRequest(http.MethodPut, s.taskGoalURL(project, filename), bytes.NewReader(body))\n+\tif err != nil {\n+\t\treturn fmt.Errorf(\"task store: build request: %w\", err)\n+\t}\n+\treq.Header.Set(\"Content-Type\", \"application/json\")\n+\n+\tresp, err := s.do(req)\n+\tif err != nil {\n+\t\treturn err\n+\t}\n+\tdefer resp.Body.Close()\n+\n+\tif resp.StatusCode != http.StatusOK {\n+\t\treturn decodeError(resp)\n+\t}\n+\treturn nil\n+}\n+\n // Close is a no-op for HTTPStore — the HTTP client has no persistent connection\n // to release. It exists to satisfy the Store interface.\n func (s *HTTPStore) Close() error {\ndiff --git a/config/taskstore/server.go b/config/taskstore/server.go\nindex fd51d01a..d83ed2e3 100644\n--- a/config/taskstore/server.go\n+++ b/config/taskstore/server.go\n@@ -4,7 +4,9 @@ import (\n \t\"encoding/json\"\n \t\"io\"\n \t\"net/http\"\n+\t\"strconv\"\n \t\"strings\"\n+\t\"time\"\n )\n \n // NewHandler returns an http.Handler that exposes the Store over HTTP.\n@@ -139,6 +141,140 @@ func NewHandler(store Store) http.Handler {\n \t\tw.WriteHeader(http.StatusOK)\n \t})\n \n+\t// Get subtasks\n+\tmux.HandleFunc(\"GET /v1/projects/{project}/tasks/{filename}/subtasks\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\tif _, err := store.Get(project, filename); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tsubtasks, err := store.GetSubtasks(project, filename)\n+\t\tif err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\twriteJSON(w, http.StatusOK, subtasks)\n+\t})\n+\n+\t// Set subtasks\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/subtasks\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\tif _, err := store.Get(project, filename); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tvar req []SubtaskEntry\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tif err := store.SetSubtasks(project, filename, req); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Update a subtask status\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\t\ttaskNumberRaw := r.PathValue(\"taskNumber\")\n+\t\ttaskNumber, err := strconv.Atoi(taskNumberRaw)\n+\t\tif err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid task number: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\ttype updateSubtaskStatusRequest struct {\n+\t\t\tStatus SubtaskStatus `json:\"status\"`\n+\t\t}\n+\t\tvar req updateSubtaskStatusRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.UpdateSubtaskStatus(project, filename, taskNumber, req.Status); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Set a phase timestamp\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\n+\t\ttype setPhaseTimestampRequest struct {\n+\t\t\tPhase string    `json:\"phase\"`\n+\t\t\tTS    time.Time `json:\"timestamp\"`\n+\t\t}\n+\t\tvar req setPhaseTimestampRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.SetPhaseTimestamp(project, filename, req.Phase, req.TS); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n+\t// Set a plan goal\n+\tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/goal\", func(w http.ResponseWriter, r *http.Request) {\n+\t\tproject := r.PathValue(\"project\")\n+\t\tfilename := r.PathValue(\"filename\")\n+\n+\t\ttype setPlanGoalRequest struct {\n+\t\t\tGoal string `json:\"goal\"`\n+\t\t}\n+\t\tvar req setPlanGoalRequest\n+\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n+\t\t\twriteError(w, http.StatusBadRequest, \"invalid request body: \"+err.Error())\n+\t\t\treturn\n+\t\t}\n+\n+\t\tif err := store.SetPlanGoal(project, filename, req.Goal); err != nil {\n+\t\t\tif isNotFound(err) {\n+\t\t\t\twriteError(w, http.StatusNotFound, err.Error())\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t\twriteError(w, http.StatusInternalServerError, err.Error())\n+\t\t\treturn\n+\t\t}\n+\t\tw.WriteHeader(http.StatusOK)\n+\t})\n+\n \t// Set ClickUp task ID\n \tmux.HandleFunc(\"PUT /v1/projects/{project}/tasks/{filename}/clickup-task-id\", func(w http.ResponseWriter, r *http.Request) {\n \t\tproject := r.PathValue(\"project\")\n",
+              "exit": 0,
+              "description": "Review HTTP transport changes",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697626114,
+              "end": 1772697626117
+            }
+          },
+          "id": "prt_cbd03246a001cxlYIEw8NialEb",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02fd0c0019aM97uPkI57Uc2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 54098,
+            "input": 1,
+            "output": 550,
+            "reasoning": 0,
+            "cache": {
+              "read": 46635,
+              "write": 6912
+            }
+          },
+          "id": "prt_cbd032648001PO96C4gf9Jw0ye",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd02fd0c0019aM97uPkI57Uc2"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697626193
+        },
+        "parentID": "msg_cbd02a280001680rHRjHgvFl2k",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cbd0326510018jdJzP9WZu5E6g",
+        "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd0330b9001PtrxYcE6hIsrRd",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd0326510018jdJzP9WZu5E6g"
+        },
+        {
+          "type": "reasoning",
+          "text": "I notice that the `SubtaskEntry` struct in the implementation is missing some fields from the plan:\n- `PlanFilename` - not in implementation\n- `WaveNumber` - not in implementation\n- `UpdatedAt` - not in implementation\n\nAnd the `GetSubtasks` query doesn't sort by `wave_number` first (since there's no `wave_number` column in the subtasks table). The plan said:\n> `GetSubtasks` ordering is deterministic by `wave_number`, then `task_number`.\n\nBut the actual SQL sorts by `task_number` only. Let me also check the missing `updated_at` column assertion from the plan:\n\n\nThe `UpdateSubtaskStatus` test doesn't verify that `updated_at` gets persisted as non-zero, and there's no `updated_at` column in the schema at all. Looking at what the plan specified for `SubtaskEntry`, it should include `PlanFilename`, `WaveNumber`, `TaskNumber`, `Title`, `Status`, and `UpdatedAt` fields, but the implementation is missing several of these.\n\nNow I'm checking how the wave grouping actually works in the UI layer—if `WaveNumber` isn't in the model, then `groupSubtasksByWave` must be getting that information from somewhere else, so I need to trace through the rest of the diff to understand the full picture.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/G7eLnxbVepfBw1/PggKqZcAJVzXAcFbDvxr3Wi4Am/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/6kLj/REDACTED/A8vYYltD+fIujxxoy+sO/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/hLVzHui6QYRjP0o6oxeOoCsYm1/REDACTED/REDACTED/N+ApjOeMykK9TXzfop/OH1aH6tcK8Ah/Y/TZRkx2m8U+WQ1ochTRYwRnha6WnG/hs4tY3hYgKKX7j/REDACTED/REDACTED/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772697628858,
+            "end": 1772697637614
+          },
+          "id": "prt_cbd0330ba001rC5fjdP3XPiX9S",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd0326510018jdJzP9WZu5E6g"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011XY8Kz1je67oDKbxRLAuE6",
+          "tool": "bash",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "git diff main..HEAD -- config/taskstate/taskstate.go config/taskfsm/fsm.go 2>&1",
+              "description": "Review taskstate and fsm changes"
+            },
+            "error": "Error: ENOENT: no such file or directory, posix_spawn '/usr/bin/bash'",
+            "time": {
+              "start": 1772697637628,
+              "end": 1772697637629
+            }
+          },
+          "id": "prt_cbd0352ef001Csc7sfaBFp4HrR",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd0326510018jdJzP9WZu5E6g"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "git diff main..HEAD -- orchestration/engine.go 2>&1",
+              "description": "Review orchestration engine changes"
+            },
+            "error": "Error: ENOENT: no such file or directory, posix_spawn '/usr/bin/bash'",
+            "time": {
+              "start": 1772697638049,
+              "end": 1772697638050
+            }
+          },
+          "id": "prt_cbd0352fd001HN21jMO2yF7G5P",
+          "sessionID": "ses_342fd5d88ffea8N5K4rV7Y1y1B",
+          "messageID": "msg_cbd0326510018jdJzP9WZu5E6g"
+        }
+      ]
+    }
+  ]
+}
