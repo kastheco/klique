@@ -1,0 +1,135 @@
+Implement Task 2: HTTPStore Client and Server Endpoints
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Persist plan subtask statuses and phase timestamps in the database, then overhaul the info pane UI to show plan summary, lifecycle timeline, and all-waves progress with per-task detail.
+**Architecture:** Add a `subtasks` table and phase-timestamp columns to the existing SQLite task store. Parse plan content during ingestion to populate subtask rows and extract the goal field. Hook FSM transitions to record phase timestamps and orchestrator state changes to update subtask status. Redesign the info pane to render the new data in a scrollable multi-section layout (metadata → goal → lifecycle → progress → instances).
+**Tech Stack:** Go, SQLite (modernc.org/sqlite), bubbletea/lipgloss (charm v2), existing taskstore/taskstate/taskfsm packages.
+
+## Wave 2 of 3
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 2. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/taskstore/http.go`
+- Modify: `config/taskstore/server.go`
+- Modify: `config/taskstore/http_test.go`
+- Modify: `config/taskstore/server_test.go`
+
+**Step 1: write the failing test**
+
+Add round-trip tests to `http_test.go` and endpoint contract tests to `server_test.go`, following existing server setup pattern (`httptest.NewServer(taskstore.NewHandler(...))`).
+
+Use these method signatures in tests so compiler drives implementation:
+
+```go
+func (s *HTTPStore) SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error
+func (s *HTTPStore) GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)
+func (s *HTTPStore) UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error
+func (s *HTTPStore) SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error
+func (s *HTTPStore) SetPlanGoal(project, planFilename, goal string) error
+```
+
+Also add server-only tests that validate:
+- `400` for malformed JSON,
+- `404` when task/subtask not found,
+- `200` for success,
+- JSON error body shape remains `{ "error": "..." }` (existing `writeError` contract).
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v
+```
+
+expected: FAIL — HTTP methods/routes missing.
+
+**Step 3: write minimal implementation**
+
+Keep parity with existing transport conventions in `http.go` and `server.go`:
+- client methods call `do(req)` and use `decodeError(resp)` for non-success status.
+- handlers use `writeError(...)` and `writeJSON(...)`.
+- not-found detection remains `isNotFound(err)`.
+
+Add server endpoints in `server.go`:
+- `GET /v1/projects/{project}/tasks/{filename}/subtasks`
+- `PUT /v1/projects/{project}/tasks/{filename}/subtasks`
+- `PUT /v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status`
+- `PUT /v1/projects/{project}/tasks/{filename}/phase-timestamp`
+- `PUT /v1/projects/{project}/tasks/{filename}/goal`
+
+Request payloads (explicit structs in handler scope):
+
+```go
+type updateSubtaskStatusRequest struct {
+    Status SubtaskStatus `json:"status"`
+}
+
+type setPhaseTimestampRequest struct {
+    Phase string    `json:"phase"`
+    TS    time.Time `json:"timestamp"`
+}
+
+type setPlanGoalRequest struct {
+    Goal string `json:"goal"`
+}
+```
+
+Use `strconv.Atoi(r.PathValue("taskNumber"))` for the path param; return `400` on parse failure.
+
+Add HTTPStore URL helpers in `http.go` to avoid duplicated path formatting:
+
+```go
+func (s *HTTPStore) taskSubtasksURL(project, filename string) string
+func (s *HTTPStore) taskSubtaskStatusURL(project, filename string, taskNumber int) string
+func (s *HTTPStore) taskPhaseTimestampURL(project, filename string) string
+func (s *HTTPStore) taskGoalURL(project, filename string) string
+```
+
+Then implement the 5 Store methods using those helpers.
+
+Edge cases to lock down:
+- `SetSubtasks(..., nil)` should still clear existing subtasks (send empty JSON array).
+- `SetPhaseTimestamp` with zero `time.Time` should still serialize and store empty-string timestamp via SQLite `formatTime`.
+- `UpdateSubtaskStatus` must return not-found if row absent (propagate server error body).
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./config/taskstore/... -run 'TestHTTPStore_Subtask|TestHTTPStore_Phase|TestHTTPStore_PlanGoal' -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add config/taskstore/http.go config/taskstore/server.go config/taskstore/http_test.go config/taskstore/server_test.go
+git commit -m "feat: add HTTP transport for subtasks, phase timestamps, and plan goal"
+```
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
