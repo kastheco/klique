@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kastheco/kasmos/config/taskparser"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -357,4 +358,39 @@ func TestBuildTaskPrompt_Method(t *testing.T) {
 	assert.Contains(t, prompt, "Test goal")
 	assert.Contains(t, prompt, "Wave 1 of 1")
 	assert.Contains(t, prompt, "parallel") // peerCount > 1
+}
+
+func TestWaveOrchestrator_PersistsSubtaskStatus(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	project := "proj"
+	planFile := "plan.md"
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: planFile, Status: taskstore.StatusImplementing}))
+	require.NoError(t, store.SetSubtasks(project, planFile, []taskstore.SubtaskEntry{
+		{TaskNumber: 1, Title: "first", Status: taskstore.SubtaskStatusPending},
+		{TaskNumber: 2, Title: "second", Status: taskstore.SubtaskStatusPending},
+	}))
+
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{{
+		Number: 1,
+		Tasks:  []taskparser.Task{{Number: 1, Title: "first"}, {Number: 2, Title: "second"}},
+	}}}
+	orch := NewWaveOrchestrator(planFile, plan)
+	orch.SetStore(store, project)
+
+	orch.StartNextWave()
+	subtasks, err := store.GetSubtasks(project, planFile)
+	require.NoError(t, err)
+	require.Len(t, subtasks, 2)
+	assert.Equal(t, taskstore.SubtaskStatusRunning, subtasks[0].Status)
+	assert.Equal(t, taskstore.SubtaskStatusRunning, subtasks[1].Status)
+
+	orch.MarkTaskComplete(1)
+	orch.MarkTaskFailed(2)
+
+	subtasks, err = store.GetSubtasks(project, planFile)
+	require.NoError(t, err)
+	require.Len(t, subtasks, 2)
+	assert.Equal(t, taskstore.SubtaskStatusComplete, subtasks[0].Status)
+	assert.Equal(t, taskstore.SubtaskStatusFailed, subtasks[1].Status)
 }

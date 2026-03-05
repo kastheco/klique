@@ -508,6 +508,83 @@ func TestTaskState_GetContent(t *testing.T) {
 	assert.Equal(t, content, got)
 }
 
+func TestTaskState_IngestContent_PopulatesGoalAndSubtasks(t *testing.T) {
+	ps := newTestPS(t)
+	require.NoError(t, ps.Create("plan.md", "", "plan/plan", "", time.Now().UTC()))
+
+	content := `# Plan
+
+**Goal:** improve info tab metadata
+
+## Wave 1
+
+### Task 1: persist goal
+write goal to store
+
+### Task 2: ingest subtasks
+write subtask rows
+
+## Wave 2
+
+### Task 3: orchestrator persistence
+persist task status updates
+`
+
+	require.NoError(t, ps.IngestContent("plan.md", content))
+
+	storedContent, err := ps.GetContent("plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, content, storedContent)
+
+	entry, ok := ps.Entry("plan.md")
+	require.True(t, ok)
+	assert.Equal(t, "improve info tab metadata", entry.Goal)
+
+	subtasks, err := ps.GetSubtasks("plan.md")
+	require.NoError(t, err)
+	require.Len(t, subtasks, 3)
+
+	assert.Equal(t, 1, subtasks[0].TaskNumber)
+	assert.Equal(t, "persist goal", subtasks[0].Title)
+	assert.Equal(t, taskstore.SubtaskStatusPending, subtasks[0].Status)
+
+	assert.Equal(t, 2, subtasks[1].TaskNumber)
+	assert.Equal(t, "ingest subtasks", subtasks[1].Title)
+	assert.Equal(t, taskstore.SubtaskStatusPending, subtasks[1].Status)
+
+	assert.Equal(t, 3, subtasks[2].TaskNumber)
+	assert.Equal(t, "orchestrator persistence", subtasks[2].Title)
+	assert.Equal(t, taskstore.SubtaskStatusPending, subtasks[2].Status)
+}
+
+func TestTaskState_IngestContent_ParseFailureStillStoresContent(t *testing.T) {
+	ps, store := newTestPSWithStore(t)
+	require.NoError(t, ps.Create("plan.md", "", "plan/plan", "", time.Now().UTC()))
+
+	seeded := []taskstore.SubtaskEntry{{
+		TaskNumber: 1,
+		Title:      "existing",
+		Status:     taskstore.SubtaskStatusDone,
+	}}
+	require.NoError(t, store.SetSubtasks("test-proj", "plan.md", seeded))
+
+	invalidContent := "# Plan\n\n**Goal:** parsed but no waves"
+	err := ps.IngestContent("plan.md", invalidContent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse plan content")
+
+	storedContent, contentErr := ps.GetContent("plan.md")
+	require.NoError(t, contentErr)
+	assert.Equal(t, invalidContent, storedContent)
+
+	subtasks, subtaskErr := ps.GetSubtasks("plan.md")
+	require.NoError(t, subtaskErr)
+	require.Len(t, subtasks, 1)
+	assert.Equal(t, seeded[0].TaskNumber, subtasks[0].TaskNumber)
+	assert.Equal(t, seeded[0].Title, subtasks[0].Title)
+	assert.Equal(t, seeded[0].Status, subtasks[0].Status)
+}
+
 func TestTaskState_LoadRequiresStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{

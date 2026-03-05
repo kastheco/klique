@@ -43,6 +43,9 @@ type SubtaskStatus string
 
 const (
 	SubtaskStatusPending  SubtaskStatus = "pending"
+	SubtaskStatusRunning  SubtaskStatus = "running"
+	SubtaskStatusComplete SubtaskStatus = "complete"
+	SubtaskStatusFailed   SubtaskStatus = "failed"
 	SubtaskStatusClosed   SubtaskStatus = "closed"
 	SubtaskStatusDone     SubtaskStatus = "done"
 	SubtaskStatusBlocked  SubtaskStatus = "blocked"

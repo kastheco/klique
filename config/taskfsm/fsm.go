@@ -2,6 +2,7 @@ package taskfsm
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
@@ -124,7 +125,30 @@ func (m *TaskStateMachine) Transition(planFile string, event Event) error {
 		return err
 	}
 	// ForceSetStatus writes through to the store.
-	return ps.ForceSetStatus(planFile, taskstate.Status(newStatus))
+	if err := ps.ForceSetStatus(planFile, taskstate.Status(newStatus)); err != nil {
+		return err
+	}
+	if phase, ok := phaseNameForStatus(newStatus); ok {
+		if err := m.store.SetPhaseTimestamp(m.project, planFile, phase, time.Now().UTC()); err != nil {
+			return fmt.Errorf("set phase timestamp: %w", err)
+		}
+	}
+	return nil
+}
+
+func phaseNameForStatus(s Status) (string, bool) {
+	switch s {
+	case StatusPlanning:
+		return "planning", true
+	case StatusImplementing:
+		return "implementing", true
+	case StatusReviewing:
+		return "reviewing", true
+	case StatusDone:
+		return "done", true
+	default:
+		return "", false
+	}
 }
 
 // mapLegacyStatus converts old planstate statuses to FSM statuses.

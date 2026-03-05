@@ -1050,6 +1050,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			orch := orchestration.NewWaveOrchestrator(ws.TaskFile, plan)
+			orch.SetStore(m.taskStore, m.taskStoreProject)
 			m.waveOrchestrators[ws.TaskFile] = orch
 
 			// Fast-forward to the requested wave

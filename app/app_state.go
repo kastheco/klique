@@ -1064,8 +1064,8 @@ func (m *home) ingestTaskContent(planFile, repoPath string) {
 			return
 		}
 	}
-	if err := m.taskState.SetContent(planFile, string(data)); err != nil {
-		log.WarningLog.Printf("ingestTaskContent: cannot store content for %s: %v", planFile, err)
+	if err := m.taskState.IngestContent(planFile, string(data)); err != nil {
+		log.WarningLog.Printf("ingestTaskContent: cannot ingest content for %s: %v", planFile, err)
 	}
 }
 
@@ -1676,6 +1676,7 @@ func (m *home) rebuildOrphanedOrchestrators() {
 		}
 
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)
+		orch.SetStore(m.taskStore, m.taskStoreProject)
 
 		// Collect completed tasks for the target wave.
 		var completedTasks []int

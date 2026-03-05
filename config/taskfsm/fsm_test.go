@@ -140,3 +140,47 @@ func TestFSM_TransitionWithStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "planning", string(entry.Status))
 }
+
+func TestFSM_TransitionRecordsPhaseTimestamp(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	dir := t.TempDir()
+
+	ps, err := taskstate.Load(store, "test-proj", dir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+
+	fsm := New(store, "test-proj", dir)
+	require.NoError(t, fsm.Transition("test.md", PlanStart))
+	require.NoError(t, fsm.Transition("test.md", PlannerFinished))
+	require.NoError(t, fsm.Transition("test.md", ImplementStart))
+	require.NoError(t, fsm.Transition("test.md", ImplementFinished))
+	require.NoError(t, fsm.Transition("test.md", ReviewApproved))
+
+	entry, err := store.Get("test-proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusDone, entry.Status)
+	assert.False(t, entry.PlanningAt.IsZero())
+	assert.False(t, entry.ImplementingAt.IsZero())
+	assert.False(t, entry.ReviewingAt.IsZero())
+	assert.False(t, entry.DoneAt.IsZero())
+}
+
+func TestFSM_TransitionSkipsTimestampForNonPhaseStatuses(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	dir := t.TempDir()
+
+	ps, err := taskstate.Load(store, "test-proj", dir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+
+	fsm := New(store, "test-proj", dir)
+	require.NoError(t, fsm.Transition("test.md", Cancel))
+
+	entry, err := store.Get("test-proj", "test.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusCancelled, entry.Status)
+	assert.True(t, entry.PlanningAt.IsZero())
+	assert.True(t, entry.ImplementingAt.IsZero())
+	assert.True(t, entry.ReviewingAt.IsZero())
+	assert.True(t, entry.DoneAt.IsZero())
+}
