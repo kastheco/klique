@@ -19,12 +19,15 @@ func TestOptionsDefaults(t *testing.T) {
 // TestWritePhase verifies the post-wizard write path: TOML config is written
 // and can be loaded back correctly. Does not run the interactive wizard.
 func TestWritePhase(t *testing.T) {
-	// Set up temp HOME to avoid touching real config
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	// Set up a project dir and chdir into it so GetConfigDir returns .kasmos under it
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
 
-	// Create config dir
-	configDir := filepath.Join(tmpHome, ".config", "kasmos")
+	// Set HOME to an empty temp dir to avoid accidental migration from real config
+	t.Setenv("HOME", t.TempDir())
+
+	// GetConfigDir will create .kasmos under projectDir
+	configDir := filepath.Join(projectDir, ".kasmos")
 	require.NoError(t, os.MkdirAll(configDir, 0o755))
 
 	// Simulate wizard output
@@ -56,8 +59,8 @@ func TestWritePhase(t *testing.T) {
 	err := config.SaveTOMLConfig(tc)
 	require.NoError(t, err)
 
-	// Verify TOML file exists
-	tomlPath := filepath.Join(configDir, "config.toml")
+	// Verify TOML file exists under .kasmos in the project dir
+	tomlPath := filepath.Join(projectDir, ".kasmos", "config.toml")
 	assert.FileExists(t, tomlPath)
 
 	// Verify it can be loaded back
