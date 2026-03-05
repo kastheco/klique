@@ -1,0 +1,90 @@
+Implement Task 2: Symlink into project skills and sync
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Create a `kasmos-cli` skill that teaches agents the full `kas` command surface — task lifecycle, instance management, skills sync, and setup — so every role-specific skill can reference it instead of duplicating CLI docs.
+**Architecture:** Single SKILL.md file in `.agents/skills/kasmos-cli/` with frontmatter, command reference tables, workflow recipes, and anti-patterns. Symlinked into `.opencode/skills/` for project-level availability. Each role skill (planner, coder, reviewer, fixer) already embeds partial CLI knowledge; this skill centralizes it and the role skills can cross-reference it.
+**Tech Stack:** Markdown (SKILL.md), kas CLI (Go/cobra), opencode skill loading
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Create: `.opencode/skills/kasmos-cli` (symlink)
+
+**Step 1: write the failing test**
+
+```bash
+ls -la .opencode/skills/kasmos-cli 2>&1
+```
+
+expected: FAIL — `No such file or directory`
+
+Also verify source exists before linking:
+- `.agents/skills/kasmos-cli/SKILL.md` must exist from Task 1
+
+**Step 2: run test to verify it fails**
+
+```bash
+ls -la .opencode/skills/kasmos-cli 2>&1
+```
+
+expected: FAIL — path doesn't exist
+
+**Step 3: write minimal implementation**
+
+Follow existing project symlink convention in `.opencode/skills/*` entries:
+- target format is relative: `../../.agents/skills/<skill-name>`
+- destination is a symlink directory entry under `.opencode/skills/`
+
+Implementation sequence:
+
+```bash
+ln -s ../../.agents/skills/kasmos-cli .opencode/skills/kasmos-cli
+kas skills sync
+```
+
+Post-link validations (required):
+- `readlink .opencode/skills/kasmos-cli` returns `../../.agents/skills/kasmos-cli`
+- `.opencode/skills/kasmos-cli/SKILL.md` resolves and is readable
+
+Edge cases/error handling:
+- If `.opencode/skills/kasmos-cli` already exists as a symlink, replace it atomically instead of nesting links
+- If it exists as a real directory/file, fail fast with a clear message instead of deleting user-managed content
+- `kas skills sync` may still report partial health if other orphan/broken links already exist; verify this skill specifically rather than requiring global 100% health
+
+No code imports are needed; filesystem + CLI operations only.
+
+**Step 4: run test to verify it passes**
+
+```bash
+ls -la .opencode/skills/kasmos-cli/SKILL.md && kas skills list | rg 'kasmos-cli'
+```
+
+expected: PASS — symlink resolves, skill listed
+
+**Step 5: commit**
+
+```bash
+git add .opencode/skills/kasmos-cli
+git commit -m "feat: symlink kasmos-cli skill into project skills"
+```
