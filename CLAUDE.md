@@ -1,4 +1,4 @@
-# klique
+# kasmos
 
 TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.
 
@@ -7,32 +7,30 @@ TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (c
 | Directory | Purpose |
 |-----------|---------|
 | `app/` | TUI application logic (bubbletea model, input handling, state) |
+| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |
 | `config/` | Configuration management (TOML + JSON dual config, agent profiles) |
-| `session/` | Instance lifecycle, git worktree ops, tmux session management |
-| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |
-| `cmd/` | CLI entry points (cobra commands) |
+| `contracts/` | Shared interfaces and types |
 | `daemon/` | Background daemon for auto-accept mode |
-| `internal/initcmd/` | `kq init` multi-harness setup wizard |
-| `.claude/commands/` | Custom slash commands for agent workflows |
+| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |
+| `keys/` | Keybinding definitions |
+| `log/` | Structured logging |
+| `orchestration/` | Wave/task orchestration engine and prompt generation |
+| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |
+| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |
+| `web/` | Web UI (public assets + source) |
+| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |
+| `.claude/` | Agent configs and skills for claude harness |
+| `.agents/` | Shared agent skills (superpowers) |
 
 ## Standards
 
 Key points:
-- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+
+- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2
 - Tests: testify assertions, table-driven, no real tmux/git/network in tests
 - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`
-- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)
+- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)
 - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. "push changes from 'foo'?" not "Push changes from 'foo'?"
 - **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.
-
-## Active Work
-
-Feature status is tracked in auto memory. Two features are in progress:
-
-- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.
-- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.
-
-See `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.
 
 ## Workflow
 
