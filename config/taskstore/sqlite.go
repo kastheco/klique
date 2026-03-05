@@ -546,12 +546,10 @@ func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEn
 	}
 
 	for _, st := range subtasks {
-		_, err = tx.Exec(
+		if _, err = tx.Exec(
 			"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)",
 			project, filename, st.TaskNumber, st.Title, string(st.Status),
-		)
-		if err != nil {
-			_ = tx.Rollback()
+		); err != nil {
 			return fmt.Errorf("insert subtask: %w", err)
 		}
 	}
@@ -559,7 +557,6 @@ func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEn
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit subtasks: %w", err)
 	}
-	err = nil
 	return nil
 }
 
