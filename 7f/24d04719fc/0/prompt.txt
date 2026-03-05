@@ -1,0 +1,81 @@
+Implement Task 2: Update `ResolvedDBPath` to use `GetConfigDir` and verify integration
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Centralize all kasmos config and state into the project-local `.kasmos/` directory (instead of `~/.config/kasmos/`) so that multiple OS users on the same repository (e.g. openfos via systemd) share config and state through the filesystem.
+**Architecture:** `GetConfigDir()` changes from returning `~/.config/kasmos/` to returning `<cwd>/.kasmos/`. A one-time migration copies config files from the legacy XDG location on first use. `ResolvedDBPath()` delegates to `GetConfigDir()` instead of hardcoding. The `.gitignore` selectively un-ignores `config.toml` so project-wide agent settings are version-controlled while runtime artifacts remain ignored.
+**Tech Stack:** Go 1.24+, testify, `t.Chdir()` for test CWD isolation
+
+## Wave 2 of 2
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/taskstore/factory.go`
+- Create: `config/taskstore/factory_test.go`
+
+**Step 1: write the failing test**
+
+Create `config/taskstore/factory_test.go`:
+
+```go
+func TestResolvedDBPath(t *testing.T) {
+	t.Run("returns taskstore.db under .kasmos in working directory", func(t *testing.T) {
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
+
+		dbPath := ResolvedDBPath()
+
+		assert.Equal(t, filepath.Join(projectDir, ".kasmos", "taskstore.db"), dbPath)
+	})
+}
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/taskstore/... -run TestResolvedDBPath -v
+```
+
+Expected: FAIL — `ResolvedDBPath` still hardcodes `~/.config/kasmos/taskstore.db`.
+
+**Step 3: write minimal implementation**
+
+Rewrite `ResolvedDBPath()` in `config/taskstore/factory.go` to delegate to `config.GetConfigDir()`:
+
+```go
+import "github.com/kastheco/kasmos/config"
+
+func ResolvedDBPath() string {
+	dir, err := config.GetConfigDir()
+	if err != nil {
+		return filepath.Join(".", ".kasmos", "taskstore.db")
+	}
+	return filepath.Join(dir, "taskstore.db")
+}
+```
+
+Update the doc comment to reflect the new behavior (returns `<cwd>/.kasmos/taskstore.db`).
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./config/taskstore/... -run TestResolvedDBPath -v
+```
+
+Expected: PASS
+
+Then run the full test suite to verify no regressions:
+
+```bash
+go test ./... 2>&1 | tail -30
+```
+
+**Step 5: commit**
+
+```bash
+git add config/taskstore/factory.go config/taskstore/factory_test.go
+git commit -m "refactor: update ResolvedDBPath to use project-local .kasmos/ config dir"
+```

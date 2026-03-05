@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "7f24d04719fc",
+  "strategy": "manual-commit",
+  "branch": "plan/move-default-config",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/taskstore/factory.go",
+    "config/taskstore/factory_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7f/24d04719fc/0/metadata.json",
+      "transcript": "/7f/24d04719fc/0/full.jsonl",
+      "context": "/7f/24d04719fc/0/context.md",
+      "content_hash": "/7f/24d04719fc/0/content_hash.txt",
+      "prompt": "/7f/24d04719fc/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 60793,
+    "cache_read_tokens": 761795,
+    "output_tokens": 3256,
+    "api_call_count": 16
+  }
+}
