@@ -197,6 +197,13 @@
       "context": "/1c/947dbb60e9/26/context.md",
       "content_hash": "/1c/947dbb60e9/26/content_hash.txt",
       "prompt": "/1c/947dbb60e9/26/prompt.txt"
+    },
+    {
+      "metadata": "/1c/947dbb60e9/27/metadata.json",
+      "transcript": "/1c/947dbb60e9/27/full.jsonl",
+      "context": "/1c/947dbb60e9/27/context.md",
+      "content_hash": "/1c/947dbb60e9/27/content_hash.txt",
+      "prompt": "/1c/947dbb60e9/27/prompt.txt"
     }
   ],
   "token_usage": {
