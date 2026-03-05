@@ -1,0 +1,3 @@
+Plan new-plan-issues. Goal: new-plan-issues
+
+disappears if confirmation dialog shows while making a new plan, losing all contents. also, the box gets bigger when the agent pane either loads a session or switches (due to exit, etc). Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
