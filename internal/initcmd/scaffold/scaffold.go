@@ -2,10 +2,12 @@ package scaffold
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
@@ -167,6 +169,166 @@ func normalizeOpenCodeModel(harnessName, model string) string {
 	}
 
 	return model
+}
+
+// stripJSONC converts JSONC (JSON with comments and trailing commas) to valid JSON.
+// Handles // line comments and trailing commas before } or ].
+func stripJSONC(data []byte) []byte {
+	// Remove single-line // comments (but not inside strings).
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if idx := findLineComment(line); idx >= 0 {
+			lines[i] = line[:idx]
+		}
+	}
+	out := strings.Join(lines, "\n")
+
+	// Remove trailing commas before } or ].
+	out = trailingCommaRe.ReplaceAllString(out, "$1")
+
+	return []byte(out)
+}
+
+var trailingCommaRe = regexp.MustCompile(`,\s*([}\]])`)
+
+// findLineComment returns the index of a // comment outside of a JSON string,
+// or -1 if none found.
+func findLineComment(line string) int {
+	inString := false
+	for i := 0; i < len(line); i++ {
+		switch {
+		case line[i] == '"' && (i == 0 || line[i-1] != '\\'):
+			inString = !inString
+		case !inString && i+1 < len(line) && line[i] == '/' && line[i+1] == '/':
+			return i
+		}
+	}
+	return -1
+}
+
+// cloneMap copies a map[string]any shallowly.
+func cloneMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(m))
+	for k, v := range m {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+// patchAgentBlock updates model, temperature, and reasoningEffort for the given
+// agent map. agent must be non-nil. Returns true when the map was changed.
+func patchAgentBlock(agent map[string]any, cfg harness.AgentConfig) (changed bool) {
+	if cfg.Model != "" {
+		normalized := normalizeOpenCodeModel(cfg.Harness, cfg.Model)
+		if current, ok := agent["model"]; !ok || fmt.Sprintf("%v", current) != normalized {
+			agent["model"] = normalized
+			changed = true
+		}
+	}
+
+	if cfg.Temperature != nil {
+		if current, ok := agent["temperature"]; !ok || current != *cfg.Temperature {
+			agent["temperature"] = *cfg.Temperature
+			changed = true
+		}
+	}
+
+	if cfg.Effort != "" {
+		if current, ok := agent["reasoningEffort"]; !ok || fmt.Sprintf("%v", current) != cfg.Effort {
+			agent["reasoningEffort"] = cfg.Effort
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+// PatchWorktreeConfig updates .opencode/opencode.jsonc with the latest model/
+// temperature/effort values for configured roles.
+func PatchWorktreeConfig(worktreePath string, agents []harness.AgentConfig) error {
+	configPath := filepath.Join(worktreePath, ".opencode", "opencode.jsonc")
+
+	currentBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read opencode.jsonc: %w", err)
+	}
+
+	var current map[string]any
+	if err := json.Unmarshal(stripJSONC(currentBytes), &current); err != nil {
+		return fmt.Errorf("parse opencode.jsonc: %w", err)
+	}
+
+	defaultConfigText, err := renderOpenCodeConfig(worktreePath, agents)
+	if err != nil {
+		return fmt.Errorf("render opencode.jsonc: %w", err)
+	}
+
+	var rendered map[string]any
+	if err := json.Unmarshal(stripJSONC([]byte(defaultConfigText)), &rendered); err != nil {
+		return fmt.Errorf("parse rendered opencode.jsonc: %w", err)
+	}
+
+	currentAgentBlocks, _ := current["agent"].(map[string]any)
+	if currentAgentBlocks == nil {
+		return fmt.Errorf("invalid opencode config: missing agent block")
+	}
+	renderedAgentBlocks, _ := rendered["agent"].(map[string]any)
+
+	changed := false
+
+	for _, agent := range agents {
+		currentBlock, ok := currentAgentBlocks[agent.Role].(map[string]any)
+		if !ok {
+			fallbackRaw, _ := renderedAgentBlocks[agent.Role].(map[string]any)
+			fallback := cloneMap(fallbackRaw)
+			if fallback != nil && len(fallback) > 0 {
+				currentAgentBlocks[agent.Role] = fallback
+				changed = true
+				if patchAgentBlock(fallback, agent) {
+					changed = true
+				}
+				continue
+			}
+
+			block := map[string]any{}
+			currentAgentBlocks[agent.Role] = block
+			if patchAgentBlock(block, agent) {
+				changed = true
+			}
+			if len(block) == 0 {
+				delete(currentAgentBlocks, agent.Role)
+			}
+			continue
+		}
+
+		if patchAgentBlock(currentBlock, agent) {
+			changed = true
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	current["agent"] = currentAgentBlocks
+
+	updated, err := json.MarshalIndent(current, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal opencode.jsonc: %w", err)
+	}
+
+	updated = append(updated, '\n')
+	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
+		return fmt.Errorf("write opencode.jsonc: %w", err)
+	}
+
+	return nil
 }
 
 // stripTrailingCommas removes JSON trailing commas that arise when removeJSONBlock

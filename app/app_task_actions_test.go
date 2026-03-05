@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,10 +12,12 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
+	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 	"github.com/stretchr/testify/assert"
@@ -209,6 +212,180 @@ func TestSpawnPlanAgent_PlannerUsesMainBranch(t *testing.T) {
 	if inst.Branch != "" {
 		t.Fatalf("planner instance must have empty Branch (runs on main), got %q", inst.Branch)
 	}
+}
+
+// TestSpawnTaskAgent_PatchesSharedWorktreeOpencodeConfig verifies that when
+// spawnTaskAgent is called for an "implement" (coder) action, PatchWorktreeConfig is
+// applied to the SHARED WORKTREE path — not the main repo — so the agent running inside
+// the worktree reads the correct model/temperature/effort from its own opencode.jsonc.
+func TestSpawnTaskAgent_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	// Build a git repo with .opencode/opencode.jsonc committed so the worktree
+	// inherits the file when git worktree add creates it.
+	opencodeDir := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(opencodeDir, 0o755))
+	configPath := filepath.Join(opencodeDir, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"agent":{"coder":{"model":"anthropic/old-coder","temperature":0.1,"reasoningEffort":"low"}}}`), 0o644))
+
+	for _, cmd := range [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "config", "user.email", "test@test.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "add", "."},
+		{"git", "-C", dir, "commit", "-m", "init with opencode config"},
+	} {
+		out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+		if err != nil {
+			t.Skipf("git setup failed (%v): %s", err, out)
+		}
+	}
+
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	planFile := "shared-wt-patch.md"
+	require.NoError(t, ps.Register(planFile, "shared wt patch test", "plan/shared-wt-patch", time.Now()))
+
+	coderTemp := 0.8
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	m := &home{
+		taskState:      ps,
+		activeRepoPath: dir,
+		program:        "opencode",
+		nav:            ui.NewNavigationPanel(&sp),
+		menu:           ui.NewMenu(),
+		toastManager:   overlay.NewToastManager(&sp),
+		appConfig: &config.Config{
+			PhaseRoles: map[string]string{
+				"implementing": "coder",
+			},
+			Profiles: map[string]config.AgentProfile{
+				"coder": {
+					Program:     "opencode",
+					Model:       "claude-opus-4-6",
+					Temperature: &coderTemp,
+					Effort:      "high",
+					Enabled:     true,
+				},
+			},
+		},
+		instanceFinalizers: make(map[*session.Instance]func()),
+	}
+
+	_, cmd := m.spawnTaskAgent(planFile, "implement", "implement prompt")
+	if cmd != nil {
+		_ = cmd()
+	}
+
+	// The shared worktree path is derived from the plan branch.
+	branch := gitpkg.TaskBranchFromFile(planFile)
+	worktreePath := gitpkg.TaskWorktreePath(dir, branch)
+	worktreeConfigPath := filepath.Join(worktreePath, ".opencode", "opencode.jsonc")
+
+	data, err := os.ReadFile(worktreeConfigPath)
+	require.NoError(t, err, "worktree opencode.jsonc must exist after shared worktree setup")
+
+	var cfg map[string]any
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	agentCfg, ok := cfg["agent"].(map[string]any)
+	require.True(t, ok, "agent block must exist")
+	coderCfg, ok := agentCfg["coder"].(map[string]any)
+	require.True(t, ok, "coder block must exist")
+	assert.Equal(t, "anthropic/claude-opus-4-6", coderCfg["model"], "worktree opencode.jsonc must have patched model")
+	assert.InDelta(t, coderTemp, coderCfg["temperature"].(float64), 0.0001, "worktree opencode.jsonc must have patched temperature")
+	assert.Equal(t, "high", coderCfg["reasoningEffort"], "worktree opencode.jsonc must have patched reasoningEffort")
+}
+
+// TestSpawnWaveTasks_PatchesSharedWorktreeOpencodeConfig verifies that spawnWaveTasks
+// patches the SHARED WORKTREE's opencode.jsonc, not the main repo's, so coder agents
+// spawned by wave orchestration read the correct config from their worktree.
+func TestSpawnWaveTasks_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	opencodeDir := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(opencodeDir, 0o755))
+	configPath := filepath.Join(opencodeDir, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"agent":{"coder":{"model":"anthropic/old-wave-coder","temperature":0.2,"reasoningEffort":"low"}}}`), 0o644))
+
+	for _, cmd := range [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "config", "user.email", "test@test.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "add", "."},
+		{"git", "-C", dir, "commit", "-m", "init with opencode config"},
+	} {
+		out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+		if err != nil {
+			t.Skipf("git setup failed (%v): %s", err, out)
+		}
+	}
+
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	const planFile = "wave-wt-patch.md"
+	require.NoError(t, ps.Register(planFile, "wave wt patch test", "plan/wave-wt-patch", time.Now()))
+
+	coderTemp := 0.75
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	m := &home{
+		taskState:      ps,
+		activeRepoPath: dir,
+		program:        "opencode",
+		nav:            ui.NewNavigationPanel(&sp),
+		menu:           ui.NewMenu(),
+		toastManager:   overlay.NewToastManager(&sp),
+		appConfig: &config.Config{
+			PhaseRoles: map[string]string{
+				"implementing": "coder",
+			},
+			Profiles: map[string]config.AgentProfile{
+				"coder": {
+					Program:     "opencode",
+					Model:       "claude-sonnet-4-6",
+					Temperature: &coderTemp,
+					Effort:      "medium",
+					Enabled:     true,
+				},
+			},
+		},
+		instanceFinalizers: make(map[*session.Instance]func()),
+	}
+
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1", Body: "do it"}}},
+		},
+	}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+
+	entry, ok := ps.Entry(planFile)
+	require.True(t, ok)
+
+	_, cmd := m.spawnWaveTasks(orch, plan.Waves[0].Tasks, entry)
+	if cmd != nil {
+		_ = cmd()
+	}
+
+	branch := gitpkg.TaskBranchFromFile(planFile)
+	worktreePath := gitpkg.TaskWorktreePath(dir, branch)
+	worktreeConfigPath := filepath.Join(worktreePath, ".opencode", "opencode.jsonc")
+
+	data, err := os.ReadFile(worktreeConfigPath)
+	require.NoError(t, err, "worktree opencode.jsonc must exist after shared worktree setup")
+
+	var cfg map[string]any
+	require.NoError(t, json.Unmarshal(data, &cfg))
+	agentCfg, ok := cfg["agent"].(map[string]any)
+	require.True(t, ok, "agent block must exist")
+	coderCfg, ok := agentCfg["coder"].(map[string]any)
+	require.True(t, ok, "coder block must exist")
+	assert.Equal(t, "anthropic/claude-sonnet-4-6", coderCfg["model"], "worktree opencode.jsonc must have patched model")
+	assert.InDelta(t, coderTemp, coderCfg["temperature"].(float64), 0.0001, "worktree opencode.jsonc must have patched temperature")
+	assert.Equal(t, "medium", coderCfg["reasoningEffort"], "worktree opencode.jsonc must have patched reasoningEffort")
 }
 
 // TestFSM_PlanLifecycleStages verifies that the FSM produces the correct status for
