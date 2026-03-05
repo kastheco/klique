@@ -1719,7 +1719,7 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 		if err := shared.Setup(); err != nil {
 			return m, m.handleError(err)
 		}
-		if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
+		if err := scaffold.PatchWorktreeConfig(shared.GetWorktreePath(), m.opencodeAgentConfigs()); err != nil {
 			return m, m.handleError(err)
 		}
 		startCmd = func() tea.Msg {
@@ -1868,7 +1868,7 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 	if err := shared.Setup(); err != nil {
 		return m, m.handleError(err)
 	}
-	if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
+	if err := scaffold.PatchWorktreeConfig(shared.GetWorktreePath(), m.opencodeAgentConfigs()); err != nil {
 		return m, m.handleError(err)
 	}
 
