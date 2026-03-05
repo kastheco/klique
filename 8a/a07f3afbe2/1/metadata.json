@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.8",
   "checkpoint_id": "8aa07f3afbe2",
+  "session_id": "ses_3413db9fbffewSYaNHDFEAI3Uo",
   "strategy": "manual-commit",
+  "created_at": "2026-03-05T16:14:49.597110881Z",
   "branch": "main",
   "checkpoints_count": 1,
   "files_touched": [
@@ -12,27 +14,22 @@
     "config/taskstore/factory_test.go",
     "config/toml.go"
   ],
-  "sessions": [
-    {
-      "metadata": "/8a/a07f3afbe2/0/metadata.json",
-      "transcript": "/8a/a07f3afbe2/0/full.jsonl",
-      "context": "",
-      "content_hash": "/8a/a07f3afbe2/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/8a/a07f3afbe2/1/metadata.json",
-      "transcript": "/8a/a07f3afbe2/1/full.jsonl",
-      "context": "/8a/a07f3afbe2/1/context.md",
-      "content_hash": "/8a/a07f3afbe2/1/content_hash.txt",
-      "prompt": "/8a/a07f3afbe2/1/prompt.txt"
-    }
-  ],
+  "agent": "OpenCode",
+  "turn_id": "f3a73f5b0fc4",
   "token_usage": {
     "input_tokens": 152183,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 1446528,
     "output_tokens": 15768,
     "api_call_count": 23
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T16:14:49.499872471Z",
+    "agent_lines": 168,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 168,
+    "agent_percentage": 100
   }
 }
