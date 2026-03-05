@@ -41,6 +41,7 @@ func TestBuildTaskPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "NEVER run `git checkout --")
 	assert.Contains(t, prompt, "formatters/linters")
 	assert.Contains(t, prompt, "test failures in files outside your task")
+	assert.Contains(t, prompt, "build failure caused by missing types")
 	assert.Contains(t, prompt, "surgical changes")
 }
 
@@ -54,6 +55,7 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 	assert.NotContains(t, prompt, "parallel")
 	assert.NotContains(t, prompt, "NEVER run")
 	assert.NotContains(t, prompt, "other agents")
+	assert.NotContains(t, prompt, "build failure caused by missing types")
 }
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
