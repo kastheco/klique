@@ -880,9 +880,6 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: reviewerInst, err: err}
 		}
-		if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
-			return instanceStartedMsg{instance: reviewerInst, err: err}
-		}
 		err := reviewerInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: reviewerInst, err: err}
 	}
@@ -1084,9 +1081,6 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 		if err := shared.Setup(); err != nil {
 			return instanceStartedMsg{instance: coderInst, err: err}
 		}
-		if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
-			return instanceStartedMsg{instance: coderInst, err: err}
-		}
 		err := coderInst.StartInSharedWorktree(shared, branch)
 		return instanceStartedMsg{instance: coderInst, err: err}
 	}
@@ -1128,54 +1122,6 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 
 	m.toastManager.Info(fmt.Sprintf("elaborating plan '%s' before implementation", planName))
 	return m, tea.Batch(tea.RequestWindowSize, startCmd, m.toastTickCmd())
-}
-
-func (m *home) materializeTaskFile(planFile, repoPath string) error {
-	if m.taskStore == nil {
-		return nil
-	}
-	content, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
-	if err != nil {
-		return fmt.Errorf("get plan content %s: %w", planFile, err)
-	}
-	plansDir := filepath.Join(repoPath, "docs", "plans")
-	if err := os.MkdirAll(plansDir, 0o755); err != nil {
-		return fmt.Errorf("create plans dir: %w", err)
-	}
-	planPath := filepath.Join(plansDir, planFile)
-	if err := os.WriteFile(planPath, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write plan file: %w", err)
-	}
-	return nil
-}
-
-// ingestTaskContent reads the plan markdown file from the given repo path and
-// stores its content in the DB via the task store. This bridges the gap between
-// agents writing plan files to their worktree and the DB being the source of truth.
-// Called when a PlannerFinished signal is processed.
-func (m *home) ingestTaskContent(planFile, repoPath string) {
-	if m.taskStore == nil || m.taskState == nil {
-		return
-	}
-	planPath := filepath.Join(repoPath, "docs", "plans", planFile)
-	data, err := os.ReadFile(planPath)
-	if err != nil {
-		log.WarningLog.Printf("ingestTaskContent: cannot read %s: %v", planPath, err)
-		return
-	}
-	// Don't clobber existing DB content with an empty disk file. The
-	// wave-annotation planner writes content directly to the DB via
-	// `kas task update-content`; overwriting with a stale/empty disk
-	// file causes a planning→replanning loop.
-	if strings.TrimSpace(string(data)) == "" {
-		if existing, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil && strings.TrimSpace(existing) != "" {
-			log.WarningLog.Printf("ingestTaskContent: disk file empty but DB has content for %s — skipping overwrite", planFile)
-			return
-		}
-	}
-	if err := m.taskState.IngestContent(planFile, string(data)); err != nil {
-		log.WarningLog.Printf("ingestTaskContent: cannot ingest content for %s: %v", planFile, err)
-	}
 }
 
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.
@@ -1659,11 +1605,7 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 	if action == "plan" || action == "solo" {
 		// Planner and solo agent run on main branch — no worktree created.
 		startCmd = func() tea.Msg {
-			if err := m.materializeTaskFile(planFile, m.activeRepoPath); err != nil {
-				return instanceStartedMsg{instance: inst, err: err}
-			}
-			err := inst.StartOnMainBranch()
-			return instanceStartedMsg{instance: inst, err: err}
+			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
 		}
 	} else {
 		// Backfill branch name for plans created before the branch field was introduced.
@@ -1680,9 +1622,6 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 			return m, m.handleError(err)
 		}
 		startCmd = func() tea.Msg {
-			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
-				return instanceStartedMsg{instance: inst, err: err}
-			}
 			err := inst.StartInSharedWorktree(shared, entry.Branch)
 			return instanceStartedMsg{instance: inst, err: err}
 		}
@@ -1844,9 +1783,6 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 
 		taskInst := inst // capture for closure
 		startCmd := func() tea.Msg {
-			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
-				return instanceStartedMsg{instance: taskInst, err: err}
-			}
 			err := taskInst.StartInSharedWorktree(shared, entry.Branch)
 			return instanceStartedMsg{instance: taskInst, err: err}
 		}
@@ -1981,17 +1917,11 @@ func (m *home) spawnChatAboutTask(planFile, question string) (tea.Model, tea.Cmd
 			if err := shared.Setup(); err != nil {
 				return instanceStartedMsg{instance: inst, err: err}
 			}
-			if err := m.materializeTaskFile(planFile, shared.GetWorktreePath()); err != nil {
-				return instanceStartedMsg{instance: inst, err: err}
-			}
 			err := inst.StartInSharedWorktree(shared, branch)
 			return instanceStartedMsg{instance: inst, err: err}
 		}
 	} else {
 		startCmd = func() tea.Msg {
-			if err := m.materializeTaskFile(planFile, m.activeRepoPath); err != nil {
-				return instanceStartedMsg{instance: inst, err: err}
-			}
 			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
 		}
 	}

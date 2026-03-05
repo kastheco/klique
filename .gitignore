@@ -18,6 +18,8 @@ kas
 **/.kasmos/config.toml
 dist/
 *.bak
+# Plan markdown files — content lives in the task store DB, not on disk
+docs/plans/
 *.test
 .mcp.json
 # Bundled skill data (large, fetched locally)

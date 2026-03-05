@@ -932,9 +932,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case taskfsm.PlannerFinished:
 				capturedPlanFile := sig.TaskFile
-				// Ingest the plan content from the agent's worktree into the DB.
-				// Planners run on the main branch, so the plan file is in activeRepoPath.
-				m.ingestTaskContent(capturedPlanFile, m.activeRepoPath)
 				// Post progress comment to ClickUp (fire-and-forget; nil-safe if no task ID).
 				{
 					summary := ""
