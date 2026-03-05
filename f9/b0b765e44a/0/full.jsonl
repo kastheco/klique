@@ -7,13 +7,13 @@
     "title": "kas: review #2 improved-info-tab",
     "version": "1.2.17",
     "summary": {
-      "additions": 175,
-      "deletions": 0,
-      "files": 5
+      "additions": 177,
+      "deletions": 5,
+      "files": 6
     },
     "time": {
       "created": 1772695900874,
-      "updated": 1772696923893
+      "updated": 1772697027433
     }
   },
   "messages": [
@@ -64,6 +64,14 @@
               "additions": 0,
               "deletions": 0,
               "status": "added"
+            },
+            {
+              "file": "config/taskstore/sqlite.go",
+              "before": "package taskstore\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t_ \"modernc.org/sqlite\" // register sqlite driver\n)\n\nconst schema = `\nCREATE TABLE IF NOT EXISTS tasks (\n\tid          INTEGER PRIMARY KEY,\n\tproject     TEXT    NOT NULL,\n\tfilename    TEXT    NOT NULL,\n\tstatus      TEXT    NOT NULL DEFAULT 'ready',\n\tdescription TEXT    NOT NULL DEFAULT '',\n\tbranch      TEXT    NOT NULL DEFAULT '',\n\ttopic       TEXT    NOT NULL DEFAULT '',\n\tcreated_at  TEXT    NOT NULL DEFAULT '',\n\timplemented TEXT    NOT NULL DEFAULT '',\n\tplanning_at  TEXT    NOT NULL DEFAULT '',\n\timplementing_at TEXT NOT NULL DEFAULT '',\n\treviewing_at TEXT    NOT NULL DEFAULT '',\n\tdone_at     TEXT    NOT NULL DEFAULT '',\n\tgoal        TEXT    NOT NULL DEFAULT '',\n\tUNIQUE(project, filename)\n);\n\nCREATE TABLE IF NOT EXISTS topics (\n\tid         INTEGER PRIMARY KEY,\n\tproject    TEXT NOT NULL,\n\tname       TEXT NOT NULL,\n\tcreated_at TEXT NOT NULL DEFAULT '',\n\tUNIQUE(project, name)\n);\n`\n\n// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\nconst subtasksTableMigration = `\n\tCREATE TABLE IF NOT EXISTS subtasks (\n\t\tid INTEGER PRIMARY KEY,\n\t\tproject TEXT NOT NULL,\n\t\tplan_filename TEXT NOT NULL,\n\t\ttask_number INTEGER NOT NULL,\n\t\ttitle TEXT NOT NULL DEFAULT '',\n\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n\t\tUNIQUE(project, plan_filename, task_number),\n\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n\t)\n`\n\n// contentMigration adds the content column to existing databases that predate it.\nconst contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n\n// planningAtMigration adds planning_at to existing databases.\nconst planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n\n// implementingAtMigration adds implementing_at to existing databases.\nconst implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n\n// reviewingAtMigration adds reviewing_at to existing databases.\nconst reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n\n// doneAtMigration adds done_at to existing databases.\nconst doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n\n// goalMigration adds goal to existing databases.\nconst goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n\n// clickupTaskIDMigration adds the clickup_task_id column to existing databases.\nconst clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n\n// reviewCycleMigration adds the review_cycle column to existing databases.\nconst reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`\n\n// SQLiteStore is a Store implementation backed by a SQLite database.\ntype SQLiteStore struct {\n\tdb *sql.DB\n}\n\n// NewSQLiteStore opens (or creates) a SQLite database at dbPath and runs\n// schema migrations. Use \":memory:\" for an in-memory database (useful in tests).\nfunc NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n\tdb, err := sql.Open(\"sqlite\", dbPath)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open sqlite db: %w\", err)\n\t}\n\n\t// Enable WAL mode for better concurrent read performance.\n\tif dbPath != \":memory:\" {\n\t\tif _, err := db.Exec(\"PRAGMA journal_mode=WAL\"); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"set WAL mode: %w\", err)\n\t\t}\n\t}\n\n\t// Enable foreign keys.\n\tif _, err := db.Exec(\"PRAGMA foreign_keys=ON\"); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"enable foreign keys: %w\", err)\n\t}\n\n\t// Migrate: rename plans → tasks (if old table exists).\n\t// This MUST run before the schema CREATE TABLE so that existing data in the\n\t// plans table is preserved. If we create an empty tasks table first, the\n\t// rename migration sees tasks already exists and skips, orphaning old data.\n\tmigrateRenameTable(db, \"plans\", \"tasks\")\n\n\tif _, err := db.Exec(schema); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"run schema migrations: %w\", err)\n\t}\n\n\t// Migrate data from legacy planstore.db if it exists in the same directory\n\t// and the new tasks table is empty. This handles the rename-plan-to-task\n\t// transition where the DB filename changed from planstore.db to taskstore.db.\n\tif dbPath != \":memory:\" {\n\t\tif err := migrateFromPlanstoreDB(db, dbPath); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"migrate from planstore.db: %w\", err)\n\t\t}\n\t}\n\n\t// Add content column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddContentColumn(db); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate content column: %w\", err)\n\t}\n\n\t// Add clickup_task_id column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"clickup_task_id\", clickupTaskIDMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate clickup_task_id column: %w\", err)\n\t}\n\n\t// Add review_cycle column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"review_cycle\", reviewCycleMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n\t}\n\n\t// Add new task lifecycle phase timestamp and goal columns.\n\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n\t}\n\n\t// Create subtasks table if missing.\n\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n\t}\n\n\treturn &SQLiteStore{db: db}, nil\n}\n\n// migrateAddContentColumn adds the content column to the tasks table if it\n// doesn't already exist. This upgrades databases created before the column\n// was introduced.\nfunc migrateAddContentColumn(db *sql.DB) error {\n\treturn migrateAddColumn(db, \"content\", contentMigration)\n}\n\n// migrateAddColumn adds a column to the tasks table if it doesn't already\n// exist, running the provided ALTER TABLE statement when needed.\nfunc migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {\n\trows, err := db.Query(\"PRAGMA table_info(tasks)\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"query table info: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tfor rows.Next() {\n\t\tvar cid int\n\t\tvar name, colType string\n\t\tvar notNull int\n\t\tvar dfltValue sql.NullString\n\t\tvar pk int\n\t\tif err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {\n\t\t\treturn fmt.Errorf(\"scan table info: %w\", err)\n\t\t}\n\t\tif name == columnName {\n\t\t\treturn nil // column already exists\n\t\t}\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn fmt.Errorf(\"iterate table info: %w\", err)\n\t}\n\n\t// Column doesn't exist — add it.\n\tif _, err := db.Exec(alterSQL); err != nil {\n\t\treturn fmt.Errorf(\"add %s column: %w\", columnName, err)\n\t}\n\treturn nil\n}\n\n// migrateRenameTable renames oldName to newName if the old table exists and\n// the new table does not. This is idempotent: subsequent runs are no-ops.\nfunc migrateRenameTable(db *sql.DB, oldName, newName string) {\n\t// Check if old table exists.\n\tvar count int\n\terr := db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", oldName).Scan(&count)\n\tif err != nil || count == 0 {\n\t\treturn // old table doesn't exist, nothing to migrate\n\t}\n\t// Check if new table already exists.\n\terr = db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", newName).Scan(&count)\n\tif err != nil || count > 0 {\n\t\treturn // new table already exists\n\t}\n\t_, _ = db.Exec(fmt.Sprintf(\"ALTER TABLE %s RENAME TO %s\", oldName, newName))\n}\n\n// Close releases the database connection.\nfunc (s *SQLiteStore) Close() error {\n\treturn s.db.Close()\n}\n\n// Ping verifies the database connection is alive.\nfunc (s *SQLiteStore) Ping() error {\n\treturn s.db.Ping()\n}\n\n// Create inserts a new task entry for the given project.\n// Returns an error if a task with the same filename already exists in the project.\nfunc (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n\tconst q = `\n\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q,\n\t\tproject,\n\t\tentry.Filename,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.Content,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, entry.Filename)\n\t\t}\n\t\treturn fmt.Errorf(\"create plan: %w\", err)\n\t}\n\treturn nil\n}\n\n// Get retrieves a task entry by project and filename.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND filename = ?\n\t`\n\trow := s.db.QueryRow(q, project, filename)\n\treturn scanTaskEntry(row)\n}\n\n// Update replaces all fields of an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// Rename changes the filename of an existing task entry.\n// Returns an error if the old filename is not found or the new filename already exists.\nfunc (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET filename = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q, newFilename, project, oldFilename)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, newFilename)\n\t\t}\n\t\treturn fmt.Errorf(\"rename plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"rename plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, oldFilename)\n\t}\n\treturn nil\n}\n\n// List returns all task entries for the given project, sorted by filename.\nfunc (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByStatus returns all task entries for the given project matching any of\n// the provided statuses, sorted by filename.\nfunc (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {\n\tif len(statuses) == 0 {\n\t\treturn nil, nil\n\t}\n\n\tplaceholders := make([]string, len(statuses))\n\targs := make([]any, 0, len(statuses)+1)\n\targs = append(args, project)\n\tfor i, s := range statuses {\n\t\tplaceholders[i] = \"?\"\n\t\targs = append(args, string(s))\n\t}\n\n\tq := fmt.Sprintf(`\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND status IN (%s)\n\t\tORDER BY filename ASC\n\t`, strings.Join(placeholders, \", \"))\n\n\trows, err := s.db.Query(q, args...)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by status: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByTopic returns all task entries for the given project and topic,\n// sorted by filename.\nfunc (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND topic = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project, topic)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by topic: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListTopics returns all topic entries for the given project, sorted by name.\nfunc (s *SQLiteStore) ListTopics(project string) ([]TopicEntry, error) {\n\tconst q = `\n\t\tSELECT name, created_at\n\t\tFROM topics\n\t\tWHERE project = ?\n\t\tORDER BY name ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list topics: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar topics []TopicEntry\n\tfor rows.Next() {\n\t\tvar name, createdAt string\n\t\tif err := rows.Scan(&name, &createdAt); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan topic: %w\", err)\n\t\t}\n\t\ttopics = append(topics, TopicEntry{\n\t\t\tName:      name,\n\t\t\tCreatedAt: parseTime(createdAt),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate topics: %w\", err)\n\t}\n\treturn topics, nil\n}\n\n// CreateTopic inserts a new topic entry for the given project.\n// Returns an error if a topic with the same name already exists in the project.\nfunc (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {\n\tconst q = `\n\t\tINSERT INTO topics (project, name, created_at)\n\t\tVALUES (?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q, project, entry.Name, formatTime(entry.CreatedAt))\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"topic already exists: %s/%s\", project, entry.Name)\n\t\t}\n\t\treturn fmt.Errorf(\"create topic: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetContent retrieves only the content field for a task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) GetContent(project, filename string) (string, error) {\n\tconst q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`\n\tvar content string\n\terr := s.db.QueryRow(q, project, filename).Scan(&content)\n\tif err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn \"\", fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t\t}\n\t\treturn \"\", fmt.Errorf(\"get content: %w\", err)\n\t}\n\treturn content, nil\n}\n\n// SetContent updates only the content field for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetContent(project, filename, content string) error {\n\tconst q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, content, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {\n\tconst q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, taskID, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// IncrementReviewCycle atomically increments the review_cycle counter for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n\tconst q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetSubtasks replaces all subtasks for a plan in a transaction.\n// Existing subtasks are removed before inserting the supplied rows.\nfunc (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n\ttx, err := s.db.Begin()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t}\n\t}()\n\n\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n\t}\n\n\tfor _, st := range subtasks {\n\t\t_, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t)\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\terr = nil\n\treturn nil\n}\n\n// GetSubtasks returns all subtasks for a plan, sorted by task_number.\nfunc (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n\trows, err := s.db.Query(\n\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar subtasks []SubtaskEntry\n\tfor rows.Next() {\n\t\tvar taskNumber int\n\t\tvar title, status string\n\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n\t\t}\n\t\tsubtasks = append(subtasks, SubtaskEntry{\n\t\t\tTaskNumber: taskNumber,\n\t\t\tTitle:      title,\n\t\t\tStatus:     SubtaskStatus(status),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n\t}\n\treturn subtasks, nil\n}\n\n// UpdateSubtaskStatus updates the status of a specific subtask.\nfunc (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n\tconst q = `\n\t\tUPDATE subtasks\n\t\tSET status = ?\n\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n\t`\n\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n\t}\n\treturn nil\n}\n\n// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n// Known phases are: planning, implementing, reviewing, done.\nfunc (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n\tvar column string\n\tswitch phase {\n\tcase \"planning\":\n\t\tcolumn = \"planning_at\"\n\tcase \"implementing\":\n\t\tcolumn = \"implementing_at\"\n\tcase \"reviewing\":\n\t\tcolumn = \"reviewing_at\"\n\tcase \"done\":\n\t\tcolumn = \"done_at\"\n\tdefault:\n\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n\t}\n\n\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetPlanGoal sets the goal text for a plan.\nfunc (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, goal, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// scanTaskEntry scans a single row into a TaskEntry.\nfunc scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\tvar reviewCycle int\n\tif err := row.Scan(\n\t\t&filename,\n\t\t&status,\n\t\t&description,\n\t\t&branch,\n\t\t&topic,\n\t\t&createdAt,\n\t\t&implemented,\n\t\t&planningAt,\n\t\t&implementingAt,\n\t\t&reviewingAt,\n\t\t&doneAt,\n\t\t&goal,\n\t\t&content,\n\t\t&clickupTaskID,\n\t\t&reviewCycle,\n\t); err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n\t\t}\n\t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n\t}\n\treturn TaskEntry{\n\t\tFilename:       filename,\n\t\tStatus:         Status(status),\n\t\tDescription:    description,\n\t\tBranch:         branch,\n\t\tTopic:          topic,\n\t\tCreatedAt:      parseTime(createdAt),\n\t\tImplemented:    implemented,\n\t\tPlanningAt:     parseTime(planningAt),\n\t\tImplementingAt: parseTime(implementingAt),\n\t\tReviewingAt:    parseTime(reviewingAt),\n\t\tDoneAt:         parseTime(doneAt),\n\t\tGoal:           goal,\n\t\tContent:        content,\n\t\tClickUpTaskID:  clickupTaskID,\n\t\tReviewCycle:    reviewCycle,\n\t}, nil\n}\n\n// scanTaskEntries scans multiple rows into a slice of TaskEntry.\nfunc scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n\tvar entries []TaskEntry\n\tfor rows.Next() {\n\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\t\tvar reviewCycle int\n\t\tif err := rows.Scan(\n\t\t\t&filename,\n\t\t\t&status,\n\t\t\t&description,\n\t\t\t&branch,\n\t\t\t&topic,\n\t\t\t&createdAt,\n\t\t\t&implemented,\n\t\t\t&planningAt,\n\t\t\t&implementingAt,\n\t\t\t&reviewingAt,\n\t\t\t&doneAt,\n\t\t\t&goal,\n\t\t\t&content,\n\t\t\t&clickupTaskID,\n\t\t\t&reviewCycle,\n\t\t); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n\t\t}\n\t\tentries = append(entries, TaskEntry{\n\t\t\tFilename:       filename,\n\t\t\tStatus:         Status(status),\n\t\t\tDescription:    description,\n\t\t\tBranch:         branch,\n\t\t\tTopic:          topic,\n\t\t\tCreatedAt:      parseTime(createdAt),\n\t\t\tImplemented:    implemented,\n\t\t\tPlanningAt:     parseTime(planningAt),\n\t\t\tImplementingAt: parseTime(implementingAt),\n\t\t\tReviewingAt:    parseTime(reviewingAt),\n\t\t\tDoneAt:         parseTime(doneAt),\n\t\t\tGoal:           goal,\n\t\t\tContent:        content,\n\t\t\tClickUpTaskID:  clickupTaskID,\n\t\t\tReviewCycle:    reviewCycle,\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate tasks: %w\", err)\n\t}\n\treturn entries, nil\n}\n\n// formatTime formats a time.Time as RFC3339 for storage. Zero time returns empty string.\nfunc formatTime(t time.Time) string {\n\tif t.IsZero() {\n\t\treturn \"\"\n\t}\n\treturn t.UTC().Format(time.RFC3339Nano)\n}\n\n// parseTime parses an RFC3339 string. Returns zero time on empty or invalid input.\nfunc parseTime(s string) time.Time {\n\tif s == \"\" {\n\t\treturn time.Time{}\n\t}\n\tt, err := time.Parse(time.RFC3339Nano, s)\n\tif err != nil {\n\t\treturn time.Time{}\n\t}\n\treturn t\n}\n\n// isUniqueConstraintError returns true if the error is a SQLite UNIQUE constraint violation.\nfunc isUniqueConstraintError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\treturn strings.Contains(err.Error(), \"UNIQUE constraint failed\")\n}\n",
+              "after": "package taskstore\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t_ \"modernc.org/sqlite\" // register sqlite driver\n)\n\nconst schema = `\nCREATE TABLE IF NOT EXISTS tasks (\n\tid          INTEGER PRIMARY KEY,\n\tproject     TEXT    NOT NULL,\n\tfilename    TEXT    NOT NULL,\n\tstatus      TEXT    NOT NULL DEFAULT 'ready',\n\tdescription TEXT    NOT NULL DEFAULT '',\n\tbranch      TEXT    NOT NULL DEFAULT '',\n\ttopic       TEXT    NOT NULL DEFAULT '',\n\tcreated_at  TEXT    NOT NULL DEFAULT '',\n\timplemented TEXT    NOT NULL DEFAULT '',\n\tplanning_at  TEXT    NOT NULL DEFAULT '',\n\timplementing_at TEXT NOT NULL DEFAULT '',\n\treviewing_at TEXT    NOT NULL DEFAULT '',\n\tdone_at     TEXT    NOT NULL DEFAULT '',\n\tgoal        TEXT    NOT NULL DEFAULT '',\n\tUNIQUE(project, filename)\n);\n\nCREATE TABLE IF NOT EXISTS topics (\n\tid         INTEGER PRIMARY KEY,\n\tproject    TEXT NOT NULL,\n\tname       TEXT NOT NULL,\n\tcreated_at TEXT NOT NULL DEFAULT '',\n\tUNIQUE(project, name)\n);\n`\n\n// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\nconst subtasksTableMigration = `\n\tCREATE TABLE IF NOT EXISTS subtasks (\n\t\tid INTEGER PRIMARY KEY,\n\t\tproject TEXT NOT NULL,\n\t\tplan_filename TEXT NOT NULL,\n\t\ttask_number INTEGER NOT NULL,\n\t\ttitle TEXT NOT NULL DEFAULT '',\n\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n\t\tUNIQUE(project, plan_filename, task_number),\n\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n\t)\n`\n\n// contentMigration adds the content column to existing databases that predate it.\nconst contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n\n// planningAtMigration adds planning_at to existing databases.\nconst planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n\n// implementingAtMigration adds implementing_at to existing databases.\nconst implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n\n// reviewingAtMigration adds reviewing_at to existing databases.\nconst reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n\n// doneAtMigration adds done_at to existing databases.\nconst doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n\n// goalMigration adds goal to existing databases.\nconst goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n\n// clickupTaskIDMigration adds the clickup_task_id column to existing databases.\nconst clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n\n// reviewCycleMigration adds the review_cycle column to existing databases.\nconst reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`\n\n// SQLiteStore is a Store implementation backed by a SQLite database.\ntype SQLiteStore struct {\n\tdb *sql.DB\n}\n\n// NewSQLiteStore opens (or creates) a SQLite database at dbPath and runs\n// schema migrations. Use \":memory:\" for an in-memory database (useful in tests).\nfunc NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n\tdb, err := sql.Open(\"sqlite\", dbPath)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open sqlite db: %w\", err)\n\t}\n\n\t// Enable WAL mode for better concurrent read performance.\n\tif dbPath != \":memory:\" {\n\t\tif _, err := db.Exec(\"PRAGMA journal_mode=WAL\"); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"set WAL mode: %w\", err)\n\t\t}\n\t}\n\n\t// Enable foreign keys.\n\tif _, err := db.Exec(\"PRAGMA foreign_keys=ON\"); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"enable foreign keys: %w\", err)\n\t}\n\n\t// Migrate: rename plans → tasks (if old table exists).\n\t// This MUST run before the schema CREATE TABLE so that existing data in the\n\t// plans table is preserved. If we create an empty tasks table first, the\n\t// rename migration sees tasks already exists and skips, orphaning old data.\n\tmigrateRenameTable(db, \"plans\", \"tasks\")\n\n\tif _, err := db.Exec(schema); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"run schema migrations: %w\", err)\n\t}\n\n\t// Migrate data from legacy planstore.db if it exists in the same directory\n\t// and the new tasks table is empty. This handles the rename-plan-to-task\n\t// transition where the DB filename changed from planstore.db to taskstore.db.\n\tif dbPath != \":memory:\" {\n\t\tif err := migrateFromPlanstoreDB(db, dbPath); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"migrate from planstore.db: %w\", err)\n\t\t}\n\t}\n\n\t// Add content column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddContentColumn(db); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate content column: %w\", err)\n\t}\n\n\t// Add clickup_task_id column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"clickup_task_id\", clickupTaskIDMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate clickup_task_id column: %w\", err)\n\t}\n\n\t// Add review_cycle column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"review_cycle\", reviewCycleMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n\t}\n\n\t// Add new task lifecycle phase timestamp and goal columns.\n\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n\t}\n\n\t// Create subtasks table if missing.\n\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n\t}\n\n\treturn &SQLiteStore{db: db}, nil\n}\n\n// migrateAddContentColumn adds the content column to the tasks table if it\n// doesn't already exist. This upgrades databases created before the column\n// was introduced.\nfunc migrateAddContentColumn(db *sql.DB) error {\n\treturn migrateAddColumn(db, \"content\", contentMigration)\n}\n\n// migrateAddColumn adds a column to the tasks table if it doesn't already\n// exist, running the provided ALTER TABLE statement when needed.\nfunc migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {\n\trows, err := db.Query(\"PRAGMA table_info(tasks)\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"query table info: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tfor rows.Next() {\n\t\tvar cid int\n\t\tvar name, colType string\n\t\tvar notNull int\n\t\tvar dfltValue sql.NullString\n\t\tvar pk int\n\t\tif err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {\n\t\t\treturn fmt.Errorf(\"scan table info: %w\", err)\n\t\t}\n\t\tif name == columnName {\n\t\t\treturn nil // column already exists\n\t\t}\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn fmt.Errorf(\"iterate table info: %w\", err)\n\t}\n\n\t// Column doesn't exist — add it.\n\tif _, err := db.Exec(alterSQL); err != nil {\n\t\treturn fmt.Errorf(\"add %s column: %w\", columnName, err)\n\t}\n\treturn nil\n}\n\n// migrateRenameTable renames oldName to newName if the old table exists and\n// the new table does not. This is idempotent: subsequent runs are no-ops.\nfunc migrateRenameTable(db *sql.DB, oldName, newName string) {\n\t// Check if old table exists.\n\tvar count int\n\terr := db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", oldName).Scan(&count)\n\tif err != nil || count == 0 {\n\t\treturn // old table doesn't exist, nothing to migrate\n\t}\n\t// Check if new table already exists.\n\terr = db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", newName).Scan(&count)\n\tif err != nil || count > 0 {\n\t\treturn // new table already exists\n\t}\n\t_, _ = db.Exec(fmt.Sprintf(\"ALTER TABLE %s RENAME TO %s\", oldName, newName))\n}\n\n// Close releases the database connection.\nfunc (s *SQLiteStore) Close() error {\n\treturn s.db.Close()\n}\n\n// Ping verifies the database connection is alive.\nfunc (s *SQLiteStore) Ping() error {\n\treturn s.db.Ping()\n}\n\n// Create inserts a new task entry for the given project.\n// Returns an error if a task with the same filename already exists in the project.\nfunc (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n\tconst q = `\n\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q,\n\t\tproject,\n\t\tentry.Filename,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.Content,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, entry.Filename)\n\t\t}\n\t\treturn fmt.Errorf(\"create plan: %w\", err)\n\t}\n\treturn nil\n}\n\n// Get retrieves a task entry by project and filename.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND filename = ?\n\t`\n\trow := s.db.QueryRow(q, project, filename)\n\treturn scanTaskEntry(row)\n}\n\n// Update replaces all fields of an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// Rename changes the filename of an existing task entry.\n// Returns an error if the old filename is not found or the new filename already exists.\nfunc (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET filename = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q, newFilename, project, oldFilename)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, newFilename)\n\t\t}\n\t\treturn fmt.Errorf(\"rename plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"rename plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, oldFilename)\n\t}\n\treturn nil\n}\n\n// List returns all task entries for the given project, sorted by filename.\nfunc (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByStatus returns all task entries for the given project matching any of\n// the provided statuses, sorted by filename.\nfunc (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {\n\tif len(statuses) == 0 {\n\t\treturn nil, nil\n\t}\n\n\tplaceholders := make([]string, len(statuses))\n\targs := make([]any, 0, len(statuses)+1)\n\targs = append(args, project)\n\tfor i, s := range statuses {\n\t\tplaceholders[i] = \"?\"\n\t\targs = append(args, string(s))\n\t}\n\n\tq := fmt.Sprintf(`\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND status IN (%s)\n\t\tORDER BY filename ASC\n\t`, strings.Join(placeholders, \", \"))\n\n\trows, err := s.db.Query(q, args...)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by status: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByTopic returns all task entries for the given project and topic,\n// sorted by filename.\nfunc (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND topic = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project, topic)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by topic: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListTopics returns all topic entries for the given project, sorted by name.\nfunc (s *SQLiteStore) ListTopics(project string) ([]TopicEntry, error) {\n\tconst q = `\n\t\tSELECT name, created_at\n\t\tFROM topics\n\t\tWHERE project = ?\n\t\tORDER BY name ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list topics: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar topics []TopicEntry\n\tfor rows.Next() {\n\t\tvar name, createdAt string\n\t\tif err := rows.Scan(&name, &createdAt); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan topic: %w\", err)\n\t\t}\n\t\ttopics = append(topics, TopicEntry{\n\t\t\tName:      name,\n\t\t\tCreatedAt: parseTime(createdAt),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate topics: %w\", err)\n\t}\n\treturn topics, nil\n}\n\n// CreateTopic inserts a new topic entry for the given project.\n// Returns an error if a topic with the same name already exists in the project.\nfunc (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {\n\tconst q = `\n\t\tINSERT INTO topics (project, name, created_at)\n\t\tVALUES (?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q, project, entry.Name, formatTime(entry.CreatedAt))\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"topic already exists: %s/%s\", project, entry.Name)\n\t\t}\n\t\treturn fmt.Errorf(\"create topic: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetContent retrieves only the content field for a task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) GetContent(project, filename string) (string, error) {\n\tconst q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`\n\tvar content string\n\terr := s.db.QueryRow(q, project, filename).Scan(&content)\n\tif err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn \"\", fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t\t}\n\t\treturn \"\", fmt.Errorf(\"get content: %w\", err)\n\t}\n\treturn content, nil\n}\n\n// SetContent updates only the content field for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetContent(project, filename, content string) error {\n\tconst q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, content, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {\n\tconst q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, taskID, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// IncrementReviewCycle atomically increments the review_cycle counter for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n\tconst q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetSubtasks replaces all subtasks for a plan in a transaction.\n// Existing subtasks are removed before inserting the supplied rows.\nfunc (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n\ttx, err := s.db.Begin()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t}\n\t}()\n\n\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n\t}\n\n\tfor _, st := range subtasks {\n\t\tif _, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t); err != nil {\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetSubtasks returns all subtasks for a plan, sorted by task_number.\nfunc (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n\trows, err := s.db.Query(\n\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar subtasks []SubtaskEntry\n\tfor rows.Next() {\n\t\tvar taskNumber int\n\t\tvar title, status string\n\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n\t\t}\n\t\tsubtasks = append(subtasks, SubtaskEntry{\n\t\t\tTaskNumber: taskNumber,\n\t\t\tTitle:      title,\n\t\t\tStatus:     SubtaskStatus(status),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n\t}\n\treturn subtasks, nil\n}\n\n// UpdateSubtaskStatus updates the status of a specific subtask.\nfunc (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n\tconst q = `\n\t\tUPDATE subtasks\n\t\tSET status = ?\n\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n\t`\n\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n\t}\n\treturn nil\n}\n\n// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n// Known phases are: planning, implementing, reviewing, done.\nfunc (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n\tvar column string\n\tswitch phase {\n\tcase \"planning\":\n\t\tcolumn = \"planning_at\"\n\tcase \"implementing\":\n\t\tcolumn = \"implementing_at\"\n\tcase \"reviewing\":\n\t\tcolumn = \"reviewing_at\"\n\tcase \"done\":\n\t\tcolumn = \"done_at\"\n\tdefault:\n\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n\t}\n\n\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetPlanGoal sets the goal text for a plan.\nfunc (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, goal, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// scanTaskEntry scans a single row into a TaskEntry.\nfunc scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\tvar reviewCycle int\n\tif err := row.Scan(\n\t\t&filename,\n\t\t&status,\n\t\t&description,\n\t\t&branch,\n\t\t&topic,\n\t\t&createdAt,\n\t\t&implemented,\n\t\t&planningAt,\n\t\t&implementingAt,\n\t\t&reviewingAt,\n\t\t&doneAt,\n\t\t&goal,\n\t\t&content,\n\t\t&clickupTaskID,\n\t\t&reviewCycle,\n\t); err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n\t\t}\n\t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n\t}\n\treturn TaskEntry{\n\t\tFilename:       filename,\n\t\tStatus:         Status(status),\n\t\tDescription:    description,\n\t\tBranch:         branch,\n\t\tTopic:          topic,\n\t\tCreatedAt:      parseTime(createdAt),\n\t\tImplemented:    implemented,\n\t\tPlanningAt:     parseTime(planningAt),\n\t\tImplementingAt: parseTime(implementingAt),\n\t\tReviewingAt:    parseTime(reviewingAt),\n\t\tDoneAt:         parseTime(doneAt),\n\t\tGoal:           goal,\n\t\tContent:        content,\n\t\tClickUpTaskID:  clickupTaskID,\n\t\tReviewCycle:    reviewCycle,\n\t}, nil\n}\n\n// scanTaskEntries scans multiple rows into a slice of TaskEntry.\nfunc scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n\tvar entries []TaskEntry\n\tfor rows.Next() {\n\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\t\tvar reviewCycle int\n\t\tif err := rows.Scan(\n\t\t\t&filename,\n\t\t\t&status,\n\t\t\t&description,\n\t\t\t&branch,\n\t\t\t&topic,\n\t\t\t&createdAt,\n\t\t\t&implemented,\n\t\t\t&planningAt,\n\t\t\t&implementingAt,\n\t\t\t&reviewingAt,\n\t\t\t&doneAt,\n\t\t\t&goal,\n\t\t\t&content,\n\t\t\t&clickupTaskID,\n\t\t\t&reviewCycle,\n\t\t); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n\t\t}\n\t\tentries = append(entries, TaskEntry{\n\t\t\tFilename:       filename,\n\t\t\tStatus:         Status(status),\n\t\t\tDescription:    description,\n\t\t\tBranch:         branch,\n\t\t\tTopic:          topic,\n\t\t\tCreatedAt:      parseTime(createdAt),\n\t\t\tImplemented:    implemented,\n\t\t\tPlanningAt:     parseTime(planningAt),\n\t\t\tImplementingAt: parseTime(implementingAt),\n\t\t\tReviewingAt:    parseTime(reviewingAt),\n\t\t\tDoneAt:         parseTime(doneAt),\n\t\t\tGoal:           goal,\n\t\t\tContent:        content,\n\t\t\tClickUpTaskID:  clickupTaskID,\n\t\t\tReviewCycle:    reviewCycle,\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate tasks: %w\", err)\n\t}\n\treturn entries, nil\n}\n\n// formatTime formats a time.Time as RFC3339 for storage. Zero time returns empty string.\nfunc formatTime(t time.Time) string {\n\tif t.IsZero() {\n\t\treturn \"\"\n\t}\n\treturn t.UTC().Format(time.RFC3339Nano)\n}\n\n// parseTime parses an RFC3339 string. Returns zero time on empty or invalid input.\nfunc parseTime(s string) time.Time {\n\tif s == \"\" {\n\t\treturn time.Time{}\n\t}\n\tt, err := time.Parse(time.RFC3339Nano, s)\n\tif err != nil {\n\t\treturn time.Time{}\n\t}\n\treturn t\n}\n\n// isUniqueConstraintError returns true if the error is a SQLite UNIQUE constraint violation.\nfunc isUniqueConstraintError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\treturn strings.Contains(err.Error(), \"UNIQUE constraint failed\")\n}\n",
+              "additions": 2,
+              "deletions": 5,
+              "status": "modified"
             }
           ]
         },
@@ -4203,7 +4211,1301 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772696923876
+          "created": 1772696923876,
+          "completed": 1772696936703
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 114579,
+          "input": 1,
+          "output": 112,
+          "reasoning": 0,
+          "cache": {
+            "read": 114231,
+            "write": 235
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf86ee40012DYL8GeY05Tf15",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "id": "prt_cbcf87b03001eSHemqAH3jDhQy",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf86ee40012DYL8GeY05Tf15"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add .gitignore && git commit -m \"fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\"",
+              "description": "Commit removal of stray kasmos state files"
+            },
+            "output": "[plan/improved-info-tab 491f0898] fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\n 11 files changed, 7 insertions(+), 277 deletions(-)\n delete mode 100644 app/.kasmos/config.json\n delete mode 100644 app/.kasmos/config.toml\n delete mode 100644 app/.kasmos/state.json\n delete mode 100644 app/.kasmos/taskstore.db\n delete mode 100644 app/.kasmos/taskstore.db-shm\n delete mode 100644 app/.kasmos/taskstore.db-wal\n delete mode 100644 ui/.kasmos/config.json\n delete mode 100644 ui/.kasmos/config.toml\n delete mode 100644 ui/.kasmos/state.json\n delete mode 100644 ui/.kasmos/taskstore.db\n",
+            "title": "Commit removal of stray kasmos state files",
+            "metadata": {
+              "output": "[plan/improved-info-tab 491f0898] fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\n 11 files changed, 7 insertions(+), 277 deletions(-)\n delete mode 100644 app/.kasmos/config.json\n delete mode 100644 app/.kasmos/config.toml\n delete mode 100644 app/.kasmos/state.json\n delete mode 100644 app/.kasmos/taskstore.db\n delete mode 100644 app/.kasmos/taskstore.db-shm\n delete mode 100644 app/.kasmos/taskstore.db-wal\n delete mode 100644 ui/.kasmos/config.json\n delete mode 100644 ui/.kasmos/config.toml\n delete mode 100644 ui/.kasmos/state.json\n delete mode 100644 ui/.kasmos/taskstore.db\n",
+              "exit": 0,
+              "description": "Commit removal of stray kasmos state files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696927978,
+              "end": 1772696936694
+            }
+          },
+          "id": "prt_cbcf87b03002cG0ZVf8M40X8Ke",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf86ee40012DYL8GeY05Tf15"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "cost": 0,
+          "tokens": {
+            "total": 114579,
+            "input": 1,
+            "output": 112,
+            "reasoning": 0,
+            "cache": {
+              "read": 114231,
+              "write": 235
+            }
+          },
+          "id": "prt_cbcf8a0f6001tmINYxMzkxIlvk",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf86ee40012DYL8GeY05Tf15"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696936705,
+          "completed": 1772696940132
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 114984,
+          "input": 1,
+          "output": 164,
+          "reasoning": 0,
+          "cache": {
+            "read": 114466,
+            "write": 353
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf8a101001y6ft8pb5e9RTNe",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "id": "prt_cbcf8a6f5001XwopC9o4Ar1bou",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8a101001y6ft8pb5e9RTNe"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now let me also check if there's a `.kasmos` config file in the `.kasmos/` diff:",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/I1lEgzViyGcjvM5/REDACTED/6QZIipZbCxBGCuyKmAwgK0Gqm/RlMHB6LQ1ndH7lVuTcIaIzXMJhc6i6/UMC/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772696938230,
+            "end": 1772696938988
+          },
+          "id": "prt_cbcf8a6f6001L9u8IZDGl5otg9",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8a101001y6ft8pb5e9RTNe"
+        },
+        {
+          "type": "text",
+          "text": "Now let me check the `.kasmos/config.toml` change that appeared in the diff (root level).",
+          "time": {
+            "start": 1772696939448,
+            "end": 1772696939448
+          },
+          "id": "prt_cbcf8a9ed001kmNWM8wbHWkKNG",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8a101001y6ft8pb5e9RTNe"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD -- .kasmos/config.toml 2>&1",
+              "description": "Check .kasmos/config.toml root-level change"
+            },
+            "output": "diff --git a/.kasmos/config.toml b/.kasmos/config.toml\nindex 4f9efa4b..f70dfdff 100644\n--- a/.kasmos/config.toml\n+++ b/.kasmos/config.toml\n@@ -18,7 +18,6 @@\n   [agents.coder]\n     enabled = true\n     program = \"opencode\"\n-    flags = [\"--variant\", \"low\"]\n     model = \"openai/gpt-5.3-codex-spark\"\n     temperature = 0.1\n     effort = \"low\"\n",
+            "title": "Check .kasmos/config.toml root-level change",
+            "metadata": {
+              "output": "diff --git a/.kasmos/config.toml b/.kasmos/config.toml\nindex 4f9efa4b..f70dfdff 100644\n--- a/.kasmos/config.toml\n+++ b/.kasmos/config.toml\n@@ -18,7 +18,6 @@\n   [agents.coder]\n     enabled = true\n     program = \"opencode\"\n-    flags = [\"--variant\", \"low\"]\n     model = \"openai/gpt-5.3-codex-spark\"\n     temperature = 0.1\n     effort = \"low\"\n",
+              "exit": 0,
+              "description": "Check .kasmos/config.toml root-level change",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696940101,
+              "end": 1772696940105
+            }
+          },
+          "id": "prt_cbcf8abb9001W1Y8jWQNK4UyQ2",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8a101001y6ft8pb5e9RTNe"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "cost": 0,
+          "tokens": {
+            "total": 114984,
+            "input": 1,
+            "output": 164,
+            "reasoning": 0,
+            "cache": {
+              "read": 114466,
+              "write": 353
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8a101001y6ft8pb5e9RTNe"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696940134,
+          "completed": 1772696948946
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 115602,
+          "input": 1,
+          "output": 459,
+          "reasoning": 0,
+          "cache": {
+            "read": 114819,
+            "write": 323
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "id": "prt_cbcf8b598001By3hjTnS0zG1nY",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "This is a change to the repo's `.kasmos/config.toml` that removes a `flags = [\"--variant\", \"low\"]` line from the coder agent config. This is a config change that was committed alongside the feature work. It's legitimate but still technically outside the plan's scope.\n\nHowever, this is the repo-level config (the one that IS tracked per the `.gitignore` exclusion `!/.kasmos/config.toml`), so it's OK to track. But it's still scope creep.\n\nActually, looking at `.gitignore`:\n```\n/.kasmos/*\n!/.kasmos/config.toml\n\n\n```\n\nSo `.kasmos/config.toml` is explicitly tracked. This change to the config is likely a legitimate adjustment made by the coder during their work. It removes a `--variant low` flag from the coder agent profile. This is minor scope creep but not harmful. Let me also quickly scan for any remaining issues I might have missed and run a typo check on the Go files to see if there are any spelling mistakes.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/epNLcL9ddA58bceQLLp9C0Ax++QA3RGFX/pVljkvsIlGU1BoaVvLHLiEJjV/REDACTED/REDACTED/REDACTED/5nLXLJnpeyUyqeZDyaZwSd/Ag8J4LQHi3CW+29N/REDACTED/REDACTED/maxE9Qkii0pfKKDHw/ACCAefHei5R/REDACTED/fc5Qzy+uhRqleajoZHwFZZf/REDACTED/AML/dmOWPY/REDACTED/REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772696941977,
+            "end": 1772696947673
+          },
+          "id": "prt_cbcf8b599001YEE0QASp38Velm",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff main..HEAD --name-only | rg '\\.go$' | xargs typos 2>&1",
+              "description": "Run typos on changed Go files"
+            },
+            "output": "",
+            "title": "Run typos on changed Go files",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Run typos on changed Go files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696947733,
+              "end": 1772696947781
+            }
+          },
+          "id": "prt_cbcf8cbe0001qdeifsuW793Cok",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01SnVbY2eY8qq4oPdB4yF7PT",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go vet ./config/taskstore/... ./config/taskstate/... ./config/taskfsm/... ./orchestration/... ./ui/... ./app/... 2>&1",
+              "description": "Run go vet on changed packages"
+            },
+            "output": "",
+            "title": "Run go vet on changed packages",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Run go vet on changed packages",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696948424,
+              "end": 1772696948936
+            }
+          },
+          "id": "prt_cbcf8cc18001HSdF4jTVKnRt1g",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "cost": 0,
+          "tokens": {
+            "total": 115602,
+            "input": 1,
+            "output": 459,
+            "reasoning": 0,
+            "cache": {
+              "read": 114819,
+              "write": 323
+            }
+          },
+          "id": "prt_cbcf8d0c9001Q6pI1ayeR6r7S6",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696948948,
+          "completed": 1772696953392
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 115879,
+          "input": 1,
+          "output": 202,
+          "reasoning": 0,
+          "cache": {
+            "read": 115142,
+            "write": 534
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf8d0d4001uRdwo91z6pF9Vg",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "id": "prt_cbcf8d76c001B3SoU5uFArFgH1",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8d0d4001uRdwo91z6pF9Vg"
+        },
+        {
+          "type": "reasoning",
+          "text": "No typos and no vet issues. Let me now check one more thing - the `SetSubtasks` redundant `err = nil` and double rollback. These are in `config/taskstore/sqlite.go`.",
+          "metadata": {
+            "anthropic": {
+              "signature": "Es4CCkYICxgCKkAPiqsqZ+lMzu1T/REDACTED//REDACTED/REDACTED/REDACTED/PHolaRgB"
+            }
+          },
+          "time": {
+            "start": 1772696950636,
+            "end": 1772696951791
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8d0d4001uRdwo91z6pF9Vg"
+        },
+        {
+          "type": "text",
+          "text": "Let me now fix the minor code issues in `SetSubtasks` that I identified.",
+          "time": {
+            "start": 1772696952623,
+            "end": 1772696952623
+          },
+          "id": "prt_cbcf8dbf0001l7fWeO51ZjaNGI",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8d0d4001uRdwo91z6pF9Vg"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RdeBeQGFLaVCuo5VCNvfjP",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go",
+              "offset": 528,
+              "limit": 70
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go</path>\n<type>file</type>\n<content>528: \treturn nil\n529: }\n530: \n531: // SetSubtasks replaces all subtasks for a plan in a transaction.\n532: // Existing subtasks are removed before inserting the supplied rows.\n533: func (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n534: \ttx, err := s.db.Begin()\n535: \tif err != nil {\n536: \t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n537: \t}\n538: \tdefer func() {\n539: \t\tif err != nil {\n540: \t\t\t_ = tx.Rollback()\n541: \t\t}\n542: \t}()\n543: \n544: \tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n545: \t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n546: \t}\n547: \n548: \tfor _, st := range subtasks {\n549: \t\t_, err = tx.Exec(\n550: \t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n551: \t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n552: \t\t)\n553: \t\tif err != nil {\n554: \t\t\t_ = tx.Rollback()\n555: \t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n556: \t\t}\n557: \t}\n558: \n559: \tif err = tx.Commit(); err != nil {\n560: \t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n561: \t}\n562: \terr = nil\n563: \treturn nil\n564: }\n565: \n566: // GetSubtasks returns all subtasks for a plan, sorted by task_number.\n567: func (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n568: \trows, err := s.db.Query(\n569: \t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n570: \t\tproject,\n571: \t\tfilename,\n572: \t)\n573: \tif err != nil {\n574: \t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n575: \t}\n576: \tdefer rows.Close()\n577: \n578: \tvar subtasks []SubtaskEntry\n579: \tfor rows.Next() {\n580: \t\tvar taskNumber int\n581: \t\tvar title, status string\n582: \t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n583: \t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n584: \t\t}\n585: \t\tsubtasks = append(subtasks, SubtaskEntry{\n586: \t\t\tTaskNumber: taskNumber,\n587: \t\t\tTitle:      title,\n588: \t\t\tStatus:     SubtaskStatus(status),\n589: \t\t})\n590: \t}\n591: \tif err := rows.Err(); err != nil {\n592: \t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n593: \t}\n594: \treturn subtasks, nil\n595: }\n596: \n597: // UpdateSubtaskStatus updates the status of a specific subtask.\n\n(Showing lines 528-597 of 787. Use offset=598 to continue.)\n</content>",
+            "title": "config/taskstore/sqlite.go",
+            "metadata": {
+              "preview": "\treturn nil\n}\n\n// SetSubtasks replaces all subtasks for a plan in a transaction.\n// Existing subtasks are removed before inserting the supplied rows.\nfunc (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n\ttx, err := s.db.Begin()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t}\n\t}()\n\n\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n\t}\n",
+              "truncated": true,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772696953354,
+              "end": 1772696953356
+            }
+          },
+          "id": "prt_cbcf8df30001cMD0Hd8yMZ6fhx",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8d0d4001uRdwo91z6pF9Vg"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "cost": 0,
+          "tokens": {
+            "total": 115879,
+            "input": 1,
+            "output": 202,
+            "reasoning": 0,
+            "cache": {
+              "read": 115142,
+              "write": 534
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8d0d4001uRdwo91z6pF9Vg"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696953395,
+          "completed": 1772696958536
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 117280,
+          "input": 1,
+          "output": 425,
+          "reasoning": 0,
+          "cache": {
+            "read": 115676,
+            "write": 1178
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf8e233001l4DWxesSLOK3pC",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "id": "prt_cbcf8ea55001iOKwQQKpd7NTob",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8e233001l4DWxesSLOK3pC"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01MrcKDhviTPJiFQ7rPTevU7",
+          "tool": "edit",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go",
+              "oldString": "\tfor _, st := range subtasks {\n\t\t_, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t)\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\terr = nil\n\treturn nil\n}",
+              "newString": "\tfor _, st := range subtasks {\n\t\tif _, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t); err != nil {\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\treturn nil\n}"
+            },
+            "output": "Edit applied successfully.",
+            "title": "config/taskstore/sqlite.go",
+            "metadata": {
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/ui/info_pane.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 163,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 163,
+                        "character": 13
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using max"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 175,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 175,
+                        "character": 13
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using max"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 211,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 211,
+                        "character": 17
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using max"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 238,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 238,
+                        "character": 10
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using max"
+                  },
+                  {
+                    "range": {
+                      "start": {
+                        "line": 294,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 294,
+                        "character": 21
+                      }
+                    },
+                    "severity": 4,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize#minmax"
+                    },
+                    "source": "minmax",
+                    "message": "if statement can be modernized using min"
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/ui/menu.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 60,
+                        "character": 4
+                      },
+                      "end": {
+                        "line": 60,
+                        "character": 22
+                      }
+                    },
+                    "severity": 3,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/gopls/internal/analysis/unusedfunc"
+                    },
+                    "source": "unusedfunc",
+                    "message": "var \"defaultMenuOptions\" is unused",
+                    "tags": [
+                      1
+                    ]
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/ui/navigation_panel.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 81,
+                        "character": 1
+                      },
+                      "end": {
+                        "line": 81,
+                        "character": 19
+                      }
+                    },
+                    "severity": 3,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/gopls/internal/analysis/unusedfunc"
+                    },
+                    "source": "unusedfunc",
+                    "message": "var \"navSectionDivStyle\" is unused"
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/ui/diff.go": [
+                  {
+                    "range": {
+                      "start": {
+                        "line": 35,
+                        "character": 1
+                      },
+                      "end": {
+                        "line": 35,
+                        "character": 16
+                      }
+                    },
+                    "severity": 3,
+                    "code": "default",
+                    "codeDescription": {
+                      "href": "https://pkg.go.dev/golang.org/x/tools/gopls/internal/analysis/unusedfunc"
+                    },
+                    "source": "unusedfunc",
+                    "message": "var \"diffHeaderStyle\" is unused"
+                  }
+                ],
+                "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go": []
+              },
+              "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go\n@@ -545,22 +545,19 @@\n \t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n \t}\n \n \tfor _, st := range subtasks {\n-\t\t_, err = tx.Exec(\n+\t\tif _, err = tx.Exec(\n \t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n \t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n-\t\t)\n-\t\tif err != nil {\n-\t\t\t_ = tx.Rollback()\n+\t\t); err != nil {\n \t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n \t\t}\n \t}\n \n \tif err = tx.Commit(); err != nil {\n \t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n \t}\n-\terr = nil\n \treturn nil\n }\n \n // GetSubtasks returns all subtasks for a plan, sorted by task_number.\n",
+              "filediff": {
+                "file": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go",
+                "before": "package taskstore\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t_ \"modernc.org/sqlite\" // register sqlite driver\n)\n\nconst schema = `\nCREATE TABLE IF NOT EXISTS tasks (\n\tid          INTEGER PRIMARY KEY,\n\tproject     TEXT    NOT NULL,\n\tfilename    TEXT    NOT NULL,\n\tstatus      TEXT    NOT NULL DEFAULT 'ready',\n\tdescription TEXT    NOT NULL DEFAULT '',\n\tbranch      TEXT    NOT NULL DEFAULT '',\n\ttopic       TEXT    NOT NULL DEFAULT '',\n\tcreated_at  TEXT    NOT NULL DEFAULT '',\n\timplemented TEXT    NOT NULL DEFAULT '',\n\tplanning_at  TEXT    NOT NULL DEFAULT '',\n\timplementing_at TEXT NOT NULL DEFAULT '',\n\treviewing_at TEXT    NOT NULL DEFAULT '',\n\tdone_at     TEXT    NOT NULL DEFAULT '',\n\tgoal        TEXT    NOT NULL DEFAULT '',\n\tUNIQUE(project, filename)\n);\n\nCREATE TABLE IF NOT EXISTS topics (\n\tid         INTEGER PRIMARY KEY,\n\tproject    TEXT NOT NULL,\n\tname       TEXT NOT NULL,\n\tcreated_at TEXT NOT NULL DEFAULT '',\n\tUNIQUE(project, name)\n);\n`\n\n// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\nconst subtasksTableMigration = `\n\tCREATE TABLE IF NOT EXISTS subtasks (\n\t\tid INTEGER PRIMARY KEY,\n\t\tproject TEXT NOT NULL,\n\t\tplan_filename TEXT NOT NULL,\n\t\ttask_number INTEGER NOT NULL,\n\t\ttitle TEXT NOT NULL DEFAULT '',\n\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n\t\tUNIQUE(project, plan_filename, task_number),\n\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n\t)\n`\n\n// contentMigration adds the content column to existing databases that predate it.\nconst contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n\n// planningAtMigration adds planning_at to existing databases.\nconst planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n\n// implementingAtMigration adds implementing_at to existing databases.\nconst implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n\n// reviewingAtMigration adds reviewing_at to existing databases.\nconst reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n\n// doneAtMigration adds done_at to existing databases.\nconst doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n\n// goalMigration adds goal to existing databases.\nconst goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n\n// clickupTaskIDMigration adds the clickup_task_id column to existing databases.\nconst clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n\n// reviewCycleMigration adds the review_cycle column to existing databases.\nconst reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`\n\n// SQLiteStore is a Store implementation backed by a SQLite database.\ntype SQLiteStore struct {\n\tdb *sql.DB\n}\n\n// NewSQLiteStore opens (or creates) a SQLite database at dbPath and runs\n// schema migrations. Use \":memory:\" for an in-memory database (useful in tests).\nfunc NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n\tdb, err := sql.Open(\"sqlite\", dbPath)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open sqlite db: %w\", err)\n\t}\n\n\t// Enable WAL mode for better concurrent read performance.\n\tif dbPath != \":memory:\" {\n\t\tif _, err := db.Exec(\"PRAGMA journal_mode=WAL\"); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"set WAL mode: %w\", err)\n\t\t}\n\t}\n\n\t// Enable foreign keys.\n\tif _, err := db.Exec(\"PRAGMA foreign_keys=ON\"); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"enable foreign keys: %w\", err)\n\t}\n\n\t// Migrate: rename plans → tasks (if old table exists).\n\t// This MUST run before the schema CREATE TABLE so that existing data in the\n\t// plans table is preserved. If we create an empty tasks table first, the\n\t// rename migration sees tasks already exists and skips, orphaning old data.\n\tmigrateRenameTable(db, \"plans\", \"tasks\")\n\n\tif _, err := db.Exec(schema); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"run schema migrations: %w\", err)\n\t}\n\n\t// Migrate data from legacy planstore.db if it exists in the same directory\n\t// and the new tasks table is empty. This handles the rename-plan-to-task\n\t// transition where the DB filename changed from planstore.db to taskstore.db.\n\tif dbPath != \":memory:\" {\n\t\tif err := migrateFromPlanstoreDB(db, dbPath); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"migrate from planstore.db: %w\", err)\n\t\t}\n\t}\n\n\t// Add content column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddContentColumn(db); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate content column: %w\", err)\n\t}\n\n\t// Add clickup_task_id column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"clickup_task_id\", clickupTaskIDMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate clickup_task_id column: %w\", err)\n\t}\n\n\t// Add review_cycle column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"review_cycle\", reviewCycleMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n\t}\n\n\t// Add new task lifecycle phase timestamp and goal columns.\n\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n\t}\n\n\t// Create subtasks table if missing.\n\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n\t}\n\n\treturn &SQLiteStore{db: db}, nil\n}\n\n// migrateAddContentColumn adds the content column to the tasks table if it\n// doesn't already exist. This upgrades databases created before the column\n// was introduced.\nfunc migrateAddContentColumn(db *sql.DB) error {\n\treturn migrateAddColumn(db, \"content\", contentMigration)\n}\n\n// migrateAddColumn adds a column to the tasks table if it doesn't already\n// exist, running the provided ALTER TABLE statement when needed.\nfunc migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {\n\trows, err := db.Query(\"PRAGMA table_info(tasks)\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"query table info: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tfor rows.Next() {\n\t\tvar cid int\n\t\tvar name, colType string\n\t\tvar notNull int\n\t\tvar dfltValue sql.NullString\n\t\tvar pk int\n\t\tif err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {\n\t\t\treturn fmt.Errorf(\"scan table info: %w\", err)\n\t\t}\n\t\tif name == columnName {\n\t\t\treturn nil // column already exists\n\t\t}\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn fmt.Errorf(\"iterate table info: %w\", err)\n\t}\n\n\t// Column doesn't exist — add it.\n\tif _, err := db.Exec(alterSQL); err != nil {\n\t\treturn fmt.Errorf(\"add %s column: %w\", columnName, err)\n\t}\n\treturn nil\n}\n\n// migrateRenameTable renames oldName to newName if the old table exists and\n// the new table does not. This is idempotent: subsequent runs are no-ops.\nfunc migrateRenameTable(db *sql.DB, oldName, newName string) {\n\t// Check if old table exists.\n\tvar count int\n\terr := db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", oldName).Scan(&count)\n\tif err != nil || count == 0 {\n\t\treturn // old table doesn't exist, nothing to migrate\n\t}\n\t// Check if new table already exists.\n\terr = db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", newName).Scan(&count)\n\tif err != nil || count > 0 {\n\t\treturn // new table already exists\n\t}\n\t_, _ = db.Exec(fmt.Sprintf(\"ALTER TABLE %s RENAME TO %s\", oldName, newName))\n}\n\n// Close releases the database connection.\nfunc (s *SQLiteStore) Close() error {\n\treturn s.db.Close()\n}\n\n// Ping verifies the database connection is alive.\nfunc (s *SQLiteStore) Ping() error {\n\treturn s.db.Ping()\n}\n\n// Create inserts a new task entry for the given project.\n// Returns an error if a task with the same filename already exists in the project.\nfunc (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n\tconst q = `\n\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q,\n\t\tproject,\n\t\tentry.Filename,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.Content,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, entry.Filename)\n\t\t}\n\t\treturn fmt.Errorf(\"create plan: %w\", err)\n\t}\n\treturn nil\n}\n\n// Get retrieves a task entry by project and filename.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND filename = ?\n\t`\n\trow := s.db.QueryRow(q, project, filename)\n\treturn scanTaskEntry(row)\n}\n\n// Update replaces all fields of an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// Rename changes the filename of an existing task entry.\n// Returns an error if the old filename is not found or the new filename already exists.\nfunc (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET filename = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q, newFilename, project, oldFilename)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, newFilename)\n\t\t}\n\t\treturn fmt.Errorf(\"rename plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"rename plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, oldFilename)\n\t}\n\treturn nil\n}\n\n// List returns all task entries for the given project, sorted by filename.\nfunc (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByStatus returns all task entries for the given project matching any of\n// the provided statuses, sorted by filename.\nfunc (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {\n\tif len(statuses) == 0 {\n\t\treturn nil, nil\n\t}\n\n\tplaceholders := make([]string, len(statuses))\n\targs := make([]any, 0, len(statuses)+1)\n\targs = append(args, project)\n\tfor i, s := range statuses {\n\t\tplaceholders[i] = \"?\"\n\t\targs = append(args, string(s))\n\t}\n\n\tq := fmt.Sprintf(`\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND status IN (%s)\n\t\tORDER BY filename ASC\n\t`, strings.Join(placeholders, \", \"))\n\n\trows, err := s.db.Query(q, args...)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by status: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByTopic returns all task entries for the given project and topic,\n// sorted by filename.\nfunc (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND topic = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project, topic)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by topic: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListTopics returns all topic entries for the given project, sorted by name.\nfunc (s *SQLiteStore) ListTopics(project string) ([]TopicEntry, error) {\n\tconst q = `\n\t\tSELECT name, created_at\n\t\tFROM topics\n\t\tWHERE project = ?\n\t\tORDER BY name ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list topics: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar topics []TopicEntry\n\tfor rows.Next() {\n\t\tvar name, createdAt string\n\t\tif err := rows.Scan(&name, &createdAt); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan topic: %w\", err)\n\t\t}\n\t\ttopics = append(topics, TopicEntry{\n\t\t\tName:      name,\n\t\t\tCreatedAt: parseTime(createdAt),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate topics: %w\", err)\n\t}\n\treturn topics, nil\n}\n\n// CreateTopic inserts a new topic entry for the given project.\n// Returns an error if a topic with the same name already exists in the project.\nfunc (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {\n\tconst q = `\n\t\tINSERT INTO topics (project, name, created_at)\n\t\tVALUES (?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q, project, entry.Name, formatTime(entry.CreatedAt))\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"topic already exists: %s/%s\", project, entry.Name)\n\t\t}\n\t\treturn fmt.Errorf(\"create topic: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetContent retrieves only the content field for a task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) GetContent(project, filename string) (string, error) {\n\tconst q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`\n\tvar content string\n\terr := s.db.QueryRow(q, project, filename).Scan(&content)\n\tif err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn \"\", fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t\t}\n\t\treturn \"\", fmt.Errorf(\"get content: %w\", err)\n\t}\n\treturn content, nil\n}\n\n// SetContent updates only the content field for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetContent(project, filename, content string) error {\n\tconst q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, content, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {\n\tconst q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, taskID, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// IncrementReviewCycle atomically increments the review_cycle counter for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n\tconst q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetSubtasks replaces all subtasks for a plan in a transaction.\n// Existing subtasks are removed before inserting the supplied rows.\nfunc (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n\ttx, err := s.db.Begin()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t}\n\t}()\n\n\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n\t}\n\n\tfor _, st := range subtasks {\n\t\t_, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t)\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\terr = nil\n\treturn nil\n}\n\n// GetSubtasks returns all subtasks for a plan, sorted by task_number.\nfunc (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n\trows, err := s.db.Query(\n\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar subtasks []SubtaskEntry\n\tfor rows.Next() {\n\t\tvar taskNumber int\n\t\tvar title, status string\n\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n\t\t}\n\t\tsubtasks = append(subtasks, SubtaskEntry{\n\t\t\tTaskNumber: taskNumber,\n\t\t\tTitle:      title,\n\t\t\tStatus:     SubtaskStatus(status),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n\t}\n\treturn subtasks, nil\n}\n\n// UpdateSubtaskStatus updates the status of a specific subtask.\nfunc (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n\tconst q = `\n\t\tUPDATE subtasks\n\t\tSET status = ?\n\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n\t`\n\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n\t}\n\treturn nil\n}\n\n// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n// Known phases are: planning, implementing, reviewing, done.\nfunc (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n\tvar column string\n\tswitch phase {\n\tcase \"planning\":\n\t\tcolumn = \"planning_at\"\n\tcase \"implementing\":\n\t\tcolumn = \"implementing_at\"\n\tcase \"reviewing\":\n\t\tcolumn = \"reviewing_at\"\n\tcase \"done\":\n\t\tcolumn = \"done_at\"\n\tdefault:\n\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n\t}\n\n\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetPlanGoal sets the goal text for a plan.\nfunc (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, goal, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// scanTaskEntry scans a single row into a TaskEntry.\nfunc scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\tvar reviewCycle int\n\tif err := row.Scan(\n\t\t&filename,\n\t\t&status,\n\t\t&description,\n\t\t&branch,\n\t\t&topic,\n\t\t&createdAt,\n\t\t&implemented,\n\t\t&planningAt,\n\t\t&implementingAt,\n\t\t&reviewingAt,\n\t\t&doneAt,\n\t\t&goal,\n\t\t&content,\n\t\t&clickupTaskID,\n\t\t&reviewCycle,\n\t); err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n\t\t}\n\t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n\t}\n\treturn TaskEntry{\n\t\tFilename:       filename,\n\t\tStatus:         Status(status),\n\t\tDescription:    description,\n\t\tBranch:         branch,\n\t\tTopic:          topic,\n\t\tCreatedAt:      parseTime(createdAt),\n\t\tImplemented:    implemented,\n\t\tPlanningAt:     parseTime(planningAt),\n\t\tImplementingAt: parseTime(implementingAt),\n\t\tReviewingAt:    parseTime(reviewingAt),\n\t\tDoneAt:         parseTime(doneAt),\n\t\tGoal:           goal,\n\t\tContent:        content,\n\t\tClickUpTaskID:  clickupTaskID,\n\t\tReviewCycle:    reviewCycle,\n\t}, nil\n}\n\n// scanTaskEntries scans multiple rows into a slice of TaskEntry.\nfunc scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n\tvar entries []TaskEntry\n\tfor rows.Next() {\n\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\t\tvar reviewCycle int\n\t\tif err := rows.Scan(\n\t\t\t&filename,\n\t\t\t&status,\n\t\t\t&description,\n\t\t\t&branch,\n\t\t\t&topic,\n\t\t\t&createdAt,\n\t\t\t&implemented,\n\t\t\t&planningAt,\n\t\t\t&implementingAt,\n\t\t\t&reviewingAt,\n\t\t\t&doneAt,\n\t\t\t&goal,\n\t\t\t&content,\n\t\t\t&clickupTaskID,\n\t\t\t&reviewCycle,\n\t\t); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n\t\t}\n\t\tentries = append(entries, TaskEntry{\n\t\t\tFilename:       filename,\n\t\t\tStatus:         Status(status),\n\t\t\tDescription:    description,\n\t\t\tBranch:         branch,\n\t\t\tTopic:          topic,\n\t\t\tCreatedAt:      parseTime(createdAt),\n\t\t\tImplemented:    implemented,\n\t\t\tPlanningAt:     parseTime(planningAt),\n\t\t\tImplementingAt: parseTime(implementingAt),\n\t\t\tReviewingAt:    parseTime(reviewingAt),\n\t\t\tDoneAt:         parseTime(doneAt),\n\t\t\tGoal:           goal,\n\t\t\tContent:        content,\n\t\t\tClickUpTaskID:  clickupTaskID,\n\t\t\tReviewCycle:    reviewCycle,\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate tasks: %w\", err)\n\t}\n\treturn entries, nil\n}\n\n// formatTime formats a time.Time as RFC3339 for storage. Zero time returns empty string.\nfunc formatTime(t time.Time) string {\n\tif t.IsZero() {\n\t\treturn \"\"\n\t}\n\treturn t.UTC().Format(time.RFC3339Nano)\n}\n\n// parseTime parses an RFC3339 string. Returns zero time on empty or invalid input.\nfunc parseTime(s string) time.Time {\n\tif s == \"\" {\n\t\treturn time.Time{}\n\t}\n\tt, err := time.Parse(time.RFC3339Nano, s)\n\tif err != nil {\n\t\treturn time.Time{}\n\t}\n\treturn t\n}\n\n// isUniqueConstraintError returns true if the error is a SQLite UNIQUE constraint violation.\nfunc isUniqueConstraintError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\treturn strings.Contains(err.Error(), \"UNIQUE constraint failed\")\n}\n",
+                "after": "package taskstore\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t_ \"modernc.org/sqlite\" // register sqlite driver\n)\n\nconst schema = `\nCREATE TABLE IF NOT EXISTS tasks (\n\tid          INTEGER PRIMARY KEY,\n\tproject     TEXT    NOT NULL,\n\tfilename    TEXT    NOT NULL,\n\tstatus      TEXT    NOT NULL DEFAULT 'ready',\n\tdescription TEXT    NOT NULL DEFAULT '',\n\tbranch      TEXT    NOT NULL DEFAULT '',\n\ttopic       TEXT    NOT NULL DEFAULT '',\n\tcreated_at  TEXT    NOT NULL DEFAULT '',\n\timplemented TEXT    NOT NULL DEFAULT '',\n\tplanning_at  TEXT    NOT NULL DEFAULT '',\n\timplementing_at TEXT NOT NULL DEFAULT '',\n\treviewing_at TEXT    NOT NULL DEFAULT '',\n\tdone_at     TEXT    NOT NULL DEFAULT '',\n\tgoal        TEXT    NOT NULL DEFAULT '',\n\tUNIQUE(project, filename)\n);\n\nCREATE TABLE IF NOT EXISTS topics (\n\tid         INTEGER PRIMARY KEY,\n\tproject    TEXT NOT NULL,\n\tname       TEXT NOT NULL,\n\tcreated_at TEXT NOT NULL DEFAULT '',\n\tUNIQUE(project, name)\n);\n`\n\n// subtasksTableMigration creates the subtasks table for persisted plan subtasks.\nconst subtasksTableMigration = `\n\tCREATE TABLE IF NOT EXISTS subtasks (\n\t\tid INTEGER PRIMARY KEY,\n\t\tproject TEXT NOT NULL,\n\t\tplan_filename TEXT NOT NULL,\n\t\ttask_number INTEGER NOT NULL,\n\t\ttitle TEXT NOT NULL DEFAULT '',\n\t\tstatus TEXT NOT NULL DEFAULT 'pending',\n\t\tUNIQUE(project, plan_filename, task_number),\n\t\tFOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE\n\t)\n`\n\n// contentMigration adds the content column to existing databases that predate it.\nconst contentMigration = `ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''`\n\n// planningAtMigration adds planning_at to existing databases.\nconst planningAtMigration = `ALTER TABLE tasks ADD COLUMN planning_at TEXT NOT NULL DEFAULT ''`\n\n// implementingAtMigration adds implementing_at to existing databases.\nconst implementingAtMigration = `ALTER TABLE tasks ADD COLUMN implementing_at TEXT NOT NULL DEFAULT ''`\n\n// reviewingAtMigration adds reviewing_at to existing databases.\nconst reviewingAtMigration = `ALTER TABLE tasks ADD COLUMN reviewing_at TEXT NOT NULL DEFAULT ''`\n\n// doneAtMigration adds done_at to existing databases.\nconst doneAtMigration = `ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''`\n\n// goalMigration adds goal to existing databases.\nconst goalMigration = `ALTER TABLE tasks ADD COLUMN goal TEXT NOT NULL DEFAULT ''`\n\n// clickupTaskIDMigration adds the clickup_task_id column to existing databases.\nconst clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEXT NOT NULL DEFAULT ''`\n\n// reviewCycleMigration adds the review_cycle column to existing databases.\nconst reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`\n\n// SQLiteStore is a Store implementation backed by a SQLite database.\ntype SQLiteStore struct {\n\tdb *sql.DB\n}\n\n// NewSQLiteStore opens (or creates) a SQLite database at dbPath and runs\n// schema migrations. Use \":memory:\" for an in-memory database (useful in tests).\nfunc NewSQLiteStore(dbPath string) (*SQLiteStore, error) {\n\tdb, err := sql.Open(\"sqlite\", dbPath)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"open sqlite db: %w\", err)\n\t}\n\n\t// Enable WAL mode for better concurrent read performance.\n\tif dbPath != \":memory:\" {\n\t\tif _, err := db.Exec(\"PRAGMA journal_mode=WAL\"); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"set WAL mode: %w\", err)\n\t\t}\n\t}\n\n\t// Enable foreign keys.\n\tif _, err := db.Exec(\"PRAGMA foreign_keys=ON\"); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"enable foreign keys: %w\", err)\n\t}\n\n\t// Migrate: rename plans → tasks (if old table exists).\n\t// This MUST run before the schema CREATE TABLE so that existing data in the\n\t// plans table is preserved. If we create an empty tasks table first, the\n\t// rename migration sees tasks already exists and skips, orphaning old data.\n\tmigrateRenameTable(db, \"plans\", \"tasks\")\n\n\tif _, err := db.Exec(schema); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"run schema migrations: %w\", err)\n\t}\n\n\t// Migrate data from legacy planstore.db if it exists in the same directory\n\t// and the new tasks table is empty. This handles the rename-plan-to-task\n\t// transition where the DB filename changed from planstore.db to taskstore.db.\n\tif dbPath != \":memory:\" {\n\t\tif err := migrateFromPlanstoreDB(db, dbPath); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"migrate from planstore.db: %w\", err)\n\t\t}\n\t}\n\n\t// Add content column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddContentColumn(db); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate content column: %w\", err)\n\t}\n\n\t// Add clickup_task_id column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"clickup_task_id\", clickupTaskIDMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate clickup_task_id column: %w\", err)\n\t}\n\n\t// Add review_cycle column if it doesn't exist (upgrade existing databases).\n\tif err := migrateAddColumn(db, \"review_cycle\", reviewCycleMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate review_cycle column: %w\", err)\n\t}\n\n\t// Add new task lifecycle phase timestamp and goal columns.\n\tif err := migrateAddColumn(db, \"planning_at\", planningAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate planning_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"implementing_at\", implementingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate implementing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"reviewing_at\", reviewingAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate reviewing_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"done_at\", doneAtMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate done_at column: %w\", err)\n\t}\n\tif err := migrateAddColumn(db, \"goal\", goalMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"migrate goal column: %w\", err)\n\t}\n\n\t// Create subtasks table if missing.\n\tif _, err := db.Exec(subtasksTableMigration); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"create subtasks table: %w\", err)\n\t}\n\n\treturn &SQLiteStore{db: db}, nil\n}\n\n// migrateAddContentColumn adds the content column to the tasks table if it\n// doesn't already exist. This upgrades databases created before the column\n// was introduced.\nfunc migrateAddContentColumn(db *sql.DB) error {\n\treturn migrateAddColumn(db, \"content\", contentMigration)\n}\n\n// migrateAddColumn adds a column to the tasks table if it doesn't already\n// exist, running the provided ALTER TABLE statement when needed.\nfunc migrateAddColumn(db *sql.DB, columnName, alterSQL string) error {\n\trows, err := db.Query(\"PRAGMA table_info(tasks)\")\n\tif err != nil {\n\t\treturn fmt.Errorf(\"query table info: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tfor rows.Next() {\n\t\tvar cid int\n\t\tvar name, colType string\n\t\tvar notNull int\n\t\tvar dfltValue sql.NullString\n\t\tvar pk int\n\t\tif err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {\n\t\t\treturn fmt.Errorf(\"scan table info: %w\", err)\n\t\t}\n\t\tif name == columnName {\n\t\t\treturn nil // column already exists\n\t\t}\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn fmt.Errorf(\"iterate table info: %w\", err)\n\t}\n\n\t// Column doesn't exist — add it.\n\tif _, err := db.Exec(alterSQL); err != nil {\n\t\treturn fmt.Errorf(\"add %s column: %w\", columnName, err)\n\t}\n\treturn nil\n}\n\n// migrateRenameTable renames oldName to newName if the old table exists and\n// the new table does not. This is idempotent: subsequent runs are no-ops.\nfunc migrateRenameTable(db *sql.DB, oldName, newName string) {\n\t// Check if old table exists.\n\tvar count int\n\terr := db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", oldName).Scan(&count)\n\tif err != nil || count == 0 {\n\t\treturn // old table doesn't exist, nothing to migrate\n\t}\n\t// Check if new table already exists.\n\terr = db.QueryRow(\"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?\", newName).Scan(&count)\n\tif err != nil || count > 0 {\n\t\treturn // new table already exists\n\t}\n\t_, _ = db.Exec(fmt.Sprintf(\"ALTER TABLE %s RENAME TO %s\", oldName, newName))\n}\n\n// Close releases the database connection.\nfunc (s *SQLiteStore) Close() error {\n\treturn s.db.Close()\n}\n\n// Ping verifies the database connection is alive.\nfunc (s *SQLiteStore) Ping() error {\n\treturn s.db.Ping()\n}\n\n// Create inserts a new task entry for the given project.\n// Returns an error if a task with the same filename already exists in the project.\nfunc (s *SQLiteStore) Create(project string, entry TaskEntry) error {\n\tconst q = `\n\t\tINSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q,\n\t\tproject,\n\t\tentry.Filename,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.Content,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, entry.Filename)\n\t\t}\n\t\treturn fmt.Errorf(\"create plan: %w\", err)\n\t}\n\treturn nil\n}\n\n// Get retrieves a task entry by project and filename.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND filename = ?\n\t`\n\trow := s.db.QueryRow(q, project, filename)\n\treturn scanTaskEntry(row)\n}\n\n// Update replaces all fields of an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) Update(project, filename string, entry TaskEntry) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET status = ?, description = ?, branch = ?, topic = ?, created_at = ?, implemented = ?, planning_at = ?, implementing_at = ?, reviewing_at = ?, done_at = ?, goal = ?, clickup_task_id = ?, review_cycle = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q,\n\t\tstring(entry.Status),\n\t\tentry.Description,\n\t\tentry.Branch,\n\t\tentry.Topic,\n\t\tformatTime(entry.CreatedAt),\n\t\tentry.Implemented,\n\t\tformatTime(entry.PlanningAt),\n\t\tformatTime(entry.ImplementingAt),\n\t\tformatTime(entry.ReviewingAt),\n\t\tformatTime(entry.DoneAt),\n\t\tentry.Goal,\n\t\tentry.ClickUpTaskID,\n\t\tentry.ReviewCycle,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// Rename changes the filename of an existing task entry.\n// Returns an error if the old filename is not found or the new filename already exists.\nfunc (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {\n\tconst q = `\n\t\tUPDATE tasks\n\t\tSET filename = ?\n\t\tWHERE project = ? AND filename = ?\n\t`\n\tresult, err := s.db.Exec(q, newFilename, project, oldFilename)\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"plan already exists: %s/%s\", project, newFilename)\n\t\t}\n\t\treturn fmt.Errorf(\"rename plan: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"rename plan rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, oldFilename)\n\t}\n\treturn nil\n}\n\n// List returns all task entries for the given project, sorted by filename.\nfunc (s *SQLiteStore) List(project string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByStatus returns all task entries for the given project matching any of\n// the provided statuses, sorted by filename.\nfunc (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEntry, error) {\n\tif len(statuses) == 0 {\n\t\treturn nil, nil\n\t}\n\n\tplaceholders := make([]string, len(statuses))\n\targs := make([]any, 0, len(statuses)+1)\n\targs = append(args, project)\n\tfor i, s := range statuses {\n\t\tplaceholders[i] = \"?\"\n\t\targs = append(args, string(s))\n\t}\n\n\tq := fmt.Sprintf(`\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND status IN (%s)\n\t\tORDER BY filename ASC\n\t`, strings.Join(placeholders, \", \"))\n\n\trows, err := s.db.Query(q, args...)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by status: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListByTopic returns all task entries for the given project and topic,\n// sorted by filename.\nfunc (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {\n\tconst q = `\n\t\tSELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle\n\t\tFROM tasks\n\t\tWHERE project = ? AND topic = ?\n\t\tORDER BY filename ASC\n\t`\n\trows, err := s.db.Query(q, project, topic)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list tasks by topic: %w\", err)\n\t}\n\tdefer rows.Close()\n\treturn scanTaskEntries(rows)\n}\n\n// ListTopics returns all topic entries for the given project, sorted by name.\nfunc (s *SQLiteStore) ListTopics(project string) ([]TopicEntry, error) {\n\tconst q = `\n\t\tSELECT name, created_at\n\t\tFROM topics\n\t\tWHERE project = ?\n\t\tORDER BY name ASC\n\t`\n\trows, err := s.db.Query(q, project)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list topics: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar topics []TopicEntry\n\tfor rows.Next() {\n\t\tvar name, createdAt string\n\t\tif err := rows.Scan(&name, &createdAt); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan topic: %w\", err)\n\t\t}\n\t\ttopics = append(topics, TopicEntry{\n\t\t\tName:      name,\n\t\t\tCreatedAt: parseTime(createdAt),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate topics: %w\", err)\n\t}\n\treturn topics, nil\n}\n\n// CreateTopic inserts a new topic entry for the given project.\n// Returns an error if a topic with the same name already exists in the project.\nfunc (s *SQLiteStore) CreateTopic(project string, entry TopicEntry) error {\n\tconst q = `\n\t\tINSERT INTO topics (project, name, created_at)\n\t\tVALUES (?, ?, ?)\n\t`\n\t_, err := s.db.Exec(q, project, entry.Name, formatTime(entry.CreatedAt))\n\tif err != nil {\n\t\tif isUniqueConstraintError(err) {\n\t\t\treturn fmt.Errorf(\"topic already exists: %s/%s\", project, entry.Name)\n\t\t}\n\t\treturn fmt.Errorf(\"create topic: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetContent retrieves only the content field for a task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) GetContent(project, filename string) (string, error) {\n\tconst q = `SELECT content FROM tasks WHERE project = ? AND filename = ?`\n\tvar content string\n\terr := s.db.QueryRow(q, project, filename).Scan(&content)\n\tif err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn \"\", fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t\t}\n\t\treturn \"\", fmt.Errorf(\"get content: %w\", err)\n\t}\n\treturn content, nil\n}\n\n// SetContent updates only the content field for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetContent(project, filename, content string) error {\n\tconst q = `UPDATE tasks SET content = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, content, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set content rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetClickUpTaskID sets the ClickUp task ID for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) SetClickUpTaskID(project, filename, taskID string) error {\n\tconst q = `UPDATE tasks SET clickup_task_id = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, taskID, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set clickup_task_id rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// IncrementReviewCycle atomically increments the review_cycle counter for an existing task entry.\n// Returns an error if the task is not found.\nfunc (s *SQLiteStore) IncrementReviewCycle(project, filename string) error {\n\tconst q = `UPDATE tasks SET review_cycle = review_cycle + 1 WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"increment review_cycle rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetSubtasks replaces all subtasks for a plan in a transaction.\n// Existing subtasks are removed before inserting the supplied rows.\nfunc (s *SQLiteStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {\n\ttx, err := s.db.Begin()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin subtasks transaction: %w\", err)\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\t_ = tx.Rollback()\n\t\t}\n\t}()\n\n\tif _, err = tx.Exec(\"DELETE FROM subtasks WHERE project = ? AND plan_filename = ?\", project, filename); err != nil {\n\t\treturn fmt.Errorf(\"delete subtasks: %w\", err)\n\t}\n\n\tfor _, st := range subtasks {\n\t\tif _, err = tx.Exec(\n\t\t\t\"INSERT INTO subtasks (project, plan_filename, task_number, title, status) VALUES (?, ?, ?, ?, ?)\",\n\t\t\tproject, filename, st.TaskNumber, st.Title, string(st.Status),\n\t\t); err != nil {\n\t\t\treturn fmt.Errorf(\"insert subtask: %w\", err)\n\t\t}\n\t}\n\n\tif err = tx.Commit(); err != nil {\n\t\treturn fmt.Errorf(\"commit subtasks: %w\", err)\n\t}\n\treturn nil\n}\n\n// GetSubtasks returns all subtasks for a plan, sorted by task_number.\nfunc (s *SQLiteStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {\n\trows, err := s.db.Query(\n\t\t`SELECT task_number, title, status FROM subtasks WHERE project = ? AND plan_filename = ? ORDER BY task_number ASC`,\n\t\tproject,\n\t\tfilename,\n\t)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"list subtasks: %w\", err)\n\t}\n\tdefer rows.Close()\n\n\tvar subtasks []SubtaskEntry\n\tfor rows.Next() {\n\t\tvar taskNumber int\n\t\tvar title, status string\n\t\tif err := rows.Scan(&taskNumber, &title, &status); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan subtask: %w\", err)\n\t\t}\n\t\tsubtasks = append(subtasks, SubtaskEntry{\n\t\t\tTaskNumber: taskNumber,\n\t\t\tTitle:      title,\n\t\t\tStatus:     SubtaskStatus(status),\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate subtasks: %w\", err)\n\t}\n\treturn subtasks, nil\n}\n\n// UpdateSubtaskStatus updates the status of a specific subtask.\nfunc (s *SQLiteStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {\n\tconst q = `\n\t\tUPDATE subtasks\n\t\tSET status = ?\n\t\tWHERE project = ? AND plan_filename = ? AND task_number = ?\n\t`\n\tresult, err := s.db.Exec(q, string(status), project, filename, taskNumber)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"update subtask status rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"subtask not found: %s/%s#%d\", project, filename, taskNumber)\n\t}\n\treturn nil\n}\n\n// SetPhaseTimestamp sets the timestamp for the requested lifecycle phase.\n// Known phases are: planning, implementing, reviewing, done.\nfunc (s *SQLiteStore) SetPhaseTimestamp(project, filename, phase string, ts time.Time) error {\n\tvar column string\n\tswitch phase {\n\tcase \"planning\":\n\t\tcolumn = \"planning_at\"\n\tcase \"implementing\":\n\t\tcolumn = \"implementing_at\"\n\tcase \"reviewing\":\n\t\tcolumn = \"reviewing_at\"\n\tcase \"done\":\n\t\tcolumn = \"done_at\"\n\tdefault:\n\t\treturn fmt.Errorf(\"unknown phase: %s\", phase)\n\t}\n\n\tquery := fmt.Sprintf(\"UPDATE tasks SET %s = ? WHERE project = ? AND filename = ?\", column)\n\tresult, err := s.db.Exec(query, formatTime(ts), project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set phase timestamp rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// SetPlanGoal sets the goal text for a plan.\nfunc (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {\n\tconst q = `UPDATE tasks SET goal = ? WHERE project = ? AND filename = ?`\n\tresult, err := s.db.Exec(q, goal, project, filename)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal: %w\", err)\n\t}\n\tn, err := result.RowsAffected()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"set plan goal rows affected: %w\", err)\n\t}\n\tif n == 0 {\n\t\treturn fmt.Errorf(\"plan not found: %s/%s\", project, filename)\n\t}\n\treturn nil\n}\n\n// scanTaskEntry scans a single row into a TaskEntry.\nfunc scanTaskEntry(row *sql.Row) (TaskEntry, error) {\n\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\tvar reviewCycle int\n\tif err := row.Scan(\n\t\t&filename,\n\t\t&status,\n\t\t&description,\n\t\t&branch,\n\t\t&topic,\n\t\t&createdAt,\n\t\t&implemented,\n\t\t&planningAt,\n\t\t&implementingAt,\n\t\t&reviewingAt,\n\t\t&doneAt,\n\t\t&goal,\n\t\t&content,\n\t\t&clickupTaskID,\n\t\t&reviewCycle,\n\t); err != nil {\n\t\tif err == sql.ErrNoRows {\n\t\t\treturn TaskEntry{}, fmt.Errorf(\"plan not found\")\n\t\t}\n\t\treturn TaskEntry{}, fmt.Errorf(\"scan plan: %w\", err)\n\t}\n\treturn TaskEntry{\n\t\tFilename:       filename,\n\t\tStatus:         Status(status),\n\t\tDescription:    description,\n\t\tBranch:         branch,\n\t\tTopic:          topic,\n\t\tCreatedAt:      parseTime(createdAt),\n\t\tImplemented:    implemented,\n\t\tPlanningAt:     parseTime(planningAt),\n\t\tImplementingAt: parseTime(implementingAt),\n\t\tReviewingAt:    parseTime(reviewingAt),\n\t\tDoneAt:         parseTime(doneAt),\n\t\tGoal:           goal,\n\t\tContent:        content,\n\t\tClickUpTaskID:  clickupTaskID,\n\t\tReviewCycle:    reviewCycle,\n\t}, nil\n}\n\n// scanTaskEntries scans multiple rows into a slice of TaskEntry.\nfunc scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {\n\tvar entries []TaskEntry\n\tfor rows.Next() {\n\t\tvar filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string\n\t\tvar reviewCycle int\n\t\tif err := rows.Scan(\n\t\t\t&filename,\n\t\t\t&status,\n\t\t\t&description,\n\t\t\t&branch,\n\t\t\t&topic,\n\t\t\t&createdAt,\n\t\t\t&implemented,\n\t\t\t&planningAt,\n\t\t\t&implementingAt,\n\t\t\t&reviewingAt,\n\t\t\t&doneAt,\n\t\t\t&goal,\n\t\t\t&content,\n\t\t\t&clickupTaskID,\n\t\t\t&reviewCycle,\n\t\t); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"scan plan: %w\", err)\n\t\t}\n\t\tentries = append(entries, TaskEntry{\n\t\t\tFilename:       filename,\n\t\t\tStatus:         Status(status),\n\t\t\tDescription:    description,\n\t\t\tBranch:         branch,\n\t\t\tTopic:          topic,\n\t\t\tCreatedAt:      parseTime(createdAt),\n\t\t\tImplemented:    implemented,\n\t\t\tPlanningAt:     parseTime(planningAt),\n\t\t\tImplementingAt: parseTime(implementingAt),\n\t\t\tReviewingAt:    parseTime(reviewingAt),\n\t\t\tDoneAt:         parseTime(doneAt),\n\t\t\tGoal:           goal,\n\t\t\tContent:        content,\n\t\t\tClickUpTaskID:  clickupTaskID,\n\t\t\tReviewCycle:    reviewCycle,\n\t\t})\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"iterate tasks: %w\", err)\n\t}\n\treturn entries, nil\n}\n\n// formatTime formats a time.Time as RFC3339 for storage. Zero time returns empty string.\nfunc formatTime(t time.Time) string {\n\tif t.IsZero() {\n\t\treturn \"\"\n\t}\n\treturn t.UTC().Format(time.RFC3339Nano)\n}\n\n// parseTime parses an RFC3339 string. Returns zero time on empty or invalid input.\nfunc parseTime(s string) time.Time {\n\tif s == \"\" {\n\t\treturn time.Time{}\n\t}\n\tt, err := time.Parse(time.RFC3339Nano, s)\n\tif err != nil {\n\t\treturn time.Time{}\n\t}\n\treturn t\n}\n\n// isUniqueConstraintError returns true if the error is a SQLite UNIQUE constraint violation.\nfunc isUniqueConstraintError(err error) bool {\n\tif err == nil {\n\t\treturn false\n\t}\n\treturn strings.Contains(err.Error(), \"UNIQUE constraint failed\")\n}\n",
+                "additions": 2,
+                "deletions": 5
+              },
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696958346,
+              "end": 1772696958524
+            }
+          },
+          "id": "prt_cbcf8ea56001yLKX6Ljt6kR5yC",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8e233001l4DWxesSLOK3pC"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 117280,
+            "input": 1,
+            "output": 425,
+            "reasoning": 0,
+            "cache": {
+              "read": 115676,
+              "write": 1178
+            }
+          },
+          "id": "prt_cbcf8f63e00117E2uiE1pI4AZY",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8e233001l4DWxesSLOK3pC"
+        },
+        {
+          "type": "patch",
+          "hash": "9aea4bce647ebac319f468d52fe2c09689dade6b",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/config/taskstore/sqlite.go"
+          ],
+          "id": "REDACTED",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8e233001l4DWxesSLOK3pC"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696958539,
+          "completed": 1772696961571
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 117389,
+          "input": 1,
+          "output": 94,
+          "reasoning": 0,
+          "cache": {
+            "read": 116854,
+            "write": 440
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf8f64b001oX0j2TLsq2VQcd",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf8fd630011hXNJnOWWC6H5p",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8f64b001oX0j2TLsq2VQcd"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01J2YZZM1AWjgtPk7s3ET2qZ",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./config/taskstore/... -count=1 2>&1",
+              "description": "Verify store tests still pass after cleanup"
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.046s\n",
+            "title": "Verify store tests still pass after cleanup",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.046s\n",
+              "exit": 0,
+              "description": "Verify store tests still pass after cleanup",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696961224,
+              "end": 1772696961562
+            }
+          },
+          "id": "prt_cbcf8fd63002gA3d5JWNdPeppr",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8f64b001oX0j2TLsq2VQcd"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 117389,
+            "input": 1,
+            "output": 94,
+            "reasoning": 0,
+            "cache": {
+              "read": 116854,
+              "write": 440
+            }
+          },
+          "id": "prt_cbcf9021b001C1Fay2QcWzHiNd",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf8f64b001oX0j2TLsq2VQcd"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696961573,
+          "completed": 1772696973254
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 117542,
+          "input": 1,
+          "output": 117,
+          "reasoning": 0,
+          "cache": {
+            "read": 117294,
+            "write": 130
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf909740011Bv0OOINrLs9Ad",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add config/taskstore/sqlite.go && git commit -m \"fix: clean up SetSubtasks transaction — remove redundant rollback and err=nil (reviewer self-fix)\"",
+              "description": "Commit SetSubtasks cleanup"
+            },
+            "output": "[plan/improved-info-tab 4614a8f2] fix: clean up SetSubtasks transaction — remove redundant rollback and err=nil (reviewer self-fix)\n 1 file changed, 2 insertions(+), 5 deletions(-)\n",
+            "title": "Commit SetSubtasks cleanup",
+            "metadata": {
+              "output": "[plan/improved-info-tab 4614a8f2] fix: clean up SetSubtasks transaction — remove redundant rollback and err=nil (reviewer self-fix)\n 1 file changed, 2 insertions(+), 5 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit SetSubtasks cleanup",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696964779,
+              "end": 1772696973245
+            }
+          },
+          "id": "prt_cbcf9097400236OylLHm2VDmJ0",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 117542,
+            "input": 1,
+            "output": 117,
+            "reasoning": 0,
+            "cache": {
+              "read": 117294,
+              "write": 130
+            }
+          },
+          "id": "prt_cbcf92fbd001b0eipXgbK1Mx19",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696973256,
+          "completed": 1772696985498
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 117744,
+          "input": 1,
+          "output": 127,
+          "reasoning": 0,
+          "cache": {
+            "read": 117424,
+            "write": 192
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf92fc8001s0LYZ5ZraGwfj8",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf93709001Gt7UlODkJL8K12",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf92fc8001s0LYZ5ZraGwfj8"
+        },
+        {
+          "type": "text",
+          "text": "Now let me verify the remaining issues and run the full test suite one more time before writing the signal.",
+          "time": {
+            "start": 1772696975935,
+            "end": 1772696975935
+          },
+          "id": "prt_cbcf93709002Uv7xngLmwSgvxi",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf92fc8001s0LYZ5ZraGwfj8"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_011tCPzcUGsCNpMrMbo86V5m",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./... 2>&1 | tail -25",
+              "description": "Final full test suite run",
+              "timeout": 180000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/config\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.012s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.024s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.053s\nok  \tgithub.com/kastheco/kasmos/contracts\t(cached)\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t(cached)\nok  \tgithub.com/kastheco/kasmos/keys\t(cached)\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.004s\nok  \tgithub.com/kastheco/kasmos/session\t(cached)\nok  \tgithub.com/kastheco/kasmos/session/git\t(cached)\nok  \tgithub.com/kastheco/kasmos/session/tmux\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t(cached)\n",
+            "title": "Final full test suite run",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/config\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/auditlog\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/taskfsm\t0.012s\nok  \tgithub.com/kastheco/kasmos/config/taskparser\t(cached)\nok  \tgithub.com/kastheco/kasmos/config/taskstate\t0.024s\nok  \tgithub.com/kastheco/kasmos/config/taskstore\t0.053s\nok  \tgithub.com/kastheco/kasmos/contracts\t(cached)\n?   \tgithub.com/kastheco/kasmos/daemon\t[no test files]\nok  \tgithub.com/kastheco/kasmos/internal/check\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/clickup\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/harness\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/scaffold\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/initcmd/wizard\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/mcpclient\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/opencodesession\t(cached)\nok  \tgithub.com/kastheco/kasmos/internal/sentry\t(cached)\nok  \tgithub.com/kastheco/kasmos/keys\t(cached)\n?   \tgithub.com/kastheco/kasmos/log\t[no test files]\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.004s\nok  \tgithub.com/kastheco/kasmos/session\t(cached)\nok  \tgithub.com/kastheco/kasmos/session/git\t(cached)\nok  \tgithub.com/kastheco/kasmos/session/tmux\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui\t(cached)\nok  \tgithub.com/kastheco/kasmos/ui/overlay\t(cached)\n",
+              "exit": 0,
+              "description": "Final full test suite run",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696976632,
+              "end": 1772696985487
+            }
+          },
+          "id": "prt_cbcf93a3f001L5XfW2iw97vPx6",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf92fc8001s0LYZ5ZraGwfj8"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 117744,
+            "input": 1,
+            "output": 127,
+            "reasoning": 0,
+            "cache": {
+              "read": 117424,
+              "write": 192
+            }
+          },
+          "id": "prt_cbcf95f900014TkuY2bJdaJ2ZG",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf92fc8001s0LYZ5ZraGwfj8"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696985500,
+          "completed": 1772696996554
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 118479,
+          "input": 1,
+          "output": 150,
+          "reasoning": 0,
+          "cache": {
+            "read": 117616,
+            "write": 712
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf95f9c001Yq7Bn8yJaYejE1",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf9661e001E0lIM5AhaBOIFK",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf95f9c001Yq7Bn8yJaYejE1"
+        },
+        {
+          "type": "reasoning",
+          "text": "Hmm, I see `app` is not shown in the output. Let me check if it ran successfully.",
+          "metadata": {
+            "anthropic": {
+              "signature": "REDACTED/REDACTED/otGiL2Pa3s+BwhTP8yRLkO/LxclBGAE="
+            }
+          },
+          "time": {
+            "start": 1772696987166,
+            "end": 1772696988050
+          },
+          "id": "prt_cbcf9661e0022F0vmjFvrAOp7P",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf95f9c001Yq7Bn8yJaYejE1"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./app/... -count=1 2>&1 | tail -5",
+              "description": "Confirm app tests pass",
+              "timeout": 60000
+            },
+            "output": "ok  \tgithub.com/kastheco/kasmos/app\t7.539s\n",
+            "title": "Confirm app tests pass",
+            "metadata": {
+              "output": "ok  \tgithub.com/kastheco/kasmos/app\t7.539s\n",
+              "exit": 0,
+              "description": "Confirm app tests pass",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772696988631,
+              "end": 1772696996544
+            }
+          },
+          "id": "prt_cbcf96996001nQQBHVRXKNnV7S",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf95f9c001Yq7Bn8yJaYejE1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 118479,
+            "input": 1,
+            "output": 150,
+            "reasoning": 0,
+            "cache": {
+              "read": 117616,
+              "write": 712
+            }
+          },
+          "id": "prt_cbcf98ac0001PuVuxPXQIsXeH3",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf95f9c001Yq7Bn8yJaYejE1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772696996556,
+          "completed": 1772697008249
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 118874,
+          "input": 1,
+          "output": 362,
+          "reasoning": 0,
+          "cache": {
+            "read": 118328,
+            "write": 183
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf98acc001LY6McDWmLdDWNZ",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf99441001uaWZ3GKhH11CPQ",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf98acc001LY6McDWmLdDWNZ"
+        },
+        {
+          "type": "text",
+          "text": "All tests pass. Now let me write the signal. There are remaining coder-required issues:\n\n1. **Missing `TestInfoPane_ProgressGroupsByWave`** — plan spec explicitly names this test; it is not present (the behavior is partially covered by `TestInfoPane_PlanSummaryWithGoalAndLifecycle` but the plan requires a dedicated test that verifies wave-level grouping in isolation).\n\n2. **`SubtaskEntry` missing `WaveNumber`** — the spec defines `SubtaskEntry` with a `WaveNumber int` field and requires the DB schema to have it. Without this field, `buildSubtaskProgress` cannot group subtasks into waves without an in-memory orchestrator, which means the plan header shows 0/0 for any plan that hasn't started the implement phase yet.\n\n3. **Scope creep in `app_input.go`** — the plan doesn't mention this file; `keyToBytes` logic and `TestKeyToBytes_ForwardsAltRuneFromCodeWhenTextEmpty` were changed outside plan scope.\n\n4. **`.kasmos/config.toml` change** — removing `flags = [\"--variant\", \"low\"]` is outside the plan scope.",
+          "time": {
+            "start": 1772697007779,
+            "end": 1772697007779
+          },
+          "id": "prt_cbcf99441002FIiqufDc0rrAl6",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf98acc001LY6McDWmLdDWNZ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals",
+              "description": "Ensure signals directory exists"
+            },
+            "output": "",
+            "title": "Ensure signals directory exists",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Ensure signals directory exists",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697008185,
+              "end": 1772697008188
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf98acc001LY6McDWmLdDWNZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 118874,
+            "input": 1,
+            "output": 362,
+            "reasoning": 0,
+            "cache": {
+              "read": 118328,
+              "write": 183
+            }
+          },
+          "id": "prt_cbcf9b870001OJKjY28CUYgWSR",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf98acc001LY6McDWmLdDWNZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697008251,
+          "completed": 1772697027416
+        },
+        "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 119765,
+          "input": 1,
+          "output": 865,
+          "reasoning": 0,
+          "cache": {
+            "read": 118511,
+            "write": 388
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbcf9b87b001xkmP0BI30OOJZ1",
+        "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "id": "prt_cbcf9be80001wRNZy5yrDNB7RL",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf9b87b001xkmP0BI30OOJZ1"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cat > .kasmos/signals/review-changes-improved-info-tab.md << 'SIGNAL'\n## review round 1\n\n### important\n\n- `ui/info_pane_test.go` — `TestInfoPane_ProgressGroupsByWave` is absent. The plan (Task 4, Step 1) explicitly requires three named tests: `TestInfoPane_PlanSummaryWithGoalAndLifecycle`, `TestInfoPane_InstanceWithTaskAssignment`, **and** `TestInfoPane_ProgressGroupsByWave`. The third is missing. The plan says it should assert: progress shows fraction (`2/4`), bar, and per-wave task lines with glyphs (`✓`, `●`, `✗`, `○`). While wave rendering is partly exercised by `TestInfoPane_PlanSummaryWithGoalAndLifecycle`, the spec-required dedicated test is missing.\n\n- `config/taskstore/store.go:SubtaskEntry` — `SubtaskEntry` is missing `WaveNumber int` (and `UpdatedAt time.Time`) as specified in the plan. The subtasks table (`sqlite.go`) likewise has no `wave_number` or `updated_at` columns. Without `WaveNumber`, `buildSubtaskProgress` in `app/app_state.go` cannot group subtasks by wave without an in-memory orchestrator. When a plan has ingested subtasks but no orchestrator yet exists (e.g. plan is in `ready` state after content ingestion, before the first implement action), the plan header shows `0/0` instead of the actual subtask counts. Fix: add `wave_number` to the subtasks table and `WaveNumber` to `SubtaskEntry`; update `SetSubtasks`/`GetSubtasks`/scanners; remove the early `orch == nil` bail-out in `buildSubtaskProgress` for the count/total computation (grouping can still fall back to flat if no orchestrator).\n\n### minor\n\n- `app/app_input.go:1500-1507` and `app/app_input_keybytes_test.go:18-24` — changes to `keyToBytes` (removed `unicode.IsPrint(msg.Code)` fallback) and deletion of `TestKeyToBytes_ForwardsAltRuneFromCodeWhenTextEmpty` are outside the plan scope. These files are not listed in any plan task. If this fix is intentional, it should be a separate commit / PR.\n\n- `.kasmos/config.toml:21` — removing `flags = [\"--variant\", \"low\"]` from the coder agent profile is outside the plan scope.\n\n### self-fixed (no action needed)\n\n- `app/.kasmos/` and `ui/.kasmos/` — 10 accidentally committed local runtime files (config.json, config.toml, state.json, taskstore.db, taskstore.db-shm, taskstore.db-wal) removed from index; `.gitignore` extended to cover nested `.kasmos/` runtime files going forward. Committed in reviewer self-fix commit.\n\n- `config/taskstore/sqlite.go:SetSubtasks` — removed explicit `_ = tx.Rollback()` inside the insert error path (redundant with deferred rollback) and removed the now-unnecessary `err = nil` after successful commit. Committed in reviewer self-fix commit.\nSIGNAL",
+              "description": "Write review-changes signal file"
+            },
+            "output": "",
+            "title": "Write review-changes signal file",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Write review-changes signal file",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697027388,
+              "end": 1772697027390
+            }
+          },
+          "id": "prt_cbcf9be80002Rri97e3RxKeSAF",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf9b87b001xkmP0BI30OOJZ1"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "6cc2f0af932efbaef3a9d01beeac52bf3d6baedd",
+          "cost": 0,
+          "tokens": {
+            "total": 119765,
+            "input": 1,
+            "output": 865,
+            "reasoning": 0,
+            "cache": {
+              "read": 118511,
+              "write": 388
+            }
+          },
+          "id": "prt_cbcfa0350001f4gSfcnCb6RCFM",
+          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
+          "messageID": "msg_cbcf9b87b001xkmP0BI30OOJZ1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697027419,
+          "completed": 1772697028851
+        },
+        "error": {
+          "name": "UnknownError",
+          "data": {
+            "message": "Error"
+          }
         },
         "parentID": "msg_cbce8d2d6001VFGsgdGAPnG3fl",
         "modelID": "claude-sonnet-4-6",
@@ -4225,40 +5527,10 @@
           }
         },
         "variant": "high",
-        "id": "msg_cbcf86ee40012DYL8GeY05Tf15",
+        "id": "msg_cbcfa035b0016gfz88eMrQ1l0A",
         "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh"
       },
-      "parts": [
-        {
-          "type": "step-start",
-          "snapshot": "9aea4bce647ebac319f468d52fe2c09689dade6b",
-          "id": "prt_cbcf87b03001eSHemqAH3jDhQy",
-          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
-          "messageID": "msg_cbcf86ee40012DYL8GeY05Tf15"
-        },
-        {
-          "type": "tool",
-          "callID": "REDACTED",
-          "tool": "bash",
-          "state": {
-            "status": "running",
-            "input": {
-              "command": "git add .gitignore && git commit -m \"fix: remove accidentally committed .kasmos state files, extend gitignore (reviewer self-fix)\"",
-              "description": "Commit removal of stray kasmos state files"
-            },
-            "metadata": {
-              "output": "",
-              "description": "Commit removal of stray kasmos state files"
-            },
-            "time": {
-              "start": 1772696927980
-            }
-          },
-          "id": "prt_cbcf87b03002cG0ZVf8M40X8Ke",
-          "sessionID": "ses_343172d35ffe8Qgz1B4Il9aYbh",
-          "messageID": "msg_cbcf86ee40012DYL8GeY05Tf15"
-        }
-      ]
+      "parts": []
     }
   ]
 }
