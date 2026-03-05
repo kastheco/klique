@@ -567,7 +567,7 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 	h := waveFlowHome(t, ps, plansDir, make(map[string]*orchestration.WaveOrchestrator))
 	h.fsm = newPlanFSMForTest(t, plansDir)
 
-	model, _ := h.Update(waveAllCompleteMsg{planFile: planFile})
+	model, _ := h.Update(wavePushCompleteMsg{planFile: planFile})
 	updated := model.(*home)
 
 	// Reload plan state from disk to verify FSM transition persisted.
@@ -576,10 +576,59 @@ func TestWaveAllCompleteMsg_TransitionsToReviewing(t *testing.T) {
 	entry, ok := reloaded.Entry(planFile)
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReviewing, entry.Status,
-		"plan must transition to reviewing after waveAllCompleteMsg")
+		"plan must transition to reviewing after wavePushCompleteMsg")
 
 	// Toast must confirm the transition
 	_ = updated // ensure the model is used (toast is in-memory, hard to assert without rendering)
+}
+
+// TestWaveAllCompleteMsg_PushIsAsync verifies that waveAllCompleteMsg
+// returns an async command and that the plan transitions on wavePushCompleteMsg.
+func TestWaveAllCompleteMsg_PushIsAsync(t *testing.T) {
+	const planFile = "review-async.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "review async test", "plan/review-async", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	h := waveFlowHome(t, ps, plansDir, make(map[string]*orchestration.WaveOrchestrator))
+	h.fsm = newPlanFSMForTest(t, plansDir)
+
+	model, cmd := h.Update(waveAllCompleteMsg{planFile: planFile})
+	require.True(t, cmd != nil, "waveAllCompleteMsg must return non-nil async cmd")
+	updated := model.(*home)
+
+	// Plan remains implementing immediately after handling waveAllCompleteMsg.
+	reloaded, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	entryBefore, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusImplementing, entryBefore.Status,
+		"plan must remain implementing before async push completion")
+
+	msg := cmd()
+	pushMsg, ok := msg.(wavePushCompleteMsg)
+	require.True(t, ok, "waveAllCompleteMsg command must resolve to wavePushCompleteMsg, got %T", msg)
+	assert.Equal(t, planFile, pushMsg.planFile, "push message must include same plan file")
+
+	model, _ = updated.Update(pushMsg)
+	updated = model.(*home)
+
+	// Transition to reviewing after push completion.
+	reloaded, err = newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	entryAfter, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReviewing, entryAfter.Status,
+		"plan must transition to reviewing after wavePushCompleteMsg")
+
+	// Ensure caller gets back a usable updated model after async completion.
+	_ = updated
+
 }
 
 // TestWaveMonitor_AllComplete_MultiWave verifies the flow with a multi-wave plan

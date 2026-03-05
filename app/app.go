@@ -1671,29 +1671,29 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			taskstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged(), m.toastTickCmd())
 	case waveAllCompleteMsg:
-		// All waves finished and user confirmed — push branch and advance to review.
+		planFile := msg.planFile
+		return m, func() tea.Msg {
+			for _, inst := range m.nav.GetInstances() {
+				if inst.TaskFile == planFile && inst.TaskNumber > 0 {
+					if worktree, err := inst.GetGitWorktree(); err == nil {
+						_ = worktree.Push(false)
+					}
+					break
+				}
+			}
+			return wavePushCompleteMsg{planFile: planFile}
+		}
+	case wavePushCompleteMsg:
+		// After async push completes for wave flow, transition and spawn reviewer.
 		planFile := msg.planFile
 		planName := taskstate.DisplayName(planFile)
 
-		// Push the implementation branch (best-effort, non-blocking).
-		for _, inst := range m.nav.GetInstances() {
-			if inst.TaskFile == planFile && inst.TaskNumber > 0 {
-				worktree, err := inst.GetGitWorktree()
-				if err == nil {
-					_ = worktree.Push(false)
-					break // one push is enough — all tasks share the worktree
-				}
-			}
-		}
-
-		// Transition FSM implementing → reviewing.
 		if err := m.fsm.Transition(planFile, taskfsm.ImplementFinished); err != nil {
-			log.WarningLog.Printf("wave all-complete: could not transition %q to reviewing: %v", planFile, err)
+			log.WarningLog.Printf("wave push-complete: could not transition %q to reviewing: %v", planFile, err)
 		}
 		m.loadTaskState()
 		m.updateSidebarTasks()
 
-		// Spawn reviewer agent for the completed plan.
 		var reviewerCmd tea.Cmd
 		if cmd := m.spawnReviewer(planFile); cmd != nil {
 			reviewerCmd = cmd
@@ -2043,6 +2043,11 @@ type waveAbortMsg struct {
 // waveAllCompleteMsg is sent when the user confirms advancing to review
 // after all waves in a plan have finished.
 type waveAllCompleteMsg struct {
+	planFile string
+}
+
+// wavePushCompleteMsg is sent when the async wave-complete push path finishes.
+type wavePushCompleteMsg struct {
 	planFile string
 }
 
