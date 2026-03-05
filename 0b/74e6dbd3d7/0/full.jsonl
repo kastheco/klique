@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772698064041,
-      "updated": 1772698386754
+      "updated": 1772698407688
     }
   },
   "messages": [
@@ -4118,7 +4118,8 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772698386745
+          "created": 1772698386745,
+          "completed": 1772698401949
         },
         "parentID": "msg_cbd09d4b1001kLJRnPLDPL2CJH",
         "modelID": "claude-sonnet-4-6",
@@ -4131,15 +4132,17 @@
         },
         "cost": 0,
         "tokens": {
-          "input": 0,
-          "output": 0,
+          "total": 104304,
+          "input": 1,
+          "output": 143,
           "reasoning": 0,
           "cache": {
-            "read": 0,
-            "write": 0
+            "read": 103183,
+            "write": 977
           }
         },
         "variant": "high",
+        "finish": "tool-calls",
         "id": "msg_cbd0ec139001ph0kqeio5XBZD6",
         "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn"
       },
@@ -4167,22 +4170,217 @@
           "callID": "REDACTED",
           "tool": "bash",
           "state": {
-            "status": "running",
+            "status": "completed",
             "input": {
               "command": "git add ui/info_pane.go ui/tabbed_window.go config/taskstore/sqlite_test.go && git commit -m \"fix: move goal row to instance section, clean up doc comment and test import (reviewer self-fix)\"",
               "description": "Commit reviewer self-fixes"
             },
+            "output": "[plan/improved-info-tab e173272a] fix: move goal row to instance section, clean up doc comment and test import (reviewer self-fix)\n 3 files changed, 4 insertions(+), 6 deletions(-)\n",
+            "title": "Commit reviewer self-fixes",
             "metadata": {
-              "output": "",
-              "description": "Commit reviewer self-fixes"
+              "output": "[plan/improved-info-tab e173272a] fix: move goal row to instance section, clean up doc comment and test import (reviewer self-fix)\n 3 files changed, 4 insertions(+), 6 deletions(-)\n",
+              "exit": 0,
+              "description": "Commit reviewer self-fixes",
+              "truncated": false
             },
             "time": {
-              "start": 1772698390851
+              "start": 1772698390850,
+              "end": 1772698401939
             }
           },
           "id": "prt_cbd0ecbf100181dH5jkQSn19h9",
           "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
           "messageID": "msg_cbd0ec139001ph0kqeio5XBZD6"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a188088c2b6b71b4536d43f669ceb6e2055adc55",
+          "cost": 0,
+          "tokens": {
+            "total": 104304,
+            "input": 1,
+            "output": 143,
+            "reasoning": 0,
+            "cache": {
+              "read": 103183,
+              "write": 977
+            }
+          },
+          "id": "prt_cbd0efc940018NTk3Y7stYhUdm",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0ec139001ph0kqeio5XBZD6"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772698401951,
+          "completed": 1772698407676
+        },
+        "parentID": "msg_cbd09d4b1001kLJRnPLDPL2CJH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 104574,
+          "input": 1,
+          "output": 201,
+          "reasoning": 0,
+          "cache": {
+            "read": 104160,
+            "write": 212
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd0efc9f001YLBFPmPnNwwQxK",
+        "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a188088c2b6b71b4536d43f669ceb6e2055adc55",
+          "id": "prt_cbd0f0363001zyFC0IQGwHnfTn",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0efc9f001YLBFPmPnNwwQxK"
+        },
+        {
+          "type": "text",
+          "text": "Now write the approval signal:",
+          "time": {
+            "start": 1772698404053,
+            "end": 1772698404053
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0efc9f001YLBFPmPnNwwQxK"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p .kasmos/signals && echo \"Approved. all 4 tasks implemented and tested: subtasks table + phase timestamps (task 1), HTTP transport (task 2), ingestion pipeline (task 3), info pane redesign (task 4); full test suite passes; three trivial self-fixes applied (goal row double-render in plan header, misleading doc comment on GetInfoData, strings.Contains replaced with assert.Contains in test).\" > .kasmos/signals/review-approved-improved-info-tab.md",
+              "description": "Write review-approved signal"
+            },
+            "output": "",
+            "title": "Write review-approved signal",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Write review-approved signal",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772698407645,
+              "end": 1772698407647
+            }
+          },
+          "id": "prt_cbd0f04d7001zV5fImooZH1EN4",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0efc9f001YLBFPmPnNwwQxK"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "a188088c2b6b71b4536d43f669ceb6e2055adc55",
+          "cost": 0,
+          "tokens": {
+            "total": 104574,
+            "input": 1,
+            "output": 201,
+            "reasoning": 0,
+            "cache": {
+              "read": 104160,
+              "write": 212
+            }
+          },
+          "id": "prt_cbd0f12f40010P0fUwo4mjmgtt",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0efc9f001YLBFPmPnNwwQxK"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772698407679,
+          "completed": 1772698420139
+        },
+        "parentID": "msg_cbd09d4b1001kLJRnPLDPL2CJH",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 105070,
+          "input": 1,
+          "output": 470,
+          "reasoning": 0,
+          "cache": {
+            "read": 104372,
+            "write": 227
+          }
+        },
+        "variant": "high",
+        "finish": "stop",
+        "id": "msg_cbd0f12fe0014Zy99eEKKbB16F",
+        "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "a188088c2b6b71b4536d43f669ceb6e2055adc55",
+          "id": "prt_cbd0f18480016XPXsDRMiKcdma",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0f12fe0014Zy99eEKKbB16F"
+        },
+        {
+          "type": "text",
+          "text": "## Review Complete — Approved\n\nAll 4 tasks were correctly implemented. Three trivial issues were self-fixed directly:\n\n### Self-fixed\n\n1. **`ui/info_pane.go:346-348`** — Goal row was added to `renderPlanSection()`, causing it to appear twice in the plan header view (once as a metadata row, once in the dedicated `renderGoalSection()`). Fixed by removing the row from `renderPlanSection()` and adding it to `renderInstanceSection()` instead, per plan spec.\n\n2. **`ui/tabbed_window.go:262`** — `GetInfoData()` doc comment said \"Intended for use in tests\" but the method is used in production code (`app_state.go`) to preserve prior subtask data. Removed the misleading sentence.\n\n3. **`config/taskstore/sqlite_test.go:338`** — `assert.True(t, strings.Contains(err.Error(), \"unknown phase\"))` replaced with `assert.Contains(t, err.Error(), \"unknown phase\")` and the now-unused `\"strings\"` import removed.\n\n### Summary of implementation\n\n- **Wave 1**: `subtasks` table with `(project, plan_filename, task_number)` uniqueness, phase timestamp columns (`planning_at`, `implementing_at`, `reviewing_at`, `done_at`), `goal` column, and all 5 new store methods with proper transactional semantics, not-found detection, and migration.\n\n- **Wave 2**: Full HTTP round-trip for all 5 methods, correct 400/404/500 status codes, proper helper URL builders.\n\n- **Wave 3**: `IngestContent` populates goal + subtasks on parse success; content always persists on failure; FSM hooks `SetPhaseTimestamp` on phase transitions; `WaveOrchestrator` persists subtask status best-effort; info pane redesigned with goal, lifecycle, and progress sections; `buildSubtaskProgress` preserves prior values on store error.",
+          "time": {
+            "start": 1772698420106,
+            "end": 1772698420106
+          },
+          "id": "prt_cbd0f1848002mu2207ijDm4oYe",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0f12fe0014Zy99eEKKbB16F"
+        },
+        {
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "a188088c2b6b71b4536d43f669ceb6e2055adc55",
+          "cost": 0,
+          "tokens": {
+            "total": 105070,
+            "input": 1,
+            "output": 470,
+            "reasoning": 0,
+            "cache": {
+              "read": 104372,
+              "write": 227
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_342f62b56ffe5Ezl4qkFH7vBcn",
+          "messageID": "msg_cbd0f12fe0014Zy99eEKKbB16F"
         }
       ]
     }
