@@ -107,35 +107,25 @@ func TestAuditList_EventFilter(t *testing.T) {
 
 func TestAuditCmd_RejectsNonPositiveLimit(t *testing.T) {
 	tests := []struct {
-		name  string
-		limit int
+		name     string
+		limitStr string
 	}{
-		{"zero", 0},
-		{"negative", -5},
+		{"zero", "0"},
+		{"negative", "-5"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Directly test the validation logic that RunE enforces.
-			// We can't call RunE directly without resolveRepoInfo succeeding,
-			// so we test the guard condition directly.
-			if tc.limit <= 0 {
-				// This matches the exact error text required by spec.
-				assert.True(t, true, "limit must be > 0")
-			}
+			auditCmd := NewAuditCmd()
+			listCmd, _, err := auditCmd.Find([]string{"list"})
+			require.NoError(t, err)
+
+			require.NoError(t, listCmd.Flags().Set("limit", tc.limitStr))
+			listCmd.SetArgs([]string{})
+			execErr := listCmd.RunE(listCmd, []string{})
+			require.Error(t, execErr)
+			assert.Equal(t, "limit must be > 0", execErr.Error())
 		})
 	}
-
-	// Also test command flag + RunE execution with cobra
-	auditCmd := NewAuditCmd()
-	listCmd, _, err := auditCmd.Find([]string{"list"})
-	require.NoError(t, err)
-
-	// Set limit to 0 via flag to trigger validation error
-	require.NoError(t, listCmd.Flags().Set("limit", "0"))
-	listCmd.SetArgs([]string{})
-	execErr := listCmd.RunE(listCmd, []string{})
-	require.Error(t, execErr)
-	assert.Equal(t, "limit must be > 0", execErr.Error())
 }
 
 func TestAuditCmd_Wiring(t *testing.T) {

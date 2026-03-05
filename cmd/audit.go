@@ -16,8 +16,9 @@ func NewAuditCmd() *cobra.Command {
 	var limit int
 	var event string
 	listCmd := &cobra.Command{
-		Use:  "list",
-		Args: cobra.NoArgs,
+		Use:   "list",
+		Short: "list recent audit events",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if limit <= 0 {
 				return fmt.Errorf("limit must be > 0")
