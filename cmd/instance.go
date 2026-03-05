@@ -380,6 +380,57 @@ func updateInstanceInState(state config.StateManager, title string, updater func
 	return state.SaveInstances(raw)
 }
 
+// instanceStatusSummary holds counts of instances grouped by their status bucket.
+type instanceStatusSummary struct {
+	Running int
+	Ready   int
+	Paused  int
+	Killed  int
+}
+
+// summarizeInstanceStatus aggregates instance records into status buckets.
+// instanceRunning and instanceLoading both increment Running (matches app semantics).
+// Any unrecognised status value goes to Killed as a future-proof bucket.
+func summarizeInstanceStatus(records []instanceRecord) instanceStatusSummary {
+	var s instanceStatusSummary
+	for _, r := range records {
+		switch r.Status {
+		case instanceRunning, instanceLoading:
+			s.Running++
+		case instanceReady:
+			s.Ready++
+		case instancePaused:
+			s.Paused++
+		default:
+			s.Killed++
+		}
+	}
+	return s
+}
+
+// executeInstanceStatus loads all instance records from state and returns a
+// tabwriter-formatted summary table as a string. Returns "no instances found\n"
+// when the state contains no records.
+func executeInstanceStatus(state config.StateManager) (string, error) {
+	records, err := loadInstanceRecords(state)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "no instances found\n", nil
+	}
+	summary := summarizeInstanceStatus(records)
+	var sb strings.Builder
+	w := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "STATE\tCOUNT")
+	fmt.Fprintf(w, "running\t%d\n", summary.Running)
+	fmt.Fprintf(w, "ready\t%d\n", summary.Ready)
+	fmt.Fprintf(w, "paused\t%d\n", summary.Paused)
+	fmt.Fprintf(w, "killed\t%d\n", summary.Killed)
+	w.Flush()
+	return sb.String(), nil
+}
+
 // NewInstanceCmd builds the `kas instance` cobra command tree.
 func NewInstanceCmd() *cobra.Command {
 	instanceCmd := &cobra.Command{
@@ -587,6 +638,22 @@ func NewInstanceCmd() *cobra.Command {
 		},
 	}
 	instanceCmd.AddCommand(sendCmd)
+
+	// kas instance status
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "show status summary for all instances",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := executeInstanceStatus(config.LoadState())
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+			return nil
+		},
+	}
+	instanceCmd.AddCommand(statusCmd)
 
 	return instanceCmd
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -476,4 +477,91 @@ func TestBuildResumeCommand_TaskEnvVars(t *testing.T) {
 	assert.Contains(t, got, "KASMOS_TASK=3")
 	assert.Contains(t, got, "KASMOS_WAVE=2")
 	assert.Contains(t, got, "KASMOS_PEERS=4")
+}
+
+// TestSummarizeInstanceStatus_Mixed verifies aggregation across all known and
+// unknown status values including instanceLoading (which counts as running).
+func TestSummarizeInstanceStatus_Mixed(t *testing.T) {
+	records := []instanceRecord{
+		{Title: "r1", Status: instanceRunning},
+		{Title: "r2", Status: instanceLoading}, // loading → running bucket
+		{Title: "r3", Status: instanceReady},
+		{Title: "r4", Status: instancePaused},
+		{Title: "r5", Status: instanceStatus(99)}, // unknown → killed bucket
+	}
+	summary := summarizeInstanceStatus(records)
+	assert.Equal(t, 2, summary.Running, "running should include loading")
+	assert.Equal(t, 1, summary.Ready)
+	assert.Equal(t, 1, summary.Paused)
+	assert.Equal(t, 1, summary.Killed, "unknown status should go to killed")
+}
+
+// TestExecuteInstanceStatus_Empty verifies the empty-state output.
+func TestExecuteInstanceStatus_Empty(t *testing.T) {
+	state := newTestStateFromRaw(t, []instanceTestData{})
+	out, err := executeInstanceStatus(state)
+	require.NoError(t, err)
+	assert.Equal(t, "no instances found\n", out)
+}
+
+// TestExecuteInstanceStatus_OutputOrder verifies deterministic row order in the
+// tabwriter output: running, ready, paused, killed.
+func TestExecuteInstanceStatus_OutputOrder(t *testing.T) {
+	state := newTestStateFromRaw(t, []instanceTestData{
+		{Title: "a", Status: 3 /* Paused */},
+		{Title: "b", Status: 0 /* Running */},
+		{Title: "c", Status: 1 /* Ready */},
+	})
+	out, err := executeInstanceStatus(state)
+	require.NoError(t, err)
+
+	// Verify header and row presence
+	assert.Contains(t, out, "STATE")
+	assert.Contains(t, out, "COUNT")
+
+	// Verify deterministic order: running before ready before paused before killed
+	runIdx := strings.Index(out, "running")
+	readyIdx := strings.Index(out, "ready")
+	pausedIdx := strings.Index(out, "paused")
+	killedIdx := strings.Index(out, "killed")
+	assert.Greater(t, readyIdx, runIdx, "ready should come after running")
+	assert.Greater(t, pausedIdx, readyIdx, "paused should come after ready")
+	assert.Greater(t, killedIdx, pausedIdx, "killed should come after paused")
+}
+
+// TestExecuteInstanceStatus_ParseError verifies that invalid JSON in state
+// returns an error containing "parse instances".
+func TestExecuteInstanceStatus_ParseError(t *testing.T) {
+	s := config.DefaultState()
+	s.InstancesData = []byte(`not-valid-json`)
+	_, err := executeInstanceStatus(s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse instances")
+}
+
+// TestNewInstanceCmd_HasStatusSubcommand verifies the status subcommand is
+// registered on the instance command tree.
+func TestNewInstanceCmd_HasStatusSubcommand(t *testing.T) {
+	cmd, _, err := NewInstanceCmd().Find([]string{"status"})
+	require.NoError(t, err)
+	assert.Equal(t, "status", cmd.Name())
+}
+
+// TestNewRootCmd_HasInstanceStatus verifies the full path kas instance status
+// resolves correctly from the root command.
+func TestNewRootCmd_HasInstanceStatus(t *testing.T) {
+	cmd, _, err := NewRootCmd().Find([]string{"instance", "status"})
+	require.NoError(t, err)
+	assert.Equal(t, "status", cmd.Name())
+}
+
+// TestSummarizeInstanceStatus_UnknownStatus verifies that an unknown status
+// value (e.g. instanceStatus(99)) is counted in the Killed bucket.
+func TestSummarizeInstanceStatus_UnknownStatus(t *testing.T) {
+	records := []instanceRecord{{Title: "stale", Status: instanceStatus(99)}}
+	summary := summarizeInstanceStatus(records)
+	assert.Equal(t, 1, summary.Killed)
+	assert.Equal(t, 0, summary.Running)
+	assert.Equal(t, 0, summary.Ready)
+	assert.Equal(t, 0, summary.Paused)
 }
