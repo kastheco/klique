@@ -1,0 +1,3 @@
+Plan restart-agent. Goal: restart-agent
+
+add an option to the space menu of an instance (where open, kill, etc is) and add a 'restart' option that kills the session (if it still exists) then launches a fresh agent with the same configuration and prompt. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
