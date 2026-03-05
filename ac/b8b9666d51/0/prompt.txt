@@ -1,0 +1,187 @@
+Implement Task 1: Rewrite CLAUDE.md with current project state
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Rewrite CLAUDE.md to reflect the current project name (kasmos), actual dependency versions, correct directory layout, and current config paths — eliminating all stale klique-era references.
+**Architecture:** Single-file rewrite of CLAUDE.md. No code changes — this is a documentation-only update. The new content is derived from auditing go.mod, the directory tree, config/config.go, and cmd/*.go.
+**Tech Stack:** Markdown (CLAUDE.md)
+
+## Wave 1 of 1
+
+## Task Instructions
+
+**Files:**
+- Modify: `CLAUDE.md`
+
+**Implementation detail and source-of-truth references (read-only):**
+
+- Use module identity from `go.mod:1` (`module github.com/kastheco/kasmos`) to anchor naming and wording.
+- Use Charm dependency versions from `go.mod:6`, `go.mod:7`, `go.mod:9`:
+  - `charm.land/bubbles/v2`
+  - `charm.land/bubbletea/v2`
+  - `charm.land/lipgloss/v2`
+- Use project-local config-path behavior from these exact signatures (do not modify code):
+
+```go
+func GetConfigDir() (string, error)
+func LoadConfig() *Config
+func LoadTOMLConfig() (*TOMLConfigResult, error)
+func ResolvedDBPath() string
+```
+
+  These are implemented in:
+  - `config/config.go:37`
+  - `config/config.go:304`
+  - `config/toml.go:92`
+  - `config/taskstore/factory.go:27`
+
+- Use CLI command surface from these signatures (do not modify code):
+
+```go
+func NewRootCmd() *cobra.Command
+func NewTaskCmd() *cobra.Command
+func NewInstanceCmd() *cobra.Command
+func NewTmuxCmd() *cobra.Command
+func NewServeCmd() *cobra.Command
+```
+
+  Implemented in:
+  - `cmd/cmd.go:44`
+  - `cmd/task.go:433`
+  - `cmd/instance.go:435`
+  - `cmd/tmux.go:256`
+  - `cmd/serve.go:18`
+
+- Directory layout must be validated against on-disk directories at repo root and immediate child directories under `internal/`, `session/`, and `ui/`.
+
+**Exact content requirements for CLAUDE.md:**
+
+1. **Title & description**
+   - Replace `# klique` with `# kasmos`.
+   - Replace the opening paragraph with wording that reflects kasmos plan/wave orchestration and isolated worktrees/tmux sessions.
+
+2. **Key Directories table**
+   Replace the full table with rows matching the current repository structure and wording below (order must match):
+
+   - `app/` — TUI application logic (bubbletea model, input handling, state)
+   - `cmd/` — CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`)
+   - `config/` — Configuration management (TOML + JSON dual config, agent profiles)
+   - `contracts/` — Shared interfaces and types
+   - `daemon/` — Background daemon for auto-accept mode
+   - `internal/` — Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry)
+   - `keys/` — Keybinding definitions
+   - `log/` — Structured logging
+   - `orchestration/` — Wave/task orchestration engine and prompt generation
+   - `session/` — Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management)
+   - `ui/` — Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme)
+   - `web/` — Web UI (public assets + source)
+   - `.opencode/` — Agent configs, commands, plugins, skills for opencode harness
+   - `.claude/` — Agent configs and skills for claude harness
+   - `.agents/` — Shared agent skills (superpowers)
+
+3. **Standards section**
+   - Keep Go version at `Go 1.24+`.
+   - Update Charm dependency line to v2 names (`bubbletea/v2`, `lipgloss/v2`, `bubbles/v2`).
+   - Replace config path line with project-local path wording:
+     - TOML: `<repo-root>/.kasmos/config.toml`
+     - JSON: `<repo-root>/.kasmos/config.json`
+   - Keep these two bullets semantically intact (wording can stay identical):
+     - **Lowercase labels**
+     - **Arrow-key navigation in overlays**
+
+4. **Active Work section**
+   - Delete this section entirely (header, bullets, stale memory path reference).
+   - Do not leave placeholders such as “TBD” or “tracked elsewhere” in this document.
+
+5. **Workflow section**
+   - Keep the lifecycle description and environment-variable guidance (`KASMOS_TASK`, `KASMOS_WAVE`, `KASMOS_PEERS`).
+   - Remove the stale path reference to `~/.claude/projects/-home-kas-dev-klique/memory/`.
+
+**Concrete replacement template (use as final CLAUDE.md body):**
+
+```markdown
+# kasmos
+
+TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.
+
+## Key Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `app/` | TUI application logic (bubbletea model, input handling, state) |
+| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |
+| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |
+| `contracts/` | Shared interfaces and types |
+| `daemon/` | Background daemon for auto-accept mode |
+| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |
+| `keys/` | Keybinding definitions |
+| `log/` | Structured logging |
+| `orchestration/` | Wave/task orchestration engine and prompt generation |
+| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |
+| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |
+| `web/` | Web UI (public assets + source) |
+| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |
+| `.claude/` | Agent configs and skills for claude harness |
+| `.agents/` | Shared agent skills (superpowers) |
+
+## Standards
+
+Key points:
+- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2
+- Tests: testify assertions, table-driven, no real tmux/git/network in tests
+- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`
+- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)
+- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. "push changes from 'foo'?" not "Push changes from 'foo'?"
+- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.
+
+## Workflow
+
+Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.
+```
+
+**Edge cases and error-avoidance requirements:**
+
+- Do not keep any `klique` token in title, prose, examples, or paths.
+- Do not keep legacy home-dir config references (`~/.klique/*`) anywhere in the file.
+- Ensure all headings remain valid markdown headings after section removal (no duplicate or dangling headers).
+- Keep file ASCII-only; do not introduce smart quotes or non-ASCII punctuation.
+
+**Step 1: write the failing test**
+
+> Skipped — no testable logic. This is a documentation-only change.
+
+**Step 2: run test to verify it fails**
+
+> Skipped — documentation only.
+
+**Step 3: write the updated CLAUDE.md**
+
+Replace the full contents of CLAUDE.md with the corrected version above.
+
+No Go source edits are required. No imports are required.
+
+**Step 4: verify correctness**
+
+```bash
+# 1) Confirm stale project name and legacy config paths are gone
+rg -n 'klique|~/.klique|/memory/' CLAUDE.md
+# Expect: no matches
+
+# 2) Confirm updated project name and dependency/version line are present
+rg -n '^# kasmos$|bubbletea/v2|lipgloss/v2|bubbles/v2' CLAUDE.md
+
+# 3) Confirm project-local config paths are present
+rg -n '<repo-root>/.kasmos/config.toml|<repo-root>/.kasmos/config.json' CLAUDE.md
+
+# 4) Confirm required directories are documented
+rg -n '`app/`|`cmd/`|`config/`|`contracts/`|`daemon/`|`internal/`|`keys/`|`log/`|`orchestration/`|`session/`|`ui/`|`web/`|`\.opencode/`|`\.claude/`|`\.agents/`' CLAUDE.md
+```
+
+**Step 5: commit**
+
+```bash
+git add CLAUDE.md
+git commit -m "docs: rewrite CLAUDE.md — rename klique→kasmos, fix versions and paths"
+```

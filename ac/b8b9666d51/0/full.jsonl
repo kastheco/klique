@@ -1,0 +1,1090 @@
+{
+  "info": {
+    "id": "ses_340b385fcffevfT26Z4TnuvyTF",
+    "slug": "lucky-rocket",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+    "title": "Rewrite CLAUDE.md for kasmos project structure and versions",
+    "version": "1.2.17",
+    "summary": {
+      "additions": 15,
+      "deletions": 17,
+      "files": 1
+    },
+    "time": {
+      "created": 1772735986179,
+      "updated": 1772736002220
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772735986206
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "CLAUDE.md",
+              "before": "# klique\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n| `cmd/` | CLI entry points (cobra commands) |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n| `.claude/commands/` | Custom slash commands for agent workflows |\n\n## Standards\n\nKey points:\n- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n\n## Active Work\n\nFeature status is tracked in auto memory. Two features are in progress:\n\n- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n\nSee `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n\n## Workflow\n\nDevelopment follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n",
+              "after": "# kasmos\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `contracts/` | Shared interfaces and types |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n| `keys/` | Keybinding definitions |\n| `log/` | Structured logging |\n| `orchestration/` | Wave/task orchestration engine and prompt generation |\n| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n| `web/` | Web UI (public assets + source) |\n| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n| `.claude/` | Agent configs and skills for claude harness |\n| `.agents/` | Shared agent skills (superpowers) |\n\n## Standards\n\nKey points:\n- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n\n## Workflow\n\nDevelopment follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n",
+              "additions": 15,
+              "deletions": 17,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex-spark"
+        },
+        "variant": "high",
+        "id": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 1: Rewrite CLAUDE.md with current project state\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Rewrite CLAUDE.md to reflect the current project name (kasmos), actual dependency versions, correct directory layout, and current config paths — eliminating all stale klique-era references.\n**Architecture:** Single-file rewrite of CLAUDE.md. No code changes — this is a documentation-only update. The new content is derived from auditing go.mod, the directory tree, config/config.go, and cmd/*.go.\n**Tech Stack:** Markdown (CLAUDE.md)\n\n## Wave 1 of 1\n\n## Task Instructions\n\n**Files:**\n- Modify: `CLAUDE.md`\n\n**Implementation detail and source-of-truth references (read-only):**\n\n- Use module identity from `go.mod:1` (`module github.com/kastheco/kasmos`) to anchor naming and wording.\n- Use Charm dependency versions from `go.mod:6`, `go.mod:7`, `go.mod:9`:\n  - `charm.land/bubbles/v2`\n  - `charm.land/bubbletea/v2`\n  - `charm.land/lipgloss/v2`\n- Use project-local config-path behavior from these exact signatures (do not modify code):\n\n```go\nfunc GetConfigDir() (string, error)\nfunc LoadConfig() *Config\nfunc LoadTOMLConfig() (*TOMLConfigResult, error)\nfunc ResolvedDBPath() string\n```\n\n  These are implemented in:\n  - `config/config.go:37`\n  - `config/config.go:304`\n  - `config/toml.go:92`\n  - `config/taskstore/factory.go:27`\n\n- Use CLI command surface from these signatures (do not modify code):\n\n```go\nfunc NewRootCmd() *cobra.Command\nfunc NewTaskCmd() *cobra.Command\nfunc NewInstanceCmd() *cobra.Command\nfunc NewTmuxCmd() *cobra.Command\nfunc NewServeCmd() *cobra.Command\n```\n\n  Implemented in:\n  - `cmd/cmd.go:44`\n  - `cmd/task.go:433`\n  - `cmd/instance.go:435`\n  - `cmd/tmux.go:256`\n  - `cmd/serve.go:18`\n\n- Directory layout must be validated against on-disk directories at repo root and immediate child directories under `internal/`, `session/`, and `ui/`.\n\n**Exact content requirements for CLAUDE.md:**\n\n1. **Title & description**\n   - Replace `# klique` with `# kasmos`.\n   - Replace the opening paragraph with wording that reflects kasmos plan/wave orchestration and isolated worktrees/tmux sessions.\n\n2. **Key Directories table**\n   Replace the full table with rows matching the current repository structure and wording below (order must match):\n\n   - `app/` — TUI application logic (bubbletea model, input handling, state)\n   - `cmd/` — CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`)\n   - `config/` — Configuration management (TOML + JSON dual config, agent profiles)\n   - `contracts/` — Shared interfaces and types\n   - `daemon/` — Background daemon for auto-accept mode\n   - `internal/` — Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry)\n   - `keys/` — Keybinding definitions\n   - `log/` — Structured logging\n   - `orchestration/` — Wave/task orchestration engine and prompt generation\n   - `session/` — Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management)\n   - `ui/` — Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme)\n   - `web/` — Web UI (public assets + source)\n   - `.opencode/` — Agent configs, commands, plugins, skills for opencode harness\n   - `.claude/` — Agent configs and skills for claude harness\n   - `.agents/` — Shared agent skills (superpowers)\n\n3. **Standards section**\n   - Keep Go version at `Go 1.24+`.\n   - Update Charm dependency line to v2 names (`bubbletea/v2`, `lipgloss/v2`, `bubbles/v2`).\n   - Replace config path line with project-local path wording:\n     - TOML: `<repo-root>/.kasmos/config.toml`\n     - JSON: `<repo-root>/.kasmos/config.json`\n   - Keep these two bullets semantically intact (wording can stay identical):\n     - **Lowercase labels**\n     - **Arrow-key navigation in overlays**\n\n4. **Active Work section**\n   - Delete this section entirely (header, bullets, stale memory path reference).\n   - Do not leave placeholders such as “TBD” or “tracked elsewhere” in this document.\n\n5. **Workflow section**\n   - Keep the lifecycle description and environment-variable guidance (`KASMOS_TASK`, `KASMOS_WAVE`, `KASMOS_PEERS`).\n   - Remove the stale path reference to `~/.claude/projects/-home-kas-dev-klique/memory/`.\n\n**Concrete replacement template (use as final CLAUDE.md body):**\n\n```markdown\n# kasmos\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `contracts/` | Shared interfaces and types |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n| `keys/` | Keybinding definitions |\n| `log/` | Structured logging |\n| `orchestration/` | Wave/task orchestration engine and prompt generation |\n| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n| `web/` | Web UI (public assets + source) |\n| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n| `.claude/` | Agent configs and skills for claude harness |\n| `.agents/` | Shared agent skills (superpowers) |\n\n## Standards\n\nKey points:\n- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n\n## Workflow\n\nDevelopment follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n```\n\n**Edge cases and error-avoidance requirements:**\n\n- Do not keep any `klique` token in title, prose, examples, or paths.\n- Do not keep legacy home-dir config references (`~/.klique/*`) anywhere in the file.\n- Ensure all headings remain valid markdown headings after section removal (no duplicate or dangling headers).\n- Keep file ASCII-only; do not introduce smart quotes or non-ASCII punctuation.\n\n**Step 1: write the failing test**\n\n> Skipped — no testable logic. This is a documentation-only change.\n\n**Step 2: run test to verify it fails**\n\n> Skipped — documentation only.\n\n**Step 3: write the updated CLAUDE.md**\n\nReplace the full contents of CLAUDE.md with the corrected version above.\n\nNo Go source edits are required. No imports are required.\n\n**Step 4: verify correctness**\n\n```bash\n# 1) Confirm stale project name and legacy config paths are gone\nrg -n 'klique|~/.klique|/memory/' CLAUDE.md\n# Expect: no matches\n\n# 2) Confirm updated project name and dependency/version line are present\nrg -n '^# kasmos$|bubbletea/v2|lipgloss/v2|bubbles/v2' CLAUDE.md\n\n# 3) Confirm project-local config paths are present\nrg -n '<repo-root>/.kasmos/config.toml|<repo-root>/.kasmos/config.json' CLAUDE.md\n\n# 4) Confirm required directories are documented\nrg -n '`app/`|`cmd/`|`config/`|`contracts/`|`daemon/`|`internal/`|`keys/`|`log/`|`orchestration/`|`session/`|`ui/`|`web/`|`\\.opencode/`|`\\.claude/`|`\\.agents/`' CLAUDE.md\n```\n\n**Step 5: commit**\n\n```bash\ngit add CLAUDE.md\ngit commit -m \"docs: rewrite CLAUDE.md — rename klique→kasmos, fix versions and paths\"\n```",
+          "id": "prt_cbf4c7a13002vEnxaLHXCMEXpp",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a13001Flky9U2Xkcqe5e"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735986215,
+          "completed": 1772735989622
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 25746,
+          "input": 25391,
+          "output": 355,
+          "reasoning": 326,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4c7a270012zdVLGW9KDr03V",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "id": "prt_cbf4c8142001773iQqtgpu7f2A",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a270012zdVLGW9KDr03V"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0c67c6550ba449820169a9cdf5123c81a3aab2ce670c8a0c49",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772735989211,
+            "end": 1772735989461
+          },
+          "id": "prt_cbf4c85db001VdVTILMihaBhBy",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a270012zdVLGW9KDr03V"
+        },
+        {
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1772735989477,
+            "end": 1772735989477
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "msg_0c67c6550ba449820169a9cdf56d3481a3ae9b9a7c965372ad"
+            }
+          },
+          "id": "prt_cbf4c86d5001vBFiGivyG8M1Dj",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a270012zdVLGW9KDr03V"
+        },
+        {
+          "type": "tool",
+          "callID": "call_6Pn5tjVOEdfetnp0IDJaa9NN",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify task state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas task transition <task-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update task state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate task status to `done` after options 1, 2, or 4:\n```bash\nkas task set-status <task-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735989549,
+              "end": 1772735989554
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0c67c6550ba449820169a9cdf572d481a3b8e7269f6cf3b3c4"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a270012zdVLGW9KDr03V"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "cost": 0,
+          "tokens": {
+            "total": 25746,
+            "input": 25391,
+            "output": 355,
+            "reasoning": 326,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4c876d0019Ni2x4Xow7c0in",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c7a270012zdVLGW9KDr03V"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735989623,
+          "completed": 1772735992482
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 29603,
+          "input": 4356,
+          "output": 31,
+          "reasoning": 11,
+          "cache": {
+            "read": 25216,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4c87770018Ql3axmImJwq4A",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "id": "prt_cbf4c8cae001qFGB4eaNjc3zzL",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c87770018Ql3axmImJwq4A"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_017a8119c7e85b9f0169a9cdf7ae808192b7dac78976142171",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772735991735,
+            "end": 1772735991754
+          },
+          "id": "prt_cbf4c8fb7001hO4XFkji4aqxCv",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c87770018Ql3axmImJwq4A"
+        },
+        {
+          "type": "tool",
+          "callID": "call_nysljFvWIW0uJHkXDy3v1HTY",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735992378,
+              "end": 1772735992382
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_017a8119c7e85b9f0169a9cdf7b6848192ab3bd891988b0fd1"
+            }
+          },
+          "id": "prt_cbf4c8fd8001pg8tlWxORA4U1U",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c87770018Ql3axmImJwq4A"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "cost": 0,
+          "tokens": {
+            "total": 29603,
+            "input": 4356,
+            "output": 31,
+            "reasoning": 11,
+            "cache": {
+              "read": 25216,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4c929a0019eO61unVOpIlvS",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c87770018Ql3axmImJwq4A"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735992483,
+          "completed": 1772735993878
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 32920,
+          "input": 3365,
+          "output": 115,
+          "reasoning": 73,
+          "cache": {
+            "read": 29440,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4c92a30012IzWhSm92qZtN2",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "id": "prt_cbf4c95f2001yMziIyKh4anGMG",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c92a30012IzWhSm92qZtN2"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_025564fde86ebb3a0169a9cdf99bc4819da17af990faa3c411",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772735993640,
+            "end": 1772735993722
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c92a30012IzWhSm92qZtN2"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md</path>\n<type>file</type>\n<content>1: # klique\n2: \n3: TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n4: \n5: ## Key Directories\n6: \n7: | Directory | Purpose |\n8: |-----------|---------|\n9: | `app/` | TUI application logic (bubbletea model, input handling, state) |\n10: | `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n11: | `session/` | Instance lifecycle, git worktree ops, tmux session management |\n12: | `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n13: | `cmd/` | CLI entry points (cobra commands) |\n14: | `daemon/` | Background daemon for auto-accept mode |\n15: | `internal/initcmd/` | `kq init` multi-harness setup wizard |\n16: | `.claude/commands/` | Custom slash commands for agent workflows |\n17: \n18: ## Standards\n19: \n20: Key points:\n21: - Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n22: - Tests: testify assertions, table-driven, no real tmux/git/network in tests\n23: - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n24: - Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n25: - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n26: - **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n27: \n28: ## Active Work\n29: \n30: Feature status is tracked in auto memory. Two features are in progress:\n31: \n32: - **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n33: - **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n34: \n35: See `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n36: \n37: ## Workflow\n38: \n39: Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n\n(End of file - total 39 lines)\n</content>",
+            "title": "CLAUDE.md",
+            "metadata": {
+              "preview": "# klique\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n| `cmd/` | CLI entry points (cobra commands) |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n| `.claude/commands/` | Custom slash commands for agent workflows |\n\n## Standards\n\nKey points:",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772735993837,
+              "end": 1772735993842
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_025564fde86ebb3a0169a9cdf9afd0819d87a43433a41902a2"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c92a30012IzWhSm92qZtN2"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "cost": 0,
+          "tokens": {
+            "total": 32920,
+            "input": 3365,
+            "output": 115,
+            "reasoning": 73,
+            "cache": {
+              "read": 29440,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4c980d00103CEDBW3ovcJUB",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4c92a30012IzWhSm92qZtN2"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735993879,
+          "completed": 1772735996536
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 35947,
+          "input": 1050,
+          "output": 2257,
+          "reasoning": 818,
+          "cache": {
+            "read": 32640,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "id": "prt_cbf4c9b23001nTxkeL9o5egkj9",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0f2b44ed7076bd580169a9cdfae830819fa443d3ce0f215741",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772735994934,
+            "end": 1772735995794
+          },
+          "id": "prt_cbf4c9c36001vk5m3AYTg3slD6",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1772735995823,
+            "end": 1772735995823
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "msg_0f2b44ed7076bd580169a9cdfbc3b0819f96ba4d11b66eb25f"
+            }
+          },
+          "id": "prt_cbf4c9f93001MUorZDRgTWtPPn",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_MQ3WcrEzMtcn5pQN8x2dtKZV",
+          "tool": "apply_patch",
+          "state": {
+            "status": "completed",
+            "input": {
+              "patchText": "*** Begin Patch\n*** Update File: CLAUDE.md\n@@\n-# klique\n-\n-TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n-\n-## Key Directories\n-\n-| Directory | Purpose |\n-|-----------|---------|\n-| `app/` | TUI application logic (bubbletea model, input handling, state) |\n-| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n-| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n-| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n-| `cmd/` | CLI entry points (cobra commands) |\n-| `daemon/` | Background daemon for auto-accept mode |\n-| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n-| `.claude/commands/` | Custom slash commands for agent workflows |\n-\n-## Standards\n-\n-Key points:\n-- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n-- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n-- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n-- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n-- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n-- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n-\n-## Active Work\n-\n-Feature status is tracked in auto memory. Two features are in progress:\n-\n-- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n-- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n-\n-See `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n-\n-## Workflow\n-\n-Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n+# kasmos\n+\n+TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n+\n+## Key Directories\n+\n+| Directory | Purpose |\n+|-----------|---------|\n+| `app/` | TUI application logic (bubbletea model, input handling, state) |\n+| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n+| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n+| `contracts/` | Shared interfaces and types |\n+| `daemon/` | Background daemon for auto-accept mode |\n+| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n+| `keys/` | Keybinding definitions |\n+| `log/` | Structured logging |\n+| `orchestration/` | Wave/task orchestration engine and prompt generation |\n+| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n+| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n+| `web/` | Web UI (public assets + source) |\n+| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n+| `.claude/` | Agent configs and skills for claude harness |\n+| `.agents/` | Shared agent skills (superpowers) |\n+\n+## Standards\n+\n+Key points:\n+- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n+- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n+- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n+- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n+- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n+- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n+\n+## Workflow\n+\n+Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n*** End Patch"
+            },
+            "output": "Success. Updated the following files:\nM CLAUDE.md",
+            "title": "Success. Updated the following files:\nM CLAUDE.md",
+            "metadata": {
+              "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n+++ /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n@@ -1,39 +1,37 @@\n-# klique\n+# kasmos\n \n TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n \n ## Key Directories\n \n | Directory | Purpose |\n |-----------|---------|\n | `app/` | TUI application logic (bubbletea model, input handling, state) |\n+| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n | `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n-| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n-| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n-| `cmd/` | CLI entry points (cobra commands) |\n+| `contracts/` | Shared interfaces and types |\n | `daemon/` | Background daemon for auto-accept mode |\n-| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n-| `.claude/commands/` | Custom slash commands for agent workflows |\n+| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n+| `keys/` | Keybinding definitions |\n+| `log/` | Structured logging |\n+| `orchestration/` | Wave/task orchestration engine and prompt generation |\n+| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n+| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n+| `web/` | Web UI (public assets + source) |\n+| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n+| `.claude/` | Agent configs and skills for claude harness |\n+| `.agents/` | Shared agent skills (superpowers) |\n \n ## Standards\n \n Key points:\n-- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n+- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n - Tests: testify assertions, table-driven, no real tmux/git/network in tests\n - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n-- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n+- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n - **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n \n-## Active Work\n-\n-Feature status is tracked in auto memory. Two features are in progress:\n-\n-- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n-- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n-\n-See `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n-\n ## Workflow\n \n Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n\n",
+              "files": [
+                {
+                  "filePath": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md",
+                  "relativePath": "CLAUDE.md",
+                  "type": "update",
+                  "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n+++ /home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md\n@@ -1,39 +1,37 @@\n-# klique\n+# kasmos\n \n TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n \n ## Key Directories\n \n | Directory | Purpose |\n |-----------|---------|\n | `app/` | TUI application logic (bubbletea model, input handling, state) |\n+| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n | `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n-| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n-| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n-| `cmd/` | CLI entry points (cobra commands) |\n+| `contracts/` | Shared interfaces and types |\n | `daemon/` | Background daemon for auto-accept mode |\n-| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n-| `.claude/commands/` | Custom slash commands for agent workflows |\n+| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n+| `keys/` | Keybinding definitions |\n+| `log/` | Structured logging |\n+| `orchestration/` | Wave/task orchestration engine and prompt generation |\n+| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n+| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n+| `web/` | Web UI (public assets + source) |\n+| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n+| `.claude/` | Agent configs and skills for claude harness |\n+| `.agents/` | Shared agent skills (superpowers) |\n \n ## Standards\n \n Key points:\n-- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n+- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n - Tests: testify assertions, table-driven, no real tmux/git/network in tests\n - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n-- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n+- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n - **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n \n-## Active Work\n-\n-Feature status is tracked in auto memory. Two features are in progress:\n-\n-- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n-- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n-\n-See `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n-\n ## Workflow\n \n Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n",
+                  "before": "# klique\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `session/` | Instance lifecycle, git worktree ops, tmux session management |\n| `ui/` | Rendering components (list, sidebar, preview, diff, overlay) |\n| `cmd/` | CLI entry points (cobra commands) |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/initcmd/` | `kq init` multi-harness setup wizard |\n| `.claude/commands/` | Custom slash commands for agent workflows |\n\n## Standards\n\nKey points:\n- Go 1.24+, bubbletea v1.3.x, lipgloss v1.1.x, bubbles v0.20+\n- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n- Config: dual TOML (`~/.klique/config.toml`) + JSON (`~/.klique/config.json`)\n- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n\n## Active Work\n\nFeature status is tracked in auto memory. Two features are in progress:\n\n- **F001 - Fork Baseline Audit**: 6 WPs updating deps, integrating upstream PRs, fixing code quality, adding test coverage. All WPs planned, none started.\n- **F002 - Agent Orchestration**: WP status in TUI, role-based agent switching. All WPs planned.\n\nSee `~/.claude/projects/-home-kas-dev-klique/memory/` for full WP breakdowns.\n\n## Workflow\n\nDevelopment follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n",
+                  "after": "# kasmos\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `contracts/` | Shared interfaces and types |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n| `keys/` | Keybinding definitions |\n| `log/` | Structured logging |\n| `orchestration/` | Wave/task orchestration engine and prompt generation |\n| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n| `web/` | Web UI (public assets + source) |\n| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n| `.claude/` | Agent configs and skills for claude harness |\n| `.agents/` | Shared agent skills (superpowers) |\n\n## Standards\n\nKey points:\n- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n- Tests: testify assertions, table-driven, no real tmux/git/network in tests\n- Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n- **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n- **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n\n## Workflow\n\nDevelopment follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n",
+                  "additions": 15,
+                  "deletions": 17
+                }
+              ],
+              "diagnostics": {},
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735996426,
+              "end": 1772735996431
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0f2b44ed7076bd580169a9cdfbc898819fab0f4dc6bd9f03a0"
+            }
+          },
+          "id": "prt_cbf4c9fb1001EvwytpUvgqFAce",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "cost": 0,
+          "tokens": {
+            "total": 35947,
+            "input": 1050,
+            "output": 2257,
+            "reasoning": 818,
+            "cache": {
+              "read": 32640,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4ca265001cZc3vp3D17Ybeb",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "d399911352afe95b1c3e2fcd140f478a915d39f5",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md"
+          ],
+          "id": "prt_cbf4ca26d0012ccB3KQpaA81vd",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735996537,
+          "completed": 1772735999515
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 36549,
+          "input": 13736,
+          "output": 541,
+          "reasoning": 173,
+          "cache": {
+            "read": 22272,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4ca2790011Cbx7JtmaUh0s3",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "id": "REDACTED",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_01e5964ae412ab260169a9cdfedcc4819e9042f4c289f9d88f",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772735998902,
+            "end": 1772735999408
+          },
+          "id": "prt_cbf4cabb6001y4nkvM2ACSKKVB",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "tool",
+          "callID": "call_Bjp6GgI6ORObP6Zd8pgSGD77",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n 'klique|~/.klique|/memory/' CLAUDE.md",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Check stale klique tokens and old paths"
+            },
+            "output": "",
+            "title": "Check stale klique tokens and old paths",
+            "metadata": {
+              "output": "",
+              "exit": 1,
+              "description": "Check stale klique tokens and old paths",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735999432,
+              "end": 1772735999447
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_01e5964ae412ab260169a9cdff5f78819ea027b9187b5bd4b3"
+            }
+          },
+          "id": "prt_cbf4cadb1001mIRrVvBcwbsAlI",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "tool",
+          "callID": "call_lCxQNUUkq1cEXPORhj5sQtLM",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n '^# kasmos$|bubbletea/v2|lipgloss/v2|bubbles/v2' CLAUDE.md",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Check updated project name and v2 dependency lines"
+            },
+            "output": "1:# kasmos\n28:- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n",
+            "title": "Check updated project name and v2 dependency lines",
+            "metadata": {
+              "output": "1:# kasmos\n28:- Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n",
+              "exit": 0,
+              "description": "Check updated project name and v2 dependency lines",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735999433,
+              "end": 1772735999448
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_01e5964ae412ab260169a9cdff5f84819e9bd47d9421f02137"
+            }
+          },
+          "id": "prt_cbf4cadc9001clUNgGssgdP9Wh",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "tool",
+          "callID": "call_1D3Gha7oj6S1ILm7lO1Kenuu",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n '<repo-root>/.kasmos/config.toml|<repo-root>/.kasmos/config.json' CLAUDE.md",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Check updated project-local config paths"
+            },
+            "output": "31:- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n",
+            "title": "Check updated project-local config paths",
+            "metadata": {
+              "output": "31:- Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n",
+              "exit": 0,
+              "description": "Check updated project-local config paths",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735999434,
+              "end": 1772735999448
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_01e5964ae412ab260169a9cdff5f8c819eabbf5c94d5f9c0f8"
+            }
+          },
+          "id": "prt_cbf4cadca001fPZfs5Wyg3uAHj",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "rg -n '`app/`|`cmd/`|`config/`|`contracts/`|`daemon/`|`internal/`|`keys/`|`log/`|`orchestration/`|`session/`|`ui/`|`web/`|`\\.opencode/`|`\\.claude/`|`\\.agents/`' CLAUDE.md",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Check required directory entries are documented"
+            },
+            "output": "9:| `app/` | TUI application logic (bubbletea model, input handling, state) |\n10:| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n11:| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n12:| `contracts/` | Shared interfaces and types |\n13:| `daemon/` | Background daemon for auto-accept mode |\n14:| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n15:| `keys/` | Keybinding definitions |\n16:| `log/` | Structured logging |\n17:| `orchestration/` | Wave/task orchestration engine and prompt generation |\n18:| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n19:| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n20:| `web/` | Web UI (public assets + source) |\n21:| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n22:| `.claude/` | Agent configs and skills for claude harness |\n23:| `.agents/` | Shared agent skills (superpowers) |\n",
+            "title": "Check required directory entries are documented",
+            "metadata": {
+              "output": "9:| `app/` | TUI application logic (bubbletea model, input handling, state) |\n10:| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n11:| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n12:| `contracts/` | Shared interfaces and types |\n13:| `daemon/` | Background daemon for auto-accept mode |\n14:| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n15:| `keys/` | Keybinding definitions |\n16:| `log/` | Structured logging |\n17:| `orchestration/` | Wave/task orchestration engine and prompt generation |\n18:| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n19:| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n20:| `web/` | Web UI (public assets + source) |\n21:| `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n22:| `.claude/` | Agent configs and skills for claude harness |\n23:| `.agents/` | Shared agent skills (superpowers) |\n",
+              "exit": 0,
+              "description": "Check required directory entries are documented",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772735999439,
+              "end": 1772735999448
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_01e5964ae412ab260169a9cdff5f94819e85cc8655f3339983"
+            }
+          },
+          "id": "prt_cbf4cadca002pb4cCbsEL9bUdt",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "cost": 0,
+          "tokens": {
+            "total": 36549,
+            "input": 13736,
+            "output": 541,
+            "reasoning": 173,
+            "cache": {
+              "read": 22272,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4cae12001m3pcnhzaL8yUW4",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4ca2790011Cbx7JtmaUh0s3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772735999516,
+          "completed": 1772736000896
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 37079,
+          "input": 1129,
+          "output": 110,
+          "reasoning": 68,
+          "cache": {
+            "read": 35840,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4cae1c001vlX3hVyetFNhd3",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "id": "prt_cbf4cb1b9001dTd7nqNqJPHLas",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cae1c001vlX3hVyetFNhd3"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0fa736ede7226c2d0169a9ce00aa50819e83fbf24507c782e1",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772736000693,
+            "end": 1772736000749
+          },
+          "id": "prt_cbf4cb2b5001Qyqu8EgLevvFwt",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cae1c001vlX3hVyetFNhd3"
+        },
+        {
+          "type": "tool",
+          "callID": "call_pfGt3HmwloqgB6wYYX5Hc8pN",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-update-claude-md/CLAUDE.md</path>\n<type>file</type>\n<content>1: # kasmos\n2: \n3: TUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n4: \n5: ## Key Directories\n6: \n7: | Directory | Purpose |\n8: |-----------|---------|\n9: | `app/` | TUI application logic (bubbletea model, input handling, state) |\n10: | `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n11: | `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n12: | `contracts/` | Shared interfaces and types |\n13: | `daemon/` | Background daemon for auto-accept mode |\n14: | `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n15: | `keys/` | Keybinding definitions |\n16: | `log/` | Structured logging |\n17: | `orchestration/` | Wave/task orchestration engine and prompt generation |\n18: | `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n19: | `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n20: | `web/` | Web UI (public assets + source) |\n21: | `.opencode/` | Agent configs, commands, plugins, skills for opencode harness |\n22: | `.claude/` | Agent configs and skills for claude harness |\n23: | `.agents/` | Shared agent skills (superpowers) |\n24: \n25: ## Standards\n26: \n27: Key points:\n28: - Go 1.24+, bubbletea/v2, lipgloss/v2, bubbles/v2\n29: - Tests: testify assertions, table-driven, no real tmux/git/network in tests\n30: - Non-blocking I/O: all I/O in `tea.Cmd` goroutines, results as `tea.Msg`\n31: - Config: dual TOML (`<repo-root>/.kasmos/config.toml`) + JSON (`<repo-root>/.kasmos/config.json`)\n32: - **Lowercase labels**: all user-visible text (toasts, confirmations, overlay titles, instance list titles) must be lowercase to match the app's aesthetic. No title case or sentence case — e.g. \"push changes from 'foo'?\" not \"Push changes from 'foo'?\"\n33: - **Arrow-key navigation in overlays**: use ↑↓ for navigation, not j/k vim bindings. Letter keys should always type into search/filter when present.\n34: \n35: ## Workflow\n36: \n37: Development follows a wave-based plan execution lifecycle. Each agent works only on the specific task it has been assigned — do not expand scope beyond your assigned work package. When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree. `KASMOS_WAVE` identifies your wave, `KASMOS_PEERS` the number of sibling agents. Implement only your assigned task — see your dynamic prompt for specific rules.\n\n(End of file - total 37 lines)\n</content>",
+            "title": "CLAUDE.md",
+            "metadata": {
+              "preview": "# kasmos\n\nTUI-based multi-agent orchestration IDE. Manages concurrent AI agent sessions (claude, codex, gemini, amp, etc.) in isolated git worktrees + tmux sessions. Each task gets its own branch; the TUI provides unified control over all running agents.\n\n## Key Directories\n\n| Directory | Purpose |\n|-----------|---------|\n| `app/` | TUI application logic (bubbletea model, input handling, state) |\n| `cmd/` | CLI entry points (cobra commands: `kas`, `kas task`, `kas instance`, `kas tmux`) |\n| `config/` | Configuration management (TOML + JSON dual config, agent profiles) |\n| `contracts/` | Shared interfaces and types |\n| `daemon/` | Background daemon for auto-accept mode |\n| `internal/` | Internal packages (check, clickup, initcmd, mcpclient, opencodesession, sentry) |\n| `keys/` | Keybinding definitions |\n| `log/` | Structured logging |\n| `orchestration/` | Wave/task orchestration engine and prompt generation |\n| `session/` | Instance lifecycle, storage, notifications; subpackages: `git/` (worktree ops), `tmux/` (session management) |\n| `ui/` | Rendering components (navigation panel, info/audit panes, preview, statusbar, menus, overlays, theme) |\n| `web/` | Web UI (public assets + source) |",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772736000853,
+              "end": 1772736000855
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0fa736ede7226c2d0169a9ce00b8ac819eb0de983c0a638d36"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cae1c001vlX3hVyetFNhd3"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "cost": 0,
+          "tokens": {
+            "total": 37079,
+            "input": 1129,
+            "output": 110,
+            "reasoning": 68,
+            "cache": {
+              "read": 35840,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4cb3770011ayQ2wbu6Ooyyy",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cae1c001vlX3hVyetFNhd3"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772736000897,
+          "completed": 1772736002211
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 37987,
+          "input": 1015,
+          "output": 108,
+          "reasoning": 54,
+          "cache": {
+            "read": 36864,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf4cb381001F1flk6RjgHCOeA",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "id": "prt_cbf4cb6ba0010luNetS37nQmC9",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb381001F1flk6RjgHCOeA"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0a2b6ad74a3cddf30169a9ce01f144819d95c2c4433e59ebba",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772736001970,
+            "end": 1772736002061
+          },
+          "id": "prt_cbf4cb7b20018g5GspLzaNb0oI",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb381001F1flk6RjgHCOeA"
+        },
+        {
+          "type": "tool",
+          "callID": "call_KkY44knPqMyo4NmlwFlqmO9I",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git status --short",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Check git status for changed files"
+            },
+            "output": " M CLAUDE.md\n",
+            "title": "Check git status for changed files",
+            "metadata": {
+              "output": " M CLAUDE.md\n",
+              "exit": 0,
+              "description": "Check git status for changed files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772736002172,
+              "end": 1772736002181
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0a2b6ad74a3cddf30169a9ce0205f4819db8bae620eb7fa895"
+            }
+          },
+          "id": "prt_cbf4cb810001voGqa2Gu6ri6Fs",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb381001F1flk6RjgHCOeA"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "cost": 0,
+          "tokens": {
+            "total": 37987,
+            "input": 1015,
+            "output": 108,
+            "reasoning": 54,
+            "cache": {
+              "read": 36864,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf4cb89b0019io5ASxAZ68TP2",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb381001F1flk6RjgHCOeA"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772736002212
+        },
+        "parentID": "msg_cbf4c7a13001Flky9U2Xkcqe5e",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cbf4cb8a4001N1FWdphHeTbpo7",
+        "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "ccfed47dac6c5e6320720cc4d31e6712e949726f",
+          "id": "prt_cbf4cbb37001XlcFvaGefMpegX",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb8a4001N1FWdphHeTbpo7"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0819be370f8f91080169a9ce034bc8819e968384fc940ff13c",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772736003397,
+            "end": 1772736003986
+          },
+          "id": "prt_cbf4cbd45001jptISssJmWie4h",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb8a4001N1FWdphHeTbpo7"
+        },
+        {
+          "type": "tool",
+          "callID": "call_XCCuzTBmcMZttvoVhAPVwQBt",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add CLAUDE.md",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Stage updated CLAUDE.md"
+            },
+            "output": "",
+            "title": "Stage updated CLAUDE.md",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Stage updated CLAUDE.md",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772736004006,
+              "end": 1772736004010
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0819be370f8f91080169a9ce03f4e4819e8c2925363f45a5fa"
+            }
+          },
+          "id": "prt_cbf4cbf930011ELKTEk9TkwJ5R",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb8a4001N1FWdphHeTbpo7"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git commit -m \"docs: rewrite CLAUDE.md — rename klique→kasmos, fix versions and paths\"",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-update-claude-md",
+              "description": "Commit CLAUDE.md rewrite"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Commit CLAUDE.md rewrite"
+            },
+            "time": {
+              "start": 1772736004010
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0819be370f8f91080169a9ce03f4f4819e92795155c551c956"
+            }
+          },
+          "id": "prt_cbf4cbfa80019Amx1zf3zq14vJ",
+          "sessionID": "ses_340b385fcffevfT26Z4TnuvyTF",
+          "messageID": "msg_cbf4cb8a4001N1FWdphHeTbpo7"
+        }
+      ]
+    }
+  ]
+}
