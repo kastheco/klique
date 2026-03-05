@@ -130,6 +130,13 @@
       "context": "/de/a8eb0f218d/16/context.md",
       "content_hash": "/de/a8eb0f218d/16/content_hash.txt",
       "prompt": "/de/a8eb0f218d/16/prompt.txt"
+    },
+    {
+      "metadata": "/de/a8eb0f218d/17/metadata.json",
+      "transcript": "/de/a8eb0f218d/17/full.jsonl",
+      "context": "/de/a8eb0f218d/17/context.md",
+      "content_hash": "/de/a8eb0f218d/17/content_hash.txt",
+      "prompt": "/de/a8eb0f218d/17/prompt.txt"
     }
   ],
   "token_usage": {
