@@ -1,0 +1,115 @@
+Implement Task 2: Add Import Dependency Awareness to Coder Task Prompt
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Prevent the planner from putting import-dependent tasks in the same wave, and give coder agents guidance when parallel tasks hit build failures from unresolved cross-task imports.
+**Architecture:** Two-pronged fix: (1) update the kasmos-planner skill template to treat import/type dependencies as real wave boundaries — remove the "just imports" dismissal, strengthen the coherence check, and add an import dependency analysis step; (2) update the coder task prompt in `orchestration/prompt.go` to tell parallel agents what to do when they encounter build failures caused by a sibling's not-yet-committed types/functions.
+**Tech Stack:** Go, markdown (skill files), orchestration/prompt.go, kasmos-planner SKILL.md
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `orchestration/prompt.go`
+- Modify: `orchestration/prompt_test.go`
+
+**Context:** Even with the planner fix, some plans may still have import dependency issues (legacy plans, edge cases the planner misses). The coder agent needs guidance on what to do when a parallel sibling's uncommitted code causes build failures.
+
+Currently `prompt.go` line 43 says: `NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work`. But it doesn't tell the agent what to DO — just what not to do. The agent needs to know: wait and retry, or commit what you can and report the dependency.
+
+Code-level targets and existing patterns to follow:
+- Modify this existing function signature only: `func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` in `orchestration/prompt.go`.
+- Keep `(*WaveOrchestrator).BuildTaskPrompt` in `orchestration/engine.go` compiling unchanged; it calls the same signature directly.
+- Add assertions inside this existing test function only: `func TestBuildTaskPrompt(t *testing.T)` in `orchestration/prompt_test.go`.
+- Follow current prompt assembly style in `orchestration/prompt.go`: append prose with consecutive `sb.WriteString(...)` calls, terminate paragraphs with `\n\n`, then return `sb.String()`.
+- Follow current test style in `orchestration/prompt_test.go`: `assert.Contains`/`assert.NotContains` checks against stable human-readable substrings.
+- Keep imports unchanged unless compilation requires it; these files already import `taskparser` and `assert`.
+
+
+**Step 1: write the failing test**
+
+Add a test assertion to `TestBuildTaskPrompt` that checks for the new import-dependency guidance in multi-task prompts:
+
+```go
+// Import dependency guidance for parallel tasks
+assert.Contains(t, prompt, "build failure caused by missing types")
+```
+
+Placement details (to remove guesswork):
+- Insert this assertion in the existing `// Parallel awareness (multi-task)` block near the other `NEVER ...` prompt checks.
+- Keep the expected substring short and stable (`"build failure caused by missing types"`) so line-wrap or punctuation tweaks do not make the test brittle.
+
+Optional hardening (same test file, same task scope):
+```go
+assert.NotContains(t, prompt, "build failure caused by missing types")
+```
+Add this to `TestBuildTaskPrompt_SingleTask` (after existing `assert.NotContains` checks) to guard against accidental leakage into the single-task prompt path.
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./orchestration/... -run TestBuildTaskPrompt -v
+```
+
+Expected: FAIL — `"build failure caused by missing types"` not found in prompt.
+
+**Step 3: write minimal implementation**
+
+In `orchestration/prompt.go`, inside the `if peerCount > 1` block, after the existing `NEVER try to fix test failures` line (line 43), add a new paragraph:
+
+```go
+sb.WriteString("If you encounter a build failure caused by missing types, functions, or interfaces that your task ")
+sb.WriteString("imports from a package being modified by a sibling agent: this is an import dependency that should have ")
+sb.WriteString("been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed ")
+sb.WriteString("so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\n\n")
+```
+
+Implementation requirements:
+- Keep this text inside the `if peerCount > 1` branch so single-task prompts remain unchanged.
+- Insert the new paragraph immediately after the existing `"test failures in files outside your task"` guidance line and before the `"- DO `git add`"` lines, preserving current rule ordering.
+- Keep message tone aligned with existing `CRITICAL - shared worktree rules` language (imperative, direct, safety-first).
+- Do not add helper functions; this file currently keeps prompt construction inline with `sb.WriteString(...)` calls.
+- Preserve existing spacing/newlines so markdown sections still render correctly.
+- Edge case: keep the phrase `build failure caused by missing types` in the prompt text so the new test assertion can match exactly.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./orchestration/... -run TestBuildTaskPrompt -v
+```
+
+Expected: PASS
+
+If you added the optional single-task guard assertion, also run:
+
+```bash
+go test ./orchestration/... -run TestBuildTaskPrompt_SingleTask -v
+```
+
+Expected: PASS (new guidance absent when `peerCount == 1`).
+
+**Step 5: commit**
+
+```bash
+git add orchestration/prompt.go orchestration/prompt_test.go
+git commit -m "feat(prompt): add import dependency guidance for parallel coder agents"
+```

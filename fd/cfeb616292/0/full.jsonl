@@ -1,0 +1,1427 @@
+{
+  "info": {
+    "id": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+    "slug": "silent-harbor",
+    "projectID": "1349495cbd7e7844a17640b79bb1c185f960f4cf",
+    "directory": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+    "title": "Add Import Dependency Guidance to Coder Task Prompt",
+    "version": "1.2.17",
+    "summary": {
+      "additions": 11,
+      "deletions": 3,
+      "files": 3
+    },
+    "time": {
+      "created": 1772733640761,
+      "updated": 1772733665394
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1772733640786
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md",
+              "before": "---\nname: kasmos-planner\ndescription: \"Load when writing implementation plans for kasmos-managed projects. Consolidates brainstorming + writing-plans. Covers design exploration, plan format, wave structure, and signaling.\"\n---\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the task status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `<feature-name>.md`\n\nPlans are stored in the **task store** (SQLite database or remote HTTP API), not as files on disk.\n\n**CLI commands for plan content:**\n- **read** existing plan content: `kas task show <plan-file>`\n- **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)\n- **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)\n\n**Full task lifecycle CLI:**\n| Command | Purpose |\n|---------|---------|\n| `kas task list [--status <s>]` | list all tasks, optionally filtered by status |\n| `kas task show <file>` | print plan content from the task store |\n| `kas task create <name>` | create a new task entry (`--content`, `--description`, `--branch`, `--topic`) |\n| `kas task register <file>` | register a plan file from disk into the store |\n| `kas task update-content <file>` | replace plan content (reads stdin or `--file`) |\n| `kas task set-status <file> <s>` | force-override status (requires `--force`) |\n| `kas task transition <file> <event>` | apply FSM event (e.g. `plan_start`, `review_approved`) |\n| `kas task start <file>` | transition to implementing + set up worktree |\n| `kas task start-over <file>` | reset branch, transition back to planning |\n| `kas task push <file>` | commit dirty changes + push task branch |\n| `kas task pr <file>` | push + open a pull request |\n| `kas task merge <file>` | merge branch into main, transition to done |\n| `kas task implement <file> [--wave N]` | trigger wave implementation |\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- the \"dependency\" is just imports (the compiler catches that)\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable.\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it\nin the task store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas task register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-<feature-name>.md\n```\n\nthe filename must match the task filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify task state directly** — kasmos manages the task store.\n\nannounce completion and stop:\n\n> \"plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the task store using the CLI:\n\n```bash\nkas task register <feature-name>.md\n```\n\nthis creates an entry in the task store with status `ready`. the task content should be\nwritten to the store via `kas task register`.\n\nthen offer execution choices:\n\n> \"plan complete: `<feature-name>.md` (registered in task store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n",
+              "after": "---\nname: kasmos-planner\ndescription: \"Load when writing implementation plans for kasmos-managed projects. Consolidates brainstorming + writing-plans. Covers design exploration, plan format, wave structure, and signaling.\"\n---\n\n# kasmos-planner\n\nYou are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.\n\n**Announce at start:** \"i'm using the kasmos-planner skill to design and plan this feature.\"\n\n<HARD-GATE>\n## banned tools\n\nthese legacy tools are NEVER permitted. using them is a violation, not a preference.\n\n| banned | replacement | no exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | recursive grep is still grep. always `rg` |\n| `grep -E` | `rg` | extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | no awk for any purpose |\n| `find` | `fd` or glob tools | even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** if you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. there are no exceptions. \"just this once\" is a violation.\n\n## tool selection by task\n\n| task | use | not | why |\n|------|-----|-----|-----|\n| rename symbol across files | `ast-grep` | `sed`/`sd` | ast-aware, won't rename inside strings/comments |\n| structural code rewrite | `comby` | `sed`/`awk` | understands balanced delimiters, nesting |\n| find code pattern | `ast-grep --pattern` | `grep`/`rg` | matches syntax, not text |\n| find literal string | `rg` | `grep` | fast, respects .gitignore, correct encoding |\n| find files by name/extension | `fd` | `find` | respects .gitignore, simpler syntax |\n| replace string in files | `sd` | `sed` | no delimiter escaping, sane defaults |\n| read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | understands structure, preserves formatting |\n| review code changes | `difft` | `diff` | syntax-aware, ignores formatting noise |\n| spell check code | `typos` | manual | understands camelCase, identifiers |\n| count lines / codebase metrics | `scc` | `wc -l`/`cloc` | fast, includes complexity estimates |\n\n## violations\n\n| violation | required fix |\n|-----------|-------------|\n| using `grep` for anything | use `rg` for text search, `ast-grep` for code patterns |\n| using `sed` for anything | use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| using `awk` for anything | use `yq`/`jq` for structured data, `sd` for text processing |\n| using `find` for anything | use `fd` for file finding, glob tools for path patterns |\n| using standalone `diff` | use `difft` for syntax-aware structural diffs |\n| using `wc -l` for counting | use `scc` for language-aware counts + complexity |\n| splitting `{` / `}` in comby templates | always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| forgetting `-in-place` with comby | without it, comby only previews changes |\n</HARD-GATE>\n\n---\n\n## where you fit\n\nthe plan lifecycle FSM: `ready → planning → implementing → reviewing → done`\n\n**your work covers:** `(any state) → planning → ready`\n\n- kasmos sets the task status to `planning` when it spawns you\n- you explore the design, write the plan doc, signal completion\n- kasmos picks it up and moves it to `implementing` when the user triggers execution\n- you do NOT implement, review, or merge — stop after signaling\n\n---\n\n## design exploration\n\nbefore writing a single task, understand what you're building. do NOT skip this phase even\nfor seemingly simple features. unexamined assumptions are where wasted work comes from.\n\n### step 1: explore project context\n\nread the codebase before asking questions:\n- check relevant source files, recent git log, existing docs\n- understand the current architecture and patterns in use\n- identify what already exists vs what needs building\n\n```bash\ngit log --oneline -20\nrg 'relevant_term' --type go -l\n```\n\n### step 2: ask clarifying questions — one at a time\n\nask questions sequentially. never batch multiple questions in one message.\n\nfocus on:\n- **purpose** — what problem does this solve? what's the success criterion?\n- **constraints** — performance, compatibility, existing interfaces to maintain?\n- **scope** — what's explicitly out of scope? what's intentionally deferred?\n- **edge cases** — what happens when X fails? when Y is missing?\n\nprefer multiple-choice questions when the answer space is bounded. open-ended is fine for\nopen-ended problems.\n\n**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler\nis always better until proven otherwise.\n\n### step 3: propose 2-3 approaches with trade-offs\n\npresent options concisely. lead with your recommendation.\n\n```\n**approach A (recommended):** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach B:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**approach C:** [brief description]\n- pro: [concrete advantage]\n- con: [concrete disadvantage]\n\n**recommendation:** A, because [specific reasoning for this codebase/context].\n```\n\nget explicit approval before writing the plan. if the user redirects to a different\napproach, update your recommendation and confirm before proceeding.\n\n---\n\n## plan document format\n\n**plan naming convention:** `<feature-name>.md`\n\nPlans are stored in the **task store** (SQLite database or remote HTTP API), not as files on disk.\n\n**CLI commands for plan content:**\n- **read** existing plan content: `kas task show <plan-file>`\n- **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)\n- **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)\n\n**Full task lifecycle CLI:**\n| Command | Purpose |\n|---------|---------|\n| `kas task list [--status <s>]` | list all tasks, optionally filtered by status |\n| `kas task show <file>` | print plan content from the task store |\n| `kas task create <name>` | create a new task entry (`--content`, `--description`, `--branch`, `--topic`) |\n| `kas task register <file>` | register a plan file from disk into the store |\n| `kas task update-content <file>` | replace plan content (reads stdin or `--file`) |\n| `kas task set-status <file> <s>` | force-override status (requires `--force`) |\n| `kas task transition <file> <event>` | apply FSM event (e.g. `plan_start`, `review_approved`) |\n| `kas task start <file>` | transition to implementing + set up worktree |\n| `kas task start-over <file>` | reset branch, transition back to planning |\n| `kas task push <file>` | commit dirty changes + push task branch |\n| `kas task pr <file>` | push + open a pull request |\n| `kas task merge <file>` | merge branch into main, transition to done |\n| `kas task implement <file> [--wave N]` | trigger wave implementation |\n\n### required header\n\nevery plan MUST start with this header block:\n\n```markdown\n# [Feature Name] Implementation Plan\n\n**Goal:** [one sentence describing what this builds and why]\n\n**Architecture:** [2-3 sentences describing the approach — key files, patterns, data flow]\n\n**Tech Stack:** [key technologies, libraries, or internal packages involved]\n\n**Size:** [Trivial/Small/Medium/Large] (estimated ~[time], [N] tasks, [N] waves)\n\n---\n```\n\n### sizing table\n\nclassify before writing any tasks. this determines wave structure and review overhead.\n\n| size | estimated effort | max tasks | waves | review model |\n|------|-----------------|-----------|-------|--------------|\n| **trivial** | < 30 min | 1 | 1 | self-review only |\n| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |\n| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |\n| **large** | 6+ hours | 6–12 | 2–4 | review per wave |\n\n**sizing rules:**\n- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.\n- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.\n- a task is a commit-worthy unit — leaves the codebase compilable and testable.\n- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.\n- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.\n\n### wave structure\n\n**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.\na plan without any `## Wave N` header cannot be executed by kasmos.\n\n```markdown\n## Wave 1: [Subsystem Name]\n\n[optional: 1-sentence description of what this wave delivers]\n\n### Task 1: [Component Name]\n...\n\n### Task 2: [Component Name]\n...\n```\n\n**wave N > 1 must justify the boundary:**\n\n```markdown\n## Wave 2: [Subsystem Name]\n\n> **depends on wave 1:** [specific reason — what output from wave 1 is required here]\n```\n\n**when NOT to use multiple waves:**\n- all tasks are independent → single `## Wave 1`\n- feature is small (< 3 tasks)\n- no task creates types, functions, or interfaces consumed by another task in the same wave\n\n### task structure\n\neach task follows TDD steps. be specific — exact file paths, exact commands, concrete code.\n\n````markdown\n### Task N: [Component Name]\n\n**Files:**\n- Create: `exact/path/to/new-file.go`\n- Modify: `exact/path/to/existing.go`\n- Test: `exact/path/to/file_test.go`\n\n**Step 1: write the failing test**\n\n```go\nfunc TestSpecificBehavior(t *testing.T) {\n    result := FunctionUnderTest(input)\n    assert.Equal(t, expected, result)\n}\n```\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: FAIL — `FunctionUnderTest undefined` or similar\n\n**Step 3: write minimal implementation**\n\n[concrete implementation — not \"add validation\", but actual code or precise description]\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./path/to/package/... -run TestSpecificBehavior -v\n```\n\nexpected: PASS\n\n**Step 5: commit**\n\n```bash\ngit add exact/path/to/new-file.go exact/path/to/file_test.go\ngit commit -m \"feat: [what this task delivers]\"\n```\n````\n\n**granularity anti-patterns — do NOT create tasks like these:**\n- \"add one case to a switch statement\" — merge into the task that needs it\n- \"remove dead code\" — do it in the task that replaces it\n- \"update help text\" — do it in the task that adds the feature\n- \"run the full test suite\" — that's a step, not a task\n\n---\n\n## after writing the plan\n\ndo all of these immediately after writing the plan. do not skip any.\n\n## plan review\n\nafter writing the plan, review it against this checklist before registering.\nthis is mandatory — do not skip it, even for trivial plans. fix every failure\ninline before proceeding to register + signal.\n\n### structural checks\n\n- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without\n  wave headers cannot be executed by kasmos.\n- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.\n- [ ] **task numbering sequential** — task numbers are sequential across the entire plan\n  (Task 1, Task 2, ..., not restarting per wave).\n- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,\n  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.\n- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a\n  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are\n  independent, they should be in a single wave.\n\n### task quality checks\n\n- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.\n  paths must be exact (no placeholders like `path/to/...`).\n- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,\n  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).\n  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.\n- [ ] **test commands runnable** — `go test` commands reference real package paths that will\n  exist after the task's files are created. no `./path/to/package/...` placeholders.\n- [ ] **commit messages present** — every task ends with a concrete `git commit -m \"...\"` step.\n- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an\n  adjacent task.\n- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.\n\n### coherence checks\n\n- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?\n  flag any task that doesn't.\n- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you\n  find yourself adding \"while we're at it\" tasks, remove them.\n- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the\n  same wave (those should be in separate waves). tasks within a wave must be independently\n  implementable. **import dependencies count:** if task A creates a type, function, or\n  interface that task B imports, they MUST be in different waves — even if they touch\n  different directories. \"different packages\" does not mean \"independent.\"\n- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they\n  do, either merge the tasks or move one to a later wave.\n\n### review outcome\n\nif all checks pass: proceed to register + signal.\n\nif any check fails: fix the plan inline, then re-run the failed checks. do not\nproceed until all checks pass. common fixes:\n- missing wave headers → wrap all tasks under `## Wave 1`\n- missing TDD steps → add the 5-step structure to each task\n- vague file paths → look up actual paths with `fd` or `rg`\n- micro-task → merge into adjacent task, renumber\n- file conflicts in same wave → reorder into separate waves\n\n### 1. create todos\n\ncall `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:\n\n```\nTodoWrite([\n  { content: \"Task 1: [Component Name]\", status: \"pending\", priority: \"high\" },\n  { content: \"Task 2: [Component Name]\", status: \"pending\", priority: \"high\" },\n  ...\n])\n```\n\n### 2. register and commit the plan\n\n**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it\nin the task store. you don't need to commit a separate file.\n\n**manual mode:** use the `kas task register` CLI command to register the plan in the store,\nthen commit any supporting files (design docs, etc.) if needed.\n\ndo NOT commit sentinel files — kasmos consumes and deletes them automatically.\n\n---\n\n## signaling\n\ncheck your execution context:\n\n```bash\necho \"${KASMOS_MANAGED:-}\"\n```\n\n### managed mode (`KASMOS_MANAGED=1`)\n\nkasmos is orchestrating this session. write a sentinel file and stop.\n\n```bash\nmkdir -p .kasmos/signals\ntouch .kasmos/signals/planner-finished-<feature-name>.md\n```\n\nthe filename must match the task filename exactly (with `planner-finished-` prefix).\n\n**do NOT modify task state directly** — kasmos manages the task store.\n\nannounce completion and stop:\n\n> \"plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation.\"\n\n**stop here. do not offer execution choices. do not implement.**\n\n### manual mode (`KASMOS_MANAGED` unset)\n\nregister the plan in the task store using the CLI:\n\n```bash\nkas task register <feature-name>.md\n```\n\nthis creates an entry in the task store with status `ready`. the task content should be\nwritten to the store via `kas task register`.\n\nthen offer execution choices:\n\n> \"plan complete: `<feature-name>.md` (registered in task store). two execution options:\n>\n> **1. this session** — i dispatch a fresh subagent per task, self-review between waves.\n>\n> **2. new session** — open a new session in this worktree, load the `kasmos-coder` skill, execute the plan task-by-task.\n>\n> which approach?\"\n\nif option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.\nif option 2: stop and let the user open a new session.\n",
+              "additions": 5,
+              "deletions": 3,
+              "status": "modified"
+            },
+            {
+              "file": "orchestration/prompt.go",
+              "before": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildElaborationPrompt returns the prompt for an elaborator agent session.\n// The elaborator reads the plan, deeply reads the codebase for each task's files,\n// and expands task bodies with detailed implementation instructions.\nfunc BuildElaborationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n\t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n\t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n\t\t\t\"## Instructions\\n\\n\"+\n\t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n\t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n\t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n\t\t\t\"and data flow in those files and their neighbors.\\n\"+\n\t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n\t\t\t\"   - Exact function signatures to create or modify\\n\"+\n\t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n\t\t\t\"   - Edge cases and error handling requirements\\n\"+\n\t\t\t\"   - Import paths and dependencies\\n\"+\n\t\t\t\"   - Concrete code snippets where helpful\\n\"+\n\t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n\t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n\t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n\t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n\t\tplanFile,\n\t)\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n\t\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n\t\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n\t\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildElaborationPrompt returns the prompt for an elaborator agent session.\n// The elaborator reads the plan, deeply reads the codebase for each task's files,\n// and expands task bodies with detailed implementation instructions.\nfunc BuildElaborationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n\t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n\t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n\t\t\t\"## Instructions\\n\\n\"+\n\t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n\t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n\t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n\t\t\t\"and data flow in those files and their neighbors.\\n\"+\n\t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n\t\t\t\"   - Exact function signatures to create or modify\\n\"+\n\t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n\t\t\t\"   - Edge cases and error handling requirements\\n\"+\n\t\t\t\"   - Import paths and dependencies\\n\"+\n\t\t\t\"   - Concrete code snippets where helpful\\n\"+\n\t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n\t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n\t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n\t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n\t\tplanFile,\n\t)\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+              "additions": 4,
+              "deletions": 0,
+              "status": "modified"
+            },
+            {
+              "file": "orchestration/prompt_test.go",
+              "before": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n\nfunc TestBuildElaborationPrompt(t *testing.T) {\n\tprompt := BuildElaborationPrompt(\"my-feature.md\")\n\n\t// Must reference the plan file for retrieval\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\t// Must reference updating the plan\n\tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n\t// Must reference the signal\n\tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n\t// Must instruct to expand task bodies\n\tassert.Contains(t, prompt, \"implementation detail\")\n\t// Must instruct to preserve structure\n\tassert.Contains(t, prompt, \"Preserve\")\n\t// Must reference reading the codebase\n\tassert.Contains(t, prompt, \"codebase\")\n}\n",
+              "after": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n\nfunc TestBuildElaborationPrompt(t *testing.T) {\n\tprompt := BuildElaborationPrompt(\"my-feature.md\")\n\n\t// Must reference the plan file for retrieval\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\t// Must reference updating the plan\n\tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n\t// Must reference the signal\n\tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n\t// Must instruct to expand task bodies\n\tassert.Contains(t, prompt, \"implementation detail\")\n\t// Must instruct to preserve structure\n\tassert.Contains(t, prompt, \"Preserve\")\n\t// Must reference reading the codebase\n\tassert.Contains(t, prompt, \"codebase\")\n}\n",
+              "additions": 2,
+              "deletions": 0,
+              "status": "modified"
+            }
+          ]
+        },
+        "agent": "coder",
+        "model": {
+          "providerID": "openai",
+          "modelID": "gpt-5.3-codex-spark"
+        },
+        "variant": "high",
+        "id": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Implement Task 2: Add Import Dependency Awareness to Coder Task Prompt\n\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n## Plan Context\n\n**Goal:** Prevent the planner from putting import-dependent tasks in the same wave, and give coder agents guidance when parallel tasks hit build failures from unresolved cross-task imports.\n**Architecture:** Two-pronged fix: (1) update the kasmos-planner skill template to treat import/type dependencies as real wave boundaries — remove the \"just imports\" dismissal, strengthen the coherence check, and add an import dependency analysis step; (2) update the coder task prompt in `orchestration/prompt.go` to tell parallel agents what to do when they encounter build failures caused by a sibling's not-yet-committed types/functions.\n**Tech Stack:** Go, markdown (skill files), orchestration/prompt.go, kasmos-planner SKILL.md\n\n## Wave 1 of 1\n\n## Parallel Execution\n\nYou are Task 2 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.\n\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\n\nCRITICAL - shared worktree rules:\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\n- DO `git add` only the specific files you changed\n- DO commit frequently with your task number in the message\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\n\n## Task Instructions\n\n**Files:**\n- Modify: `orchestration/prompt.go`\n- Modify: `orchestration/prompt_test.go`\n\n**Context:** Even with the planner fix, some plans may still have import dependency issues (legacy plans, edge cases the planner misses). The coder agent needs guidance on what to do when a parallel sibling's uncommitted code causes build failures.\n\nCurrently `prompt.go` line 43 says: `NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work`. But it doesn't tell the agent what to DO — just what not to do. The agent needs to know: wait and retry, or commit what you can and report the dependency.\n\nCode-level targets and existing patterns to follow:\n- Modify this existing function signature only: `func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string` in `orchestration/prompt.go`.\n- Keep `(*WaveOrchestrator).BuildTaskPrompt` in `orchestration/engine.go` compiling unchanged; it calls the same signature directly.\n- Add assertions inside this existing test function only: `func TestBuildTaskPrompt(t *testing.T)` in `orchestration/prompt_test.go`.\n- Follow current prompt assembly style in `orchestration/prompt.go`: append prose with consecutive `sb.WriteString(...)` calls, terminate paragraphs with `\\n\\n`, then return `sb.String()`.\n- Follow current test style in `orchestration/prompt_test.go`: `assert.Contains`/`assert.NotContains` checks against stable human-readable substrings.\n- Keep imports unchanged unless compilation requires it; these files already import `taskparser` and `assert`.\n\n\n**Step 1: write the failing test**\n\nAdd a test assertion to `TestBuildTaskPrompt` that checks for the new import-dependency guidance in multi-task prompts:\n\n```go\n// Import dependency guidance for parallel tasks\nassert.Contains(t, prompt, \"build failure caused by missing types\")\n```\n\nPlacement details (to remove guesswork):\n- Insert this assertion in the existing `// Parallel awareness (multi-task)` block near the other `NEVER ...` prompt checks.\n- Keep the expected substring short and stable (`\"build failure caused by missing types\"`) so line-wrap or punctuation tweaks do not make the test brittle.\n\nOptional hardening (same test file, same task scope):\n```go\nassert.NotContains(t, prompt, \"build failure caused by missing types\")\n```\nAdd this to `TestBuildTaskPrompt_SingleTask` (after existing `assert.NotContains` checks) to guard against accidental leakage into the single-task prompt path.\n\n**Step 2: run test to verify it fails**\n\n```bash\ngo test ./orchestration/... -run TestBuildTaskPrompt -v\n```\n\nExpected: FAIL — `\"build failure caused by missing types\"` not found in prompt.\n\n**Step 3: write minimal implementation**\n\nIn `orchestration/prompt.go`, inside the `if peerCount > 1` block, after the existing `NEVER try to fix test failures` line (line 43), add a new paragraph:\n\n```go\nsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\nsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\nsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\nsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n```\n\nImplementation requirements:\n- Keep this text inside the `if peerCount > 1` branch so single-task prompts remain unchanged.\n- Insert the new paragraph immediately after the existing `\"test failures in files outside your task\"` guidance line and before the `\"- DO `git add`\"` lines, preserving current rule ordering.\n- Keep message tone aligned with existing `CRITICAL - shared worktree rules` language (imperative, direct, safety-first).\n- Do not add helper functions; this file currently keeps prompt construction inline with `sb.WriteString(...)` calls.\n- Preserve existing spacing/newlines so markdown sections still render correctly.\n- Edge case: keep the phrase `build failure caused by missing types` in the prompt text so the new test assertion can match exactly.\n\n**Step 4: run test to verify it passes**\n\n```bash\ngo test ./orchestration/... -run TestBuildTaskPrompt -v\n```\n\nExpected: PASS\n\nIf you added the optional single-task guard assertion, also run:\n\n```bash\ngo test ./orchestration/... -run TestBuildTaskPrompt_SingleTask -v\n```\n\nExpected: PASS (new guidance absent when `peerCount == 1`).\n\n**Step 5: commit**\n\n```bash\ngit add orchestration/prompt.go orchestration/prompt_test.go\ngit commit -m \"feat(prompt): add import dependency guidance for parallel coder agents\"\n```\n",
+          "id": "prt_cbf28b0470026xnWCtOhGulaWa",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28b047001VuYZzlgfbz6QMO"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733640794,
+          "completed": 1772733643668
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 24950,
+          "input": 24675,
+          "output": 275,
+          "reasoning": 238,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "id": "prt_cbf28b84d001BHrRcA9ftGwwZW",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_00b8941299f54a240169a9c4cb3d8c81a08777f5c738c8c5af",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733643270,
+            "end": 1772733643544
+          },
+          "id": "prt_cbf28ba06001Hl3f4j4sy8NJB9",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1772733643563,
+            "end": 1772733643563
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "msg_00b8941299f54a240169a9c4cb841081a0aa6224eda8391049"
+            }
+          },
+          "id": "prt_cbf28bb19001krb6sVnBBcZGBb",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_UZxBicSxaOM4sUXc8UQ1ClfF",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "kasmos-coder"
+            },
+            "output": "<skill_content name=\"kasmos-coder\">\n# Skill: kasmos-coder\n\n# kasmos-coder\n\nYou implement code. One task (managed) or a full plan sequentially (manual). Your disciplines are TDD, systematic debugging, evidence-first verification, and safe shared-worktree hygiene. Review feedback gets technical evaluation, not performative agreement.\n\n---\n\n## CLI Tools Hard Gate\n\n<HARD-GATE>\n### Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners |\n| `grep -r` | `rg` | Recursive grep is still grep |\n| `grep -E` | `rg` | Extended regex is still grep |\n| `sed` | `sd` | Even for one-liners |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop. There are no exceptions.\n</HARD-GATE>\n\n### Tool Selection\n\n| Task | Use | Not |\n|------|-----|-----|\n| Find literal string | `rg` | `grep` |\n| Find files by name/ext | `fd` | `find` |\n| Replace string in files | `sd` | `sed` |\n| Rename symbol across files | `ast-grep` | `sed`/`sd` |\n| Structural code rewrite | `comby` | `sed`/`awk` |\n| Find code pattern | `ast-grep --pattern` | `rg` |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` |\n| Review code changes | `difft` | `diff` |\n| Spell check code | `typos` | manual |\n| Count lines / codebase metrics | `scc` | `wc -l` |\n\n---\n\n## Where You Fit\n\n### Env Vars\n\n| Variable | Meaning |\n|----------|---------|\n| `KASMOS_MANAGED` | Set to `1` when kasmos TUI spawned you. Unset in raw terminal. |\n| `KASMOS_TASK` | The task number you're assigned (managed only). |\n| `KASMOS_WAVE` | The wave number (managed only). |\n| `KASMOS_PEERS` | Number of sibling agents running in parallel. `0` or unset = solo. |\n\n### Managed (`KASMOS_MANAGED=1`)\n\nkasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:\n\n1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.\n2. Implement that single task following TDD discipline below.\n3. Commit your work with task number in the commit message.\n4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.\n\n**Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt\ndetection (when your agent returns to its input prompt) and handles the\nimplementing→reviewing transition through the wave orchestrator. Writing implement-finished\nfrom a task agent prematurely triggers review and breaks wave orchestration.\n\n### Manual (KASMOS_MANAGED unset)\n\nYou execute the full plan sequentially, wave by wave:\n\n1. Retrieve the plan with `kas task show <plan-file>`. Check its **Size** field to determine wave structure.\n2. Create a todo list with one item per task (all `pending`), then begin.\n3. Execute one wave at a time: implement each task (TDD), commit, then proceed to next task.\n4. After each wave completes, self-review before starting the next wave.\n5. When all waves complete, write the implement-finished sentinel (see **Signaling**).\n\n---\n\n## TDD Discipline\n\n### The Iron Law\n\n```\nNO PRODUCTION CODE WITHOUT A FAILING TEST FIRST\n```\n\nWrote code before writing the test? Delete it. Start over from the test. No exceptions:\n- Don't keep it \"for reference\" — you'll adapt it, which is testing after\n- Don't \"adapt\" it while writing tests — delete means delete\n- Implement fresh from tests\n\n### RED → GREEN → REFACTOR\n\n**RED — Write the failing test**\n\nWrite one minimal test showing the required behavior. Run it. Confirm:\n- Test actually fails (not errors from syntax — a genuine test failure)\n- Failure message is the expected one (\"function not found\", \"assertion error\")\n- Test fails because the feature is missing, not a typo\n\n**Never skip the RED verification.** If the test passes immediately, you are testing existing behavior. Fix the test.\n\n**GREEN — Minimal implementation**\n\nWrite the simplest code that makes the test pass. Don't add features. Don't refactor other code. Don't \"improve\" beyond what the test requires. Verify:\n- Your test passes\n- All other tests still pass\n- No new errors or warnings\n\n**REFACTOR — Clean up**\n\nOnly after green: remove duplication, improve names, extract helpers. Never add behavior during refactor. Keep tests green throughout.\n\n**Repeat** — one test per behavior. When the task is fully implemented, all new tests are green and no existing tests are broken.\n\n### Red Flags — STOP and Start Over\n\n| Thought | Action |\n|---------|--------|\n| \"I'll write tests after to verify it works\" | Delete code, write test first |\n| \"Too simple to need a test\" | Write the test — it takes 30 seconds |\n| \"I already manually tested it\" | Manual ≠ systematic. Write the test |\n| \"I'll keep this code as reference\" | Delete it. Keeping = adapting = testing after |\n| \"TDD will slow me down\" | Debugging later is slower. Write the test |\n| \"Just this once\" | Not a valid exception |\n\n---\n\n## Shared Worktree Safety\n\nWhen `KASMOS_PEERS > 0`, sibling agents are modifying this worktree concurrently.\n\n**Never:**\n- `git add .` or `git add -A` — you will stage a sibling's in-progress files\n- `git stash` — you will destroy sibling's uncommitted changes\n- `git reset` — you will destroy sibling's uncommitted changes\n- `git checkout -- <file>` on files you didn't modify — you will revert a sibling's edits\n- Run project-wide formatters (`go fmt ./...`, `prettier --write .`) — scope to your files only\n- Run project-wide linters across files you didn't touch\n\n**Always:**\n- `git add <specific-files>` — only the files you changed\n- Include task number in every commit message: `feat(task-6): add kasmos-coder skill`\n- Expect untracked files and dirty state from siblings — ignore them\n- Run tests scoped to your changed packages where possible before committing\n\n**When you see test failures in files outside your task scope:** Do not attempt to fix them. They may be caused by incomplete parallel work from a sibling agent. Report the failure context in your signal and stop.\n\n---\n\n## Debugging Discipline\n\nWhen tests fail, builds break, or behavior is unexpected — investigate before proposing fixes. Random patches mask the actual problem and create new ones.\n\n### The Four Phases\n\n**Phase 1 — Root Cause Investigation**\n\nBefore attempting any fix:\n1. Read error messages completely — stack traces, line numbers, error codes\n2. Reproduce the failure consistently — what exact steps trigger it?\n3. Check recent changes — git diff, recent commits, env differences\n4. In multi-component systems: add diagnostic instrumentation at each boundary to find exactly where it breaks. Run once to gather evidence, then analyze.\n5. Trace data flow — where does the bad value originate? Trace backward up the call stack to the source.\n\n**Phase 2 — Pattern Analysis**\n\nFind working examples in the codebase doing something similar. Compare them against the broken code. List every difference — don't assume \"that can't matter.\" Understand all dependencies (config, env, state).\n\n**Phase 3 — Hypothesis and Testing**\n\nForm one specific hypothesis: \"I think X is the root cause because Y.\" Test it with the smallest possible change. One variable at a time. Verify — did it work? If not, form a new hypothesis. Don't stack fixes.\n\n**Phase 4 — Implementation**\n\nWrite a failing test reproducing the bug first (TDD discipline applies to bugfixes). Implement the single fix addressing the root cause. Verify the test now passes and no other tests regressed.\n\n**If the fix doesn't work:** Return to Phase 1. Re-analyze with new information.\n\n**If 3 fixes have failed:** STOP. Question the architecture — each fix revealing a new problem in a different place is an architectural signal, not a debugging problem. Escalate or document the situation rather than attempting fix #4.\n\n### Red Flags — Return to Phase 1\n\n- \"Quick fix for now, investigate later\"\n- \"Just try changing X and see if it works\"\n- \"It's probably X, let me fix that\"\n- \"I don't fully understand but this might work\"\n- Proposing solutions before tracing data flow\n- \"One more fix attempt\" (when you've already tried 2+)\n- Each fix reveals a new problem in a different place\n\n---\n\n## Verification\n\nBefore claiming a task is complete, before committing, before writing the finished sentinel:\n\n### The Gate\n\n```\n1. IDENTIFY: What command proves this works?\n2. RUN: Execute it fresh. Complete output.\n3. READ: Full output. Check exit code. Count failures.\n4. VERIFY: Does output confirm the claim?\n   - If NO: State actual status with evidence.\n   - If YES: State claim WITH evidence.\n5. ONLY THEN: Claim completion.\n```\n\nSkipping any step is not verification — it's guessing.\n\n### Common Verification Commands\n\n```bash\n# Go\ngo build ./...\ngo test ./...\ngo test ./path/to/package/...   # scoped — preferred in shared worktree\n\n# Node\nnpm test\nnpm run build\n\n# Python\npytest\npytest path/to/tests/\n\n# General\ngo vet ./...\ntypos                            # spell check before committing\n```\n\n### Red Flags — STOP\n\n- Using \"should\", \"probably\", \"seems to\" before verification\n- Claiming tests pass without running them in this message\n- Trusting previous run output — always run fresh\n- Expressing satisfaction (\"Done!\", \"Perfect!\") before the verification command output is in view\n- Committing without a clean build\n\n---\n\n## Handling Reviewer Feedback\n\nCode review requires technical evaluation, not performative agreement.\n\n### Response Pattern\n\n```\n1. READ: Complete feedback without reacting\n2. UNDERSTAND: Restate the technical requirement (or ask if unclear)\n3. VERIFY: Check against the actual codebase\n4. EVALUATE: Is this technically sound for THIS codebase?\n5. RESPOND: Technical acknowledgment, or reasoned pushback with evidence\n6. IMPLEMENT: One item at a time, test each\n```\n\n### Forbidden Responses\n\n**Never:**\n- \"You're absolutely right!\" — performative\n- \"Great point!\" / \"Excellent feedback!\" — performative\n- \"Let me implement that now\" — before verification\n\n**Instead:**\n- Restate the technical requirement\n- Ask for clarification if anything is unclear\n- Push back with technical reasoning if the suggestion is wrong\n- Just start working — actions over words\n\n### Before Implementing Any Item\n\n- Unclear about any item? **Stop. Ask for clarification on all unclear items first.** Do not implement partial feedback — items may be related.\n- Does it break existing functionality? Verify before proceeding.\n- Does it violate YAGNI? Check if the feature is actually used (`rg` in codebase).\n- Does it conflict with architectural decisions already made? Escalate rather than blindly implement.\n\n### When to Push Back\n\nPush back when:\n- The suggestion breaks existing functionality (show the test)\n- The reviewer lacks full context for the decision\n- It violates YAGNI (feature not used anywhere)\n- It's technically incorrect for this stack/version\n- It conflicts with established architectural decisions\n\n**How:** Technical reasoning, not defensiveness. Reference working tests. Reference the code.\n\n### Implementation Order\n\nFor multi-item feedback:\n1. Clarify all unclear items first\n2. Blocking issues (breaks, security holes)\n3. Simple fixes (typos, wrong identifiers, missing imports)\n4. Complex fixes (refactoring, logic changes)\n5. Test each fix individually before moving to the next\n6. Verify no regressions after all items complete\n\n### Acknowledging Correct Feedback\n\n```\n✅ \"Fixed. [One sentence describing the change]\"\n✅ \"Good catch — [specific issue]. Fixed in [location].\"\n✅ [Just fix it. The code shows you heard the feedback.]\n\n❌ \"You're absolutely right!\"\n❌ \"Thanks for catching that!\"\n❌ Any gratitude expression\n```\n\n---\n\n## Signaling\n\n### Managed (`KASMOS_MANAGED=1`)\n\n**Do NOT write any sentinel files.** kasmos detects task completion automatically when your\nagent returns to its input prompt. The wave orchestrator handles all lifecycle transitions\n(implementing→reviewing) and reviewer spawning.\n\nAfter implementing and committing your task: **stop.** Do not implement other tasks, do not\nwrite signal files, do not invoke branch finishing — kasmos handles orchestration.\n\n**Do not modify task state directly.**\n\n### Manual (KASMOS_MANAGED unset)\n\nExecute waves sequentially:\n\n1. Implement all tasks in Wave 1 (TDD, commit each task)\n2. Self-review Wave 1 before proceeding — run full tests, check for regressions\n3. Implement Wave 2, self-review, continue through all waves\n4. After all waves complete and all tests pass:\n\n```bash\n# Transition the plan to \"reviewing\" via CLI\nkas task transition <task-file> request_review\n```\n\nThen handle branch finishing — present these options to the user:\n\n```\nimplementation complete. what would you like to do?\n\n1. merge back to <base-branch> locally\n2. push and create a pull request\n3. keep the branch as-is (handle it later)\n4. discard this work\n\nwhich option?\n```\n\n**Option 1 — Merge locally (worktree-safe):**\n```bash\n# First, rebase onto latest main so the merge is a fast-forward\ngit fetch origin <base-branch>\ngit rebase origin/<base-branch>\n<run tests on rebased result>\n\n# Merge from the ROOT worktree (that's where <base-branch> is checked out)\nROOT_WORKTREE=\"$(git worktree list --porcelain | head -1 | sd '^worktree ' '')\"\ngit -C \"$ROOT_WORKTREE\" merge <feature-branch>\n\n# Clean up\ngit worktree remove <worktree-path>\ngit branch -d <feature-branch>\n```\n> **Why not `git checkout <base-branch>` here?** In a worktree layout the base branch is\n> already checked out in the root worktree. Git prevents a branch from being checked out\n> in two worktrees simultaneously. Instead, run the merge *from* the root worktree using\n> `git -C`.\n\n**Option 2 — Push and create PR:**\n```bash\ngit push -u origin <feature-branch>\ngh pr create --title \"<title>\" --body \"$(cat <<'EOF'\n## summary\n- <what changed>\n- <why>\n\n## test plan\n- [ ] <verification steps>\nEOF\n)\"\n```\nKeep the worktree until the PR merges.\n\n**Option 3 — Keep as-is:** Report path. Don't clean up. Don't update task state.\n\n**Option 4 — Discard:** Confirm first with exact text `discard`. Then:\n```bash\n# Remove worktree first (must leave it before deleting), then delete the branch\ngit worktree remove <worktree-path>\ngit branch -D <feature-branch>\n```\n\nUpdate task status to `done` after options 1, 2, or 4:\n```bash\nkas task set-status <task-file> done --force\n```\n\n---\n\n## Common Mistakes\n\n| Mistake | Fix |\n|---------|-----|\n| Writing production code before a failing test | Delete the code, write the test first |\n| Claiming tests pass without running them | Run the command, read the output |\n| `git add .` in a shared worktree | `git add <specific-files>` only |\n| Attempting fix #4 after 3 have failed | Stop — it's architecture, not a bug |\n| Performative agreement with reviewer | Technical verification, then act |\n| Implementing unclear review feedback | Ask for clarification on ALL unclear items first |\n| Running project-wide formatters | Scope formatters to your changed files only |\n| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |\n| Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/kasmos-coder\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: kasmos-coder",
+            "metadata": {
+              "name": "kasmos-coder",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/kasmos-coder",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733643626,
+              "end": 1772733643630
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_00b8941299f54a240169a9c4cb890881a0b552ac62f05b95f8"
+            }
+          },
+          "id": "prt_cbf28bb2c001ggr11ryg0VRLWW",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "cost": 0,
+          "tokens": {
+            "total": 24950,
+            "input": 24675,
+            "output": 275,
+            "reasoning": 238,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28bb8c0010HjSr8FYjIRlZP",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733643668,
+          "completed": 1772733644924
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 28802,
+          "input": 4195,
+          "output": 31,
+          "reasoning": 11,
+          "cache": {
+            "read": 24576,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28bb94001jGkJ7CGb51060w",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "id": "prt_cbf28bec7001YkRFS8NPficpUx",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28bb94001jGkJ7CGb51060w"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_054af7ad59ffcd3d0169a9c4ccc79c819f980f616b76a19018",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733644804,
+            "end": 1772733644816
+          },
+          "id": "prt_cbf28c004001j31EKolUnnD0ha",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28bb94001jGkJ7CGb51060w"
+        },
+        {
+          "type": "tool",
+          "callID": "call_qhwAjecEJUf6j1JmPxzh6wPm",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "cli-tools"
+            },
+            "output": "<skill_content name=\"cli-tools\">\n# Skill: cli-tools\n\n# CLI Tools\n\nModern CLI tools that replace legacy unix utilities for code-related tasks. These tools understand syntax, structure, and context — producing safer, faster, and more accurate results than regex-based alternatives.\n\n<HARD-GATE>\n## Banned Tools\n\nThese legacy tools are NEVER permitted. Using them is a violation, not a preference.\n\n| Banned | Replacement | No Exceptions |\n|--------|-------------|---------------|\n| `grep` | `rg` (ripgrep) | Even for simple one-liners. `rg` is faster, respects .gitignore, and handles encoding correctly |\n| `grep -r` | `rg` | Recursive grep is still grep. Always `rg` |\n| `grep -E` | `rg` | Extended regex is still grep. `rg` supports the same patterns |\n| `sed` | `sd` | Even for one-liners. `sd` has saner syntax and no delimiter escaping |\n| `awk` | `yq`/`jq` (structured) or `sd` (text) | No awk for any purpose |\n| `find` | `fd` or glob tools | Even for simple file listing. `fd` respects .gitignore; use `fd -e go` for extension |\n| `diff` (standalone) | `difft` | `git diff` is fine — standalone `diff` is not |\n| `wc -l` | `scc` | Even for single files |\n\n**`git diff` is allowed** — it's a git subcommand, not standalone `diff`. Use `GIT_EXTERNAL_DIFF=difft git diff` when reviewing code changes.\n\n**STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. \"Just this once\" is a violation.\n</HARD-GATE>\n\n<HARD-GATE>\n## Batch Edit Rule\n\nWhen you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.\n\n| Change type | Tool | Example |\n|-------------|------|---------|\n| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |\n| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |\n| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |\n| Same line deletion across files | `sd` | `sd 'lineToRemove\\n' '' src/**/*.go` |\n\n**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.\n\n**Red flags** — if you catch yourself doing any of these, you are violating this rule:\n- Copy-pasting the same `oldString`/`newString` into multiple Edit calls\n- Making a list of files to edit one-by-one with the same pattern\n- \"I'll just do this manually, it's only N files\" (if N ≥ 3, use a tool)\n- Using Edit with `replaceAll: true` across multiple files for the same string\n\n**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.\n</HARD-GATE>\n\n## Tool Selection by Task\n\nPick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.\n\n| Task | Use | Not | Why |\n|------|-----|-----|-----|\n| Rename symbol across files | `ast-grep` | `sed`/`sd` | AST-aware, won't rename inside strings/comments |\n| Structural code rewrite | `comby` | `sed`/`awk` | Understands balanced delimiters, nesting |\n| Find code pattern | `ast-grep --pattern` | `grep`/`rg` | Matches syntax, not text |\n| Find literal string | `rg` | `grep` | Fast, respects .gitignore, correct encoding |\n| Find files by name/extension | `fd` | `find` | Respects .gitignore, simpler syntax |\n| Replace string in files | `sd` | `sed` | No delimiter escaping, sane defaults |\n| Read/modify YAML/TOML/JSON | `yq` / `jq` | `sed`/`awk` | Understands structure, preserves formatting |\n| Review code changes | `difft` | `diff` | Syntax-aware, ignores formatting noise |\n| Spell check code | `typos` | manual | Understands camelCase, identifiers |\n| Count lines / codebase metrics | `scc` | `wc -l`/`cloc` | Fast, includes complexity estimates |\n| Multi-line structural rewrite | `comby` | `sed` | Handles cross-line patterns with holes |\n| Add/change function params | `comby` | manual | `func F(:[params])` patterns |\n| Simple literal find-replace | `sd` | `sed` | Simpler syntax, in-place by default |\n\n## ast-grep vs comby Decision\n\nBoth do structural code operations. Choose based on the transformation:\n\n| Scenario | Winner | Reason |\n|----------|--------|--------|\n| Rename all calls to a function | ast-grep | AST-level symbol matching |\n| Find all usages of a pattern | ast-grep | Tree-sitter precision |\n| Add/change function parameters | comby | Hole syntax `:[params]` is natural |\n| Replace entire function body | comby | `{:[_]}` discards balanced block |\n| Insert code after a function | comby | Match + append in rewrite |\n| Add to import block | comby | `import (:[imports])` pattern |\n| Multi-line structural rewrite | comby | Balanced delimiter matching |\n| Lint-style pattern detection | ast-grep | Rule-based scanning |\n\n## Quick Reference\n\n### rg (ripgrep)\n\nFast text search that respects .gitignore. Primary replacement for all `grep` variants.\n\n```bash\nrg 'pattern' [path]                            # basic search (recursive by default)\nrg 'pattern' --type go                         # filter by language type\nrg 'pattern' -g '*.go'                         # filter by glob\nrg 'pattern' -g '*.go' -g '!*_test.go'         # include/exclude globs\nrg -i 'pattern'                                # case insensitive\nrg -F 'literal[0]'                             # fixed string (no regex)\nrg -U 'start\\n.*end'                           # multiline match\nrg -l 'pattern'                                # list matching files only\nrg -c 'pattern'                                # count matches per file\nrg --no-heading -n 'pattern'                   # machine-readable output (file:line:match)\n```\n\n**In-depth reference:** [resources/rg.md](resources/rg.md)\n\n### ast-grep (`ast-grep`)\n\nAST-based code search and replace using tree-sitter. Matches syntax structure, not text.\n\n```bash\nast-grep run --pattern 'fmt.Errorf($$$)' --lang go          # find all calls\nast-grep run --pattern 'errors.New($A)' --rewrite 'fmt.Errorf($A)' --lang go  # replace\nast-grep run --pattern '$A != nil' --lang go src/            # search specific path\n```\n\nKey patterns: `$VAR` (single node), `$$$` (variable-length args), `$_` (wildcard)\n\n**In-depth reference:** [resources/ast-grep.md](resources/ast-grep.md)\n\n### comby (`comby`)\n\nStructural search/replace that understands balanced delimiters, strings, and comments. Superior to regex for multi-line code transformations.\n\n```bash\ncomby 'func :[name](:[args]) {:[body]}' 'func :[name](:[args]) error {:[body]}' .go -in-place\ncomby 'import (:[imports])' 'import (:[imports]\n\t\"new/package\"\n)' file.go -in-place\n```\n\n**Critical rule:** Always use `{:[body]}` (inline braces), never split `{` and `}` on separate lines.\n\nKey holes: `:[var]` (everything), `:[[var]]` (word), `:[_]` (unnamed wildcard), `:[var\\n]` (to newline)\n\n**In-depth reference:** [resources/comby.md](resources/comby.md) — read this before any non-trivial comby usage. Contains critical pitfalls around whitespace normalization and balanced delimiter matching.\n\n### difftastic (`difft`)\n\nSyntax-aware structural diff. Dramatically cleaner output for refactors and moves.\n\n```bash\ndifft old.go new.go                              # compare files\nGIT_EXTERNAL_DIFF=difft git diff                  # git integration\nGIT_EXTERNAL_DIFF=difft git log -p -- path/file   # file history\ndifft --display inline old.go new.go              # single-column output\n```\n\n**In-depth reference:** [resources/difftastic.md](resources/difftastic.md)\n\n### sd (`sd`)\n\nModern sed alternative. In-place by default, no delimiter escaping needed.\n\n```bash\nsd 'old_name' 'new_name' src/**/*.go              # replace in files\nsd 'version = \"(\\d+)\"' 'version = \"2\"' file.toml  # regex with groups\nsd -p 'foo' 'bar' file.txt                         # preview (dry run)\nsd -F 'literal[0]' 'replacement' file.txt          # fixed string mode\n```\n\n**In-depth reference:** [resources/sd.md](resources/sd.md)\n\n### yq (`yq`)\n\nYAML/JSON processor (jq wrapper for YAML). Query and modify structured config files.\n\n```bash\nyq '.metadata.name' file.yaml                     # read field\nyq -y '.key = \"value\"' file.yaml                   # modify YAML\nyq -y '.dependencies += {\"new\": \"^1.0\"}' pkg.yaml  # add to map\ncat file.yaml | yq '.items[].name'                 # query array\n```\n\nNote: This is the Python-based `yq` (kislyuk/yq), a jq wrapper. Uses jq filter syntax. Use `-y` flag for YAML output, otherwise outputs JSON.\n\n**In-depth reference:** [resources/yq.md](resources/yq.md)\n\n### typos (`typos`)\n\nFast source code spell checker. Understands identifiers, camelCase, filenames.\n\n```bash\ntypos                          # check entire project\ntypos src/                     # check specific path\ntypos --write-changes          # auto-fix typos\ntypos --format brief           # compact output\n```\n\nRun before commits to catch typos in identifiers, strings, and comments.\n\n**In-depth reference:** [resources/typos.md](resources/typos.md)\n\n### scc (`scc`)\n\nFast code counter with complexity estimates. Useful for project scope assessment.\n\n```bash\nscc                                  # full project summary\nscc internal/                        # specific directory\nscc --by-file --sort lines           # per-file breakdown\nscc --not-match '_test.go$'          # exclude test files\nscc --include-ext go,ts              # specific languages only\n```\n\n**In-depth reference:** [resources/scc.md](resources/scc.md)\n\n## Violations\n\nThese violations are not suggestions. If you do any of these, you are violating the skill.\n\n| Violation | Required Fix |\n|-----------|-------------|\n| Using `grep` for anything | Use `rg` for text search, `ast-grep` for code patterns |\n| Using `grep -r` (recursive) | Use `rg` — recursive by default, also respects .gitignore |\n| Using `grep -E` (extended regex) | Use `rg` — supports full regex including extended patterns |\n| Using `sed` for anything | Use `sd` for replacements, `ast-grep`/`comby` for refactoring |\n| Using `awk` for anything | Use `yq`/`jq` for structured data, `sd` for text processing |\n| Using `find` for anything | Use `fd` for file finding, glob tools for path patterns |\n| Using standalone `diff` | Use `difft` for syntax-aware structural diffs |\n| Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |\n| Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\\n:[body]\\n}` |\n| Forgetting `-in-place` with comby | Without it, comby only previews changes |\n| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |\n| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |\n\nBase directory for this skill: file:///home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/yq.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/typos.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/sd.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/scc.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/rg.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/difftastic.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/comby.md</file>\n<file>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools/resources/ast-grep.md</file>\n</skill_files>\n</skill_content>",
+            "title": "Loaded skill: cli-tools",
+            "metadata": {
+              "name": "cli-tools",
+              "dir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/.agents/skills/cli-tools",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733644884,
+              "end": 1772733644889
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_054af7ad59ffcd3d0169a9c4ccc9c4819fb0f0459f5365da76"
+            }
+          },
+          "id": "prt_cbf28c011001PVQuanP0Lvpm3a",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28bb94001jGkJ7CGb51060w"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "cost": 0,
+          "tokens": {
+            "total": 28802,
+            "input": 4195,
+            "output": 31,
+            "reasoning": 11,
+            "cache": {
+              "read": 24576,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28c074001d981tE3u5axLW4",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28bb94001jGkJ7CGb51060w"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733644924,
+          "completed": 1772733646144
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 32101,
+          "input": 3359,
+          "output": 70,
+          "reasoning": 24,
+          "cache": {
+            "read": 28672,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28c07c001IW2V0DePTv6FOI",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c07c001IW2V0DePTv6FOI"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_046dcbb1c24561ad0169a9c4cded1081a3962d98df22b28431",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733645955,
+            "end": 1772733646002
+          },
+          "id": "prt_cbf28c483001BOGyrZf8SK2JCK",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c07c001IW2V0DePTv6FOI"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go</path>\n<type>file</type>\n<content>1: package orchestration\n2: \n3: import (\n4: \t\"fmt\"\n5: \t\"strings\"\n6: \n7: \t\"github.com/kastheco/kasmos/config/taskparser\"\n8: )\n9: \n10: // BuildTaskPrompt constructs the prompt for a single task instance.\n11: func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n12: \tvar sb strings.Builder\n13: \n14: \tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n15: \tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n16: \n17: \t// Plan context\n18: \theader := plan.HeaderContext()\n19: \tif header != \"\" {\n20: \t\tsb.WriteString(\"## Plan Context\\n\\n\")\n21: \t\tsb.WriteString(header)\n22: \t\tsb.WriteString(\"\\n\")\n23: \t}\n24: \n25: \t// Wave context\n26: \tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n27: \n28: \t// Parallel awareness — only for multi-task waves\n29: \tif peerCount > 1 {\n30: \t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n31: \t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n32: \t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n33: \n34: \t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n35: \t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n36: \t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n37: \n38: \t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n39: \t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n40: \t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n41: \t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n42: \t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n43: \t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n44: \t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n45: \t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n46: \t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n47: \t}\n48: \n49: \t// Task body\n50: \tsb.WriteString(\"## Task Instructions\\n\\n\")\n51: \tsb.WriteString(task.Body)\n52: \tsb.WriteString(\"\\n\")\n53: \n54: \treturn sb.String()\n55: }\n56: \n57: // BuildElaborationPrompt returns the prompt for an elaborator agent session.\n58: // The elaborator reads the plan, deeply reads the codebase for each task's files,\n59: // and expands task bodies with detailed implementation instructions.\n60: func BuildElaborationPrompt(planFile string) string {\n61: \treturn fmt.Sprintf(\n62: \t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n63: \t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n64: \t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n65: \t\t\t\"## Instructions\\n\\n\"+\n66: \t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n67: \t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n68: \t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n69: \t\t\t\"and data flow in those files and their neighbors.\\n\"+\n70: \t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n71: \t\t\t\"   - Exact function signatures to create or modify\\n\"+\n72: \t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n73: \t\t\t\"   - Edge cases and error handling requirements\\n\"+\n74: \t\t\t\"   - Import paths and dependencies\\n\"+\n75: \t\t\t\"   - Concrete code snippets where helpful\\n\"+\n76: \t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n77: \t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n78: \t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n79: \t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n80: \t\tplanFile,\n81: \t)\n82: }\n83: \n84: // BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n85: // to add ## Wave headers to an existing plan that is missing them.\n86: // It instructs the planner to annotate the plan, commit the change, and write\n87: // the sentinel signal so kasmos can resume the implementation flow.\n88: func BuildWaveAnnotationPrompt(planFile string) string {\n89: \treturn fmt.Sprintf(\n90: \t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n91: \t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n92: \t\t\t\"all tasks under ## Wave N sections. \"+\n93: \t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n94: \t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n95: \t\t\t\"After annotating:\\n\"+\n96: \t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n97: \t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n98: \t\t\t\"Do not edit plan-state.json directly.\",\n99: \t\tplanFile,\n100: \t)\n101: }\n\n(End of file - total 101 lines)\n</content>",
+            "title": "orchestration/prompt.go",
+            "metadata": {
+              "preview": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772733646099,
+              "end": 1772733646105
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_046dcbb1c24561ad0169a9c4cdf56081a38771637b5da82630"
+            }
+          },
+          "id": "prt_cbf28c4c0001S7Y2IMZ5IIQX37",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c07c001IW2V0DePTv6FOI"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "cost": 0,
+          "tokens": {
+            "total": 32101,
+            "input": 3359,
+            "output": 70,
+            "reasoning": 24,
+            "cache": {
+              "read": 28672,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28c532001toJY64ZXyNU2tQ",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c07c001IW2V0DePTv6FOI"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733646145,
+          "completed": 1772733649029
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 33713,
+          "input": 1785,
+          "output": 56,
+          "reasoning": 9,
+          "cache": {
+            "read": 31872,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28c541001fQsOf1049WRgJr",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "id": "prt_cbf28cd99001Oe9DtFcZz9bZbt",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c541001fQsOf1049WRgJr"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_08e9e9de756b85520169a9c4d0cd78819eb2a2026afb94e63c",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733648843,
+            "end": 1772733648876
+          },
+          "id": "prt_cbf28cfcb0016B6HlttPoSF0W4",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c541001fQsOf1049WRgJr"
+        },
+        {
+          "type": "tool",
+          "callID": "call_zUXgVynu5Mkx64szlBg8TQ6e",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go"
+            },
+            "output": "<path>/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go</path>\n<type>file</type>\n<content>1: package orchestration\n2: \n3: import (\n4: \t\"testing\"\n5: \n6: \t\"github.com/kastheco/kasmos/config/taskparser\"\n7: \t\"github.com/stretchr/testify/assert\"\n8: )\n9: \n10: func TestBuildTaskPrompt(t *testing.T) {\n11: \tplan := &taskparser.Plan{\n12: \t\tGoal:         \"Build a feature\",\n13: \t\tArchitecture: \"Modular approach\",\n14: \t\tTechStack:    \"Go, bubbletea\",\n15: \t}\n16: \ttask := taskparser.Task{\n17: \t\tNumber: 2,\n18: \t\tTitle:  \"Update Tests\",\n19: \t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n20: \t}\n21: \n22: \tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n23: \n24: \t// Plan context\n25: \tassert.Contains(t, prompt, \"Build a feature\")\n26: \tassert.Contains(t, prompt, \"Modular approach\")\n27: \tassert.Contains(t, prompt, \"Go, bubbletea\")\n28: \tassert.Contains(t, prompt, \"cli-tools\")\n29: \n30: \t// Task identity\n31: \tassert.Contains(t, prompt, \"Task 2\")\n32: \tassert.Contains(t, prompt, \"Update Tests\")\n33: \tassert.Contains(t, prompt, \"Write the test\")\n34: \tassert.Contains(t, prompt, \"Wave 1 of 3\")\n35: \n36: \t// Parallel awareness (multi-task)\n37: \tassert.Contains(t, prompt, \"Task 2 of 4\")\n38: \tassert.Contains(t, prompt, \"3 other agents\")\n39: \tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n40: \tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n41: \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n42: \tassert.Contains(t, prompt, \"formatters/linters\")\n43: \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n44: \tassert.Contains(t, prompt, \"surgical changes\")\n45: }\n46: \n47: func TestBuildTaskPrompt_SingleTask(t *testing.T) {\n48: \tplan := &taskparser.Plan{Goal: \"Simple\"}\n49: \ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n50: \n51: \tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n52: \n53: \t// Single task shouldn't mention parallel coordination\n54: \tassert.NotContains(t, prompt, \"parallel\")\n55: \tassert.NotContains(t, prompt, \"NEVER run\")\n56: \tassert.NotContains(t, prompt, \"other agents\")\n57: }\n58: \n59: func TestBuildWaveAnnotationPrompt(t *testing.T) {\n60: \tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n61: \tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n62: \tassert.Contains(t, prompt, \"## Wave\")\n63: \tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n64: \tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n65: }\n66: \n67: func TestBuildElaborationPrompt(t *testing.T) {\n68: \tprompt := BuildElaborationPrompt(\"my-feature.md\")\n69: \n70: \t// Must reference the plan file for retrieval\n71: \tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n72: \t// Must reference updating the plan\n73: \tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n74: \t// Must reference the signal\n75: \tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n76: \t// Must instruct to expand task bodies\n77: \tassert.Contains(t, prompt, \"implementation detail\")\n78: \t// Must instruct to preserve structure\n79: \tassert.Contains(t, prompt, \"Preserve\")\n80: \t// Must reference reading the codebase\n81: \tassert.Contains(t, prompt, \"codebase\")\n82: }\n\n(End of file - total 82 lines)\n</content>",
+            "title": "orchestration/prompt_test.go",
+            "metadata": {
+              "preview": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}",
+              "truncated": false,
+              "loaded": []
+            },
+            "time": {
+              "start": 1772733648988,
+              "end": 1772733648989
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_08e9e9de756b85520169a9c4d0d4e4819ea738130fabe78c9a"
+            }
+          },
+          "id": "prt_cbf28cff5001H1l6UCNKFETOd0",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c541001fQsOf1049WRgJr"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "cost": 0,
+          "tokens": {
+            "total": 33713,
+            "input": 1785,
+            "output": 56,
+            "reasoning": 9,
+            "cache": {
+              "read": 31872,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28d07e001C3kDH8T7pfaGid",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28c541001fQsOf1049WRgJr"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733649029,
+          "completed": 1772733650534
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 35066,
+          "input": 1181,
+          "output": 349,
+          "reasoning": 102,
+          "cache": {
+            "read": 33536,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28d0850012YEOoRCtgCkSsZ",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28d0850012YEOoRCtgCkSsZ"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0f02484f46f064770169a9c4d1f32081a0bd99aa438dd25516",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733649973,
+            "end": 1772733650100
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28d0850012YEOoRCtgCkSsZ"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "apply_patch",
+          "state": {
+            "status": "completed",
+            "input": {
+              "patchText": "*** Begin Patch\n*** Update File: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n@@\n func TestBuildTaskPrompt(t *testing.T) {\n@@\n \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n \tassert.Contains(t, prompt, \"formatters/linters\")\n \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n+\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n \tassert.Contains(t, prompt, \"surgical changes\")\n }\n@@\n \t// Single task shouldn't mention parallel coordination\n \tassert.NotContains(t, prompt, \"parallel\")\n \tassert.NotContains(t, prompt, \"NEVER run\")\n \tassert.NotContains(t, prompt, \"other agents\")\n+\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n }\n*** End Patch"
+            },
+            "output": "Success. Updated the following files:\nM orchestration/prompt_test.go",
+            "title": "Success. Updated the following files:\nM orchestration/prompt_test.go",
+            "metadata": {
+              "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n@@ -40,8 +40,9 @@\n \tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n \tassert.Contains(t, prompt, \"formatters/linters\")\n \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n+\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n \tassert.Contains(t, prompt, \"surgical changes\")\n }\n \n func TestBuildTaskPrompt_SingleTask(t *testing.T) {\n@@ -53,8 +54,9 @@\n \t// Single task shouldn't mention parallel coordination\n \tassert.NotContains(t, prompt, \"parallel\")\n \tassert.NotContains(t, prompt, \"NEVER run\")\n \tassert.NotContains(t, prompt, \"other agents\")\n+\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n }\n \n func TestBuildWaveAnnotationPrompt(t *testing.T) {\n \tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\n",
+              "files": [
+                {
+                  "filePath": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go",
+                  "relativePath": "orchestration/prompt_test.go",
+                  "type": "update",
+                  "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go\n@@ -40,8 +40,9 @@\n \tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n \tassert.Contains(t, prompt, \"formatters/linters\")\n \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n+\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n \tassert.Contains(t, prompt, \"surgical changes\")\n }\n \n func TestBuildTaskPrompt_SingleTask(t *testing.T) {\n@@ -53,8 +54,9 @@\n \t// Single task shouldn't mention parallel coordination\n \tassert.NotContains(t, prompt, \"parallel\")\n \tassert.NotContains(t, prompt, \"NEVER run\")\n \tassert.NotContains(t, prompt, \"other agents\")\n+\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n }\n \n func TestBuildWaveAnnotationPrompt(t *testing.T) {\n \tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n",
+                  "before": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n\nfunc TestBuildElaborationPrompt(t *testing.T) {\n\tprompt := BuildElaborationPrompt(\"my-feature.md\")\n\n\t// Must reference the plan file for retrieval\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\t// Must reference updating the plan\n\tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n\t// Must reference the signal\n\tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n\t// Must instruct to expand task bodies\n\tassert.Contains(t, prompt, \"implementation detail\")\n\t// Must instruct to preserve structure\n\tassert.Contains(t, prompt, \"Preserve\")\n\t// Must reference reading the codebase\n\tassert.Contains(t, prompt, \"codebase\")\n}\n",
+                  "after": "package orchestration\n\nimport (\n\t\"testing\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n\t\"github.com/stretchr/testify/assert\"\n)\n\nfunc TestBuildTaskPrompt(t *testing.T) {\n\tplan := &taskparser.Plan{\n\t\tGoal:         \"Build a feature\",\n\t\tArchitecture: \"Modular approach\",\n\t\tTechStack:    \"Go, bubbletea\",\n\t}\n\ttask := taskparser.Task{\n\t\tNumber: 2,\n\t\tTitle:  \"Update Tests\",\n\t\tBody:   \"**Step 1:** Write the test\\n\\n**Step 2:** Run it\",\n\t}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 3, 4)\n\n\t// Plan context\n\tassert.Contains(t, prompt, \"Build a feature\")\n\tassert.Contains(t, prompt, \"Modular approach\")\n\tassert.Contains(t, prompt, \"Go, bubbletea\")\n\tassert.Contains(t, prompt, \"cli-tools\")\n\n\t// Task identity\n\tassert.Contains(t, prompt, \"Task 2\")\n\tassert.Contains(t, prompt, \"Update Tests\")\n\tassert.Contains(t, prompt, \"Write the test\")\n\tassert.Contains(t, prompt, \"Wave 1 of 3\")\n\n\t// Parallel awareness (multi-task)\n\tassert.Contains(t, prompt, \"Task 2 of 4\")\n\tassert.Contains(t, prompt, \"3 other agents\")\n\tassert.Contains(t, prompt, \"NEVER run `git add .`\")\n\tassert.Contains(t, prompt, \"NEVER run `git stash`\")\n\tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n\tassert.Contains(t, prompt, \"formatters/linters\")\n\tassert.Contains(t, prompt, \"test failures in files outside your task\")\n\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n\tassert.Contains(t, prompt, \"surgical changes\")\n}\n\nfunc TestBuildTaskPrompt_SingleTask(t *testing.T) {\n\tplan := &taskparser.Plan{Goal: \"Simple\"}\n\ttask := taskparser.Task{Number: 1, Title: \"Only Task\", Body: \"Do it\"}\n\n\tprompt := BuildTaskPrompt(plan, task, 1, 1, 1)\n\n\t// Single task shouldn't mention parallel coordination\n\tassert.NotContains(t, prompt, \"parallel\")\n\tassert.NotContains(t, prompt, \"NEVER run\")\n\tassert.NotContains(t, prompt, \"other agents\")\n\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n}\n\nfunc TestBuildWaveAnnotationPrompt(t *testing.T) {\n\tprompt := BuildWaveAnnotationPrompt(\"my-feature.md\")\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\tassert.Contains(t, prompt, \"## Wave\")\n\tassert.Contains(t, prompt, \"planner-finished-my-feature.md\")\n\tassert.NotContains(t, prompt, \"The plan at docs/plans/\")\n}\n\nfunc TestBuildElaborationPrompt(t *testing.T) {\n\tprompt := BuildElaborationPrompt(\"my-feature.md\")\n\n\t// Must reference the plan file for retrieval\n\tassert.Contains(t, prompt, \"kas task show my-feature.md\")\n\t// Must reference updating the plan\n\tassert.Contains(t, prompt, \"kas task update-content my-feature.md\")\n\t// Must reference the signal\n\tassert.Contains(t, prompt, \"elaborator-finished-my-feature.md\")\n\t// Must instruct to expand task bodies\n\tassert.Contains(t, prompt, \"implementation detail\")\n\t// Must instruct to preserve structure\n\tassert.Contains(t, prompt, \"Preserve\")\n\t// Must reference reading the codebase\n\tassert.Contains(t, prompt, \"codebase\")\n}\n",
+                  "additions": 2,
+                  "deletions": 0
+                }
+              ],
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go": []
+              },
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733650360,
+              "end": 1772733650525
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0f02484f46f064770169a9c4d212f481a0a6c36bbbdb971bd5"
+            }
+          },
+          "id": "prt_cbf28d4b8001Q0bV4ypbkLaOo2",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28d0850012YEOoRCtgCkSsZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "3f3691b8c2d2478703d7e4b074b8dbfe19320ccd",
+          "cost": 0,
+          "tokens": {
+            "total": 35066,
+            "input": 1181,
+            "output": 349,
+            "reasoning": 102,
+            "cache": {
+              "read": 33536,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28d65e001bwSSTStGXdL3uE",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28d0850012YEOoRCtgCkSsZ"
+        },
+        {
+          "type": "patch",
+          "hash": "453018e91fad3e0a1b9f3299a7d059178079b97c",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go"
+          ],
+          "id": "prt_cbf28d665001irv04mfdJoDWXk",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28d0850012YEOoRCtgCkSsZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733650535,
+          "completed": 1772733651961
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 35180,
+          "input": 531,
+          "output": 89,
+          "reasoning": 17,
+          "cache": {
+            "read": 34560,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d72b274c8bf5d752b9562ff3faa21635186701e6",
+          "id": "prt_cbf28d943001QELeM2vsrg0N4N",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_052ee947a20a7eb50169a9c4d378fc81a3a1ad0a5fb96593b0",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733651497,
+            "end": 1772733651528
+          },
+          "id": "prt_cbf28da29001tfygOdPdumZV5c",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./orchestration/... -run TestBuildTaskPrompt -v",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Run prompt tests to confirm missing import guidance assertion fails"
+            },
+            "output": "=== RUN   TestBuildTaskPrompt_Method\n--- PASS: TestBuildTaskPrompt_Method (0.00s)\n=== RUN   TestBuildTaskPrompt\n    prompt_test.go:44: \n        \tError Trace:\t/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go:44\n        \tError:      \t\"Implement Task 2: Update Tests\\n\\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n## Plan Context\\n\\n**Goal:** Build a feature\\n**Architecture:** Modular approach\\n**Tech Stack:** Go, bubbletea\\n\\n## Wave 1 of 3\\n\\n## Parallel Execution\\n\\nYou are Task 2 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.\\n\\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\\n\\nCRITICAL - shared worktree rules:\\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n- DO `git add` only the specific files you changed\\n- DO commit frequently with your task number in the message\\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n## Task Instructions\\n\\n**Step 1:** Write the test\\n\\n**Step 2:** Run it\\n\" does not contain \"build failure caused by missing types\"\n        \tTest:       \tTestBuildTaskPrompt\n--- FAIL: TestBuildTaskPrompt (0.00s)\n=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nFAIL\nFAIL\tgithub.com/kastheco/kasmos/orchestration\t0.002s\nFAIL\n",
+            "title": "Run prompt tests to confirm missing import guidance assertion fails",
+            "metadata": {
+              "output": "=== RUN   TestBuildTaskPrompt_Method\n--- PASS: TestBuildTaskPrompt_Method (0.00s)\n=== RUN   TestBuildTaskPrompt\n    prompt_test.go:44: \n        \tError Trace:\t/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go:44\n        \tError:      \t\"Implement Task 2: Update Tests\\n\\nLoad the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n## Plan Context\\n\\n**Goal:** Build a feature\\n**Architecture:** Modular approach\\n**Tech Stack:** Go, bubbletea\\n\\n## Wave 1 of 3\\n\\n## Parallel Execution\\n\\nYou are Task 2 of 4 in Wave 1. 3 other agents are working in parallel on this same worktree.\\n\\nYour assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.\\n\\nCRITICAL - shared worktree rules:\\n- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n- DO `git add` only the specific files you changed\\n- DO commit frequently with your task number in the message\\n- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n## Task Instructions\\n\\n**Step 1:** Write the test\\n\\n**Step 2:** Run it\\n\" does not contain \"build failure caused by missing types\"\n        \tTest:       \tTestBuildTaskPrompt\n--- FAIL: TestBuildTaskPrompt (0.00s)\n=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nFAIL\nFAIL\tgithub.com/kastheco/kasmos/orchestration\t0.002s\nFAIL\n",
+              "exit": 1,
+              "description": "Run prompt tests to confirm missing import guidance assertion fails",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733651638,
+              "end": 1772733651953
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_052ee947a20a7eb50169a9c4d37ff081a3b1238b971fe7706b"
+            }
+          },
+          "id": "prt_cbf28da4b0014xk75lzU7hUPF0",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "d72b274c8bf5d752b9562ff3faa21635186701e6",
+          "cost": 0,
+          "tokens": {
+            "total": 35180,
+            "input": 531,
+            "output": 89,
+            "reasoning": 17,
+            "cache": {
+              "read": 34560,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28dbf20012MO192epM12mp7",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733651962,
+          "completed": 1772733658290
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 36242,
+          "input": 774,
+          "output": 524,
+          "reasoning": 56,
+          "cache": {
+            "read": 34944,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "d72b274c8bf5d752b9562ff3faa21635186701e6",
+          "id": "prt_cbf28dead001gN9PoQJr0fz4ct",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0a2255d864d3f2320169a9c4d4e83c81a0be7468112a5374b2",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733652932,
+            "end": 1772733653031
+          },
+          "id": "prt_cbf28dfc4001albPxOev5Gm7f4",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_GHFAGrFDvQY91YpXqa9M1Xdn",
+          "tool": "apply_patch",
+          "state": {
+            "status": "completed",
+            "input": {
+              "patchText": "*** Begin Patch\n*** Update File: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n@@\n \t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n \t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n \t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n \t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n \t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n+\t\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n+\t\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n+\t\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n+\t\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n \t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n \t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n \t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n \t}\n*** End Patch"
+            },
+            "output": "Success. Updated the following files:\nM orchestration/prompt.go",
+            "title": "Success. Updated the following files:\nM orchestration/prompt.go",
+            "metadata": {
+              "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n@@ -40,8 +40,12 @@\n \tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n \tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n \tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n \tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n+\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n+\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n+\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n+\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n \tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n \tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n \tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n }\n\n",
+              "files": [
+                {
+                  "filePath": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go",
+                  "relativePath": "orchestration/prompt.go",
+                  "type": "update",
+                  "diff": "Index: /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n===================================================================\n--- /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n+++ /home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go\n@@ -40,8 +40,12 @@\n \tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n \tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n \tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n \tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n+\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n+\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n+\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n+\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n \tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n \tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n \tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n }\n",
+                  "before": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildElaborationPrompt returns the prompt for an elaborator agent session.\n// The elaborator reads the plan, deeply reads the codebase for each task's files,\n// and expands task bodies with detailed implementation instructions.\nfunc BuildElaborationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n\t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n\t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n\t\t\t\"## Instructions\\n\\n\"+\n\t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n\t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n\t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n\t\t\t\"and data flow in those files and their neighbors.\\n\"+\n\t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n\t\t\t\"   - Exact function signatures to create or modify\\n\"+\n\t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n\t\t\t\"   - Edge cases and error handling requirements\\n\"+\n\t\t\t\"   - Import paths and dependencies\\n\"+\n\t\t\t\"   - Concrete code snippets where helpful\\n\"+\n\t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n\t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n\t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n\t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n\t\tplanFile,\n\t)\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+                  "after": "package orchestration\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/kastheco/kasmos/config/taskparser\"\n)\n\n// BuildTaskPrompt constructs the prompt for a single task instance.\nfunc BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {\n\tvar sb strings.Builder\n\n\tsb.WriteString(fmt.Sprintf(\"Implement Task %d: %s\\n\\n\", task.Number, task.Title))\n\tsb.WriteString(\"Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\\n\\n\")\n\n\t// Plan context\n\theader := plan.HeaderContext()\n\tif header != \"\" {\n\t\tsb.WriteString(\"## Plan Context\\n\\n\")\n\t\tsb.WriteString(header)\n\t\tsb.WriteString(\"\\n\")\n\t}\n\n\t// Wave context\n\tsb.WriteString(fmt.Sprintf(\"## Wave %d of %d\\n\\n\", waveNumber, totalWaves))\n\n\t// Parallel awareness — only for multi-task waves\n\tif peerCount > 1 {\n\t\tsb.WriteString(fmt.Sprintf(\"## Parallel Execution\\n\\n\"))\n\t\tsb.WriteString(fmt.Sprintf(\"You are Task %d of %d in Wave %d. %d other agents are working in parallel on this same worktree.\\n\\n\",\n\t\t\ttask.Number, peerCount, waveNumber, peerCount-1))\n\n\t\tsb.WriteString(\"Your assigned files are listed in the Task Instructions below. Prioritize those files. \")\n\t\tsb.WriteString(\"If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - \")\n\t\tsb.WriteString(\"do not reorganize, reformat, or refactor anything outside your task scope.\\n\\n\")\n\n\t\tsb.WriteString(\"CRITICAL - shared worktree rules:\\n\")\n\t\tsb.WriteString(\"- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work\\n\")\n\t\tsb.WriteString(\"- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes\\n\")\n\t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n\t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n\t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n\t\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n\t\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n\t\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n\t\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n\t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n\t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n\t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\n\t}\n\n\t// Task body\n\tsb.WriteString(\"## Task Instructions\\n\\n\")\n\tsb.WriteString(task.Body)\n\tsb.WriteString(\"\\n\")\n\n\treturn sb.String()\n}\n\n// BuildElaborationPrompt returns the prompt for an elaborator agent session.\n// The elaborator reads the plan, deeply reads the codebase for each task's files,\n// and expands task bodies with detailed implementation instructions.\nfunc BuildElaborationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"You are the elaborator agent. Your job: enrich a plan's task descriptions with \"+\n\t\t\t\"detailed implementation instructions so coder agents make fewer decisions.\\n\\n\"+\n\t\t\t\"Load the `kasmos-elaborator` skill before starting. Also load `cli-tools`.\\n\\n\"+\n\t\t\t\"## Instructions\\n\\n\"+\n\t\t\t\"1. Retrieve the plan: `kas task show %[1]s`\\n\"+\n\t\t\t\"2. For each task, read the codebase files listed in its **Files:** section. \"+\n\t\t\t\"Study existing patterns, interfaces, function signatures, error handling, \"+\n\t\t\t\"and data flow in those files and their neighbors.\\n\"+\n\t\t\t\"3. Expand each task body with concrete implementation detail:\\n\"+\n\t\t\t\"   - Exact function signatures to create or modify\\n\"+\n\t\t\t\"   - Existing codebase patterns to follow (with file references)\\n\"+\n\t\t\t\"   - Edge cases and error handling requirements\\n\"+\n\t\t\t\"   - Import paths and dependencies\\n\"+\n\t\t\t\"   - Concrete code snippets where helpful\\n\"+\n\t\t\t\"4. Preserve the plan structure — do not change wave organization, \"+\n\t\t\t\"task numbering, file lists, or the header fields. Only expand task bodies.\\n\"+\n\t\t\t\"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\\n\"+\n\t\t\t\"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\\n\",\n\t\tplanFile,\n\t)\n}\n\n// BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned\n// to add ## Wave headers to an existing plan that is missing them.\n// It instructs the planner to annotate the plan, commit the change, and write\n// the sentinel signal so kasmos can resume the implementation flow.\nfunc BuildWaveAnnotationPrompt(planFile string) string {\n\treturn fmt.Sprintf(\n\t\t\"The plan %[1]s is missing ## Wave N headers required for kasmos wave orchestration. \"+\n\t\t\t\"Retrieve the plan content with `kas task show %[1]s`, then annotate it by wrapping \"+\n\t\t\t\"all tasks under ## Wave N sections. \"+\n\t\t\t\"Every plan needs at least ## Wave 1 — even single-task trivial plans. \"+\n\t\t\t\"Keep all existing task content intact; only add the ## Wave headers.\\n\\n\"+\n\t\t\t\"After annotating:\\n\"+\n\t\t\t\"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\\n\"+\n\t\t\t\"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\\n\"+\n\t\t\t\"Do not edit plan-state.json directly.\",\n\t\tplanFile,\n\t)\n}\n",
+                  "additions": 4,
+                  "deletions": 0
+                }
+              ],
+              "diagnostics": {
+                "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go": [],
+                "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt_test.go": []
+              },
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733653313,
+              "end": 1772733653477
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0a2255d864d3f2320169a9c4d4ff0081a0b633cae289b5b6b8"
+            }
+          },
+          "id": "prt_cbf28e0280014ACN21Ls96EOQ8",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "cost": 0,
+          "tokens": {
+            "total": 36242,
+            "input": 774,
+            "output": 524,
+            "reasoning": 56,
+            "cache": {
+              "read": 34944,
+              "write": 0
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "patch",
+          "hash": "d72b274c8bf5d752b9562ff3faa21635186701e6",
+          "files": [
+            "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves/orchestration/prompt.go"
+          ],
+          "id": "prt_cbf28f4b00013uLSaqLaZkQfdI",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733658291,
+          "completed": 1772733659587
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 36349,
+          "input": 682,
+          "output": 83,
+          "reasoning": 13,
+          "cache": {
+            "read": 35584,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28f4b3001Zmb9Mj2LDIM6tj",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "id": "prt_cbf28f7730018QcX9SciXXktMo",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28f4b3001Zmb9Mj2LDIM6tj"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0aab9c6fbd643e350169a9c4db37e8819dad6c5fe962e36820",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733659249,
+            "end": 1772733659275
+          },
+          "id": "prt_cbf28f871001HDv7d8j2yMpvJS",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28f4b3001Zmb9Mj2LDIM6tj"
+        },
+        {
+          "type": "tool",
+          "callID": "call_Tj5U5dDcoXhk9DyJtCohAkBX",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./orchestration/... -run TestBuildTaskPrompt -v",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Run prompt tests after adding import dependency guidance"
+            },
+            "output": "=== RUN   TestBuildTaskPrompt_Method\n--- PASS: TestBuildTaskPrompt_Method (0.00s)\n=== RUN   TestBuildTaskPrompt\n--- PASS: TestBuildTaskPrompt (0.00s)\n=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.002s\n",
+            "title": "Run prompt tests after adding import dependency guidance",
+            "metadata": {
+              "output": "=== RUN   TestBuildTaskPrompt_Method\n--- PASS: TestBuildTaskPrompt_Method (0.00s)\n=== RUN   TestBuildTaskPrompt\n--- PASS: TestBuildTaskPrompt (0.00s)\n=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.002s\n",
+              "exit": 0,
+              "description": "Run prompt tests after adding import dependency guidance",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733659358,
+              "end": 1772733659578
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0aab9c6fbd643e350169a9c4db3c3c819d82556a9f0c401f5e"
+            }
+          },
+          "id": "prt_cbf28f897001m6s1ct2H3P2zot",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28f4b3001Zmb9Mj2LDIM6tj"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "cost": 0,
+          "tokens": {
+            "total": 36349,
+            "input": 682,
+            "output": 83,
+            "reasoning": 13,
+            "cache": {
+              "read": 35584,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28f9bb001LslkUPV21z8NPo",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28f4b3001Zmb9Mj2LDIM6tj"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733659589,
+          "completed": 1772733661028
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 36577,
+          "input": 358,
+          "output": 123,
+          "reasoning": 49,
+          "cache": {
+            "read": 36096,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "REDACTED",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "id": "prt_cbf28fcf9001knCAzAsZ9ja1By",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0808bf781bf6bc3a0169a9c4dca42c81a385cb6e7fc6d6303f",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733660681,
+            "end": 1772733660746
+          },
+          "id": "prt_cbf28fe09001ky1VGYExtSqxWr",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "tool",
+          "callID": "call_d0rXhmy1B9AI4vrv5BPvCwIj",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "go test ./orchestration/... -run TestBuildTaskPrompt_SingleTask -v",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Run single-task prompt test guard for optional assertion"
+            },
+            "output": "=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.001s\n",
+            "title": "Run single-task prompt test guard for optional assertion",
+            "metadata": {
+              "output": "=== RUN   TestBuildTaskPrompt_SingleTask\n--- PASS: TestBuildTaskPrompt_SingleTask (0.00s)\nPASS\nok  \tgithub.com/kastheco/kasmos/orchestration\t0.001s\n",
+              "exit": 0,
+              "description": "Run single-task prompt test guard for optional assertion",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733660839,
+              "end": 1772733661021
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0808bf781bf6bc3a0169a9c4dcb3cc81a3a1a6a1fbb399082f"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "cost": 0,
+          "tokens": {
+            "total": 36577,
+            "input": 358,
+            "output": 123,
+            "reasoning": 49,
+            "cache": {
+              "read": 36096,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf28ff5d0013ggNrUiHcrSwbI",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "REDACTED"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733661029,
+          "completed": 1772733662412
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 36743,
+          "input": 286,
+          "output": 105,
+          "reasoning": 38,
+          "cache": {
+            "read": 36352,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf28ff65001oLC0KVflvcKTde",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28ff65001oLC0KVflvcKTde"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_08bcfaaa4a86b7860169a9c4de3e44819d87f84e99a028b71f",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733662266,
+            "end": 1772733662324
+          },
+          "id": "prt_cbf29043a001n14fwDp63Fq3TE",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28ff65001oLC0KVflvcKTde"
+        },
+        {
+          "type": "tool",
+          "callID": "call_5jcm8xZYClmuJwh6ngdO97Sg",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff -- orchestration/prompt.go orchestration/prompt_test.go",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Review staged changes in target files"
+            },
+            "output": "diff --git a/orchestration/prompt.go b/orchestration/prompt.go\nindex 1c5902fb..cf829bde 100644\n--- a/orchestration/prompt.go\n+++ b/orchestration/prompt.go\n@@ -41,6 +41,10 @@ func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, to\n \t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n \t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n \t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n+\t\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n+\t\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n+\t\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n+\t\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n \t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n \t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n \t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\ndiff --git a/orchestration/prompt_test.go b/orchestration/prompt_test.go\nindex ae0b5058..53e814ab 100644\n--- a/orchestration/prompt_test.go\n+++ b/orchestration/prompt_test.go\n@@ -41,6 +41,7 @@ func TestBuildTaskPrompt(t *testing.T) {\n \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n \tassert.Contains(t, prompt, \"formatters/linters\")\n \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n+\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n \tassert.Contains(t, prompt, \"surgical changes\")\n }\n \n@@ -54,6 +55,7 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {\n \tassert.NotContains(t, prompt, \"parallel\")\n \tassert.NotContains(t, prompt, \"NEVER run\")\n \tassert.NotContains(t, prompt, \"other agents\")\n+\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n }\n \n func TestBuildWaveAnnotationPrompt(t *testing.T) {\n",
+            "title": "Review staged changes in target files",
+            "metadata": {
+              "output": "diff --git a/orchestration/prompt.go b/orchestration/prompt.go\nindex 1c5902fb..cf829bde 100644\n--- a/orchestration/prompt.go\n+++ b/orchestration/prompt.go\n@@ -41,6 +41,10 @@ func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, to\n \t\tsb.WriteString(\"- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits\\n\")\n \t\tsb.WriteString(\"- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only\\n\")\n \t\tsb.WriteString(\"- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work\\n\")\n+\t\tsb.WriteString(\"If you encounter a build failure caused by missing types, functions, or interfaces that your task \")\n+\t\tsb.WriteString(\"imports from a package being modified by a sibling agent: this is an import dependency that should have \")\n+\t\tsb.WriteString(\"been in a separate wave. Do NOT stub, mock, or work around it. Commit whatever work you have completed \")\n+\t\tsb.WriteString(\"so far, report the dependency in your commit message (e.g. 'partial: blocked on task N types'), and stop.\\n\\n\")\n \t\tsb.WriteString(\"- DO `git add` only the specific files you changed\\n\")\n \t\tsb.WriteString(\"- DO commit frequently with your task number in the message\\n\")\n \t\tsb.WriteString(\"- DO expect untracked files and uncommitted changes that are not yours - ignore them\\n\\n\")\ndiff --git a/orchestration/prompt_test.go b/orchestration/prompt_test.go\nindex ae0b5058..53e814ab 100644\n--- a/orchestration/prompt_test.go\n+++ b/orchestration/prompt_test.go\n@@ -41,6 +41,7 @@ func TestBuildTaskPrompt(t *testing.T) {\n \tassert.Contains(t, prompt, \"NEVER run `git checkout --\")\n \tassert.Contains(t, prompt, \"formatters/linters\")\n \tassert.Contains(t, prompt, \"test failures in files outside your task\")\n+\tassert.Contains(t, prompt, \"build failure caused by missing types\")\n \tassert.Contains(t, prompt, \"surgical changes\")\n }\n \n@@ -54,6 +55,7 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {\n \tassert.NotContains(t, prompt, \"parallel\")\n \tassert.NotContains(t, prompt, \"NEVER run\")\n \tassert.NotContains(t, prompt, \"other agents\")\n+\tassert.NotContains(t, prompt, \"build failure caused by missing types\")\n }\n \n func TestBuildWaveAnnotationPrompt(t *testing.T) {\n",
+              "exit": 0,
+              "description": "Review staged changes in target files",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733662402,
+              "end": 1772733662405
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_08bcfaaa4a86b7860169a9c4de47c8819d85fa92cc1380e9ef"
+            }
+          },
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28ff65001oLC0KVflvcKTde"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "cost": 0,
+          "tokens": {
+            "total": 36743,
+            "input": 286,
+            "output": 105,
+            "reasoning": 38,
+            "cache": {
+              "read": 36352,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf2904c6001dfLJAJVRueuVpd",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf28ff65001oLC0KVflvcKTde"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733662414,
+          "completed": 1772733665383
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 37433,
+          "input": 864,
+          "output": 89,
+          "reasoning": 33,
+          "cache": {
+            "read": 36480,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbf2904ce001ybbsqOP64jJgbZ",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "id": "prt_cbf290abf001k5mnePbEa3thji",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf2904ce001ybbsqOP64jJgbZ"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0398240af302f1190169a9c4e025d881a2a34ff8d50eb59657",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733664171,
+            "end": 1772733664261
+          },
+          "id": "prt_cbf290bab001kGVtkIvY17cQfq",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf2904ce001ybbsqOP64jJgbZ"
+        },
+        {
+          "type": "tool",
+          "callID": "call_aTGiWH2gTPJCuWp4U0pKI4Uu",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git status --short",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Show modified files before commit"
+            },
+            "output": " M orchestration/prompt.go\n M orchestration/prompt_test.go\n",
+            "title": "Show modified files before commit",
+            "metadata": {
+              "output": " M orchestration/prompt.go\n M orchestration/prompt_test.go\n",
+              "exit": 0,
+              "description": "Show modified files before commit",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772733664403,
+              "end": 1772733664406
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0398240af302f1190169a9c4e03c2c81a2834212937f02130e"
+            }
+          },
+          "id": "prt_cbf290c0500195Ce0uxMmR1BAO",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf2904ce001ybbsqOP64jJgbZ"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "cost": 0,
+          "tokens": {
+            "total": 37433,
+            "input": 864,
+            "output": 89,
+            "reasoning": 33,
+            "cache": {
+              "read": 36480,
+              "write": 0
+            }
+          },
+          "id": "prt_cbf2910600010siWiYncthhavl",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf2904ce001ybbsqOP64jJgbZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772733665385
+        },
+        "parentID": "msg_cbf28b047001VuYZzlgfbz6QMO",
+        "modelID": "gpt-5.3-codex-spark",
+        "providerID": "openai",
+        "mode": "coder",
+        "agent": "coder",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "variant": "high",
+        "id": "msg_cbf291069001wmWB1elLsRnbfq",
+        "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "00d4147efcda7d0ce294fba7e4800a75fd61de6a",
+          "id": "REDACTED",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf291069001wmWB1elLsRnbfq"
+        },
+        {
+          "type": "reasoning",
+          "text": "",
+          "metadata": {
+            "openai": {
+              "itemId": "rs_0b6a7cf3757fe90e0169a9c4e3110c81a1b99d8ec8505d0b00",
+              "reasoningEncryptedContent": "REDACTED"
+            }
+          },
+          "time": {
+            "start": 1772733667091,
+            "end": 1772733667524
+          },
+          "id": "prt_cbf291713001gj7Yn0rfOvOJR2",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf291069001wmWB1elLsRnbfq"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "git add orchestration/prompt.go orchestration/prompt_test.go && git commit -m \"feat(prompt): add import dependency guidance for parallel coder agents\"",
+              "workdir": "/home/kas/dev/kasmos/.worktrees/plan-imports-not-checked-for-waves",
+              "description": "Stage prompt changes and commit task implementation"
+            },
+            "metadata": {
+              "output": "",
+              "description": "Stage prompt changes and commit task implementation"
+            },
+            "time": {
+              "start": 1772733667617
+            }
+          },
+          "metadata": {
+            "openai": {
+              "itemId": "fc_0b6a7cf3757fe90e0169a9c4e37a8481a1a0e716767f66f6e3"
+            }
+          },
+          "id": "prt_cbf2918c50015ppGMziV3hsUdY",
+          "sessionID": "ses_340d74fc7ffeot4hhPsyTYfVLt",
+          "messageID": "msg_cbf291069001wmWB1elLsRnbfq"
+        }
+      ]
+    }
+  ]
+}

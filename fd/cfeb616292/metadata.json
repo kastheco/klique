@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "fdcfeb616292",
+  "strategy": "manual-commit",
+  "branch": "plan/imports-not-checked-for-waves",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "orchestration/prompt.go",
+    "orchestration/prompt_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fd/cfeb616292/0/metadata.json",
+      "transcript": "/fd/cfeb616292/0/full.jsonl",
+      "context": "/fd/cfeb616292/0/context.md",
+      "content_hash": "/fd/cfeb616292/0/content_hash.txt",
+      "prompt": "/fd/cfeb616292/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38690,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 332672,
+    "output_tokens": 1794,
+    "api_call_count": 12
+  }
+}
