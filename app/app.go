@@ -1671,14 +1671,21 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			taskstate.DisplayName(msg.planFile)))
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged(), m.toastTickCmd())
 	case waveAllCompleteMsg:
+		// Capture the target instance on the main goroutine to avoid a data
+		// race when the returned tea.Cmd runs concurrently with future Updates
+		// that may mutate m.nav.instances.
 		planFile := msg.planFile
+		var pushInst *session.Instance
+		for _, inst := range m.nav.GetInstances() {
+			if inst.TaskFile == planFile && inst.TaskNumber > 0 {
+				pushInst = inst
+				break
+			}
+		}
 		return m, func() tea.Msg {
-			for _, inst := range m.nav.GetInstances() {
-				if inst.TaskFile == planFile && inst.TaskNumber > 0 {
-					if worktree, err := inst.GetGitWorktree(); err == nil {
-						_ = worktree.Push(false)
-					}
-					break
+			if pushInst != nil {
+				if worktree, err := pushInst.GetGitWorktree(); err == nil && worktree != nil {
+					_ = worktree.Push(false)
 				}
 			}
 			return wavePushCompleteMsg{planFile: planFile}
