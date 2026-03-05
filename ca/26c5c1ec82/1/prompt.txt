@@ -1,0 +1,210 @@
+Implement Task 2: `kas tmux` subcommand group
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Add CLI commands for querying the audit log, managing orphaned tmux sessions, and viewing instance status summaries. Closes Category 5 (Monitoring & Observability) in the UI/CLI feature parity report.
+**Architecture:** Three independent subcommand groups:
+**Tech Stack:** Go, cobra, `config/auditlog`, `session/tmux`, `config.State`
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 2 of 3 in Wave 1. 2 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+Add `kas tmux list`, `kas tmux adopt`, and `kas tmux kill` cobra commands for orphan tmux session management.
+
+**Files:**
+- `cmd/tmux.go` — new cobra command group with `list`, `adopt <session> <title>`, `kill <session>`
+- `cmd/tmux_test.go` — unit tests (mock tmux output where needed)
+
+**Details:**
+- Important constraint: do **not** import `session/tmux` from `cmd` package (import cycle: `session/tmux -> cmd`). Follow the same local-mirror strategy documented in `cmd/instance.go` for tmux name/state handling.
+- Implement local parsing around `tmux ls -F` using the same format string as `session/tmux/tmux_session.go`:
+
+```go
+"#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}"
+```
+
+- Implement these signatures in `cmd/tmux.go`:
+
+```go
+type tmuxSessionRow struct {
+	Name     string
+	Title    string
+	Created  time.Time
+	Windows  int
+	Attached bool
+	Width    int
+	Height   int
+	Managed  bool
+}
+
+func NewTmuxCmd() *cobra.Command
+func discoverKasSessions(exec Executor, known map[string]struct{}) ([]tmuxSessionRow, error)
+func executeTmuxList(state config.StateManager, exec Executor) (string, error)
+func executeTmuxAdopt(state config.StateManager, sessionName, title, repoRoot string, now time.Time, exec Executor) error
+func executeTmuxKill(state config.StateManager, sessionName string, exec Executor) error
+```
+
+- Build `known` tmux names from persisted instances via existing helpers in the same package: `loadInstanceRecords(state)` + `kasTmuxName(record.Title)` (pattern from `app/app_state.go:discoverTmuxSessions`).
+- `kas tmux list`: discover all `kas_` sessions, then print only orphan rows (`Managed == false`) with `NAME`, `TITLE`, `WINDOWS`, `ATTACHED`, `AGE`; if none, print `no orphan tmux sessions found`.
+- `kas tmux adopt <session-name> <title>`:
+  - Validate session exists in current orphan set (exact name match; no prefix matching).
+  - Validate `title` is non-empty and does not collide with an existing instance title.
+  - Append a new `instanceRecord` to state without mutating existing records (preserve full JSON round-trip behavior established in `cmd/instance.go`).
+  - Seed adopted record as `Status: instanceReady`, `Program: "unknown"`, `Path: repoRoot`, `CreatedAt/UpdatedAt: now`.
+- `kas tmux kill <session-name>`:
+  - Validate target exists in orphan set before killing.
+  - Execute `tmux kill-session -t <session-name>` through injected `Executor`.
+  - Return wrapped execution errors (`fmt.Errorf("kill tmux session %s: %w", sessionName, err)`).
+- Treat `tmux ls` exit errors indicating no server/no sessions as an empty list (same behavior as `session/tmux.DiscoverAll`); malformed output lines should be skipped, not fatal.
+- Required imports for `cmd/tmux.go`:
+
+```go
+import (
+	"encoding/json"
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
+	"text/tabwriter"
+	"time"
+
+	"github.com/kastheco/kasmos/config"
+	"github.com/spf13/cobra"
+)
+```
+
+- Testing guidance for `cmd/tmux_test.go`: table-drive parser/list formatting, orphan filtering, adopt validation failures, and state preservation checks (reuse `newTestStateFromRecords` + `assertRecordFieldsEqual` patterns from `cmd/instance_test.go`).
+
+- Command tree wiring in `NewTmuxCmd()` should match root command style in `cmd/cmd.go:44` and other groups:
+
+```go
+func NewTmuxCmd() *cobra.Command {
+	tmuxCmd := &cobra.Command{Use: "tmux", Short: "manage orphan tmux sessions"}
+	listCmd := &cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: ...}
+	adoptCmd := &cobra.Command{Use: "adopt <session> <title>", Args: cobra.ExactArgs(2), RunE: ...}
+	killCmd := &cobra.Command{Use: "kill <session>", Args: cobra.ExactArgs(1), RunE: ...}
+	tmuxCmd.AddCommand(listCmd, adoptCmd, killCmd)
+	return tmuxCmd
+}
+```
+
+- `discoverKasSessions` implementation shape:
+  - Execute `tmux ls -F "#{session_name}|#{session_created}|#{session_windows}|#{session_attached}|#{window_width}|#{window_height}"` through injected `Executor.Output`.
+  - Treat `*exec.ExitError` as empty list (same contract as `session/tmux.DiscoverAll` in `session/tmux/tmux_session.go:595`).
+  - Parse with `strings.SplitN(line, "|", 6)`; skip malformed lines (`len(parts) < 6`) without failing.
+  - Ignore non-`kas_` sessions and compute `Managed` from `known[name]`.
+  - Parse epoch/windows/width/height with `strconv`; keep zero values on parse failure (non-fatal).
+
+- Reuse existing state round-trip patterns from `cmd/instance.go:262`, `cmd/instance.go:358`:
+  - Read records with `loadInstanceRecords(state)`.
+  - For `adopt`, append a fully populated `instanceRecord` and re-marshal the full slice (`json.Marshal(records)` then `state.SaveInstances(raw)`) so existing fields are preserved.
+  - Derive known session names with `kasTmuxName(r.Title)` exactly (same sanitization path used elsewhere).
+
+- `executeTmuxAdopt` validation order (deterministic and testable):
+  1. `strings.TrimSpace(title) != ""`
+  2. title uniqueness against existing instance records (`r.Title == title`)
+  3. orphan existence by exact session name (`row.Name == sessionName` and `!row.Managed`)
+  4. persist new record with `Status: instanceReady`, `Program: "unknown"`, `Path: repoRoot`, `CreatedAt: now`, `UpdatedAt: now`
+  - Return explicit errors for each validation branch so tests can assert messages.
+
+- `executeTmuxKill` requirements:
+  - Recompute orphan set and ensure target exists before attempting kill.
+  - Use `exec.Run(exec.Command("tmux", "kill-session", "-t", sessionName))`.
+  - Wrap failure as `fmt.Errorf("kill tmux session %s: %w", sessionName, err)`.
+
+- `executeTmuxList` formatting contract:
+  - Only include orphan rows (`Managed == false`).
+  - Header: `NAME\tTITLE\tWINDOWS\tATTACHED\tAGE`.
+  - AGE can reuse overlay semantics from `ui/overlay/tmuxBrowserOverlay.go:240` (`s ago`, `m ago`, `h ago`, `d ago`); keep it deterministic in tests by passing fixed `Created` values.
+  - Empty result must be exactly `no orphan tmux sessions found\n`.
+
+- Suggested test cases in `cmd/tmux_test.go`:
+  - `TestDiscoverKasSessions_ParsesAndSkipsMalformed`
+  - `TestExecuteTmuxList_FiltersManaged`
+  - `TestExecuteTmuxList_Empty`
+  - `TestExecuteTmuxAdopt_Validation`
+  - `TestExecuteTmuxAdopt_PreservesExistingFields` (use `assertRecordFieldsEqual` from `cmd/instance_test.go:207`)
+  - `TestExecuteTmuxKill_WrapsExecutorError`
+  - Use `cmd/cmd_test.NewMockExecutor()` for command stubbing.
+
+
+- Codebase anchors to mirror while implementing:
+  - `cmd/cmd.go:10` defines the package-level `Executor` abstraction; reuse it directly in tmux helpers so tests can inject `cmd/cmd_test.NewMockExecutor()`.
+  - `session/tmux/tmux_session.go:591` is the canonical behavior for tmux discovery (`tmux ls -F ...`, treat `*exec.ExitError` as empty, skip malformed rows).
+  - `app/app_state.go:1801` shows how known managed names are derived from instance titles and mapped to `kas_` names.
+  - `app/app_state.go:1900` is the source of truth for orphan adoption defaults (`Program: "unknown"`, path rooted at active repo).
+- Root wiring requirement so `kas tmux ...` is reachable: extend `NewRootCmd()` in `cmd/cmd.go` to register `NewTmuxCmd()`.
+- Add a small pure helper for age formatting in `cmd/tmux.go` so output tests stay deterministic:
+
+```go
+func relativeAge(now, created time.Time) string
+```
+
+  Implement with the same buckets as `ui/overlay/tmuxBrowserOverlay.go:241` (`s/m/h/d ago`).
+- Adopt persistence must preserve full record payloads exactly like existing state mutations in `cmd/instance.go:358`:
+  - load all records via `loadInstanceRecords(state)`
+  - append one fully initialized `instanceRecord`
+  - `json.Marshal(records)`
+  - `state.SaveInstances(raw)`
+- Testing specifics from current patterns:
+  - Reuse `newTestStateFromRecords` and `assertRecordFieldsEqual` from `cmd/instance_test.go` for round-trip guarantees.
+  - Use `cmd/cmd_test.NewMockExecutor()` and assert invoked commands via `ToString(cmd)` when validating `kill-session` behavior.
+  - Include a case where `tmux ls` returns non-`kas_` sessions + malformed lines in one payload; parser should return only valid `kas_` rows without error.
+- Use explicit, stable validation errors in `executeTmuxAdopt` / `executeTmuxKill` so tests can assert exact branches:
+  - `title must not be empty`
+  - `instance title already exists: <title>`
+  - `orphan tmux session not found: <session>`
+- Seed adopted records with a fully explicit struct literal (do not rely on incidental zero values), mirroring `instanceRecord` in `cmd/instance.go`:
+
+```go
+rec := instanceRecord{
+	Title:     title,
+	Path:      repoRoot,
+	Status:    instanceReady,
+	Program:   "unknown",
+	CreatedAt: now,
+	UpdatedAt: now,
+}
+```
+
+- Add root registration coverage so the command group cannot be orphaned from `kas`:
+  - `cmd, _, err := NewRootCmd().Find([]string{"tmux", "list"})`
+  - `cmd, _, err := NewRootCmd().Find([]string{"tmux", "adopt"})`
+  - `cmd, _, err := NewRootCmd().Find([]string{"tmux", "kill"})`
+
+- Additional implementation guardrails from codebase reads:
+  - Keep the local tmux row parser behavior byte-for-byte compatible with `session/tmux/tmux_session.go:591` (exact format string, `SplitN(..., 6)`, skip malformed lines, and treat any `*exec.ExitError` as empty result).
+  - Derive the human title exactly as `strings.TrimPrefix(name, "kas_")` (same as `session/tmux/tmux_session.go:632`); do not normalize case or punctuation further.
+  - Use `config.StateManager` + `loadInstanceRecords`/`SaveInstances` round-trip from `cmd/instance.go:262` and `cmd/instance.go:358` to avoid dropping optional fields during adopt writes.
+  - Prefer command-level tests for deterministic behavior, and pure-function tests for parsing/age formatting:
+
+```go
+func TestRelativeAge_Buckets(t *testing.T)
+func TestDiscoverKasSessions_ExitErrorIsEmpty(t *testing.T)
+```
+
+  - For `kill`, verify exact command invocation with `ToString(cmd)` from `cmd/cmd.go:36`, asserting `tmux kill-session -t <session>`.
+
+**Tests:**
+- `go test ./cmd/... -run TestTmux -count=1`
+
+---

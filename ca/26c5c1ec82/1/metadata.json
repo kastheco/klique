@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "ca26c5c1ec82",
+  "session_id": "ses_34451f2edffem8Iyaj4Yt5PsTc",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T01:51:18.063528922Z",
+  "branch": "plan/cli-monitoring",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/cmd.go",
+    "cmd/tmux.go",
+    "cmd/tmux_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "aeff51f65b5d",
+  "checkpoint_transcript_start": 11,
+  "transcript_lines_at_start": 11,
+  "token_usage": {
+    "input_tokens": 7,
+    "cache_creation_tokens": 7050,
+    "cache_read_tokens": 582470,
+    "output_tokens": 1419,
+    "api_call_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T01:51:17.993148197Z",
+    "agent_lines": 458,
+    "human_added": 311,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 769,
+    "agent_percentage": 59.557867360208064
+  }
+}

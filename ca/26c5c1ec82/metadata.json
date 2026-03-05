@@ -5,6 +5,8 @@
   "branch": "plan/cli-monitoring",
   "checkpoints_count": 1,
   "files_touched": [
+    "cmd/cmd.go",
+    "cmd/tmux.go",
     "cmd/tmux_test.go"
   ],
   "sessions": [
@@ -14,13 +16,20 @@
       "context": "/ca/26c5c1ec82/0/context.md",
       "content_hash": "/ca/26c5c1ec82/0/content_hash.txt",
       "prompt": "/ca/26c5c1ec82/0/prompt.txt"
+    },
+    {
+      "metadata": "/ca/26c5c1ec82/1/metadata.json",
+      "transcript": "/ca/26c5c1ec82/1/full.jsonl",
+      "context": "/ca/26c5c1ec82/1/context.md",
+      "content_hash": "/ca/26c5c1ec82/1/content_hash.txt",
+      "prompt": "/ca/26c5c1ec82/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1,
-    "cache_creation_tokens": 238,
-    "cache_read_tokens": 69262,
-    "output_tokens": 416,
-    "api_call_count": 1
+    "input_tokens": 8,
+    "cache_creation_tokens": 7288,
+    "cache_read_tokens": 651732,
+    "output_tokens": 1835,
+    "api_call_count": 9
   }
 }
