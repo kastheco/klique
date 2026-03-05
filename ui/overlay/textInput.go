@@ -4,6 +4,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 )
 
 // TextInputOverlay represents a text input overlay with state management.
@@ -97,6 +98,13 @@ func (t *TextInputOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 			t.OnSubmit()
 		}
 		return Result{Dismissed: true, Submitted: true, Value: t.textarea.Value()}
+	case "ctrl+v":
+		if t.FocusIndex == 0 {
+			if text, err := clipboard.ReadAll(); err == nil && text != "" {
+				t.textarea.InsertString(text)
+			}
+		}
+		return Result{}
 	default:
 		if t.FocusIndex == 0 {
 			t.textarea, _ = t.textarea.Update(msg)

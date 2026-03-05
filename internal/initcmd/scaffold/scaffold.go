@@ -230,7 +230,7 @@ func patchAgentBlock(agent map[string]any, cfg harness.AgentConfig, fallback map
 	}
 
 	if cfg.Model != "" {
-		normalized := normalizeOpenCodeModel("claude", cfg.Model)
+		normalized := normalizeOpenCodeModel(cfg.Harness, cfg.Model)
 		if current, ok := agent["model"]; !ok || fmt.Sprintf("%v", current) != normalized {
 			agent["model"] = normalized
 			changed = true

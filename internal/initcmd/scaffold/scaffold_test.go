@@ -784,6 +784,48 @@ func TestPatchWorktreeConfig_AddsMissingAgentBlocks(t *testing.T) {
 	assert.Equal(t, effort, elabCfg["reasoningEffort"])
 }
 
+func TestPatchWorktreeConfig_UsesHarnessForModelNormalization(t *testing.T) {
+	dir := t.TempDir()
+	opencodeConfig := `{
+	  "agent": {
+	    "coder": {
+	      "model": "legacy/model",
+	      "temperature": 0.4,
+	      "reasoningEffort": "medium"
+	    }
+	  }
+}
+`
+	reqPath := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(reqPath, 0o755))
+	configPath := filepath.Join(reqPath, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(opencodeConfig), 0o644))
+
+	temp := 0.5
+	agents := []harness.AgentConfig{{
+		Role:        "coder",
+		Harness:     "codex",
+		Model:       "gpt-5-codex",
+		Temperature: &temp,
+		Effort:      "medium",
+	}}
+
+	err := PatchWorktreeConfig(dir, agents)
+	require.NoError(t, err)
+
+	updated, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assertValidJSON(t, string(updated))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(updated, &parsed))
+	agent, ok := parsed["agent"].(map[string]any)
+	require.True(t, ok)
+	coder, ok := agent["coder"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "gpt-5-codex", coder["model"])
+}
+
 func TestPatchWorktreeConfig_Idempotent_NoRewriteWhenUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	opencodeConfig := `{
