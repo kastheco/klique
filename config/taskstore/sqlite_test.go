@@ -1,6 +1,7 @@
 package taskstore_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -284,4 +285,66 @@ func TestSQLiteStore_ReviewCycle(t *testing.T) {
 	got, err = store.Get("proj", "test.md")
 	require.NoError(t, err)
 	assert.Equal(t, 2, got.ReviewCycle)
+}
+
+func TestSQLiteStore_SubtaskCRUD(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+
+	require.NoError(t, store.SetSubtasks("kasmos", "plan.md", []taskstore.SubtaskEntry{
+		{TaskNumber: 1, Title: "one", Status: taskstore.SubtaskStatusPending},
+		{TaskNumber: 2, Title: "two", Status: taskstore.SubtaskStatusPending},
+	}))
+
+	got, err := store.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+	assert.Equal(t, 1, got[0].TaskNumber)
+	assert.Equal(t, taskstore.SubtaskStatusPending, got[0].Status)
+
+	require.NoError(t, store.UpdateSubtaskStatus("kasmos", "plan.md", 1, taskstore.SubtaskStatusClosed))
+	updated, err := store.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.SubtaskStatusClosed, updated[0].Status)
+
+	require.NoError(t, store.SetSubtasks("kasmos", "plan.md", []taskstore.SubtaskEntry{
+		{TaskNumber: 2, Title: "replacement", Status: taskstore.SubtaskStatusDone},
+	}))
+	replaced, err := store.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.Len(t, replaced, 1)
+	assert.Equal(t, "replacement", replaced[0].Title)
+	assert.Equal(t, taskstore.SubtaskStatusDone, replaced[0].Status)
+}
+
+func TestSQLiteStore_PhaseTimestamps(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "planning"))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "implementing"))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "reviewing"))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "done"))
+
+	got, err := store.Get("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.False(t, got.PlanningAt.IsZero())
+	assert.False(t, got.ImplementingAt.IsZero())
+	assert.False(t, got.ReviewingAt.IsZero())
+	assert.False(t, got.DoneAt.IsZero())
+
+	err = store.SetPhaseTimestamp("kasmos", "plan.md", "unknown")
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "unknown phase"))
+}
+
+func TestSQLiteStore_PlanGoal(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+
+	require.NoError(t, store.SetPlanGoal("kasmos", "plan.md", "ship resilient workflow"))
+
+	got, err := store.Get("kasmos", "plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, "ship resilient workflow", got.Goal)
 }

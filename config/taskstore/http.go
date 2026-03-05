@@ -227,6 +227,38 @@ func (s *HTTPStore) SetContent(project, filename, content string) error {
 	return nil
 }
 
+// GetSubtasks is currently not implemented over HTTP.
+func (s *HTTPStore) GetSubtasks(project, filename string) ([]SubtaskEntry, error) {
+	_ = project
+	_ = filename
+	return nil, fmt.Errorf("task store: GetSubtasks is not implemented in HTTPStore")
+}
+
+// SetSubtasks is currently not implemented over HTTP.
+func (s *HTTPStore) SetSubtasks(project, filename string, subtasks []SubtaskEntry) error {
+	_ = project
+	_ = filename
+	_ = subtasks
+	return fmt.Errorf("task store: SetSubtasks is not implemented in HTTPStore")
+}
+
+// UpdateSubtaskStatus is currently not implemented over HTTP.
+func (s *HTTPStore) UpdateSubtaskStatus(project, filename string, taskNumber int, status SubtaskStatus) error {
+	_ = project
+	_ = filename
+	_ = taskNumber
+	_ = status
+	return fmt.Errorf("task store: UpdateSubtaskStatus is not implemented in HTTPStore")
+}
+
+// SetPhaseTimestamp is currently not implemented over HTTP.
+func (s *HTTPStore) SetPhaseTimestamp(project, filename, phase string) error {
+	_ = project
+	_ = filename
+	_ = phase
+	return fmt.Errorf("task store: SetPhaseTimestamp is not implemented in HTTPStore")
+}
+
 // List returns all task entries for the given project.
 func (s *HTTPStore) List(project string) ([]TaskEntry, error) {
 	req, err := http.NewRequest(http.MethodGet, s.taskURL(project), nil)
@@ -420,6 +452,14 @@ func (s *HTTPStore) IncrementReviewCycle(project, filename string) error {
 		return decodeError(resp)
 	}
 	return nil
+}
+
+// SetPlanGoal is currently not implemented over HTTP.
+func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {
+	_ = project
+	_ = filename
+	_ = goal
+	return fmt.Errorf("task store: SetPlanGoal is not implemented in HTTPStore")
 }
 
 // Close is a no-op for HTTPStore — the HTTP client has no persistent connection
