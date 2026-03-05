@@ -1016,9 +1016,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Process wave signals — trigger implementation for specific waves.
 		for _, ws := range msg.WaveSignals {
 			taskfsm.ConsumeWaveSignal(ws)
+			log.WarningLog.Printf("[wave-dbg] signal received: task=%s wave=%d", ws.TaskFile, ws.WaveNumber)
 
 			// Check if orchestrator already exists
 			if _, exists := m.waveOrchestrators[ws.TaskFile]; exists {
+				log.WarningLog.Printf("[wave-dbg] orchestrator already exists for %s — skipping", ws.TaskFile)
 				m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", taskstate.DisplayName(ws.TaskFile)))
 				continue
 			}
@@ -1416,24 +1418,31 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								}
 							}
 							if stillSpawning {
+								log.WarningLog.Printf("[wave-dbg] %s: not in instanceMap, stillSpawning=true → waiting", taskTitle)
 								continue // wait for async start to complete
 							}
+							log.WarningLog.Printf("[wave-dbg] %s: not in instanceMap, not spawning → MARKING FAILED", taskTitle)
 							orch.MarkTaskFailed(task.Number)
 							continue
 						}
 						if inst.Paused() {
 							// Paused task instances are treated as failures.
+							log.WarningLog.Printf("[wave-dbg] %s: paused → MARKING FAILED", taskTitle)
 							orch.MarkTaskFailed(task.Number)
 							continue
 						}
 						alive, collected := tmuxAliveMap[inst.Title]
 						if !collected {
+							log.WarningLog.Printf("[wave-dbg] %s: tmux not collected yet (started=%v status=%v) → waiting", taskTitle, inst.Started(), inst.Status)
 							continue
 						}
+						log.WarningLog.Printf("[wave-dbg] %s: alive=%v prompt=%v awaiting=%v worked=%v status=%v", taskTitle, alive, inst.PromptDetected, inst.AwaitingWork, inst.HasWorked, inst.Status)
 						if inst.PromptDetected && !inst.AwaitingWork && inst.HasWorked {
+							log.WarningLog.Printf("[wave-dbg] %s: → MARKING COMPLETE", taskTitle)
 							orch.MarkTaskComplete(task.Number)
 							inst.SetStatus(session.Ready)
 						} else if !alive {
+							log.WarningLog.Printf("[wave-dbg] %s: tmux dead → MARKING FAILED", taskTitle)
 							orch.MarkTaskFailed(task.Number)
 						}
 					}
@@ -1830,6 +1839,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.triggerTaskStage(msg.planFile, "implement")
 	case instanceStartedMsg:
 		if msg.err != nil {
+			log.WarningLog.Printf("[wave-dbg] instanceStartedMsg: %s FAILED: %v", msg.instance.Title, msg.err)
 			// Remove the specific instance that failed — not the currently selected one.
 			_ = msg.instance.Kill()
 			m.nav.RemoveByTitle(msg.instance.Title)
@@ -1837,6 +1847,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateNavPanelStatus()
 			return m, m.handleError(msg.err)
 		}
+		log.WarningLog.Printf("[wave-dbg] instanceStartedMsg: %s OK (taskNum=%d waveNum=%d)", msg.instance.Title, msg.instance.TaskNumber, msg.instance.WaveNumber)
 		// Instance started successfully — add to master list, save and finalize
 		m.allInstances = append(m.allInstances, msg.instance)
 		if err := m.saveAllInstances(); err != nil {

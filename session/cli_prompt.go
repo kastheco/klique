@@ -11,12 +11,22 @@ import "strings"
 var cliPromptPrograms = []string{"opencode", "claude"}
 
 // programSupportsCliPrompt reports whether program accepts a startup prompt
-// passed directly on the command line. It checks that program ends with one
-// of the known program names, so both bare names ("claude") and absolute
-// paths ("/usr/local/bin/claude") are matched correctly.
+// passed directly on the command line. It extracts the base program name
+// (first whitespace-delimited token, then the filepath base) so that both
+// bare names ("claude"), absolute paths ("/usr/local/bin/claude"), and
+// commands with flags ("opencode --variant low") are matched correctly.
 func programSupportsCliPrompt(program string) bool {
+	// Extract the executable name: first token handles flags, then
+	// filepath-style base handles absolute paths.
+	base := program
+	if idx := strings.IndexByte(program, ' '); idx > 0 {
+		base = program[:idx]
+	}
+	if slashIdx := strings.LastIndexByte(base, '/'); slashIdx >= 0 {
+		base = base[slashIdx+1:]
+	}
 	for _, name := range cliPromptPrograms {
-		if strings.HasSuffix(program, name) {
+		if base == name {
 			return true
 		}
 	}
