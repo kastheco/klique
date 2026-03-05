@@ -1,0 +1,9 @@
+Plan improved-info-tab. Goal: improved-info-tab\n\nstore plan metadata and statuses (including subtasks) in the database. then, improve the info tabs ui to be much more useful and informative, tracking the whole dev lifecycle for a plan instead of an incomplete instances count and repeated text. i want to be able to see a summary about the plan, detailed information about what's been implemented / progress that's been made. we should brainstorm and generate mockups before beginning implementation.. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
+
+---
+
+a
+
+---
+
+a and i agree with instance
