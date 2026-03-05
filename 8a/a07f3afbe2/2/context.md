@@ -1,0 +1,8 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+I'm having issues merging these latest plans in after they finish, and it's always merge conflicts related to markdown files in the docs plans subfolder. that was supposed to be fully removed. please investigate why that's happening, as well as, actually, let's just start and focus on that. you have to figure out why that's happening. it obviously completely ruins the flow because I have to go in and manually do it, and it's just a whole headache when the whole idea is that all of plan conten...
+
