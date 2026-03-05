@@ -13,7 +13,7 @@
     },
     "time": {
       "created": 1772697058598,
-      "updated": 1772697545164
+      "updated": 1772697583629
     }
   },
   "messages": [
@@ -3486,7 +3486,289 @@
       "info": {
         "role": "assistant",
         "time": {
-          "created": 1772697545154
+          "created": 1772697545154,
+          "completed": 1772697556254
+        },
+        "parentID": "msg_cbcfa7d2f001zA278NvNA1VSgo",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 111060,
+          "input": 1,
+          "output": 139,
+          "reasoning": 0,
+          "cache": {
+            "read": 110752,
+            "write": 168
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd01e9c2001KpqLpaU5mFxCAh",
+        "sessionID": "ses_3430582daffeik0IScchz3okZc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd01ede9001ED0VSPkr9cDPHF",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd01e9c2001KpqLpaU5mFxCAh"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab && git add ui/info_pane.go && git commit -m \"fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\"",
+              "description": "Commit self-fix for wrapText"
+            },
+            "output": "[plan/improved-info-tab a6c3673a] fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+            "title": "Commit self-fix for wrapText",
+            "metadata": {
+              "output": "[plan/improved-info-tab a6c3673a] fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+              "exit": 0,
+              "description": "Commit self-fix for wrapText",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697547510,
+              "end": 1772697556246
+            }
+          },
+          "id": "prt_cbd01ede9002YTpy2MsXoB60Je",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd01e9c2001KpqLpaU5mFxCAh"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 111060,
+            "input": 1,
+            "output": 139,
+            "reasoning": 0,
+            "cache": {
+              "read": 110752,
+              "write": 168
+            }
+          },
+          "id": "prt_cbd0215160012LdFq8VoZTvm2y",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd01e9c2001KpqLpaU5mFxCAh"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697556256,
+          "completed": 1772697558971
+        },
+        "parentID": "msg_cbcfa7d2f001zA278NvNA1VSgo",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 111239,
+          "input": 1,
+          "output": 110,
+          "reasoning": 0,
+          "cache": {
+            "read": 110920,
+            "write": 208
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd021520001URaDW3Ql7uf7Gd",
+        "sessionID": "ses_3430582daffeik0IScchz3okZc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd021a32001mqwxRWaF48fSpe",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021520001URaDW3Ql7uf7Gd"
+        },
+        {
+          "type": "text",
+          "text": "Now write the review signal:",
+          "time": {
+            "start": 1772697558027,
+            "end": 1772697558027
+          },
+          "id": "prt_cbd021a32002X0A6fvR6T6rm8A",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021520001URaDW3Ql7uf7Gd"
+        },
+        {
+          "type": "tool",
+          "callID": "toolu_01RR8KMCBjdPjuY3D5hXrk3o",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "mkdir -p /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.kasmos/signals",
+              "description": "Ensure signals directory exists"
+            },
+            "output": "",
+            "title": "Ensure signals directory exists",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Ensure signals directory exists",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697558933,
+              "end": 1772697558935
+            }
+          },
+          "id": "prt_cbd021c0b001f3iMqhqp5MNSwj",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021520001URaDW3Ql7uf7Gd"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 111239,
+            "input": 1,
+            "output": 110,
+            "reasoning": 0,
+            "cache": {
+              "read": 110920,
+              "write": 208
+            }
+          },
+          "id": "prt_cbd021fb30010wMdrKQqY2eYJY",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021520001URaDW3Ql7uf7Gd"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697558973,
+          "completed": 1772697583621
+        },
+        "parentID": "msg_cbcfa7d2f001zA278NvNA1VSgo",
+        "modelID": "claude-sonnet-4-6",
+        "providerID": "anthropic",
+        "mode": "reviewer",
+        "agent": "reviewer",
+        "path": {
+          "cwd": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab",
+          "root": "/home/kas/dev/kasmos/.worktrees/plan-improved-info-tab"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 112238,
+          "input": 1,
+          "output": 973,
+          "reasoning": 0,
+          "cache": {
+            "read": 111128,
+            "write": 136
+          }
+        },
+        "variant": "high",
+        "finish": "tool-calls",
+        "id": "msg_cbd021fbd001wdjExoz2CPlrIn",
+        "sessionID": "ses_3430582daffeik0IScchz3okZc"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "id": "prt_cbd022415001OnfV6k0QivBpOk",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021fbd001wdjExoz2CPlrIn"
+        },
+        {
+          "type": "tool",
+          "callID": "REDACTED",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cat > /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab/.kasmos/signals/review-changes-improved-info-tab.md << 'SIGNAL'\n## review round 1\n\n### important\n\n- `config/taskstore/server.go:228-251` (SetPhaseTimestamp handler) — returns HTTP 500 when an\n  invalid/unknown phase string is supplied in the request body (e.g. `{\"phase\":\"invalid\",...}`).\n  The store returns `\"unknown phase: X\"`, which does not contain `\"not found\"` so `isNotFound`\n  returns false and the handler falls through to 500. Should return 400 Bad Request with the\n  error message. Fix: add `strings.Contains(err.Error(), \"unknown phase\")` check before the\n  isNotFound check and return 400. Also add a server_test that sends `{\"phase\":\"bogus\"}` and\n  asserts 400.\n\n- `app/app_state.go:448-451` / `config/taskstore/store.go:47-54` — Subtask progress\n  (`CompletedTasks`, `TotalSubtasks`, `AllWaveSubtasks`) is only populated when an active\n  `WaveOrchestrator` is present. The `buildSubtaskProgress` guard `if ... orch == nil { return\n  priorCompleted, priorTotal, priorGroups }` means plans in \"ready\" or \"planning\" state (no\n  orchestrator yet) and \"done\" plans after restart (orchestrator not rebuilt for finished plans)\n  always display 0/0 subtasks even when rows exist in the DB.\n\n  The plan spec required `WaveNumber int` in `SubtaskEntry` (and the matching `wave_number`\n  column in the DB) precisely so that store-backed grouping can work without an orchestrator.\n\n  Fix:\n  1. Add `WaveNumber int` to `SubtaskEntry` in `store.go` and the `subtasks` table in `sqlite.go`.\n  2. Populate `WaveNumber` in `SetSubtasks` (pass it from the `taskparser.Wave.Number`) and in\n     `IngestContent` (`taskstate.go`).\n  3. Update `GetSubtasks` query to `ORDER BY wave_number ASC, task_number ASC`.\n  4. Rewrite `buildSubtaskProgress` to group by stored `WaveNumber` when the orchestrator is nil\n     (use orchestrator plan only as a fallback/supplement, not a hard requirement).\n  5. Add a test that calls `updateInfoPaneForPlanHeader()` with no orchestrator in\n     `m.waveOrchestrators` and asserts that subtask data is populated from the store.\n\n### minor\n\n- `ui/info_pane_test.go` — Plan spec explicitly required `TestInfoPane_ProgressGroupsByWave` as\n  a separately named test function (wave-grouping assertions). The coverage exists inside\n  `TestInfoPane_PlanSummaryWithGoalAndLifecycle` but the required named function is absent. Add\n  `TestInfoPane_ProgressGroupsByWave` as a focused test that asserts: two wave groups are\n  rendered with correct wave numbers, task glyphs appear for each task, and wave ordering is\n  ascending.\n\n### self-fixed (no action needed)\n\n- `ui/info_pane.go:223` — `wrapText` used `len(current)+1+len(word)` (byte-length) instead of\n  `lipgloss.Width()` for wrap-point calculation, causing incorrect wrapping for multi-byte\n  Unicode goal text. Fixed to `lipgloss.Width(current)+1+lipgloss.Width(word)` and committed.\nSIGNAL",
+              "description": "Write review-changes signal file"
+            },
+            "output": "",
+            "title": "Write review-changes signal file",
+            "metadata": {
+              "output": "",
+              "exit": 0,
+              "description": "Write review-changes signal file",
+              "truncated": false
+            },
+            "time": {
+              "start": 1772697583597,
+              "end": 1772697583600
+            }
+          },
+          "id": "prt_cbd022415002eNppb72qpPNF8k",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021fbd001wdjExoz2CPlrIn"
+        },
+        {
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
+          "cost": 0,
+          "tokens": {
+            "total": 112238,
+            "input": 1,
+            "output": 973,
+            "reasoning": 0,
+            "cache": {
+              "read": 111128,
+              "write": 136
+            }
+          },
+          "id": "prt_cbd027ffb001LxXp1XvkNGwZDr",
+          "sessionID": "ses_3430582daffeik0IScchz3okZc",
+          "messageID": "msg_cbd021fbd001wdjExoz2CPlrIn"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "time": {
+          "created": 1772697583623,
+          "completed": 1772697584878
+        },
+        "error": {
+          "name": "UnknownError",
+          "data": {
+            "message": "Error"
+          }
         },
         "parentID": "msg_cbcfa7d2f001zA278NvNA1VSgo",
         "modelID": "claude-sonnet-4-6",
@@ -3508,40 +3790,10 @@
           }
         },
         "variant": "high",
-        "id": "msg_cbd01e9c2001KpqLpaU5mFxCAh",
+        "id": "msg_cbd028007001MVhwy7SXKe3KGe",
         "sessionID": "ses_3430582daffeik0IScchz3okZc"
       },
-      "parts": [
-        {
-          "type": "step-start",
-          "snapshot": "5009e4aefba38fe77460e5b1f84f845be499005a",
-          "id": "prt_cbd01ede9001ED0VSPkr9cDPHF",
-          "sessionID": "ses_3430582daffeik0IScchz3okZc",
-          "messageID": "msg_cbd01e9c2001KpqLpaU5mFxCAh"
-        },
-        {
-          "type": "tool",
-          "callID": "REDACTED",
-          "tool": "bash",
-          "state": {
-            "status": "running",
-            "input": {
-              "command": "cd /home/kas/dev/kasmos/.worktrees/plan-improved-info-tab && git add ui/info_pane.go && git commit -m \"fix: use lipgloss.Width for wrapText wrap-point calculation (reviewer self-fix)\"",
-              "description": "Commit self-fix for wrapText"
-            },
-            "metadata": {
-              "output": "",
-              "description": "Commit self-fix for wrapText"
-            },
-            "time": {
-              "start": 1772697547512
-            }
-          },
-          "id": "prt_cbd01ede9002YTpy2MsXoB60Je",
-          "sessionID": "ses_3430582daffeik0IScchz3okZc",
-          "messageID": "msg_cbd01e9c2001KpqLpaU5mFxCAh"
-        }
-      ]
+      "parts": []
     }
   ]
 }
