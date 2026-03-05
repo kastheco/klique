@@ -1,0 +1,162 @@
+Implement Task 1: Make waveAllCompleteMsg push non-blocking
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Eliminate the 1-2s UI freeze that occurs when the user confirms the "push branch and start review?" dialog after wave completion, caused by a synchronous `git push` in the bubbletea `Update` loop.
+**Architecture:** The `waveAllCompleteMsg` handler in `app/app.go` calls `worktree.Push(false)` synchronously inside `Update()`, blocking the TUI render loop for the duration of the network round-trip. The fix moves the push into an async `tea.Cmd` that returns a new `wavePushCompleteMsg` on completion, then the FSM transition and reviewer spawn happen in that message's handler. This mirrors the existing pattern used by `coderCompleteMsg` / `promptPushBranchThenAdvance` in `app/app_state.go`.
+**Tech Stack:** Go, bubbletea (tea.Cmd async pattern), git subprocess
+
+## Wave 1 of 1
+
+## Task Instructions
+
+**Files:**
+- Modify: `app/app.go` (waveAllCompleteMsg handler + new message type)
+- Modify: `app/app_wave_orchestration_flow_test.go` (update existing test, add new test)
+
+**Step 1: write the failing test**
+
+Add a regression test that proves `waveAllCompleteMsg` is now only a trigger message and does not perform side effects (FSM transition/reviewer spawn) inline. Follow the same setup pattern already used by `TestWaveAllCompleteMsg_TransitionsToReviewing` in `app/app_wave_orchestration_flow_test.go` (temp plans dir, `newTestPlanState`, `seedPlanStatus`, `newPlanFSMForTest`).
+
+Implement this exact new test signature:
+
+```go
+func TestWaveAllCompleteMsg_PushIsAsync(t *testing.T)
+```
+
+In the test body, assert all of the following in order:
+
+1. `h.Update(waveAllCompleteMsg{planFile: planFile})` returns a non-nil `tea.Cmd`.
+2. Plan state on disk is still `taskstate.StatusImplementing` immediately after handling `waveAllCompleteMsg`.
+3. Executing the returned command (`msg := cmd()`) yields `wavePushCompleteMsg` with the same `planFile`.
+4. Feeding that message back through `Update` transitions the plan to `taskstate.StatusReviewing`.
+
+Use this concrete assertion shape (adapt variable names as needed):
+
+```go
+model, cmd := h.Update(waveAllCompleteMsg{planFile: planFile})
+_ = model.(*home)
+require.NotNil(t, cmd, "waveAllCompleteMsg must return async push command")
+
+reloaded, err := newTestPlanState(t, plansDir)
+require.NoError(t, err)
+entry, ok := reloaded.Entry(planFile)
+require.True(t, ok)
+assert.Equal(t, taskstate.StatusImplementing, entry.Status,
+    "waveAllCompleteMsg must not transition FSM synchronously")
+
+msg := cmd()
+pushDone, ok := msg.(wavePushCompleteMsg)
+require.True(t, ok, "async command must return wavePushCompleteMsg, got %T", msg)
+assert.Equal(t, planFile, pushDone.planFile)
+
+_, _ = h.Update(pushDone)
+reloaded2, err := newTestPlanState(t, plansDir)
+require.NoError(t, err)
+entry2, ok := reloaded2.Entry(planFile)
+require.True(t, ok)
+assert.Equal(t, taskstate.StatusReviewing, entry2.Status)
+```
+
+Why this should fail before implementation:
+- Current `waveAllCompleteMsg` transitions FSM synchronously in `app/app.go`, so status becomes reviewing too early.
+- Current handler returns a `tea.Batch` for toast/window/reviewer flow, not a `wavePushCompleteMsg` command.
+
+**Dependencies/imports:** no new dependencies; existing imports in `app/app_wave_orchestration_flow_test.go` already include `tea`, `assert`, `require`, `taskstate`, and related helpers.
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./app/... -run TestWaveAllCompleteMsg_PushIsAsync -v
+```
+
+expected: FAIL — synchronous state transition still occurs and/or returned command does not produce `wavePushCompleteMsg`.
+
+**Step 3: write minimal implementation**
+
+Implement the async split in `app/app.go` using the same command/message contract pattern documented in `confirmAction` (`app/app_input.go`: action returned as `tea.Cmd`) and used by coder completion (`app/app_state.go` `promptPushBranchThenAdvance`, plus `case coderCompleteMsg` in `app/app.go`).
+
+1. Add a new message type near the existing wave/coder/planner message structs:
+
+```go
+// wavePushCompleteMsg is sent after async push completion for the
+// wave-all-complete flow.
+type wavePushCompleteMsg struct {
+    planFile string
+}
+```
+
+2. Rewrite `case waveAllCompleteMsg:` so it does **only** async push kickoff and returns a command. Do not transition FSM, refresh sidebar, or spawn reviewer in this case.
+
+Use this behavior contract:
+- Resolve the target plan file once (`planFile := msg.planFile`).
+- Find one matching task instance (`inst.TaskFile == planFile && inst.TaskNumber > 0`) to obtain shared worktree context.
+- In the returned `tea.Cmd`, do best-effort push (`GetGitWorktree`, `Push(false)`), swallowing errors exactly like existing code paths.
+- Always return `wavePushCompleteMsg{planFile: planFile}` even if no instance/worktree/push is available.
+
+Concrete implementation shape:
+
+```go
+case waveAllCompleteMsg:
+    planFile := msg.planFile
+
+    var pushInst *session.Instance
+    for _, inst := range m.nav.GetInstances() {
+        if inst.TaskFile == planFile && inst.TaskNumber > 0 {
+            pushInst = inst
+            break
+        }
+    }
+
+    return m, func() tea.Msg {
+        if pushInst != nil {
+            if worktree, err := pushInst.GetGitWorktree(); err == nil && worktree != nil {
+                _ = worktree.Push(false)
+            }
+        }
+        return wavePushCompleteMsg{planFile: planFile}
+    }
+```
+
+3. Add `case wavePushCompleteMsg:` and move the old post-push logic there (transition + UI refresh + reviewer spawn + toast). Keep the existing warning log/error-handling pattern exactly.
+
+Required behavior in this handler:
+- `planFile := msg.planFile`, `planName := taskstate.DisplayName(planFile)`
+- `m.fsm.Transition(planFile, taskfsm.ImplementFinished)` with warning log on error
+- `m.loadTaskState()` and `m.updateSidebarTasks()`
+- spawn reviewer via `m.spawnReviewer(planFile)` with nil-safe cmd capture
+- toast: `"all waves complete for '%s' — starting review"`
+- return `tea.Batch(tea.RequestWindowSize, reviewerCmd, m.toastTickCmd())`
+
+4. Update `TestWaveAllCompleteMsg_TransitionsToReviewing` in `app/app_wave_orchestration_flow_test.go` so it sends `wavePushCompleteMsg{planFile: planFile}` instead of `waveAllCompleteMsg{...}`; this test now verifies the second-stage handler where transition actually occurs.
+
+**Edge cases to preserve:**
+- No matching task instance for the plan: still return completion msg and advance to reviewing.
+- `GetGitWorktree()` failure or nil worktree: ignore and continue to completion msg.
+- Push failure: ignore (best-effort), still continue to reviewing path.
+- FSM transition failure: warn via `log.WarningLog.Printf(...)` but continue loading state/sidebar and attempting reviewer spawn, matching current behavior.
+
+**Dependencies/imports:**
+- `app/app.go` already imports `session`, `taskfsm`, `taskstate`, `log`, `fmt`, and `tea`; no new imports should be required.
+- `app/app_wave_orchestration_flow_test.go` should not need new imports for this change.
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./app/... -run 'TestWaveAllCompleteMsg_PushIsAsync|TestWaveAllCompleteMsg_TransitionsToReviewing' -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add app/app.go app/app_wave_orchestration_flow_test.go
+git commit -m "fix: move wave-complete git push to async tea.Cmd to prevent UI freeze"
+```
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
