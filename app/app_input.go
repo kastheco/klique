@@ -55,6 +55,16 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 
 // handleMouseWheel processes mouse wheel events for scrolling.
 func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	if m.tabbedWindow.IsDocumentMode() && m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.tabbedWindow.ContentScrollUp()
+		case tea.MouseWheelDown:
+			m.tabbedWindow.ContentScrollDown()
+		}
+		return m, nil
+	}
+
 	selected := m.nav.GetSelectedInstance()
 	if selected != nil && selected.Status != session.Paused {
 		switch msg.Button {
