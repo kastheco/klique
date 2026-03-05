@@ -379,6 +379,27 @@ func TestNavigation_RightExpandsAndDescends(t *testing.T) {
 	assert.Equal(t, 1, n.selectedIdx)
 }
 
+func TestRight_HistoryToggle_ExpandedDescendsIntoChild(t *testing.T) {
+	n := newTestPanel()
+	history := []PlanDisplay{
+		{Filename: "old-a.md"},
+		{Filename: "old-b.md"},
+	}
+	n.SetData(nil, nil, history, nil, nil)
+
+	// Expand history section first.
+	n.selectedIdx = 0
+	n.ToggleSelectedExpand()
+	require.True(t, n.historyExpanded)
+	require.Len(t, n.rows, 3) // toggle + 2 history plans
+
+	// Select the toggle row again and press Right — should descend.
+	n.selectedIdx = 0
+	n.Right()
+	assert.Equal(t, 1, n.selectedIdx, "Right on expanded history toggle should move to first child")
+	assert.Equal(t, navRowHistoryPlan, n.rows[n.selectedIdx].Kind)
+}
+
 // ---------- expand/collapse ----------
 
 func TestToggleSelectedExpand_PlanHeader(t *testing.T) {
