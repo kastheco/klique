@@ -120,6 +120,13 @@
       "context": "/28/19306ce2dc/15/context.md",
       "content_hash": "/28/19306ce2dc/15/content_hash.txt",
       "prompt": "/28/19306ce2dc/15/prompt.txt"
+    },
+    {
+      "metadata": "/28/19306ce2dc/16/metadata.json",
+      "transcript": "/28/19306ce2dc/16/full.jsonl",
+      "context": "/28/19306ce2dc/16/context.md",
+      "content_hash": "/28/19306ce2dc/16/content_hash.txt",
+      "prompt": "/28/19306ce2dc/16/prompt.txt"
     }
   ],
   "token_usage": {
