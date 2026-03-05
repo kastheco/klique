@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "1d8954a39d18",
+  "strategy": "manual-commit",
+  "branch": "plan/improved-info-tab",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/taskstore/http.go",
+    "config/taskstore/sqlite.go",
+    "config/taskstore/sqlite_test.go",
+    "config/taskstore/store.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1d/8954a39d18/0/metadata.json",
+      "transcript": "/1d/8954a39d18/0/full.jsonl",
+      "context": "/1d/8954a39d18/0/context.md",
+      "content_hash": "/1d/8954a39d18/0/content_hash.txt",
+      "prompt": "/1d/8954a39d18/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 334389,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3216384,
+    "output_tokens": 24251,
+    "api_call_count": 63
+  }
+}

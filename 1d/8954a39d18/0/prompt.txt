@@ -1,0 +1,153 @@
+Implement Task 1: Subtask Table, Phase Timestamps, and SQLiteStore Methods
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Persist plan subtask statuses and phase timestamps in the database, then overhaul the info pane UI to show plan summary, lifecycle timeline, and all-waves progress with per-task detail.
+**Architecture:** Add a `subtasks` table and phase-timestamp columns to the existing SQLite task store. Parse plan content during ingestion to populate subtask rows and extract the goal field. Hook FSM transitions to record phase timestamps and orchestrator state changes to update subtask status. Redesign the info pane to render the new data in a scrollable multi-section layout (metadata → goal → lifecycle → progress → instances).
+**Tech Stack:** Go, SQLite (modernc.org/sqlite), bubbletea/lipgloss (charm v2), existing taskstore/taskstate/taskfsm packages.
+
+## Wave 1 of 3
+
+## Task Instructions
+
+**Files:**
+- Modify: `config/taskstore/store.go`
+- Modify: `config/taskstore/sqlite.go`
+- Modify: `config/taskstore/testing.go`
+- Modify: `config/taskstore/sqlite_test.go`
+
+**Step 1: write the failing test**
+
+Add tests to `sqlite_test.go` that exercise subtask CRUD, phase timestamps, and goal persistence using the same assert style already used in this file (`require.NoError`, then `assert.Equal`). Keep names stable so Step 2/4 regexes keep working:
+
+```go
+func TestSQLiteStore_SubtaskCRUD(t *testing.T)
+func TestSQLiteStore_PhaseTimestamps(t *testing.T)
+func TestSQLiteStore_PlanGoal(t *testing.T)
+```
+
+In `TestSQLiteStore_SubtaskCRUD`, assert all of these explicitly:
+- `SetSubtasks` replaces prior rows for the same `(project, plan)` (delete + insert semantics).
+- `GetSubtasks` ordering is deterministic by `wave_number`, then `task_number`.
+- `UpdateSubtaskStatus` updates one task row only and persists `updated_at` non-zero.
+
+In `TestSQLiteStore_PhaseTimestamps`, also assert unknown phase handling:
+
+```go
+err := store.SetPhaseTimestamp(project, "plan.md", "invalid-phase", now)
+require.Error(t, err)
+assert.Contains(t, err.Error(), "unknown phase")
+```
+
+**Step 2: run test to verify it fails**
+
+```bash
+go test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v
+```
+
+expected: FAIL — new types/methods/columns not implemented yet.
+
+**Step 3: write minimal implementation**
+
+Implement concrete signatures first, then wire SQL.
+
+In `store.go`:
+- Add `SubtaskStatus` and `SubtaskEntry`:
+
+```go
+type SubtaskStatus string
+
+type SubtaskEntry struct {
+    PlanFilename string        `json:"plan_filename"`
+    WaveNumber   int           `json:"wave_number"`
+    TaskNumber   int           `json:"task_number"`
+    Title        string        `json:"title"`
+    Status       SubtaskStatus `json:"status"`
+    UpdatedAt    time.Time     `json:"updated_at,omitempty"`
+}
+```
+
+- Add `TaskEntry` fields (all optional/zero-safe):
+
+```go
+PlanningAt     time.Time `json:"planning_at,omitempty"`
+ImplementingAt time.Time `json:"implementing_at,omitempty"`
+ReviewingAt    time.Time `json:"reviewing_at,omitempty"`
+DoneAt         time.Time `json:"done_at,omitempty"`
+Goal           string    `json:"goal,omitempty"`
+```
+
+- Extend `Store` with exact signatures:
+
+```go
+SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error
+GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)
+UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error
+SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error
+SetPlanGoal(project, planFilename, goal string) error
+```
+
+In `sqlite.go`, follow existing patterns already used by this package:
+- Error wrapping pattern: `fmt.Errorf("<operation>: %w", err)`.
+- Not-found detection pattern: `RowsAffected()==0` -> `fmt.Errorf("plan not found: %s/%s", project, filename)`.
+- Time storage pattern: `formatTime`/`parseTime` (RFC3339Nano text columns).
+
+Add schema + migrations:
+- Create `subtasks` table in `schema` with unique key `(project, plan_filename, task_number)`.
+- Add tasks columns via `migrateAddColumn` constants:
+  - `planning_at`, `implementing_at`, `reviewing_at`, `done_at`, `goal`.
+- Add a `subtasksTableMigration` constant and execute `CREATE TABLE IF NOT EXISTS subtasks (...)` in `NewSQLiteStore` after base `schema` exec.
+
+Update task queries/scanners:
+- `Create`, `Get`, `Update`, `List`, `ListByStatus`, `ListByTopic`, `scanTaskEntry`, `scanTaskEntries` must include the new five task columns.
+- Keep `Update` behavior consistent with existing content-preservation test: do not re-add `content` into `UPDATE ... SET ...`.
+
+Implement methods with transactional safety:
+
+```go
+func (s *SQLiteStore) SetSubtasks(project, planFilename string, subtasks []SubtaskEntry) error
+func (s *SQLiteStore) GetSubtasks(project, planFilename string) ([]SubtaskEntry, error)
+func (s *SQLiteStore) UpdateSubtaskStatus(project, planFilename string, taskNumber int, status SubtaskStatus) error
+func (s *SQLiteStore) SetPhaseTimestamp(project, planFilename, phase string, ts time.Time) error
+func (s *SQLiteStore) SetPlanGoal(project, planFilename, goal string) error
+```
+
+`SetSubtasks` must:
+- begin transaction,
+- delete existing rows for `(project, plan_filename)`,
+- insert all provided rows,
+- commit.
+
+`SetPhaseTimestamp` should map phase -> column with a closed switch (no dynamic SQL from user input):
+- `planning` -> `planning_at`
+- `implementing` -> `implementing_at`
+- `reviewing` -> `reviewing_at`
+- `done` -> `done_at`
+- otherwise return `fmt.Errorf("unknown phase: %s", phase)`
+
+For `config/taskstore/testing.go`, keep return type as `Store`, but ensure compile remains clean with the expanded interface (no behavior change needed).
+
+**Step 4: run test to verify it passes**
+
+```bash
+go test ./config/taskstore/... -run 'TestSQLiteStore_Subtask|TestSQLiteStore_Phase|TestSQLiteStore_PlanGoal' -v
+```
+
+expected: PASS
+
+**Step 5: commit**
+
+```bash
+git add config/taskstore/store.go config/taskstore/sqlite.go config/taskstore/sqlite_test.go config/taskstore/testing.go
+git commit -m "feat: add subtasks table, phase timestamps, and goal column to task store"
+```
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
+
+---
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
