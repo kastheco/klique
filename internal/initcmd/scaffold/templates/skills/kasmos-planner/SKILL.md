@@ -190,7 +190,7 @@ classify before writing any tasks. this determines wave structure and review ove
 
 **sizing rules:**
 - every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.
-- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.
+- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.
 - a task is a commit-worthy unit — leaves the codebase compilable and testable.
 - waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.
 - one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.
@@ -223,7 +223,7 @@ a plan without any `## Wave N` header cannot be executed by kasmos.
 **when NOT to use multiple waves:**
 - all tasks are independent → single `## Wave 1`
 - feature is small (< 3 tasks)
-- the "dependency" is just imports (the compiler catches that)
+- no task creates types, functions, or interfaces consumed by another task in the same wave
 
 ### task structure
 
@@ -327,7 +327,9 @@ inline before proceeding to register + signal.
   find yourself adding "while we're at it" tasks, remove them.
 - [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the
   same wave (those should be in separate waves). tasks within a wave must be independently
-  implementable.
+  implementable. **import dependencies count:** if task A creates a type, function, or
+  interface that task B imports, they MUST be in different waves — even if they touch
+  different directories. "different packages" does not mean "independent."
 - [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they
   do, either merge the tasks or move one to a later wave.
 
