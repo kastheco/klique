@@ -676,4 +676,149 @@ func TestScaffold_IncludesFixerAgent(t *testing.T) {
 	assert.True(t, foundConfig)
 }
 
+func TestPatchWorktreeConfig_UpdatesModelTempEffortPreservesOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	opencodeConfig := `{
+	  "agent": {
+	    "planner": {
+	      "permission": "read",
+	      "textVerbosity": "concise",
+	      "model": "anthropic/claude-sonnet-4-6",
+	      "temperature": 0.3,
+	      "reasoningEffort": "low"
+	    }
+	  }
+	}`
+	reqPath := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(reqPath, 0o755))
+	configPath := filepath.Join(reqPath, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(opencodeConfig), 0o644))
+
+	temp := 0.7
+	agents := []harness.AgentConfig{{
+		Role:        "planner",
+		Harness:     "claude",
+		Model:       "claude-opus-4-6",
+		Temperature: &temp,
+		Effort:      "high",
+	}}
+
+	err := PatchWorktreeConfig(dir, agents)
+	require.NoError(t, err)
+
+	updated, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assertValidJSON(t, string(updated))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(updated, &parsed))
+	agent, ok := parsed["agent"].(map[string]any)
+	require.True(t, ok)
+	planner, ok := agent["planner"].(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, "anthropic/claude-opus-4-6", planner["model"])
+	assert.Equal(t, temp, planner["temperature"])
+	assert.Equal(t, "high", planner["reasoningEffort"])
+	assert.Equal(t, "read", planner["permission"])
+	assert.Equal(t, "concise", planner["textVerbosity"])
+}
+
+func TestPatchWorktreeConfig_AddsMissingAgentBlocks(t *testing.T) {
+	dir := t.TempDir()
+	opencodeConfig := `{
+	  "agent": {
+	    "planner": {
+	      "model": "anthropic/claude-sonnet-4-6",
+	      "temperature": 0.2,
+	      "reasoningEffort": "low"
+	    }
+	  }
+	}`
+	reqPath := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(reqPath, 0o755))
+	configPath := filepath.Join(reqPath, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(opencodeConfig), 0o644))
+
+	temp := 0.7
+	effort := "high"
+	agents := []harness.AgentConfig{
+		{
+			Role:        "planner",
+			Harness:     "claude",
+			Model:       "claude-opus-4-6",
+			Temperature: &temp,
+			Effort:      effort,
+		},
+		{
+			Role:        "elaborator",
+			Harness:     "opencode",
+			Model:       "anthropic/claude-opus-4-6",
+			Temperature: &temp,
+			Effort:      effort,
+		},
+	}
+
+	err := PatchWorktreeConfig(dir, agents)
+	require.NoError(t, err)
+
+	updated, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assertValidJSON(t, string(updated))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(updated, &parsed))
+	agent, ok := parsed["agent"].(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, agent, "elaborator")
+
+	plannerCfg, ok := agent["planner"].(map[string]any)
+	require.True(t, ok)
+	elabCfg, ok := agent["elaborator"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "anthropic/claude-opus-4-6", plannerCfg["model"])
+	assert.Equal(t, temp, plannerCfg["temperature"])
+	assert.Equal(t, effort, plannerCfg["reasoningEffort"])
+	assert.Equal(t, "anthropic/claude-opus-4-6", elabCfg["model"])
+	assert.Equal(t, temp, elabCfg["temperature"])
+	assert.Equal(t, effort, elabCfg["reasoningEffort"])
+}
+
+func TestPatchWorktreeConfig_Idempotent_NoRewriteWhenUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	opencodeConfig := `{
+	  "agent": {
+	    "coder": {
+	      "model": "anthropic/claude-sonnet-4-6",
+	      "temperature": 0.3,
+	      "reasoningEffort": "medium"
+	    }
+	  }
+	}`
+	reqPath := filepath.Join(dir, ".opencode")
+	require.NoError(t, os.MkdirAll(reqPath, 0o755))
+	configPath := filepath.Join(reqPath, "opencode.jsonc")
+	require.NoError(t, os.WriteFile(configPath, []byte(opencodeConfig), 0o644))
+
+	temp := 0.3
+	agents := []harness.AgentConfig{{
+		Role:        "coder",
+		Harness:     "opencode",
+		Model:       "anthropic/claude-sonnet-4-6",
+		Temperature: &temp,
+		Effort:      "medium",
+	}}
+
+	before, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	err = PatchWorktreeConfig(dir, agents)
+	require.NoError(t, err)
+
+	after, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, before, after)
+}
+
 func ptrFloat(f float64) *float64 { return &f }

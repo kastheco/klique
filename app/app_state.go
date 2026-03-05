@@ -19,6 +19,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
+	"github.com/kastheco/kasmos/internal/initcmd/harness"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
@@ -965,6 +966,96 @@ func normalizeOpenCodeModelID(model string) string {
 	return model
 }
 
+func (m *home) opencodeAgentConfigs() []harness.AgentConfig {
+	if m.appConfig == nil {
+		return nil
+	}
+
+	configsByRole := make(map[string]harness.AgentConfig)
+	resolve := func(phase, fallbackRole string) {
+		profile := m.appConfig.ResolveProfile(phase, m.program)
+		if !isOpenCodeProfile(profile) || !profile.Enabled {
+			return
+		}
+
+		role := fallbackRole
+		if mappedRole, ok := m.appConfig.PhaseRoles[phase]; ok && mappedRole != "" {
+			role = mappedRole
+		}
+
+		if role == "" {
+			return
+		}
+
+		if profile.Model == "" && profile.Temperature == nil && profile.Effort == "" {
+			return
+		}
+
+		programFields := strings.Fields(profile.Program)
+		if len(programFields) == 0 {
+			return
+		}
+
+		configsByRole[role] = harness.AgentConfig{
+			Role:        role,
+			Harness:     filepath.Base(programFields[0]),
+			Model:       normalizeOpenCodeModelID(profile.Model),
+			Temperature: profile.Temperature,
+			Effort:      profile.Effort,
+			Enabled:     profile.Enabled,
+		}
+	}
+
+	resolve("implementing", session.AgentTypeCoder)
+	resolve("planning", session.AgentTypePlanner)
+	resolve("quality_review", session.AgentTypeReviewer)
+	resolve("fixer", session.AgentTypeFixer)
+	resolve("elaborating", session.AgentTypeElaborator)
+
+	if len(configsByRole) == 0 {
+		return nil
+	}
+
+	configs := make([]harness.AgentConfig, 0, len(configsByRole))
+	for _, phaseRole := range []string{session.AgentTypeCoder, session.AgentTypePlanner, session.AgentTypeReviewer, session.AgentTypeFixer, session.AgentTypeElaborator} {
+		mappedRole := phaseRole
+		if mappedRoleFromConfig, ok := m.appConfig.PhaseRoles[phaseToLookup(phaseRole)]; ok && mappedRoleFromConfig != "" {
+			mappedRole = mappedRoleFromConfig
+		}
+		if cfg, ok := configsByRole[mappedRole]; ok {
+			configs = append(configs, cfg)
+		}
+	}
+
+	return configs
+}
+
+func isOpenCodeProfile(profile config.AgentProfile) bool {
+	fields := strings.Fields(profile.Program)
+	if len(fields) == 0 {
+		return false
+	}
+
+	return filepath.Base(fields[0]) == "opencode"
+}
+
+func phaseToLookup(phase string) string {
+	switch phase {
+	case session.AgentTypeCoder:
+		return "implementing"
+	case session.AgentTypePlanner:
+		return "planning"
+	case session.AgentTypeReviewer:
+		return "quality_review"
+	case session.AgentTypeFixer:
+		return "fixer"
+	case session.AgentTypeElaborator:
+		return "elaborating"
+	default:
+		return phase
+	}
+}
+
 // killExistingPlanAgent finds and kills any existing instance for the given plan
 // and agent type, removing it from both the UI list and persistence list.
 //
@@ -1111,6 +1202,10 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 	inst.LoadingMessage = "elaborating plan..."
 
 	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+
+	if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
+		return m, m.handleError(err)
+	}
 
 	startCmd := func() tea.Msg {
 		return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
@@ -1604,6 +1699,9 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 	var startCmd tea.Cmd
 	if action == "plan" || action == "solo" {
 		// Planner and solo agent run on main branch — no worktree created.
+		if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
+			return m, m.handleError(err)
+		}
 		startCmd = func() tea.Msg {
 			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
 		}
@@ -1619,6 +1717,9 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 		// Coder and reviewer share the plan's feature branch worktree
 		shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
 		if err := shared.Setup(); err != nil {
+			return m, m.handleError(err)
+		}
+		if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
 			return m, m.handleError(err)
 		}
 		startCmd = func() tea.Msg {
@@ -1765,6 +1866,9 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 	// Set up shared worktree for all tasks in this batch.
 	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
 	if err := shared.Setup(); err != nil {
+		return m, m.handleError(err)
+	}
+	if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
 		return m, m.handleError(err)
 	}
 
