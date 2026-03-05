@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "fdee8e60320c",
+  "strategy": "manual-commit",
+  "branch": "plan/move-default-config",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "config/toml.go",
+    "internal/initcmd/wizard/model_review.go",
+    "main.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fd/ee8e60320c/0/metadata.json",
+      "transcript": "/fd/ee8e60320c/0/full.jsonl",
+      "context": "/fd/ee8e60320c/0/context.md",
+      "content_hash": "/fd/ee8e60320c/0/content_hash.txt",
+      "prompt": "/fd/ee8e60320c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 11,
+    "cache_creation_tokens": 70407,
+    "cache_read_tokens": 519927,
+    "output_tokens": 6235,
+    "api_call_count": 11
+  }
+}
