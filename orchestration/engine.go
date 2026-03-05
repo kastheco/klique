@@ -85,6 +85,11 @@ func (o *WaveOrchestrator) CurrentWaveTasks() []taskparser.Task {
 	return o.plan.Waves[o.currentWave].Tasks
 }
 
+// Plan returns the current plan held by the orchestrator.
+func (o *WaveOrchestrator) Plan() *taskparser.Plan {
+	return o.plan
+}
+
 // SetElaborating puts the orchestrator into the elaborating state.
 // StartNextWave is blocked until UpdatePlan is called.
 func (o *WaveOrchestrator) SetElaborating() {
