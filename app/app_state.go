@@ -1655,8 +1655,8 @@ func (m *home) getTopicNames() []string {
 // were mid-wave when kasmos was restarted. Without this, the wave completion monitor and
 // the "Mark complete" context menu action are both inoperative after a restart.
 //
-// For each plan that is StatusImplementing and has task instances (TaskNumber > 0) but
-// no orchestrator, we:
+// For each plan that is StatusImplementing and has active wave-task instances
+// (TaskNumber > 0, started, not paused, not exited) but no orchestrator, we:
 //  1. Parse the plan file to get the wave/task structure.
 //  2. Fast-forward the orchestrator to the wave the instances are on.
 //  3. Mark tasks as complete for instances that are already paused (finished their work).
@@ -1675,8 +1675,12 @@ func (m *home) rebuildOrphanedOrchestrators() {
 		paused     bool
 	}
 	byPlan := make(map[string][]taskInst)
+	hasActiveByPlan := make(map[string]bool)
 	for _, inst := range m.nav.GetInstances() {
 		if inst.TaskNumber == 0 || inst.TaskFile == "" {
+			continue
+		}
+		if !inst.Started() || inst.Exited {
 			continue
 		}
 		byPlan[inst.TaskFile] = append(byPlan[inst.TaskFile], taskInst{
@@ -1684,9 +1688,17 @@ func (m *home) rebuildOrphanedOrchestrators() {
 			waveNumber: inst.WaveNumber,
 			paused:     inst.Paused(),
 		})
+		if !inst.Paused() {
+			hasActiveByPlan[inst.TaskFile] = true
+		}
 	}
 
 	for planFile, tasks := range byPlan {
+		if !hasActiveByPlan[planFile] {
+			log.WarningLog.Printf("rebuildOrphanedOrchestrators: skipping %s — no active wave instances", planFile)
+			continue
+		}
+
 		// Skip if orchestrator already exists.
 		if _, exists := m.waveOrchestrators[planFile]; exists {
 			continue

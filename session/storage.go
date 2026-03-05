@@ -8,6 +8,7 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/log"
+	"github.com/kastheco/kasmos/session/tmux"
 )
 
 // InstanceData is the JSON-serializable mirror of Instance fields used for persistence.
@@ -106,8 +107,9 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 }
 
 // LoadInstances reads instances from the state store and restores them.
-// Stale entries (non-paused instances whose worktree directory no longer exists)
-// are dropped with a warning instead of causing a hard failure.
+// Stale entries are dropped with a warning instead of causing a hard failure:
+//   - non-paused instances whose worktree directory no longer exists
+//   - wave-task instances whose tmux session no longer exists
 func (s *Storage) LoadInstances() ([]*Instance, error) {
 	raw := s.state.GetInstances()
 
@@ -124,6 +126,19 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 				log.WarningLog.Printf(
 					"skipping stale instance %q: worktree path gone: %s",
 					rec.Title, rec.Worktree.WorktreePath,
+				)
+				continue
+			}
+		}
+
+		// Wave-task instances are not resumable without their tmux session.
+		// Drop stale records so restart recovery does not resurrect ghost tasks.
+		if rec.TaskNumber > 0 {
+			ts := tmux.NewTmuxSession(rec.Title, rec.Program, rec.SkipPermissions)
+			if !ts.DoesSessionExist() {
+				log.WarningLog.Printf(
+					"skipping stale wave instance %q: tmux session not found",
+					rec.Title,
 				)
 				continue
 			}

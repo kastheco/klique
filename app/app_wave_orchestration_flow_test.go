@@ -186,6 +186,124 @@ func TestWaveMonitor_MissingTaskCountsAsFailed(t *testing.T) {
 		"failed-wave confirm key must be 'r' (retry)")
 }
 
+// TestRebuildOrphanedOrchestrators_SkipsPausedOrExitedOnlyPlans verifies restart
+// recovery does not resurrect wave orchestration when a plan only has stale
+// paused/exited wave instances and no active task sessions.
+func TestRebuildOrphanedOrchestrators_SkipsPausedOrExitedOnlyPlans(t *testing.T) {
+	const planFile = "stale-wave.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	content := "**Goal:** stale test\n\n## Wave 1\n\n### Task 1: First\n\nDo first.\n\n### Task 2: Second\n\nDo second.\n"
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusReady,
+		Branch:   "plan/stale-wave",
+		Content:  content,
+	}))
+
+	ps, err := taskstate.Load(store, "proj", plansDir)
+	require.NoError(t, err)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	h := waveFlowHome(t, ps, plansDir, make(map[string]*orchestration.WaveOrchestrator))
+	h.taskStore = store
+	h.taskStoreProject = "proj"
+
+	pausedInst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "stale-wave-W1-T1",
+		Path:       dir,
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	pausedInst.MarkStartedForTest()
+	pausedInst.SetStatus(session.Paused)
+	h.nav.AddInstance(pausedInst)
+
+	exitedInst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "stale-wave-W1-T2",
+		Path:       dir,
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 2,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	exitedInst.MarkStartedForTest()
+	exitedInst.Exited = true
+	h.nav.AddInstance(exitedInst)
+
+	h.rebuildOrphanedOrchestrators()
+	_, exists := h.waveOrchestrators[planFile]
+	assert.False(t, exists, "stale paused/exited wave instances must not trigger orchestrator rebuild")
+}
+
+// TestRebuildOrphanedOrchestrators_RestoresWithActiveWaveInstance verifies restart
+// recovery still works when at least one active wave instance exists.
+func TestRebuildOrphanedOrchestrators_RestoresWithActiveWaveInstance(t *testing.T) {
+	const planFile = "active-wave.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	store := taskstore.NewTestSQLiteStore(t)
+	content := "**Goal:** active test\n\n## Wave 1\n\n### Task 1: First\n\nDo first.\n\n### Task 2: Second\n\nDo second.\n"
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusReady,
+		Branch:   "plan/active-wave",
+		Content:  content,
+	}))
+
+	ps, err := taskstate.Load(store, "proj", plansDir)
+	require.NoError(t, err)
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	h := waveFlowHome(t, ps, plansDir, make(map[string]*orchestration.WaveOrchestrator))
+	h.taskStore = store
+	h.taskStoreProject = "proj"
+
+	completedInst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "active-wave-W1-T1",
+		Path:       dir,
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	completedInst.MarkStartedForTest()
+	completedInst.SetStatus(session.Paused)
+	h.nav.AddInstance(completedInst)
+
+	activeInst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "active-wave-W1-T2",
+		Path:       dir,
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 2,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	activeInst.MarkStartedForTest()
+	h.nav.AddInstance(activeInst)
+
+	h.rebuildOrphanedOrchestrators()
+	orch, exists := h.waveOrchestrators[planFile]
+	require.True(t, exists, "active wave instance must trigger orchestrator rebuild")
+	assert.Equal(t, 1, orch.CurrentWaveNumber())
+	assert.Equal(t, orchestration.WaveStateRunning, orch.State())
+	assert.True(t, orch.IsTaskComplete(1), "paused task should be restored as completed")
+	assert.True(t, orch.IsTaskRunning(2), "active task should remain running")
+}
+
 // TestWaveMonitor_AbortKeyDeletesOrchestrator verifies that pressing 'a' on the
 // failed-wave decision prompt removes the orchestrator and returns to default state.
 func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
