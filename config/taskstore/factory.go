@@ -20,7 +20,8 @@ func NewStoreFromConfig(storeURL, project string) (Store, error) {
 
 // ResolvedDBPath returns the filesystem path that the factory would use for a
 // local SQLite taskstore. It delegates to config.GetConfigDir() to resolve the
-// project-local config directory (<cwd>/.kasmos/) and appends "taskstore.db".
+// project-local config directory (<repo-root>/.kasmos/ when in a git repo) and
+// appends "taskstore.db".
 // This path is shared with the auditlog SQLiteLogger so both can coexist in
 // the same database file (each using a separate table).
 func ResolvedDBPath() string {

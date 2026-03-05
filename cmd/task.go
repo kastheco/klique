@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -848,71 +847,8 @@ func resolveRepoInfo() (repoRoot, project string, err error) {
 	return root, filepath.Base(root), nil
 }
 
-// resolveRepoRoot returns the root directory of the git repository that owns
-// dir. It handles both regular repositories (where .git is a directory) and
-// git worktrees (where .git is a file with a "gitdir:" pointer). On failure it
-// falls back to shelling out to `git rev-parse --show-toplevel`.
+// resolveRepoRoot delegates to the shared config-level resolver so task
+// commands and config/state paths stay aligned on the same repository root.
 func resolveRepoRoot(dir string) (string, error) {
-	gitPath := filepath.Join(dir, ".git")
-	info, err := os.Stat(gitPath)
-	if err != nil {
-		// .git not found — try git CLI as last resort.
-		return resolveRepoRootViaGit(dir)
-	}
-
-	if info.IsDir() {
-		// Regular repo: .git is a directory, so dir IS the repo root.
-		return dir, nil
-	}
-
-	// Worktree: .git is a file with content "gitdir: <path>"
-	data, err := os.ReadFile(gitPath)
-	if err != nil {
-		return resolveRepoRootViaGit(dir)
-	}
-	line := strings.TrimSpace(string(data))
-	if !strings.HasPrefix(line, "gitdir: ") {
-		return resolveRepoRootViaGit(dir)
-	}
-
-	// worktreeGitDir is the per-worktree git dir (e.g. /repo/.git/worktrees/name)
-	worktreeGitDir := strings.TrimPrefix(line, "gitdir: ")
-	if !filepath.IsAbs(worktreeGitDir) {
-		worktreeGitDir = filepath.Join(dir, worktreeGitDir)
-	}
-	worktreeGitDir = filepath.Clean(worktreeGitDir)
-
-	// commondir contains a relative (or absolute) path back to the main .git dir.
-	commondirPath := filepath.Join(worktreeGitDir, "commondir")
-	commondirData, err := os.ReadFile(commondirPath)
-	if err != nil {
-		return resolveRepoRootViaGit(dir)
-	}
-	commondir := strings.TrimSpace(string(commondirData))
-
-	var mainGitDir string
-	if filepath.IsAbs(commondir) {
-		mainGitDir = commondir
-	} else {
-		mainGitDir = filepath.Clean(filepath.Join(worktreeGitDir, commondir))
-	}
-
-	// The repo root is the parent of the main .git directory.
-	return filepath.Dir(mainGitDir), nil
-}
-
-// resolveRepoRootViaGit shells out to git to find the main repository root.
-// It uses --git-common-dir (which always points to the main repo's .git) rather
-// than --show-toplevel (which returns the worktree checkout path in worktrees).
-func resolveRepoRootViaGit(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--git-common-dir").Output()
-	if err != nil {
-		return "", fmt.Errorf("resolve repo root for %s: %w", dir, err)
-	}
-	gitDir := strings.TrimSpace(string(out))
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(dir, gitDir)
-	}
-	// --git-common-dir returns the .git directory; repo root is its parent.
-	return filepath.Dir(filepath.Clean(gitDir)), nil
+	return config.ResolveRepoRoot(dir)
 }

@@ -25,7 +25,11 @@ const (
 // Handles formats: "aliased to <path>", "-> <path>", "= <path>".
 var aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
 
-// GetConfigDir returns the project-local config directory (<cwd>/.kasmos/).
+// GetConfigDir returns the project-local config directory (<repo-root>/.kasmos/).
+//
+// If the current directory is inside a git repository (including a worktree),
+// the directory is anchored to the main repository root so all orchestrator
+// state uses a single shared location.
 // On first call without existing config files in the target, it attempts a one-time
 // migration by copying files from legacy XDG directories. The migration is a copy
 // (not a move) so legacy locations are preserved. Any migration error is silently
@@ -36,7 +40,12 @@ func GetConfigDir() (string, error) {
 		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	target := filepath.Join(cwd, ".kasmos")
+	baseDir := cwd
+	if repoRoot, repoErr := ResolveRepoRoot(cwd); repoErr == nil {
+		baseDir = repoRoot
+	}
+
+	target := filepath.Join(baseDir, ".kasmos")
 
 	// Fast path: config already exists in target — skip migration entirely.
 	for _, marker := range []string{"config.toml", "config.json"} {
@@ -69,6 +78,74 @@ func GetConfigDir() (string, error) {
 	}
 
 	return target, nil
+}
+
+// ResolveRepoRoot returns the main repository root for dir.
+// It supports both normal repos and git worktrees.
+func ResolveRepoRoot(dir string) (string, error) {
+	gitPath := filepath.Join(dir, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		// .git not found — try git CLI fallback.
+		return resolveRepoRootViaGit(dir)
+	}
+
+	if info.IsDir() {
+		// Regular repo: .git is a directory, so dir is the repo root.
+		return dir, nil
+	}
+
+	// Worktree: .git is a file with content "gitdir: <path>".
+	data, err := os.ReadFile(gitPath)
+	if err != nil {
+		return resolveRepoRootViaGit(dir)
+	}
+	line := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(line, "gitdir: ") {
+		return resolveRepoRootViaGit(dir)
+	}
+
+	worktreeGitDir := strings.TrimPrefix(line, "gitdir: ")
+	if !filepath.IsAbs(worktreeGitDir) {
+		worktreeGitDir = filepath.Join(dir, worktreeGitDir)
+	}
+	worktreeGitDir = filepath.Clean(worktreeGitDir)
+
+	commondirPath := filepath.Join(worktreeGitDir, "commondir")
+	commondirData, err := os.ReadFile(commondirPath)
+	if err != nil {
+		return resolveRepoRootViaGit(dir)
+	}
+	commondir := strings.TrimSpace(string(commondirData))
+
+	var mainGitDir string
+	if filepath.IsAbs(commondir) {
+		mainGitDir = commondir
+	} else {
+		mainGitDir = filepath.Clean(filepath.Join(worktreeGitDir, commondir))
+	}
+
+	return filepath.Dir(mainGitDir), nil
+}
+
+// resolveRepoRootViaGit shells out to git to find the main repository root.
+func resolveRepoRootViaGit(dir string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		out, err = exec.Command("git", "-C", dir, "rev-parse", "--git-common-dir").Output()
+		if err != nil {
+			return "", fmt.Errorf("resolve repo root for %s: %w", dir, err)
+		}
+	}
+
+	gitDir := strings.TrimSpace(string(out))
+	if gitDir == "" {
+		return "", fmt.Errorf("resolve repo root for %s: empty git-common-dir output", dir)
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	return filepath.Dir(filepath.Clean(gitDir)), nil
 }
 
 // copyIfMissing copies src to dst only when dst does not already exist.

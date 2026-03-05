@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/kastheco/kasmos/log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,6 +132,13 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestGetConfigDir(t *testing.T) {
+	runGit := func(t *testing.T, repo string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+	}
+
 	t.Run("returns .kasmos relative to working directory", func(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Chdir(tempDir)
@@ -139,6 +147,48 @@ func TestGetConfigDir(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Join(tempDir, ".kasmos"), configDir)
+	})
+
+	t.Run("returns .kasmos under repo root from nested git directory", func(t *testing.T) {
+		repoDir := t.TempDir()
+		t.Setenv("HOME", t.TempDir())
+
+		runGit(t, repoDir, "init", "-b", "main")
+		runGit(t, repoDir, "config", "user.email", "test@example.com")
+		runGit(t, repoDir, "config", "user.name", "test")
+		require.NoError(t, os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("init\n"), 0o644))
+		runGit(t, repoDir, "add", ".")
+		runGit(t, repoDir, "commit", "-m", "initial")
+
+		nestedDir := filepath.Join(repoDir, "internal", "nested")
+		require.NoError(t, os.MkdirAll(nestedDir, 0o755))
+		t.Chdir(nestedDir)
+
+		configDir, err := GetConfigDir()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(repoDir, ".kasmos"), configDir)
+	})
+
+	t.Run("returns .kasmos under main repo root from worktree", func(t *testing.T) {
+		repoDir := t.TempDir()
+		t.Setenv("HOME", t.TempDir())
+
+		runGit(t, repoDir, "init", "-b", "main")
+		runGit(t, repoDir, "config", "user.email", "test@example.com")
+		runGit(t, repoDir, "config", "user.name", "test")
+		require.NoError(t, os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("init\n"), 0o644))
+		runGit(t, repoDir, "add", ".")
+		runGit(t, repoDir, "commit", "-m", "initial")
+
+		runGit(t, repoDir, "branch", "plan/worktree-config")
+		worktreeParent := t.TempDir()
+		worktreeDir := filepath.Join(worktreeParent, "worktree-config")
+		runGit(t, repoDir, "worktree", "add", worktreeDir, "plan/worktree-config")
+		t.Chdir(worktreeDir)
+
+		configDir, err := GetConfigDir()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(repoDir, ".kasmos"), configDir)
 	})
 
 	t.Run("migrates config.toml from legacy XDG location", func(t *testing.T) {
