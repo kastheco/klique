@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "5b2725ed9f16",
+  "strategy": "manual-commit",
+  "branch": "plan/improved-info-tab",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app.go",
+    "app/app_actions.go",
+    "app/app_state.go",
+    "config/taskfsm/fsm.go",
+    "config/taskfsm/fsm_test.go",
+    "config/taskstate/taskstate.go",
+    "config/taskstate/taskstate_test.go",
+    "config/taskstore/store.go",
+    "orchestration/engine.go",
+    "orchestration/engine_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5b/2725ed9f16/0/metadata.json",
+      "transcript": "/5b/2725ed9f16/0/full.jsonl",
+      "context": "/5b/2725ed9f16/0/context.md",
+      "content_hash": "/5b/2725ed9f16/0/content_hash.txt",
+      "prompt": "/5b/2725ed9f16/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "5b2725ed9f16",
+  "session_id": "ses_343594f22ffeAV7vsnI2bkKKU4",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T06:36:54.966083902Z",
+  "branch": "plan/improved-info-tab",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app/app_actions.go",
+    "config/taskfsm/fsm_test.go",
+    "config/taskstate/taskstate_test.go",
+    "config/taskstore/store.go",
+    "orchestration/engine.go",
+    "app/app.go",
+    "app/app_state.go",
+    "config/taskfsm/fsm.go",
+    "config/taskstate/taskstate.go",
+    "orchestration/engine_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "8aabc773e73c",
+  "checkpoint_transcript_start": 70,
+  "transcript_lines_at_start": 70,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T06:36:54.643370402Z",
+    "agent_lines": 304,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 304,
+    "agent_percentage": 100
+  }
+}
