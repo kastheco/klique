@@ -1750,7 +1750,7 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 // startNextWave advances the orchestrator to the next wave and spawns its task instances.
 func (m *home) startNextWave(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.StartNextWave()
-	if tasks == nil {
+	if len(tasks) == 0 {
 		return m, nil
 	}
 

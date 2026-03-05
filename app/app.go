@@ -1319,6 +1319,60 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Dead elaborator recovery: if an elaborator instance died without
+			// writing its signal, recover by re-reading the (possibly enriched)
+			// plan and starting wave 1. Prevents the elaboration loop where a
+			// crashed elaborator leaves the orchestrator stuck forever.
+			for planFile, orch := range m.waveOrchestrators {
+				if orch.State() != orchestration.WaveStateElaborating {
+					continue
+				}
+				// Check if the elaborator instance for this plan is dead.
+				var deadElaborator *session.Instance
+				for _, inst := range m.nav.GetInstances() {
+					if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeElaborator && inst.Exited {
+						deadElaborator = inst
+						break
+					}
+				}
+				if deadElaborator == nil {
+					continue
+				}
+				log.WarningLog.Printf("elaborator for %q died without signaling — recovering", planFile)
+
+				// Re-read the plan from the store (elaborator may have enriched it before crashing).
+				if m.taskStore != nil {
+					if content, err := m.taskStore.GetContent(m.taskStoreProject, planFile); err == nil {
+						if plan, parseErr := taskparser.Parse(content); parseErr == nil {
+							orch.UpdatePlan(plan)
+						}
+					}
+				}
+				// If re-read failed, force out of elaborating with the original plan.
+				if orch.State() == orchestration.WaveStateElaborating {
+					orch.UpdatePlan(orch.Plan())
+				}
+
+				// Remove the dead elaborator instance.
+				m.killExistingPlanAgent(planFile, session.AgentTypeElaborator)
+
+				entry, ok := m.taskState.Entry(planFile)
+				if !ok {
+					continue
+				}
+
+				planName := taskstate.DisplayName(planFile)
+				m.toastManager.Info(fmt.Sprintf("elaborator crashed — starting wave 1 for '%s'", planName))
+				m.audit(auditlog.EventWaveStarted, "elaborator crash recovery: starting wave 1",
+					auditlog.WithPlan(planFile))
+
+				mdl, cmd := m.startNextWave(orch, entry)
+				m = mdl.(*home)
+				if cmd != nil {
+					signalCmds = append(signalCmds, cmd)
+				}
+			}
+
 			// Drain deferred all-complete prompts that were blocked by an overlay.
 			if len(m.pendingAllComplete) > 0 {
 				m.exitFocusModeForDialog()

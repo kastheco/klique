@@ -46,7 +46,9 @@ func (p *Plan) HeaderContext() string {
 
 var (
 	waveHeaderRe = regexp.MustCompile(`(?m)^## Wave (\d+)\b.*$`)
-	taskHeaderRe = regexp.MustCompile(`(?m)^### Task (\d+):\s*(.+)$`)
+	// Accept colon, em-dash (—), en-dash (–), or hyphen (-) as task number separator.
+	// Elaborator agents sometimes rewrite "Task N:" to "Task N —" which must still parse.
+	taskHeaderRe = regexp.MustCompile("(?m)^### Task (\\d+)\\s*[:\\x{2014}\\x{2013}\\-]+\\s*(.+)$")
 	goalRe       = regexp.MustCompile(`(?m)^\*\*Goal:\*\*\s*(.+)$`)
 	archRe       = regexp.MustCompile(`(?m)^\*\*Architecture:\*\*\s*(.+)$`)
 	techRe       = regexp.MustCompile(`(?m)^\*\*Tech Stack:\*\*\s*(.+)$`)

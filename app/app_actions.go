@@ -677,6 +677,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 			case taskstate.StatusImplementing:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
+					overlay.ContextMenuItem{Label: "implement directly", Action: "start_implement_direct"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
@@ -894,6 +895,19 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadTaskState()
 		m.updateSidebarTasks()
+
+		// Check if an elaborator already ran for this plan (e.g. after TUI restart
+		// where the in-memory orchestrator was lost but the elaborator already
+		// enriched the plan before crashing). Skip re-elaboration in that case.
+		for _, inst := range m.nav.GetInstances() {
+			if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeElaborator {
+				m.killExistingPlanAgent(planFile, session.AgentTypeElaborator)
+				m.toastManager.Info(fmt.Sprintf("elaborator already ran — starting wave 1 for '%s'", taskstate.DisplayName(planFile)))
+				m.audit(auditlog.EventWaveStarted, "skipping re-elaboration (prior elaborator found)",
+					auditlog.WithPlan(planFile))
+				return m.startNextWave(orch, entry)
+			}
+		}
 
 		// Elaboration phase: spawn elaborator before starting wave 1.
 		orch.SetElaborating()

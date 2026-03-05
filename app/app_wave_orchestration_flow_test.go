@@ -1264,6 +1264,97 @@ func TestImplementDirectlySkipsElaboration(t *testing.T) {
 		"direct implement must skip elaboration")
 }
 
+// TestDeadElaboratorRecovery verifies that when an elaborator instance dies
+// (tmux exits) while the orchestrator is still in WaveStateElaborating, the
+// metadata tick recovers by removing the dead elaborator and advancing the
+// orchestrator out of the elaborating state (triggering wave 1).
+func TestDeadElaboratorRecovery(t *testing.T) {
+	h := newWaveElabTestHarness(t)
+
+	const planFile = "dead-elab.md"
+	planContent := "**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\n**Files:**\n- Create: `foo.go`\n\nImplement foo."
+	h.registerPlan(planFile, planContent, "plan/dead-elab")
+
+	// Set up: create orchestrator in elaborating state with a dead elaborator instance.
+	plan, err := taskparser.Parse(planContent)
+	require.NoError(t, err)
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.SetElaborating()
+	h.h.waveOrchestrators[planFile] = orch
+
+	elaboratorInst := &session.Instance{
+		Title:     "dead-elab-elaborator",
+		Program:   "opencode",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeElaborator,
+		Exited:    true, // tmux died
+	}
+	h.h.nav.AddInstance(elaboratorInst)
+
+	// Simulate metadata tick with the elaborator's tmux dead.
+	msg := metadataResultMsg{
+		Results: []instanceMetadata{
+			{Title: "dead-elab-elaborator", TmuxAlive: false},
+		},
+		PlanState: h.h.taskState,
+	}
+	model, _ := h.h.Update(msg)
+	m := model.(*home)
+
+	// The dead elaborator instance must have been removed.
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeElaborator {
+			t.Fatal("dead elaborator instance must be removed during recovery")
+		}
+	}
+
+	// The orchestrator must no longer be stuck in elaborating state.
+	// It may have been deleted by cascading wave-monitor logic (since no real
+	// task instances exist in this test), which is fine — the key invariant
+	// is that it's not stuck in WaveStateElaborating.
+	if recoveredOrch, exists := m.waveOrchestrators[planFile]; exists {
+		assert.NotEqual(t, orchestration.WaveStateElaborating, recoveredOrch.State(),
+			"orchestrator must not remain in elaborating state after recovery")
+	}
+}
+
+// TestImplementSkipsElaborationWhenElaboratorAlreadyRan verifies that triggering
+// "implement" when a dead elaborator instance already exists for this plan
+// skips the elaboration phase and goes straight to wave 1.
+func TestImplementSkipsElaborationWhenElaboratorAlreadyRan(t *testing.T) {
+	h := newWaveElabTestHarness(t)
+
+	const planFile = "re-elab.md"
+	planContent := "**Goal:** test\n\n## Wave 1\n\n### Task 1: Do thing\n\n**Files:**\n- Create: `bar.go`\n\nImplement bar."
+	h.registerPlan(planFile, planContent, "plan/re-elab")
+
+	// Simulate a dead elaborator instance from a prior TUI session.
+	deadElaborator := &session.Instance{
+		Title:     "re-elab-elaborator",
+		Program:   "opencode",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeElaborator,
+		Exited:    true,
+	}
+	h.h.nav.AddInstance(deadElaborator)
+
+	model, _ := h.executeTaskStage(planFile, "implement")
+	m := model.(*home)
+
+	// Orchestrator should exist and NOT be in elaborating state.
+	orch, exists := m.waveOrchestrators[planFile]
+	require.True(t, exists, "orchestrator must be created")
+	assert.NotEqual(t, orchestration.WaveStateElaborating, orch.State(),
+		"implement must skip elaboration when a prior elaborator already ran")
+
+	// No new elaborator instance should have been spawned.
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeElaborator {
+			t.Fatal("no new elaborator should be spawned when one already ran")
+		}
+	}
+}
+
 // TestCoderExit_FocusesCoderInstance_BeforePushConfirm verifies that when a
 // coder finishes (tmux dies) and the "push branch?" dialog shows, the coder
 // instance is auto-focused so its output is visible behind the overlay.

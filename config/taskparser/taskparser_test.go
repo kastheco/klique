@@ -96,6 +96,33 @@ func TestParsePlan_EmptyPlan(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParsePlan_TaskHeaderSeparatorVariants(t *testing.T) {
+	tests := []struct {
+		name    string
+		header  string
+		wantNum int
+		wantTtl string
+	}{
+		{"colon", "### Task 1: Do thing", 1, "Do thing"},
+		{"em-dash", "### Task 2 \u2014 Do thing", 2, "Do thing"},
+		{"en-dash", "### Task 3 \u2013 Do thing", 3, "Do thing"},
+		{"hyphen", "### Task 4 - Do thing", 4, "Do thing"},
+		{"colon-no-space", "### Task 5:Do thing", 5, "Do thing"},
+		{"backtick-title", "### Task 1 \u2014 `kas audit` subcommand", 1, "`kas audit` subcommand"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := "## Wave 1\n\n" + tt.header + "\n\nBody text.\n"
+			plan, err := Parse(input)
+			require.NoError(t, err)
+			require.Len(t, plan.Waves, 1)
+			require.Len(t, plan.Waves[0].Tasks, 1, "task header must be parsed: %s", tt.header)
+			assert.Equal(t, tt.wantNum, plan.Waves[0].Tasks[0].Number)
+			assert.Equal(t, tt.wantTtl, plan.Waves[0].Tasks[0].Title)
+		})
+	}
+}
+
 func TestParsePlan_HeaderExtraction(t *testing.T) {
 	input := `# Plan
 
