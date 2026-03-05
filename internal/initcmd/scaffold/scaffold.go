@@ -219,16 +219,8 @@ func cloneMap(m map[string]any) map[string]any {
 }
 
 // patchAgentBlock updates model, temperature, and reasoningEffort for the given
-// agent map. Returns true when the map was changed.
-func patchAgentBlock(agent map[string]any, cfg harness.AgentConfig, fallback map[string]any) (changed bool) {
-	if agent == nil {
-		agent = cloneMap(fallback)
-		if len(agent) == 0 {
-			agent = map[string]any{}
-		}
-		changed = true
-	}
-
+// agent map. agent must be non-nil. Returns true when the map was changed.
+func patchAgentBlock(agent map[string]any, cfg harness.AgentConfig) (changed bool) {
 	if cfg.Model != "" {
 		normalized := normalizeOpenCodeModel(cfg.Harness, cfg.Model)
 		if current, ok := agent["model"]; !ok || fmt.Sprintf("%v", current) != normalized {
@@ -298,7 +290,7 @@ func PatchWorktreeConfig(worktreePath string, agents []harness.AgentConfig) erro
 			if fallback != nil && len(fallback) > 0 {
 				currentAgentBlocks[agent.Role] = fallback
 				changed = true
-				if patchAgentBlock(fallback, agent, nil) {
+				if patchAgentBlock(fallback, agent) {
 					changed = true
 				}
 				continue
@@ -306,7 +298,7 @@ func PatchWorktreeConfig(worktreePath string, agents []harness.AgentConfig) erro
 
 			block := map[string]any{}
 			currentAgentBlocks[agent.Role] = block
-			if patchAgentBlock(block, agent, nil) {
+			if patchAgentBlock(block, agent) {
 				changed = true
 			}
 			if len(block) == 0 {
@@ -315,7 +307,7 @@ func PatchWorktreeConfig(worktreePath string, agents []harness.AgentConfig) erro
 			continue
 		}
 
-		if patchAgentBlock(currentBlock, agent, nil) {
+		if patchAgentBlock(currentBlock, agent) {
 			changed = true
 		}
 	}
