@@ -165,6 +165,13 @@
       "context": "/de/a8eb0f218d/21/context.md",
       "content_hash": "/de/a8eb0f218d/21/content_hash.txt",
       "prompt": "/de/a8eb0f218d/21/prompt.txt"
+    },
+    {
+      "metadata": "/de/a8eb0f218d/22/metadata.json",
+      "transcript": "/de/a8eb0f218d/22/full.jsonl",
+      "context": "/de/a8eb0f218d/22/context.md",
+      "content_hash": "/de/a8eb0f218d/22/content_hash.txt",
+      "prompt": "/de/a8eb0f218d/22/prompt.txt"
     }
   ],
   "token_usage": {
