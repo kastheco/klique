@@ -815,6 +815,8 @@ func (n *NavigationPanel) Right() {
 	case navRowHistoryToggle:
 		if row.Collapsed {
 			n.ToggleSelectedExpand()
+		} else {
+			n.Down()
 		}
 	}
 }
