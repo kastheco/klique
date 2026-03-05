@@ -71,6 +71,13 @@
       "context": "/e4/ebebb9aef3/8/context.md",
       "content_hash": "/e4/ebebb9aef3/8/content_hash.txt",
       "prompt": "/e4/ebebb9aef3/8/prompt.txt"
+    },
+    {
+      "metadata": "/e4/ebebb9aef3/9/metadata.json",
+      "transcript": "/e4/ebebb9aef3/9/full.jsonl",
+      "context": "/e4/ebebb9aef3/9/context.md",
+      "content_hash": "/e4/ebebb9aef3/9/content_hash.txt",
+      "prompt": "/e4/ebebb9aef3/9/prompt.txt"
     }
   ],
   "token_usage": {
