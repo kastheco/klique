@@ -951,9 +951,7 @@ func (m *home) programForAgent(agentType string) string {
 		return withOpenCodeModelFlag(prog, profile.Model)
 	}
 	// Typed agents: opencode handles model via --agent <type> + its own config.
-	cmd := profile.BuildCommand()
-	log.WarningLog.Printf("[wave-dbg] programForAgent(%s): program=%q flags=%v effort=%q → cmd=%q", agentType, profile.Program, profile.Flags, profile.Effort, cmd)
-	return cmd
+	return profile.BuildCommand()
 }
 
 func normalizeOpenCodeModelID(model string) string {
@@ -1763,15 +1761,12 @@ func (m *home) rebuildOrphanedOrchestrators() {
 func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	planFile := orch.TaskFile()
 	planName := taskstate.DisplayName(planFile)
-	log.WarningLog.Printf("[wave-dbg] spawnWaveTasks: plan=%s branch=%q repoPath=%q tasks=%d", planFile, entry.Branch, m.activeRepoPath, len(tasks))
 
 	// Set up shared worktree for all tasks in this batch.
 	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
 	if err := shared.Setup(); err != nil {
-		log.WarningLog.Printf("[wave-dbg] spawnWaveTasks: worktree setup FAILED: %v", err)
 		return m, m.handleError(err)
 	}
-	log.WarningLog.Printf("[wave-dbg] spawnWaveTasks: worktree setup OK at %s", shared.GetWorktreePath())
 
 	var cmds []tea.Cmd
 	for _, task := range tasks {
@@ -1813,14 +1808,11 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 // startNextWave advances the orchestrator to the next wave and spawns its task instances.
 func (m *home) startNextWave(orch *orchestration.WaveOrchestrator, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
 	tasks := orch.StartNextWave()
-	log.WarningLog.Printf("[wave-dbg] startNextWave: plan=%s tasks=%d orchState=%v", orch.TaskFile(), len(tasks), orch.State())
 	if len(tasks) == 0 {
-		log.WarningLog.Printf("[wave-dbg] startNextWave: no tasks to start!")
 		return m, nil
 	}
 
 	waveNum := orch.CurrentWaveNumber()
-	log.WarningLog.Printf("[wave-dbg] startNextWave: spawning wave %d with %d tasks", waveNum, len(tasks))
 	m.toastManager.Info(fmt.Sprintf("wave %d started: %d task(s) running", waveNum, len(tasks)))
 	m.audit(auditlog.EventWaveStarted,
 		fmt.Sprintf("wave %d started: %d task(s)", waveNum, len(tasks)),
