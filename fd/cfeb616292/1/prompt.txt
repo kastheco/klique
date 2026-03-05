@@ -1,0 +1,141 @@
+Implement Task 1: Fix Planner Skill Wave-Splitting Guidance
+
+Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.
+
+## Plan Context
+
+**Goal:** Prevent the planner from putting import-dependent tasks in the same wave, and give coder agents guidance when parallel tasks hit build failures from unresolved cross-task imports.
+**Architecture:** Two-pronged fix: (1) update the kasmos-planner skill template to treat import/type dependencies as real wave boundaries — remove the "just imports" dismissal, strengthen the coherence check, and add an import dependency analysis step; (2) update the coder task prompt in `orchestration/prompt.go` to tell parallel agents what to do when they encounter build failures caused by a sibling's not-yet-committed types/functions.
+**Tech Stack:** Go, markdown (skill files), orchestration/prompt.go, kasmos-planner SKILL.md
+
+## Wave 1 of 1
+
+## Parallel Execution
+
+You are Task 1 of 2 in Wave 1. 1 other agents are working in parallel on this same worktree.
+
+Your assigned files are listed in the Task Instructions below. Prioritize those files. If you must touch a shared file (go.mod, go.sum, imports), make minimal surgical changes - do not reorganize, reformat, or refactor anything outside your task scope.
+
+CRITICAL - shared worktree rules:
+- NEVER run `git add .` or `git add -A` - you will commit other agents' in-progress work
+- NEVER run `git stash` or `git reset` - you will destroy sibling agents' changes
+- NEVER run `git checkout -- <file>` on files you didn't modify - you will revert a sibling's edits
+- NEVER run formatters/linters across the whole project (e.g. `go fmt ./...`) - scope them to your files only
+- NEVER try to fix test failures in files outside your task - they may be caused by incomplete parallel work
+- DO `git add` only the specific files you changed
+- DO commit frequently with your task number in the message
+- DO expect untracked files and uncommitted changes that are not yours - ignore them
+
+## Task Instructions
+
+**Files:**
+- Modify: `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`
+
+**Context:** The planner skill template (source of truth for all synced copies in `.agents/` and `.opencode/`) currently contains three problems related to import dependencies:
+
+1. **Line 226** — `the "dependency" is just imports (the compiler catches that)` in the "when NOT to use multiple waves" section. This actively tells planners to ignore import dependencies. But when Task A creates `type Foo` in `app/model.go` and Task B in `ui/render.go` imports it, they cannot run in parallel — Task B will fail to compile until Task A's code exists.
+
+2. **Lines 328-330** — The "dependency ordering" coherence check says tasks in the same wave must be "independently implementable" but doesn't mention import/type dependencies as a specific thing to check. Planners interpret "independently implementable" as "different directories = independent" without considering cross-package imports.
+
+3. **Lines 191-196** — The sizing rules mention "never split tightly coupled work across tasks" but the coupling concept is vague. Import dependencies are the most common form of coupling in Go codebases and need explicit mention.
+
+Use existing conventions already present in the skill file:
+- Keep all new prose lowercase to match the style used across this skill file.
+- Keep existing section structure and checklist formatting (`- [ ] ...`) intact.
+- Edit only the three target bullets; do not rename headings such as `**sizing rules:**`, `**when NOT to use multiple waves:**`, or `### coherence checks`.
+- This task modifies markdown guidance only (no Go code); there are no function signatures to add.
+
+**Step 1: write the failing test**
+
+No automated test — this is a skill markdown file. Use a manual baseline check so the later verification is objective.
+
+Run these read-only checks before editing:
+
+```bash
+rg -n 'the "dependency" is just imports' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md
+rg -n '\*\*dependency ordering\*\*' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md
+rg -n 'never split tightly coupled work across tasks' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md
+```
+
+Expected baseline:
+- First command finds the old "just imports" line.
+- Second and third commands find the current checklist/rule text that lacks explicit import coupling language.
+
+**Step 2: run test to verify it fails**
+
+Skipped — markdown-only change, no executable test target. The baseline `rg` checks in Step 1 are the failing condition.
+
+**Step 3: write minimal implementation**
+
+Make these three edits to `internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md`:
+
+Implementation details to remove ambiguity (derived from current template content):
+- Keep the file's lowercase prose style used throughout (see the existing sizing/coherence sections around lines 191-196 and 323-331).
+- Preserve wrapped-bullet formatting where continuation lines are indented by two spaces (match the existing dependency-ordering checklist style exactly).
+- Apply exact text replacement for each target bullet (do not paraphrase), including `MUST` capitalization in Edit B.
+- Do not alter YAML frontmatter (`name`, `description`) or any section headings; only edit the three target bullets.
+- Do not introduce new sections, additional bullets, or behavior outside import-dependency guidance.
+- Update only this scaffold template file in this task; do not touch generated skill copies under `.agents/` or `.opencode/`.
+
+**Edit A** — Replace the misleading "when NOT to use multiple waves" bullet (line 226):
+
+Replace:
+```
+- the "dependency" is just imports (the compiler catches that)
+```
+
+With:
+```
+- no task creates types, functions, or interfaces consumed by another task in the same wave
+```
+
+**Edit B** — Strengthen the "dependency ordering" coherence check (lines 328-330):
+
+Replace:
+```
+- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the
+  same wave (those should be in separate waves). tasks within a wave must be independently
+  implementable.
+```
+
+With:
+```
+- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the
+  same wave (those should be in separate waves). tasks within a wave must be independently
+  implementable. **import dependencies count:** if task A creates a type, function, or
+  interface that task B imports, they MUST be in different waves — even if they touch
+  different directories. "different packages" does not mean "independent."
+```
+
+**Edit C** — Add explicit import coupling mention to the sizing rules (after line 193):
+
+Replace:
+```
+- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them.
+```
+
+With:
+```
+- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.
+```
+
+Edge cases to account for while editing:
+- Ensure the phrase `just imports` no longer appears anywhere in the file after Edit A.
+- Keep the strong language (`MUST`) in Edit B; this is intended to be normative planner guidance, not a suggestion.
+- Preserve nearby checklist marker formatting (`- [ ]`) and wrapped continuation indentation so the rendered coherence checklist stays readable.
+
+**Step 4: run test to verify it passes**
+
+```bash
+# Verify the edits landed correctly
+rg -n 'just imports' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md  # should return nothing
+rg -n 'import dependencies count' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md  # should return the new check
+rg -n 'import dependencies are tight coupling' internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md  # should return the new rule
+```
+
+**Step 5: commit**
+
+```bash
+git add internal/initcmd/scaffold/templates/skills/kasmos-planner/SKILL.md
+git commit -m "fix(planner-skill): treat import dependencies as wave boundaries, not ignorable"
+```

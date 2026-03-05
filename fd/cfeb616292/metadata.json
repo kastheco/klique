@@ -3,7 +3,7 @@
   "checkpoint_id": "fdcfeb616292",
   "strategy": "manual-commit",
   "branch": "plan/imports-not-checked-for-waves",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "orchestration/prompt.go",
     "orchestration/prompt_test.go"
@@ -15,13 +15,20 @@
       "context": "/fd/cfeb616292/0/context.md",
       "content_hash": "/fd/cfeb616292/0/content_hash.txt",
       "prompt": "/fd/cfeb616292/0/prompt.txt"
+    },
+    {
+      "metadata": "/fd/cfeb616292/1/metadata.json",
+      "transcript": "/fd/cfeb616292/1/full.jsonl",
+      "context": "/fd/cfeb616292/1/context.md",
+      "content_hash": "/fd/cfeb616292/1/content_hash.txt",
+      "prompt": "/fd/cfeb616292/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 38690,
+    "input_tokens": 39320,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 332672,
-    "output_tokens": 1794,
-    "api_call_count": 12
+    "cache_read_tokens": 408448,
+    "output_tokens": 2639,
+    "api_call_count": 14
   }
 }

@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "fdcfeb616292",
+  "session_id": "ses_340d75022ffez7S4h5juP8FGiF",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T18:01:09.418993827Z",
+  "branch": "plan/imports-not-checked-for-waves",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "orchestration/prompt.go",
+    "orchestration/prompt_test.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "c8bc6e8b5859",
+  "checkpoint_transcript_start": 12,
+  "transcript_lines_at_start": 12,
+  "token_usage": {
+    "input_tokens": 630,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 75776,
+    "output_tokens": 845,
+    "api_call_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T18:01:09.36856323Z",
+    "agent_lines": 6,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 6,
+    "agent_percentage": 100
+  }
+}
