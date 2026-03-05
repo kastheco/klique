@@ -14,6 +14,7 @@ import (
 	"github.com/kastheco/kasmos/ui/overlay"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
@@ -1500,8 +1501,13 @@ func keyToBytes(msg tea.KeyPressMsg) []byte {
 			return []byte("\x1b[1;2F")
 		}
 	}
-	if msg.Mod.Contains(tea.ModAlt) && len(msg.Text) > 0 {
-		return append([]byte{0x1b}, []byte(msg.Text)...)
+	if msg.Mod.Contains(tea.ModAlt) {
+		if len(msg.Text) > 0 {
+			return append([]byte{0x1b}, []byte(msg.Text)...)
+		}
+		if msg.Code != 0 && unicode.IsPrint(msg.Code) {
+			return append([]byte{0x1b}, []byte(string(msg.Code))...)
+		}
 	}
 
 	// Printable text with no modifiers.

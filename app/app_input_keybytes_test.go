@@ -15,6 +15,14 @@ func TestKeyToBytes_ForwardsAltRuneAsEscapeSequence(t *testing.T) {
 	require.Equal(t, []byte("\x1bv"), got)
 }
 
+func TestKeyToBytes_ForwardsAltRuneFromCodeWhenTextEmpty(t *testing.T) {
+	msg := tea.KeyPressMsg{Code: 'v', Mod: tea.ModAlt}
+
+	got := keyToBytes(msg)
+
+	require.Equal(t, []byte("\x1bv"), got)
+}
+
 func TestKeyToBytes_ForwardsPlainRuneWithoutEscapePrefix(t *testing.T) {
 	msg := tea.KeyPressMsg{Code: 'v', Text: "v"}
 
