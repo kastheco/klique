@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.8",
+  "checkpoint_id": "8aa07f3afbe2",
+  "session_id": "ses_34537c3c8ffeI30Nw3wFe1xOFY",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-05T16:15:04.977505232Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/task.go",
+    "config/config.go",
+    "config/config_test.go",
+    "config/taskstore/factory.go",
+    "config/taskstore/factory_test.go",
+    "config/toml.go"
+  ],
+  "agent": "OpenCode",
+  "turn_id": "db9eba96e9df",
+  "checkpoint_transcript_start": 10,
+  "transcript_lines_at_start": 10,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-05T16:15:04.677704324Z",
+    "agent_lines": 168,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 168,
+    "agent_percentage": 100
+  }
+}
