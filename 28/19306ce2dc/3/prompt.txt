@@ -1,0 +1,3 @@
+Plan fix-agent-skills-cli. Goal: fix-agent-skills-cli
+
+update all agent definitions and skills to have full awareness of the kas cli capabilities and how to properly use it to accomplish their task while adhering to the kasmos orchestration workflow. Use the `kasmos-planner` skill. The plan MUST include ## Wave N sections (at minimum ## Wave 1) grouping all tasks — kasmos requires Wave headers to orchestrate implementation.
