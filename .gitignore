@@ -7,7 +7,8 @@ kasmos
 kq
 kas
 .worktrees/
-.kasmos/
+/.kasmos/*
+!/.kasmos/config.toml
 dist/
 *.bak
 *.test

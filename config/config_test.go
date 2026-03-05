@@ -131,102 +131,86 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestGetConfigDir(t *testing.T) {
-	t.Run("returns valid config directory", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
+	t.Run("returns .kasmos relative to working directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
 
 		configDir, err := GetConfigDir()
 
 		require.NoError(t, err)
-		assert.NotEmpty(t, configDir)
-		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
-		assert.True(t, filepath.IsAbs(configDir))
+		assert.Equal(t, filepath.Join(tempDir, ".kasmos"), configDir)
 	})
 
-	t.Run("migrates legacy .hivemind to .config/kasmos", func(t *testing.T) {
+	t.Run("migrates config.toml from legacy XDG location", func(t *testing.T) {
 		tempHome := t.TempDir()
 		t.Setenv("HOME", tempHome)
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
 
-		oldDir := filepath.Join(tempHome, ".hivemind")
-		require.NoError(t, os.MkdirAll(oldDir, 0755))
+		// Create legacy config at ~/.config/kasmos/
+		legacyDir := filepath.Join(tempHome, ".config", "kasmos")
+		require.NoError(t, os.MkdirAll(legacyDir, 0755))
 		require.NoError(t, os.WriteFile(
-			filepath.Join(oldDir, "config.json"),
-			[]byte(`{"auto_yes":true}`), 0644))
+			filepath.Join(legacyDir, "config.toml"),
+			[]byte("[ui]\nanimate_banner = true\n"), 0644))
 
 		configDir, err := GetConfigDir()
 		require.NoError(t, err)
-		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
+		assert.Equal(t, filepath.Join(projectDir, ".kasmos"), configDir)
 
-		// Old dir should be gone
-		_, err = os.Stat(oldDir)
-		assert.True(t, os.IsNotExist(err))
-
-		// New dir should contain the migrated file with original contents intact
-		data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+		// Config should be copied to new location
+		data, err := os.ReadFile(filepath.Join(configDir, "config.toml"))
 		require.NoError(t, err)
-		assert.Equal(t, `{"auto_yes":true}`, string(data))
+		assert.Contains(t, string(data), "animate_banner")
+
+		// Legacy file should still exist (copy, not move)
+		assert.FileExists(t, filepath.Join(legacyDir, "config.toml"))
 	})
 
-	t.Run("migrates legacy .klique to .config/kasmos", func(t *testing.T) {
+	t.Run("skips migration when config already exists in .kasmos", func(t *testing.T) {
 		tempHome := t.TempDir()
 		t.Setenv("HOME", tempHome)
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
 
-		oldDir := filepath.Join(tempHome, ".klique")
-		require.NoError(t, os.MkdirAll(oldDir, 0755))
+		// Create config in both locations
+		kasmosDir := filepath.Join(projectDir, ".kasmos")
+		require.NoError(t, os.MkdirAll(kasmosDir, 0755))
 		require.NoError(t, os.WriteFile(
-			filepath.Join(oldDir, "config.json"),
-			[]byte(`{"auto_yes":true}`), 0644))
+			filepath.Join(kasmosDir, "config.toml"),
+			[]byte("[ui]\nanimate_banner = false\n"), 0644))
+
+		legacyDir := filepath.Join(tempHome, ".config", "kasmos")
+		require.NoError(t, os.MkdirAll(legacyDir, 0755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(legacyDir, "config.toml"),
+			[]byte("[ui]\nanimate_banner = true\n"), 0644))
 
 		configDir, err := GetConfigDir()
 		require.NoError(t, err)
-		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
 
-		// Old dir should be gone
-		_, err = os.Stat(oldDir)
-		assert.True(t, os.IsNotExist(err))
-
-		// New dir should contain the migrated file with original contents intact
-		data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
+		// Should use existing .kasmos config, NOT overwrite with legacy
+		data, err := os.ReadFile(filepath.Join(configDir, "config.toml"))
 		require.NoError(t, err)
-		assert.Equal(t, `{"auto_yes":true}`, string(data))
+		assert.Contains(t, string(data), "animate_banner = false")
 	})
 
-	t.Run("skips migration when .config/kasmos already exists", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-
-		newDir := filepath.Join(tempHome, ".config", "kasmos")
-		oldDir := filepath.Join(tempHome, ".hivemind")
-		require.NoError(t, os.MkdirAll(newDir, 0755))
-		require.NoError(t, os.MkdirAll(oldDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "config.json"), []byte(`{"auto_yes":false}`), 0644))
+	t.Run("no-ops when neither location has config", func(t *testing.T) {
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
+		t.Setenv("HOME", t.TempDir())
 
 		configDir, err := GetConfigDir()
 		require.NoError(t, err)
-		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
-
-		// Old dir should still exist with original contents untouched
-		_, err = os.Stat(oldDir)
-		assert.NoError(t, err)
-		data, err := os.ReadFile(filepath.Join(oldDir, "config.json"))
-		require.NoError(t, err)
-		assert.Equal(t, `{"auto_yes":false}`, string(data))
-	})
-
-	t.Run("no-ops when neither dir exists", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-
-		configDir, err := GetConfigDir()
-		require.NoError(t, err)
-		assert.True(t, strings.HasSuffix(configDir, filepath.Join(".config", "kasmos")))
+		assert.Equal(t, filepath.Join(projectDir, ".kasmos"), configDir)
 	})
 }
 
 func TestLoadConfig(t *testing.T) {
 	t.Run("returns default config when file doesn't exist", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
+		t.Setenv("HOME", t.TempDir())
 
 		config := LoadConfig()
 
@@ -238,8 +222,11 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("loads valid config file", func(t *testing.T) {
-		tempHome := t.TempDir()
-		configDir := filepath.Join(tempHome, ".config", "kasmos")
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
+		t.Setenv("HOME", t.TempDir())
+
+		configDir := filepath.Join(tempDir, ".kasmos")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
@@ -253,8 +240,6 @@ func TestLoadConfig(t *testing.T) {
 		err = os.WriteFile(configPath, []byte(configContent), 0644)
 		require.NoError(t, err)
 
-		t.Setenv("HOME", tempHome)
-
 		config := LoadConfig()
 
 		assert.NotNil(t, config)
@@ -265,8 +250,11 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {
-		tempHome := t.TempDir()
-		configDir := filepath.Join(tempHome, ".config", "kasmos")
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
+		t.Setenv("HOME", t.TempDir())
+
+		configDir := filepath.Join(tempDir, ".kasmos")
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
@@ -274,8 +262,6 @@ func TestLoadConfig(t *testing.T) {
 		invalidContent := `{"invalid": json content}`
 		err = os.WriteFile(configPath, []byte(invalidContent), 0644)
 		require.NoError(t, err)
-
-		t.Setenv("HOME", tempHome)
 
 		config := LoadConfig()
 
@@ -288,8 +274,9 @@ func TestLoadConfig(t *testing.T) {
 
 func TestSaveConfig(t *testing.T) {
 	t.Run("saves config to file", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
+		t.Setenv("HOME", t.TempDir())
 
 		testConfig := &Config{
 			DefaultProgram:     "test-program",
@@ -301,7 +288,7 @@ func TestSaveConfig(t *testing.T) {
 		err := SaveConfig(testConfig)
 		assert.NoError(t, err)
 
-		configDir := filepath.Join(tempHome, ".config", "kasmos")
+		configDir := filepath.Join(tempDir, ".kasmos")
 		configPath := filepath.Join(configDir, ConfigFileName)
 
 		assert.FileExists(t, configPath)

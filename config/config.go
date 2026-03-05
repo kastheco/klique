@@ -25,44 +25,65 @@ const (
 // Handles formats: "aliased to <path>", "-> <path>", "= <path>".
 var aliasRegex = regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
 
-// GetConfigDir returns the XDG-compliant config directory (~/.config/kasmos/).
-// On first call without that directory, it attempts to migrate legacy directories
-// (.klique, then .hivemind) via rename. If migration fails it returns the old path.
+// GetConfigDir returns the project-local config directory (<cwd>/.kasmos/).
+// On first call without existing config files in the target, it attempts a one-time
+// migration by copying files from legacy XDG directories. The migration is a copy
+// (not a move) so legacy locations are preserved. Any migration error is silently
+// ignored — the new target is always returned.
 func GetConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("failed to get config home directory: %w", err)
+		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	target := filepath.Join(home, ".config", "kasmos")
+	target := filepath.Join(cwd, ".kasmos")
 
-	// Fast path: target already exists.
-	if _, statErr := os.Stat(target); statErr == nil {
-		return target, nil
+	// Fast path: config already exists in target — skip migration entirely.
+	for _, marker := range []string{"config.toml", "config.json"} {
+		if _, statErr := os.Stat(filepath.Join(target, marker)); statErr == nil {
+			return target, nil
+		}
 	}
 
-	// Try each legacy directory in preference order.
-	for _, legacy := range []string{
-		filepath.Join(home, ".klique"),
-		filepath.Join(home, ".hivemind"),
-	} {
-		if _, statErr := os.Stat(legacy); statErr != nil {
-			continue
+	// Attempt one-time migration from legacy directories (copy, not move).
+	home, homeErr := os.UserHomeDir()
+	if homeErr == nil {
+		for _, legacy := range []string{
+			filepath.Join(home, ".config", "kasmos"),
+			filepath.Join(home, ".klique"),
+			filepath.Join(home, ".hivemind"),
+		} {
+			if _, statErr := os.Stat(legacy); statErr != nil {
+				continue
+			}
+			// Legacy dir found — copy known files to target.
+			if mkErr := os.MkdirAll(target, 0755); mkErr != nil {
+				log.ErrorLog.Printf("failed to create %s: %v", target, mkErr)
+				break
+			}
+			for _, fname := range []string{"config.json", "config.toml", "state.json", "taskstore.db"} {
+				copyIfMissing(filepath.Join(legacy, fname), filepath.Join(target, fname))
+			}
+			break
 		}
-		// Ensure ~/.config/ parent exists before rename.
-		if mkErr := os.MkdirAll(filepath.Dir(target), 0755); mkErr != nil {
-			log.ErrorLog.Printf("failed to create %s: %v", filepath.Dir(target), mkErr)
-			return legacy, nil
-		}
-		if mvErr := os.Rename(legacy, target); mvErr != nil {
-			log.ErrorLog.Printf("failed to migrate %s to %s: %v", legacy, target, mvErr)
-			return legacy, nil
-		}
-		return target, nil
 	}
 
-	// No legacy dir found — return target path; caller creates it on first write.
 	return target, nil
+}
+
+// copyIfMissing copies src to dst only when dst does not already exist.
+// Any error (missing src, unreadable, write failure) is silently ignored — migration
+// is best-effort and must never block normal startup.
+func copyIfMissing(src, dst string) {
+	if _, err := os.Stat(dst); err == nil {
+		// dst already exists — do not overwrite.
+		return
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(dst, data, 0644)
 }
 
 // Config holds all persistent application configuration.
