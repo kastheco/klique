@@ -1405,7 +1405,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						taskTitle := fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number)
 						inst, exists := instanceMap[taskTitle]
 						if !exists {
-							// No matching instance — treat as failed (e.g. spawn crashed).
+							// Instance not in metadata results — check if it exists in the
+							// nav list but hasn't started yet (async spawn still in flight).
+							// Only mark failed if the instance is truly missing.
+							stillSpawning := false
+							for _, navInst := range m.nav.GetInstances() {
+								if navInst.Title == taskTitle && (!navInst.Started() || navInst.Status == session.Loading) {
+									stillSpawning = true
+									break
+								}
+							}
+							if stillSpawning {
+								continue // wait for async start to complete
+							}
 							orch.MarkTaskFailed(task.Number)
 							continue
 						}

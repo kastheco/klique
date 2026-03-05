@@ -304,6 +304,78 @@ func TestRebuildOrphanedOrchestrators_RestoresWithActiveWaveInstance(t *testing.
 	assert.True(t, orch.IsTaskRunning(2), "active task should remain running")
 }
 
+// TestWaveMonitor_LoadingInstanceNotMarkedFailed verifies that a wave task whose
+// instance exists in the nav list but hasn't finished async startup (Loading status)
+// is NOT prematurely marked as failed. This prevents the "instant all-complete" bug
+// where the metadata tick fires before StartInSharedWorktree completes.
+func TestWaveMonitor_LoadingInstanceNotMarkedFailed(t *testing.T) {
+	const planFile = "loading-race.md"
+
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{
+			{Number: 1, Tasks: []taskparser.Task{
+				{Number: 1, Title: "Task 1", Body: "do it"},
+				{Number: 2, Title: "Task 2", Body: "do it too"},
+			}},
+		},
+	}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "loading race test", "plan/loading-race", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	// Create instances in Loading state (async start not yet complete).
+	inst1, err := session.NewInstance(session.InstanceOptions{
+		Title:      "loading-race-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+		PeerCount:  2,
+	})
+	require.NoError(t, err)
+	inst1.SetStatus(session.Loading)
+
+	inst2, err := session.NewInstance(session.InstanceOptions{
+		Title:      "loading-race-W1-T2",
+		Path:       t.TempDir(),
+		Program:    "opencode",
+		TaskFile:   planFile,
+		TaskNumber: 2,
+		WaveNumber: 1,
+		PeerCount:  2,
+	})
+	require.NoError(t, err)
+	inst2.SetStatus(session.Loading)
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(inst1)
+	_ = h.nav.AddInstance(inst2)
+
+	// Metadata tick with NO results for the loading instances (they aren't started yet).
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	// Orchestrator must still be running — tasks must NOT be marked failed.
+	require.Len(t, updated.waveOrchestrators, 1,
+		"orchestrator must survive when instances are still loading")
+	assert.Equal(t, orchestration.WaveStateRunning, orch.State(),
+		"wave must remain running while instances are loading")
+	assert.False(t, orch.IsTaskComplete(1), "task 1 must not be complete")
+	assert.False(t, orch.IsTaskComplete(2), "task 2 must not be complete")
+}
+
 // TestWaveMonitor_AbortKeyDeletesOrchestrator verifies that pressing 'a' on the
 // failed-wave decision prompt removes the orchestrator and returns to default state.
 func TestWaveMonitor_AbortKeyDeletesOrchestrator(t *testing.T) {
