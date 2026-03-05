@@ -220,7 +220,7 @@ func (p *InfoPane) wrapText(text string) []string {
 			current = word
 			continue
 		}
-		if len(current)+1+len(word) <= maxWidth {
+		if lipgloss.Width(current)+1+lipgloss.Width(word) <= maxWidth {
 			current += " " + word
 		} else {
 			lines = append(lines, p.renderRow("", current))
