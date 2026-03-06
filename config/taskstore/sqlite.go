@@ -212,7 +212,9 @@ func migrateAddContentColumn(db *sql.DB) error {
 
 // migrateStripMdSuffix removes a trailing '.md' suffix from task and subtask
 // plan filenames. This keeps existing task/subtask references in sync after the
-// transition to extension-less plan filenames.
+// transition to extension-less plan filenames. OR IGNORE skips any row where
+// stripping '.md' would collide with an already-existing bare-slug entry, so
+// the migration is safe to run on databases that were partially updated.
 func migrateStripMdSuffix(db *sql.DB) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -224,12 +226,12 @@ func migrateStripMdSuffix(db *sql.DB) error {
 		return fmt.Errorf("defer foreign keys for strip .md migration: %w", err)
 	}
 
-	if _, err = tx.Exec("UPDATE tasks SET filename = SUBSTR(filename, 1, LENGTH(filename) - 3) WHERE filename LIKE '%.md'"); err != nil {
+	if _, err = tx.Exec("UPDATE OR IGNORE tasks SET filename = SUBSTR(filename, 1, LENGTH(filename) - 3) WHERE filename LIKE '%.md'"); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("strip .md suffix from tasks: %w", err)
 	}
 
-	if _, err = tx.Exec("UPDATE subtasks SET plan_filename = SUBSTR(plan_filename, 1, LENGTH(plan_filename) - 3) WHERE plan_filename LIKE '%.md'"); err != nil {
+	if _, err = tx.Exec("UPDATE OR IGNORE subtasks SET plan_filename = SUBSTR(plan_filename, 1, LENGTH(plan_filename) - 3) WHERE plan_filename LIKE '%.md'"); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("strip .md suffix from subtasks: %w", err)
 	}

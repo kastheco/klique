@@ -254,7 +254,7 @@ func TestSpawnTaskAgent_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	planFile := "shared-wt-patch.md"
+	planFile := "shared-wt-patch"
 	require.NoError(t, ps.Register(planFile, "shared wt patch test", "plan/shared-wt-patch", time.Now()))
 
 	coderTemp := 0.8
@@ -335,7 +335,7 @@ func TestSpawnWaveTasks_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	const planFile = "wave-wt-patch.md"
+	const planFile = "wave-wt-patch"
 	require.NoError(t, ps.Register(planFile, "wave wt patch test", "plan/wave-wt-patch", time.Now()))
 
 	coderTemp := 0.75
@@ -505,8 +505,8 @@ func TestSpawnPlanAgent_SoloTitlesArePlanScoped(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 
-	const firstPlan = "wrong-timezone.md"
-	const secondPlan = "rename-solo-agent-label.md"
+	const firstPlan = "wrong-timezone"
+	const secondPlan = "rename-solo-agent-label"
 	require.NoError(t, ps.Register(firstPlan, "wrong timezone", "plan/wrong-timezone", time.Now()))
 	require.NoError(t, ps.Register(secondPlan, "rename solo agent label", "plan/rename-solo-agent-label", time.Now()))
 
