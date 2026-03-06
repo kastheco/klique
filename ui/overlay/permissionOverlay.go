@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,6 +21,12 @@ const (
 )
 
 var permissionChoiceLabels = []string{"allow once", "allow always", "reject"}
+
+var ansiSequenceRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+func stripANSI(s string) string {
+	return ansiSequenceRE.ReplaceAllString(s, "")
+}
 
 // PermissionOverlay shows a three-choice modal for opencode permission prompts.
 type PermissionOverlay struct {
@@ -120,6 +127,47 @@ func (p *PermissionOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	case tea.KeyEscape:
 		return Result{Dismissed: true}
 	}
+	return Result{}
+}
+
+// HandleMouse implements MouseHandler. It processes a click event and returns the
+// result. Only left clicks on the choice row are handled.
+func (p *PermissionOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	if button != tea.MouseLeft {
+		return Result{}
+	}
+
+	viewLines := strings.Split(p.render(), "\n")
+	choiceLine := -1
+	for i, line := range viewLines {
+		if strings.Contains(stripANSI(line), "allow once") {
+			choiceLine = i
+			break
+		}
+	}
+	if relY != choiceLine {
+		return Result{}
+	}
+
+	if choiceLine < 0 || choiceLine >= len(viewLines) {
+		return Result{}
+	}
+	line := stripANSI(viewLines[choiceLine])
+
+	for i, label := range permissionChoiceLabels {
+		idx := strings.Index(line, label)
+		if idx < 0 {
+			continue
+		}
+		start := len([]rune(line[:idx]))
+		end := start + len([]rune(label))
+		if relX >= start && relX < end {
+			p.selectedIdx = i
+			p.confirmed = true
+			return Result{Dismissed: true, Submitted: true, Action: permissionActionLabels[i]}
+		}
+	}
+
 	return Result{}
 }
 

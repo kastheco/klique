@@ -223,6 +223,30 @@ func (b *TmuxBrowserOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	return Result{}
 }
 
+// HandleMouse implements MouseHandler. A left click on a visible session row
+// selects it and mirrors the Enter key by attaching to that session.
+func (b *TmuxBrowserOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	if button != tea.MouseLeft {
+		return Result{}
+	}
+
+	lines := strings.Split(b.View(), "\n")
+	if relY < 0 || relY >= len(lines) {
+		return Result{}
+	}
+
+	line := stripANSI(lines[relY])
+	for i, idx := range b.filtered {
+		item := b.sessions[idx]
+		if strings.Contains(line, item.Title) {
+			b.selectedIdx = i
+			return Result{Dismissed: true, Action: "attach"}
+		}
+	}
+
+	return Result{}
+}
+
 // View implements Overlay. Returns the rendered overlay string.
 func (b *TmuxBrowserOverlay) View() string {
 	return b.render()

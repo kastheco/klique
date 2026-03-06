@@ -1,11 +1,28 @@
 package overlay
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+var _ MouseHandler = NewPickerOverlay("pick", []string{"alpha"})
+
+func pickerMouseTarget(t *testing.T, view, needle string) (int, int) {
+	t.Helper()
+	for y, line := range strings.Split(view, "\n") {
+		clean := stripANSI(line)
+		x := strings.Index(clean, needle)
+		if x >= 0 {
+			return x, y
+		}
+	}
+	require.FailNowf(t, "missing target", "could not find %q in view", needle)
+	return 0, 0
+}
 
 func TestPickerOverlay_ImplementsOverlay(t *testing.T) {
 	var _ Overlay = NewPickerOverlay("pick one", []string{"a", "b", "c"})
@@ -56,4 +73,24 @@ func TestPickerOverlay_View(t *testing.T) {
 	assert.Contains(t, view, "select item")
 	assert.Contains(t, view, "one")
 	assert.Contains(t, view, "two")
+}
+
+func TestPickerOverlay_HandleMouse_SelectBeta(t *testing.T) {
+	p := NewPickerOverlay("pick", []string{"alpha", "beta"})
+	x, y := pickerMouseTarget(t, p.View(), "beta")
+
+	result := p.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.Equal(t, Result{Dismissed: true, Submitted: true, Value: "beta"}, result)
+}
+
+func TestPickerOverlay_HandleMouse_SelectCustomEntry(t *testing.T) {
+	p := NewPickerOverlay("pick", []string{"alpha"})
+	p.SetAllowCustom(true)
+	p.HandleKey(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	x, y := pickerMouseTarget(t, p.View(), "Create: z")
+
+	result := p.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.Equal(t, Result{Dismissed: true, Submitted: true, Value: "z"}, result)
 }

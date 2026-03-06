@@ -131,6 +131,30 @@ func (p *PickerOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	return Result{}
 }
 
+// HandleMouse handles mouse clicks and translates them into picker selection.
+func (p *PickerOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	if button != tea.MouseLeft {
+		return Result{}
+	}
+
+	lines := strings.Split(p.View(), "\n")
+	if relY < 0 || relY >= len(lines) {
+		return Result{}
+	}
+
+	line := stripANSI(lines[relY])
+	for i, item := range p.filtered {
+		if strings.Contains(line, item) {
+			p.selectedIdx = i
+			p.submitted = true
+			p.cancelled = false
+			return Result{Dismissed: true, Submitted: true, Value: p.Value()}
+		}
+	}
+
+	return Result{}
+}
+
 // View implements Overlay using DefaultStyles for rendering.
 func (p *PickerOverlay) View() string {
 	st := DefaultStyles()
