@@ -51,5 +51,6 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewInstanceCmd())
 	root.AddCommand(NewAuditCmd())
 	root.AddCommand(NewTmuxCmd())
+	root.AddCommand(NewSignalCmd())
 	return root
 }
