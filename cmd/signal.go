@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -196,5 +197,5 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 
 // defaultSignalsDir returns the canonical signals directory path for a repo root.
 func defaultSignalsDir(repoRoot string) string {
-	return repoRoot + "/.kasmos/signals"
+	return filepath.Join(repoRoot, ".kasmos", "signals")
 }
