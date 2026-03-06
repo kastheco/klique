@@ -347,3 +347,32 @@ func TestSQLiteStore_PlanGoal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ship resilient workflow", got.Goal)
 }
+
+func TestSQLiteStore_PRMetadata(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	project := "test"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+
+	require.NoError(t, store.SetPRURL(project, "plan.md", "https://github.com/org/repo/pull/42"))
+	require.NoError(t, store.SetPRState(project, "plan.md", "APPROVED", "SUCCESS"))
+
+	entry, err := store.Get(project, "plan.md")
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/org/repo/pull/42", entry.PRURL)
+	assert.Equal(t, "APPROVED", entry.PRReviewDecision)
+	assert.Equal(t, "SUCCESS", entry.PRCheckStatus)
+}
+
+func TestSQLiteStore_PRMetadata_NotFound(t *testing.T) {
+	store := newTestStore(t)
+
+	err := store.SetPRURL("test", "nonexistent.md", "https://github.com/org/repo/pull/42")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+
+	err = store.SetPRState("test", "nonexistent.md", "APPROVED", "SUCCESS")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

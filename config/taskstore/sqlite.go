@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS tasks (
 	implementing_at TEXT NOT NULL DEFAULT '',
 	reviewing_at TEXT    NOT NULL DEFAULT '',
 	done_at     TEXT    NOT NULL DEFAULT '',
-	goal        TEXT    NOT NULL DEFAULT '',
+	goal                TEXT    NOT NULL DEFAULT '',
+	pr_url              TEXT    NOT NULL DEFAULT '',
+	pr_review_decision  TEXT    NOT NULL DEFAULT '',
+	pr_check_status     TEXT    NOT NULL DEFAULT '',
 	UNIQUE(project, filename)
 );
 
@@ -74,6 +77,15 @@ const clickupTaskIDMigration = `ALTER TABLE tasks ADD COLUMN clickup_task_id TEX
 
 // reviewCycleMigration adds the review_cycle column to existing databases.
 const reviewCycleMigration = `ALTER TABLE tasks ADD COLUMN review_cycle INTEGER NOT NULL DEFAULT 0`
+
+// prURLMigration adds the pr_url column to existing databases.
+const prURLMigration = `ALTER TABLE tasks ADD COLUMN pr_url TEXT NOT NULL DEFAULT ''`
+
+// prReviewDecisionMigration adds the pr_review_decision column to existing databases.
+const prReviewDecisionMigration = `ALTER TABLE tasks ADD COLUMN pr_review_decision TEXT NOT NULL DEFAULT ''`
+
+// prCheckStatusMigration adds the pr_check_status column to existing databases.
+const prCheckStatusMigration = `ALTER TABLE tasks ADD COLUMN pr_check_status TEXT NOT NULL DEFAULT ''`
 
 // SQLiteStore is a Store implementation backed by a SQLite database.
 type SQLiteStore struct {
@@ -163,6 +175,20 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("migrate goal column: %w", err)
 	}
 
+	// Add PR metadata columns if they don't exist (upgrade existing databases).
+	if err := migrateAddColumn(db, "pr_url", prURLMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate pr_url column: %w", err)
+	}
+	if err := migrateAddColumn(db, "pr_review_decision", prReviewDecisionMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate pr_review_decision column: %w", err)
+	}
+	if err := migrateAddColumn(db, "pr_check_status", prCheckStatusMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate pr_check_status column: %w", err)
+	}
+
 	// Create subtasks table if missing.
 	if _, err := db.Exec(subtasksTableMigration); err != nil {
 		db.Close()
@@ -243,8 +269,8 @@ func (s *SQLiteStore) Ping() error {
 // Returns an error if a task with the same filename already exists in the project.
 func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 	const q = `
-		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tasks (project, filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle, pr_url, pr_review_decision, pr_check_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(q,
 		project,
@@ -263,6 +289,9 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 		entry.Content,
 		entry.ClickUpTaskID,
 		entry.ReviewCycle,
+		entry.PRURL,
+		entry.PRReviewDecision,
+		entry.PRCheckStatus,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -277,7 +306,7 @@ func (s *SQLiteStore) Create(project string, entry TaskEntry) error {
 // Returns an error if the task is not found.
 func (s *SQLiteStore) Get(project, filename string) (TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle, pr_url, pr_review_decision, pr_check_status
 		FROM tasks
 		WHERE project = ? AND filename = ?
 	`
@@ -351,7 +380,7 @@ func (s *SQLiteStore) Rename(project, oldFilename, newFilename string) error {
 // List returns all task entries for the given project, sorted by filename.
 func (s *SQLiteStore) List(project string) ([]TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle, pr_url, pr_review_decision, pr_check_status
 		FROM tasks
 		WHERE project = ?
 		ORDER BY filename ASC
@@ -380,7 +409,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 	}
 
 	q := fmt.Sprintf(`
-		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle, pr_url, pr_review_decision, pr_check_status
 		FROM tasks
 		WHERE project = ? AND status IN (%s)
 		ORDER BY filename ASC
@@ -398,7 +427,7 @@ func (s *SQLiteStore) ListByStatus(project string, statuses ...Status) ([]TaskEn
 // sorted by filename.
 func (s *SQLiteStore) ListByTopic(project, topic string) ([]TaskEntry, error) {
 	const q = `
-		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle
+		SELECT filename, status, description, branch, topic, created_at, implemented, planning_at, implementing_at, reviewing_at, done_at, goal, content, clickup_task_id, review_cycle, pr_url, pr_review_decision, pr_check_status
 		FROM tasks
 		WHERE project = ? AND topic = ?
 		ORDER BY filename ASC
@@ -661,10 +690,47 @@ func (s *SQLiteStore) SetPlanGoal(project, filename, goal string) error {
 	return nil
 }
 
+// SetPRURL sets the pull request URL for an existing task entry.
+// Returns an error if the task is not found.
+func (s *SQLiteStore) SetPRURL(project, filename, url string) error {
+	const q = `UPDATE tasks SET pr_url = ? WHERE project = ? AND filename = ?`
+	result, err := s.db.Exec(q, url, project, filename)
+	if err != nil {
+		return fmt.Errorf("set pr_url: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set pr_url rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
+// SetPRState sets the review decision and check status for an existing task entry.
+// Returns an error if the task is not found.
+func (s *SQLiteStore) SetPRState(project, filename, reviewDecision, checkStatus string) error {
+	const q = `UPDATE tasks SET pr_review_decision = ?, pr_check_status = ? WHERE project = ? AND filename = ?`
+	result, err := s.db.Exec(q, reviewDecision, checkStatus, project, filename)
+	if err != nil {
+		return fmt.Errorf("set pr_state: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set pr_state rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("plan not found: %s/%s", project, filename)
+	}
+	return nil
+}
+
 // scanTaskEntry scans a single row into a TaskEntry.
 func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 	var filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string
 	var reviewCycle int
+	var prURL, prReviewDecision, prCheckStatus string
 	if err := row.Scan(
 		&filename,
 		&status,
@@ -681,6 +747,9 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 		&content,
 		&clickupTaskID,
 		&reviewCycle,
+		&prURL,
+		&prReviewDecision,
+		&prCheckStatus,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return TaskEntry{}, fmt.Errorf("plan not found")
@@ -688,21 +757,24 @@ func scanTaskEntry(row *sql.Row) (TaskEntry, error) {
 		return TaskEntry{}, fmt.Errorf("scan plan: %w", err)
 	}
 	return TaskEntry{
-		Filename:       filename,
-		Status:         Status(status),
-		Description:    description,
-		Branch:         branch,
-		Topic:          topic,
-		CreatedAt:      parseTime(createdAt),
-		Implemented:    implemented,
-		PlanningAt:     parseTime(planningAt),
-		ImplementingAt: parseTime(implementingAt),
-		ReviewingAt:    parseTime(reviewingAt),
-		DoneAt:         parseTime(doneAt),
-		Goal:           goal,
-		Content:        content,
-		ClickUpTaskID:  clickupTaskID,
-		ReviewCycle:    reviewCycle,
+		Filename:         filename,
+		Status:           Status(status),
+		Description:      description,
+		Branch:           branch,
+		Topic:            topic,
+		CreatedAt:        parseTime(createdAt),
+		Implemented:      implemented,
+		PlanningAt:       parseTime(planningAt),
+		ImplementingAt:   parseTime(implementingAt),
+		ReviewingAt:      parseTime(reviewingAt),
+		DoneAt:           parseTime(doneAt),
+		Goal:             goal,
+		Content:          content,
+		ClickUpTaskID:    clickupTaskID,
+		ReviewCycle:      reviewCycle,
+		PRURL:            prURL,
+		PRReviewDecision: prReviewDecision,
+		PRCheckStatus:    prCheckStatus,
 	}, nil
 }
 
@@ -712,6 +784,7 @@ func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {
 	for rows.Next() {
 		var filename, status, description, branch, topic, createdAt, implemented, planningAt, implementingAt, reviewingAt, doneAt, goal, content, clickupTaskID string
 		var reviewCycle int
+		var prURL, prReviewDecision, prCheckStatus string
 		if err := rows.Scan(
 			&filename,
 			&status,
@@ -728,25 +801,31 @@ func scanTaskEntries(rows *sql.Rows) ([]TaskEntry, error) {
 			&content,
 			&clickupTaskID,
 			&reviewCycle,
+			&prURL,
+			&prReviewDecision,
+			&prCheckStatus,
 		); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
 		entries = append(entries, TaskEntry{
-			Filename:       filename,
-			Status:         Status(status),
-			Description:    description,
-			Branch:         branch,
-			Topic:          topic,
-			CreatedAt:      parseTime(createdAt),
-			Implemented:    implemented,
-			PlanningAt:     parseTime(planningAt),
-			ImplementingAt: parseTime(implementingAt),
-			ReviewingAt:    parseTime(reviewingAt),
-			DoneAt:         parseTime(doneAt),
-			Goal:           goal,
-			Content:        content,
-			ClickUpTaskID:  clickupTaskID,
-			ReviewCycle:    reviewCycle,
+			Filename:         filename,
+			Status:           Status(status),
+			Description:      description,
+			Branch:           branch,
+			Topic:            topic,
+			CreatedAt:        parseTime(createdAt),
+			Implemented:      implemented,
+			PlanningAt:       parseTime(planningAt),
+			ImplementingAt:   parseTime(implementingAt),
+			ReviewingAt:      parseTime(reviewingAt),
+			DoneAt:           parseTime(doneAt),
+			Goal:             goal,
+			Content:          content,
+			ClickUpTaskID:    clickupTaskID,
+			ReviewCycle:      reviewCycle,
+			PRURL:            prURL,
+			PRReviewDecision: prReviewDecision,
+			PRCheckStatus:    prCheckStatus,
 		})
 	}
 	if err := rows.Err(); err != nil {

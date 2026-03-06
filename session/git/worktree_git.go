@@ -1,12 +1,93 @@
 package git
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 
 	"github.com/kastheco/kasmos/log"
 )
+
+// PRState holds the current state of a GitHub pull request as returned by
+// `gh pr view --json url,reviewDecision,statusCheckRollup,isDraft,number`.
+type PRState struct {
+	URL            string
+	ReviewDecision string
+	CheckStatus    string
+	IsDraft        bool
+	Number         int
+}
+
+// ParsePRViewJSON parses the JSON output of `gh pr view --json ...` into a PRState.
+// A missing statusCheckRollup is not an error — CheckStatus will be empty.
+func ParsePRViewJSON(data []byte) (PRState, error) {
+	var raw struct {
+		URL               string `json:"url"`
+		ReviewDecision    string `json:"reviewDecision"`
+		StatusCheckRollup *struct {
+			State string `json:"state"`
+		} `json:"statusCheckRollup"`
+		IsDraft bool `json:"isDraft"`
+		Number  int  `json:"number"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return PRState{}, fmt.Errorf("parse pr view json: %w", err)
+	}
+	state := PRState{
+		URL:            raw.URL,
+		ReviewDecision: raw.ReviewDecision,
+		IsDraft:        raw.IsDraft,
+		Number:         raw.Number,
+	}
+	if raw.StatusCheckRollup != nil {
+		state.CheckStatus = raw.StatusCheckRollup.State
+	}
+	return state, nil
+}
+
+// QueryPRState queries GitHub for the current state of the pull request
+// associated with the worktree's branch. It returns a zero PRState (and nil
+// error) when no pull request exists for the branch.
+//
+// The command runs inside repoPath rather than worktreePath: gh pr view only
+// needs any valid git repo directory, and the branch-specific worktree may
+// have been cleaned up after the plan completed.
+func (g *GitWorktree) QueryPRState() (PRState, error) {
+	cmd := exec.Command("gh", "pr", "view", g.branchName,
+		"--json", "url,reviewDecision,statusCheckRollup,isDraft,number")
+	cmd.Dir = g.repoPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "no pull requests found") {
+			return PRState{}, nil
+		}
+		return PRState{}, fmt.Errorf("failed to query PR state: %s (%w)", out, err)
+	}
+	return ParsePRViewJSON(out)
+}
+
+// PostGitHubReview posts a review comment (or approval) to the pull request
+// identified by prNumber. When approve is true the review is submitted as an
+// approval; otherwise it is posted as a plain comment.
+func (g *GitWorktree) PostGitHubReview(prNumber int, body string, approve bool) error {
+	if prNumber <= 0 {
+		return fmt.Errorf("invalid pr number: %d", prNumber)
+	}
+	numStr := fmt.Sprintf("%d", prNumber)
+	var cmd *exec.Cmd
+	if approve {
+		cmd = exec.Command("gh", "pr", "review", numStr, "--approve", "-b", body)
+	} else {
+		cmd = exec.Command("gh", "pr", "review", numStr, "--comment", "-b", body)
+	}
+	cmd.Dir = g.worktreePath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to post github review: %s (%w)", out, err)
+	}
+	return nil
+}
 
 // runGitCommand executes a git command with the given path as the working directory.
 // It builds the invocation as: git -C <path> <args...>, captures combined stdout+stderr,

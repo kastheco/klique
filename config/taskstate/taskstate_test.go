@@ -620,6 +620,32 @@ func TestTaskState_LoadRequiresStore(t *testing.T) {
 	assert.Len(t, ps.Plans, 1)
 }
 
+func TestFinished_SortedByDoneAtDescending(t *testing.T) {
+	t1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	ps := &TaskState{
+		Dir: "/tmp",
+		Plans: map[string]TaskEntry{
+			// created newest but done oldest — should sort last
+			"oldest-done.md": {Status: StatusDone, CreatedAt: t3, DoneAt: t1},
+			// created oldest but done newest — should sort first
+			"newest-done.md": {Status: StatusDone, CreatedAt: t1, DoneAt: t3},
+			// in the middle by done time
+			"middle-done.md": {Status: StatusDone, CreatedAt: t2, DoneAt: t2},
+			// non-done plans must not appear
+			"active.md": {Status: StatusImplementing, CreatedAt: t3, DoneAt: time.Time{}},
+		},
+	}
+
+	finished := ps.Finished()
+	require.Len(t, finished, 3)
+	assert.Equal(t, "newest-done.md", finished[0].Filename, "newest done must sort first")
+	assert.Equal(t, "middle-done.md", finished[1].Filename)
+	assert.Equal(t, "oldest-done.md", finished[2].Filename, "oldest done must sort last")
+}
+
 func TestSetClickUpTaskID(t *testing.T) {
 	ps := newTestPS(t)
 	require.NoError(t, ps.Create("cu-test.md", "clickup test", "plan/cu-test", "", time.Now()))
@@ -653,39 +679,6 @@ func TestSetClickUpTaskID_NotFound(t *testing.T) {
 	err := ps.SetClickUpTaskID("nonexistent.md", "CU-xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
-}
-
-func TestFinished_SortedByDoneAtDescending(t *testing.T) {
-	base := time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
-	ps := &TaskState{
-		Dir: "/tmp",
-		Plans: map[string]TaskEntry{
-			"old.md": {
-				Status:    StatusDone,
-				CreatedAt: base.Add(-1 * time.Hour),
-				DoneAt:    base.Add(-3 * time.Hour),
-			},
-			"newest.md": {
-				Status:    StatusDone,
-				CreatedAt: base.Add(-10 * time.Hour),
-				DoneAt:    base,
-			},
-			"middle.md": {
-				Status:    StatusDone,
-				CreatedAt: base.Add(-30 * time.Minute),
-				DoneAt:    base.Add(-90 * time.Minute),
-			},
-			"active.md": {Status: StatusImplementing},
-		},
-	}
-
-	finished := ps.Finished()
-	require.Len(t, finished, 3)
-	assert.Equal(t, "newest.md", finished[0].Filename, "most recently done should be first")
-	assert.Equal(t, "middle.md", finished[1].Filename)
-	assert.Equal(t, "old.md", finished[2].Filename, "oldest done should be last")
-
-	assert.False(t, finished[0].DoneAt.IsZero())
 }
 
 func TestTaskState_ReviewCycle(t *testing.T) {

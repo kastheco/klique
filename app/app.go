@@ -19,6 +19,7 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
+	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -259,6 +260,9 @@ type home struct {
 
 	// previewTickCount counts preview ticks for throttled banner animation
 	previewTickCount int
+
+	// metadataTickCount counts metadata ticks for throttled PR state polling.
+	metadataTickCount int
 
 	// cachedPlanFile is the filename of the last rendered plan (for cache hit).
 	cachedPlanFile string
@@ -647,6 +651,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())
 		m.pendingPRToastID = ""
 		return m, m.toastTickCmd()
+	case prCreatedForPlanMsg:
+		if msg.url != "" && m.taskStore != nil {
+			if err := m.taskStore.SetPRURL(m.taskStoreProject, msg.planFile, msg.url); err != nil {
+				log.WarningLog.Printf("prCreatedForPlanMsg: could not persist PR URL for %q: %v", msg.planFile, err)
+			}
+		}
+		m.loadTaskState()
+		m.updateInfoPane()
+		planName := taskstate.DisplayName(msg.planFile)
+		m.toastManager.Success(fmt.Sprintf("pr created for '%s'", planName))
+		return m, m.toastTickCmd()
 	case planRenderedMsg:
 		if msg.err != nil {
 			return m, m.handleError(msg.err)
@@ -759,6 +774,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		signalsDir := m.signalsDir     // snapshot for goroutine
 		store := m.taskStore           // snapshot for goroutine
 		project := m.taskStoreProject  // snapshot for goroutine
+		repoPath := m.activeRepoPath   // snapshot for goroutine
+		m.metadataTickCount++
+		tickCount := m.metadataTickCount // capture by value for goroutine
 
 		return m, func() tea.Msg {
 			results := make([]instanceMetadata, 0, len(snapshots))
@@ -834,8 +852,36 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())
+
+			// Periodically poll PR state for plans that have a PR URL.
+			// Poll every 10th tick (~2s) to avoid hammering the GitHub API.
+			var prStateUpdates []prStateUpdateMsg
+			if tickCount%10 == 0 && store != nil {
+				if entries, err := store.List(project); err == nil {
+					for _, entry := range entries {
+						if entry.PRURL == "" || entry.Branch == "" {
+							continue
+						}
+						shared := gitpkg.NewSharedTaskWorktree(repoPath, entry.Branch)
+						state, err := shared.QueryPRState()
+						if err != nil {
+							log.WarningLog.Printf("PR poll: QueryPRState for %q: %v", entry.Filename, err)
+							continue
+						}
+						if state.URL == "" {
+							continue
+						}
+						prStateUpdates = append(prStateUpdates, prStateUpdateMsg{
+							planFile:       entry.Filename,
+							reviewDecision: mapPRReviewDecision(state.ReviewDecision),
+							checkStatus:    mapPRCheckStatus(state.CheckStatus),
+						})
+					}
+				}
+			}
+
 			time.Sleep(200 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount, PRStateUpdates: prStateUpdates}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
@@ -907,6 +953,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							signalCmds = append(signalCmds, cmd)
 						}
 						break
+					}
+				}
+				// Auto-create PR if the plan has a branch and no PR yet.
+				if m.taskStore != nil {
+					if entry, err := m.taskStore.Get(m.taskStoreProject, sig.TaskFile); err == nil {
+						if shouldCreatePR(entry) {
+							signalCmds = append(signalCmds, m.createPRAfterApproval(sig.TaskFile, sig.Body))
+						}
 					}
 				}
 			case taskfsm.ReviewChangesRequested:
@@ -1559,6 +1613,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Apply PR state updates from periodic polling.
+		if len(msg.PRStateUpdates) > 0 && m.taskStore != nil {
+			selectedPlanFile := m.nav.GetSelectedPlanFile()
+			selectedPlanChanged := false
+			for _, u := range msg.PRStateUpdates {
+				if err := m.taskStore.SetPRState(m.taskStoreProject, u.planFile, u.reviewDecision, u.checkStatus); err != nil {
+					log.WarningLog.Printf("PR state update: could not persist for %q: %v", u.planFile, err)
+				}
+				if u.planFile == selectedPlanFile {
+					selectedPlanChanged = true
+				}
+			}
+			if selectedPlanChanged {
+				m.loadTaskState()
+				m.updateInfoPane()
+			}
+		}
+
 		m.updateSidebarTasks()
 		m.updateInfoPane()
 		completionCmd := m.checkPlanCompletion()
@@ -1997,6 +2069,19 @@ type prCreatedMsg struct {
 	prTitle       string
 }
 
+// prCreatedForPlanMsg is sent when automatic PR creation on review approval succeeds.
+type prCreatedForPlanMsg struct {
+	planFile string
+	url      string
+}
+
+// prStateUpdateMsg carries updated PR review/check state for a single plan.
+type prStateUpdateMsg struct {
+	planFile       string
+	reviewDecision string
+	checkStatus    string
+}
+
 // prErrorMsg is sent when async PR creation fails.
 type prErrorMsg struct {
 	id  string
@@ -2154,6 +2239,7 @@ type metadataResultMsg struct {
 	WaveSignals        []taskfsm.WaveSignal        // implement-wave-N signal files found this tick
 	ElaborationSignals []taskfsm.ElaborationSignal // elaborator-finished signal files found this tick
 	TmuxSessionCount   int                         // number of kas_-prefixed tmux sessions
+	PRStateUpdates     []prStateUpdateMsg          // PR review/check state refreshed this tick
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 200ms. We iterate

@@ -863,4 +863,18 @@ func TestPatchWorktreeConfig_Idempotent_NoRewriteWhenUnchanged(t *testing.T) {
 	assert.Equal(t, before, after)
 }
 
+func TestLoadReviewPrompt_ContainsTieredStructure(t *testing.T) {
+	prompt := LoadReviewPrompt("test-plan.md", "test-plan")
+	assert.Contains(t, prompt, "Phase 0")
+	assert.Contains(t, prompt, "Phase 1")
+	assert.Contains(t, prompt, "Phase 2")
+	assert.Contains(t, prompt, "Phase 3")
+	assert.Contains(t, prompt, "change profile")
+	assert.Contains(t, prompt, "DECISION:")
+	assert.Contains(t, prompt, "{{true|false}}", "change profile option markers must remain in rendered output")
+	assert.NotContains(t, prompt, "{{PLAN_FILE}}")
+	assert.NotContains(t, prompt, "{{PLAN_FILENAME}}")
+	assert.NotContains(t, prompt, "{{PLAN_NAME}}")
+}
+
 func ptrFloat(f float64) *float64 { return &f }

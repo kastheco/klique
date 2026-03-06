@@ -209,6 +209,54 @@ func migrateFromPlanstoreDB(db *sql.DB, dbPath string) error {
 				_ = err
 			}
 		}
+
+		// Copy pr_url if it exists.
+		if columnExistsInAttached(db, "old", "plans", "pr_url") {
+			if _, err := db.Exec(`
+				UPDATE tasks SET pr_url = (
+					SELECT old.plans.pr_url FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+				WHERE EXISTS (
+					SELECT 1 FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+			`); err != nil {
+				_ = err
+			}
+		}
+
+		// Copy pr_review_decision if it exists.
+		if columnExistsInAttached(db, "old", "plans", "pr_review_decision") {
+			if _, err := db.Exec(`
+				UPDATE tasks SET pr_review_decision = (
+					SELECT old.plans.pr_review_decision FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+				WHERE EXISTS (
+					SELECT 1 FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+			`); err != nil {
+				_ = err
+			}
+		}
+
+		// Copy pr_check_status if it exists.
+		if columnExistsInAttached(db, "old", "plans", "pr_check_status") {
+			if _, err := db.Exec(`
+				UPDATE tasks SET pr_check_status = (
+					SELECT old.plans.pr_check_status FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+				WHERE EXISTS (
+					SELECT 1 FROM old.plans
+					WHERE old.plans.project = tasks.project AND old.plans.filename = tasks.filename
+				)
+			`); err != nil {
+				_ = err
+			}
+		}
 	}
 
 	// Copy topics.

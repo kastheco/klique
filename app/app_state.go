@@ -33,6 +33,93 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// shouldCreatePR returns true when a plan entry is eligible for automatic PR creation:
+// the plan is done, has a branch, and does not already have a PR URL.
+func shouldCreatePR(entry taskstore.TaskEntry) bool {
+	return entry.Status == taskstore.StatusDone && entry.Branch != "" && entry.PRURL == ""
+}
+
+// mapPRReviewDecision maps GitHub review decision strings to internal representation.
+func mapPRReviewDecision(ghValue string) string {
+	switch ghValue {
+	case "APPROVED":
+		return "approved"
+	case "CHANGES_REQUESTED":
+		return "changes_requested"
+	default:
+		return "pending"
+	}
+}
+
+// mapPRCheckStatus maps GitHub check status strings to internal representation.
+func mapPRCheckStatus(ghValue string) string {
+	switch ghValue {
+	case "SUCCESS":
+		return "passing"
+	case "FAILURE", "ERROR":
+		return "failing"
+	default:
+		return "pending"
+	}
+}
+
+// createPRAfterApproval returns an async tea.Cmd that creates a GitHub PR for the given
+// plan file, posts an approving review with the reviewer's body, and reports the URL back.
+func (m *home) createPRAfterApproval(planFile, reviewBody string) tea.Cmd {
+	repoPath := m.activeRepoPath
+	store := m.taskStore
+	project := m.taskStoreProject
+	planName := taskstate.DisplayName(planFile)
+
+	return func() tea.Msg {
+		entry, err := store.Get(project, planFile)
+		if err != nil {
+			log.WarningLog.Printf("createPRAfterApproval: could not get entry for %q: %v", planFile, err)
+			return nil
+		}
+		if entry.Branch == "" {
+			log.WarningLog.Printf("createPRAfterApproval: no branch for %q — skipping PR creation", planFile)
+			return nil
+		}
+
+		shared := gitpkg.NewSharedTaskWorktree(repoPath, entry.Branch)
+		if err := shared.Setup(); err != nil {
+			log.WarningLog.Printf("createPRAfterApproval: worktree setup failed for %q: %v", planFile, err)
+			return nil
+		}
+
+		title := planName
+		body := reviewBody
+		if body == "" {
+			body = fmt.Sprintf("Implementation of '%s' reviewed and approved.", planName)
+		}
+		commitMsg := fmt.Sprintf("[kas] implementation of '%s'", planName)
+		if err := shared.CreatePR(title, body, commitMsg); err != nil {
+			log.WarningLog.Printf("createPRAfterApproval: PR creation failed for %q: %v", planFile, err)
+			return nil
+		}
+
+		state, err := shared.QueryPRState()
+		if err != nil {
+			log.WarningLog.Printf("createPRAfterApproval: QueryPRState failed for %q: %v", planFile, err)
+			return nil
+		}
+		if state.URL == "" {
+			log.WarningLog.Printf("createPRAfterApproval: empty URL for %q after PR creation", planFile)
+			return nil
+		}
+
+		if state.Number > 0 {
+			if err := shared.PostGitHubReview(state.Number, body, true); err != nil {
+				log.WarningLog.Printf("createPRAfterApproval: PostGitHubReview failed for %q: %v", planFile, err)
+				// Non-fatal — PR was created, review posting failed.
+			}
+		}
+
+		return prCreatedForPlanMsg{planFile: planFile, url: state.URL}
+	}
+}
+
 func mergeTopicStatus(status ui.TopicStatus, inst *session.Instance, started bool) ui.TopicStatus {
 	if started && !inst.Paused() && !inst.PromptDetected {
 		status.HasRunning = true
@@ -107,6 +194,14 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 					}
 				}
 			}
+
+			// Populate PR state from the task store (has full PR metadata).
+			if m.taskStore != nil {
+				if storeEntry, err := m.taskStore.Get(m.taskStoreProject, planFile); err == nil && storeEntry.PRURL != "" {
+					data.PRState = mapPRReviewDecision(storeEntry.PRReviewDecision)
+					data.PRChecks = mapPRCheckStatus(storeEntry.PRCheckStatus)
+				}
+			}
 		}
 	case selected != nil && selected.Branch != "":
 		data.Branch = selected.Branch
@@ -115,6 +210,14 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 			if ok {
 				data.PlanName = taskstate.DisplayName(selected.TaskFile)
 				data.PlanStatus = string(entry.Status)
+
+				// Populate PR state from the task store.
+				if m.taskStore != nil {
+					if storeEntry, err := m.taskStore.Get(m.taskStoreProject, selected.TaskFile); err == nil && storeEntry.PRURL != "" {
+						data.PRState = mapPRReviewDecision(storeEntry.PRReviewDecision)
+						data.PRChecks = mapPRCheckStatus(storeEntry.PRCheckStatus)
+					}
+				}
 			}
 		}
 	}

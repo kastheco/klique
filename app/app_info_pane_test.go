@@ -346,5 +346,11 @@ func (f *failingSubtaskStore) ListTopics(project string) ([]taskstore.TopicEntry
 func (f *failingSubtaskStore) CreateTopic(project string, entry taskstore.TopicEntry) error {
 	return f.inner.CreateTopic(project, entry)
 }
+func (f *failingSubtaskStore) SetPRURL(project, filename, url string) error {
+	return f.inner.SetPRURL(project, filename, url)
+}
+func (f *failingSubtaskStore) SetPRState(project, filename, reviewDecision, checkStatus string) error {
+	return f.inner.SetPRState(project, filename, reviewDecision, checkStatus)
+}
 func (f *failingSubtaskStore) Ping() error  { return f.inner.Ping() }
 func (f *failingSubtaskStore) Close() error { return f.inner.Close() }

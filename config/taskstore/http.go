@@ -66,6 +66,16 @@ func (s *HTTPStore) taskGoalURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/goal", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
+// taskPRURLURL builds the URL for a task's PR URL update endpoint.
+func (s *HTTPStore) taskPRURLURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-url", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
+// taskPRStateURL builds the URL for a task's PR state update endpoint.
+func (s *HTTPStore) taskPRStateURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-state", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
 // topicURL builds the base URL for a project's topics endpoint.
 func (s *HTTPStore) topicURL(project string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/topics", s.baseURL, url.PathEscape(project))
@@ -566,6 +576,65 @@ func (s *HTTPStore) SetPlanGoal(project, filename, goal string) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// SetPRURL sets the pull request URL for an existing task entry.
+func (s *HTTPStore) SetPRURL(project, filename, prURL string) error {
+	body, err := json.Marshal(struct {
+		PRURL string `json:"pr_url"`
+	}{PRURL: prURL})
+	if err != nil {
+		return fmt.Errorf("task store: marshal pr_url payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskPRURLURL(project, filename), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("task store: plan not found: %s", filename)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// SetPRState sets the review decision and check status for an existing task entry.
+func (s *HTTPStore) SetPRState(project, filename, reviewDecision, checkStatus string) error {
+	body, err := json.Marshal(struct {
+		PRReviewDecision string `json:"pr_review_decision"`
+		PRCheckStatus    string `json:"pr_check_status"`
+	}{PRReviewDecision: reviewDecision, PRCheckStatus: checkStatus})
+	if err != nil {
+		return fmt.Errorf("task store: marshal pr_state payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, s.taskPRStateURL(project, filename), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("task store: plan not found: %s", filename)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return decodeError(resp)
 	}

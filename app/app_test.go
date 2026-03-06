@@ -10,6 +10,7 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -1422,4 +1423,36 @@ func TestMetadataTick_ExitedInstanceTransitionsToReady(t *testing.T) {
 	assert.True(t, inst.Exited, "instance should be marked exited")
 	assert.Equal(t, session.Ready, inst.Status,
 		"exited instance status should transition to Ready")
+}
+
+func TestShouldCreatePROnApproval(t *testing.T) {
+	tests := []struct {
+		name   string
+		entry  taskstore.TaskEntry
+		expect bool
+	}{
+		{name: "done with branch and no pr", entry: taskstore.TaskEntry{Status: taskstore.StatusDone, Branch: "plan/test", PRURL: ""}, expect: true},
+		{name: "done with existing pr", entry: taskstore.TaskEntry{Status: taskstore.StatusDone, Branch: "plan/test", PRURL: "https://github.com/org/repo/pull/1"}, expect: false},
+		{name: "not done", entry: taskstore.TaskEntry{Status: taskstore.StatusImplementing, Branch: "plan/test"}, expect: false},
+		{name: "done but no branch", entry: taskstore.TaskEntry{Status: taskstore.StatusDone, Branch: ""}, expect: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, shouldCreatePR(tt.entry))
+		})
+	}
+}
+
+func TestMapPRReviewDecision(t *testing.T) {
+	assert.Equal(t, "approved", mapPRReviewDecision("APPROVED"))
+	assert.Equal(t, "changes_requested", mapPRReviewDecision("CHANGES_REQUESTED"))
+	assert.Equal(t, "pending", mapPRReviewDecision("REVIEW_REQUIRED"))
+	assert.Equal(t, "pending", mapPRReviewDecision(""))
+}
+
+func TestMapPRCheckStatus(t *testing.T) {
+	assert.Equal(t, "passing", mapPRCheckStatus("SUCCESS"))
+	assert.Equal(t, "failing", mapPRCheckStatus("FAILURE"))
+	assert.Equal(t, "pending", mapPRCheckStatus("PENDING"))
+	assert.Equal(t, "pending", mapPRCheckStatus(""))
 }

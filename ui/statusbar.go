@@ -27,6 +27,8 @@ type StatusBarData struct {
 	FocusMode        bool        // true when in interactive/focus mode
 	TmuxSessionCount int         // total kas_ tmux sessions (0 = hide)
 	ProjectDir       string      // project directory name, shown right-aligned
+	PRState          string      // approved, changes_requested, pending (empty = no PR)
+	PRChecks         string      // passing, failing, pending (empty = unknown)
 }
 
 // StatusBar renders the top status bar row of the TUI.
@@ -110,6 +112,27 @@ func taskGlyphStr(g TaskGlyph) string {
 	}
 }
 
+// rightPRGroup builds a compact PR review/check indicator for the right side.
+// Returns "" when no PR state is set. Priority: failing checks > changes_requested > approved > pending.
+func (s *StatusBar) rightPRGroup() string {
+	if s.data.PRState == "" {
+		return ""
+	}
+
+	// Failing checks is the strongest signal regardless of review decision.
+	if s.data.PRChecks == "failing" {
+		return lipgloss.NewStyle().Foreground(ColorLove).Background(ColorSurface).Render("✕ pr")
+	}
+	switch s.data.PRState {
+	case "approved":
+		return lipgloss.NewStyle().Foreground(ColorFoam).Background(ColorSurface).Render("✓ pr")
+	case "changes_requested":
+		return lipgloss.NewStyle().Foreground(ColorRose).Background(ColorSurface).Render("● pr")
+	default:
+		return lipgloss.NewStyle().Foreground(ColorMuted).Background(ColorSurface).Render("○ pr")
+	}
+}
+
 // centerBranchGroup builds the centered git branch indicator.
 // Returns an empty string when no branch is set.
 func (s *StatusBar) centerBranchGroup() string {
@@ -178,10 +201,32 @@ func (s *StatusBar) String() string {
 		centerWidth = 0
 	}
 
-	// Build right section: project directory (right-aligned).
+	// Build right section: [prGroup · projectDir] or just one of them.
+	prGroup := s.rightPRGroup()
 	right := ""
 	rightWidth := 0
-	if s.data.ProjectDir != "" {
+
+	if prGroup != "" && s.data.ProjectDir != "" {
+		// Compose both together.
+		composed := prGroup + statusBarSepStyle.Render(" · ") + statusBarProjectDirStyle.Render(s.data.ProjectDir)
+		composedWidth := lipgloss.Width(composed)
+		rightStart := contentWidth - composedWidth
+		if rightStart >= centerStart+centerWidth+1 {
+			right = composed
+			rightWidth = composedWidth
+		} else {
+			// Can't fit both — try just prGroup.
+			right = prGroup
+			rightWidth = lipgloss.Width(prGroup)
+			if contentWidth-rightWidth < centerStart+centerWidth+1 {
+				right = ""
+				rightWidth = 0
+			}
+		}
+	} else if prGroup != "" {
+		right = prGroup
+		rightWidth = lipgloss.Width(prGroup)
+	} else if s.data.ProjectDir != "" {
 		right = statusBarProjectDirStyle.Render(s.data.ProjectDir)
 		rightWidth = lipgloss.Width(right)
 	}
