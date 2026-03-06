@@ -22,7 +22,7 @@ func TestStatusBarIncludedInView(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&spin),
 		overlays:     overlay.NewManager(),
 		statusBar:    ui.NewStatusBar(),

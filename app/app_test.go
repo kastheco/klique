@@ -48,7 +48,7 @@ func newTestHome() *home {
 		nav:            ui.NewNavigationPanel(&spin),
 		menu:           ui.NewMenu(),
 		auditPane:      ui.NewAuditPane(),
-		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&spin),
 		overlays:       overlay.NewManager(),
 		activeRepoPath: os.TempDir(),
@@ -486,7 +486,7 @@ func TestFocusRing(t *testing.T) {
 			appConfig:    config.DefaultConfig(),
 			nav:          ui.NewNavigationPanel(&spin),
 			menu:         ui.NewMenu(),
-			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		}
 	}
 
@@ -520,19 +520,9 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to agent")
 	})
 
-	t.Run("Tab cycles active tab from agent to diff, sidebar stays focused", func(t *testing.T) {
+	t.Run("Tab wraps active tab from agent to info, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
-
-		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
-		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to diff")
-	})
-
-	t.Run("Tab wraps active tab from diff to info, sidebar stays focused", func(t *testing.T) {
-		h := newTestHome()
-		h.tabbedWindow.SetActiveTab(ui.DiffTab)
 
 		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
 
@@ -550,24 +540,14 @@ func TestFocusRing(t *testing.T) {
 		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to info")
 	})
 
-	t.Run("Shift+Tab reverses active tab from diff to agent, sidebar stays focused", func(t *testing.T) {
-		h := newTestHome()
-		h.tabbedWindow.SetActiveTab(ui.DiffTab)
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
-
-		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
-		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to agent")
-	})
-
-	t.Run("Shift+Tab wraps active tab from info to diff, sidebar stays focused", func(t *testing.T) {
+	t.Run("Shift+Tab wraps active tab from info to agent, sidebar stays focused", func(t *testing.T) {
 		h := newTestHome()
 		h.tabbedWindow.SetActiveTab(ui.InfoTab)
 
 		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
-		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to diff")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to agent")
 	})
 
 	t.Run("T jumps to nav slot when instances exist", func(t *testing.T) {
@@ -590,16 +570,6 @@ func TestFocusRing(t *testing.T) {
 
 		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
 		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "! must switch to agent tab")
-	})
-
-	t.Run("@ switches active tab to diff, sidebar keeps focus", func(t *testing.T) {
-		h := newTestHome()
-		h.tabbedWindow.SetActiveTab(ui.InfoTab)
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: '@', Text: "@"})
-
-		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
-		assert.Equal(t, ui.DiffTab, homeModel.tabbedWindow.GetActiveTab(), "@ must switch to diff tab")
 	})
 
 	t.Run("# switches active tab to info, sidebar keeps focus", func(t *testing.T) {
@@ -778,7 +748,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 			appConfig:    config.DefaultConfig(),
 			nav:          ui.NewNavigationPanel(&spin),
 			menu:         ui.NewMenu(),
-			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		}
 
 		instA, err := session.NewInstance(session.InstanceOptions{
@@ -834,7 +804,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 			appConfig:    config.DefaultConfig(),
 			nav:          ui.NewNavigationPanel(&spin),
 			menu:         ui.NewMenu(),
-			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		}
 
 		// Attach a terminal.
@@ -943,7 +913,7 @@ func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
 			appConfig:    config.DefaultConfig(),
 			nav:          ui.NewNavigationPanel(&spin),
 			menu:         ui.NewMenu(),
-			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		}
 
 		instA, err := session.NewInstance(session.InstanceOptions{
@@ -1061,7 +1031,7 @@ func TestPreviewTerminalReadyMsg_StaleDiscard(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
 	// Add instance "B" and select it (simulating selection change after spawn started for "A").
@@ -1171,7 +1141,7 @@ func TestPreviewTerminalReadyMsg_AcceptsCurrentInstance(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
 	// Add instance "A" and select it.
@@ -1211,7 +1181,7 @@ func TestFocusMode_ReusesPreviewTerminal(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
 	// Add a started-looking instance. We can't actually start it (no tmux),
@@ -1342,7 +1312,7 @@ func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
 	// Set previewTerminalInstance to simulate an attached terminal.

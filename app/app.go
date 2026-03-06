@@ -19,7 +19,6 @@ import (
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
-	"github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -170,7 +169,7 @@ type home struct {
 	menu *ui.Menu
 	// statusBar displays the top contextual status bar
 	statusBar *ui.StatusBar
-	// tabbedWindow displays the tabbed window with preview and diff panes
+	// tabbedWindow displays the tabbed window with preview and info panes
 	tabbedWindow *ui.TabbedWindow
 	// toastManager manages toast notifications
 	toastManager *overlay.ToastManager
@@ -183,7 +182,7 @@ type home struct {
 
 	// nav handles unified navigation state
 	// focusSlot tracks which pane has keyboard focus in the Tab ring:
-	// 0=nav, 1=info tab, 2=agent tab, 3=diff tab
+	// 0=nav, 1=info tab, 2=agent tab
 	focusSlot int
 	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
@@ -365,7 +364,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		menu:                  ui.NewMenu(),
 		auditPane:             ui.NewAuditPane(),
 		statusBar:             ui.NewStatusBar(),
-		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		storage:               storage,
 		appConfig:             appConfig,
 		program:               program,
@@ -770,7 +769,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ContentCaptured:    md.ContentCaptured,
 					Updated:            md.Updated,
 					HasPrompt:          md.HasPrompt,
-					DiffStats:          md.DiffStats,
 					CPUPercent:         md.CPUPercent,
 					MemMB:              md.MemMB,
 					ResourceUsageValid: md.ResourceUsageValid,
@@ -1229,9 +1227,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 
-			if md.DiffStats != nil {
-				inst.SetDiffStats(md.DiffStats)
-			}
 			if md.ResourceUsageValid {
 				inst.CPUPercent = md.CPUPercent
 				inst.MemMB = md.MemMB
@@ -2140,7 +2135,6 @@ type instanceMetadata struct {
 	ContentCaptured    bool
 	Updated            bool
 	HasPrompt          bool
-	DiffStats          *git.DiffStats
 	CPUPercent         float64
 	MemMB              float64
 	ResourceUsageValid bool

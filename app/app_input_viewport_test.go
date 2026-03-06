@@ -18,7 +18,7 @@ import (
 func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 	// Up/Down always refocus the sidebar and navigate it, regardless of which
 	// pane was previously focused (when no document/scroll mode is active).
-	for _, slot := range []int{slotInfo, slotAgent, slotDiff} {
+	for _, slot := range []int{slotInfo, slotAgent} {
 		t.Run(fmt.Sprintf("from slot %d", slot), func(t *testing.T) {
 			spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 			h := &home{
@@ -27,7 +27,7 @@ func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 				appConfig:    config.DefaultConfig(),
 				nav:          ui.NewNavigationPanel(&spin),
 				menu:         ui.NewMenu(),
-				tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+				tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 				focusSlot:    slot,
 				keySent:      true,
 			}
@@ -41,7 +41,7 @@ func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 }
 
 func TestHandleKeyPress_UpKeyAlwaysFocusesNav(t *testing.T) {
-	for _, slot := range []int{slotInfo, slotAgent, slotDiff} {
+	for _, slot := range []int{slotInfo, slotAgent} {
 		t.Run(fmt.Sprintf("from slot %d", slot), func(t *testing.T) {
 			spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 			h := &home{
@@ -50,7 +50,7 @@ func TestHandleKeyPress_UpKeyAlwaysFocusesNav(t *testing.T) {
 				appConfig:    config.DefaultConfig(),
 				nav:          ui.NewNavigationPanel(&spin),
 				menu:         ui.NewMenu(),
-				tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+				tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 				focusSlot:    slot,
 				keySent:      true,
 			}
@@ -82,7 +82,7 @@ func TestHandleMouseWheel_DocumentModeScrollsWithoutSelectedInstance(t *testing.
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		keySent:      true,
 	}
 

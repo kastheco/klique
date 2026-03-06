@@ -165,13 +165,12 @@ func (m *home) updateNavPanelStatus() {
 }
 
 // focusSlot constants for readability.
-// Order matches tab layout: info (first), agent (second), diff (third).
+// Order matches tab layout: info (first), agent (second).
 const (
 	slotNav   = 0
 	slotInfo  = 1
 	slotAgent = 2
-	slotDiff  = 3
-	slotCount = 4
+	slotCount = 3
 )
 
 // setFocusSlot updates which pane has focus and syncs visual state.
@@ -180,8 +179,8 @@ func (m *home) setFocusSlot(slot int) {
 	m.nav.SetFocused(slot == slotNav)
 	m.menu.SetFocusSlot(slot)
 
-	// Center pane is focused when any of the 3 center tabs is active.
-	centerFocused := slot >= slotInfo && slot <= slotDiff
+	// Center pane is focused when any of the 2 center tabs is active.
+	centerFocused := slot >= slotInfo && slot <= slotAgent
 	m.tabbedWindow.SetFocused(centerFocused)
 
 	// When focusing a center tab, switch the visible tab to match and track which tab is focused.
@@ -192,30 +191,26 @@ func (m *home) setFocusSlot(slot int) {
 	// regardless of which pane has keyboard focus.
 }
 
-// nextFocusSlot cycles the visible center tab forward (info → agent → diff → info).
+// nextFocusSlot cycles the visible center tab forward (info ↔ agent).
 // The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
 // displayed tab changes. This is called by Tab and →.
 func (m *home) nextFocusSlot() {
 	switch m.tabbedWindow.GetActiveTab() {
 	case ui.InfoTab:
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-	case ui.PreviewTab:
-		m.tabbedWindow.SetActiveTab(ui.DiffTab)
-	default: // ui.DiffTab — wraps to info
+	default: // ui.PreviewTab — wraps to info
 		m.tabbedWindow.SetActiveTab(ui.InfoTab)
 	}
 }
 
-// prevFocusSlot cycles the visible center tab backward (info → diff → agent → info).
+// prevFocusSlot cycles the visible center tab backward (agent ↔ info).
 // The sidebar always retains keyboard focus (focusSlot stays slotNav).
 func (m *home) prevFocusSlot() {
 	switch m.tabbedWindow.GetActiveTab() {
 	case ui.PreviewTab:
 		m.tabbedWindow.SetActiveTab(ui.InfoTab)
-	case ui.DiffTab:
+	default: // ui.InfoTab — wraps to agent
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-	default: // ui.InfoTab — wraps to diff
-		m.tabbedWindow.SetActiveTab(ui.DiffTab)
 	}
 }
 
@@ -275,8 +270,6 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	switch name {
 	case keys.KeyTabAgent:
 		targetTab = ui.PreviewTab
-	case keys.KeyTabDiff:
-		targetTab = ui.DiffTab
 	case keys.KeyTabInfo:
 		targetTab = ui.InfoTab
 	default:
@@ -404,7 +397,6 @@ func (m *home) instanceChanged() tea.Cmd {
 		}
 	}
 
-	m.tabbedWindow.UpdateDiff(selected)
 	m.tabbedWindow.SetInstance(selected)
 	m.updateInfoPane()
 	// Update menu with current instance

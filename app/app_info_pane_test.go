@@ -79,7 +79,7 @@ func buildInfoPaneHome(t *testing.T) (*home, *taskstate.TaskState, taskstore.Sto
 		nav:               ui.NewNavigationPanel(&sp),
 		menu:              ui.NewMenu(),
 		auditPane:         ui.NewAuditPane(),
-		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		overlays:          overlay.NewManager(),
 		activeRepoPath:    os.TempDir(),

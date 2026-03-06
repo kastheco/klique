@@ -43,7 +43,7 @@ func newCancelDelayHome(t *testing.T, store taskstore.Store, ps *taskstate.TaskS
 		fsm:            taskfsm.New(store, "test", plansDir),
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
-		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
 		overlays:       overlay.NewManager(),
 		storage:        storage,

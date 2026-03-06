@@ -60,7 +60,7 @@ func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 	h := &home{
 		state:        stateDefault,
 		keySent:      true,
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		overlays:     overlay.NewManager(),
 	}
 
@@ -291,7 +291,7 @@ func TestNewPlanOverlaySizePreservedOnSpuriousWindowSize(t *testing.T) {
 	s := spinner.New()
 	h := &home{
 		state:        stateNewPlan,
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		nav:          ui.NewNavigationPanel(&s),
 		menu:         ui.NewMenu(),
 		toastManager: overlay.NewToastManager(&s),

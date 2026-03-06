@@ -116,7 +116,6 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	for i, zoneID := range ui.TabZoneIDs {
 		if zone.Get(zoneID).InBounds(msg) {
 			m.tabbedWindow.SetActiveTab(i)
-			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 			return m, nil
 		}
 	}
@@ -1073,17 +1072,16 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	}
 
-	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
-	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
-	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
+	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode.
+	// Always check for escape key first to ensure it doesn't get intercepted elsewhere.
 	if msg.Code == tea.KeyEscape {
 		// Exit document mode (plan viewer) on Esc
 		if m.tabbedWindow.IsDocumentMode() {
 			m.tabbedWindow.ClearDocumentMode()
 			return m, m.instanceChanged()
 		}
-		// If in preview tab and in scroll mode, exit scroll mode
-		if !m.tabbedWindow.IsInDiffTab() && m.tabbedWindow.IsPreviewInScrollMode() {
+		// If in scroll mode, exit scroll mode
+		if m.tabbedWindow.IsPreviewInScrollMode() {
 			// Use the selected instance from the list
 			selected := m.nav.GetSelectedInstance()
 			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
@@ -1245,7 +1243,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 		m.tabbedWindow.SetActiveTab(ui.InfoTab)
 		return m, nil
-	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabInfo:
+	case keys.KeyTabAgent, keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeySendPrompt:
 		// Ensure the agent tab is visible when entering focus mode.

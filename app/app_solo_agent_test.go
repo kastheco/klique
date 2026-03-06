@@ -51,7 +51,7 @@ func TestSoloAgent_NoAutomaticPushPromptOnExit(t *testing.T) {
 		appConfig:         config.DefaultConfig(),
 		nav:               list,
 		menu:              ui.NewMenu(),
-		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		overlays:          overlay.NewManager(),
 		taskState:         ps,
