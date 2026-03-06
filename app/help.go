@@ -90,7 +90,7 @@ func (h helpTypeInstanceStart) toContent() string {
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Branch))),
 		descStyle.Render(fmt.Sprintf("• %s running via %s",
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Program),
-			lipgloss.NewStyle().Bold(true).Render(config.NormalizeExecutionMode(h.instance.ExecutionMode)))),
+			lipgloss.NewStyle().Bold(true).Render(config.NormalizeExecutionMode(string(h.instance.ExecutionMode))))),
 		descStyle.Render("interactive attach is only available for tmux sessions; headless sessions use preview/log output."),
 		"",
 		headerStyle.Render("managing:"),
@@ -204,7 +204,7 @@ func (m *home) handleHelpState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.pendingAttachInstance = nil
 
 		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() &&
-			config.NormalizeExecutionMode(pending.ExecutionMode) == config.ExecutionModeTmux {
+			config.NormalizeExecutionMode(string(pending.ExecutionMode)) == config.ExecutionModeTmux {
 			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
 				if err != nil {
 					return err
