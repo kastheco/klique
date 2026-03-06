@@ -50,8 +50,8 @@ func TestStartTransfersQueuedPromptForOpenCode(t *testing.T) {
 		Path:         t.TempDir(),
 		Program:      "opencode",
 		QueuedPrompt: "Plan auth.",
-		tmuxSession:  tmux.NewTmuxSessionWithDeps("test-transfer", "opencode", false, &testPtyFactory{}, cmdExec),
 	}
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-transfer", "opencode", false, &testPtyFactory{}, cmdExec))
 
 	// Simulate StartOnMainBranch which is the simplest path.
 	err := inst.StartOnMainBranch()
@@ -74,8 +74,8 @@ func TestStartKeepsQueuedPromptForAider(t *testing.T) {
 		Path:         t.TempDir(),
 		Program:      "aider --model ollama_chat/gemma3:1b",
 		QueuedPrompt: "Fix the bug.",
-		tmuxSession:  tmux.NewTmuxSessionWithDeps("test-aider", "aider --model ollama_chat/gemma3:1b", false, &testPtyFactory{}, cmdExec),
 	}
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-aider", "aider --model ollama_chat/gemma3:1b", false, &testPtyFactory{}, cmdExec))
 
 	err := inst.StartOnMainBranch()
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestRestart_KillsTmuxAndRestartsSession(t *testing.T) {
 		Program: "opencode",
 		started: true,
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
 
 	err := inst.Restart()
 	assert.NoError(t, err)
@@ -117,7 +117,7 @@ func TestRestart_WorksWhenTmuxAlreadyDead(t *testing.T) {
 		started: true,
 		Exited:  true,
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
 
 	err := inst.Restart()
 	assert.NoError(t, err)
@@ -159,7 +159,7 @@ func TestStartOnBranch_SetsFields(t *testing.T) {
 			return []byte("Ask anything"), nil
 		},
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps("test-branch", "opencode", false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-branch", "opencode", false, &testPtyFactory{}, cmdExec))
 
 	err = inst.StartOnBranch("feature/task-5")
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestKill_PreservesBranch(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
 
 	err = inst.StartOnBranch("safe-kill-branch")
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestKill_DirtyWorktreeReturnsError(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
 
 	err = inst.StartOnBranch("dirty-kill-branch")
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestPause_DirtyWorktreeReturnsError(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
 
 	err = inst.StartOnBranch("dirty-pause-branch")
 	require.NoError(t, err)

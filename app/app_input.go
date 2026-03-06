@@ -1263,6 +1263,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
+		if config.NormalizeExecutionMode(selected.ExecutionMode) == config.ExecutionModeHeadless {
+			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; use the preview tab to review output", selected.Title))
+			return m, nil
+		}
 		return m, m.enterFocusMode()
 	case keys.KeySendYes:
 		selected := m.nav.GetSelectedInstance()
@@ -1399,6 +1403,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.toastManager.Error(fmt.Sprintf("session for '%s' is not running", selected.Title))
 			return m, m.toastTickCmd()
 		}
+		if config.NormalizeExecutionMode(selected.ExecutionMode) == config.ExecutionModeHeadless {
+			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; attach is disabled", selected.Title))
+			return m, nil
+		}
 		// Queue the selected instance, then show the attach help overlay.
 		// Actual attach (via tea.Exec) happens in handleHelpState once the user
 		// dismisses the help screen — this keeps bubbletea's event loop free.
@@ -1410,6 +1418,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if m.state != stateHelp && m.pendingAttachInstance != nil {
 			pending := m.pendingAttachInstance
 			m.pendingAttachInstance = nil
+			if config.NormalizeExecutionMode(pending.ExecutionMode) == config.ExecutionModeHeadless {
+				m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; attach is disabled", pending.Title))
+				return m, nil
+			}
 			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
 				if err != nil {
 					return err

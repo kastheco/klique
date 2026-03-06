@@ -1047,12 +1047,13 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 
 	cycle, _ := m.taskState.ReviewCycle(planFile)
 	reviewerInst, err := session.NewInstance(session.InstanceOptions{
-		Title:       fmt.Sprintf("%s-review-%d", planName, cycle+1),
-		Path:        m.activeRepoPath,
-		Program:     m.programForAgent(session.AgentTypeReviewer),
-		TaskFile:    planFile,
-		AgentType:   session.AgentTypeReviewer,
-		ReviewCycle: cycle + 1,
+		Title:         fmt.Sprintf("%s-review-%d", planName, cycle+1),
+		Path:          m.activeRepoPath,
+		Program:       m.programForAgent(session.AgentTypeReviewer),
+		ExecutionMode: m.executionModeForAgent(session.AgentTypeReviewer),
+		TaskFile:      planFile,
+		AgentType:     session.AgentTypeReviewer,
+		ReviewCycle:   cycle + 1,
 	})
 	if err != nil {
 		log.WarningLog.Printf("could not create reviewer instance for %q: %v", planFile, err)
@@ -1112,19 +1113,11 @@ func withOpenCodeModelFlag(program, model string) string {
 	return program + " --model " + model
 }
 
-// programForAgent resolves the program command for a given agent type
-// (e.g. "coder", "planner") using the kasmos config profile. Falls back to
-// m.program if no profile is configured.
-//
-// For typed agents (coder/planner/reviewer), opencode's own --agent flag
-// handles model selection via its agent config, so we do NOT append --model.
-// For ad-hoc instances (no agent type), we append --model since there is no
-// --agent flag to drive model selection.
-func (m *home) programForAgent(agentType string) string {
+func (m *home) profileForAgent(agentType string) config.AgentProfile {
 	if m.appConfig == nil {
-		return m.program
+		return config.AgentProfile{Program: m.program, ExecutionMode: config.ExecutionModeTmux}
 	}
-	// Map agent types to config phases or profile names.
+
 	var profile config.AgentProfile
 	switch agentType {
 	case session.AgentTypeCoder:
@@ -1138,18 +1131,41 @@ func (m *home) programForAgent(agentType string) string {
 	case session.AgentTypeElaborator:
 		profile = m.appConfig.ResolveProfile("elaborating", m.program)
 	default:
-		// Ad-hoc — use the "chat" profile if available.
 		if p, ok := m.appConfig.Profiles["chat"]; ok && p.Enabled && p.Program != "" {
 			profile = p
 		} else {
-			return m.program
+			return config.AgentProfile{Program: m.program, ExecutionMode: config.ExecutionModeTmux}
 		}
-		// Ad-hoc sessions have no --agent flag, so pass --model explicitly.
-		prog := profile.BuildCommand()
-		return withOpenCodeModelFlag(prog, profile.Model)
 	}
-	// Typed agents: opencode handles model via --agent <type> + its own config.
+	profile.ExecutionMode = config.NormalizeExecutionMode(profile.ExecutionMode)
+	return profile
+}
+
+// programForAgent resolves the program command for a given agent type
+// (e.g. "coder", "planner") using the kasmos config profile. Falls back to
+// m.program if no profile is configured.
+//
+// For typed agents (coder/planner/reviewer), opencode's own --agent flag
+// handles model selection via its agent config, so we do NOT append --model.
+// For ad-hoc instances (no agent type), we append --model since there is no
+// --agent flag to drive model selection.
+func (m *home) programForAgent(agentType string) string {
+	profile := m.profileForAgent(agentType)
+	if agentType == "" {
+		return withOpenCodeModelFlag(profile.BuildCommand(), profile.Model)
+	}
 	return profile.BuildCommand()
+}
+
+func (m *home) executionModeForAgent(agentType string) string {
+	mode := config.NormalizeExecutionMode(m.profileForAgent(agentType).ExecutionMode)
+	// Headless execution is only wired for coder sessions right now.
+	// Other agent roles remain tmux-attached for visibility and interactive
+	// control, while still allowing them to pick up any future shared config.
+	if agentType != session.AgentTypeCoder {
+		return config.ExecutionModeTmux
+	}
+	return mode
 }
 
 func normalizeOpenCodeModelID(model string) string {
@@ -1330,12 +1346,13 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 
 	cycle, _ := m.taskState.ReviewCycle(planFile)
 	coderInst, err := session.NewInstance(session.InstanceOptions{
-		Title:       fmt.Sprintf("%s-fix-%d", planName, cycle),
-		Path:        m.activeRepoPath,
-		Program:     m.programForAgent(session.AgentTypeCoder),
-		TaskFile:    planFile,
-		AgentType:   session.AgentTypeCoder,
-		ReviewCycle: cycle,
+		Title:         fmt.Sprintf("%s-fix-%d", planName, cycle),
+		Path:          m.activeRepoPath,
+		Program:       m.programForAgent(session.AgentTypeCoder),
+		ExecutionMode: m.executionModeForAgent(session.AgentTypeCoder),
+		TaskFile:      planFile,
+		AgentType:     session.AgentTypeCoder,
+		ReviewCycle:   cycle,
 	})
 	if err != nil {
 		log.WarningLog.Printf("could not create coder instance for %q: %v", planFile, err)
@@ -1384,10 +1401,11 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 	prompt := orchestration.BuildElaborationPrompt(planFile)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:    fmt.Sprintf("%s-elaborator", planName),
-		Path:     m.activeRepoPath,
-		Program:  m.programForAgent(session.AgentTypeElaborator),
-		TaskFile: planFile,
+		Title:         fmt.Sprintf("%s-elaborator", planName),
+		Path:          m.activeRepoPath,
+		Program:       m.programForAgent(session.AgentTypeElaborator),
+		ExecutionMode: m.executionModeForAgent(session.AgentTypeElaborator),
+		TaskFile:      planFile,
 	})
 	if err != nil {
 		return m, m.handleError(err)
@@ -1678,6 +1696,9 @@ func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Ins
 	if !tmuxAlive {
 		return true
 	}
+	if config.NormalizeExecutionMode(inst.ExecutionMode) == config.ExecutionModeHeadless && inst.Exited {
+		return true
+	}
 	// Agent returned to prompt after finishing queued work — covers the
 	// review-feedback coder ("applying fixes") which stays alive in tmux.
 	if inst.PromptDetected && !inst.AwaitingWork {
@@ -1873,11 +1894,12 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 		title = fmt.Sprintf("%s-review-%d", planName, reviewCycle+1)
 	}
 	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:     title,
-		Path:      m.activeRepoPath,
-		Program:   m.programForAgent(agentType),
-		TaskFile:  planFile,
-		AgentType: agentType,
+		Title:         title,
+		Path:          m.activeRepoPath,
+		Program:       m.programForAgent(agentType),
+		ExecutionMode: m.executionModeForAgent(agentType),
+		TaskFile:      planFile,
+		AgentType:     agentType,
 	})
 	if err != nil {
 		return m, m.handleError(err)
@@ -2082,14 +2104,15 @@ func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []task
 		prompt := orch.BuildTaskPrompt(task, len(tasks))
 
 		inst, err := session.NewInstance(session.InstanceOptions{
-			Title:      fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
-			Path:       m.activeRepoPath,
-			Program:    m.programForAgent(session.AgentTypeCoder),
-			TaskFile:   planFile,
-			AgentType:  session.AgentTypeCoder,
-			TaskNumber: task.Number,
-			WaveNumber: orch.CurrentWaveNumber(),
-			PeerCount:  len(tasks),
+			Title:         fmt.Sprintf("%s-W%d-T%d", planName, orch.CurrentWaveNumber(), task.Number),
+			Path:          m.activeRepoPath,
+			Program:       m.programForAgent(session.AgentTypeCoder),
+			ExecutionMode: m.executionModeForAgent(session.AgentTypeCoder),
+			TaskFile:      planFile,
+			AgentType:     session.AgentTypeCoder,
+			TaskNumber:    task.Number,
+			WaveNumber:    orch.CurrentWaveNumber(),
+			PeerCount:     len(tasks),
 		})
 		if err != nil {
 			return m, m.handleError(err)

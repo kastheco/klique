@@ -8,7 +8,7 @@ import (
 )
 
 // BuildTaskPrompt constructs the prompt for a single task instance.
-func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {
+func BuildTaskPrompt(planFile string, plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Implement Task %d: %s\n\n", task.Number, task.Title))
@@ -21,7 +21,8 @@ func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, to
 	sb.WriteString("- Run scoped tests before committing: `go test ./pkg/... -run Test<Name> -v`\n")
 	sb.WriteString("- Verify build: `go build ./...`\n")
 	sb.WriteString("- Commit: `git add <specific-files> && git commit -m \"feat(task-N): description\"`\n")
-	sb.WriteString("- When done: stop. kasmos detects completion automatically. Do NOT write sentinel files.\n\n")
+	sb.WriteString(fmt.Sprintf("- When done: write completion sentinel `touch .kasmos/signals/implement-task-finished-w%d-t%d-%s`, then stop.\n\n",
+		waveNumber, task.Number, planFile))
 
 	// Plan context
 	header := plan.HeaderContext()
