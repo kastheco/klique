@@ -206,6 +206,11 @@ func (m *home) handleActiveOverlayMouse(msg tea.MouseClickMsg) (tea.Model, tea.C
 
 	case statePrompt:
 		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.RequestWindowSize
+		}
 		m.state = stateDefault
 		return m, tea.Sequence(
 			tea.RequestWindowSize,
