@@ -60,6 +60,7 @@ type TaskInfo struct {
 	Branch      string
 	Topic       string
 	CreatedAt   time.Time
+	DoneAt      time.Time
 }
 
 type TopicInfo struct {
@@ -230,7 +231,7 @@ func (ps *TaskState) Unfinished() []TaskInfo {
 	return result
 }
 
-// Finished returns plans that are done, sorted by creation time (newest first).
+// Finished returns plans that are done, sorted by completion time (newest first).
 func (ps *TaskState) Finished() []TaskInfo {
 	result := make([]TaskInfo, 0)
 	for filename, entry := range ps.Plans {
@@ -241,11 +242,12 @@ func (ps *TaskState) Finished() []TaskInfo {
 			Filename: filename, Status: entry.Status,
 			Description: entry.Description, Branch: entry.Branch,
 			Topic: entry.Topic, CreatedAt: entry.CreatedAt,
+			DoneAt: entry.DoneAt,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
-		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
-			return result[i].CreatedAt.After(result[j].CreatedAt)
+		if !result[i].DoneAt.Equal(result[j].DoneAt) {
+			return result[i].DoneAt.After(result[j].DoneAt)
 		}
 		return result[i].Filename > result[j].Filename
 	})

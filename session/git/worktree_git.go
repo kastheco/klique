@@ -49,10 +49,14 @@ func ParsePRViewJSON(data []byte) (PRState, error) {
 // QueryPRState queries GitHub for the current state of the pull request
 // associated with the worktree's branch. It returns a zero PRState (and nil
 // error) when no pull request exists for the branch.
+//
+// The command runs inside repoPath rather than worktreePath: gh pr view only
+// needs any valid git repo directory, and the branch-specific worktree may
+// have been cleaned up after the plan completed.
 func (g *GitWorktree) QueryPRState() (PRState, error) {
 	cmd := exec.Command("gh", "pr", "view", g.branchName,
 		"--json", "url,reviewDecision,statusCheckRollup,isDraft,number")
-	cmd.Dir = g.worktreePath
+	cmd.Dir = g.repoPath
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(out), "no pull requests found") {
