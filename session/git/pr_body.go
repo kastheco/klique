@@ -8,6 +8,27 @@ import (
 	"github.com/kastheco/kasmos/config/taskstore"
 )
 
+// PRMetadata stores parsed plan content and git summary details used to build a PR body.
+type PRMetadata struct {
+	Description     string
+	Goal            string
+	Architecture    string
+	TechStack       string
+	ReviewerSummary string
+	ReviewCycle     int
+	Subtasks        []PRSubtask
+	GitChanges      string
+	GitCommits      string
+	GitStats        string
+}
+
+// PRSubtask stores an individual plan subtask entry for PR body rendering.
+type PRSubtask struct {
+	Number int
+	Title  string
+	Status string
+}
+
 // PRBodyInputs collects metadata used to build a PR body.
 type PRBodyInputs struct {
 	PlanContent     string
@@ -31,34 +52,8 @@ func BuildPRTitle(description, goal, planFile string) string {
 	return strings.TrimSuffix(planFile, ".md")
 }
 
-// BuildPRBody creates a lower-case, markdown-formatted PR body from plan metadata,
-// subtask status, reviewer summary, and git snippets.
-func BuildPRBody(inputs PRBodyInputs, entry taskstore.TaskEntry) string {
-	var (
-		goal         string
-		architecture string
-		techStack    string
-	)
-
-	if entry.Goal != "" {
-		goal = entry.Goal
-	}
-	if parsed, err := taskparser.Parse(inputs.PlanContent); err == nil {
-		if goal == "" && strings.TrimSpace(parsed.Goal) != "" {
-			goal = parsed.Goal
-		}
-		if strings.TrimSpace(parsed.Architecture) != "" {
-			architecture = parsed.Architecture
-		}
-		if strings.TrimSpace(parsed.TechStack) != "" {
-			techStack = parsed.TechStack
-		}
-	}
-
-	if inputs.ReviewCycle == 0 {
-		inputs.ReviewCycle = entry.ReviewCycle
-	}
-
+// BuildPRBody creates a lower-case, markdown-formatted PR body from PR metadata.
+func BuildPRBody(meta PRMetadata) string {
 	var sections []string
 	appendSection := func(title string, body string) {
 		trimmed := strings.TrimSpace(body)
@@ -68,21 +63,21 @@ func BuildPRBody(inputs PRBodyInputs, entry taskstore.TaskEntry) string {
 		sections = append(sections, "## "+title+"\n\n"+trimmed)
 	}
 
-	appendSection("goal", goal)
-	appendSection("architecture", architecture)
-	appendSection("tech stack", techStack)
+	appendSection("goal", meta.Goal)
+	appendSection("architecture", meta.Architecture)
+	appendSection("tech stack", meta.TechStack)
 
-	if len(inputs.Subtasks) > 0 {
+	if len(meta.Subtasks) > 0 {
 		var taskLines strings.Builder
-		for _, subtask := range inputs.Subtasks {
+		for _, subtask := range meta.Subtasks {
 			checked := "- [ ] "
 			s := string(subtask.Status)
 			if s == "complete" || s == "done" || s == "closed" {
 				checked = "- [x] "
 			}
 			line := strings.TrimSpace(subtask.Title)
-			if subtask.TaskNumber > 0 {
-				line = "task " + strconv.Itoa(subtask.TaskNumber) + ": " + line
+			if subtask.Number > 0 {
+				line = "task " + strconv.Itoa(subtask.Number) + ": " + line
 			}
 			if line != "" {
 				taskLines.WriteString(checked + line + "\n")
@@ -91,15 +86,53 @@ func BuildPRBody(inputs PRBodyInputs, entry taskstore.TaskEntry) string {
 		appendSection("tasks", taskLines.String())
 	}
 
-	if inputs.ReviewCycle > 0 {
-		appendSection("review cycle", strconv.Itoa(inputs.ReviewCycle))
+	if meta.ReviewCycle > 0 {
+		appendSection("review cycle", strconv.Itoa(meta.ReviewCycle))
 	}
-	appendSection("reviewer summary", inputs.ReviewerSummary)
-	appendSection("changes", inputs.Changes)
-	appendSection("commits", inputs.Commits)
-	appendSection("stats", inputs.Stats)
+	appendSection("reviewer summary", meta.ReviewerSummary)
+	appendSection("changes", meta.GitChanges)
+	appendSection("commits", meta.GitCommits)
+	appendSection("stats", meta.GitStats)
 
 	return strings.Join(sections, "\n\n")
+}
+
+// BuildPRBodyFromInputs builds a PR body from the legacy input format.
+func BuildPRBodyFromInputs(inputs PRBodyInputs, entry taskstore.TaskEntry) string {
+	meta := PRMetadata{
+		Description:     strings.TrimSpace(entry.Description),
+		Goal:            strings.TrimSpace(entry.Goal),
+		ReviewerSummary: strings.TrimSpace(inputs.ReviewerSummary),
+		ReviewCycle:     inputs.ReviewCycle,
+		GitChanges:      strings.TrimSpace(inputs.Changes),
+		GitCommits:      strings.TrimSpace(inputs.Commits),
+		GitStats:        strings.TrimSpace(inputs.Stats),
+		Subtasks:        make([]PRSubtask, 0, len(inputs.Subtasks)),
+	}
+
+	if meta.ReviewCycle == 0 {
+		meta.ReviewCycle = entry.ReviewCycle
+	}
+
+	if entry.Goal == "" && strings.TrimSpace(inputs.PlanContent) != "" {
+		if plan, err := taskparser.Parse(inputs.PlanContent); err == nil {
+			if meta.Goal == "" && strings.TrimSpace(plan.Goal) != "" {
+				meta.Goal = strings.TrimSpace(plan.Goal)
+			}
+			meta.Architecture = strings.TrimSpace(plan.Architecture)
+			meta.TechStack = strings.TrimSpace(plan.TechStack)
+		}
+	}
+
+	for _, subtask := range inputs.Subtasks {
+		meta.Subtasks = append(meta.Subtasks, PRSubtask{
+			Number: int(subtask.TaskNumber),
+			Title:  strings.TrimSpace(subtask.Title),
+			Status: string(subtask.Status),
+		})
+	}
+
+	return BuildPRBody(meta)
 }
 
 // PRBodySections stores parsed git snippet sections from GeneratePRBody output.
