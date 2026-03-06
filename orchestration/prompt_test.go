@@ -64,20 +64,6 @@ func TestBuildTaskPrompt_InlineCoderRules(t *testing.T) {
 	assert.Contains(t, prompt, "go build ./...")
 }
 
-func TestBuildTaskPrompt_InlinesCoderRules(t *testing.T) {
-	plan := &taskparser.Plan{Goal: "Test inlining"}
-	task := taskparser.Task{Number: 1, Title: "Do thing", Body: "Make the change"}
-
-	prompt := BuildTaskPrompt(plan, task, 1, 1, 1)
-
-	assert.NotContains(t, prompt, "Load the `kasmos-coder` skill")
-	assert.NotContains(t, prompt, "cli-tools")
-	assert.Contains(t, prompt, "## Rules")
-	assert.Contains(t, prompt, "rg")
-	assert.Contains(t, prompt, "git add")
-	assert.Contains(t, prompt, "Do NOT write sentinel files")
-}
-
 func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 	plan := &taskparser.Plan{Goal: "Simple"}
 	task := taskparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
