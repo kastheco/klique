@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/session/git"
-	"github.com/kastheco/kasmos/session/tmux"
 )
 
 // Status represents the current state of an instance.
@@ -32,7 +31,7 @@ const (
 	AgentTypeElaborator = "elaborator"
 )
 
-// Instance represents a managed agent session with its associated tmux and git state.
+// Instance represents a managed agent session with its associated execution backend and git state.
 type Instance struct {
 	// Title is the display name and tmux session identifier for this instance.
 	Title string
@@ -42,8 +41,10 @@ type Instance struct {
 	Branch string
 	// Status is the current lifecycle state of the instance.
 	Status Status
-	// Program is the agent command to execute within the tmux session.
+	// Program is the agent command to execute within the session.
 	Program string
+	// ExecutionMode determines how the agent process is hosted (tmux or headless).
+	ExecutionMode ExecutionMode
 	// Height is the terminal height in rows.
 	Height int
 	// Width is the terminal width in columns.
@@ -125,8 +126,8 @@ type Instance struct {
 
 	// started is true once Start() has been called successfully.
 	started bool
-	// tmuxSession manages the underlying tmux session for this instance.
-	tmuxSession *tmux.TmuxSession
+	// executionSession manages the underlying process host (tmux or headless) for this instance.
+	executionSession ExecutionSession
 	// gitWorktree manages the git worktree associated with this instance.
 	gitWorktree *git.GitWorktree
 }
@@ -144,6 +145,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		CreatedAt:              i.CreatedAt,
 		UpdatedAt:              time.Now(),
 		Program:                i.Program,
+		ExecutionMode:          NormalizeExecutionMode(i.ExecutionMode),
 		AutoYes:                i.AutoYes,
 		SkipPermissions:        i.SkipPermissions,
 		TaskFile:               i.TaskFile,
@@ -172,9 +174,13 @@ func (i *Instance) ToInstanceData() InstanceData {
 }
 
 // FromInstanceData reconstructs an Instance from its serialised form.
-// For paused instances the tmux session is prepared but not started.
-// For live instances the tmux session is reattached; dead sessions are marked Exited.
+// Empty or unknown ExecutionMode is normalised to tmux before constructing the session.
+// For paused instances the execution session is prepared but not started.
+// For live instances the session is reattached; dead sessions are marked Exited.
 func FromInstanceData(data InstanceData) (*Instance, error) {
+	// Normalise empty/unknown mode to tmux for backward compatibility.
+	mode := NormalizeExecutionMode(data.ExecutionMode)
+
 	instance := &Instance{
 		Title:                  data.Title,
 		Path:                   data.Path,
@@ -185,6 +191,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt:              data.CreatedAt,
 		UpdatedAt:              data.UpdatedAt,
 		Program:                data.Program,
+		ExecutionMode:          mode,
 		SkipPermissions:        data.SkipPermissions,
 		TaskFile:               data.TaskFile,
 		AgentType:              data.AgentType,
@@ -208,17 +215,19 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	if instance.Paused() {
 		// Paused instances keep the session struct ready but do not reattach.
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
+		es := NewExecutionSession(mode, instance.Title, instance.Program, instance.SkipPermissions)
+		es.SetAgentType(instance.AgentType)
+		instance.executionSession = es
 		return instance, nil
 	}
 
-	// Build the tmux session handle and check liveness before attempting a full restore.
-	ts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
-	ts.SetAgentType(instance.AgentType)
-	instance.tmuxSession = ts
+	// Build the execution session handle and check liveness before attempting a full restore.
+	es := NewExecutionSession(mode, instance.Title, instance.Program, instance.SkipPermissions)
+	es.SetAgentType(instance.AgentType)
+	instance.executionSession = es
 
-	if !ts.DoesSessionExist() {
-		// The tmux session is gone — mark as exited so the UI can display it as dead.
+	if !es.DoesSessionExist() {
+		// The session is gone — mark as exited so the UI can display it as dead.
 		instance.started = true
 		instance.Exited = true
 		instance.SetStatus(Ready)
@@ -235,12 +244,15 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 // InstanceOptions holds the configuration values for creating a new Instance.
 type InstanceOptions struct {
-	// Title is the display name and tmux session identifier.
+	// Title is the display name and session identifier.
 	Title string
 	// Path is the workspace directory.
 	Path string
 	// Program is the agent command to run (e.g. "claude", "opencode").
 	Program string
+	// ExecutionMode selects the process host backend (tmux or headless).
+	// Empty string defaults to ExecutionModeTmux.
+	ExecutionMode ExecutionMode
 	// AutoYes enables automatic confirmation of agent prompts.
 	AutoYes bool
 	// SkipPermissions enables --dangerously-skip-permissions for Claude.
@@ -274,6 +286,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Status:          Ready,
 		Path:            absPath,
 		Program:         opts.Program,
+		ExecutionMode:   NormalizeExecutionMode(opts.ExecutionMode),
 		Height:          0,
 		Width:           0,
 		CreatedAt:       now,
@@ -371,10 +384,12 @@ func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
-// TmuxAlive reports whether the underlying tmux session is still running.
+// TmuxAlive reports whether the underlying execution session is still running.
+// The method name is preserved for backward compatibility with callers that
+// use it to check session liveness (the semantics are unchanged).
 func (i *Instance) TmuxAlive() bool {
-	if i.tmuxSession == nil {
+	if i.executionSession == nil {
 		return false
 	}
-	return i.tmuxSession.DoesSessionExist()
+	return i.executionSession.DoesSessionExist()
 }

@@ -18,7 +18,7 @@ func (i *Instance) Preview() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContent()
+	return i.executionSession.CapturePaneContent()
 }
 
 // HasUpdated reports whether the pane content has changed since the last check.
@@ -27,16 +27,20 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	if !i.started {
 		return false, false
 	}
-	return i.tmuxSession.HasUpdated()
+	return i.executionSession.HasUpdated()
 }
 
 // NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected
 // to this instance's tmux PTY for zero-latency interactive focus mode.
+// Returns ErrInteractiveOnly for headless instances.
 func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {
-	if !i.started || i.tmuxSession == nil {
+	if i.ExecutionMode == ExecutionModeHeadless {
+		return nil, ErrInteractiveOnly
+	}
+	if !i.started || i.executionSession == nil {
 		return nil, fmt.Errorf("instance not started")
 	}
-	sessionName := i.tmuxSession.GetSanitizedName()
+	sessionName := i.executionSession.GetSanitizedName()
 	return NewEmbeddedTerminal(sessionName, cols, rows)
 }
 
@@ -46,18 +50,19 @@ func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {
 		return
 	}
-	if err := i.tmuxSession.TapEnter(); err != nil {
+	if err := i.executionSession.TapEnter(); err != nil {
 		log.ErrorLog.Printf("error tapping enter: %v", err)
 	}
 }
 
-// Attach connects the caller to the instance's tmux session.
+// Attach connects the caller to the instance's execution session.
 // Returns an error if the instance has not been started.
+// Returns ErrInteractiveOnly for headless instances.
 func (i *Instance) Attach() (chan struct{}, error) {
 	if !i.started {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
 	}
-	return i.tmuxSession.Attach()
+	return i.executionSession.Attach()
 }
 
 // SetPreviewSize resizes the detached pane to the given dimensions.
@@ -67,7 +72,7 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 		return fmt.Errorf("cannot set preview size for instance that has not been started or " +
 			"is paused")
 	}
-	return i.tmuxSession.SetDetachedSize(width, height)
+	return i.executionSession.SetDetachedSize(width, height)
 }
 
 // GetGitWorktree returns the git worktree associated with this instance.
@@ -80,40 +85,42 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 }
 
 // SendPrompt sends a text prompt followed by an enter keypress to the agent pane.
-// Returns an error if the instance is not started or the tmux session is nil.
+// Returns an error if the instance is not started or the execution session is nil.
 func (i *Instance) SendPrompt(prompt string) error {
 	if !i.started {
 		return fmt.Errorf("instance not started")
 	}
-	if i.tmuxSession == nil {
-		return fmt.Errorf("tmux session not initialized")
+	if i.executionSession == nil {
+		return fmt.Errorf("execution session not initialized")
 	}
-	if err := i.tmuxSession.SendKeys(prompt); err != nil {
-		return fmt.Errorf("error sending keys to tmux session: %w", err)
+	if err := i.executionSession.SendKeys(prompt); err != nil {
+		return fmt.Errorf("error sending keys to session: %w", err)
 	}
 	// Brief pause to prevent the carriage return from being misinterpreted.
 	time.Sleep(100 * time.Millisecond)
-	if err := i.tmuxSession.TapEnter(); err != nil {
+	if err := i.executionSession.TapEnter(); err != nil {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
 	return nil
 }
 
-// PreviewFullHistory captures the complete tmux pane output including the full scrollback buffer.
+// PreviewFullHistory captures the complete pane output including the full scrollback buffer.
 // Returns an empty string if the instance is not started or is paused.
 func (i *Instance) PreviewFullHistory() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
+	return i.executionSession.CapturePaneContentWithOptions("-", "-")
 }
 
 // SetTmuxSession replaces the tmux session handle. Intended for use in tests only.
+// The TmuxSession is wrapped in the internal tmuxExecutionSession adapter so that
+// the Instance can be used through the ExecutionSession interface.
 func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
-	i.tmuxSession = session
+	i.executionSession = &tmuxExecutionSession{s: session}
 }
 
-// MarkStartedForTest sets the started flag without spawning a real tmux session.
+// MarkStartedForTest sets the started flag without spawning a real session.
 // Use only in tests that need to simulate a running instance.
 func (i *Instance) MarkStartedForTest() {
 	i.started = true
@@ -125,13 +132,13 @@ func (i *Instance) SendKeys(keys string) error {
 	if !i.started || i.Status == Paused {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
-	return i.tmuxSession.SendKeys(keys)
+	return i.executionSession.SendKeys(keys)
 }
 
 // InstanceMetadata holds the results of a single per-tick poll for one instance.
 // All fields are value types — safe to pass between goroutines without synchronization.
 type InstanceMetadata struct {
-	// Content is the raw tmux capture-pane output.
+	// Content is the raw capture output.
 	Content         string
 	ContentCaptured bool
 	Updated         bool
@@ -140,7 +147,7 @@ type InstanceMetadata struct {
 	MemMB           float64
 	// ResourceUsageValid is true when CPU/memory data was successfully collected.
 	ResourceUsageValid bool
-	// TmuxAlive reflects the result of tmux has-session (used by the reviewer completion check).
+	// TmuxAlive reflects the result of session liveness check (used by the reviewer completion check).
 	TmuxAlive        bool
 	PermissionPrompt *PermissionPrompt
 }
@@ -154,8 +161,8 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 		return m
 	}
 
-	// Single capture-pane call shared by hash check, activity parsing, and preview.
-	m.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()
+	// Single capture call shared by hash check, activity parsing, and preview.
+	m.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.executionSession.HasUpdatedWithContent()
 
 	// Permission prompt detection — only meaningful when content was actually captured.
 	if m.ContentCaptured && m.Content != "" {
@@ -174,11 +181,11 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 // collectResourceUsage samples CPU and RSS memory for the agent process via pgrep and ps.
 // Returns (cpu%, memMB, ok). Safe to call from a goroutine.
 func (i *Instance) collectResourceUsage() (float64, float64, bool) {
-	if !i.started || i.tmuxSession == nil {
+	if !i.started || i.executionSession == nil {
 		return 0, 0, false
 	}
 
-	pid, err := i.tmuxSession.GetPanePID()
+	pid, err := i.executionSession.GetPanePID()
 	if err != nil {
 		return 0, 0, false
 	}
@@ -221,12 +228,12 @@ func (i *Instance) UpdateResourceUsage() {
 }
 
 // SendPermissionResponse forwards a permission dialog choice to the agent pane.
-// No-op if the instance is not started or the tmux session is nil.
+// No-op if the instance is not started or the execution session is nil.
 func (i *Instance) SendPermissionResponse(choice tmux.PermissionChoice) {
-	if !i.started || i.tmuxSession == nil {
+	if !i.started || i.executionSession == nil {
 		return
 	}
-	if err := i.tmuxSession.SendPermissionResponse(choice); err != nil {
+	if err := i.executionSession.SendPermissionResponse(choice); err != nil {
 		log.ErrorLog.Printf("error sending permission response: %v", err)
 	}
 }
