@@ -1467,6 +1467,54 @@ func TestShouldCreatePROnApproval(t *testing.T) {
 	}
 }
 
+func TestAssemblePRMetadata_FullEntry(t *testing.T) {
+	meta := assemblePRMetadata(taskstore.TaskEntry{
+		Description: "Auth Middleware",
+		Goal:        "add JWT auth to all routes",
+		Branch:      "plan/auth-middleware",
+		Content:     "# Auth\n\n**Goal:** add JWT auth\n\n**Architecture:** middleware chain\n\n**Tech Stack:** Go\n\n## Wave 1\n\n### Task 1: JWT middleware\n\nbody\n",
+	}, []taskstore.SubtaskEntry{
+		{TaskNumber: 1, Title: "JWT middleware", Status: taskstore.SubtaskStatusComplete},
+		{TaskNumber: 2, Title: "Route wiring", Status: taskstore.SubtaskStatusComplete},
+	}, "looks good, approved", 2, "file1.go", "abc123 fix: auth", "1 file changed")
+
+	assert.Equal(t, "Auth Middleware", meta.Description)
+	assert.Equal(t, "add JWT auth to all routes", meta.Goal)
+	assert.Equal(t, "middleware chain", meta.Architecture)
+	assert.Equal(t, "Go", meta.TechStack)
+	assert.Len(t, meta.Subtasks, 2)
+	assert.Equal(t, "looks good, approved", meta.ReviewerSummary)
+	assert.Equal(t, 2, meta.ReviewCycle)
+	assert.Equal(t, "file1.go", meta.GitChanges)
+}
+
+func TestAssemblePRMetadata_EmptyContent(t *testing.T) {
+	meta := assemblePRMetadata(taskstore.TaskEntry{
+		Description: "quick fix",
+		Goal:        "fix the bug",
+	}, nil, "", 0, "", "", "")
+
+	assert.Equal(t, "quick fix", meta.Description)
+	assert.Equal(t, "fix the bug", meta.Goal)
+	assert.Empty(t, meta.Architecture)
+	assert.Empty(t, meta.TechStack)
+	assert.Empty(t, meta.Subtasks)
+	assert.Zero(t, meta.ReviewCycle)
+}
+
+func TestAssemblePRMetadata_InvalidPlanContent(t *testing.T) {
+	meta := assemblePRMetadata(taskstore.TaskEntry{
+		Description: "quick fix",
+		Goal:        "fix the bug",
+		Content:     "# no waves here",
+	}, nil, "", 0, "", "", "")
+
+	assert.Equal(t, "quick fix", meta.Description)
+	assert.Equal(t, "fix the bug", meta.Goal)
+	assert.Empty(t, meta.Architecture)
+	assert.Empty(t, meta.TechStack)
+}
+
 func TestMapPRReviewDecision(t *testing.T) {
 	assert.Equal(t, "approved", mapPRReviewDecision("APPROVED"))
 	assert.Equal(t, "changes_requested", mapPRReviewDecision("CHANGES_REQUESTED"))
