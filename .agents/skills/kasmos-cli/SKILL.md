@@ -125,8 +125,8 @@ The commands below are derived from current Cobra handlers and help output in th
 | `kas instance list` | list all instances; defaults `text` format |
 | `kas instance list --format json` | outputs JSON with `title`, `status`, `branch`, `program`, optional `task_file` |
 | `kas instance list --status paused` | filters list by lowercase status |
-| `kas instance kill <title>` | removes tmux session and worktree, marks instance as paused (branch preserved); allowed from any state |
-| `kas instance pause <title>` | removes tmux session and worktree, marks paused; not allowed if already paused |
+| `kas instance kill <title>` | refuses dirty worktrees (shows changed-file summary), otherwise removes tmux session and worktree and marks paused (branch preserved); allowed from any state |
+| `kas instance pause <title>` | refuses dirty worktrees (shows changed-file summary), otherwise removes tmux session and worktree and marks paused; not allowed if already paused |
 | `kas instance resume <title>` | recreates worktree from preserved branch, restarts tmux session |
 | `kas instance send <title> <prompt>` | sends prompt into resumed tmux session |
 | `kas instance status` | shows aggregated counts (running, ready, paused, killed) |

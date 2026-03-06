@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -75,6 +76,29 @@ func (i *Instance) configureSessionTitle() {
 			log.ErrorLog.Printf("opencodesession: set title: %v", err)
 		}
 	})
+}
+
+func dirtyWorktreeContext(worktreePath string) string {
+	if strings.TrimSpace(worktreePath) == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", worktreePath, "status", "--short").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return ""
+	}
+	lines := strings.Split(trimmed, "\n")
+	preview := lines
+	if len(preview) > 5 {
+		preview = preview[:5]
+	}
+	if len(lines) > len(preview) {
+		return fmt.Sprintf(" (%s (+%d more))", strings.Join(preview, ", "), len(lines)-len(preview))
+	}
+	return fmt.Sprintf(" (%s)", strings.Join(preview, ", "))
 }
 
 // Start launches the instance. When firstTimeSetup is true a fresh git worktree is
@@ -297,6 +321,15 @@ func (i *Instance) Kill() error {
 	if !i.started {
 		return nil
 	}
+	if i.gitWorktree != nil && !i.sharedWorktree {
+		dirty, err := i.gitWorktree.IsDirty()
+		if err != nil {
+			return fmt.Errorf("failed to check if worktree is dirty: %w", err)
+		}
+		if dirty {
+			return fmt.Errorf("cannot kill instance with uncommitted changes%s; commit or stash first", dirtyWorktreeContext(i.gitWorktree.GetWorktreePath()))
+		}
+	}
 
 	var errs []error
 
@@ -336,6 +369,15 @@ func (i *Instance) Pause() error {
 	}
 	if i.Status == Paused {
 		return fmt.Errorf("instance is already paused")
+	}
+	if i.gitWorktree != nil && !i.sharedWorktree {
+		dirty, err := i.gitWorktree.IsDirty()
+		if err != nil {
+			return fmt.Errorf("failed to check if worktree is dirty: %w", err)
+		}
+		if dirty {
+			return fmt.Errorf("cannot pause instance with uncommitted changes%s; commit or stash first", dirtyWorktreeContext(i.gitWorktree.GetWorktreePath()))
+		}
 	}
 
 	var errs []error

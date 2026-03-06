@@ -202,3 +202,69 @@ func TestKill_PreservesBranch(t *testing.T) {
 	require.NoError(t, gitErr)
 	assert.Contains(t, string(out), branchName, "branch should be preserved after Kill()")
 }
+
+func TestKill_DirtyWorktreeReturnsError(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	inst, err := NewInstance(InstanceOptions{
+		Title:   "test-dirty-kill",
+		Path:    repoPath,
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+
+	err = inst.StartOnBranch("dirty-kill-branch")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if inst.gitWorktree != nil {
+			_ = inst.gitWorktree.Remove()
+			_ = inst.gitWorktree.Prune()
+		}
+	})
+
+	readmePath := filepath.Join(inst.GetWorktreePath(), "README.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte("dirty\n"), 0o644))
+
+	err = inst.Kill()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "uncommitted changes")
+	assert.Contains(t, err.Error(), "README.md")
+}
+
+func TestPause_DirtyWorktreeReturnsError(t *testing.T) {
+	repoPath := setupGitRepo(t)
+	inst, err := NewInstance(InstanceOptions{
+		Title:   "test-dirty-pause",
+		Path:    repoPath,
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc:    func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
+	}
+	inst.tmuxSession = tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec)
+
+	err = inst.StartOnBranch("dirty-pause-branch")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if inst.gitWorktree != nil {
+			_ = inst.gitWorktree.Remove()
+			_ = inst.gitWorktree.Prune()
+		}
+	})
+
+	readmePath := filepath.Join(inst.GetWorktreePath(), "README.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte("dirty\n"), 0o644))
+
+	err = inst.Pause()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "uncommitted changes")
+	assert.Contains(t, err.Error(), "README.md")
+}

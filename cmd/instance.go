@@ -371,6 +371,29 @@ func updateInstanceInState(state config.StateManager, title string, updater func
 	return state.SaveInstances(raw)
 }
 
+func ensureCleanWorktree(worktreePath, action string) error {
+	if strings.TrimSpace(worktreePath) == "" {
+		return nil
+	}
+	out, err := exec.Command("git", "-C", worktreePath, "status", "--short").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("check worktree status: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) > 0 && lines[0] != "" {
+		preview := lines
+		if len(preview) > 5 {
+			preview = preview[:5]
+		}
+		suffix := ""
+		if len(lines) > len(preview) {
+			suffix = fmt.Sprintf(" (+%d more)", len(lines)-len(preview))
+		}
+		return fmt.Errorf("cannot %s: worktree has uncommitted changes (%s%s); commit or stash first", action, strings.Join(preview, ", "), suffix)
+	}
+	return nil
+}
+
 // instanceStatusSummary holds counts of instances grouped by their status bucket.
 type instanceStatusSummary struct {
 	Running int
@@ -468,6 +491,9 @@ func NewInstanceCmd() *cobra.Command {
 			if err := validateStatusForAction(rec, "kill"); err != nil {
 				return err
 			}
+			if err := ensureCleanWorktree(rec.Worktree.WorktreePath, "kill instance"); err != nil {
+				return err
+			}
 			// Kill tmux session (best-effort).
 			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
 			// Remove worktree but preserve branch.
@@ -508,6 +534,9 @@ func NewInstanceCmd() *cobra.Command {
 				return err
 			}
 			if err := validateStatusForAction(rec, "pause"); err != nil {
+				return err
+			}
+			if err := ensureCleanWorktree(rec.Worktree.WorktreePath, "pause instance"); err != nil {
 				return err
 			}
 			// Kill the tmux session using the kas_-prefixed name.

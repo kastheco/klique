@@ -114,7 +114,7 @@ func (h helpTypeInstanceCheckout) toContent() string {
 		"",
 		descStyle.Render("your branch name has been copied to your clipboard."),
 		"",
-		descStyle.Render("feel free to make changes and commit them. when resuming, the session continues from where you left off."),
+		descStyle.Render("pause requires a clean worktree. commit or stash first, then resume continues where you left off."),
 		"",
 		headerStyle.Render("commands:"),
 		keyStyle.Render("c")+descStyle.Render(" - checkout: pause session and preserve branch"),
