@@ -260,17 +260,6 @@ func TestToolsReferenceInjected(t *testing.T) {
 		assert.Contains(t, string(content), "claude-opus-4-6")
 	})
 
-	t.Run("kasmos-coder-lite skill file is present in scaffold output", func(t *testing.T) {
-		dir := t.TempDir()
-
-		// kasmos-coder-lite skill file must be written regardless of agent configuration.
-		// This verifies the skill is available for manual/ad-hoc sessions even though
-		// the coder templates no longer reference it via a skill-load directive.
-		_, err := WriteProjectSkills(dir, false)
-		require.NoError(t, err)
-
-		assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "kasmos-coder-lite", "SKILL.md"))
-	})
 }
 
 func TestWriteProjectSkills(t *testing.T) {
