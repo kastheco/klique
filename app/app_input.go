@@ -154,6 +154,9 @@ func (m *home) handleActiveOverlayMouse(msg tea.MouseClickMsg) (tea.Model, tea.C
 		return m, nil
 
 	case stateHelp:
+		if to, ok := current.(*overlay.TextOverlay); ok && to.OnDismiss != nil {
+			to.OnDismiss()
+		}
 		m.state = stateDefault
 		pending := m.pendingAttachInstance
 		m.pendingAttachInstance = nil
