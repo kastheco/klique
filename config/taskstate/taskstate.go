@@ -90,6 +90,14 @@ func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 	}
 
 	for _, e := range plans {
+		goal := e.Goal
+		// Backfill: if content exists but goal is empty, parse it now and persist.
+		if goal == "" && e.Content != "" {
+			if plan, parseErr := taskparser.Parse(e.Content); parseErr == nil && plan.Goal != "" {
+				goal = plan.Goal
+				_ = store.SetPlanGoal(project, e.Filename, goal)
+			}
+		}
 		ps.Plans[e.Filename] = TaskEntry{
 			Status:         Status(e.Status),
 			Description:    e.Description,
@@ -101,7 +109,7 @@ func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 			ImplementingAt: e.ImplementingAt,
 			ReviewingAt:    e.ReviewingAt,
 			DoneAt:         e.DoneAt,
-			Goal:           e.Goal,
+			Goal:           goal,
 			ClickUpTaskID:  e.ClickUpTaskID,
 			ReviewCycle:    e.ReviewCycle,
 		}

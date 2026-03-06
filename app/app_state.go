@@ -531,6 +531,7 @@ func (m *home) updateInfoPaneForPlanHeader() {
 	data := ui.InfoData{
 		IsPlanHeaderSelected: true,
 		PlanName:             taskstate.DisplayName(planFile),
+		PlanDescription:      entry.Description,
 		PlanStatus:           string(entry.Status),
 		PlanTopic:            entry.Topic,
 		PlanBranch:           entry.Branch,

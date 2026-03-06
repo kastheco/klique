@@ -9,6 +9,7 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/clickup"
@@ -591,8 +592,28 @@ func NewTaskCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read content: %w", err)
 			}
-			if err := store.SetContent(storeProject, filename, string(data)); err != nil {
+			content := string(data)
+			if err := store.SetContent(storeProject, filename, content); err != nil {
 				return err
+			}
+			// Parse plan metadata (goal, subtasks) and persist alongside content.
+			if plan, parseErr := taskparser.Parse(content); parseErr == nil {
+				if plan.Goal != "" {
+					_ = store.SetPlanGoal(storeProject, filename, plan.Goal)
+				}
+				subtasks := make([]taskstore.SubtaskEntry, 0)
+				for _, wave := range plan.Waves {
+					for _, task := range wave.Tasks {
+						subtasks = append(subtasks, taskstore.SubtaskEntry{
+							TaskNumber: task.Number,
+							Title:      task.Title,
+							Status:     taskstore.SubtaskStatusPending,
+						})
+					}
+				}
+				if len(subtasks) > 0 {
+					_ = store.SetSubtasks(storeProject, filename, subtasks)
+				}
 			}
 			fmt.Printf("updated content for %s\n", filename)
 			return nil
