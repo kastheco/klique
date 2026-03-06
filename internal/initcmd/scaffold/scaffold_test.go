@@ -871,7 +871,7 @@ func TestLoadReviewPrompt_ContainsTieredStructure(t *testing.T) {
 	assert.Contains(t, prompt, "Phase 3")
 	assert.Contains(t, prompt, "change profile")
 	assert.Contains(t, prompt, "DECISION:")
-	assert.Contains(t, prompt, "{{", "all placeholders must be substituted before returning")
+	assert.Contains(t, prompt, "{{true|false}}", "change profile option markers must remain in rendered output")
 	assert.NotContains(t, prompt, "{{PLAN_FILE}}")
 	assert.NotContains(t, prompt, "{{PLAN_FILENAME}}")
 	assert.NotContains(t, prompt, "{{PLAN_NAME}}")
