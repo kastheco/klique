@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -409,25 +410,88 @@ func executeTaskStartOver(repoRoot, project, planFile string, store taskstore.St
 // creates (or reopens) the PR via the GitHub CLI. The PR URL is printed to
 // stdout by the gh CLI; the returned string is currently always empty.
 func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.Store) (string, error) {
-	entry, err := resolveTaskEntry(project, planFile, store)
+	if store == nil {
+		var err error
+		store, err = localSQLiteStore()
+		if err != nil {
+			return "", fmt.Errorf("open local task store: %w", err)
+		}
+	}
+
+	entry, err := store.Get(project, planFile)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("task not found: %s (%w)", planFile, err)
 	}
 	branch := entry.Branch
-	if title == "" {
-		title = entry.Description
+	if branch == "" {
+		branch = git.TaskBranchFromFile(planFile)
 	}
+	defaultTitle := git.BuildPRTitle(entry.Description, strings.TrimSuffix(planFile, ".md"))
 	if title == "" {
-		// Last-resort: use the filename stem as the title.
-		title = strings.TrimSuffix(planFile, ".md")
+		title = defaultTitle
 	}
 	worktreePath := git.TaskWorktreePath(repoRoot, branch)
 	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "pr", branch, "")
-	body, _ := wt.GeneratePRBody()
+
+	gitChanges := ""
+	gitCommits := ""
+	gitStats := ""
+	// If the branch cannot be resolved against main, keep PR metadata text-only.
+	if baseOut, err := exec.Command("git", "-C", repoRoot, "merge-base", "HEAD", branch).CombinedOutput(); err == nil {
+		base := strings.TrimSpace(string(baseOut))
+		if base != "" {
+			if files, err := exec.Command("git", "-C", worktreePath, "diff", "--name-only", base).CombinedOutput(); err == nil {
+				gitChanges = strings.TrimSpace(string(files))
+			}
+			if commits, err := exec.Command("git", "-C", worktreePath, "log", "--oneline", base+"..HEAD").CombinedOutput(); err == nil {
+				gitCommits = strings.TrimSpace(string(commits))
+			}
+			if stats, err := exec.Command("git", "-C", worktreePath, "diff", "--stat", base).CombinedOutput(); err == nil {
+				gitStats = strings.TrimSpace(string(stats))
+			}
+		}
+	}
+
+	subtasks, _ := store.GetSubtasks(project, planFile)
+	body := git.BuildPRBody(buildCLIPRMetadata(entry, subtasks, gitChanges, gitCommits, gitStats))
 	if err := wt.CreatePR(title, body, "update from kas"); err != nil {
 		return "", err
 	}
 	return "", nil
+}
+
+func buildCLIPRMetadata(
+	entry taskstore.TaskEntry,
+	subtasks []taskstore.SubtaskEntry,
+	gitChanges, gitCommits, gitStats string,
+) git.PRMetadata {
+	meta := git.PRMetadata{
+		Description: strings.TrimSpace(entry.Description),
+		Goal:        strings.TrimSpace(entry.Goal),
+		GitChanges:  strings.TrimSpace(gitChanges),
+		GitCommits:  strings.TrimSpace(gitCommits),
+		GitStats:    strings.TrimSpace(gitStats),
+	}
+
+	if entry.Content != "" {
+		if parsed, err := taskparser.Parse(entry.Content); err == nil {
+			if meta.Goal == "" && strings.TrimSpace(parsed.Goal) != "" {
+				meta.Goal = strings.TrimSpace(parsed.Goal)
+			}
+			meta.Architecture = strings.TrimSpace(parsed.Architecture)
+			meta.TechStack = strings.TrimSpace(parsed.TechStack)
+		}
+	}
+
+	for _, subtask := range subtasks {
+		meta.Subtasks = append(meta.Subtasks, git.PRSubtask{
+			Number: subtask.TaskNumber,
+			Title:  strings.TrimSpace(subtask.Title),
+			Status: string(subtask.Status),
+		})
+	}
+
+	return meta
 }
 
 // NewTaskCmd builds the `kq plan` cobra command tree.
