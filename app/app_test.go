@@ -1096,7 +1096,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 			Path:    "/tmp",
 			Program: "claude",
 		})
-		inst.TaskFile = "auth.md"
+		inst.TaskFile = "auth"
 		inst.AgentType = session.AgentTypeCoder
 		inst.MarkStartedForTest()
 		inst.SetTmuxSession(tmux.NewTmuxSession("auth-impl", "claude", false))
@@ -1114,7 +1114,7 @@ func TestTmuxBrowserActions(t *testing.T) {
 		item := browser.SelectedItem()
 		assert.True(t, item.Managed)
 		assert.Equal(t, "coder", item.AgentType)
-		assert.Equal(t, "auth.md", item.TaskFile)
+		assert.Equal(t, "auth", item.TaskFile)
 	})
 
 	t.Run("dismiss returns to default state", func(t *testing.T) {
@@ -1265,10 +1265,10 @@ func (h *home) setupPlanState(t *testing.T, planFile string, status taskstate.St
 
 func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "test topic")
+	h.setupPlanState(t, "test-plan", taskstate.StatusImplementing, "test topic")
 
 	// Select the plan in the nav panel
-	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan")
 
 	// Execute the context action
 	model, _ := h.executeContextAction("chat_about_plan")
@@ -1280,10 +1280,10 @@ func TestChatAboutPlan_ContextMenuAction(t *testing.T) {
 
 func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "")
+	h.setupPlanState(t, "test-plan", taskstate.StatusImplementing, "")
 
 	h.focusSlot = slotNav
-	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan")
 
 	model, _ := h.openTaskContextMenu()
 	updated := model.(*home)
@@ -1305,10 +1305,10 @@ func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 
 func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	h := newTestHome()
-	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "")
+	h.setupPlanState(t, "test-plan", taskstate.StatusImplementing, "")
 
 	h.focusSlot = slotNav
-	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan")
 
 	model, _ := h.openTaskContextMenu()
 	updated := model.(*home)

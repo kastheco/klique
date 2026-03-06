@@ -77,7 +77,7 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 // signal is processed, the app enters stateConfirm with a confirmation overlay
 // and pendingPlannerTaskFile is set.
 func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
 	signal := taskfsm.Signal{
@@ -104,7 +104,7 @@ func TestPlannerFinishedSignal_ShowsConfirmDialog(t *testing.T) {
 // after the user confirms (plannerCompleteMsg), the planner instance is removed,
 // plannerPrompted is set, and triggerTaskStage("implement") is called.
 func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, _, plansDir, plannerInst := plannerSignalHome(t, planFile)
 
 	// Set up the state as if the confirm dialog was shown after a PlannerFinished signal.
@@ -145,7 +145,7 @@ func TestPlannerFinishedSignal_ConfirmKillsPlannerAndTriggersImplement(t *testin
 // the user cancels (no), the planner instance is removed, plannerPrompted is set,
 // and the plan stays at StatusReady.
 func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, _, _, plannerInst := plannerSignalHome(t, planFile)
 
 	// Advance FSM to StatusReady (as the signal handler would do).
@@ -189,7 +189,7 @@ func TestPlannerFinishedSignal_CancelKillsPlannerAndLeavesReady(t *testing.T) {
 // TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted verifies that when
 // plannerPrompted[planFile] is already true, no dialog is shown.
 func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
 	// Mark already prompted.
@@ -220,7 +220,7 @@ func TestPlannerFinishedSignal_SkipsWhenAlreadyPrompted(t *testing.T) {
 // This is the definitive regression test for the removed tmux-death fallback:
 // spurious transitions must not occur just because the planner process died.
 func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
-	const planFile = "no-fallback.md"
+	const planFile = "no-fallback"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
 	// No sentinel written — plan stays in StatusPlanning.
@@ -251,7 +251,7 @@ func TestPlannerTmuxDeath_NoFallbackDialog(t *testing.T) {
 // PlannerFinished signal arrives while an overlay is active, the dialog is NOT
 // lost — it is deferred and shown on the next metadata tick once the overlay clears.
 func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
 	// Simulate an active overlay (e.g. new-plan form is open).
@@ -301,7 +301,7 @@ func TestPlannerFinishedSignal_DeferredWhenOverlayActive(t *testing.T) {
 // TestPlannerFinishedSignal_SkipsWhenConfirmActive verifies that when
 // state == stateConfirm, no new dialog is shown (avoids clobbering an active overlay).
 func TestPlannerFinishedSignal_SkipsWhenConfirmActive(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	h, ps, _, _ := plannerSignalHome(t, planFile)
 
 	// Pre-existing confirm overlay.

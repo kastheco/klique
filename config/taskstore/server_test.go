@@ -18,12 +18,12 @@ func TestServer_CreateAndGetPlan(t *testing.T) {
 	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
-	body := `{"filename":"test.md","status":"ready","description":"test"}`
+	body := `{"filename":"test","status":"ready","description":"test"}`
 	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/test.md")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/test")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -39,8 +39,8 @@ func TestServer_ListByStatus(t *testing.T) {
 
 	// Create plans with different statuses
 	for _, p := range []taskstore.TaskEntry{
-		{Filename: "a.md", Status: taskstore.StatusReady},
-		{Filename: "b.md", Status: taskstore.StatusDone},
+		{Filename: "a", Status: taskstore.StatusReady},
+		{Filename: "b", Status: taskstore.StatusDone},
 	} {
 		store.Create("kasmos", p)
 	}
@@ -68,7 +68,7 @@ func TestServer_SetClickUpTaskID(t *testing.T) {
 	defer srv.Close()
 
 	// Create a plan first
-	body := `{"filename":"plan.md","status":"ready"}`
+	body := `{"filename":"plan","status":"ready"}`
 	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -76,7 +76,7 @@ func TestServer_SetClickUpTaskID(t *testing.T) {
 
 	// PUT clickup-task-id
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/clickup-task-id",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/clickup-task-id",
 		strings.NewReader(`{"clickup_task_id":"CU-abc123"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -86,7 +86,7 @@ func TestServer_SetClickUpTaskID(t *testing.T) {
 	resp.Body.Close()
 
 	// Verify it was stored
-	got, err := store.Get("kasmos", "plan.md")
+	got, err := store.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, "CU-abc123", got.ClickUpTaskID)
 }
@@ -97,7 +97,7 @@ func TestServer_SetClickUpTaskID_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/nonexistent.md/clickup-task-id",
+		srv.URL+"/v1/projects/kasmos/tasks/nonexistent/clickup-task-id",
 		strings.NewReader(`{"clickup_task_id":"CU-xyz"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -113,14 +113,14 @@ func TestServer_ContentEndpoints(t *testing.T) {
 	defer srv.Close()
 
 	// Create a plan first
-	body := `{"filename":"plan.md","status":"ready","content":"# Initial"}`
+	body := `{"filename":"plan","status":"ready","content":"# Initial"}`
 	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
 	// GET content
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/content")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan/content")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "text/markdown", resp.Header.Get("Content-Type"))
@@ -130,7 +130,7 @@ func TestServer_ContentEndpoints(t *testing.T) {
 	assert.Equal(t, "# Initial", string(gotBody))
 
 	// PUT content
-	req, err := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/tasks/plan.md/content", strings.NewReader("# Updated"))
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/tasks/plan/content", strings.NewReader("# Updated"))
 	require.NoError(t, err)
 	resp, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestServer_ContentEndpoints(t *testing.T) {
 	resp.Body.Close()
 
 	// GET content again to verify update
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/content")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan/content")
 	require.NoError(t, err)
 	gotBody, err = io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -151,12 +151,12 @@ func TestServer_SubtasksEndpoints(t *testing.T) {
 	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan.md","status":"ready"}`))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan","status":"ready"}`))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/subtasks")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan/subtasks")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	var got []taskstore.SubtaskEntry
@@ -165,7 +165,7 @@ func TestServer_SubtasksEndpoints(t *testing.T) {
 	assert.Len(t, got, 0)
 
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/subtasks",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/subtasks",
 		strings.NewReader(`[{"task_number":1,"title":"first","status":"pending"}]`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -175,7 +175,7 @@ func TestServer_SubtasksEndpoints(t *testing.T) {
 	resp.Body.Close()
 
 	req, err = http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/subtasks/1/status",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/subtasks/1/status",
 		strings.NewReader(`{"status":"done"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -184,7 +184,7 @@ func TestServer_SubtasksEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan.md/subtasks")
+	resp, err = http.Get(srv.URL + "/v1/projects/kasmos/tasks/plan/subtasks")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var updated []taskstore.SubtaskEntry
@@ -198,7 +198,7 @@ func TestServer_Subtasks_ContractErrors(t *testing.T) {
 	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan.md","status":"ready"}`))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan","status":"ready"}`))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -224,7 +224,7 @@ func TestServer_Subtasks_ContractErrors(t *testing.T) {
 	assert.Contains(t, notFound["error"], "plan not found")
 
 	req, err = http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/subtasks",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/subtasks",
 		strings.NewReader("{"))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -237,7 +237,7 @@ func TestServer_Subtasks_ContractErrors(t *testing.T) {
 	assert.Contains(t, badRequest["error"], "invalid request body")
 
 	req, err = http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/subtasks/1/status",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/subtasks/1/status",
 		strings.NewReader("{"))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -249,7 +249,7 @@ func TestServer_Subtasks_ContractErrors(t *testing.T) {
 	assert.Contains(t, badRequest["error"], "invalid request body")
 
 	req, err = http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/subtasks/1/status",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/subtasks/1/status",
 		strings.NewReader(`{"status":"done"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -266,13 +266,13 @@ func TestServer_PhaseTimestampAndGoalEndpoints(t *testing.T) {
 	srv := httptest.NewServer(taskstore.NewHandler(store))
 	defer srv.Close()
 
-	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan.md","status":"ready"}`))
+	resp, err := http.Post(srv.URL+"/v1/projects/kasmos/tasks", "application/json", strings.NewReader(`{"filename":"plan","status":"ready"}`))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
 	req, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/phase-timestamp",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/phase-timestamp",
 		strings.NewReader(`{"phase":"planning","timestamp":"2026-01-02T03:04:05Z"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -282,7 +282,7 @@ func TestServer_PhaseTimestampAndGoalEndpoints(t *testing.T) {
 	resp.Body.Close()
 
 	req, err = http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/goal",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/goal",
 		strings.NewReader(`{"goal":"ship faster"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -291,13 +291,13 @@ func TestServer_PhaseTimestampAndGoalEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	got, err := store.Get("kasmos", "plan.md")
+	got, err := store.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, "ship faster", got.Goal)
 	assert.False(t, got.PlanningAt.IsZero())
 
 	bad, err := http.NewRequest(http.MethodPut,
-		srv.URL+"/v1/projects/kasmos/tasks/plan.md/phase-timestamp",
+		srv.URL+"/v1/projects/kasmos/tasks/plan/phase-timestamp",
 		strings.NewReader("{"))
 	require.NoError(t, err)
 	bad.Header.Set("Content-Type", "application/json")

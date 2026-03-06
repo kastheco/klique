@@ -11,7 +11,7 @@ import (
 )
 
 func TestTaskBranchFromFile(t *testing.T) {
-	got := TaskBranchFromFile("auth-refactor.md")
+	got := TaskBranchFromFile("auth-refactor")
 	want := "plan/auth-refactor"
 	if got != want {
 		t.Fatalf("TaskBranchFromFile() = %q, want %q", got, want)

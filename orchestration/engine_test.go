@@ -23,7 +23,7 @@ func TestNewWaveOrchestrator(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	assert.Equal(t, WaveStateIdle, orch.State())
 	assert.Equal(t, 2, orch.TotalWaves())
 	assert.Equal(t, 3, orch.TotalTasks())
@@ -38,7 +38,7 @@ func TestWaveOrchestrator_StartWave(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	tasks := orch.StartNextWave()
 
 	assert.Equal(t, WaveStateRunning, orch.State())
@@ -57,7 +57,7 @@ func TestWaveOrchestrator_TaskCompleted(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 
 	assert.False(t, orch.IsCurrentWaveComplete())
@@ -80,7 +80,7 @@ func TestWaveOrchestrator_TaskFailed(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 
 	orch.MarkTaskFailed(1)
@@ -103,7 +103,7 @@ func TestWaveOrchestrator_MultiWaveProgression(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 
 	// Wave 1
 	orch.StartNextWave()
@@ -130,7 +130,7 @@ func TestWaveOrchestrator_AllComplete(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 	orch.MarkTaskComplete(1)
 
@@ -150,7 +150,7 @@ func TestWaveOrchestrator_ResetConfirmAllowsReprompt(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 	orch.MarkTaskComplete(1) // wave 1 complete
 
@@ -169,7 +169,7 @@ func TestIsTaskRunning(t *testing.T) {
 			{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
 		},
 	}
-	orch := NewWaveOrchestrator("test.md", plan)
+	orch := NewWaveOrchestrator("test", plan)
 	orch.StartNextWave()
 
 	assert.True(t, orch.IsTaskRunning(1), "task 1 should be running after StartNextWave")
@@ -192,7 +192,7 @@ func TestWaveOrchestrator_TaskStatusQueries(t *testing.T) {
 			}},
 		},
 	}
-	orch := NewWaveOrchestrator("test.md", plan)
+	orch := NewWaveOrchestrator("test", plan)
 	orch.StartNextWave()
 
 	// All should be running initially.
@@ -225,7 +225,7 @@ func TestWaveOrchestrator_RetryFailedTasksRestoresRunning(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 
 	// T1 fails, T2 completes — wave done with failure
@@ -254,7 +254,7 @@ func TestRestoreToWave(t *testing.T) {
 			{Number: 2, Tasks: []taskparser.Task{{Number: 3}}},
 		},
 	}
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.RestoreToWave(2, []int{3})
 	assert.Equal(t, WaveStateAllComplete, orch.State())
 	assert.Equal(t, 2, orch.CurrentWaveNumber())
@@ -267,7 +267,7 @@ func TestRestoreToWave_PartialCompletion(t *testing.T) {
 			{Number: 2, Tasks: []taskparser.Task{{Number: 2}, {Number: 3}}},
 		},
 	}
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.RestoreToWave(2, []int{2}) // task 3 still running
 	assert.Equal(t, WaveStateRunning, orch.State())
 	assert.True(t, orch.IsTaskComplete(2))
@@ -282,8 +282,8 @@ func TestShouldPostWaveCompleteComment(t *testing.T) {
 		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
 		{Number: 2, Tasks: []taskparser.Task{{Number: 2}}},
 	}}
-	assert.False(t, NewWaveOrchestrator("s.md", single).ShouldPostWaveCompleteComment())
-	assert.True(t, NewWaveOrchestrator("m.md", multi).ShouldPostWaveCompleteComment())
+	assert.False(t, NewWaveOrchestrator("s", single).ShouldPostWaveCompleteComment())
+	assert.True(t, NewWaveOrchestrator("m", multi).ShouldPostWaveCompleteComment())
 
 	// nil receiver safety
 	var nilOrch *WaveOrchestrator
@@ -299,7 +299,7 @@ func TestWaveOrchestrator_ElaboratingState(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.SetElaborating()
 	assert.Equal(t, WaveStateElaborating, orch.State())
 
@@ -319,7 +319,7 @@ func TestWaveOrchestrator_UpdatePlan(t *testing.T) {
 		},
 	}
 
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.SetElaborating()
 
 	updated := &taskparser.Plan{
@@ -351,7 +351,7 @@ func TestBuildTaskPrompt_Method(t *testing.T) {
 			}},
 		},
 	}
-	orch := NewWaveOrchestrator("plan.md", plan)
+	orch := NewWaveOrchestrator("plan", plan)
 	orch.StartNextWave()
 	prompt := orch.BuildTaskPrompt(plan.Waves[0].Tasks[0], 2)
 	assert.Contains(t, prompt, "Task 1")
@@ -363,7 +363,7 @@ func TestBuildTaskPrompt_Method(t *testing.T) {
 func TestWaveOrchestrator_PersistsSubtaskStatus(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	project := "proj"
-	planFile := "plan.md"
+	planFile := "plan"
 
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: planFile, Status: taskstore.StatusImplementing}))
 	require.NoError(t, store.SetSubtasks(project, planFile, []taskstore.SubtaskEntry{
