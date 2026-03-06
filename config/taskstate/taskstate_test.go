@@ -655,6 +655,39 @@ func TestSetClickUpTaskID_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestFinished_SortedByDoneAtDescending(t *testing.T) {
+	base := time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
+	ps := &TaskState{
+		Dir: "/tmp",
+		Plans: map[string]TaskEntry{
+			"old.md": {
+				Status:    StatusDone,
+				CreatedAt: base.Add(-1 * time.Hour),
+				DoneAt:    base.Add(-3 * time.Hour),
+			},
+			"newest.md": {
+				Status:    StatusDone,
+				CreatedAt: base.Add(-10 * time.Hour),
+				DoneAt:    base,
+			},
+			"middle.md": {
+				Status:    StatusDone,
+				CreatedAt: base.Add(-30 * time.Minute),
+				DoneAt:    base.Add(-90 * time.Minute),
+			},
+			"active.md": {Status: StatusImplementing},
+		},
+	}
+
+	finished := ps.Finished()
+	require.Len(t, finished, 3)
+	assert.Equal(t, "newest.md", finished[0].Filename, "most recently done should be first")
+	assert.Equal(t, "middle.md", finished[1].Filename)
+	assert.Equal(t, "old.md", finished[2].Filename, "oldest done should be last")
+
+	assert.False(t, finished[0].DoneAt.IsZero())
+}
+
 func TestTaskState_ReviewCycle(t *testing.T) {
 	ps := newTestPS(t)
 	require.NoError(t, ps.Create("test.md", "desc", "plan/test", "", time.Now()))
