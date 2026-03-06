@@ -195,11 +195,6 @@ func fullInstanceRecord(title string) instanceRecord {
 			BranchName:    "feat/" + title,
 			BaseCommitSHA: "deadbeef" + title,
 		},
-		DiffStats: instanceDiffStats{
-			Added:   10,
-			Removed: 5,
-			Content: "some diff for " + title,
-		},
 	}
 }
 
@@ -233,9 +228,6 @@ func assertRecordFieldsEqual(t *testing.T, want, got instanceRecord) {
 	assert.Equal(t, want.Worktree.SessionName, got.Worktree.SessionName, "Worktree.SessionName")
 	assert.Equal(t, want.Worktree.BranchName, got.Worktree.BranchName, "Worktree.BranchName")
 	assert.Equal(t, want.Worktree.BaseCommitSHA, got.Worktree.BaseCommitSHA, "Worktree.BaseCommitSHA")
-	assert.Equal(t, want.DiffStats.Added, got.DiffStats.Added, "DiffStats.Added")
-	assert.Equal(t, want.DiffStats.Removed, got.DiffStats.Removed, "DiffStats.Removed")
-	assert.Equal(t, want.DiffStats.Content, got.DiffStats.Content, "DiffStats.Content")
 }
 
 // TestRemoveInstanceFromState_PreservesFields verifies that removing one instance
@@ -330,9 +322,6 @@ func TestUpdateInstanceInState_PreservesFields(t *testing.T) {
 	assert.Equal(t, target.Worktree.SessionName, gotTarget.Worktree.SessionName, "target.Worktree.SessionName")
 	assert.Equal(t, target.Worktree.BranchName, gotTarget.Worktree.BranchName, "target.Worktree.BranchName")
 	assert.Equal(t, target.Worktree.BaseCommitSHA, gotTarget.Worktree.BaseCommitSHA, "target.Worktree.BaseCommitSHA")
-	assert.Equal(t, target.DiffStats.Added, gotTarget.DiffStats.Added, "target.DiffStats.Added")
-	assert.Equal(t, target.DiffStats.Removed, gotTarget.DiffStats.Removed, "target.DiffStats.Removed")
-	assert.Equal(t, target.DiffStats.Content, gotTarget.DiffStats.Content, "target.DiffStats.Content")
 }
 
 // TestUpdateInstanceInState_NotFound verifies that an error is returned when the

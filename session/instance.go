@@ -123,9 +123,6 @@ type Instance struct {
 	// CachedContentSet is true once CachedContent has been populated for the first time.
 	CachedContentSet bool
 
-	// diffStats holds the current git diff statistics for this instance.
-	diffStats *git.DiffStats
-
 	// started is true once Start() has been called successfully.
 	started bool
 	// tmuxSession manages the underlying tmux session for this instance.
@@ -171,14 +168,6 @@ func (i *Instance) ToInstanceData() InstanceData {
 		}
 	}
 
-	if i.diffStats != nil {
-		data.DiffStats = DiffStatsData{
-			Added:   i.diffStats.Added,
-			Removed: i.diffStats.Removed,
-			Content: i.diffStats.Content,
-		}
-	}
-
 	return data
 }
 
@@ -214,11 +203,6 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
 		),
-		diffStats: &git.DiffStats{
-			Added:   data.DiffStats.Added,
-			Removed: data.DiffStats.Removed,
-			Content: data.DiffStats.Content,
-		},
 	}
 
 	if instance.Paused() {

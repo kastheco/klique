@@ -37,8 +37,7 @@ type InstanceData struct {
 	QueuedPrompt           string `json:"queued_prompt,omitempty"`
 	ReviewCycle            int    `json:"review_cycle,omitempty"`
 
-	Worktree  GitWorktreeData `json:"worktree"`
-	DiffStats DiffStatsData   `json:"diff_stats"`
+	Worktree GitWorktreeData `json:"worktree"`
 }
 
 // UnmarshalJSON implements a custom unmarshaler that handles the historical rename from
@@ -70,13 +69,6 @@ type GitWorktreeData struct {
 	SessionName   string `json:"session_name"`
 	BranchName    string `json:"branch_name"`
 	BaseCommitSHA string `json:"base_commit_sha"`
-}
-
-// DiffStatsData is the serializable form of a git.DiffStats.
-type DiffStatsData struct {
-	Added   int    `json:"added"`
-	Removed int    `json:"removed"`
-	Content string `json:"content"`
 }
 
 // Storage persists instances via a config.StateManager.

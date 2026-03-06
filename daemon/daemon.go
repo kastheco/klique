@@ -40,9 +40,6 @@ func RunDaemon(cfg *config.Config) error {
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
 
-	// Rate-limited logger: identical errors are suppressed for 60 s at a time.
-	throttle := log.NewEvery(60 * time.Second)
-
 	stopCh := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -55,11 +52,6 @@ func RunDaemon(cfg *config.Config) error {
 				if inst.Started() && !inst.Paused() {
 					if _, hasPrompt := inst.HasUpdated(); hasPrompt {
 						inst.TapEnter()
-						if diffErr := inst.UpdateDiffStats(); diffErr != nil {
-							if throttle.ShouldLog() {
-								log.WarningLog.Printf("diff stats update failed for %s: %v", inst.Title, diffErr)
-							}
-						}
 					}
 				}
 			}

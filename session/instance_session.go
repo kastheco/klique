@@ -136,7 +136,6 @@ type InstanceMetadata struct {
 	ContentCaptured bool
 	Updated         bool
 	HasPrompt       bool
-	DiffStats       *git.DiffStats
 	CPUPercent      float64
 	MemMB           float64
 	// ResourceUsageValid is true when CPU/memory data was successfully collected.
@@ -158,21 +157,6 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 	// Single capture-pane call shared by hash check, activity parsing, and preview.
 	m.Updated, m.HasPrompt, m.Content, m.ContentCaptured = i.tmuxSession.HasUpdatedWithContent()
 
-	// Git diff statistics.
-	if i.gitWorktree != nil {
-		stats := i.gitWorktree.Diff()
-		if stats.Error != nil {
-			errMsg := stats.Error.Error()
-			if !strings.Contains(errMsg, "base commit SHA not set") &&
-				!strings.Contains(errMsg, "worktree path gone") {
-				log.WarningLog.Printf("diff stats error: %v", stats.Error)
-			}
-			// On error leave m.DiffStats nil so the caller preserves its previous value.
-		} else {
-			m.DiffStats = stats
-		}
-	}
-
 	// Permission prompt detection — only meaningful when content was actually captured.
 	if m.ContentCaptured && m.Content != "" {
 		m.PermissionPrompt = ParsePermissionPrompt(m.Content, i.Program)
@@ -185,39 +169,6 @@ func (i *Instance) CollectMetadata() InstanceMetadata {
 	m.TmuxAlive = i.TmuxAlive()
 
 	return m
-}
-
-// SetDiffStats stores externally collected diff statistics on the instance.
-func (i *Instance) SetDiffStats(stats *git.DiffStats) {
-	i.diffStats = stats
-}
-
-// UpdateDiffStats refreshes the cached git diff statistics.
-// Clears stats when not started; preserves existing stats when paused.
-func (i *Instance) UpdateDiffStats() error {
-	if !i.started {
-		i.diffStats = nil
-		return nil
-	}
-	if i.Status == Paused {
-		return nil
-	}
-
-	stats := i.gitWorktree.Diff()
-	if stats.Error != nil {
-		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
-			i.diffStats = nil
-			return nil
-		}
-		if strings.Contains(stats.Error.Error(), "worktree path gone") {
-			i.diffStats = nil
-			return nil
-		}
-		return fmt.Errorf("failed to get diff stats: %w", stats.Error)
-	}
-
-	i.diffStats = stats
-	return nil
 }
 
 // collectResourceUsage samples CPU and RSS memory for the agent process via pgrep and ps.
@@ -267,11 +218,6 @@ func (i *Instance) UpdateResourceUsage() {
 	if cpu, mem, ok := i.collectResourceUsage(); ok {
 		i.CPUPercent, i.MemMB = cpu, mem
 	}
-}
-
-// GetDiffStats returns the cached git diff statistics, or nil if unavailable.
-func (i *Instance) GetDiffStats() *git.DiffStats {
-	return i.diffStats
 }
 
 // SendPermissionResponse forwards a permission dialog choice to the agent pane.

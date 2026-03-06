@@ -38,14 +38,6 @@ type instanceWorktree struct {
 	BaseCommitSHA string `json:"base_commit_sha"`
 }
 
-// instanceDiffStats holds the git diff statistics for an instance.
-// It fully mirrors session.DiffStatsData so round-trip serialisation is lossless.
-type instanceDiffStats struct {
-	Added   int    `json:"added"`
-	Removed int    `json:"removed"`
-	Content string `json:"content"`
-}
-
 // instanceRecord is a local mirror of session.InstanceData containing all fields
 // required for lossless round-trip serialisation.  Every field present in
 // InstanceData must appear here; omitting a field causes silent data loss when
@@ -80,8 +72,7 @@ type instanceRecord struct {
 	QueuedPrompt           string `json:"queued_prompt,omitempty"`
 	ReviewCycle            int    `json:"review_cycle,omitempty"`
 
-	Worktree  instanceWorktree  `json:"worktree"`
-	DiffStats instanceDiffStats `json:"diff_stats"`
+	Worktree instanceWorktree `json:"worktree"`
 }
 
 // UnmarshalJSON implements a custom unmarshaler that handles the historical rename
