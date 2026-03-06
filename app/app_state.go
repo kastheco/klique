@@ -194,6 +194,14 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 					}
 				}
 			}
+
+			// Populate PR state from the task store (has full PR metadata).
+			if m.taskStore != nil {
+				if storeEntry, err := m.taskStore.Get(m.taskStoreProject, planFile); err == nil && storeEntry.PRURL != "" {
+					data.PRState = mapPRReviewDecision(storeEntry.PRReviewDecision)
+					data.PRChecks = mapPRCheckStatus(storeEntry.PRCheckStatus)
+				}
+			}
 		}
 	case selected != nil && selected.Branch != "":
 		data.Branch = selected.Branch
@@ -202,6 +210,14 @@ func (m *home) computeStatusBarData() ui.StatusBarData {
 			if ok {
 				data.PlanName = taskstate.DisplayName(selected.TaskFile)
 				data.PlanStatus = string(entry.Status)
+
+				// Populate PR state from the task store.
+				if m.taskStore != nil {
+					if storeEntry, err := m.taskStore.Get(m.taskStoreProject, selected.TaskFile); err == nil && storeEntry.PRURL != "" {
+						data.PRState = mapPRReviewDecision(storeEntry.PRReviewDecision)
+						data.PRChecks = mapPRCheckStatus(storeEntry.PRCheckStatus)
+					}
+				}
 			}
 		}
 	}

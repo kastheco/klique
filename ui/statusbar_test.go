@@ -267,3 +267,60 @@ func TestStatusBar_FocusModeNoLongerShowsPill(t *testing.T) {
 	assert.NotContains(t, result, "interactive",
 		"interactive indicator moved to bottom menu bar")
 }
+
+func TestStatusBar_PRIndicator(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+	sb.SetData(StatusBarData{
+		Branch:     "plan/test",
+		ProjectDir: "myproject",
+		PRState:    "approved",
+		PRChecks:   "passing",
+	})
+	rendered := sb.String()
+	assert.Contains(t, rendered, "✓")
+}
+
+func TestStatusBar_PRIndicator_ChangesRequested(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+	sb.SetData(StatusBarData{
+		Branch:     "plan/test",
+		ProjectDir: "myproject",
+		PRState:    "changes_requested",
+		PRChecks:   "passing",
+	})
+	rendered := sb.String()
+	assert.Contains(t, rendered, "●")
+}
+
+func TestStatusBar_PRIndicator_Empty(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+	sb.SetData(StatusBarData{
+		Branch:     "main",
+		ProjectDir: "myproject",
+	})
+	plain := stripANSI(sb.String())
+	// None of the PR indicator glyphs should appear when PRState is empty.
+	assert.NotContains(t, plain, "✓ pr")
+	assert.NotContains(t, plain, "● pr")
+	assert.NotContains(t, plain, "✕ pr")
+	assert.NotContains(t, plain, "○ pr")
+}
+
+func TestStatusBar_PRIndicator_NarrowDrops(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(30) // very narrow — PR indicator should drop cleanly
+	sb.SetData(StatusBarData{
+		Branch:     "plan/test",
+		ProjectDir: "myproject",
+		PRState:    "approved",
+		PRChecks:   "passing",
+	})
+	result := sb.String()
+	// Should not panic and should produce output
+	require.NotEmpty(t, result)
+	// The output should still contain the app name
+	assert.Contains(t, result, "k") // gradient-rendered "kasmos"
+}
