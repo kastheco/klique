@@ -415,7 +415,7 @@ func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.St
 	}
 	branch := entry.Branch
 	if title == "" {
-		title = entry.Description
+		title = git.BuildPRTitle(entry.Description, entry.Goal, planFile)
 	}
 	if title == "" {
 		// Last-resort: use the filename stem as the title.
@@ -423,7 +423,22 @@ func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.St
 	}
 	worktreePath := git.TaskWorktreePath(repoRoot, branch)
 	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "pr", branch, "")
-	body, _ := wt.GeneratePRBody()
+	gitBody, _ := wt.GeneratePRBody()
+	sections := git.ParsePRBodySections(gitBody)
+	planContent, _ := store.GetContent(project, planFile)
+	subtasks, _ := store.GetSubtasks(project, planFile)
+	body := git.BuildPRBody(git.PRBodyInputs{
+		PlanContent:     planContent,
+		Subtasks:        subtasks,
+		Changes:         sections.Changes,
+		Commits:         sections.Commits,
+		Stats:           sections.Stats,
+		ReviewerSummary: "",
+		ReviewCycle:     entry.ReviewCycle,
+	}, taskstore.TaskEntry{
+		Goal:        entry.Goal,
+		ReviewCycle: entry.ReviewCycle,
+	})
 	if err := wt.CreatePR(title, body, "update from kas"); err != nil {
 		return "", err
 	}
