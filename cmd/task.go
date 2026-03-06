@@ -243,9 +243,9 @@ func resolveTaskEntry(project, filename string, store taskstore.Store) (taskstat
 	return entry, nil
 }
 
-// executeTaskCreate creates a new task entry in the store. name is the plan
-// name without the .md extension. branch defaults to "plan/<name>" when empty.
-// If content is non-empty, it is stored alongside the metadata.
+// executeTaskCreate creates a new task entry in the store. name is the plan slug.
+// branch defaults to "plan/<name>" when empty. If content is non-empty, it is
+// stored alongside the metadata.
 func executeTaskCreate(project, name, description, branch, topic, content string, store taskstore.Store) error {
 	filename := name
 	if branch == "" {

@@ -67,8 +67,9 @@ type TopicInfo struct {
 }
 
 // Load creates a TaskState backed by the given store. Plans and TopicEntries are
-// populated from the store. dir is retained for file operations (e.g. Rename moves
-// the .md file on disk). The store is always required — there is no JSON fallback.
+// populated from the store. dir is retained for compatibility and auxiliary path
+// resolution, not for filename migration. The store is always required — there is
+// no JSON fallback.
 func Load(store taskstore.Store, project, dir string) (*TaskState, error) {
 	plans, err := store.List(project)
 	if err != nil {
@@ -538,14 +539,14 @@ func (ps *TaskState) Save() error {
 	return nil
 }
 
-// DisplayName converts a plan filename to its display name.
-// For bare slugs, it is a pass-through.
+// DisplayName returns a plan display name. For bare slugs it is a pass-through,
+// e.g. "auth-refactor" -> "auth-refactor".
 func DisplayName(filename string) string {
 	return filename
 }
 
 // Rename renames a plan by giving it a new display name slug.
-// It rekeys the planstate entry and persists the updated state.
+// It rekeys the taskstate entry and persists the updated task entry in the store.
 // newName should be a human-readable name (e.g., "auth refactor") which will be
 // slugified automatically. Returns the new filename on success.
 func (ps *TaskState) Rename(oldFilename, newName string) (string, error) {
