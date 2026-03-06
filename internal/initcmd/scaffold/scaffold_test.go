@@ -862,4 +862,15 @@ func TestLoadReviewPrompt_ContainsTieredStructure(t *testing.T) {
 	assert.NotContains(t, prompt, "{{PLAN_NAME}}")
 }
 
+func TestLoadReviewPrompt_UsesMergeBase(t *testing.T) {
+	prompt := LoadReviewPrompt("test-plan.md", "test-plan")
+	assert.Contains(t, prompt, "merge-base")
+	assert.Contains(t, prompt, "MERGE_BASE")
+	assert.NotContains(t, prompt, "git diff main..HEAD",
+		"bare main..HEAD without merge-base will break in worktrees with diverged main")
+	assert.NotContains(t, prompt, "git diff --stat main..HEAD")
+	assert.NotContains(t, prompt, "git diff --name-only main..HEAD")
+	assert.NotContains(t, prompt, "git log main..HEAD")
+}
+
 func ptrFloat(f float64) *float64 { return &f }

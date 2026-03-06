@@ -3,9 +3,25 @@ Review the implementation of plan: {{PLAN_NAME}}
 Retrieve the plan content with `kas task show {{PLAN_FILE}}` to understand the goals,
 architecture, and tasks that were implemented.
 
-IMPORTANT: Only review changes from this branch. Use `git diff main..HEAD` to see exactly
+IMPORTANT: Only review changes from this branch. Use `git diff $MERGE_BASE..HEAD` to see exactly
 what was changed by the implementation — do NOT review code that was inherited from main.
 Files may contain code from main that is outside the scope of this plan.
+
+## Worktree awareness
+
+You are reviewing in a **git worktree**. The `main` branch may have advanced since this
+worktree was created (other PRs merged). Always use `merge-base` to find the true branch
+point — never compare against `main` directly.
+
+Set the merge base once at the start of your review and use it everywhere:
+
+```bash
+MERGE_BASE=$(git merge-base main HEAD)
+echo "merge base: $MERGE_BASE"
+```
+
+All diff and log commands below use `$MERGE_BASE` instead of `main`. This ensures you
+only review changes from this branch, regardless of how far main has diverged.
 
 ---
 
@@ -14,8 +30,8 @@ Files may contain code from main that is outside the scope of this plan.
 Run the following commands before starting any phase:
 
 ```bash
-git diff --stat main..HEAD
-git diff main..HEAD
+git diff --stat $MERGE_BASE..HEAD
+git diff $MERGE_BASE..HEAD
 ```
 
 If the diff is empty, approve immediately:
@@ -31,9 +47,9 @@ Then stop. No further analysis is needed.
 Gather the full scope of what changed on this branch:
 
 ```bash
-git diff --name-only main..HEAD          # changed files
-git diff --stat main..HEAD               # line counts per file
-git log main..HEAD --oneline             # commit history
+git diff --name-only $MERGE_BASE..HEAD          # changed files
+git diff --stat $MERGE_BASE..HEAD               # line counts per file
+git log $MERGE_BASE..HEAD --oneline             # commit history
 ```
 
 Review ONLY the branch diff. Do not critique code that pre-exists on main.

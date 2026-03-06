@@ -47,14 +47,27 @@ use the replacement. There are no exceptions.
 ## Where You Fit
 
 You review the implementation branch **after coders finish**. Your scope is the diff between
-the base branch and HEAD — nothing more.
+the base branch and HEAD — nothing more. Use `merge-base` to get the actual branch point
+when review happens in a worktree.
+
+## Worktree Awareness
+
+You are reviewing in a **git worktree**. `main` may have advanced since this worktree was
+created, so always compare against the merge base instead of `main` directly.
+
+```bash
+MERGE_BASE=$(git merge-base main HEAD)
+echo "merge base: $MERGE_BASE"
+```
+
+This keeps your diff scope limited to this branch even after other PRs merge into main.
 
 ```bash
 # See all changes since branching from main
-GIT_EXTERNAL_DIFF=difft git diff main..HEAD
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD
 
 # Or by file for targeted review
-GIT_EXTERNAL_DIFF=difft git diff main..HEAD -- path/to/file.go
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD -- path/to/file.go
 ```
 
 In **managed mode** (`KASMOS_MANAGED=1`): kasmos spawned you after receiving the
@@ -100,7 +113,7 @@ If tests are slow, at minimum run tests for changed packages:
 
 ```bash
 # Identify changed packages
-git diff main..HEAD --name-only | rg '\.go$' | sd '/[^/]+\.go$' '' | sort -u
+git diff $MERGE_BASE..HEAD --name-only | rg '\.go$' | sd '/[^/]+\.go$' '' | sort -u
 
 # Run them
 go test ./path/to/changed/... ./other/changed/...
@@ -169,7 +182,7 @@ Before writing `review-approved`:
 go test ./... 2>&1
 
 # Confirm no typos in changed files
-git diff main..HEAD --name-only | xargs typos
+git diff $MERGE_BASE..HEAD --name-only | xargs typos
 ```
 
 ## Signal Format
