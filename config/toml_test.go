@@ -76,6 +76,29 @@ flags = []
 		assert.Equal(t, []string{"--agent", "reviewer"}, reviewer.Flags)
 	})
 
+	t.Run("normalizes invalid execution_mode in TOML profile", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "config.toml")
+
+		content := `
+		[phases]
+		implementing = "coder"
+
+		[agents.coder]
+		enabled = true
+		program = "opencode"
+		execution_mode = "invalid"
+		`
+		require.NoError(t, os.WriteFile(tomlPath, []byte(content), 0o644))
+
+		tc, err := LoadTOMLConfigFrom(tomlPath)
+		require.NoError(t, err)
+
+		coder, ok := tc.Profiles["coder"]
+		require.True(t, ok)
+		assert.Equal(t, ExecutionModeTmux, coder.ExecutionMode)
+	})
+
 	t.Run("returns error on missing file", func(t *testing.T) {
 		_, err := LoadTOMLConfigFrom("/nonexistent/config.toml")
 		assert.Error(t, err)
@@ -154,6 +177,18 @@ func TestResolveProfile_ExecutionMode(t *testing.T) {
 
 		profile := cfg.ResolveProfile("implementing", "claude")
 		assert.Equal(t, ExecutionModeHeadless, profile.ExecutionMode)
+	})
+
+	t.Run("falls back to tmux for invalid mode", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]AgentProfile{
+				"coder": {Program: "opencode", Enabled: true, ExecutionMode: "invalid"},
+			},
+		}
+
+		profile := cfg.ResolveProfile("implementing", "claude")
+		assert.Equal(t, ExecutionModeTmux, profile.ExecutionMode)
 	})
 }
 

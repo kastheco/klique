@@ -1158,7 +1158,14 @@ func (m *home) programForAgent(agentType string) string {
 }
 
 func (m *home) executionModeForAgent(agentType string) string {
-	return config.NormalizeExecutionMode(m.profileForAgent(agentType).ExecutionMode)
+	mode := config.NormalizeExecutionMode(m.profileForAgent(agentType).ExecutionMode)
+	// Headless execution is only wired for coder sessions right now.
+	// Other agent roles remain tmux-attached for visibility and interactive
+	// control, while still allowing them to pick up any future shared config.
+	if agentType != session.AgentTypeCoder {
+		return config.ExecutionModeTmux
+	}
+	return mode
 }
 
 func normalizeOpenCodeModelID(model string) string {
