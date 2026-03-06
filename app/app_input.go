@@ -153,6 +153,23 @@ func (m *home) handleActiveOverlayMouse(msg tea.MouseClickMsg) (tea.Model, tea.C
 		}
 		return m, nil
 
+	case stateHelp:
+		m.state = stateDefault
+		pending := m.pendingAttachInstance
+		m.pendingAttachInstance = nil
+		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() {
+			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
+				if err != nil {
+					return err
+				}
+				return instanceChangedMsg{}
+			})
+		}
+		return m, tea.Sequence(tea.RequestWindowSize, func() tea.Msg {
+			m.menu.SetState(ui.StateDefault)
+			return nil
+		})
+
 	case statePermission:
 		return m.finishPermissionOverlay(result)
 
