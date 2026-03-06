@@ -184,12 +184,12 @@ classify before writing any tasks. this determines wave structure and review ove
 | size | estimated effort | max tasks | waves | review model |
 |------|-----------------|-----------|-------|--------------|
 | **trivial** | < 30 min | 1 | 1 | self-review only |
-| **small** | 30 min – 2 hours | 2–3 | 1 | single review after all tasks |
-| **medium** | 2–6 hours | 3–6 | 1–2 | review per wave |
-| **large** | 6+ hours | 6–12 | 2–4 | review per wave |
+| **small** | 30 min – 2 hours | 3–5 | 1 | single review after all tasks |
+| **medium** | 2–6 hours | 5–10 | 1–2 | review per wave |
+| **large** | 6+ hours | 10–20 | 2–4 | review per wave |
 
 **sizing rules:**
-- every task = 15–45 minutes of cohesive work. < 10 min → merge into adjacent task.
+- every task = 5–15 minutes of mechanical work. tasks must be small enough that a low-context coder agent can execute without reading the full codebase. < 3 min → merge into adjacent task. > 15 min → split further.
 - never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.
 - a task is a commit-worthy unit — leaves the codebase compilable and testable.
 - waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.
@@ -274,6 +274,16 @@ git commit -m "feat: [what this task delivers]"
 ```
 ````
 
+**coder agent context budget:** the coder agent has a small context window.
+task bodies must be self-contained — include exact file paths, exact function
+signatures, exact code snippets. the coder should never need to "explore" or
+"understand the architecture." if a task requires reading more than 2-3 files
+to understand what to do, it's too vague — add more detail or split it.
+
+**ideal task shape:** "in file X, add function Y with signature Z. follow the
+pattern in file W (lines N-M). add test T to file_test.go." — not "implement
+the auth module" or "add error handling throughout."
+
 **granularity anti-patterns — do NOT create tasks like these:**
 - "add one case to a switch statement" — merge into the task that needs it
 - "remove dead code" — do it in the task that replaces it
@@ -315,9 +325,9 @@ inline before proceeding to register + signal.
 - [ ] **test commands runnable** — `go test` commands reference real package paths that will
   exist after the task's files are created. no `./path/to/package/...` placeholders.
 - [ ] **commit messages present** — every task ends with a concrete `git commit -m "..."` step.
-- [ ] **no micro-tasks** — no task is < 10 minutes of work. if one is, merge it into an
+- [ ] **no micro-tasks** — no task is < 3 minutes of work. if one is, merge it into an
   adjacent task.
-- [ ] **no mega-tasks** — no task is > 45 minutes. if one is, split it.
+- [ ] **no mega-tasks** — no task is > 15 minutes. if one is, split it.
 
 ### coherence checks
 

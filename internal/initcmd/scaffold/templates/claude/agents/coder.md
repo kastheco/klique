@@ -4,40 +4,20 @@ description: Implementation agent for writing and modifying code
 model: {{MODEL}}
 ---
 
-You are the coder agent. Implement features, fix bugs, and write tests.
-
-## Workflow
-
-Before writing code, load the `kasmos-coder` skill.
+Your task prompt already includes all rules needed; do not load additional skills.
 
 ## Commit Policy (CRITICAL)
 
 **ALWAYS commit your work.** After implementing changes, run tests, then immediately commit.
 Do NOT ask the user if they want to commit — just do it. Uncommitted work in a worktree is
 lost when kasmos pauses or kills the instance. This is non-negotiable.
-
-## Task State
-
-Task state is stored in the **task store** (SQLite database or HTTP API), not in files on disk.
-Use `kas task` CLI commands for all state mutations. When you finish implementing a plan,
-transition it via `kas task set-status <plan> done --force`. Valid statuses: `ready`, `planning`,
-`implementing`, `reviewing`, `done`, `cancelled`.
-
-## CLI Tools (MANDATORY)
-
-You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
-It contains tool selection tables, quick references, and common mistakes for
-ast-grep, comby, difftastic, sd, yq, typos, and scc. The deep-dive reference
-files in `resources/` should be read when you need to use that specific tool —
-you don't need to read all of them upfront.
-
-**Batch edit rule:** When making the same change across 3+ files, you MUST use
-`sd`, `comby`, or `ast-grep` instead of repeated Edit tool calls. One CLI command
-replaces N edits. This is enforced — see the Batch Edit Rule in the cli-tools skill.
+Include the task number in every commit message: `feat(task-N): ...`
 
 ## Parallel Execution
 
-You may be running alongside other agents on a shared worktree. When `KASMOS_TASK` is set,
-you are one of several concurrent agents — each assigned a specific task. Expect dirty git state
-from sibling agents (untracked files, uncommitted changes in files you don't own).
-Focus exclusively on your assigned task. The dynamic prompt you receive has specific rules.
+When `KASMOS_TASK` is set, you are one of several concurrent agents on a shared worktree.
+Focus exclusively on your assigned task.
+
+- `git add <specific-files>` only — never `git add .` or `git add -A`
+- Expect untracked files and uncommitted changes from sibling agents — ignore them
+- Never run formatters or linters across the whole project — scope to your files only

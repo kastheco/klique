@@ -206,13 +206,10 @@ func TestToolsReferenceInjected(t *testing.T) {
 		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
 		require.NoError(t, err)
 		assert.NotContains(t, string(content), "{{TOOLS_REFERENCE}}")
-		assert.Contains(t, string(content), "ast-grep")
-		assert.Contains(t, string(content), "difft")
-		assert.Contains(t, string(content), "comby")
-		assert.Contains(t, string(content), "typos")
-		assert.Contains(t, string(content), "scc")
-		assert.Contains(t, string(content), "yq")
-		assert.Contains(t, string(content), "sd")
+		// Skill-load directives are stripped; coder template is now minimal
+		assert.Contains(t, string(content), "KASMOS_TASK")
+		assert.NotContains(t, string(content), "cli-tools")
+		assert.NotContains(t, string(content), "CLI Tools (MANDATORY)")
 	})
 
 	t.Run("opencode agents include tools reference", func(t *testing.T) {
@@ -227,7 +224,10 @@ func TestToolsReferenceInjected(t *testing.T) {
 		content, err := os.ReadFile(filepath.Join(dir, ".opencode", "agents", "coder.md"))
 		require.NoError(t, err)
 		assert.NotContains(t, string(content), "{{TOOLS_REFERENCE}}")
-		assert.Contains(t, string(content), "ast-grep")
+		// Skill-load directives are stripped; coder template is now minimal
+		assert.Contains(t, string(content), "KASMOS_TASK")
+		assert.NotContains(t, string(content), "cli-tools")
+		assert.NotContains(t, string(content), "CLI Tools (MANDATORY)")
 	})
 
 	t.Run("codex AGENTS.md includes tools reference", func(t *testing.T) {
@@ -260,21 +260,6 @@ func TestToolsReferenceInjected(t *testing.T) {
 		assert.Contains(t, string(content), "claude-opus-4-6")
 	})
 
-	t.Run("cli-tools directive is always present regardless of selectedTools", func(t *testing.T) {
-		dir := t.TempDir()
-		agents := []harness.AgentConfig{
-			{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
-		}
-
-		// Even with no selected tools, the mandatory directive is always written
-		_, err := WriteClaudeProject(dir, agents, []string{}, false)
-		require.NoError(t, err)
-
-		content, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "coder.md"))
-		require.NoError(t, err)
-		assert.Contains(t, string(content), "CLI Tools (MANDATORY)")
-		assert.Contains(t, string(content), "cli-tools")
-	})
 }
 
 func TestWriteProjectSkills(t *testing.T) {

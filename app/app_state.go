@@ -1743,8 +1743,8 @@ func buildPlanningPrompt(planFile, planName, description string) string {
 // sentinel signals to .kasmos/signals/ in their worktree; the TUI ingests them on completion.
 func buildImplementPrompt(planFile string) string {
 	return fmt.Sprintf(
-		"Implement %s using the `kasmos-coder` skill. "+
-			"Retrieve the full plan with `kas task show %s` and execute all tasks sequentially.",
+		"Implement %s. Retrieve the full plan with `kas task show %s` and execute all tasks sequentially. "+
+			"Use rg/sd/fd instead of grep/sed/find. Scope tests with -run TestName. Do not load skills.",
 		planFile, planFile,
 	)
 }
@@ -1752,13 +1752,14 @@ func buildImplementPrompt(planFile string) string {
 // buildSoloPrompt returns a minimal prompt for a solo agent session.
 // If planFile is non-empty, it references the plan via kas task show. Otherwise just name + description.
 func buildSoloPrompt(planName, description, planFile string) string {
+	const rules = "Commit with task number in message. Use rg/sd/fd instead of grep/sed/find. Scope tests with -run TestName. Do not load skills."
 	if planFile != "" {
 		return fmt.Sprintf(
-			"Implement %s. Goal: %s. Retrieve the full plan with `kas task show %s`.",
-			planName, description, planFile,
+			"Implement %s. Goal: %s. Retrieve the full plan with `kas task show %s`. %s",
+			planName, description, planFile, rules,
 		)
 	}
-	return fmt.Sprintf("Implement %s. Goal: %s.", planName, description)
+	return fmt.Sprintf("Implement %s. Goal: %s. %s", planName, description, rules)
 }
 
 // buildModifyTaskPrompt returns the prompt for modifying an existing plan.
