@@ -497,6 +497,9 @@ func TestFocusRing(t *testing.T) {
 			Title: "test", Path: t.TempDir(), Program: "claude",
 		})
 		require.NoError(t, err)
+		// Stagger timestamps so newest-first sort gives deterministic visual order:
+		// first added gets the highest timestamp (visual position 0), last added is oldest (visual last).
+		inst.CreatedAt = time.Unix(int64(1000-h.nav.NumInstances()*100), 0)
 		h.nav.AddInstance(inst)()
 	}
 

@@ -317,12 +317,11 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Sort helpers
+	// Sort helpers: instances newest-first by CreatedAt, then alpha by title.
 	sortInsts := func(list []*session.Instance) {
 		sort.SliceStable(list, func(i, j int) bool {
-			ki, kj := navInstanceSortKey(list[i]), navInstanceSortKey(list[j])
-			if ki != kj {
-				return ki < kj
+			if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+				return list[i].CreatedAt.After(list[j].CreatedAt)
 			}
 			return strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)
 		})
@@ -332,16 +331,11 @@ func (n *NavigationPanel) rebuildRows() {
 	}
 	sortInsts(solo)
 
-	// Sort plans: notification (0) < running/active-status (1) < idle (2), then alpha.
+	// Sort plans alphabetically descending (newest date-prefixed names first).
 	sorted := append([]PlanDisplay(nil), n.plans...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		pi, pj := sorted[i], sorted[j]
-		ki := navPlanSortKey(pi, byPlan[pi.Filename], n.planStatuses[pi.Filename])
-		kj := navPlanSortKey(pj, byPlan[pj.Filename], n.planStatuses[pj.Filename])
-		if ki != kj {
-			return ki < kj
-		}
-		return strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))
+		return strings.ToLower(taskstate.DisplayName(pi.Filename)) > strings.ToLower(taskstate.DisplayName(pj.Filename))
 	})
 
 	capacity := len(sorted) + len(n.instances) + len(n.deadPlans) + len(n.historyPlans) + len(n.cancelled) + 8
@@ -401,22 +395,7 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Split sorted plans into active (key < 2) and idle (key == 2).
-	var activePlans, idlePlans []PlanDisplay
-	for _, p := range sorted {
-		if navPlanSortKey(p, byPlan[p.Filename], n.planStatuses[p.Filename]) < 2 {
-			activePlans = append(activePlans, p)
-		} else {
-			idlePlans = append(idlePlans, p)
-		}
-	}
-
-	// Active plans (running, notified, implementing, reviewing).
-	for _, p := range activePlans {
-		appendPlan(p, 0)
-	}
-
-	// Solo instances section (between active plans and idle plans).
+	// Solo agents section (top, above plans).
 	if len(solo) > 0 {
 		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "agents"})
 		for _, inst := range solo {
@@ -429,17 +408,17 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Idle plans grouped by topic, then ungrouped remainder.
-	idleSet := make(map[string]bool, len(idlePlans))
-	for _, p := range idlePlans {
-		idleSet[p.Filename] = true
+	// All plans alphabetically — topic-grouped first, then ungrouped remainder.
+	allPlanSet := make(map[string]bool, len(sorted))
+	for _, p := range sorted {
+		allPlanSet[p.Filename] = true
 	}
 
 	emitted := make(map[string]bool)
 	for _, t := range n.topics {
 		var planGroup []PlanDisplay
 		for _, p := range t.Plans {
-			if idleSet[p.Filename] {
+			if allPlanSet[p.Filename] {
 				planGroup = append(planGroup, p)
 			}
 		}
@@ -462,8 +441,8 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Ungrouped idle plans.
-	for _, p := range idlePlans {
+	// Ungrouped plans.
+	for _, p := range sorted {
 		if !emitted[p.Filename] {
 			appendPlan(p, 0)
 		}
@@ -1399,7 +1378,7 @@ func (n *NavigationPanel) String() string {
 	}
 	items := make([]visItem, 0, len(n.rows)+4)
 	selectedDisplayIdx := 0
-	lastPlanKey := -1
+	plansDividerEmitted := false
 	inDeadSection := false
 
 	for i, row := range n.rows {
@@ -1412,29 +1391,17 @@ func (n *NavigationPanel) String() string {
 			}
 		}
 
-		// Track dead section to suppress plan-group dividers inside it.
+		// Track dead section to suppress the plans divider inside it.
 		if row.Kind == navRowDeadToggle {
 			inDeadSection = true
 		} else if row.Kind != navRowPlanHeader && row.Kind != navRowInstance {
 			inDeadSection = false
 		}
 
-		// Inject section dividers before plan header groups.
-		if row.Kind == navRowPlanHeader && !inDeadSection {
-			sk := 2
-			if row.HasNotification || row.HasRunning ||
-				row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
-				sk = 0 // unified "active" group
-			}
-			if sk != lastPlanKey {
-				items = append(items, visItem{line: navDividerLine(navSectionLabel(sk), itemWidth), rowIdx: -1})
-				lastPlanKey = sk
-			}
-		}
-		// Topic headers always belong to the idle group.
-		if row.Kind == navRowTopicHeader && lastPlanKey != 2 {
-			items = append(items, visItem{line: navDividerLine(navSectionLabel(2), itemWidth), rowIdx: -1})
-			lastPlanKey = 2
+		// Inject a single "plans" divider before the first plan or topic header.
+		if (row.Kind == navRowPlanHeader || row.Kind == navRowTopicHeader) && !inDeadSection && !plansDividerEmitted {
+			items = append(items, visItem{line: navDividerLine("plans", itemWidth), rowIdx: -1})
+			plansDividerEmitted = true
 		}
 
 		if i == n.selectedIdx {
