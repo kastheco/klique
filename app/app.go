@@ -198,6 +198,10 @@ type home struct {
 	pendingChatAboutTask string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
+	// pendingAttachInstance is the instance queued for tea.Exec attach after the
+	// help overlay is dismissed. Set in the keys.KeyEnter handler; consumed and
+	// cleared in handleHelpState once the user acknowledges the attach help screen.
+	pendingAttachInstance *session.Instance
 
 	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
 	tmuxSessionCount int

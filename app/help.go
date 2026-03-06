@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
@@ -103,7 +104,9 @@ func (h helpTypeInstanceAttach) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render("attaching to instance"),
 		"",
-		descStyle.Render("to detach from a session, press ")+keyStyle.Render("ctrl-q"),
+		descStyle.Render("to detach from the session:"),
+		keyStyle.Render("ctrl-q")+descStyle.Render("     - detach"),
+		keyStyle.Render("ctrl+space")+descStyle.Render(" - detach"),
 	)
 	return content
 }
@@ -185,6 +188,23 @@ func (m *home) handleHelpState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	result := m.overlays.HandleKey(msg)
 	if result.Dismissed {
 		m.state = stateDefault
+
+		// If the attach help overlay was dismissed and a valid instance is queued,
+		// hand off to tea.Exec so bubbletea can release the terminal before attaching.
+		// This prevents stdin contention between bubbletea's event loop and the
+		// attach goroutines that read/write os.Stdin and os.Stdout directly.
+		pending := m.pendingAttachInstance
+		m.pendingAttachInstance = nil
+
+		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() {
+			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
+				if err != nil {
+					return err
+				}
+				return instanceChangedMsg{}
+			})
+		}
+
 		return m, tea.Sequence(
 			tea.RequestWindowSize,
 			func() tea.Msg {

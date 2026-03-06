@@ -14,6 +14,7 @@ import (
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
+	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	tea "charm.land/bubbletea/v2"
@@ -46,14 +47,12 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {
 			return m, nil
 		}
-		return m, func() tea.Msg {
-			ch, err := m.nav.Attach()
+		return m, tea.Exec(tmux.NewAttachExecCommand(selected), func(err error) tea.Msg {
 			if err != nil {
 				return err
 			}
-			<-ch
 			return instanceChangedMsg{}
-		}
+		})
 
 	case "pause_instance":
 		selected := m.nav.GetSelectedInstance()
