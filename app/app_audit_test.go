@@ -327,6 +327,9 @@ func TestAuditHomeEmit_PlanCreated(t *testing.T) {
 
 	err = h.createTaskEntry("my cool plan", "description", "")
 	require.NoError(t, err)
+	content, err := store.GetContent("myproject", "my-cool-plan.md")
+	require.NoError(t, err)
+	assert.Contains(t, content, "# my cool plan")
 
 	events, err := logger.Query(auditlog.QueryFilter{
 		Project: "myproject",

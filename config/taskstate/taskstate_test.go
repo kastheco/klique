@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,28 @@ func TestLoadMissing(t *testing.T) {
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Empty(t, ps.Plans)
+}
+
+func TestLoad_BackfillsGoalFromContent(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	content := "# Test\n\n**Goal:** ship planner metadata\n\n## Wave 1\n\n### Task 1: parse goal\n\nDo it.\n"
+	plan, err := taskparser.Parse(content)
+	require.NoError(t, err)
+	require.NotEmpty(t, plan.Goal)
+
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: "goal-backfill.md",
+		Status:   taskstore.StatusReady,
+		Content:  content,
+	}))
+
+	ps, err := Load(store, "proj", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, plan.Goal, ps.Plans["goal-backfill.md"].Goal)
+
+	entry, err := store.Get("proj", "goal-backfill.md")
+	require.NoError(t, err)
+	assert.Equal(t, plan.Goal, entry.Goal)
 }
 
 func TestUnfinished(t *testing.T) {

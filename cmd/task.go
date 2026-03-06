@@ -598,8 +598,8 @@ func NewTaskCmd() *cobra.Command {
 			}
 			// Parse plan metadata (goal, subtasks) and persist alongside content.
 			if plan, parseErr := taskparser.Parse(content); parseErr == nil {
-				if plan.Goal != "" {
-					_ = store.SetPlanGoal(storeProject, filename, plan.Goal)
+				if err := store.SetPlanGoal(storeProject, filename, plan.Goal); err != nil {
+					return fmt.Errorf("set plan goal: %w", err)
 				}
 				subtasks := make([]taskstore.SubtaskEntry, 0)
 				for _, wave := range plan.Waves {
@@ -611,8 +611,8 @@ func NewTaskCmd() *cobra.Command {
 						})
 					}
 				}
-				if len(subtasks) > 0 {
-					_ = store.SetSubtasks(storeProject, filename, subtasks)
+				if err := store.SetSubtasks(storeProject, filename, subtasks); err != nil {
+					return fmt.Errorf("set subtasks: %w", err)
 				}
 			}
 			fmt.Printf("updated content for %s\n", filename)

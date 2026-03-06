@@ -1349,6 +1349,12 @@ func (m *home) createTaskEntry(name, description, topic string) error {
 		}
 		return err
 	}
+	if err := m.taskState.SetContent(filename, renderPlanStub(name, description, filename)); err != nil {
+		if m.toastManager != nil {
+			m.toastManager.Error("task store error: " + err.Error())
+		}
+		return err
+	}
 	m.audit(auditlog.EventPlanCreated, "created plan", auditlog.WithPlan(filename))
 	m.updateSidebarTasks()
 	return nil
@@ -1586,13 +1592,14 @@ func (m *home) taskBranch(planFile string) string {
 // buildPlanningPrompt returns the initial prompt for a planner agent session.
 // The prompt explicitly requires ## Wave N headers because kasmos uses them
 // for wave orchestration — without them, implementation cannot start.
-func buildPlanningPrompt(planName, description string) string {
+func buildPlanningPrompt(planFile, planName, description string) string {
 	return fmt.Sprintf(
 		"Plan %s. Goal: %s. "+
 			"Use the `kasmos-planner` skill. "+
 			"The plan MUST include ## Wave N sections (at minimum ## Wave 1) "+
-			"grouping all tasks — kasmos requires Wave headers to orchestrate implementation.",
-		planName, description,
+			"grouping all tasks — kasmos requires Wave headers to orchestrate implementation. "+
+			"After writing the plan, store it with `kas task update-content %s` and then signal completion with `touch .kasmos/signals/planner-finished-%s`.",
+		planName, description, planFile, planFile,
 	)
 }
 

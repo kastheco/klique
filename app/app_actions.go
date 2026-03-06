@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
@@ -826,7 +827,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			auditlog.WithPlan(planFile))
 		m.loadTaskState()
 		m.updateSidebarTasks()
-		return m.spawnTaskAgent(planFile, "plan", buildPlanningPrompt(taskstate.DisplayName(planFile), entry.Description))
+		return m.spawnTaskAgent(planFile, "plan", buildPlanningPrompt(planFile, taskstate.DisplayName(planFile), entry.Description))
 	case "solo":
 		// Check store content before fsmSetImplementing — the FSM transition calls
 		// store.Update which overwrites the content field with an empty string.
@@ -871,6 +872,16 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 				return m, m.handleError(err)
 			}
 			rawContent = c
+		}
+		if strings.TrimSpace(rawContent) == "" {
+			if setErr := m.fsmRevertToPlanning(planFile); setErr != nil {
+				return m, m.handleError(setErr)
+			}
+			m.loadTaskState()
+			m.updateSidebarTasks()
+			m.toastManager.Info("plan content missing — respawning planner to write plan content.")
+			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildPlanningPrompt(planFile, taskstate.DisplayName(planFile), entry.Description))
+			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}
 		plan, err := taskparser.Parse(rawContent)
 		if err != nil {
@@ -924,6 +935,16 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 				return m, m.handleError(err)
 			}
 			rawContent = c
+		}
+		if strings.TrimSpace(rawContent) == "" {
+			if setErr := m.fsmRevertToPlanning(planFile); setErr != nil {
+				return m, m.handleError(setErr)
+			}
+			m.loadTaskState()
+			m.updateSidebarTasks()
+			m.toastManager.Info("plan content missing — respawning planner to write plan content.")
+			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", buildPlanningPrompt(planFile, taskstate.DisplayName(planFile), entry.Description))
+			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}
 		plan, err := taskparser.Parse(rawContent)
 		if err != nil {

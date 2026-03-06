@@ -25,7 +25,7 @@ import (
 )
 
 func TestBuildPlanPrompt(t *testing.T) {
-	prompt := buildPlanningPrompt("Auth Refactor", "Refactor JWT auth")
+	prompt := buildPlanningPrompt("auth-refactor.md", "Auth Refactor", "Refactor JWT auth")
 	if !strings.Contains(prompt, "Plan Auth Refactor") {
 		t.Fatalf("prompt missing title")
 	}
@@ -36,6 +36,8 @@ func TestBuildPlanPrompt(t *testing.T) {
 	// instruct the planner to include them.
 	assert.Contains(t, prompt, "Wave", "plan prompt must mention Wave headers for kasmos orchestration")
 	assert.Contains(t, prompt, "kasmos-planner", "plan prompt must reference the kasmos-planner skill")
+	assert.Contains(t, prompt, "kas task update-content auth-refactor.md", "plan prompt must include content storage command")
+	assert.Contains(t, prompt, "planner-finished-auth-refactor.md", "plan prompt must include planner completion signal")
 }
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
