@@ -1114,6 +1114,8 @@ func navInstanceTitle(inst *session.Instance) string {
 			return fmt.Sprintf("applying fixes #%d", inst.ReviewCycle)
 		}
 		return "applying fixes"
+	case inst.AgentType == session.AgentTypeElaborator && inst.TaskFile != "":
+		return "creating blueprint"
 	default:
 		return inst.Title
 	}
