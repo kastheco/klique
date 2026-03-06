@@ -195,6 +195,11 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("create subtasks table: %w", err)
 	}
 
+	if err := migrateStripMdSuffix(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate strip .md suffix: %w", err)
+	}
+
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -203,6 +208,37 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 // was introduced.
 func migrateAddContentColumn(db *sql.DB) error {
 	return migrateAddColumn(db, "content", contentMigration)
+}
+
+// migrateStripMdSuffix removes a trailing '.md' suffix from task and subtask
+// plan filenames. This keeps existing task/subtask references in sync after the
+// transition to extension-less plan filenames.
+func migrateStripMdSuffix(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin strip .md suffix transaction: %w", err)
+	}
+
+	if _, err = tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("defer foreign keys for strip .md migration: %w", err)
+	}
+
+	if _, err = tx.Exec("UPDATE tasks SET filename = SUBSTR(filename, 1, LENGTH(filename) - 3) WHERE filename LIKE '%.md'"); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("strip .md suffix from tasks: %w", err)
+	}
+
+	if _, err = tx.Exec("UPDATE subtasks SET plan_filename = SUBSTR(plan_filename, 1, LENGTH(plan_filename) - 3) WHERE plan_filename LIKE '%.md'"); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("strip .md suffix from subtasks: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit strip .md suffix migration: %w", err)
+	}
+
+	return nil
 }
 
 // migrateAddColumn adds a column to the tasks table if it doesn't already

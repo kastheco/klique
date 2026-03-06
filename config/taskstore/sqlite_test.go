@@ -1,6 +1,8 @@
 package taskstore_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +34,32 @@ func TestSQLiteStore_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusReady, got.Status)
 	assert.Equal(t, "test plan", got.Description)
+}
+
+func TestSQLiteStore_MdSuffixMigration(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "taskstore.db")
+
+	store, err := taskstore.NewSQLiteStore(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "foo.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "bar.md", Status: taskstore.StatusDone}))
+	require.NoError(t, store.SetSubtasks("proj", "foo.md", []taskstore.SubtaskEntry{{TaskNumber: 1, Title: "sub1", Status: taskstore.SubtaskStatusPending}}))
+	require.NoError(t, store.Close())
+
+	store2, err := taskstore.NewSQLiteStore(dbPath)
+	require.NoError(t, err)
+	defer store2.Close()
+
+	plans, err := store2.List("proj")
+	require.NoError(t, err)
+	for _, plan := range plans {
+		assert.False(t, strings.HasSuffix(plan.Filename, ".md"))
+	}
+
+	subs, err := store2.GetSubtasks("proj", "foo")
+	require.NoError(t, err)
+	assert.Len(t, subs, 1)
 }
 
 func TestSQLiteStore_ListByStatus(t *testing.T) {
