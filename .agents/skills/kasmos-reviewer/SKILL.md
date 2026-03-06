@@ -51,10 +51,11 @@ the base branch and HEAD — nothing more.
 
 ```bash
 # See all changes since branching from main
-GIT_EXTERNAL_DIFF=difft git diff main..HEAD
+MERGE_BASE=$(git merge-base main HEAD)
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD
 
 # Or by file for targeted review
-GIT_EXTERNAL_DIFF=difft git diff main..HEAD -- path/to/file.go
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD -- path/to/file.go
 ```
 
 In **managed mode** (`KASMOS_MANAGED=1`): kasmos spawned you after receiving the
@@ -63,6 +64,20 @@ push, or create PRs — kasmos handles post-approval actions.
 
 In **manual mode** (unset): you were invoked directly or self-dispatched. After signaling,
 additionally offer merge/PR/keep/discard options (see Signal Format section).
+
+## Worktree Awareness
+
+- Treat the review diff as worktree-aware by anchoring all comparison commands to `merge-base`.
+- Use this in each check so you review only commits since your branch diverged from `main`.
+
+```bash
+MERGE_BASE=$(git merge-base main HEAD)
+
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD
+GIT_EXTERNAL_DIFF=difft git diff $MERGE_BASE..HEAD -- path/to/file.go
+git diff $MERGE_BASE..HEAD --name-only | rg '\.go$' | sd '/[^/]+\.go$' '' | sort -u
+git diff $MERGE_BASE..HEAD --name-only | xargs typos
+```
 
 ## Review Checklist
 
@@ -100,7 +115,7 @@ If tests are slow, at minimum run tests for changed packages:
 
 ```bash
 # Identify changed packages
-git diff main..HEAD --name-only | rg '\.go$' | sd '/[^/]+\.go$' '' | sort -u
+git diff $MERGE_BASE..HEAD --name-only | rg '\.go$' | sd '/[^/]+\.go$' '' | sort -u
 
 # Run them
 go test ./path/to/changed/... ./other/changed/...
@@ -169,7 +184,7 @@ Before writing `review-approved`:
 go test ./... 2>&1
 
 # Confirm no typos in changed files
-git diff main..HEAD --name-only | xargs typos
+git diff $MERGE_BASE..HEAD --name-only | xargs typos
 ```
 
 ## Signal Format
