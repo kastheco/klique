@@ -290,8 +290,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	return nil
 }
 
-// Kill terminates the tmux session and removes the git worktree. If the worktree
-// has uncommitted changes they are committed first to prevent data loss.
+// Kill terminates the tmux session and removes the git worktree.
 // The git branch is preserved so the instance can be inspected or resumed later.
 // Returns nil for instances that were never started.
 func (i *Instance) Kill() error {
@@ -310,12 +309,6 @@ func (i *Instance) Kill() error {
 
 	// Shared worktrees are owned by the topic, not the instance.
 	if i.gitWorktree != nil && !i.sharedWorktree {
-		if dirty, err := i.gitWorktree.IsDirty(); err == nil && dirty {
-			msg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)", i.Title, time.Now().Format(time.RFC822))
-			if commitErr := i.gitWorktree.CommitChanges(msg); commitErr != nil {
-				errs = append(errs, fmt.Errorf("failed to auto-commit before kill: %w", commitErr))
-			}
-		}
 		if err := i.gitWorktree.Remove(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
 		}
@@ -336,7 +329,7 @@ func (i *Instance) StopTmux() {
 }
 
 // Pause detaches from the tmux session and removes the git worktree, preserving
-// the branch for a later Resume. Any dirty changes are committed before removal.
+// the branch for a later Resume.
 func (i *Instance) Pause() error {
 	if !i.started {
 		return fmt.Errorf("cannot pause instance that has not been started")
@@ -346,21 +339,6 @@ func (i *Instance) Pause() error {
 	}
 
 	var errs []error
-
-	if !i.sharedWorktree && i.gitWorktree != nil {
-		dirty, err := i.gitWorktree.IsDirty()
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
-			log.ErrorLog.Print(err)
-		} else if dirty {
-			msg := fmt.Sprintf("[kas] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
-			if commitErr := i.gitWorktree.CommitChanges(msg); commitErr != nil {
-				errs = append(errs, fmt.Errorf("failed to commit changes: %w", commitErr))
-				log.ErrorLog.Print(commitErr)
-				return errors.Join(errs...)
-			}
-		}
-	}
 
 	if err := i.tmuxSession.DetachSafely(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))

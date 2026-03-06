@@ -477,14 +477,6 @@ func NewInstanceCmd() *cobra.Command {
 			if err := validateStatusForAction(rec, "kill"); err != nil {
 				return err
 			}
-			// Auto-commit dirty changes before removing worktree.
-			if rec.Worktree.WorktreePath != "" {
-				commitMsg := fmt.Sprintf("[kas] auto-save from '%s' on %s (killed)",
-					rec.Title, time.Now().Format(time.RFC822))
-				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "add", "-A").Run()
-				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath,
-					"commit", "-m", commitMsg, "--allow-empty").Run()
-			}
 			// Kill tmux session (best-effort).
 			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()
 			// Remove worktree but preserve branch.
@@ -526,12 +518,6 @@ func NewInstanceCmd() *cobra.Command {
 			}
 			if err := validateStatusForAction(rec, "pause"); err != nil {
 				return err
-			}
-			// Commit any dirty changes in the worktree before pausing.
-			if rec.Worktree.WorktreePath != "" {
-				commitMsg := fmt.Sprintf("[kas] update from '%s' on %s (paused)", rec.Title, time.Now().Format(time.RFC822))
-				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "add", "-A").Run()
-				_ = exec.Command("git", "-C", rec.Worktree.WorktreePath, "commit", "-m", commitMsg, "--allow-empty").Run()
 			}
 			// Kill the tmux session using the kas_-prefixed name.
 			_ = exec.Command("tmux", "kill-session", "-t", kasTmuxName(rec.Title)).Run()

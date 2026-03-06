@@ -112,12 +112,12 @@ func (h helpTypeInstanceCheckout) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render("checkout instance"),
 		"",
-		descStyle.Render("changes will be committed locally. the branch name has been copied to your clipboard."),
+		descStyle.Render("your branch name has been copied to your clipboard."),
 		"",
 		descStyle.Render("feel free to make changes and commit them. when resuming, the session continues from where you left off."),
 		"",
 		headerStyle.Render("commands:"),
-		keyStyle.Render("c")+descStyle.Render(" - checkout: commit changes locally and pause session"),
+		keyStyle.Render("c")+descStyle.Render(" - checkout: pause session and preserve branch"),
 		keyStyle.Render("r")+descStyle.Render(" - resume a paused session"),
 	)
 	return content
