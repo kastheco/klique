@@ -711,6 +711,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
 		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
 		overlay.ContextMenuItem{Label: "set status", Action: "set_status"},
+		overlay.ContextMenuItem{Label: "create pr", Action: "create_plan_pr"},
 		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},
 		overlay.ContextMenuItem{Label: "mark done", Action: "mark_plan_done"},
 		overlay.ContextMenuItem{Label: "start over", Action: "start_over_plan"},

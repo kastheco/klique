@@ -1303,6 +1303,30 @@ func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	require.True(t, found, "context menu must include 'chat about this' action")
 }
 
+func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
+	h := newTestHome()
+	h.setupPlanState(t, "test-plan.md", taskstate.StatusImplementing, "")
+
+	h.focusSlot = slotNav
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan.md")
+
+	model, _ := h.openTaskContextMenu()
+	updated := model.(*home)
+
+	require.Equal(t, stateContextMenu, updated.state)
+	cm, ok := updated.overlays.Current().(*overlay.ContextMenu)
+	require.True(t, ok, "current overlay must be a ContextMenu")
+
+	found := false
+	for _, item := range cm.Items() {
+		if item.Action == "create_plan_pr" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "task context menu must include 'create pr' action")
+}
+
 // TestExitFocusMode_KeepsPreviewTerminal verifies that exitFocusMode does NOT close
 // previewTerminal — it stays alive for preview rendering.
 func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {
