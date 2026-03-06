@@ -145,10 +145,7 @@ func (p *PermissionOverlay) HandleMouse(relX, relY int, button tea.MouseButton) 
 			break
 		}
 	}
-	if relY != choiceLine {
-		return Result{}
-	}
-	if choiceLine < 0 {
+	if choiceLine < 0 || relY != choiceLine {
 		return Result{}
 	}
 	line := stripANSI(viewLines[choiceLine])
