@@ -52,9 +52,9 @@ func TestScaffoldFilename_Dedup(t *testing.T) {
 	// First collision returns -2 suffix.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, base), []byte("x"), 0o644))
 	name2 := dedupePlanFilename(dir, base)
-	assert.Equal(t, "test-task-2.md", name2)
+	assert.Equal(t, "test-task-2", name2)
 
 	// Second collision returns -3 suffix.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name2), []byte("x"), 0o644))
-	assert.Equal(t, "test-task-3.md", dedupePlanFilename(dir, base))
+	assert.Equal(t, "test-task-3", dedupePlanFilename(dir, base))
 }

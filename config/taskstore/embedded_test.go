@@ -38,10 +38,10 @@ func TestEmbeddedServer_ContentEndpoint(t *testing.T) {
 
 	client := taskstore.NewHTTPStore(srv.URL(), "test")
 	require.NoError(t, client.Create("proj", taskstore.TaskEntry{
-		Filename: "test.md", Status: taskstore.StatusReady, Content: "# Hello",
+		Filename: "test", Status: taskstore.StatusReady, Content: "# Hello",
 	}))
 
-	content, err := client.GetContent("proj", "test.md")
+	content, err := client.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# Hello", content)
 }

@@ -24,28 +24,28 @@ func setupSignalTestStore(t *testing.T) (taskstore.Store, string, string) {
 	project := filepath.Base(root)
 
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "implementing-plan.md",
+		Filename:    "implementing-plan",
 		Status:      taskstore.Status(taskfsm.StatusImplementing),
 		Description: "implementing plan",
 		Branch:      "plan/implementing-plan",
 		CreatedAt:   time.Now(),
 	}))
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "reviewing-plan.md",
+		Filename:    "reviewing-plan",
 		Status:      taskstore.Status(taskfsm.StatusReviewing),
 		Description: "reviewing plan",
 		Branch:      "plan/reviewing-plan",
 		CreatedAt:   time.Now(),
 	}))
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "planning-plan.md",
+		Filename:    "planning-plan",
 		Status:      taskstore.Status(taskfsm.StatusPlanning),
 		Description: "planning plan",
 		Branch:      "plan/planning-plan",
 		CreatedAt:   time.Now(),
 	}))
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "ready-plan.md",
+		Filename:    "ready-plan",
 		Status:      taskstore.Status(taskfsm.StatusReady),
 		Description: "ready plan",
 		Branch:      "plan/ready-plan",
@@ -70,69 +70,69 @@ func TestExecuteSignalList_MissingDirectory(t *testing.T) {
 
 func TestExecuteSignalList_WithFSMSignal_ImplementFinished(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-finished-my-plan.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-finished-my-plan"), nil, 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "implement_finished")
-	assert.Contains(t, result, "my-plan.md")
+	assert.Contains(t, result, "my-plan")
 }
 
 func TestExecuteSignalList_WithFSMSignal_ReviewApproved(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-approved-auth-plan.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-approved-auth-plan"), nil, 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "review_approved")
-	assert.Contains(t, result, "auth-plan.md")
+	assert.Contains(t, result, "auth-plan")
 }
 
 func TestExecuteSignalList_WithFSMSignal_PlannerFinished(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "planner-finished-my-plan.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "planner-finished-my-plan"), nil, 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "planner_finished")
-	assert.Contains(t, result, "my-plan.md")
+	assert.Contains(t, result, "my-plan")
 }
 
 func TestExecuteSignalList_WithFSMSignal_ReviewChanges(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-changes-auth-plan.md"), []byte("fix the tests"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-changes-auth-plan"), []byte("fix the tests"), 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "review_changes_requested")
-	assert.Contains(t, result, "auth-plan.md")
+	assert.Contains(t, result, "auth-plan")
 }
 
 func TestExecuteSignalList_WithWaveSignal(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-wave-2-big-plan.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-wave-2-big-plan"), nil, 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "implement_wave")
-	assert.Contains(t, result, "big-plan.md")
+	assert.Contains(t, result, "big-plan")
 	assert.Contains(t, result, "wave 2")
 }
 
 func TestExecuteSignalList_WithElaborationSignal(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "elaborator-finished-my-plan.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "elaborator-finished-my-plan"), nil, 0o644))
 
 	result := executeSignalList(dir)
 	assert.Contains(t, result, "elaborator_finished")
-	assert.Contains(t, result, "my-plan.md")
+	assert.Contains(t, result, "my-plan")
 }
 
 func TestExecuteSignalList_MultipleSignals(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-finished-plan-a.md"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-approved-plan-b.md"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-wave-1-plan-c.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-finished-plan-a"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "review-approved-plan-b"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "implement-wave-1-plan-c"), nil, 0o644))
 
 	result := executeSignalList(dir)
-	assert.Contains(t, result, "plan-a.md")
-	assert.Contains(t, result, "plan-b.md")
-	assert.Contains(t, result, "plan-c.md")
+	assert.Contains(t, result, "plan-a")
+	assert.Contains(t, result, "plan-b")
+	assert.Contains(t, result, "plan-c")
 }
 
 // --- executeSignalProcess tests ---
@@ -145,7 +145,7 @@ func TestExecuteSignalProcess_ImplementFinished_TransitionToReviewing(t *testing
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// Write implement-finished signal for the implementing plan.
-	sigFile := filepath.Join(signalsDir, "implement-finished-implementing-plan.md")
+	sigFile := filepath.Join(signalsDir, "implement-finished-implementing-plan")
 	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
 
 	opts := signalProcessOptions{
@@ -165,7 +165,7 @@ func TestExecuteSignalProcess_ImplementFinished_TransitionToReviewing(t *testing
 	// FSM should have transitioned to reviewing.
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("implementing-plan.md")
+	entry, ok := ps.Entry("implementing-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReviewing, entry.Status)
 }
@@ -177,7 +177,7 @@ func TestExecuteSignalProcess_ReviewApproved_TransitionToDone(t *testing.T) {
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	// Write review-approved signal for the reviewing plan.
-	sigFile := filepath.Join(signalsDir, "review-approved-reviewing-plan.md")
+	sigFile := filepath.Join(signalsDir, "review-approved-reviewing-plan")
 	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
 
 	opts := signalProcessOptions{
@@ -197,7 +197,7 @@ func TestExecuteSignalProcess_ReviewApproved_TransitionToDone(t *testing.T) {
 	// FSM → done.
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("reviewing-plan.md")
+	entry, ok := ps.Entry("reviewing-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusDone, entry.Status)
 }
@@ -208,7 +208,7 @@ func TestExecuteSignalProcess_PlannerFinished_TransitionToReady(t *testing.T) {
 	signalsDir := filepath.Join(root, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	sigFile := filepath.Join(signalsDir, "planner-finished-planning-plan.md")
+	sigFile := filepath.Join(signalsDir, "planner-finished-planning-plan")
 	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
 
 	opts := signalProcessOptions{
@@ -226,7 +226,7 @@ func TestExecuteSignalProcess_PlannerFinished_TransitionToReady(t *testing.T) {
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("planning-plan.md")
+	entry, ok := ps.Entry("planning-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 }
@@ -238,7 +238,7 @@ func TestExecuteSignalProcess_UnknownPlan_SignalConsumed(t *testing.T) {
 	signalsDir := filepath.Join(root, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	sigFile := filepath.Join(signalsDir, "implement-finished-nonexistent-plan.md")
+	sigFile := filepath.Join(signalsDir, "implement-finished-nonexistent-plan")
 	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
 
 	opts := signalProcessOptions{
@@ -282,9 +282,9 @@ func TestExecuteSignalProcess_MultipleSignals(t *testing.T) {
 
 	// Write two valid signals.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-planning-plan.md"), nil, 0o644))
+		filepath.Join(signalsDir, "planner-finished-planning-plan"), nil, 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "review-approved-reviewing-plan.md"), nil, 0o644))
+		filepath.Join(signalsDir, "review-approved-reviewing-plan"), nil, 0o644))
 
 	opts := signalProcessOptions{
 		repoRoot:   root,
@@ -304,8 +304,8 @@ func TestExecuteSignalProcess_MultipleSignals(t *testing.T) {
 	// Both plans transitioned.
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	planningEntry, _ := ps.Entry("planning-plan.md")
-	reviewingEntry, _ := ps.Entry("reviewing-plan.md")
+	planningEntry, _ := ps.Entry("planning-plan")
+	reviewingEntry, _ := ps.Entry("reviewing-plan")
 	assert.Equal(t, taskstate.StatusReady, planningEntry.Status)
 	assert.Equal(t, taskstate.StatusDone, reviewingEntry.Status)
 }
@@ -318,7 +318,7 @@ func TestExecuteSignalProcess_ReviewChanges_TransitionToImplementing(t *testing.
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	feedback := "Please fix the tests"
-	sigFile := filepath.Join(signalsDir, "review-changes-reviewing-plan.md")
+	sigFile := filepath.Join(signalsDir, "review-changes-reviewing-plan")
 	require.NoError(t, os.WriteFile(sigFile, []byte(feedback), 0o644))
 
 	opts := signalProcessOptions{
@@ -337,7 +337,7 @@ func TestExecuteSignalProcess_ReviewChanges_TransitionToImplementing(t *testing.
 	// FSM → implementing.
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("reviewing-plan.md")
+	entry, ok := ps.Entry("reviewing-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 	// Review cycle should be incremented.

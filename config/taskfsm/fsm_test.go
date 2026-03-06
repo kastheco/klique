@@ -85,16 +85,16 @@ func TestTaskStateMachine_TransitionWritesToStore(t *testing.T) {
 	// Seed with a ready plan
 	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+	require.NoError(t, ps.Register("test", "test plan", "plan/test", time.Now()))
 
 	fsm := New(store, "test-proj", dir)
-	err = fsm.Transition("test.md", PlanStart)
+	err = fsm.Transition("test", PlanStart)
 	require.NoError(t, err)
 
 	// Re-read from store to verify persistence
 	reloaded, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	entry, ok := reloaded.Entry("test.md")
+	entry, ok := reloaded.Entry("test")
 	require.True(t, ok)
 	assert.Equal(t, "planning", string(entry.Status))
 }
@@ -105,38 +105,38 @@ func TestTaskStateMachine_RejectsInvalidTransition(t *testing.T) {
 
 	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+	require.NoError(t, ps.Register("test", "test plan", "plan/test", time.Now()))
 
 	fsm := New(store, "test-proj", dir)
-	err = fsm.Transition("test.md", ImplementFinished) // ready → implement_finished is invalid
+	err = fsm.Transition("test", ImplementFinished) // ready → implement_finished is invalid
 	assert.Error(t, err)
 
 	// Status must remain unchanged in store
 	reloaded, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	entry, ok := reloaded.Entry("test.md")
+	entry, ok := reloaded.Entry("test")
 	require.True(t, ok)
 	assert.Equal(t, "ready", string(entry.Status))
 }
 
 func TestTaskStateMachine_MissingPlanReturnsError(t *testing.T) {
 	fsm, _ := newTestFSM(t)
-	err := fsm.Transition("nonexistent.md", PlanStart)
+	err := fsm.Transition("nonexistent", PlanStart)
 	assert.Error(t, err)
 }
 
 func TestFSM_TransitionWithStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	err := store.Create("test-project", taskstore.TaskEntry{
-		Filename: "test.md", Status: "ready",
+		Filename: "test", Status: "ready",
 	})
 	require.NoError(t, err)
 
 	fsm := New(store, "test-project", t.TempDir())
-	require.NoError(t, fsm.Transition("test.md", PlanStart))
+	require.NoError(t, fsm.Transition("test", PlanStart))
 
 	// Verify the store was updated
-	entry, err := store.Get("test-project", "test.md")
+	entry, err := store.Get("test-project", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "planning", string(entry.Status))
 }
@@ -147,16 +147,16 @@ func TestFSM_TransitionRecordsPhaseTimestamp(t *testing.T) {
 
 	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+	require.NoError(t, ps.Register("test", "test plan", "plan/test", time.Now()))
 
 	fsm := New(store, "test-proj", dir)
-	require.NoError(t, fsm.Transition("test.md", PlanStart))
-	require.NoError(t, fsm.Transition("test.md", PlannerFinished))
-	require.NoError(t, fsm.Transition("test.md", ImplementStart))
-	require.NoError(t, fsm.Transition("test.md", ImplementFinished))
-	require.NoError(t, fsm.Transition("test.md", ReviewApproved))
+	require.NoError(t, fsm.Transition("test", PlanStart))
+	require.NoError(t, fsm.Transition("test", PlannerFinished))
+	require.NoError(t, fsm.Transition("test", ImplementStart))
+	require.NoError(t, fsm.Transition("test", ImplementFinished))
+	require.NoError(t, fsm.Transition("test", ReviewApproved))
 
-	entry, err := store.Get("test-proj", "test.md")
+	entry, err := store.Get("test-proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusDone, entry.Status)
 	assert.False(t, entry.PlanningAt.IsZero())
@@ -171,12 +171,12 @@ func TestFSM_TransitionSkipsTimestampForNonPhaseStatuses(t *testing.T) {
 
 	ps, err := taskstate.Load(store, "test-proj", dir)
 	require.NoError(t, err)
-	require.NoError(t, ps.Register("test.md", "test plan", "plan/test", time.Now()))
+	require.NoError(t, ps.Register("test", "test plan", "plan/test", time.Now()))
 
 	fsm := New(store, "test-proj", dir)
-	require.NoError(t, fsm.Transition("test.md", Cancel))
+	require.NoError(t, fsm.Transition("test", Cancel))
 
-	entry, err := store.Get("test-proj", "test.md")
+	entry, err := store.Get("test-proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusCancelled, entry.Status)
 	assert.True(t, entry.PlanningAt.IsZero())

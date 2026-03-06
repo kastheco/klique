@@ -43,7 +43,7 @@ func TestMergeTopicStatus(t *testing.T) {
 }
 
 func TestMergePlanStatus(t *testing.T) {
-	reviewer := newSidebarStatusTestInstance(t, "plan.md")
+	reviewer := newSidebarStatusTestInstance(t, "plan")
 	reviewer.IsReviewer = true
 	reviewer.Notified = true
 
@@ -51,12 +51,12 @@ func TestMergePlanStatus(t *testing.T) {
 	assert.True(t, st.HasNotification)
 	assert.False(t, st.HasRunning)
 
-	coder := newSidebarStatusTestInstance(t, "plan.md")
+	coder := newSidebarStatusTestInstance(t, "plan")
 	st = mergePlanStatus(st, coder, true)
 	assert.True(t, st.HasRunning)
 	assert.True(t, st.HasNotification)
 
-	pausedCoder := newSidebarStatusTestInstance(t, "plan.md")
+	pausedCoder := newSidebarStatusTestInstance(t, "plan")
 	pausedCoder.Status = session.Paused
 	paused := mergePlanStatus(ui.TopicStatus{}, pausedCoder, true)
 	assert.False(t, paused.HasRunning)

@@ -120,7 +120,7 @@ func TestRenamePlan_SelectionFollowsRenamedPlan(t *testing.T) {
 	// The handler renamed aardvark → zebra and must have called SelectByID so
 	// the cursor now points at the zebra plan, not marmot.
 	// Derive the expected new filename the same way taskstate.Rename does.
-	expectedID := ui.SidebarPlanPrefix + "zebra.md"
+	expectedID := ui.SidebarPlanPrefix + "zebra"
 	assert.Equal(t, expectedID, h.nav.GetSelectedID(),
 		"selection must follow the renamed plan; without the fix it jumps to marmot")
 }

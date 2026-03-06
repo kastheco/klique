@@ -26,14 +26,14 @@ func setupTestPlanState(t *testing.T) (taskstore.Store, string, string) {
 	project := filepath.Base(root)
 
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "test-plan.md",
+		Filename:    "test-plan",
 		Status:      taskstore.StatusReady,
 		Description: "test plan",
 		Branch:      "plan/test-plan",
 		CreatedAt:   time.Now(),
 	}))
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "implementing-plan.md",
+		Filename:    "implementing-plan",
 		Status:      taskstore.Status("implementing"),
 		Description: "implementing plan",
 		Branch:      "plan/implementing-plan",
@@ -54,13 +54,13 @@ func TestPlanList(t *testing.T) {
 	}{
 		{
 			name:         "all plans",
-			wantContains: []string{"test-plan.md", "implementing-plan.md"},
+			wantContains: []string{"test-plan", "implementing-plan"},
 		},
 		{
 			name:           "filter by ready",
 			statusFilter:   "ready",
-			wantContains:   []string{"test-plan.md"},
-			wantNotContain: []string{"implementing-plan.md"},
+			wantContains:   []string{"test-plan"},
+			wantNotContain: []string{"implementing-plan"},
 		},
 	}
 
@@ -81,21 +81,21 @@ func TestPlanSetStatus(t *testing.T) {
 	store, _, project := setupTestPlanState(t)
 
 	// Requires --force
-	err := executeTaskSetStatus(project, "test-plan.md", "done", false, store)
+	err := executeTaskSetStatus(project, "test-plan", "done", false, store)
 	assert.Error(t, err, "should require --force flag")
 
 	// Valid override
-	err = executeTaskSetStatus(project, "test-plan.md", "done", true, store)
+	err = executeTaskSetStatus(project, "test-plan", "done", true, store)
 	require.NoError(t, err)
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("test-plan.md")
+	entry, ok := ps.Entry("test-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.Status("done"), entry.Status)
 
 	// Invalid status
-	err = executeTaskSetStatus(project, "test-plan.md", "bogus", true, store)
+	err = executeTaskSetStatus(project, "test-plan", "bogus", true, store)
 	assert.Error(t, err, "should reject invalid status")
 }
 
@@ -103,12 +103,12 @@ func TestPlanTransition(t *testing.T) {
 	store, _, project := setupTestPlanState(t)
 
 	// Valid transition: ready → planning via plan_start
-	newStatus, err := executeTaskTransition(project, "test-plan.md", "plan_start", store)
+	newStatus, err := executeTaskTransition(project, "test-plan", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", newStatus)
 
 	// Invalid transition (plan is now in "planning" state)
-	_, err = executeTaskTransition(project, "test-plan.md", "review_approved", store)
+	_, err = executeTaskTransition(project, "test-plan", "review_approved", store)
 	assert.Error(t, err)
 }
 
@@ -123,16 +123,16 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	assert.Contains(t, output, "implementing")
 
 	// Transition ready → planning
-	status, err := executeTaskTransition(project, "test-plan.md", "plan_start", store)
+	status, err := executeTaskTransition(project, "test-plan", "plan_start", store)
 	require.NoError(t, err)
 	assert.Equal(t, "planning", status)
 
 	// Force set back to ready
-	err = executeTaskSetStatus(project, "test-plan.md", "ready", true, store)
+	err = executeTaskSetStatus(project, "test-plan", "ready", true, store)
 	require.NoError(t, err)
 
 	// Implement with wave signal
-	err = executeTaskImplement(repoRoot, project, "test-plan.md", 2, store)
+	err = executeTaskImplement(repoRoot, project, "test-plan", 2, store)
 	require.NoError(t, err)
 
 	// Verify signal file
@@ -141,12 +141,12 @@ func TestPlanCLI_EndToEnd(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.Contains(t, names, "implement-wave-2-test-plan.md")
+	assert.Contains(t, names, "implement-wave-2-test-plan")
 
 	// Verify final status
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, _ := ps.Entry("test-plan.md")
+	entry, _ := ps.Entry("test-plan")
 	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
 }
 
@@ -155,13 +155,13 @@ func TestPlanImplement(t *testing.T) {
 	signalsDir := filepath.Join(repoRoot, ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	err := executeTaskImplement(repoRoot, project, "test-plan.md", 1, store)
+	err := executeTaskImplement(repoRoot, project, "test-plan", 1, store)
 	require.NoError(t, err)
 
 	// Verify plan transitioned to implementing
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, _ := ps.Entry("test-plan.md")
+	entry, _ := ps.Entry("test-plan")
 	assert.Equal(t, taskstate.Status("implementing"), entry.Status)
 
 	// Verify signal file created
@@ -169,7 +169,7 @@ func TestPlanImplement(t *testing.T) {
 	require.NoError(t, err)
 	var found bool
 	for _, e := range entries {
-		if e.Name() == "implement-wave-1-test-plan.md" {
+		if e.Name() == "implement-wave-1-test-plan" {
 			found = true
 		}
 	}
@@ -193,7 +193,7 @@ func TestPlanRegister(t *testing.T) {
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("new-feature.md")
+	entry, ok := ps.Entry("new-feature")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "New Feature Plan", entry.Description)
@@ -216,7 +216,7 @@ func TestPlanRegister_WithTopicAndDescription(t *testing.T) {
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("stub-plan.md")
+	entry, ok := ps.Entry("stub-plan")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "Implement circuit breaker", entry.Description)
@@ -366,7 +366,7 @@ func TestExecuteTaskRegisterIngestsContent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify content was ingested into the store.
-	got, err := store.GetContent(project, planFile)
+	got, err := store.GetContent(project, "my-plan")
 	require.NoError(t, err)
 	assert.Equal(t, planContent, got)
 }
@@ -414,7 +414,7 @@ func TestExecuteTaskCreate(t *testing.T) {
 
 	ps, err := taskstate.Load(store, project, "")
 	require.NoError(t, err)
-	entry, ok := ps.Entry("my-feature.md")
+	entry, ok := ps.Entry("my-feature")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "add dark mode", entry.Description)
@@ -430,7 +430,7 @@ func TestExecuteTaskCreate_WithContent(t *testing.T) {
 	err := executeTaskCreate(project, "content-plan", "", "", "", content, store)
 	require.NoError(t, err)
 
-	got, err := store.GetContent(project, "content-plan.md")
+	got, err := store.GetContent(project, "content-plan")
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
 }
@@ -449,13 +449,13 @@ func TestExecuteTaskCreate_DefaultBranch(t *testing.T) {
 	project := "test-defaults"
 	require.NoError(t, executeTaskCreate(project, "auto-branch", "", "", "", "", store))
 	ps, _ := taskstate.Load(store, project, "")
-	entry, _ := ps.Entry("auto-branch.md")
+	entry, _ := ps.Entry("auto-branch")
 	assert.Equal(t, "plan/auto-branch", entry.Branch)
 }
 
 func TestResolveTaskEntry(t *testing.T) {
 	store, _, project := setupTestPlanState(t)
-	entry, err := resolveTaskEntry(project, "test-plan.md", store)
+	entry, err := resolveTaskEntry(project, "test-plan", store)
 	require.NoError(t, err)
 	assert.Equal(t, taskstate.StatusReady, entry.Status)
 	assert.Equal(t, "plan/test-plan", entry.Branch)
@@ -472,10 +472,10 @@ func TestResolveTaskEntry_BackfillsBranch(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	project := "backfill"
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename: "no-branch.md",
+		Filename: "no-branch",
 		Status:   taskstore.StatusReady,
 	}))
-	entry, err := resolveTaskEntry(project, "no-branch.md", store)
+	entry, err := resolveTaskEntry(project, "no-branch", store)
 	require.NoError(t, err)
 	assert.Equal(t, "plan/no-branch", entry.Branch)
 }
@@ -551,13 +551,13 @@ func TestExecuteTaskPR_DefaultTitle(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	project := "pr-test"
 	require.NoError(t, store.Create(project, taskstore.TaskEntry{
-		Filename:    "my-feature.md",
+		Filename:    "my-feature",
 		Status:      taskstore.StatusImplementing,
 		Description: "add dark mode toggle",
 		Branch:      "plan/my-feature",
 	}))
 	// Will fail on git/gh ops but tests the title derivation logic.
-	_, err := executeTaskPR("", project, "my-feature.md", "", store)
+	_, err := executeTaskPR("", project, "my-feature", "", store)
 	require.Error(t, err) // expected: git error (no real repo)
 }
 

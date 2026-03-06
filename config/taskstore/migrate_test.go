@@ -18,7 +18,7 @@ func TestMigrateFromJSON(t *testing.T) {
 
 	stateJSON := `{
         "plans": {
-            "test.md": {
+            "test": {
                 "status": "ready",
                 "description": "test plan",
                 "branch": "plan/test"
@@ -29,18 +29,18 @@ func TestMigrateFromJSON(t *testing.T) {
         }
     }`
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(stateJSON), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "test.md"), []byte("# Test Plan"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "test"), []byte("# Test Plan"), 0o644))
 
 	migrated, err := MigrateFromJSON(store, "proj", plansDir)
 	require.NoError(t, err)
 	assert.Equal(t, 1, migrated)
 
-	entry, err := store.Get("proj", "test.md")
+	entry, err := store.Get("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, StatusReady, entry.Status)
 	assert.Equal(t, "test plan", entry.Description)
 
-	content, err := store.GetContent("proj", "test.md")
+	content, err := store.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# Test Plan", content)
 
@@ -53,7 +53,7 @@ func TestMigrateFromJSON_Idempotent(t *testing.T) {
 	store := newTestStore(t)
 	plansDir := t.TempDir()
 
-	stateJSON := `{"plans": {"test.md": {"status": "done"}}}`
+	stateJSON := `{"plans": {"test": {"status": "done"}}}`
 	require.NoError(t, os.WriteFile(filepath.Join(plansDir, "plan-state.json"), []byte(stateJSON), 0o644))
 
 	_, err := MigrateFromJSON(store, "proj", plansDir)
@@ -119,13 +119,13 @@ func TestMigrateFromPlanstoreDB(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status, description, branch) VALUES ('proj', 'plan-a.md', 'done', 'old plan', 'plan/a')`)
+	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status, description, branch) VALUES ('proj', 'plan-a', 'done', 'old plan', 'plan/a')`)
 	require.NoError(t, err)
-	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status, description, branch) VALUES ('proj', 'plan-b.md', 'ready', 'old plan b', 'plan/b')`)
+	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status, description, branch) VALUES ('proj', 'plan-b', 'ready', 'old plan b', 'plan/b')`)
 	require.NoError(t, err)
 	_, err = oldDB.Exec(`INSERT INTO topics (project, name, created_at) VALUES ('proj', 'tools', '2026-02-28T00:00:00Z')`)
 	require.NoError(t, err)
-	_, err = oldDB.Exec(`INSERT INTO audit_events (kind, timestamp, project, plan_file, message) VALUES ('transition', '2026-02-28T00:00:00Z', 'proj', 'plan-a.md', 'ready -> done')`)
+	_, err = oldDB.Exec(`INSERT INTO audit_events (kind, timestamp, project, plan_file, message) VALUES ('transition', '2026-02-28T00:00:00Z', 'proj', 'plan-a', 'ready -> done')`)
 	require.NoError(t, err)
 	require.NoError(t, oldDB.Close())
 
@@ -140,7 +140,7 @@ func TestMigrateFromPlanstoreDB(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 2, "expected 2 tasks migrated from planstore.db")
 
-	entryA, err := store.Get("proj", "plan-a.md")
+	entryA, err := store.Get("proj", "plan-a")
 	require.NoError(t, err)
 	assert.Equal(t, Status("done"), entryA.Status)
 	assert.Equal(t, "old plan", entryA.Description)
@@ -181,7 +181,7 @@ func TestMigrateFromPlanstoreDB_AlreadyHasData(t *testing.T) {
 	// Pre-create the new DB with existing data (no planstore.db yet).
 	store1, err := NewSQLiteStore(newDBPath)
 	require.NoError(t, err)
-	require.NoError(t, store1.Create("proj", TaskEntry{Filename: "existing.md", Status: StatusReady}))
+	require.NoError(t, store1.Create("proj", TaskEntry{Filename: "existing", Status: StatusReady}))
 	store1.Close()
 
 	// Now create old DB with data.
@@ -198,7 +198,7 @@ func TestMigrateFromPlanstoreDB_AlreadyHasData(t *testing.T) {
 			UNIQUE(project, filename)
 		)`)
 	require.NoError(t, err)
-	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status) VALUES ('proj', 'should-not-appear.md', 'ready')`)
+	_, err = oldDB.Exec(`INSERT INTO plans (project, filename, status) VALUES ('proj', 'should-not-appear', 'ready')`)
 	require.NoError(t, err)
 	require.NoError(t, oldDB.Close())
 
@@ -210,5 +210,5 @@ func TestMigrateFromPlanstoreDB_AlreadyHasData(t *testing.T) {
 	entries, err := store2.List("proj")
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "migration should be skipped when taskstore already has data")
-	assert.Equal(t, "existing.md", entries[0].Filename)
+	assert.Equal(t, "existing", entries[0].Filename)
 }

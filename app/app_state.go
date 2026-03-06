@@ -1494,7 +1494,7 @@ func (m *home) createTaskEntry(name, description, topic string) error {
 	}
 
 	slug := slugifyPlanName(name)
-	filename := slug + ".md"
+	filename := slug
 	branch := "plan/" + slug
 	if err := m.taskState.Create(filename, description, branch, topic, time.Now().UTC()); err != nil {
 		if m.toastManager != nil {
@@ -1521,13 +1521,13 @@ func slugifyPlanName(name string) string {
 }
 
 // buildPlanFilename derives the plan filename from a human name.
-// "Auth Refactor" → "auth-refactor.md"
+// "Auth Refactor" → "auth-refactor"
 func buildPlanFilename(name string, _ time.Time) string {
 	slug := slugifyPlanName(name)
 	if slug == "" {
 		slug = "plan"
 	}
-	return slug + ".md"
+	return slug
 }
 
 // renderPlanStub returns the initial markdown content for a new plan file.
@@ -1640,9 +1640,8 @@ func dedupePlanFilename(plansDir, filename string) string {
 		return filename
 	}
 
-	base := strings.TrimSuffix(filename, ".md")
 	for i := 2; i < 100; i++ {
-		candidate := fmt.Sprintf("%s-%d.md", base, i)
+		candidate := fmt.Sprintf("%s-%d", filename, i)
 		if _, err := os.Stat(filepath.Join(plansDir, candidate)); os.IsNotExist(err) {
 			return candidate
 		}
@@ -1659,9 +1658,8 @@ func dedupePlanFilenameInState(ps *taskstate.TaskState, filename string) string 
 		return filename
 	}
 
-	base := strings.TrimSuffix(filename, ".md")
 	for i := 2; i < 100; i++ {
-		candidate := fmt.Sprintf("%s-%d.md", base, i)
+		candidate := fmt.Sprintf("%s-%d", filename, i)
 		if _, ok := ps.Entry(candidate); !ok {
 			return candidate
 		}
