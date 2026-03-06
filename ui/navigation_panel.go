@@ -320,9 +320,8 @@ func (n *NavigationPanel) rebuildRows() {
 	// Sort helpers
 	sortInsts := func(list []*session.Instance) {
 		sort.SliceStable(list, func(i, j int) bool {
-			ki, kj := navInstanceSortKey(list[i]), navInstanceSortKey(list[j])
-			if ki != kj {
-				return ki < kj
+			if !list[i].CreatedAt.Equal(list[j].CreatedAt) {
+				return list[i].CreatedAt.After(list[j].CreatedAt)
 			}
 			return strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)
 		})
@@ -332,16 +331,11 @@ func (n *NavigationPanel) rebuildRows() {
 	}
 	sortInsts(solo)
 
-	// Sort plans: notification (0) < running/active-status (1) < idle (2), then alpha.
+	// Sort plans alphabetically descending (newest date-prefixed names first).
 	sorted := append([]PlanDisplay(nil), n.plans...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		pi, pj := sorted[i], sorted[j]
-		ki := navPlanSortKey(pi, byPlan[pi.Filename], n.planStatuses[pi.Filename])
-		kj := navPlanSortKey(pj, byPlan[pj.Filename], n.planStatuses[pj.Filename])
-		if ki != kj {
-			return ki < kj
-		}
-		return strings.ToLower(taskstate.DisplayName(pi.Filename)) < strings.ToLower(taskstate.DisplayName(pj.Filename))
+		return strings.ToLower(taskstate.DisplayName(pi.Filename)) > strings.ToLower(taskstate.DisplayName(pj.Filename))
 	})
 
 	capacity := len(sorted) + len(n.instances) + len(n.deadPlans) + len(n.historyPlans) + len(n.cancelled) + 8
@@ -401,45 +395,16 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Split sorted plans into active (key < 2) and idle (key == 2).
-	var activePlans, idlePlans []PlanDisplay
+	// Render all plans — topic-grouped first, then ungrouped remainder.
+	allPlanSet := make(map[string]bool, len(sorted))
 	for _, p := range sorted {
-		if navPlanSortKey(p, byPlan[p.Filename], n.planStatuses[p.Filename]) < 2 {
-			activePlans = append(activePlans, p)
-		} else {
-			idlePlans = append(idlePlans, p)
-		}
+		allPlanSet[p.Filename] = true
 	}
-
-	// Active plans (running, notified, implementing, reviewing).
-	for _, p := range activePlans {
-		appendPlan(p, 0)
-	}
-
-	// Solo instances section (between active plans and idle plans).
-	if len(solo) > 0 {
-		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "agents"})
-		for _, inst := range solo {
-			rows = append(rows, navRow{
-				Kind:     navRowInstance,
-				ID:       "inst:" + inst.Title,
-				Label:    inst.Title,
-				Instance: inst,
-			})
-		}
-	}
-
-	// Idle plans grouped by topic, then ungrouped remainder.
-	idleSet := make(map[string]bool, len(idlePlans))
-	for _, p := range idlePlans {
-		idleSet[p.Filename] = true
-	}
-
 	emitted := make(map[string]bool)
 	for _, t := range n.topics {
 		var planGroup []PlanDisplay
 		for _, p := range t.Plans {
-			if idleSet[p.Filename] {
+			if allPlanSet[p.Filename] {
 				planGroup = append(planGroup, p)
 			}
 		}
@@ -462,8 +427,21 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 
-	// Ungrouped idle plans.
-	for _, p := range idlePlans {
+	// Solo instances section (between topic-grouped and ungrouped plans).
+	if len(solo) > 0 {
+		rows = append(rows, navRow{Kind: navRowSoloHeader, ID: "__solo__", Label: "agents"})
+		for _, inst := range solo {
+			rows = append(rows, navRow{
+				Kind:     navRowInstance,
+				ID:       "inst:" + inst.Title,
+				Label:    inst.Title,
+				Instance: inst,
+			})
+		}
+	}
+
+	// Ungrouped plans.
+	for _, p := range sorted {
 		if !emitted[p.Filename] {
 			appendPlan(p, 0)
 		}
@@ -534,49 +512,6 @@ func (n *NavigationPanel) rebuildRows() {
 		}
 	}
 	n.clampScroll()
-}
-
-// ---------- sort key helpers ----------
-
-// navInstanceSortKey returns the sort priority for an instance within a plan.
-// Lower values sort first: running (0) < notified (1) < paused (2) < done (3).
-func navInstanceSortKey(inst *session.Instance) int {
-	if inst.ImplementationComplete {
-		return 3
-	}
-	switch inst.Status {
-	case session.Running, session.Loading:
-		return 0
-	case session.Paused:
-		return 2
-	}
-	if inst.Notified {
-		return 1
-	}
-	return 3
-}
-
-// navPlanSortKey returns the sort priority for a plan.
-// 0 = has notification, 1 = running or active lifecycle, 2 = idle.
-func navPlanSortKey(p PlanDisplay, insts []*session.Instance, st TopicStatus) int {
-	hasNotif := st.HasNotification
-	hasRunning := st.HasRunning
-	for _, inst := range insts {
-		if inst.Notified {
-			hasNotif = true
-		}
-		if inst.Status == session.Running || inst.Status == session.Loading {
-			hasRunning = true
-		}
-	}
-	switch {
-	case hasNotif:
-		return 0
-	case hasRunning, p.Status == "implementing", p.Status == "reviewing":
-		return 1
-	default:
-		return 2
-	}
 }
 
 // aggregateNavPlanStatus derives combined running/notification flags from

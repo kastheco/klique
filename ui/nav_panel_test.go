@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"testing"
 
 	"charm.land/bubbles/v2/spinner"
@@ -63,13 +65,16 @@ func TestRebuildRows_PlansWithInstances(t *testing.T) {
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Both plans have running instances so they should be expanded.
-	// Expected: plan-a header, a-impl, plan-b header, b-impl
+	// Alphabetical descending by filename now drives order.
 	require.Len(t, n.rows, 4)
 	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
 	assert.Equal(t, navRowInstance, n.rows[1].Kind)
-	assert.Equal(t, "a-impl", n.rows[1].Label)
+	assert.Equal(t, "plan-b", n.rows[0].TaskFile)
+	assert.Equal(t, "b-impl", n.rows[1].Label)
 	assert.Equal(t, navRowPlanHeader, n.rows[2].Kind)
+	assert.Equal(t, "plan-a", n.rows[2].TaskFile)
 	assert.Equal(t, navRowInstance, n.rows[3].Kind)
+	assert.Equal(t, "a-impl", n.rows[3].Label)
 }
 
 func TestRebuildRows_SoloInstances(t *testing.T) {
@@ -97,14 +102,27 @@ func TestRebuildRows_MixedPlanAndSolo(t *testing.T) {
 	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
-	// plan header + plan instance + solo header + solo instance
 	require.Len(t, n.rows, 4)
-	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
-	assert.Equal(t, navRowInstance, n.rows[1].Kind)
-	assert.Equal(t, "plan-impl", n.rows[1].Label)
-	assert.Equal(t, navRowSoloHeader, n.rows[2].Kind)
-	assert.Equal(t, navRowInstance, n.rows[3].Kind)
-	assert.Equal(t, "adhoc", n.rows[3].Label)
+	hasAdhoc := false
+	hasSoloHeader := false
+	hasPlanHeader := false
+	hasPlanInstance := false
+	for _, row := range n.rows {
+		switch {
+		case row.Kind == navRowPlanHeader && row.TaskFile == "plan":
+			hasPlanHeader = true
+		case row.Kind == navRowInstance && row.Label == "plan-impl":
+			hasPlanInstance = true
+		case row.Kind == navRowInstance && row.Label == "adhoc":
+			hasAdhoc = true
+		case row.Kind == navRowSoloHeader:
+			hasSoloHeader = true
+		}
+	}
+	assert.True(t, hasPlanHeader)
+	assert.True(t, hasPlanInstance)
+	assert.True(t, hasAdhoc)
+	assert.True(t, hasSoloHeader)
 }
 
 func TestRebuildRows_HistoryAndCancelled(t *testing.T) {
@@ -301,9 +319,9 @@ func TestSortOrder_NotificationsFirst(t *testing.T) {
 	}
 	n.SetData(plans, instances, nil, nil, statuses)
 
-	// Notified plan should sort before running-only plan.
+	// Plans now sort alphabetically descending.
 	require.True(t, len(n.rows) >= 2)
-	assert.Contains(t, n.rows[0].TaskFile, "notified")
+	assert.Equal(t, "running", n.rows[0].TaskFile)
 }
 
 func TestSortOrder_InstancesWithinPlan(t *testing.T) {
@@ -317,11 +335,59 @@ func TestSortOrder_InstancesWithinPlan(t *testing.T) {
 	statuses := map[string]TopicStatus{"plan": {HasRunning: true, HasNotification: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
-	// Within plan: notified (0) < running (1) < paused (3)
+	// Within plan: by creation time descending (all equal), then title.
 	require.Len(t, n.rows, 4) // header + 3 instances
 	assert.Equal(t, "notified", n.rows[1].Label)
-	assert.Equal(t, "running", n.rows[2].Label)
-	assert.Equal(t, "paused", n.rows[3].Label)
+	assert.Equal(t, "paused", n.rows[2].Label)
+	assert.Equal(t, "running", n.rows[3].Label)
+}
+
+func TestRebuildRows_PlansSortedAlphabeticalDescending(t *testing.T) {
+	n := newTestPanel()
+	plans := []PlanDisplay{
+		{Filename: "alpha-feature.md", Status: "ready"},
+		{Filename: "zeta-feature.md", Status: "ready"},
+		{Filename: "mid-feature.md", Status: "implementing"},
+	}
+	statuses := map[string]TopicStatus{
+		"mid-feature.md": {HasRunning: true},
+	}
+	n.SetData(plans, nil, nil, nil, statuses)
+
+	var planNames []string
+	for _, row := range n.rows {
+		if row.Kind == navRowPlanHeader {
+			planNames = append(planNames, row.TaskFile)
+		}
+	}
+	// Alphabetical descending: zeta > mid > alpha.
+	require.Len(t, planNames, 3)
+	assert.Equal(t, "zeta-feature.md", planNames[0])
+	assert.Equal(t, "mid-feature.md", planNames[1])
+	assert.Equal(t, "alpha-feature.md", planNames[2])
+}
+
+func TestRebuildRows_InstancesSortedByCreatedAtDescending(t *testing.T) {
+	n := newTestPanel()
+	now := time.Now()
+	plans := []PlanDisplay{{Filename: "plan.md", Status: "implementing"}}
+	instances := []*session.Instance{
+		{Title: "oldest", TaskFile: "plan.md", Status: session.Running, CreatedAt: now.Add(-2 * time.Hour)},
+		{Title: "newest", TaskFile: "plan.md", Status: session.Paused, CreatedAt: now},
+		{Title: "middle", TaskFile: "plan.md", Status: session.Ready, CreatedAt: now.Add(-1 * time.Hour)},
+	}
+	n.SetData(plans, instances, nil, nil, nil)
+
+	var instNames []string
+	for _, row := range n.rows {
+		if row.Kind == navRowInstance {
+			instNames = append(instNames, row.Label)
+		}
+	}
+	require.Len(t, instNames, 3)
+	assert.Equal(t, "newest", instNames[0])
+	assert.Equal(t, "middle", instNames[1])
+	assert.Equal(t, "oldest", instNames[2])
 }
 
 // ---------- navigation (Up/Down/Left/Right) ----------
@@ -531,17 +597,39 @@ func TestSoloHeaderSkippedDuringNavigation(t *testing.T) {
 	}
 	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
+	n.SetTopicsAndPlans(
+		[]TopicDisplay{{Name: "active", Plans: plans}},
+		nil,
+		nil,
+	)
 
-	// Layout: [0]=plan header, [1]=plan-impl, [2]=solo header, [3]=adhoc
+	planImplIdx := -1
+	adhocIdx := -1
+	soloHeaderIdx := -1
+	for i, row := range n.rows {
+		switch {
+		case row.Kind == navRowInstance && row.Label == "plan-impl":
+			planImplIdx = i
+		case row.Kind == navRowInstance && row.Label == "adhoc":
+			adhocIdx = i
+		case row.Kind == navRowSoloHeader:
+			soloHeaderIdx = i
+		}
+	}
+	require.GreaterOrEqual(t, planImplIdx, 0, "plan-impl instance row should exist")
+	require.GreaterOrEqual(t, adhocIdx, 0, "adhoc instance row should exist")
+	require.GreaterOrEqual(t, soloHeaderIdx, 0, "solo header row should exist")
+	n.selectedIdx = planImplIdx
 
-	// Down from plan-impl should skip solo header, land on adhoc
-	n.selectedIdx = 1
+	// Down from plan-impl should skip solo header and land on adhoc.
 	n.Down()
-	assert.Equal(t, 3, n.selectedIdx, "Down should skip solo header")
+	assert.Equal(t, adhocIdx, n.selectedIdx)
+	assert.NotEqual(t, soloHeaderIdx, n.selectedIdx)
 
-	// Up from adhoc should skip solo header, land on plan-impl
+	// Up from adhoc should land on plan-impl.
 	n.Up()
-	assert.Equal(t, 1, n.selectedIdx, "Up should skip solo header")
+	assert.Equal(t, planImplIdx, n.selectedIdx)
+	assert.NotEqual(t, soloHeaderIdx, n.selectedIdx)
 }
 
 func TestSoloHeaderSkippedBySelectFirst(t *testing.T) {
