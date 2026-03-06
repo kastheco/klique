@@ -153,7 +153,6 @@ func TestExecuteSignalProcess_ImplementFinished_TransitionToReviewing(t *testing
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo", // no-op program so no real tmux needed
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -186,7 +185,6 @@ func TestExecuteSignalProcess_ReviewApproved_TransitionToDone(t *testing.T) {
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -218,7 +216,6 @@ func TestExecuteSignalProcess_PlannerFinished_TransitionToReady(t *testing.T) {
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -249,7 +246,6 @@ func TestExecuteSignalProcess_UnknownPlan_SignalConsumed(t *testing.T) {
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	// Should not return error — just log and consume.
 	processed, err := executeSignalProcess(opts)
@@ -272,7 +268,6 @@ func TestExecuteSignalProcess_EmptyDirectory(t *testing.T) {
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -296,7 +291,6 @@ func TestExecuteSignalProcess_MultipleSignals(t *testing.T) {
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -332,7 +326,6 @@ func TestExecuteSignalProcess_ReviewChanges_TransitionToImplementing(t *testing.
 		project:    project,
 		signalsDir: signalsDir,
 		store:      store,
-		program:    "echo",
 	}
 	processed, err := executeSignalProcess(opts)
 	require.NoError(t, err)
@@ -349,13 +342,6 @@ func TestExecuteSignalProcess_ReviewChanges_TransitionToImplementing(t *testing.
 	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 	// Review cycle should be incremented.
 	assert.Equal(t, 1, entry.ReviewCycle)
-}
-
-// TestResolveAgentProgram_DefaultsToProgram verifies fallback when no config profile exists.
-func TestResolveAgentProgram_DefaultsToProgram(t *testing.T) {
-	// Without a kasmos config, should fall back to the supplied default.
-	program := resolveAgentProgram("coder", "opencode")
-	assert.NotEmpty(t, program, "should return a non-empty program string")
 }
 
 // TestNewSignalCmd_Structure verifies the cobra command tree structure.

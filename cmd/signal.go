@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
@@ -21,7 +20,6 @@ type signalProcessOptions struct {
 	project    string
 	signalsDir string
 	store      taskstore.Store
-	program    string // agent program to use when spawning (e.g. "opencode")
 }
 
 // NewSignalCmd returns the "kas signal" cobra command with subcommands.
@@ -71,13 +69,11 @@ Use --once to process a single batch and exit.`,
 			if err := os.MkdirAll(signalsDir, 0o755); err != nil {
 				return fmt.Errorf("create signals dir: %w", err)
 			}
-			program := resolveAgentProgram("coder", "opencode")
 			opts := signalProcessOptions{
 				repoRoot:   repoRoot,
 				project:    project,
 				signalsDir: signalsDir,
 				store:      store,
-				program:    program,
 			}
 			if once {
 				n, err := executeSignalProcess(opts)
@@ -171,7 +167,11 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 		if sig.Event == taskfsm.ReviewChangesRequested {
 			ps2, err := taskstate.Load(opts.store, opts.project, "")
 			if err == nil {
-				_ = ps2.IncrementReviewCycle(sig.TaskFile)
+				if incErr := ps2.IncrementReviewCycle(sig.TaskFile); incErr != nil {
+					log.Printf("signal: increment review cycle for %q: %v", sig.TaskFile, incErr)
+				}
+			} else {
+				log.Printf("signal: reload task state for review cycle increment %q: %v", sig.TaskFile, err)
 			}
 		}
 
@@ -192,20 +192,6 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 	}
 
 	return processed, nil
-}
-
-// resolveAgentProgram returns the program to use for the given lifecycle phase.
-// Falls back to defaultProgram when no config profile is found.
-func resolveAgentProgram(phase, defaultProgram string) string {
-	cfg := config.LoadConfig()
-	if cfg == nil {
-		return defaultProgram
-	}
-	profile := cfg.ResolveProfile(phase, defaultProgram)
-	if profile.Program == "" {
-		return defaultProgram
-	}
-	return profile.Program
 }
 
 // defaultSignalsDir returns the canonical signals directory path for a repo root.
