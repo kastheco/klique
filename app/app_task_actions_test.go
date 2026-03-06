@@ -25,7 +25,7 @@ import (
 )
 
 func TestBuildPlanPrompt(t *testing.T) {
-	prompt := buildPlanningPrompt("auth-refactor.md", "Auth Refactor", "Refactor JWT auth")
+	prompt := buildPlanningPrompt("auth-refactor", "Auth Refactor", "Refactor JWT auth")
 	if !strings.Contains(prompt, "Plan Auth Refactor") {
 		t.Fatalf("prompt missing title")
 	}
@@ -36,13 +36,13 @@ func TestBuildPlanPrompt(t *testing.T) {
 	// instruct the planner to include them.
 	assert.Contains(t, prompt, "Wave", "plan prompt must mention Wave headers for kasmos orchestration")
 	assert.Contains(t, prompt, "kasmos-planner", "plan prompt must reference the kasmos-planner skill")
-	assert.Contains(t, prompt, "kas task update-content auth-refactor.md", "plan prompt must include content storage command")
-	assert.Contains(t, prompt, "planner-finished-auth-refactor.md", "plan prompt must include planner completion signal")
+	assert.Contains(t, prompt, "kas task update-content auth-refactor", "plan prompt must include content storage command")
+	assert.Contains(t, prompt, "planner-finished-auth-refactor", "plan prompt must include planner completion signal")
 }
 
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
-	prompt := orchestration.BuildWaveAnnotationPrompt("my-feature.md")
-	assert.Contains(t, prompt, "kas task show my-feature.md", "prompt must reference kas task show")
+	prompt := orchestration.BuildWaveAnnotationPrompt("my-feature")
+	assert.Contains(t, prompt, "kas task show my-feature", "prompt must reference kas task show")
 	assert.Contains(t, prompt, "## Wave", "prompt must mention ## Wave header format")
 	assert.Contains(t, prompt, "kas task", "prompt must instruct the planner to store content via kas task")
 	assert.Contains(t, prompt, "planner-finished-", "prompt must include the signal file instruction")
@@ -50,27 +50,27 @@ func TestBuildWaveAnnotationPrompt(t *testing.T) {
 }
 
 func TestBuildWaveAnnotationPrompt_SingleWaveFallback(t *testing.T) {
-	prompt := orchestration.BuildWaveAnnotationPrompt("trivial.md")
+	prompt := orchestration.BuildWaveAnnotationPrompt("trivial")
 	// Even trivial plans must be wrapped in at least ## Wave 1
 	assert.Contains(t, prompt, "## Wave 1", "prompt must specify ## Wave 1 as the minimum structure")
 }
 
 func TestBuildImplementPrompt(t *testing.T) {
-	prompt := buildImplementPrompt("auth-refactor.md")
-	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	prompt := buildImplementPrompt("auth-refactor")
+	assert.Contains(t, prompt, "kas task show auth-refactor")
 	assert.NotContains(t, prompt, "docs/plans/")
 	assert.NotContains(t, prompt, "kasmos-coder", "implement prompt must not reference skill to avoid skill-load overhead")
 }
 
 func TestSoloAgentPrompt_ContainsTestScopingRule(t *testing.T) {
-	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
+	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor")
 	assert.Contains(t, prompt, "-run Test")
 	assert.Contains(t, prompt, "Do not load skills")
 }
 
 func TestBuildSoloPrompt_WithDescription(t *testing.T) {
-	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
-	assert.Contains(t, prompt, "kas task show auth-refactor.md")
+	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor")
+	assert.Contains(t, prompt, "kas task show auth-refactor")
 	assert.NotContains(t, prompt, "docs/plans/")
 }
 
