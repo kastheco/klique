@@ -17,18 +17,16 @@ import (
 	"github.com/atotto/clipboard"
 )
 
-// prepareExecutionSession returns the existing execution session if already wired,
-// otherwise allocates a fresh one from the instance configuration.
+// prepareExecutionSession returns the existing execution session if already wired, otherwise
+// allocates a fresh one from the instance configuration.
 func (i *Instance) prepareExecutionSession() ExecutionSession {
 	if i.executionSession != nil {
 		return i.executionSession
 	}
-	session := NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
-	i.executionSession = session
-	return session
+	return NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
 }
 
-// transferPromptToCli moves QueuedPrompt into the tmux session's initialPrompt
+// transferPromptToCli moves QueuedPrompt into the execution session's initialPrompt
 // when the program supports CLI prompt injection. Programs that do not support it
 // leave QueuedPrompt intact so a send-keys fallback can deliver it later.
 func (i *Instance) transferPromptToCli() {
@@ -38,9 +36,8 @@ func (i *Instance) transferPromptToCli() {
 	}
 }
 
-// setExecutionTaskEnv pushes wave/task/peer identity into the execution session
-// environment so that agents spawned inside the session inherit the orchestration
-// context.
+// setExecutionTaskEnv pushes wave/task/peer identity into the execution session environment
+// so that agents spawned inside the session inherit the orchestration context.
 func (i *Instance) setExecutionTaskEnv() {
 	if i.TaskNumber > 0 && i.executionSession != nil {
 		i.executionSession.SetTaskEnv(i.TaskNumber, i.WaveNumber, i.PeerCount)
@@ -104,9 +101,17 @@ func dirtyWorktreeContext(worktreePath string) string {
 	return fmt.Sprintf(" (%s)", strings.Join(preview, ", "))
 }
 
+// setProgressFunc injects a progress hook into the execution session if it
+// implements progressReporter (i.e. tmuxExecutionSession). No-op otherwise.
+func (i *Instance) setProgressFunc(fn func(int, string)) {
+	if pr, ok := i.executionSession.(progressReporter); ok {
+		pr.SetProgressFunc(fn)
+	}
+}
+
 // Start launches the instance. When firstTimeSetup is true a fresh git worktree is
-// created and the tmux session starts inside it. When false the instance was loaded
-// from storage and the existing tmux session is restored instead.
+// created and the execution session starts inside it. When false the instance was loaded
+// from storage and the existing session is restored instead.
 func (i *Instance) Start(firstTimeSetup bool) error {
 	if i.Title == "" {
 		return fmt.Errorf("instance title cannot be empty")
@@ -126,12 +131,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
 
-	// Offset tmux-internal progress stages so they map to the overall loading bar.
+	// Offset internal progress stages so they map to the overall loading bar.
 	stageBase := 3
 	if !firstTimeSetup {
 		stageBase = 1
 	}
-	i.executionSession.SetProgressFunc(func(stage int, desc string) {
+	i.setProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(stageBase+stage, desc)
 	})
 	i.transferPromptToCli()
@@ -164,12 +169,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			startErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return startErr
 		}
-		i.setLoadingProgress(4, "Starting tmux session...")
+		i.setLoadingProgress(4, "Starting session...")
 		if err := i.executionSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
 			}
-			startErr = fmt.Errorf("failed to start tmux session: %w", err)
+			startErr = fmt.Errorf("failed to start session: %w", err)
 			return startErr
 		}
 	} else {
@@ -200,7 +205,7 @@ func (i *Instance) StartOnMainBranch() error {
 	i.executionSession.SetAgentType(i.AgentType)
 	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.executionSession.SetProgressFunc(func(stage int, desc string) {
+	i.setProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
 	})
 	i.transferPromptToCli()
@@ -226,7 +231,7 @@ func (i *Instance) StartOnMainBranch() error {
 }
 
 // StartOnBranch creates a worktree on the specified branch (reusing an existing
-// branch when it already exists) and starts the tmux session inside it.
+// branch when it already exists) and starts the execution session inside it.
 func (i *Instance) StartOnBranch(branch string) error {
 	if i.Title == "" {
 		return fmt.Errorf("instance title cannot be empty")
@@ -241,7 +246,7 @@ func (i *Instance) StartOnBranch(branch string) error {
 	i.executionSession.SetAgentType(i.AgentType)
 	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.executionSession.SetProgressFunc(func(stage int, desc string) {
+	i.setProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(3+stage, desc)
 	})
 	i.transferPromptToCli()
@@ -271,12 +276,12 @@ func (i *Instance) StartOnBranch(branch string) error {
 		return startErr
 	}
 
-	i.setLoadingProgress(4, "Starting tmux session...")
+	i.setLoadingProgress(4, "Starting session...")
 	if err := i.executionSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 			err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
 		}
-		startErr = fmt.Errorf("failed to start tmux session: %w", err)
+		startErr = fmt.Errorf("failed to start session: %w", err)
 		return startErr
 	}
 
@@ -302,12 +307,12 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	i.executionSession.SetAgentType(i.AgentType)
 	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.executionSession.SetProgressFunc(func(stage int, desc string) {
+	i.setProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
 	})
 	i.transferPromptToCli()
 
-	i.setLoadingProgress(2, "Starting tmux session...")
+	i.setLoadingProgress(2, "Starting session...")
 	if err := i.executionSession.Start(worktree.GetWorktreePath()); err != nil {
 		return fmt.Errorf("failed to start session in shared worktree: %w", err)
 	}
@@ -317,7 +322,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	return nil
 }
 
-// Kill terminates the tmux session and removes the git worktree.
+// Kill terminates the execution session and removes the git worktree.
 // The git branch is preserved so the instance can be inspected or resumed later.
 // Returns nil for instances that were never started.
 func (i *Instance) Kill() error {
@@ -336,10 +341,10 @@ func (i *Instance) Kill() error {
 
 	var errs []error
 
-	// Close tmux first — it holds an open handle to the worktree directory.
+	// Close the execution session first — it may hold an open handle to the worktree directory.
 	if i.executionSession != nil {
 		if err := i.executionSession.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+			errs = append(errs, fmt.Errorf("failed to close session: %w", err))
 		}
 	}
 
@@ -356,7 +361,7 @@ func (i *Instance) Kill() error {
 	return errors.Join(errs...)
 }
 
-// StopTmux closes the underlying tmux session without touching the worktree or
+// StopTmux closes the underlying execution session without touching the worktree or
 // any other instance state. The instance remains in the list as stopped.
 func (i *Instance) StopTmux() {
 	if i.executionSession != nil {
@@ -364,7 +369,7 @@ func (i *Instance) StopTmux() {
 	}
 }
 
-// Pause detaches from the tmux session and removes the git worktree, preserving
+// Pause detaches from the session and removes the git worktree, preserving
 // the branch for a later Resume.
 func (i *Instance) Pause() error {
 	if !i.started {
@@ -386,10 +391,8 @@ func (i *Instance) Pause() error {
 	var errs []error
 
 	if err := i.executionSession.DetachSafely(); err != nil {
-		if !errors.Is(err, ErrInteractiveOnly) {
-			errs = append(errs, fmt.Errorf("failed to detach execution session: %w", err))
-			log.ErrorLog.Print(err)
-		}
+		errs = append(errs, fmt.Errorf("failed to detach session: %w", err))
+		log.ErrorLog.Print(err)
 	}
 
 	if !i.sharedWorktree && i.gitWorktree != nil {
@@ -427,7 +430,8 @@ func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
 		return fmt.Errorf("adopting orphan sessions is only supported for tmux execution")
 	}
 	ts := tmux.NewTmuxSessionFromExisting(tmuxName, i.Program, i.SkipPermissions)
-	i.executionSession = ts
+	w := &tmuxExecutionSession{s: ts}
+	i.executionSession = w
 	if err := ts.Restore(); err != nil {
 		return fmt.Errorf("failed to adopt orphan session %s: %w", tmuxName, err)
 	}
@@ -436,7 +440,18 @@ func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
 	return nil
 }
 
-// Restart closes the current tmux session (best-effort) and launches a fresh one
+// resetExecutionSession creates a fresh execution session for Restart().
+// For tmux sessions, the underlying TmuxSession.NewReset preserves injected
+// test dependencies (ptyFactory, cmdExec). For all other modes a new session
+// is constructed via NewExecutionSession.
+func (i *Instance) resetExecutionSession() ExecutionSession {
+	if ts, ok := i.executionSession.(*tmuxExecutionSession); ok {
+		return &tmuxExecutionSession{s: ts.s.NewReset(i.Title, i.Program, i.SkipPermissions)}
+	}
+	return NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
+}
+
+// Restart closes the current execution session (best-effort) and launches a fresh one
 // with the same configuration. The worktree and branch are preserved. Ephemeral
 // per-run flags are reset so the instance appears freshly started.
 func (i *Instance) Restart() error {
@@ -453,14 +468,8 @@ func (i *Instance) Restart() error {
 	}
 
 	// Allocate a new session object, carrying over injected test dependencies.
-	var ts ExecutionSession
-	if typed, ok := i.executionSession.(*tmux.TmuxSession); ok {
-		ts = typed.NewReset(i.Title, i.Program, i.SkipPermissions)
-	} else {
-		ts = NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
-	}
-	i.executionSession = ts
-	ts.SetAgentType(i.AgentType)
+	i.executionSession = i.resetExecutionSession()
+	i.executionSession.SetAgentType(i.AgentType)
 	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
 
@@ -469,8 +478,8 @@ func (i *Instance) Restart() error {
 		workDir = i.gitWorktree.GetWorktreePath()
 	}
 
-	if err := ts.Start(workDir); err != nil {
-		return fmt.Errorf("failed to restart tmux session: %w", err)
+	if err := i.executionSession.Start(workDir); err != nil {
+		return fmt.Errorf("failed to restart session: %w", err)
 	}
 
 	// Reset ephemeral per-run state.
@@ -487,7 +496,7 @@ func (i *Instance) Restart() error {
 }
 
 // Resume recreates the worktree for a paused instance and reconnects or starts
-// a fresh tmux session inside it.
+// a fresh execution session inside it.
 func (i *Instance) Resume() error {
 	if !i.started {
 		return fmt.Errorf("cannot resume instance that has not been started")

@@ -181,3 +181,51 @@ func TestInstanceData_RoundTripSoloAgent(t *testing.T) {
 		t.Fatal("expected SoloAgent = true after InstanceData round-trip")
 	}
 }
+
+// TestInstanceData_RoundTripExecutionMode verifies that ExecutionMode survives a
+// full InstanceData round-trip, and that the empty string normalises to tmux.
+func TestInstanceData_RoundTripExecutionMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    ExecutionMode
+		expected ExecutionMode
+	}{
+		{"headless preserved", ExecutionModeHeadless, ExecutionModeHeadless},
+		{"tmux preserved", ExecutionModeTmux, ExecutionModeTmux},
+		{"empty defaults to tmux", "", ExecutionModeTmux},
+		{"unknown defaults to tmux", ExecutionMode("unknown"), ExecutionModeTmux},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := InstanceData{
+				Title:         "mode-test",
+				Path:          "/tmp/repo",
+				Branch:        "feature/test",
+				Status:        Paused,
+				Program:       "claude",
+				ExecutionMode: tt.input,
+				Worktree: GitWorktreeData{
+					RepoPath:      "/tmp/repo",
+					WorktreePath:  "/tmp/repo/.worktrees/mode-test",
+					SessionName:   "mode-test",
+					BranchName:    "feature/test",
+					BaseCommitSHA: "abc123",
+				},
+			}
+
+			inst, err := FromInstanceData(data)
+			if err != nil {
+				t.Fatalf("FromInstanceData() error = %v", err)
+			}
+			if inst.ExecutionMode != tt.expected {
+				t.Fatalf("ExecutionMode = %q, want %q", inst.ExecutionMode, tt.expected)
+			}
+
+			roundTrip := inst.ToInstanceData()
+			if roundTrip.ExecutionMode != tt.expected {
+				t.Fatalf("ToInstanceData ExecutionMode = %q, want %q", roundTrip.ExecutionMode, tt.expected)
+			}
+		})
+	}
+}

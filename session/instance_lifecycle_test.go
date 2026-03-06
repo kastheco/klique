@@ -37,6 +37,14 @@ func setupGitRepo(t *testing.T) string {
 	return repo
 }
 
+// newMockTmuxSession returns a tmuxExecutionSession backed by a mock TmuxSession
+// with the given dependencies, for use in lifecycle tests.
+func newMockTmuxSession(name, program string, ptyFac tmux.PtyFactory, cmdExec cmd_test.MockCmdExec) *tmuxExecutionSession {
+	return &tmuxExecutionSession{
+		s: tmux.NewTmuxSessionWithDeps(name, program, false, ptyFac, cmdExec),
+	}
+}
+
 func TestStartTransfersQueuedPromptForOpenCode(t *testing.T) {
 	cmdExec := cmd_test.MockCmdExec{
 		RunFunc: func(cmd *exec.Cmd) error { return nil },
@@ -46,10 +54,11 @@ func TestStartTransfersQueuedPromptForOpenCode(t *testing.T) {
 	}
 
 	inst := &Instance{
-		Title:        "test-transfer",
-		Path:         t.TempDir(),
-		Program:      "opencode",
-		QueuedPrompt: "Plan auth.",
+		Title:            "test-transfer",
+		Path:             t.TempDir(),
+		Program:          "opencode",
+		QueuedPrompt:     "Plan auth.",
+		executionSession: newMockTmuxSession("test-transfer", "opencode", &testPtyFactory{}, cmdExec),
 	}
 	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-transfer", "opencode", false, &testPtyFactory{}, cmdExec))
 
@@ -70,10 +79,11 @@ func TestStartKeepsQueuedPromptForAider(t *testing.T) {
 	}
 
 	inst := &Instance{
-		Title:        "test-aider",
-		Path:         t.TempDir(),
-		Program:      "aider --model ollama_chat/gemma3:1b",
-		QueuedPrompt: "Fix the bug.",
+		Title:            "test-aider",
+		Path:             t.TempDir(),
+		Program:          "aider --model ollama_chat/gemma3:1b",
+		QueuedPrompt:     "Fix the bug.",
+		executionSession: newMockTmuxSession("test-aider", "aider --model ollama_chat/gemma3:1b", &testPtyFactory{}, cmdExec),
 	}
 	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-aider", "aider --model ollama_chat/gemma3:1b", false, &testPtyFactory{}, cmdExec))
 
@@ -96,7 +106,7 @@ func TestRestart_KillsTmuxAndRestartsSession(t *testing.T) {
 		Program: "opencode",
 		started: true,
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession(inst.Title, inst.Program, &testPtyFactory{}, cmdExec)
 
 	err := inst.Restart()
 	assert.NoError(t, err)
@@ -117,7 +127,7 @@ func TestRestart_WorksWhenTmuxAlreadyDead(t *testing.T) {
 		started: true,
 		Exited:  true,
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession(inst.Title, inst.Program, &testPtyFactory{}, cmdExec)
 
 	err := inst.Restart()
 	assert.NoError(t, err)
@@ -159,7 +169,7 @@ func TestStartOnBranch_SetsFields(t *testing.T) {
 			return []byte("Ask anything"), nil
 		},
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-branch", "opencode", false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession("test-branch", "opencode", &testPtyFactory{}, cmdExec)
 
 	err = inst.StartOnBranch("feature/task-5")
 	require.NoError(t, err)
@@ -186,7 +196,7 @@ func TestKill_PreservesBranch(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession(inst.Title, inst.Program, &testPtyFactory{}, cmdExec)
 
 	err = inst.StartOnBranch("safe-kill-branch")
 	require.NoError(t, err)
@@ -216,7 +226,7 @@ func TestKill_DirtyWorktreeReturnsError(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession(inst.Title, inst.Program, &testPtyFactory{}, cmdExec)
 
 	err = inst.StartOnBranch("dirty-kill-branch")
 	require.NoError(t, err)
@@ -249,7 +259,7 @@ func TestPause_DirtyWorktreeReturnsError(t *testing.T) {
 		RunFunc:    func(cmd *exec.Cmd) error { return nil },
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) { return []byte(""), nil },
 	}
-	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps(inst.Title, inst.Program, false, &testPtyFactory{}, cmdExec))
+	inst.executionSession = newMockTmuxSession(inst.Title, inst.Program, &testPtyFactory{}, cmdExec)
 
 	err = inst.StartOnBranch("dirty-pause-branch")
 	require.NoError(t, err)
@@ -267,4 +277,68 @@ func TestPause_DirtyWorktreeReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "uncommitted changes")
 	assert.Contains(t, err.Error(), "README.md")
+}
+
+// TestInstance_DefaultExecutionModeIsTmux verifies that instances created without
+// an explicit ExecutionMode use tmux by default, and that this survives a round-trip
+// through InstanceData.
+func TestInstance_DefaultExecutionModeIsTmux(t *testing.T) {
+	inst, err := NewInstance(InstanceOptions{
+		Title:   "default-mode",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ExecutionModeTmux, inst.ExecutionMode, "default execution mode should be tmux")
+
+	// Round-trip through InstanceData.
+	data := inst.ToInstanceData()
+	assert.Equal(t, ExecutionModeTmux, data.ExecutionMode, "InstanceData should persist tmux mode")
+
+	// Restoring with empty ExecutionMode should also default to tmux.
+	emptyModeData := InstanceData{
+		Title:   "empty-mode",
+		Path:    "/tmp/repo",
+		Branch:  "feature/test",
+		Status:  Paused,
+		Program: "claude",
+		Worktree: GitWorktreeData{
+			RepoPath:      "/tmp/repo",
+			WorktreePath:  "/tmp/repo/.worktrees/empty-mode",
+			SessionName:   "empty-mode",
+			BranchName:    "feature/test",
+			BaseCommitSHA: "abc123",
+		},
+	}
+	restored, err := FromInstanceData(emptyModeData)
+	require.NoError(t, err)
+	assert.Equal(t, ExecutionModeTmux, restored.ExecutionMode, "empty ExecutionMode should restore as tmux")
+}
+
+// TestInstance_AttachReturnsErrorForHeadlessExecution verifies that Attach() returns
+// an error for headless instances, and that unstarted instances return the standard
+// "not started" error regardless of execution mode.
+func TestInstance_AttachReturnsErrorForHeadlessExecution(t *testing.T) {
+	// An unstarted instance should always return the "not started" error.
+	unstarted := &Instance{
+		Title:         "headless-unstarted",
+		ExecutionMode: ExecutionModeHeadless,
+		started:       false,
+	}
+	_, err := unstarted.Attach()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot attach instance that has not been started")
+
+	// A started headless instance should return ErrInteractiveOnly (or an error
+	// wrapping it) from the headless execution session's Attach implementation.
+	headlessInst := &Instance{
+		Title:            "headless-started",
+		ExecutionMode:    ExecutionModeHeadless,
+		started:          true,
+		executionSession: NewExecutionSession(ExecutionModeHeadless, "headless-started", "sh", false),
+	}
+	_, err = headlessInst.Attach()
+	require.Error(t, err, "Attach on headless instance should return an error")
+	// The error originates from the headless session, which reports interactive-only.
+	assert.Contains(t, err.Error(), "interactive")
 }

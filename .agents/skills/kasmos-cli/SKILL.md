@@ -40,6 +40,12 @@ The commands below are derived from current Cobra handlers and help output in th
 | setup | `kas init` | `kas init [--force] [--clean]` | `--force`, `--clean` |
 | check | `kas check` | `kas check [-v|--verbose]` | `-v`, `--verbose` |
 | serve | `kas serve` | `kas serve [--bind <addr>] [--db <path>] [--port <n>]` | `--bind`, `--db`, `--port` |
+| signal | `kas signal list` | `kas signal list` | none |
+| signal | `kas signal process` | `kas signal process [--once]` | `--once` |
+| audit | `kas audit list` | `kas audit list [--limit <n>] [--event <kind>]` | `--limit`, `--event` |
+| tmux | `kas tmux list` | `kas tmux list` | none |
+| tmux | `kas tmux adopt` | `kas tmux adopt <session> <title>` | none |
+| tmux | `kas tmux kill` | `kas tmux kill <session>` | none |
 </HARD-GATE>
 
 ## task lifecycle commands
@@ -131,6 +137,51 @@ The commands below are derived from current Cobra handlers and help output in th
 | `kas instance send <title> <prompt>` | sends prompt into resumed tmux session |
 | `kas instance status` | shows aggregated counts (running, ready, paused, killed) |
 
+## signal commands
+
+### `kas signal list`
+- Lists pending signals in `.kasmos/signals/` under the resolved repo root (`cmd/signal.go:37`, `cmd/task.go:922`).
+- Includes FSM signals, wave signals, and elaboration signals.
+- Formats one line per signal and prints `no pending signals` when the directory is empty or missing (`cmd/signal.go:108`, `cmd/signal_test.go:60`).
+
+### `kas signal process`
+- Processes FSM signals from `.kasmos/signals/` and consumes signal files after handling (`cmd/signal.go:135`).
+- `--once`: process one batch and exit, printing either `processed N signal(s)` or `no signals to process` (`cmd/signal.go:79`).
+- Default mode loops every 5 seconds and prints `watching for signals (ctrl-c to stop)...` before polling (`cmd/signal.go:91`).
+- Unknown plans and invalid transitions are consumed and logged, not returned as fatal errors (`cmd/signal.go:153`, `cmd/signal.go:160`).
+- `review_changes_requested` also increments the stored review-cycle counter (`cmd/signal.go:167`, `cmd/signal_test.go:313`).
+- Wave and elaboration signals are consumed but not transitioned by the FSM (`cmd/signal.go:183`).
+
+## audit commands
+
+### `kas audit list`
+- Queries audit events for the current project from the shared SQLite audit logger (`cmd/audit.go:26`, `cmd/audit.go:49`).
+- `--limit` defaults to `50`; values `<= 0` fail with `limit must be > 0` (`cmd/audit.go:16`, `cmd/audit_test.go:108`).
+- `--event` filters by event kind string (for example `agent_spawned`) before rendering (`cmd/audit.go:57`, `cmd/audit_test.go:93`).
+- Output is a tabwriter table with `TIME`, `EVENT`, and `DETAILS` columns (`cmd/audit.go:74`).
+- Empty results print `no audit entries found` (`cmd/audit.go:67`).
+- DETAILS joins message/detail as `message | detail` when both are present (`cmd/audit.go:88`).
+
+## tmux commands
+
+### `kas tmux list`
+- Lists orphan `kas_` tmux sessions that are not already represented in persisted instance state (`cmd/tmux.go:121`).
+- Output columns are `NAME`, `TITLE`, `WINDOWS`, `ATTACHED`, and `AGE` (`cmd/tmux.go:147`).
+- Returns `no orphan tmux sessions found` when no unmanaged `kas_` sessions exist (`cmd/tmux.go:140`, `cmd/tmux_test.go:159`).
+
+### `kas tmux adopt`
+- Usage is exactly `kas tmux adopt <session> <title>` (`cmd/tmux.go:277`).
+- Validation order is fixed: non-empty title, unique title, then orphan session existence (`cmd/tmux.go:164`).
+- On success it appends a new instance record with `status=ready`, `program=unknown`, and `path=.` because the cobra handler passes `"."` as repo root (`cmd/tmux.go:171`, `cmd/tmux.go:285`).
+- Duplicate titles fail with `instance title already exists: <title>` (`cmd/tmux.go:183`, `cmd/tmux_test.go:190`).
+- Managed or missing sessions fail with `orphan tmux session not found: <session>` (`cmd/tmux.go:204`).
+
+### `kas tmux kill`
+- Usage is exactly `kas tmux kill <session>` (`cmd/tmux.go:293`).
+- Only orphan sessions are eligible; managed or missing sessions fail with `orphan tmux session not found: <session>` (`cmd/tmux.go:227`, `cmd/tmux_test.go:306`).
+- Executor failures wrap as `kill tmux session <name>: <cause>` (`cmd/tmux.go:225`, `cmd/tmux_test.go:262`).
+- This command is intentionally separate from `kas instance kill`, which operates on managed instances.
+
 ## skills commands
 
 ### `kas skills list`
@@ -209,6 +260,15 @@ kas task transition my-feature.md request_review
 kas task set-status my-feature.md cancelled --force
 ```
 
+### workflow D: signal processing and orphan tmux cleanup
+
+```bash
+kas signal list
+kas signal process --once
+kas audit list --limit 20
+kas tmux list
+```
+
 ### wave orchestration
 
 - `kas task implement <plan-file> --wave <n>` writes an implementation signal consumed by downstream automation.
@@ -225,6 +285,7 @@ kas task set-status my-feature.md cancelled --force
 - `kas check` can print full health tables and still exit code `1` when health is below `100%`.
 - `kas instance send` returns `cannot send prompt to a paused instance` for paused targets.
 - `kas instance resume` requires preserved worktree metadata (`repo path` + `branch`), else `instance "<title>" has no stored worktree metadata; cannot resume`.
+- `kas signal process` without `--once` runs indefinitely until interrupted; `kas tmux adopt` rejects blank titles; `kas tmux kill` rejects managed sessions; `kas audit list --limit 0` fails with `limit must be > 0`.
 
 ## anti-patterns
 
@@ -232,6 +293,7 @@ kas task set-status my-feature.md cancelled --force
 - Editing task store files directly when `kas task create/register/update-content/show/transition` already owns state transitions.
 - Using `kas task set-status` for normal state movement (replace with `kas task transition` and valid events).
 - Assuming `kas skills sync` syncs project-level `./.agents/skills` into harness globals; it only syncs personal `~/.agents/skills` to harness global dirs.
+- documenting bare `kas audit` / `kas signal` / `kas tmux` as if they do useful work without subcommands; running `kas signal process` inside the TUI-managed flow where metadata ticks already consume orchestration signals; using `kas tmux kill` for managed instances instead of `kas instance kill`
 
 ## verification checks
 
