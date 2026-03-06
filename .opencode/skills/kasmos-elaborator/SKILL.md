@@ -147,6 +147,22 @@ rewrite the body of each `### Task N: Title` section. **preserve everything** ex
 prose below the `**Files:**` block — wave headers, task numbers, file lists, and plan header
 metadata must remain byte-for-byte identical.
 
+### coder context budget
+
+the coder agent uses a minimal-context model. your enrichments must make tasks
+completely self-contained. the coder will NOT load the full kasmos-coder skill,
+will NOT explore the codebase beyond what you provide, and will NOT make
+architectural decisions. every task body you write must include:
+- exact file paths (no "find the relevant file")
+- exact function signatures (no "add appropriate error handling")
+- exact code snippets for any non-trivial logic
+- exact test code (no "write a test for the happy path")
+- exact import paths
+
+if a task body exceeds ~100 lines of markdown, it's too large. split the
+guidance across the task's TDD steps so the coder can work step-by-step
+without holding the entire task in context.
+
 ### what to add
 
 **exact function signatures**
@@ -315,6 +331,8 @@ before signaling, verify each enriched task against this checklist:
 - [ ] **concrete test code** — placeholder test descriptions replaced with real test functions
 - [ ] **real package paths** — no `./path/to/...` placeholders in test commands
 - [ ] **structure preserved** — wave headers, task numbers, **Files:** blocks unchanged
+- [ ] **self-contained** — each task can be implemented by reading only the task body
+  and the listed files. no "explore the codebase" or "understand the architecture" steps.
 
 if any check fails, fix the enrichment before writing back to the store.
 
