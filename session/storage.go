@@ -24,6 +24,7 @@ type InstanceData struct {
 	AutoYes         bool      `json:"auto_yes"`
 	SkipPermissions bool      `json:"skip_permissions"`
 	Program         string    `json:"program"`
+	ExecutionMode   string    `json:"execution_mode,omitempty"`
 
 	// Optional plan/orchestration fields.
 	TaskFile               string `json:"task_file,omitempty"`

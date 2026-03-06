@@ -44,6 +44,8 @@ type Instance struct {
 	Status Status
 	// Program is the agent command to execute within the tmux session.
 	Program string
+	// ExecutionMode controls how the agent should be run (tmux or headless).
+	ExecutionMode string
 	// Height is the terminal height in rows.
 	Height int
 	// Width is the terminal width in columns.
@@ -144,6 +146,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		CreatedAt:              i.CreatedAt,
 		UpdatedAt:              time.Now(),
 		Program:                i.Program,
+		ExecutionMode:          i.ExecutionMode,
 		AutoYes:                i.AutoYes,
 		SkipPermissions:        i.SkipPermissions,
 		TaskFile:               i.TaskFile,
@@ -185,6 +188,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt:              data.CreatedAt,
 		UpdatedAt:              data.UpdatedAt,
 		Program:                data.Program,
+		ExecutionMode:          data.ExecutionMode,
 		SkipPermissions:        data.SkipPermissions,
 		TaskFile:               data.TaskFile,
 		AgentType:              data.AgentType,
@@ -241,6 +245,8 @@ type InstanceOptions struct {
 	Path string
 	// Program is the agent command to run (e.g. "claude", "opencode").
 	Program string
+	// ExecutionMode controls how the agent should be run (tmux or headless).
+	ExecutionMode string
 	// AutoYes enables automatic confirmation of agent prompts.
 	AutoYes bool
 	// SkipPermissions enables --dangerously-skip-permissions for Claude.
@@ -274,6 +280,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Status:          Ready,
 		Path:            absPath,
 		Program:         opts.Program,
+		ExecutionMode:   opts.ExecutionMode,
 		Height:          0,
 		Width:           0,
 		CreatedAt:       now,

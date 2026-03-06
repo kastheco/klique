@@ -27,6 +27,18 @@ func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 	}
 }
 
+func TestShouldPromptPushAfterCoderExit_HeadlessCoderExited(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:      "p.md",
+		AgentType:     session.AgentTypeCoder,
+		ExecutionMode: config.ExecutionModeHeadless,
+		Exited:        true,
+	}
+
+	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true))
+}
+
 func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
