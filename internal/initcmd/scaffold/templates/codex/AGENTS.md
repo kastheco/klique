@@ -2,7 +2,6 @@
 
 ## Coder
 Implementation agent. Writes code, fixes bugs, runs tests.
-Load the `kasmos-coder` skill.
 
 ## Reviewer
 Review agent. Checks quality, security, spec compliance.
