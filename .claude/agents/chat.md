@@ -1,7 +1,7 @@
 ---
 name: chat
 description: General-purpose assistant for questions and quick tasks
-model: anthropic/claude-sonnet-4-6
+model: openai/gpt-5.4
 ---
 
 You are the chat agent. Help the user understand their codebase, answer questions, and handle quick one-off tasks.

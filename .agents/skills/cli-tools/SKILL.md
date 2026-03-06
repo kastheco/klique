@@ -28,29 +28,6 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 **STOP.** If you are about to type `grep`, `sed`, `awk`, `find`, `diff`, or `wc` — stop and use the replacement. There are no exceptions. "Just this once" is a violation.
 </HARD-GATE>
 
-<HARD-GATE>
-## Batch Edit Rule
-
-When you need to make the **same or similar change across multiple files**, you MUST use a CLI tool (`sd`, `comby`, or `ast-grep`) instead of repeated Edit tool calls. This is not a suggestion.
-
-| Change type | Tool | Example |
-|-------------|------|---------|
-| Literal string replacement across files | `sd` | `sd 'oldFunc' 'newFunc' src/**/*.go` |
-| Same structural pattern across files | `comby` | `comby 'before(:[args])' 'after(:[args])' .go -in-place` |
-| Symbol rename across files | `ast-grep` | `ast-grep run --pattern 'old($$$)' --rewrite 'new($$$)' --lang go` |
-| Same line deletion across files | `sd` | `sd 'lineToRemove\n' '' src/**/*.go` |
-
-**The threshold is 3.** If you are about to make the same Edit in 3+ files, stop and use a CLI tool instead. One command replaces N edit calls — it's faster, less error-prone, and produces smaller diffs.
-
-**Red flags** — if you catch yourself doing any of these, you are violating this rule:
-- Copy-pasting the same `oldString`/`newString` into multiple Edit calls
-- Making a list of files to edit one-by-one with the same pattern
-- "I'll just do this manually, it's only N files" (if N ≥ 3, use a tool)
-- Using Edit with `replaceAll: true` across multiple files for the same string
-
-**STOP.** If you are about to make the same edit in 3+ files — stop and use `sd`, `comby`, or `ast-grep`. There are no exceptions.
-</HARD-GATE>
-
 ## Tool Selection by Task
 
 Pick the right tool for the job. When multiple tools could work, the table shows the preferred choice and why.
@@ -224,5 +201,3 @@ These violations are not suggestions. If you do any of these, you are violating 
 | Using `wc -l` for counting | Use `scc` for language-aware counts + complexity |
 | Splitting `{` / `}` in comby templates | Always inline: `{:[body]}` not `{\n:[body]\n}` |
 | Forgetting `-in-place` with comby | Without it, comby only previews changes |
-| Repeated Edit calls with same pattern across 3+ files | Use `sd`, `comby`, or `ast-grep` — one command, not N edits |
-| Using Edit `replaceAll` across multiple files for same string | Use `sd 'old' 'new' file1 file2 ...` or glob pattern |
