@@ -1397,16 +1397,24 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.toastManager.Error(fmt.Sprintf("session for '%s' is not running", selected.Title))
 			return m, m.toastTickCmd()
 		}
-		// Show help screen before attaching
-		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
-			ch, err := m.nav.Attach()
-			if err != nil {
-				m.handleError(err)
-				return
-			}
-			<-ch
-			m.state = stateDefault
-		})
+		// Queue the selected instance, then show the attach help overlay.
+		// Actual attach (via tea.Exec) happens in handleHelpState once the user
+		// dismisses the help screen — this keeps bubbletea's event loop free.
+		m.pendingAttachInstance = selected
+		m.showHelpScreen(helpTypeInstanceAttach{}, nil)
+		// If the overlay was skipped (already seen), showHelpScreen returns without
+		// setting m.state = stateHelp. In that case consume pendingAttachInstance
+		// immediately so the attach is not silently abandoned.
+		if m.state != stateHelp && m.pendingAttachInstance != nil {
+			pending := m.pendingAttachInstance
+			m.pendingAttachInstance = nil
+			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
+				if err != nil {
+					return err
+				}
+				return instanceChangedMsg{}
+			})
+		}
 		return m, nil
 	case keys.KeyFocusList:
 		// t key always jumps directly to the instance list — no-op when list is hidden.
