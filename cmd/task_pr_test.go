@@ -41,6 +41,6 @@ func TestBuildCLIPRMetadata_EmptyContent(t *testing.T) {
 }
 
 func TestBuildCLIPRTitleFallback(t *testing.T) {
-	assert.Equal(t, "Auth Middleware", git.BuildPRTitle("Auth Middleware", "", "my-feature"))
-	assert.Equal(t, "my-feature", git.BuildPRTitle("", "", "my-feature"))
+	assert.Equal(t, "Auth Middleware", git.BuildPRTitle("Auth Middleware", "my-feature"))
+	assert.Equal(t, "my-feature", git.BuildPRTitle("", "my-feature"))
 }

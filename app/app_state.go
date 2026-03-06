@@ -47,8 +47,8 @@ func assemblePRMetadata(
 	gitChanges, gitCommits, gitStats string,
 ) gitpkg.PRMetadata {
 	meta := gitpkg.PRMetadata{
-		Description:     entry.Description,
-		Goal:            entry.Goal,
+		Description:     strings.TrimSpace(entry.Description),
+		Goal:            strings.TrimSpace(entry.Goal),
 		ReviewerSummary: strings.TrimSpace(reviewerSummary),
 		ReviewCycle:     reviewCycle,
 		GitChanges:      strings.TrimSpace(gitChanges),
@@ -67,7 +67,7 @@ func assemblePRMetadata(
 	for _, s := range subtasks {
 		meta.Subtasks = append(meta.Subtasks, gitpkg.PRSubtask{
 			Number: s.TaskNumber,
-			Title:  s.Title,
+			Title:  strings.TrimSpace(s.Title),
 			Status: string(s.Status),
 		})
 	}
@@ -146,7 +146,7 @@ func (m *home) createPRAfterApproval(planFile, reviewBody string) tea.Cmd {
 		}
 
 		meta := assemblePRMetadata(entry, subtasks, reviewBody, entry.ReviewCycle, gitChanges, gitCommits, gitStats)
-		title := gitpkg.BuildPRTitle(entry.Description, "", planName)
+		title := gitpkg.BuildPRTitle(entry.Description, planName)
 		body := gitpkg.BuildPRBody(meta)
 		commitMsg := fmt.Sprintf("[kas] implementation of '%s'", planName)
 		if err := shared.CreatePR(title, body, commitMsg); err != nil {
