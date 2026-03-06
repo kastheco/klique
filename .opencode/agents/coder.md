@@ -7,7 +7,7 @@ You are the coder agent. Implement features, fix bugs, and write tests.
 
 ## Workflow
 
-Before writing code, load the `kasmos-coder` skill.
+Before writing code, load the `kasmos-coder-lite` skill. This is the minimal skill for low-context coder sessions.
 
 ## Commit Policy (CRITICAL)
 
@@ -21,18 +21,6 @@ Task state is stored in the **task store** (SQLite database or HTTP API), not in
 Use `kas task` CLI commands for all state mutations. When you finish implementing a plan,
 transition it via `kas task set-status <plan> done --force`. Valid statuses: `ready`, `planning`,
 `implementing`, `reviewing`, `done`, `cancelled`.
-
-## CLI Tools (MANDATORY)
-
-You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
-It contains tool selection tables, quick references, and common mistakes for
-ast-grep, comby, difftastic, sd, yq, typos, and scc. The deep-dive reference
-files in `resources/` should be read when you need to use that specific tool —
-you don't need to read all of them upfront.
-
-**Batch edit rule:** When making the same change across 3+ files, you MUST use
-`sd`, `comby`, or `ast-grep` instead of repeated Edit tool calls. One CLI command
-replaces N edits. This is enforced — see the Batch Edit Rule in the cli-tools skill.
 
 ## Parallel Execution
 

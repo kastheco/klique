@@ -20,6 +20,7 @@ func TestCoderPromptParallelSection(t *testing.T) {
 		"KASMOS_TASK",
 		"shared worktree",
 		"dirty git state",
+		"kasmos-coder-lite",
 	}
 
 	for _, f := range coderFiles {

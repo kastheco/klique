@@ -8,7 +8,7 @@ You are the coder agent. Implement features, fix bugs, and write tests.
 
 ## Workflow
 
-Before writing code, load the `kasmos-coder` skill.
+Before writing code, load the `kasmos-coder-lite` skill. This is the minimal skill for low-context coder sessions.
 
 ## Task State
 
@@ -23,14 +23,6 @@ Load based on what you're implementing:
 - `tui-design` — when building or modifying TUI components, views, or styles
 - `tmux-orchestration` — when working on tmux pane management, worker backends, or process lifecycle
 - `golang-pro` — for concurrency patterns, interface design, generics, testing best practices
-
-## CLI Tools (MANDATORY)
-
-You MUST read the `cli-tools` skill (SKILL.md) at the start of every session.
-It contains tool selection tables, quick references, and common mistakes for
-ast-grep, comby, difftastic, sd, yq, typos, and scc. The deep-dive reference
-files in `resources/` should be read when you need to use that specific tool —
-you don't need to read all of them upfront.
 
 ## Parallel Execution
 
