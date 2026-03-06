@@ -356,7 +356,7 @@ func TestSpawnWaveTasks_HeadlessCoderUsesHeadlessExecution(t *testing.T) {
 
 	instances := list.GetInstances()
 	require.Len(t, instances, 1)
-	assert.Equal(t, config.ExecutionModeHeadless, instances[0].ExecutionMode)
+	assert.Equal(t, session.ExecutionModeHeadless, instances[0].ExecutionMode)
 }
 
 // TestSpawnWaveTasks_PatchesSharedWorktreeOpencodeConfig verifies that spawnWaveTasks

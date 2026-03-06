@@ -1212,13 +1212,13 @@ func (m *home) programForAgent(agentType string) string {
 	return profile.BuildCommand()
 }
 
-func (m *home) executionModeForAgent(agentType string) string {
-	mode := config.NormalizeExecutionMode(m.profileForAgent(agentType).ExecutionMode)
+func (m *home) executionModeForAgent(agentType string) session.ExecutionMode {
+	mode := session.ExecutionMode(config.NormalizeExecutionMode(m.profileForAgent(agentType).ExecutionMode))
 	// Headless execution is only wired for coder sessions right now.
 	// Other agent roles remain tmux-attached for visibility and interactive
 	// control, while still allowing them to pick up any future shared config.
 	if agentType != session.AgentTypeCoder {
-		return config.ExecutionModeTmux
+		return session.ExecutionModeTmux
 	}
 	return mode
 }
@@ -1749,7 +1749,7 @@ func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Ins
 	if !tmuxAlive {
 		return true
 	}
-	if config.NormalizeExecutionMode(inst.ExecutionMode) == config.ExecutionModeHeadless && inst.Exited {
+	if config.NormalizeExecutionMode(string(inst.ExecutionMode)) == config.ExecutionModeHeadless && inst.Exited {
 		return true
 	}
 	// Agent returned to prompt after finishing queued work — covers the

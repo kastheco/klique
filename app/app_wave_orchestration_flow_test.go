@@ -1360,8 +1360,11 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "task signal guard test", "plan/task-signal-guard", time.Now()))
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
+	planName := taskstate.DisplayName(planFile)
+	instTitle := planName + "-W1-T1"
+
 	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:      "task-signal-guard-W1-T1",
+		Title:      instTitle,
 		Path:       t.TempDir(),
 		Program:    "claude",
 		TaskFile:   planFile,
@@ -1376,7 +1379,7 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "task-signal-guard-W1-T1", TmuxAlive: true}},
+		Results:   []instanceMetadata{{Title: instTitle, TmuxAlive: true}},
 		PlanState: ps,
 	}
 	model, _ := h.Update(msg)
@@ -1390,14 +1393,21 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	assert.NotEqual(t, stateConfirm, updated.state,
 		"no completion dialog should appear")
 
-	// Now simulate the agent doing real work and returning to prompt again.
-	inst.HasWorked = true
-	model2, _ := updated.Update(msg)
+	// Now send a task-finished signal — the orchestrator must be removed.
+	model2, _ := updated.Update(metadataResultMsg{
+		Results:   []instanceMetadata{{Title: instTitle, TmuxAlive: true}},
+		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
+	})
 	updated2 := model2.(*home)
 
 	// Now it should complete.
 	assert.Empty(t, updated2.waveOrchestrators,
-		"orchestrator must be deleted after HasWorked is set and task completes")
+		"orchestrator must be deleted after the task-finished signal arrives")
 }
 
 // TestWaveTaskCompletion_IgnoresPromptEchoUpdates verifies that a wave task is
@@ -1406,8 +1416,54 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 func TestWaveTaskCompletion_IgnoresPromptEchoUpdates(t *testing.T) {
 	const planFile = "prompt-echo-guard"
 
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{{
+		Number: 1,
+		Tasks:  []taskparser.Task{{Number: 1, Title: "do work"}},
+	}}}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "prompt echo guard test", "plan/prompt-echo-guard", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	planName := taskstate.DisplayName(planFile)
+	instTitle := planName + "-W1-T1"
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      instTitle,
+		Path:       t.TempDir(),
+		Program:    "claude",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+	inst.PromptDetected = true
+	inst.HasWorked = false
+
+	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
+	_ = h.nav.AddInstance(inst)
+
+	// First update: metadata arrives while at prompt with no real work done.
+	// The orchestrator must NOT complete the task yet.
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: instTitle, TmuxAlive: true}},
+		PlanState: ps,
+	}
+	model, _ := h.Update(msg)
+	updated := model.(*home)
+
+	assert.Len(t, updated.waveOrchestrators, 1,
+		"orchestrator must still exist when only a prompt-echo update arrived")
+
+	// Second update: a task-finished signal arrives — now the orchestrator must be removed.
 	model2, _ := updated.Update(metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "task-signal-guard-W1-T1", TmuxAlive: true}},
+		Results:   []instanceMetadata{{Title: instTitle, TmuxAlive: true}},
 		PlanState: ps,
 		TaskSignals: []taskfsm.TaskSignal{{
 			WaveNumber: 1,

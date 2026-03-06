@@ -47,7 +47,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {
 			return m, nil
 		}
-		if config.NormalizeExecutionMode(selected.ExecutionMode) == config.ExecutionModeHeadless {
+		if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
 			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; attach is disabled", selected.Title))
 			return m, nil
 		}
@@ -111,7 +111,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		if config.NormalizeExecutionMode(selected.ExecutionMode) == config.ExecutionModeHeadless {
+		if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
 			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; use the preview tab to review output", selected.Title))
 			return m, nil
 		}
