@@ -39,6 +39,42 @@ func shouldCreatePR(entry taskstore.TaskEntry) bool {
 	return entry.Status == taskstore.StatusDone && entry.Branch != "" && entry.PRURL == ""
 }
 
+func assemblePRMetadata(
+	entry taskstore.TaskEntry,
+	subtasks []taskstore.SubtaskEntry,
+	reviewerSummary string,
+	reviewCycle int,
+	gitChanges, gitCommits, gitStats string,
+) gitpkg.PRMetadata {
+	meta := gitpkg.PRMetadata{
+		Description:     entry.Description,
+		Goal:            entry.Goal,
+		ReviewerSummary: strings.TrimSpace(reviewerSummary),
+		ReviewCycle:     reviewCycle,
+		GitChanges:      strings.TrimSpace(gitChanges),
+		GitCommits:      strings.TrimSpace(gitCommits),
+		GitStats:        strings.TrimSpace(gitStats),
+		Subtasks:        make([]gitpkg.PRSubtask, 0, len(subtasks)),
+	}
+
+	if strings.TrimSpace(entry.Content) != "" {
+		if plan, err := taskparser.Parse(entry.Content); err == nil {
+			meta.Architecture = strings.TrimSpace(plan.Architecture)
+			meta.TechStack = strings.TrimSpace(plan.TechStack)
+		}
+	}
+
+	for _, s := range subtasks {
+		meta.Subtasks = append(meta.Subtasks, gitpkg.PRSubtask{
+			Number: s.TaskNumber,
+			Title:  s.Title,
+			Status: string(s.Status),
+		})
+	}
+
+	return meta
+}
+
 // mapPRReviewDecision maps GitHub review decision strings to internal representation.
 func mapPRReviewDecision(ghValue string) string {
 	switch ghValue {
@@ -88,11 +124,30 @@ func (m *home) createPRAfterApproval(planFile, reviewBody string) tea.Cmd {
 			return nil
 		}
 
-		title := planName
-		body := reviewBody
-		if body == "" {
-			body = fmt.Sprintf("Implementation of '%s' reviewed and approved.", planName)
+		subtasks := []taskstore.SubtaskEntry(nil)
+		if subtasksFromStore, err := store.GetSubtasks(project, planFile); err == nil {
+			subtasks = subtasksFromStore
+		} else {
+			log.WarningLog.Printf("createPRAfterApproval: failed to load subtasks for %q: %v", planFile, err)
 		}
+
+		base := shared.GetBaseCommitSHA()
+		gitChanges, gitCommits, gitStats := "", "", ""
+		if base != "" {
+			if files, err := exec.Command("git", "-C", shared.GetWorktreePath(), "diff", "--name-only", base).CombinedOutput(); err == nil {
+				gitChanges = strings.TrimSpace(string(files))
+			}
+			if commits, err := exec.Command("git", "-C", shared.GetWorktreePath(), "log", "--oneline", base+"..HEAD").CombinedOutput(); err == nil {
+				gitCommits = strings.TrimSpace(string(commits))
+			}
+			if stats, err := exec.Command("git", "-C", shared.GetWorktreePath(), "diff", "--stat", base).CombinedOutput(); err == nil {
+				gitStats = strings.TrimSpace(string(stats))
+			}
+		}
+
+		meta := assemblePRMetadata(entry, subtasks, reviewBody, entry.ReviewCycle, gitChanges, gitCommits, gitStats)
+		title := gitpkg.BuildPRTitle(entry.Description, planName)
+		body := gitpkg.BuildPRBody(meta)
 		commitMsg := fmt.Sprintf("[kas] implementation of '%s'", planName)
 		if err := shared.CreatePR(title, body, commitMsg); err != nil {
 			log.WarningLog.Printf("createPRAfterApproval: PR creation failed for %q: %v", planFile, err)
