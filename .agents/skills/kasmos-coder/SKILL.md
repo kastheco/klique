@@ -51,6 +51,10 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 ## Where You Fit
 
+> **Note:** When kasmos spawns you for a wave task, your task prompt already contains
+> all essential rules inline. You do NOT need to load this skill or `cli-tools` in that
+> case — doing so wastes context. This skill is for manual/ad-hoc coder sessions only.
+
 ### Env Vars
 
 | Variable | Meaning |
@@ -64,7 +68,8 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 kasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:
 
-1. Retrieve the plan content with `kas task show <plan-file>`. Find your wave (`KASMOS_WAVE`) and task (`KASMOS_TASK`) in the plan.
+1. Your task prompt contains the plan context, wave info, and task instructions. Do not
+   retrieve the full plan — it's already in your prompt. Start implementing immediately.
 2. Implement that single task following TDD discipline below.
 3. Commit your work with task number in the commit message.
 4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
