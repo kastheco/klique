@@ -8,7 +8,6 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/log"
-	"github.com/kastheco/kasmos/session/tmux"
 )
 
 // InstanceData is the JSON-serializable mirror of Instance fields used for persistence.
@@ -24,6 +23,7 @@ type InstanceData struct {
 	AutoYes         bool      `json:"auto_yes"`
 	SkipPermissions bool      `json:"skip_permissions"`
 	Program         string    `json:"program"`
+	ExecutionMode   string    `json:"execution_mode,omitempty"`
 
 	// Optional plan/orchestration fields.
 	TaskFile               string `json:"task_file,omitempty"`
@@ -126,10 +126,10 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 		// Wave-task instances are not resumable without their tmux session.
 		// Drop stale records so restart recovery does not resurrect ghost tasks.
 		if rec.TaskNumber > 0 {
-			ts := tmux.NewTmuxSession(rec.Title, rec.Program, rec.SkipPermissions)
+			ts := NewExecutionSession(rec.ExecutionMode, rec.Title, rec.Program, rec.SkipPermissions)
 			if !ts.DoesSessionExist() {
 				log.WarningLog.Printf(
-					"skipping stale wave instance %q: tmux session not found",
+					"skipping stale wave instance %q: execution session not found",
 					rec.Title,
 				)
 				continue

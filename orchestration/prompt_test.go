@@ -19,7 +19,7 @@ func TestBuildTaskPrompt(t *testing.T) {
 		Body:   "**Step 1:** Write the test\n\n**Step 2:** Run it",
 	}
 
-	prompt := BuildTaskPrompt(plan, task, 1, 3, 4)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 3, 4)
 
 	// Plan context
 	assert.Contains(t, prompt, "Build a feature")
@@ -45,13 +45,14 @@ func TestBuildTaskPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "test failures in files outside your task")
 	assert.Contains(t, prompt, "build failure caused by missing types")
 	assert.Contains(t, prompt, "surgical changes")
+	assert.Contains(t, prompt, "implement-task-finished-w1-t2-feature.md")
 }
 
 func TestBuildTaskPrompt_InlineCoderRules(t *testing.T) {
 	plan := &taskparser.Plan{Goal: "Test feature"}
 	task := taskparser.Task{Number: 1, Title: "Do thing", Body: "Make the change"}
 
-	prompt := BuildTaskPrompt(plan, task, 1, 1, 1)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1)
 
 	assert.NotContains(t, prompt, "kasmos-coder")
 	assert.NotContains(t, prompt, "cli-tools")
@@ -62,13 +63,14 @@ func TestBuildTaskPrompt_InlineCoderRules(t *testing.T) {
 	assert.Contains(t, prompt, "feat(task-N):")
 	assert.Contains(t, prompt, "-run Test")
 	assert.Contains(t, prompt, "go build ./...")
+	assert.Contains(t, prompt, "touch .kasmos/signals/implement-task-finished-w1-t1-feature.md")
 }
 
 func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 	plan := &taskparser.Plan{Goal: "Simple"}
 	task := taskparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
 
-	prompt := BuildTaskPrompt(plan, task, 1, 1, 1)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1)
 
 	// Single task shouldn't mention parallel coordination
 	assert.NotContains(t, prompt, "parallel")

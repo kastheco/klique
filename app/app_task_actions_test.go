@@ -307,6 +307,58 @@ func TestSpawnTaskAgent_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
 	assert.Equal(t, "high", coderCfg["reasoningEffort"], "worktree opencode.jsonc must have patched reasoningEffort")
 }
 
+func TestSpawnWaveTasks_HeadlessCoderUsesHeadlessExecution(t *testing.T) {
+	dir := t.TempDir()
+	for _, cmd := range [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "config", "user.email", "test@test.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
+	} {
+		out, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+		if err != nil {
+			t.Skipf("git setup failed (%v): %s", err, out)
+		}
+	}
+
+	planDoc := "# test\n\n## Wave 1\n\n### Task 1: implement headless execution\n\nDo it.\n"
+	parsed, err := taskparser.Parse(planDoc)
+	require.NoError(t, err)
+	require.Len(t, parsed.Waves, 1)
+
+	orch := orchestration.NewWaveOrchestrator("test.md", parsed)
+	tasks := orch.StartNextWave()
+	require.Len(t, tasks, 1)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	h := &home{
+		activeRepoPath:     dir,
+		program:            "opencode",
+		nav:                list,
+		menu:               ui.NewMenu(),
+		toastManager:       overlay.NewToastManager(&sp),
+		instanceFinalizers: make(map[*session.Instance]func()),
+		appConfig: &config.Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]config.AgentProfile{
+				"coder": {
+					Program:       "opencode",
+					Enabled:       true,
+					ExecutionMode: config.ExecutionModeHeadless,
+				},
+			},
+		},
+	}
+
+	entry := taskstate.TaskEntry{Branch: "plan/test"}
+	_, _ = h.spawnWaveTasks(orch, tasks, entry)
+
+	instances := list.GetInstances()
+	require.Len(t, instances, 1)
+	assert.Equal(t, config.ExecutionModeHeadless, instances[0].ExecutionMode)
+}
+
 // TestSpawnWaveTasks_PatchesSharedWorktreeOpencodeConfig verifies that spawnWaveTasks
 // patches the SHARED WORKTREE's opencode.jsonc, not the main repo's, so coder agents
 // spawned by wave orchestration read the correct config from their worktree.

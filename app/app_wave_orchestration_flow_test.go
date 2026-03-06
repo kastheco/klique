@@ -511,7 +511,7 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "all-complete test", "plan/all-complete", time.Now()))
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	// Create task instance with PromptDetected (agent finished)
+	// Create task instance for the finished wave task.
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:      "all-complete-W1-T1",
 		Path:       t.TempDir(),
@@ -521,8 +521,6 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 		WaveNumber: 1,
 	})
 	require.NoError(t, err)
-	inst.PromptDetected = true
-	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -531,6 +529,11 @@ func TestWaveMonitor_AllComplete_ShowsReviewPrompt(t *testing.T) {
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "all-complete-W1-T1", TmuxAlive: true}},
 		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
@@ -658,7 +661,7 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "multi wave test", "plan/multi-wave", time.Now()))
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	// Wave 2 task instance — agent finished
+	// Wave 2 task instance.
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:      "multi-wave-W2-T2",
 		Path:       t.TempDir(),
@@ -668,8 +671,6 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 		WaveNumber: 2,
 	})
 	require.NoError(t, err)
-	inst.PromptDetected = true
-	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -679,6 +680,11 @@ func TestWaveMonitor_AllComplete_MultiWave(t *testing.T) {
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "multi-wave-W2-T2", TmuxAlive: true}},
 		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 2,
+			TaskNumber: 2,
+			TaskFile:   planFile,
+		}},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
@@ -938,8 +944,6 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 		WaveNumber: 1,
 	}
 	taskInst.MarkStartedForTest()
-	taskInst.PromptDetected = true
-	taskInst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	_ = h.nav.AddInstance(otherInst)
@@ -954,6 +958,11 @@ func TestWaveMonitor_FocusesTaskInstance_WhenWaveCompleteShown(t *testing.T) {
 			{Title: taskTitle, TmuxAlive: true},
 		},
 		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
@@ -1114,8 +1123,6 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 		WaveNumber: 1,
 	})
 	require.NoError(t, err)
-	inst.PromptDetected = true
-	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	h.fsm = newPlanFSMForTest(t, plansDir)
@@ -1127,6 +1134,11 @@ func TestWaveMonitor_AllComplete_DeferredWhenOverlayActive(t *testing.T) {
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "deferred-complete-W1-T1", TmuxAlive: true}},
 		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
 	}
 	model, _ := h.Update(msg)
 	updated := model.(*home)
@@ -1298,8 +1310,6 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 		WaveNumber: 1,
 	})
 	require.NoError(t, err)
-	inst.PromptDetected = true
-	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	// Enable auto-advance
@@ -1309,6 +1319,11 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 	msg := metadataResultMsg{
 		Results:   []instanceMetadata{{Title: "auto-advance-success-W1-T1", TmuxAlive: true}},
 		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
 	}
 	model, cmd := h.Update(msg)
 	updated := model.(*home)
@@ -1330,11 +1345,10 @@ func TestAutoAdvanceWaves_EmitsAdvanceMsgOnSuccess(t *testing.T) {
 func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	const planFile = "has-worked-guard"
 
-	plan := &taskparser.Plan{
-		Waves: []taskparser.Wave{
-			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "do work"}}},
-		},
-	}
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{{
+		Number: 1,
+		Tasks:  []taskparser.Task{{Number: 1, Title: "do work"}},
+	}}}
 	orch := orchestration.NewWaveOrchestrator(planFile, plan)
 	orch.StartNextWave()
 
@@ -1343,11 +1357,11 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
-	require.NoError(t, ps.Register(planFile, "has-worked guard test", "plan/has-worked-guard", time.Now()))
+	require.NoError(t, ps.Register(planFile, "task signal guard test", "plan/task-signal-guard", time.Now()))
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:      "has-worked-guard-W1-T1",
+		Title:      "task-signal-guard-W1-T1",
 		Path:       t.TempDir(),
 		Program:    "claude",
 		TaskFile:   planFile,
@@ -1356,13 +1370,13 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
-	inst.HasWorked = false // agent returned to prompt without doing real work
+	inst.HasWorked = true
 
 	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
 	_ = h.nav.AddInstance(inst)
 
 	msg := metadataResultMsg{
-		Results:   []instanceMetadata{{Title: "has-worked-guard-W1-T1", TmuxAlive: true}},
+		Results:   []instanceMetadata{{Title: "task-signal-guard-W1-T1", TmuxAlive: true}},
 		PlanState: ps,
 	}
 	model, _ := h.Update(msg)
@@ -1392,113 +1406,17 @@ func TestWaveTaskCompletion_RequiresHasWorked(t *testing.T) {
 func TestWaveTaskCompletion_IgnoresPromptEchoUpdates(t *testing.T) {
 	const planFile = "prompt-echo-guard"
 
-	plan := &taskparser.Plan{
-		Waves: []taskparser.Wave{
-			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "do work"}}},
-		},
-	}
-	orch := orchestration.NewWaveOrchestrator(planFile, plan)
-	orch.StartNextWave()
-
-	dir := t.TempDir()
-	plansDir := filepath.Join(dir, "docs", "plans")
-	require.NoError(t, os.MkdirAll(plansDir, 0o755))
-	ps, err := newTestPlanState(t, plansDir)
-	require.NoError(t, err)
-	require.NoError(t, ps.Register(planFile, "prompt echo guard test", "plan/prompt-echo-guard", time.Now()))
-	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
-
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:      "prompt-echo-guard-W1-T1",
-		Path:       t.TempDir(),
-		Program:    "claude",
-		TaskFile:   planFile,
-		TaskNumber: 1,
-		WaveNumber: 1,
+	model2, _ := updated.Update(metadataResultMsg{
+		Results:   []instanceMetadata{{Title: "task-signal-guard-W1-T1", TmuxAlive: true}},
+		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
 	})
-	require.NoError(t, err)
-	inst.QueuedPrompt = "do the task"
-
-	h := waveFlowHome(t, ps, plansDir, map[string]*orchestration.WaveOrchestrator{planFile: orch})
-	_ = h.nav.AddInstance(inst)
-
-	// First tick: prompt gets dispatched (PromptDetected path), task should remain running.
-	firstMsg := metadataResultMsg{
-		Results: []instanceMetadata{{
-			Title:           "prompt-echo-guard-W1-T1",
-			ContentCaptured: true,
-			Updated:         false,
-			HasPrompt:       true,
-			TmuxAlive:       true,
-		}},
-		PlanState: ps,
-	}
-	model, _ := h.Update(firstMsg)
-	updated := model.(*home)
-	require.Len(t, updated.waveOrchestrators, 1)
-
-	// Second tick: updated+prompt (echo/startup noise) must NOT set HasWorked.
-	secondMsg := metadataResultMsg{
-		Results: []instanceMetadata{{
-			Title:           "prompt-echo-guard-W1-T1",
-			ContentCaptured: true,
-			Updated:         true,
-			HasPrompt:       true,
-			TmuxAlive:       true,
-		}},
-		PlanState: ps,
-	}
-	model2, _ := updated.Update(secondMsg)
 	updated2 := model2.(*home)
-	assert.False(t, inst.HasWorked, "prompt-echo update must not count as real work")
-	require.Len(t, updated2.waveOrchestrators, 1)
-
-	// Third tick: still at prompt must not complete while HasWorked=false.
-	thirdMsg := metadataResultMsg{
-		Results: []instanceMetadata{{
-			Title:           "prompt-echo-guard-W1-T1",
-			ContentCaptured: true,
-			Updated:         false,
-			HasPrompt:       true,
-			TmuxAlive:       true,
-		}},
-		PlanState: ps,
-	}
-	model3, _ := updated2.Update(thirdMsg)
-	updated3 := model3.(*home)
-	require.Len(t, updated3.waveOrchestrators, 1,
-		"task must not auto-complete on prompt echo/startup output")
-
-	// Fourth tick: non-prompt update counts as real work.
-	fourthMsg := metadataResultMsg{
-		Results: []instanceMetadata{{
-			Title:           "prompt-echo-guard-W1-T1",
-			ContentCaptured: true,
-			Updated:         true,
-			HasPrompt:       false,
-			TmuxAlive:       true,
-		}},
-		PlanState: ps,
-	}
-	model4, _ := updated3.Update(fourthMsg)
-	updated4 := model4.(*home)
-	assert.True(t, inst.HasWorked, "non-prompt update must count as real work")
-
-	// Fifth tick: back at prompt after real work should complete.
-	fifthMsg := metadataResultMsg{
-		Results: []instanceMetadata{{
-			Title:           "prompt-echo-guard-W1-T1",
-			ContentCaptured: true,
-			Updated:         false,
-			HasPrompt:       true,
-			TmuxAlive:       true,
-		}},
-		PlanState: ps,
-	}
-	model5, _ := updated4.Update(fifthMsg)
-	updated5 := model5.(*home)
-	assert.Empty(t, updated5.waveOrchestrators,
-		"task should complete only after non-prompt work output")
+	assert.Empty(t, updated2.waveOrchestrators, "orchestrator must be deleted after the task-finished signal arrives")
 }
 
 // ---------------------------------------------------------------------------

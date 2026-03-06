@@ -10,7 +10,9 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -25,6 +27,18 @@ func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
 		t.Fatal("expected push prompt for exited coder")
 	}
+}
+
+func TestShouldPromptPushAfterCoderExit_HeadlessCoderExited(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:      "p.md",
+		AgentType:     session.AgentTypeCoder,
+		ExecutionMode: config.ExecutionModeHeadless,
+		Exited:        true,
+	}
+
+	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true))
 }
 
 func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
@@ -206,6 +220,76 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 		"expected stateConfirm when coder is at prompt (PromptDetected && !AwaitingWork)")
 	assert.True(t, updated.overlays.IsActive(),
 		"expected confirmation overlay for push-prompt on prompt-detected coder")
+}
+
+func TestMetadataTick_TaskFinishedSignalMarksWaveTaskComplete(t *testing.T) {
+	const planFile = "task-finished.md"
+
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{{
+			Number: 1,
+			Tasks:  []taskparser.Task{{Number: 1, Title: "Only task", Body: "do it"}},
+		}},
+	}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "task finished test", "plan/task-finished", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "task-finished-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:               context.Background(),
+		state:             stateDefault,
+		appConfig:         config.DefaultConfig(),
+		nav:               list,
+		menu:              ui.NewMenu(),
+		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:      overlay.NewToastManager(&sp),
+		overlays:          overlay.NewManager(),
+		taskState:         ps,
+		taskStateDir:      plansDir,
+		fsm:               newPlanFSMForTest(t, plansDir),
+		waveOrchestrators: map[string]*orchestration.WaveOrchestrator{planFile: orch},
+	}
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: inst.Title, TmuxAlive: true}},
+		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
+	}
+
+	model, _ := h.Update(msg)
+	updated, ok := model.(*home)
+	require.True(t, ok)
+
+	assert.Empty(t, updated.waveOrchestrators, "orchestrator must be deleted after final task signal")
+	assert.True(t, inst.ImplementationComplete, "task instance must be marked complete")
+	assert.Equal(t, session.Ready, inst.Status, "task instance should be left ready for wave completion handling")
+	assert.Equal(t, stateConfirm, updated.state, "final task signal should trigger the review prompt")
+	assert.True(t, updated.overlays.IsActive(), "review prompt should be shown after final task signal")
 }
 
 // TestPromptPushBranchThenAdvance_SetStatusErrorPropagates verifies that when

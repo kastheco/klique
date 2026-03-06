@@ -24,6 +24,7 @@ planning = "planner"
 [agents.coder]
 enabled = true
 program = "opencode"
+execution_mode = "headless"
 model = "anthropic/claude-sonnet-4-6"
 temperature = 0.7
 effort = "high"
@@ -61,6 +62,7 @@ flags = []
 		assert.NotNil(t, coder.Temperature)
 		assert.InDelta(t, 0.7, *coder.Temperature, 0.001)
 		assert.Equal(t, "high", coder.Effort)
+		assert.Equal(t, ExecutionModeHeadless, coder.ExecutionMode)
 		assert.True(t, coder.Enabled)
 
 		// Verify disabled agent
@@ -72,6 +74,29 @@ flags = []
 		reviewer, ok := tc.Profiles["reviewer"]
 		require.True(t, ok)
 		assert.Equal(t, []string{"--agent", "reviewer"}, reviewer.Flags)
+	})
+
+	t.Run("normalizes invalid execution_mode in TOML profile", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "config.toml")
+
+		content := `
+		[phases]
+		implementing = "coder"
+
+		[agents.coder]
+		enabled = true
+		program = "opencode"
+		execution_mode = "invalid"
+		`
+		require.NoError(t, os.WriteFile(tomlPath, []byte(content), 0o644))
+
+		tc, err := LoadTOMLConfigFrom(tomlPath)
+		require.NoError(t, err)
+
+		coder, ok := tc.Profiles["coder"]
+		require.True(t, ok)
+		assert.Equal(t, ExecutionModeTmux, coder.ExecutionMode)
 	})
 
 	t.Run("returns error on missing file", func(t *testing.T) {
@@ -103,12 +128,13 @@ func TestSaveTOMLConfig(t *testing.T) {
 			},
 			Agents: map[string]TOMLAgent{
 				"coder": {
-					Enabled:     true,
-					Program:     "opencode",
-					Model:       "anthropic/claude-sonnet-4-6",
-					Temperature: &temp,
-					Effort:      "high",
-					Flags:       []string{},
+					Enabled:       true,
+					Program:       "opencode",
+					ExecutionMode: ExecutionModeHeadless,
+					Model:         "anthropic/claude-sonnet-4-6",
+					Temperature:   &temp,
+					Effort:        "high",
+					Flags:         []string{},
 				},
 			},
 		}
@@ -122,8 +148,47 @@ func TestSaveTOMLConfig(t *testing.T) {
 		assert.Equal(t, original.Phases, loaded.PhaseRoles)
 		coder := loaded.Profiles["coder"]
 		assert.Equal(t, "opencode", coder.Program)
+		assert.Equal(t, ExecutionModeHeadless, coder.ExecutionMode)
 		assert.Equal(t, "anthropic/claude-sonnet-4-6", coder.Model)
 		assert.InDelta(t, 0.5, *coder.Temperature, 0.001)
+	})
+}
+
+func TestResolveProfile_ExecutionMode(t *testing.T) {
+	t.Run("defaults to tmux when unset", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]AgentProfile{
+				"coder": {Program: "opencode", Enabled: true},
+			},
+		}
+
+		profile := cfg.ResolveProfile("implementing", "claude")
+		assert.Equal(t, ExecutionModeTmux, profile.ExecutionMode)
+	})
+
+	t.Run("preserves configured headless mode", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]AgentProfile{
+				"coder": {Program: "opencode", Enabled: true, ExecutionMode: ExecutionModeHeadless},
+			},
+		}
+
+		profile := cfg.ResolveProfile("implementing", "claude")
+		assert.Equal(t, ExecutionModeHeadless, profile.ExecutionMode)
+	})
+
+	t.Run("falls back to tmux for invalid mode", func(t *testing.T) {
+		cfg := &Config{
+			PhaseRoles: map[string]string{"implementing": "coder"},
+			Profiles: map[string]AgentProfile{
+				"coder": {Program: "opencode", Enabled: true, ExecutionMode: "invalid"},
+			},
+		}
+
+		profile := cfg.ResolveProfile("implementing", "claude")
+		assert.Equal(t, ExecutionModeTmux, profile.ExecutionMode)
 	})
 }
 
