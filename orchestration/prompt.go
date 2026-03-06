@@ -12,7 +12,14 @@ func BuildTaskPrompt(plan *taskparser.Plan, task taskparser.Task, waveNumber, to
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Implement Task %d: %s\n\n", task.Number, task.Title))
-	sb.WriteString("Load the `kasmos-coder` skill before starting. Also load `cli-tools` for the tool selection reference.\n\n")
+
+	// Inline coder rules — avoids the context cost of loading the kasmos-coder skill
+	sb.WriteString("## Rules\n\n")
+	sb.WriteString("- Implement ONLY this task. Do not modify files outside your scope.\n")
+	sb.WriteString("- Use `rg` (not grep), `sd` (not sed), `fd` (not find), `comby`/`ast-grep` for structural changes.\n")
+	sb.WriteString("- Run scoped tests after changes: `go test ./path/to/package/... -v`\n")
+	sb.WriteString("- Commit with task number: `git add <specific-files> && git commit -m \"feat(task-N): description\"`\n")
+	sb.WriteString("- When done: stop. kasmos detects completion automatically. Do NOT write sentinel files.\n\n")
 
 	// Plan context
 	header := plan.HeaderContext()

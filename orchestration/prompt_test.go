@@ -25,7 +25,9 @@ func TestBuildTaskPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Build a feature")
 	assert.Contains(t, prompt, "Modular approach")
 	assert.Contains(t, prompt, "Go, bubbletea")
-	assert.Contains(t, prompt, "cli-tools")
+	// Rules section must be inlined (no skill-load instruction)
+	assert.NotContains(t, prompt, "Load the `kasmos-coder` skill")
+	assert.Contains(t, prompt, "## Rules")
 
 	// Task identity
 	assert.Contains(t, prompt, "Task 2")
@@ -43,6 +45,20 @@ func TestBuildTaskPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "test failures in files outside your task")
 	assert.Contains(t, prompt, "build failure caused by missing types")
 	assert.Contains(t, prompt, "surgical changes")
+}
+
+func TestBuildTaskPrompt_InlinesCoderRules(t *testing.T) {
+	plan := &taskparser.Plan{Goal: "Test inlining"}
+	task := taskparser.Task{Number: 1, Title: "Do thing", Body: "Make the change"}
+
+	prompt := BuildTaskPrompt(plan, task, 1, 1, 1)
+
+	assert.NotContains(t, prompt, "Load the `kasmos-coder` skill")
+	assert.NotContains(t, prompt, "cli-tools")
+	assert.Contains(t, prompt, "## Rules")
+	assert.Contains(t, prompt, "rg")
+	assert.Contains(t, prompt, "git add")
+	assert.Contains(t, prompt, "Do NOT write sentinel files")
 }
 
 func TestBuildTaskPrompt_SingleTask(t *testing.T) {
