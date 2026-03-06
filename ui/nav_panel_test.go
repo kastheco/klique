@@ -22,6 +22,21 @@ func makeInst(title, planFile string, status session.Status) *session.Instance {
 	}
 }
 
+func TestNavInstanceTitle_ElaboratorUsesCreatingBlueprint(t *testing.T) {
+	instance := &session.Instance{
+		AgentType: session.AgentTypeElaborator,
+		TaskFile:  "history-sort-issue.md",
+	}
+
+	assert.Equal(t, "creating blueprint", navInstanceTitle(instance))
+}
+
+func TestNavInstanceTitle_AdhocInstanceFallsBackToTitle(t *testing.T) {
+	instance := &session.Instance{Title: "adhoc-instance", TaskFile: ""}
+
+	assert.Equal(t, "adhoc-instance", navInstanceTitle(instance))
+}
+
 // ---------- rebuildRows grouping ----------
 
 func TestRebuildRows_EmptyPanel(t *testing.T) {
