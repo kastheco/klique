@@ -1,11 +1,13 @@
+// Package headless provides an execution backend that runs agent programs
+// directly as child processes without a tmux session. All interactive
+// operations (Attach, SendKeys, SetDetachedSize, permission responses) return
+// ErrInteractiveOnly.
 package headless
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"github.com/kastheco/kasmos/session/tmux"
 	"io"
 	"os"
 	"os/exec"
@@ -14,342 +16,270 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kastheco/kasmos/session/tmux"
 )
 
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-var sanitizeRegex = regexp.MustCompile(`\s+`)
-
-type outputWriter struct {
-	mu     sync.Mutex
-	buffer *bytes.Buffer
-}
-
-func (w *outputWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.buffer.Write(p)
-}
-
+// ErrInteractiveOnly is returned when the caller requests an operation that
+// requires a live terminal (tmux). Exported so session.ErrInteractiveOnly can
+// alias it without a circular import.
 var ErrInteractiveOnly = errors.New("interactive operation requires tmux execution")
 
-// Session is a lightweight non-interactive execution backend.
+var whiteSpaceRegex = regexp.MustCompile(`\s+`)
+
+// Session is a headless execution backend that runs the agent program directly
+// via exec.Cmd without tmux. Output is captured in an in-memory buffer and
+// appended to a log file under <workDir>/.kasmos/logs/.
 type Session struct {
-	name     string
-	program  string
-	skipPerm bool
+	name            string
+	sanitizedName   string
+	program         string
+	skipPermissions bool
 
 	agentType     string
 	initialPrompt string
 	taskNumber    int
 	waveNumber    int
 	peerCount     int
+	sessionTitle  string
+	titleFunc     func(workDir string, beforeStart time.Time, title string)
 
-	progressFn func(int, string)
-
-	cmd      *exec.Cmd
-	ctx      context.Context
-	cancel   context.CancelFunc
-	waitDone bool
-	waitErr  error
-	waitMu   sync.Mutex
-	closedMu sync.Mutex
-	closed   bool
-
-	logFile     *os.File
-	logFilePath string
-
-	outputMu sync.RWMutex
-	output   outputWriter
-
-	preview   string
-	previewMu sync.Mutex
-
-	started time.Time
+	// mu protects cmd, buf, done, lastContent.
+	mu          sync.Mutex
+	cmd         *exec.Cmd
+	buf         bytes.Buffer
+	done        chan struct{} // closed when the child process exits
+	lastContent string        // previous content snapshot for HasUpdated tracking
 }
 
-// NewSession creates a headless execution session.
-func NewSession(name string, program string, skipPermissions bool) *Session {
+// sanitizeName converts a human-readable session name into a safe identifier.
+// Whitespace is stripped and dots are replaced with underscores.
+func sanitizeName(name string) string {
+	s := whiteSpaceRegex.ReplaceAllString(name, "")
+	s = strings.ReplaceAll(s, ".", "_")
+	return s
+}
+
+// New constructs a new unstarted headless Session.
+func New(name, program string, skipPermissions bool) *Session {
 	return &Session{
-		name:     sanitizeSessionName(name),
-		program:  strings.TrimSpace(program),
-		skipPerm: skipPermissions,
-		output: outputWriter{
-			buffer: &bytes.Buffer{},
-		},
+		name:            name,
+		sanitizedName:   sanitizeName(name),
+		program:         program,
+		skipPermissions: skipPermissions,
 	}
 }
 
-func sanitizeSessionName(name string) string {
-	name = sanitizeRegex.ReplaceAllString(name, "")
-	name = strings.ReplaceAll(name, ".", "_")
-	return "kas_" + name
+// Configuration (builder-style, called before Start)
+
+// SetAgentType stores the agent type identifier (informational; not forwarded to CLI).
+func (s *Session) SetAgentType(agentType string) { s.agentType = strings.TrimSpace(agentType) }
+
+// SetInitialPrompt stores the initial prompt (not supported for headless programs).
+func (s *Session) SetInitialPrompt(prompt string) { s.initialPrompt = prompt }
+
+// SetTaskEnv sets the task/wave/peer identity injected as env vars at Start().
+func (s *Session) SetTaskEnv(task, wave, peers int) {
+	s.taskNumber = task
+	s.waveNumber = wave
+	s.peerCount = peers
 }
 
-// SetProgressFunc stores a startup progress callback.
-func (s *Session) SetProgressFunc(fn func(int, string)) {
-	s.progressFn = fn
+// SetSessionTitle stores the session title (no-op for headless).
+func (s *Session) SetSessionTitle(title string) { s.sessionTitle = title }
+
+// SetTitleFunc stores the title callback (no-op for headless).
+func (s *Session) SetTitleFunc(fn func(workDir string, beforeStart time.Time, title string)) {
+	s.titleFunc = fn
 }
 
-// Start runs the command as a background process under the given working directory.
+// GetSanitizedName returns the sanitized session name used for log file naming.
+func (s *Session) GetSanitizedName() string { return s.sanitizedName }
+
+// Write implements io.Writer so the Session can be used as a combined stdout/stderr
+// destination for the child process. Protected by mu.
+func (s *Session) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+// Start launches the program as a child process in workDir.
+// Output is captured to both the in-memory buffer and a log file under
+// <workDir>/.kasmos/logs/<sanitizedName>.log.
+// KASMOS_MANAGED=1 and (when TaskNumber > 0) KASMOS_TASK/KASMOS_WAVE/KASMOS_PEERS
+// are prepended to the process environment.
 func (s *Session) Start(workDir string) error {
-	if s.DoesSessionExist() {
-		return s.Restore()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cmd != nil {
+		return fmt.Errorf("headless session already started")
 	}
 
-	if s.progressFn != nil {
-		s.progressFn(1, "preparing")
+	// Ensure the log directory exists.
+	logDir := filepath.Join(workDir, ".kasmos", "logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
 	}
+	logPath := filepath.Join(logDir, s.sanitizedName+".log")
 
-	command := s.program
-	if s.skipPerm && strings.HasSuffix(s.program, "claude") {
-		command += " --dangerously-skip-permissions"
+	// Parse the program string into argv.
+	parts := strings.Fields(s.program)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty program")
 	}
-	if s.taskNumber > 0 {
-		command = fmt.Sprintf("KASMOS_TASK=%d KASMOS_WAVE=%d KASMOS_PEERS=%d %s", s.taskNumber, s.waveNumber, s.peerCount, command)
-	}
-	if s.initialPrompt != "" {
-		command = command + " " + shellQuote(s.initialPrompt)
-	}
-
-	logFilePath := filepath.Join(workDir, ".kasmos", "logs", s.name+".log")
-	if err := os.MkdirAll(filepath.Dir(logFilePath), 0o755); err != nil {
-		return fmt.Errorf("error creating log directory: %w", err)
-	}
-
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("error creating session log: %w", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	s.ctx = ctx
-	s.cancel = cancel
-
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd := exec.Command(parts[0], parts[1:]...)
 	cmd.Dir = workDir
-	cmd.Env = append(os.Environ(), "KASMOS_MANAGED=1")
-	cmd.Stdout = io.MultiWriter(logFile, &s.output)
-	cmd.Stderr = io.MultiWriter(logFile, &s.output)
+
+	// Build the child's environment.
+	env := os.Environ()
+	env = append(env, "KASMOS_MANAGED=1")
+	if s.taskNumber > 0 {
+		env = append(env,
+			fmt.Sprintf("KASMOS_TASK=%d", s.taskNumber),
+			fmt.Sprintf("KASMOS_WAVE=%d", s.waveNumber),
+			fmt.Sprintf("KASMOS_PEERS=%d", s.peerCount),
+		)
+	}
+	cmd.Env = env
+
+	// Open the log file for appending.
+	lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	// Capture combined stdout+stderr to both the in-memory buffer and the log file.
+	combined := io.MultiWriter(s, lf)
+	cmd.Stdout = combined
+	cmd.Stderr = combined
 
 	if err := cmd.Start(); err != nil {
-		s.logFile = logFile
-		return fmt.Errorf("error starting headless session: %w", err)
+		lf.Close()
+		return fmt.Errorf("failed to start headless session: %w", err)
 	}
 
 	s.cmd = cmd
-	s.resetWaitState()
-	s.logFile = logFile
-	s.logFilePath = logFilePath
-	s.started = time.Now()
+	s.done = make(chan struct{})
 
-	if s.progressFn != nil {
-		s.progressFn(2, "running")
-	}
-
+	// Reap the child process in the background and signal done on exit.
 	go func() {
-		_ = s.waitForExit()
-		if s.progressFn != nil {
-			s.progressFn(3, "stopped")
-		}
+		defer close(s.done)
+		_ = cmd.Wait()
+		lf.Close()
 	}()
 
 	return nil
 }
 
-// Restore returns nil for a running process and an error otherwise.
-func (s *Session) Restore() error {
-	if !s.DoesSessionExist() {
-		return fmt.Errorf("headless session not running")
-	}
-	return nil
-}
+// Restore is a no-op for headless sessions (no reconnection to an existing session).
+func (s *Session) Restore() error { return nil }
 
-// Close stops the process and cleans up resources.
+// Close stops the child process idempotently. Safe to call multiple times.
 func (s *Session) Close() error {
-	s.closedMu.Lock()
-	if s.closed {
-		s.closedMu.Unlock()
+	s.mu.Lock()
+	cmd := s.cmd
+	done := s.done
+	s.mu.Unlock()
+
+	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
-	s.closed = true
-	s.closedMu.Unlock()
-
-	if s.cancel != nil {
-		s.cancel()
-	}
-
-	var errs []error
-	if s.cmd != nil && s.cmd.Process != nil {
-		if err := s.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			errs = append(errs, fmt.Errorf("error killing headless process: %w", err))
-		}
-		if err := s.waitForExit(); err != nil && !isBenignWaitError(err) {
-			errs = append(errs, err)
+	// Already exited.
+	if done != nil {
+		select {
+		case <-done:
+			return nil
+		default:
 		}
 	}
-
-	if s.logFile != nil {
-		if err := s.logFile.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("error closing log file: %w", err))
-		}
-		s.logFile = nil
-	}
-
-	return errors.Join(errs...)
+	return cmd.Process.Kill()
 }
 
-func (s *Session) waitForExit() error {
-	s.waitMu.Lock()
-	if s.waitDone {
-		waitErr := s.waitErr
-		s.waitMu.Unlock()
-		return waitErr
-	}
-	s.waitDone = true
-	s.waitMu.Unlock()
-
-	waitErr := s.cmd.Wait()
-
-	s.waitMu.Lock()
-	s.waitErr = waitErr
-	s.waitMu.Unlock()
-
-	return waitErr
-}
-
-func (s *Session) resetWaitState() {
-	s.waitMu.Lock()
-	s.waitDone = false
-	s.waitErr = nil
-	s.waitMu.Unlock()
-}
-
-func isBenignWaitError(err error) bool {
-	if err == nil {
-		return true
-	}
-	if errors.Is(err, os.ErrProcessDone) {
-		return true
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "wait was already called") || strings.Contains(msg, "no child processes")
-}
-
-// DoesSessionExist reports whether the underlying process is still alive.
+// DoesSessionExist reports whether the child process is currently running.
 func (s *Session) DoesSessionExist() bool {
-	if s.cmd == nil || s.cmd.Process == nil {
+	s.mu.Lock()
+	cmd := s.cmd
+	done := s.done
+	s.mu.Unlock()
+
+	if cmd == nil || done == nil {
 		return false
 	}
-	if s.cmd.ProcessState != nil {
+	select {
+	case <-done:
 		return false
+	default:
+		return true
 	}
-	return true
 }
 
-// SendKeys is interactive-only for headless execution.
-func (s *Session) SendKeys(_ string) error { return ErrInteractiveOnly }
-
-// TapEnter is interactive-only for headless execution.
-func (s *Session) TapEnter() error { return ErrInteractiveOnly }
-
-// SendPermissionResponse is interactive-only for headless execution.
-func (s *Session) SendPermissionResponse(_ tmux.PermissionChoice) error { return ErrInteractiveOnly }
-
-// CapturePaneContent returns the in-memory output captured so far.
+// CapturePaneContent returns the current in-memory output buffer as a string.
 func (s *Session) CapturePaneContent() (string, error) {
-	s.output.mu.Lock()
-	defer s.output.mu.Unlock()
-	return s.output.buffer.String(), nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String(), nil
 }
 
-// CapturePaneContentWithOptions returns all available output.
-func (s *Session) CapturePaneContentWithOptions(_ string, _ string) (string, error) {
+// CapturePaneContentWithOptions returns the same content as CapturePaneContent.
+// The start/end arguments are ignored (not meaningful for headless).
+func (s *Session) CapturePaneContentWithOptions(_, _ string) (string, error) {
 	return s.CapturePaneContent()
 }
 
-// HasUpdated reports output-change status and prompt detection.
+// HasUpdated reports whether new output has been produced since the last call.
+// hasPrompt is always false for headless sessions.
 func (s *Session) HasUpdated() (updated bool, hasPrompt bool) {
-	updated, hasPrompt, _, _ = s.HasUpdatedWithContent()
-	return
+	updated, _, _, _ = s.HasUpdatedWithContent()
+	return updated, false
 }
 
-// HasUpdatedWithContent compares against the last captured snapshot and reports prompt detection.
+// HasUpdatedWithContent is like HasUpdated but also returns the current content
+// and a captured flag (always true for headless).
 func (s *Session) HasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool) {
-	content, err := s.CapturePaneContent()
-	if err != nil {
-		return false, false, "", false
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	plain := ansiRe.ReplaceAllString(content, "")
-	hasPrompt = isPromptText(plain)
-
-	s.previewMu.Lock()
-	defer s.previewMu.Unlock()
-	if content == s.preview {
-		updated = false
-	} else {
-		updated = true
-		s.preview = content
-	}
-
-	return updated, hasPrompt, content, true
+	content = s.buf.String()
+	updated = content != s.lastContent
+	s.lastContent = content
+	return updated, false, content, true
 }
 
-func isPromptText(content string) bool {
-	if strings.Contains(content, "No, and tell Claude what to do differently") {
-		return true
-	}
-	if strings.Contains(content, "Ask anything") {
-		return true
-	}
-	return false
-}
-
-// GetPanePID returns the process ID of the managed command.
+// GetPanePID returns the PID of the child process.
 func (s *Session) GetPanePID() (int, error) {
-	if !s.DoesSessionExist() || s.cmd.Process == nil {
-		return 0, fmt.Errorf("headless session not running")
+	s.mu.Lock()
+	cmd := s.cmd
+	s.mu.Unlock()
+
+	if cmd == nil || cmd.Process == nil {
+		return 0, fmt.Errorf("process not started")
 	}
-	return s.cmd.Process.Pid, nil
+	return cmd.Process.Pid, nil
 }
 
-// Attach is unsupported for headless execution.
-func (s *Session) Attach() (chan struct{}, error) { return nil, ErrInteractiveOnly }
+// --- Interactive operations (not supported by headless) -----------------
 
-// GetPTY is not available for headless execution.
-func (s *Session) GetPTY() *os.File { return nil }
-
-// Detach is unsupported for headless execution.
-func (s *Session) Detach() {}
-
-// DetachSafely is unsupported for headless execution.
-func (s *Session) DetachSafely() error { return ErrInteractiveOnly }
-
-// SetDetachedSize is unsupported for headless execution.
-func (s *Session) SetDetachedSize(_ int, _ int) error { return ErrInteractiveOnly }
-
-// GetSanitizedName returns the generated session name used for logs.
-func (s *Session) GetSanitizedName() string { return s.name }
-
-// SetAgentType stores the agent type for context.
-func (s *Session) SetAgentType(agentType string) { s.agentType = strings.TrimSpace(agentType) }
-
-// SetInitialPrompt stores startup prompt text.
-func (s *Session) SetInitialPrompt(prompt string) { s.initialPrompt = prompt }
-
-// SetTaskEnv stores task/peer identities.
-func (s *Session) SetTaskEnv(taskNumber, waveNumber, peerCount int) {
-	s.taskNumber = taskNumber
-	s.waveNumber = waveNumber
-	s.peerCount = peerCount
+// Attach returns ErrInteractiveOnly — headless sessions do not support
+// interactive terminal attachment.
+func (s *Session) Attach() (chan struct{}, error) {
+	return nil, ErrInteractiveOnly
 }
 
-// SetSessionTitle is a no-op for headless execution.
-func (s *Session) SetSessionTitle(_ string) {}
+// SendKeys returns ErrInteractiveOnly.
+func (s *Session) SendKeys(_ string) error { return ErrInteractiveOnly }
 
-// SetTitleFunc is a no-op for headless execution.
-func (s *Session) SetTitleFunc(_ func(workDir string, beforeStart time.Time, title string)) {}
+// TapEnter returns ErrInteractiveOnly.
+func (s *Session) TapEnter() error { return ErrInteractiveOnly }
 
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+// SendPermissionResponse returns ErrInteractiveOnly.
+func (s *Session) SendPermissionResponse(_ tmux.PermissionChoice) error {
+	return ErrInteractiveOnly
 }
+
+// DetachSafely is a no-op for headless sessions (nothing to detach from).
+func (s *Session) DetachSafely() error { return nil }
+
+// SetDetachedSize returns ErrInteractiveOnly.
+func (s *Session) SetDetachedSize(_, _ int) error { return ErrInteractiveOnly }
