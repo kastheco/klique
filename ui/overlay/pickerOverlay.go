@@ -136,6 +136,7 @@ func (p *PickerOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Resu
 	if button != tea.MouseLeft {
 		return Result{}
 	}
+	_ = relX
 
 	lines := strings.Split(p.View(), "\n")
 	if relY < 0 || relY >= len(lines) {
@@ -144,7 +145,11 @@ func (p *PickerOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Resu
 
 	line := stripANSI(lines[relY])
 	for i, item := range p.filtered {
-		if strings.Contains(line, item) {
+		rowText := "  " + item
+		if i == p.selectedIdx {
+			rowText = "▸ " + item
+		}
+		if lineContainsTextBoundary(line, rowText) {
 			p.selectedIdx = i
 			p.submitted = true
 			p.cancelled = false

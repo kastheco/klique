@@ -94,3 +94,12 @@ func TestPickerOverlay_HandleMouse_SelectCustomEntry(t *testing.T) {
 
 	assert.Equal(t, Result{Dismissed: true, Submitted: true, Value: "z"}, result)
 }
+
+func TestPickerOverlay_HandleMouse_PrefixMatchUsesClickedRow(t *testing.T) {
+	p := NewPickerOverlay("pick", []string{"a", "alpha"})
+	x, y := pickerMouseTarget(t, p.View(), "alpha")
+
+	result := p.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.Equal(t, Result{Dismissed: true, Submitted: true, Value: "alpha"}, result)
+}

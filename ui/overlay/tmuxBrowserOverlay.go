@@ -229,6 +229,7 @@ func (b *TmuxBrowserOverlay) HandleMouse(relX, relY int, button tea.MouseButton)
 	if button != tea.MouseLeft {
 		return Result{}
 	}
+	_ = relX
 
 	lines := strings.Split(b.View(), "\n")
 	if relY < 0 || relY >= len(lines) {
@@ -238,7 +239,8 @@ func (b *TmuxBrowserOverlay) HandleMouse(relX, relY int, button tea.MouseButton)
 	line := stripANSI(lines[relY])
 	for i, idx := range b.filtered {
 		item := b.sessions[idx]
-		if strings.Contains(line, item.Title) {
+		titleField := fmt.Sprintf("%-28s", truncateStr(item.Title, 28))
+		if lineContainsTextBoundary(line, titleField) {
 			b.selectedIdx = i
 			return Result{Dismissed: true, Action: "attach"}
 		}

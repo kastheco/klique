@@ -81,3 +81,12 @@ func TestPermissionOverlay_HandleMouse_NonChoiceLineNoop(t *testing.T) {
 
 	assert.Equal(t, Result{}, result)
 }
+
+func TestPermissionOverlay_HandleMouse_DescriptionContainingAllowOnceStillUsesChoiceRow(t *testing.T) {
+	p := NewPermissionOverlay("inst", "echo allow once", "*.sh")
+	x, y := permissionMouseTarget(t, p.View(), "allow always")
+
+	result := p.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.Equal(t, Result{Dismissed: true, Submitted: true, Action: "allow_always"}, result)
+}

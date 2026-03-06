@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -26,6 +27,59 @@ var ansiSequenceRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 func stripANSI(s string) string {
 	return ansiSequenceRE.ReplaceAllString(s, "")
+}
+
+func lineContainsTextBoundary(line, text string) bool {
+	lineRunes := []rune(line)
+	textRunes := []rune(text)
+	if len(textRunes) == 0 || len(textRunes) > len(lineRunes) {
+		return false
+	}
+
+	for start := 0; start+len(textRunes) <= len(lineRunes); start++ {
+		matched := true
+		for i, r := range textRunes {
+			if lineRunes[start+i] != r {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		end := start + len(textRunes)
+		if end == len(lineRunes) {
+			return true
+		}
+		next := lineRunes[end]
+		if unicode.IsSpace(next) || strings.ContainsRune("│┃|", next) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func permissionChoiceLineIndex(lines []string) int {
+	for i, line := range lines {
+		clean := stripANSI(line)
+		pos := 0
+		matched := true
+		for _, label := range permissionChoiceLabels {
+			next := strings.Index(clean[pos:], label)
+			if next < 0 {
+				matched = false
+				break
+			}
+			pos += next + len(label)
+		}
+		if matched {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // PermissionOverlay shows a three-choice modal for opencode permission prompts.
@@ -138,13 +192,7 @@ func (p *PermissionOverlay) HandleMouse(relX, relY int, button tea.MouseButton) 
 	}
 
 	viewLines := strings.Split(p.render(), "\n")
-	choiceLine := -1
-	for i, line := range viewLines {
-		if strings.Contains(stripANSI(line), "allow once") {
-			choiceLine = i
-			break
-		}
-	}
+	choiceLine := permissionChoiceLineIndex(viewLines)
 	if choiceLine < 0 || relY != choiceLine {
 		return Result{}
 	}
