@@ -357,6 +357,48 @@ func (m *home) enterFocusMode() tea.Cmd {
 	return nil
 }
 
+// exclamationAutoFocus handles the `!` key in stateDefault: it switches to the
+// agent preview tab, enters interactive/focus mode, and sends '!' to the harness
+// terminal so the agent's shell mode is activated in one keystroke.
+//
+// No-ops gracefully when no selected/running instance exists.
+func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
+	// Switch to agent tab first (same as KeySendPrompt convention).
+	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+	// Resolve selected instance (mirrors KeySendPrompt logic).
+	selected := m.nav.GetSelectedInstance()
+	if selected == nil {
+		if pf := m.nav.GetSelectedPlanFile(); pf != "" {
+			if best := m.nav.FindPlanInstance(pf); best != nil {
+				m.nav.SelectInstance(best)
+				selected = best
+			}
+		}
+	}
+
+	// Guard: no valid target — leave tab switched but don't enter focus mode.
+	if selected == nil || !selected.Started() || selected.Paused() {
+		return m, nil
+	}
+
+	// Enter focus mode using the existing API.
+	cmd := m.enterFocusMode()
+
+	// Only send '!' if focus mode was actually entered and the tmux session is live.
+	// This prevents nil-PTY panics on DummyTerminal (tests) and stale terminals.
+	if m.state != stateFocusAgent {
+		return m, cmd
+	}
+	if m.previewTerminal != nil && selected.TmuxAlive() {
+		if err := m.previewTerminal.SendKey([]byte("!")); err != nil {
+			return m, m.handleError(err)
+		}
+	}
+
+	return m, cmd
+}
+
 // exitFocusMode resets focus state. previewTerminal stays alive — it continues
 // rendering in normal preview mode after the user exits focus/insert mode.
 func (m *home) exitFocusMode() {
@@ -371,8 +413,6 @@ func (m *home) exitFocusMode() {
 func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	var targetTab int
 	switch name {
-	case keys.KeyTabAgent:
-		targetTab = ui.PreviewTab
 	case keys.KeyTabInfo:
 		targetTab = ui.InfoTab
 	default:
