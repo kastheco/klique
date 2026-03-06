@@ -2,7 +2,9 @@ package overlay
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -20,6 +22,65 @@ const (
 )
 
 var permissionChoiceLabels = []string{"allow once", "allow always", "reject"}
+
+var ansiSequenceRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+func stripANSI(s string) string {
+	return ansiSequenceRE.ReplaceAllString(s, "")
+}
+
+func lineContainsTextBoundary(line, text string) bool {
+	lineRunes := []rune(line)
+	textRunes := []rune(text)
+	if len(textRunes) == 0 || len(textRunes) > len(lineRunes) {
+		return false
+	}
+
+	for start := 0; start+len(textRunes) <= len(lineRunes); start++ {
+		matched := true
+		for i, r := range textRunes {
+			if lineRunes[start+i] != r {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		end := start + len(textRunes)
+		if end == len(lineRunes) {
+			return true
+		}
+		next := lineRunes[end]
+		if unicode.IsSpace(next) || strings.ContainsRune("│┃|", next) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func permissionChoiceLineIndex(lines []string) int {
+	for i, line := range lines {
+		clean := stripANSI(line)
+		pos := 0
+		matched := true
+		for _, label := range permissionChoiceLabels {
+			next := strings.Index(clean[pos:], label)
+			if next < 0 {
+				matched = false
+				break
+			}
+			pos += next + len(label)
+		}
+		if matched {
+			return i
+		}
+	}
+
+	return -1
+}
 
 // PermissionOverlay shows a three-choice modal for opencode permission prompts.
 type PermissionOverlay struct {
@@ -120,6 +181,37 @@ func (p *PermissionOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	case tea.KeyEscape:
 		return Result{Dismissed: true}
 	}
+	return Result{}
+}
+
+// HandleMouse implements MouseHandler. It processes a click event and returns the
+// result. Only left clicks on the choice row are handled.
+func (p *PermissionOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	if button != tea.MouseLeft {
+		return Result{}
+	}
+
+	viewLines := strings.Split(p.render(), "\n")
+	choiceLine := permissionChoiceLineIndex(viewLines)
+	if choiceLine < 0 || relY != choiceLine {
+		return Result{}
+	}
+	line := stripANSI(viewLines[choiceLine])
+
+	for i, label := range permissionChoiceLabels {
+		idx := strings.Index(line, label)
+		if idx < 0 {
+			continue
+		}
+		start := len([]rune(line[:idx]))
+		end := start + len([]rune(label))
+		if relX >= start && relX < end {
+			p.selectedIdx = i
+			p.confirmed = true
+			return Result{Dismissed: true, Submitted: true, Action: permissionActionLabels[i]}
+		}
+	}
+
 	return Result{}
 }
 

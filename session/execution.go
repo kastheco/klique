@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/kastheco/kasmos/session/headless"
@@ -66,9 +67,10 @@ type progressReporter interface {
 }
 
 // NormalizeExecutionMode returns ExecutionModeHeadless when mode is
-// ExecutionModeHeadless, and ExecutionModeTmux for all other values including "".
+// ExecutionModeHeadless (after trimming whitespace), and ExecutionModeTmux for
+// all other values including "".
 func NormalizeExecutionMode(mode ExecutionMode) ExecutionMode {
-	if mode == ExecutionModeHeadless {
+	if ExecutionMode(strings.TrimSpace(string(mode))) == ExecutionModeHeadless {
 		return ExecutionModeHeadless
 	}
 	return ExecutionModeTmux

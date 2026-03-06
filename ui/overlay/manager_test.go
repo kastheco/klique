@@ -43,6 +43,68 @@ func TestManager_HandleKeyWhenInactive(t *testing.T) {
 	assert.False(t, result.Submitted)
 }
 
+func TestManager_HandleMouseWhenInactive(t *testing.T) {
+	mgr := NewManager()
+	result := mgr.HandleMouse(tea.MouseClickMsg{X: 10, Y: 5, Button: tea.MouseLeft})
+
+	assert.False(t, result.Dismissed)
+	assert.False(t, result.Submitted)
+	assert.False(t, mgr.IsActive())
+}
+
+func TestManager_HandleMouse_DismissOnOutsideClick(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(80, 24)
+	o := &stubOverlay{rendered: "overlay content"}
+	mgr.Show(o)
+
+	view := o.View()
+	lines, widest := getLines(view)
+	x := (80 - widest) / 2
+	y := (24 - len(lines)) / 2
+	result := mgr.HandleMouse(tea.MouseClickMsg{X: x + widest + 1, Y: y, Button: tea.MouseLeft})
+
+	assert.True(t, result.Dismissed)
+	assert.Nil(t, mgr.Current())
+}
+
+func TestManager_HandleMouse_DelegatesToMouseHandler(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(80, 24)
+	o := &mouseStubOverlay{stubOverlay: stubOverlay{rendered: "abcde\nabcde"}, result: Result{Dismissed: true, Action: "clicked"}}
+	mgr.Show(o)
+
+	view := o.View()
+	lines, widest := getLines(view)
+	x := (80 - widest) / 2
+	y := (24 - len(lines)) / 2
+	msg := tea.MouseClickMsg{X: x + 2, Y: y + 1, Button: tea.MouseLeft}
+	result := mgr.HandleMouse(msg)
+
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "clicked", result.Action)
+	assert.Equal(t, 2, o.lastX)
+	assert.Equal(t, 1, o.lastY)
+	assert.Equal(t, tea.MouseLeft, o.lastBtn)
+	assert.Nil(t, mgr.Current())
+}
+
+func TestManager_HandleMouse_NoMouseHandler(t *testing.T) {
+	mgr := NewManager()
+	mgr.SetSize(80, 24)
+	o := &stubOverlay{rendered: "abcde\nabcde"}
+	mgr.Show(o)
+
+	view := o.View()
+	lines, widest := getLines(view)
+	x := (80 - widest) / 2
+	y := (24 - len(lines)) / 2
+	result := mgr.HandleMouse(tea.MouseClickMsg{X: x + 2, Y: y + 1, Button: tea.MouseLeft})
+
+	assert.Equal(t, Result{}, result)
+	assert.Equal(t, o, mgr.Current())
+}
+
 func TestManager_SetSize(t *testing.T) {
 	s := &stubOverlay{}
 	mgr := NewManager()

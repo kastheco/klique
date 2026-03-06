@@ -105,6 +105,43 @@ func (m *Manager) HandleKey(msg tea.KeyPressMsg) Result {
 	return result
 }
 
+// HandleMouse delegates mouse clicks to the active overlay. Returns a zero Result
+// if inactive or if m is nil.
+func (m *Manager) HandleMouse(msg tea.MouseClickMsg) Result {
+	if m == nil || m.active == nil {
+		return Result{}
+	}
+
+	lines, widest := getLines(m.active.View())
+	placeX, placeY := m.x, m.y
+	if m.centered {
+		placeX = (m.w - widest) / 2
+		placeY = (m.h - len(lines)) / 2
+
+		if placeX < 0 {
+			placeX = 0
+		}
+		if placeY < 0 {
+			placeY = 0
+		}
+	}
+
+	if msg.X < placeX || msg.X >= placeX+widest || msg.Y < placeY || msg.Y >= placeY+len(lines) {
+		m.Dismiss()
+		return Result{Dismissed: true}
+	}
+
+	result := Result{}
+	if handler, ok := m.active.(MouseHandler); ok {
+		result = handler.HandleMouse(msg.X-placeX, msg.Y-placeY, msg.Button)
+		if result.Dismissed {
+			m.Dismiss()
+		}
+	}
+
+	return result
+}
+
 // SetSize updates the viewport dimensions and propagates to the active overlay.
 // No-op if m is nil.
 func (m *Manager) SetSize(w, h int) {

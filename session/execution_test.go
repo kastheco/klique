@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/kastheco/kasmos/session/headless"
-	"github.com/kastheco/kasmos/session/tmux"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -35,9 +34,9 @@ func TestNewExecutionSession(t *testing.T) {
 		mode     ExecutionMode
 		wantType interface{}
 	}{
-		{name: "tmux mode creates tmux session", mode: ExecutionModeTmux, wantType: &tmux.TmuxSession{}},
-		{name: "empty mode creates tmux session", mode: "", wantType: &tmux.TmuxSession{}},
-		{name: "unknown mode creates tmux session", mode: ExecutionMode("bogus"), wantType: &tmux.TmuxSession{}},
+		{name: "tmux mode creates tmux session", mode: ExecutionModeTmux, wantType: &tmuxExecutionSession{}},
+		{name: "empty mode creates tmux session", mode: "", wantType: &tmuxExecutionSession{}},
+		{name: "unknown mode creates tmux session", mode: ExecutionMode("bogus"), wantType: &tmuxExecutionSession{}},
 		{name: "headless mode creates headless session", mode: ExecutionModeHeadless, wantType: &headless.Session{}},
 	}
 
@@ -45,8 +44,8 @@ func TestNewExecutionSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := NewExecutionSession(tc.mode, "test", "claude", false)
 			switch tc.wantType.(type) {
-			case *tmux.TmuxSession:
-				_, ok := sess.(*tmux.TmuxSession)
+			case *tmuxExecutionSession:
+				_, ok := sess.(*tmuxExecutionSession)
 				assert.True(t, ok)
 			case *headless.Session:
 				_, ok := sess.(*headless.Session)

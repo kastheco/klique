@@ -159,6 +159,32 @@ func (c *ContextMenu) HandleKey(msg tea.KeyPressMsg) Result {
 	return Result{}
 }
 
+// HandleMouse handles mouse clicks and translates them into menu selection actions.
+func (c *ContextMenu) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	if button != tea.MouseLeft {
+		return Result{}
+	}
+
+	lines := strings.Split(c.View(), "\n")
+	if relY < 0 || relY >= len(lines) {
+		return Result{}
+	}
+
+	line := stripANSI(lines[relY])
+	for i, fi := range c.filtered {
+		itemText := fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label)
+		if strings.Contains(line, itemText) {
+			c.selectedIdx = i
+			if fi.item.Disabled {
+				return Result{}
+			}
+			return Result{Dismissed: true, Action: fi.item.Action}
+		}
+	}
+
+	return Result{}
+}
+
 // View implements Overlay using DefaultStyles for rendering.
 func (c *ContextMenu) View() string {
 	st := DefaultStyles()
