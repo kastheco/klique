@@ -310,11 +310,55 @@ func (m *home) removeFromAllInstances(title string) {
 	}
 }
 
+// cleanupPausedDoneReviewers removes paused reviewer instances whose plan is
+// done and that the user has already navigated away from (i.e. they are not
+// the currently-selected instance). This is called at the start of
+// instanceChanged() to GC the reviewer once the user moves on.
+func (m *home) cleanupPausedDoneReviewers(selected *session.Instance) {
+	if m.taskState == nil {
+		return
+	}
+	var toCleanup []*session.Instance
+	for _, inst := range m.nav.GetInstances() {
+		if !inst.IsReviewer {
+			continue
+		}
+		if inst.Status != session.Paused {
+			continue
+		}
+		// Don't remove the instance the user is currently looking at.
+		if selected != nil && inst == selected {
+			continue
+		}
+		entry, ok := m.taskState.Entry(inst.TaskFile)
+		if !ok {
+			continue
+		}
+		if entry.Status != taskstate.StatusDone {
+			continue
+		}
+		toCleanup = append(toCleanup, inst)
+	}
+	if len(toCleanup) == 0 {
+		return
+	}
+	for _, inst := range toCleanup {
+		m.nav.RemoveByTitle(inst.Title)
+		m.removeFromAllInstances(inst.Title)
+		if err := inst.Kill(); err != nil {
+			log.WarningLog.Printf("cleanupPausedDoneReviewers: could not kill reviewer %q: %v", inst.Title, err)
+		}
+	}
+	m.updateNavPanelStatus()
+}
+
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance.
 // It returns a tea.Cmd when an async operation is needed (terminal spawn).
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.nav.GetSelectedInstance()
+	m.cleanupPausedDoneReviewers(selected)
+	selected = m.nav.GetSelectedInstance() // refresh in case list mutation changed selection
 
 	// Clear notification on the previously-viewed instance when the user
 	// navigates away. This prevents the item from jumping out of "attention"

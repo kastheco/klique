@@ -879,6 +879,74 @@ func TestReviewApproved_PausesReviewerInsteadOfKilling(t *testing.T) {
 	assert.Equal(t, taskstate.StatusDone, entry.Status)
 }
 
+// TestPausedReviewer_CleanedUpOnNavigateAway verifies that when the user navigates
+// away from a paused reviewer whose plan is done, the reviewer instance is
+// automatically removed from the nav panel and allInstances list.
+func TestPausedReviewer_CleanedUpOnNavigateAway(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusDone)
+
+	reviewer, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review-1",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewer.IsReviewer = true
+	reviewer.SetStatus(session.Paused)
+
+	other, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-coder",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeCoder,
+	})
+	require.NoError(t, err)
+	other.SetStatus(session.Running)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	nav := ui.NewNavigationPanel(&sp)
+	_ = nav.AddInstance(reviewer)
+	_ = nav.AddInstance(other)
+	// Register the plan so instances appear in nav rows (required for SelectInstance).
+	nav.SetPlans([]ui.PlanDisplay{{Filename: planFile, Status: string(taskstate.StatusDone)}})
+	require.True(t, nav.SelectInstance(reviewer))
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          nav,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		allInstances: []*session.Instance{reviewer, other},
+	}
+
+	// Simulate user navigating away from paused reviewer.
+	require.True(t, h.nav.SelectInstance(other))
+	_ = h.instanceChanged()
+
+	for _, inst := range h.nav.GetInstances() {
+		assert.NotEqual(t, "feature-review-1", inst.Title)
+	}
+	for _, inst := range h.allInstances {
+		assert.NotEqual(t, "feature-review-1", inst.Title)
+	}
+}
+
 // TestReviewApproved_NoReviewerNoPanic verifies that a ReviewApproved signal
 // with no matching reviewer instance in nav still transitions the FSM to done
 // without panicking.
