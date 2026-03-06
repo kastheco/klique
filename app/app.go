@@ -820,12 +820,21 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				signals = taskfsm.ScanSignals(signalsDir)
 			}
 
+			var taskSignals []taskfsm.TaskSignal
+			if signalsDir != "" {
+				taskSignals = taskfsm.ScanTaskSignals(signalsDir)
+			}
+
 			// Also scan signals from active worktrees — agents write
 			// sentinel files relative to their CWD which is the worktree,
 			// not the main repo. Worktrees use .kasmos/signals/ as well.
 			seen := make(map[string]bool)
 			for _, sig := range signals {
 				seen[sig.Key()] = true
+			}
+			seenTaskSignals := make(map[string]bool)
+			for _, ts := range taskSignals {
+				seenTaskSignals[ts.Key()] = true
 			}
 			for _, inst := range snapshots {
 				wt := inst.GetWorktreePath()
@@ -837,6 +846,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !seen[sig.Key()] {
 						seen[sig.Key()] = true
 						signals = append(signals, sig)
+					}
+				}
+				for _, ts := range taskfsm.ScanTaskSignals(wtSignalsDir) {
+					if !seenTaskSignals[ts.Key()] {
+						seenTaskSignals[ts.Key()] = true
+						taskSignals = append(taskSignals, ts)
 					}
 				}
 			}
@@ -881,7 +896,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			time.Sleep(200 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount, PRStateUpdates: prStateUpdates}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, TaskSignals: taskSignals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount, PRStateUpdates: prStateUpdates}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
@@ -1042,7 +1057,37 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 		}
-		if len(msg.Signals) > 0 {
+
+		for _, ts := range msg.TaskSignals {
+			orch, exists := m.waveOrchestrators[ts.TaskFile]
+			if !exists {
+				log.WarningLog.Printf("ignoring task-finished signal for %q — no active wave orchestrator", ts.TaskFile)
+				taskfsm.ConsumeTaskSignal(ts)
+				continue
+			}
+			if ts.WaveNumber != orch.CurrentWaveNumber() {
+				log.WarningLog.Printf("ignoring task-finished signal for %q wave %d — active wave is %d", ts.TaskFile, ts.WaveNumber, orch.CurrentWaveNumber())
+				taskfsm.ConsumeTaskSignal(ts)
+				continue
+			}
+			if !orch.IsTaskRunning(ts.TaskNumber) {
+				taskfsm.ConsumeTaskSignal(ts)
+				continue
+			}
+
+			orch.MarkTaskComplete(ts.TaskNumber)
+			for _, inst := range m.nav.GetInstances() {
+				if inst.TaskFile != ts.TaskFile || inst.TaskNumber != ts.TaskNumber || inst.WaveNumber != ts.WaveNumber {
+					continue
+				}
+				inst.ImplementationComplete = true
+				inst.SetStatus(session.Ready)
+				break
+			}
+			taskfsm.ConsumeTaskSignal(ts)
+		}
+
+		if len(msg.Signals) > 0 || len(msg.TaskSignals) > 0 {
 			m.loadTaskState() // refresh after signal processing
 		}
 
@@ -1452,7 +1497,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (re-show confirm dialog after user cancelled, resetting the latch via ResetConfirm).
 			for planFile, orch := range m.waveOrchestrators {
 				orchState := orch.State()
-				if orchState != orchestration.WaveStateRunning && orchState != orchestration.WaveStateWaveComplete {
+				if orchState != orchestration.WaveStateRunning && orchState != orchestration.WaveStateWaveComplete && orchState != orchestration.WaveStateAllComplete {
 					continue
 				}
 
@@ -1488,10 +1533,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if !collected {
 							continue
 						}
-						if inst.PromptDetected && !inst.AwaitingWork && inst.HasWorked {
-							orch.MarkTaskComplete(task.Number)
-							inst.SetStatus(session.Ready)
-						} else if !alive {
+						if !alive {
 							orch.MarkTaskFailed(task.Number)
 						}
 					}
@@ -2236,6 +2278,7 @@ type metadataResultMsg struct {
 	Results            []instanceMetadata
 	PlanState          *taskstate.TaskState        // pre-loaded plan state (nil if dir not set)
 	Signals            []taskfsm.Signal            // agent sentinel files found this tick
+	TaskSignals        []taskfsm.TaskSignal        // task completion sentinel files found this tick
 	WaveSignals        []taskfsm.WaveSignal        // implement-wave-N signal files found this tick
 	ElaborationSignals []taskfsm.ElaborationSignal // elaborator-finished signal files found this tick
 	TmuxSessionCount   int                         // number of kas_-prefixed tmux sessions

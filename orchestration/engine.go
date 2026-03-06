@@ -281,7 +281,7 @@ func (o *WaveOrchestrator) RestoreToWave(targetWave int, completedTasks []int) {
 // BuildTaskPrompt is a convenience wrapper that builds the task prompt for a
 // task in the current wave.
 func (o *WaveOrchestrator) BuildTaskPrompt(task taskparser.Task, peerCount int) string {
-	return BuildTaskPrompt(o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)
+	return BuildTaskPrompt(o.taskFile, o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)
 }
 
 func (o *WaveOrchestrator) checkWaveComplete() {
