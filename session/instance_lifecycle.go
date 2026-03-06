@@ -17,13 +17,15 @@ import (
 	"github.com/atotto/clipboard"
 )
 
-// prepareTmuxSession returns the existing tmux session if already wired, otherwise
-// allocates a fresh one from the instance configuration.
-func (i *Instance) prepareTmuxSession() *tmux.TmuxSession {
-	if i.tmuxSession != nil {
-		return i.tmuxSession
+// prepareExecutionSession returns the existing execution session if already wired,
+// otherwise allocates a fresh one from the instance configuration.
+func (i *Instance) prepareExecutionSession() ExecutionSession {
+	if i.executionSession != nil {
+		return i.executionSession
 	}
-	return tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	session := NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
+	i.executionSession = session
+	return session
 }
 
 // transferPromptToCli moves QueuedPrompt into the tmux session's initialPrompt
@@ -31,16 +33,17 @@ func (i *Instance) prepareTmuxSession() *tmux.TmuxSession {
 // leave QueuedPrompt intact so a send-keys fallback can deliver it later.
 func (i *Instance) transferPromptToCli() {
 	if i.QueuedPrompt != "" && programSupportsCliPrompt(i.Program) {
-		i.tmuxSession.SetInitialPrompt(i.QueuedPrompt)
+		i.executionSession.SetInitialPrompt(i.QueuedPrompt)
 		i.QueuedPrompt = ""
 	}
 }
 
-// setTmuxTaskEnv pushes wave/task/peer identity into the tmux session environment
-// so that agents spawned inside the session inherit the orchestration context.
-func (i *Instance) setTmuxTaskEnv() {
-	if i.TaskNumber > 0 && i.tmuxSession != nil {
-		i.tmuxSession.SetTaskEnv(i.TaskNumber, i.WaveNumber, i.PeerCount)
+// setExecutionTaskEnv pushes wave/task/peer identity into the execution session
+// environment so that agents spawned inside the session inherit the orchestration
+// context.
+func (i *Instance) setExecutionTaskEnv() {
+	if i.TaskNumber > 0 && i.executionSession != nil {
+		i.executionSession.SetTaskEnv(i.TaskNumber, i.WaveNumber, i.PeerCount)
 	}
 }
 
@@ -65,13 +68,13 @@ func buildTitleOpts(inst *Instance) opencodesession.TitleOpts {
 // registers a callback that writes it to the opencode database when the session
 // becomes ready. It is a no-op for non-opencode programs.
 func (i *Instance) configureSessionTitle() {
-	if i.tmuxSession == nil || !strings.HasSuffix(i.Program, "opencode") {
+	if i.executionSession == nil || !strings.HasSuffix(i.Program, "opencode") {
 		return
 	}
 	opts := buildTitleOpts(i)
 	title := opencodesession.BuildTitle(opts)
-	i.tmuxSession.SetSessionTitle(title)
-	i.tmuxSession.SetTitleFunc(func(workDir string, beforeStart time.Time, t string) {
+	i.executionSession.SetSessionTitle(title)
+	i.executionSession.SetTitleFunc(func(workDir string, beforeStart time.Time, t string) {
 		if err := opencodesession.SetTitleDirect(workDir, beforeStart, t); err != nil {
 			log.ErrorLog.Printf("opencodesession: set title: %v", err)
 		}
@@ -118,9 +121,9 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.LoadingMessage = "Initializing..."
 
 	i.setLoadingProgress(1, "Preparing session...")
-	i.tmuxSession = i.prepareTmuxSession()
-	i.tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
+	i.executionSession = i.prepareExecutionSession()
+	i.executionSession.SetAgentType(i.AgentType)
+	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
 
 	// Offset tmux-internal progress stages so they map to the overall loading bar.
@@ -128,9 +131,9 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	if !firstTimeSetup {
 		stageBase = 1
 	}
-	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+	i.executionSession.SetProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(stageBase+stage, desc)
-	}
+	})
 	i.transferPromptToCli()
 
 	if firstTimeSetup {
@@ -162,7 +165,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return startErr
 		}
 		i.setLoadingProgress(4, "Starting tmux session...")
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.executionSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
 			}
@@ -171,7 +174,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	} else {
 		i.setLoadingProgress(2, "Restoring session...")
-		if err := i.tmuxSession.Restore(); err != nil {
+		if err := i.executionSession.Restore(); err != nil {
 			startErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return startErr
 		}
@@ -193,13 +196,13 @@ func (i *Instance) StartOnMainBranch() error {
 	i.LoadingMessage = "Initializing..."
 
 	i.setLoadingProgress(1, "Preparing session...")
-	i.tmuxSession = i.prepareTmuxSession()
-	i.tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
+	i.executionSession = i.prepareExecutionSession()
+	i.executionSession.SetAgentType(i.AgentType)
+	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+	i.executionSession.SetProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
-	}
+	})
 	i.transferPromptToCli()
 
 	var startErr error
@@ -213,7 +216,7 @@ func (i *Instance) StartOnMainBranch() error {
 		}
 	}()
 
-	if err := i.tmuxSession.Start(i.Path); err != nil {
+	if err := i.executionSession.Start(i.Path); err != nil {
 		startErr = fmt.Errorf("failed to start session on main branch: %w", err)
 		return startErr
 	}
@@ -234,13 +237,13 @@ func (i *Instance) StartOnBranch(branch string) error {
 	i.LoadingMessage = "Initializing..."
 
 	i.setLoadingProgress(1, "Preparing session...")
-	i.tmuxSession = i.prepareTmuxSession()
-	i.tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
+	i.executionSession = i.prepareExecutionSession()
+	i.executionSession.SetAgentType(i.AgentType)
+	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+	i.executionSession.SetProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(3+stage, desc)
-	}
+	})
 	i.transferPromptToCli()
 
 	i.setLoadingProgress(2, "Creating git worktree...")
@@ -269,7 +272,7 @@ func (i *Instance) StartOnBranch(branch string) error {
 	}
 
 	i.setLoadingProgress(4, "Starting tmux session...")
-	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+	if err := i.executionSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 			err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)
 		}
@@ -295,17 +298,17 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	i.Branch = branch
 	i.sharedWorktree = true
 
-	i.tmuxSession = i.prepareTmuxSession()
-	i.tmuxSession.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
+	i.executionSession = i.prepareExecutionSession()
+	i.executionSession.SetAgentType(i.AgentType)
+	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
-	i.tmuxSession.ProgressFunc = func(stage int, desc string) {
+	i.executionSession.SetProgressFunc(func(stage int, desc string) {
 		i.setLoadingProgress(1+stage, desc)
-	}
+	})
 	i.transferPromptToCli()
 
 	i.setLoadingProgress(2, "Starting tmux session...")
-	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
+	if err := i.executionSession.Start(worktree.GetWorktreePath()); err != nil {
 		return fmt.Errorf("failed to start session in shared worktree: %w", err)
 	}
 
@@ -334,8 +337,8 @@ func (i *Instance) Kill() error {
 	var errs []error
 
 	// Close tmux first — it holds an open handle to the worktree directory.
-	if i.tmuxSession != nil {
-		if err := i.tmuxSession.Close(); err != nil {
+	if i.executionSession != nil {
+		if err := i.executionSession.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
 		}
 	}
@@ -356,8 +359,8 @@ func (i *Instance) Kill() error {
 // StopTmux closes the underlying tmux session without touching the worktree or
 // any other instance state. The instance remains in the list as stopped.
 func (i *Instance) StopTmux() {
-	if i.tmuxSession != nil {
-		_ = i.tmuxSession.Close()
+	if i.executionSession != nil {
+		_ = i.executionSession.Close()
 	}
 }
 
@@ -382,9 +385,11 @@ func (i *Instance) Pause() error {
 
 	var errs []error
 
-	if err := i.tmuxSession.DetachSafely(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
-		log.ErrorLog.Print(err)
+	if err := i.executionSession.DetachSafely(); err != nil {
+		if !errors.Is(err, ErrInteractiveOnly) {
+			errs = append(errs, fmt.Errorf("failed to detach execution session: %w", err))
+			log.ErrorLog.Print(err)
+		}
 	}
 
 	if !i.sharedWorktree && i.gitWorktree != nil {
@@ -418,8 +423,11 @@ func (i *Instance) Pause() error {
 // AdoptOrphanTmuxSession wires the instance to an existing tmux session that was
 // not created through the normal lifecycle. No worktree is involved.
 func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
+	if NormalizeExecutionMode(i.ExecutionMode) != ExecutionModeTmux {
+		return fmt.Errorf("adopting orphan sessions is only supported for tmux execution")
+	}
 	ts := tmux.NewTmuxSessionFromExisting(tmuxName, i.Program, i.SkipPermissions)
-	i.tmuxSession = ts
+	i.executionSession = ts
 	if err := ts.Restore(); err != nil {
 		return fmt.Errorf("failed to adopt orphan session %s: %w", tmuxName, err)
 	}
@@ -440,15 +448,20 @@ func (i *Instance) Restart() error {
 	}
 
 	// Best-effort: session may already be dead.
-	if i.tmuxSession != nil {
-		_ = i.tmuxSession.Close()
+	if i.executionSession != nil {
+		_ = i.executionSession.Close()
 	}
 
 	// Allocate a new session object, carrying over injected test dependencies.
-	ts := i.tmuxSession.NewReset(i.Title, i.Program, i.SkipPermissions)
-	i.tmuxSession = ts
+	var ts ExecutionSession
+	if typed, ok := i.executionSession.(*tmux.TmuxSession); ok {
+		ts = typed.NewReset(i.Title, i.Program, i.SkipPermissions)
+	} else {
+		ts = NewExecutionSession(i.ExecutionMode, i.Title, i.Program, i.SkipPermissions)
+	}
+	i.executionSession = ts
 	ts.SetAgentType(i.AgentType)
-	i.setTmuxTaskEnv()
+	i.setExecutionTaskEnv()
 	i.configureSessionTitle()
 
 	workDir := i.Path
@@ -499,11 +512,11 @@ func (i *Instance) Resume() error {
 
 	worktreePath := i.gitWorktree.GetWorktreePath()
 
-	if i.tmuxSession.DoesSessionExist() {
-		if restoreErr := i.tmuxSession.Restore(); restoreErr != nil {
+	if i.executionSession.DoesSessionExist() {
+		if restoreErr := i.executionSession.Restore(); restoreErr != nil {
 			log.ErrorLog.Print(restoreErr)
 			// Fall back to a fresh session start.
-			if startErr := i.tmuxSession.Start(worktreePath); startErr != nil {
+			if startErr := i.executionSession.Start(worktreePath); startErr != nil {
 				log.ErrorLog.Print(startErr)
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 					startErr = fmt.Errorf("%v (cleanup: %v)", startErr, cleanupErr)
@@ -513,7 +526,7 @@ func (i *Instance) Resume() error {
 			}
 		}
 	} else {
-		if err := i.tmuxSession.Start(worktreePath); err != nil {
+		if err := i.executionSession.Start(worktreePath); err != nil {
 			log.ErrorLog.Print(err)
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup: %v)", err, cleanupErr)

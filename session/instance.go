@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/session/git"
-	"github.com/kastheco/kasmos/session/tmux"
 )
 
 // Status represents the current state of an instance.
@@ -127,8 +126,8 @@ type Instance struct {
 
 	// started is true once Start() has been called successfully.
 	started bool
-	// tmuxSession manages the underlying tmux session for this instance.
-	tmuxSession *tmux.TmuxSession
+	// executionSession manages the active backend for this instance.
+	executionSession ExecutionSession
 	// gitWorktree manages the git worktree associated with this instance.
 	gitWorktree *git.GitWorktree
 }
@@ -212,14 +211,19 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	if instance.Paused() {
 		// Paused instances keep the session struct ready but do not reattach.
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
+		instance.executionSession = NewExecutionSession(
+			instance.ExecutionMode,
+			instance.Title,
+			instance.Program,
+			instance.SkipPermissions,
+		)
 		return instance, nil
 	}
 
 	// Build the tmux session handle and check liveness before attempting a full restore.
-	ts := tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
+	ts := NewExecutionSession(instance.ExecutionMode, instance.Title, instance.Program, instance.SkipPermissions)
 	ts.SetAgentType(instance.AgentType)
-	instance.tmuxSession = ts
+	instance.executionSession = ts
 
 	if !ts.DoesSessionExist() {
 		// The tmux session is gone — mark as exited so the UI can display it as dead.
@@ -378,10 +382,10 @@ func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
-// TmuxAlive reports whether the underlying tmux session is still running.
+// TmuxAlive reports whether the underlying execution session is still running.
 func (i *Instance) TmuxAlive() bool {
-	if i.tmuxSession == nil {
+	if i.executionSession == nil {
 		return false
 	}
-	return i.tmuxSession.DoesSessionExist()
+	return i.executionSession.DoesSessionExist()
 }
