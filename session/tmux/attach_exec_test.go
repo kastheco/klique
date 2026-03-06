@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,17 +25,17 @@ func (s stubAttacher) Attach() (chan struct{}, error) {
 
 func TestAttachExecCommand_RunWaitsForDetach(t *testing.T) {
 	detachCh := make(chan struct{})
-	called := false
+	var called atomic.Bool
 
 	cmd := NewAttachExecCommand(stubAttacher{attach: func() (chan struct{}, error) {
-		called = true
+		called.Store(true)
 		return detachCh, nil
 	}})
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Run() }()
 
-	require.Eventually(t, func() bool { return called }, 200*time.Millisecond, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return called.Load() }, 200*time.Millisecond, 10*time.Millisecond)
 
 	select {
 	case err := <-done:
