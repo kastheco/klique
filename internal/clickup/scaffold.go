@@ -66,7 +66,7 @@ func ScaffoldFilename(name string) string {
 	slug := strings.ToLower(strings.TrimSpace(name))
 	slug = nonAlphanumeric.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
-	return slug + ".md"
+	return slug
 }
 
 func isDone(status string) bool {

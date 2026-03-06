@@ -34,16 +34,16 @@ func TestRebuildRows_EmptyPanel(t *testing.T) {
 func TestRebuildRows_PlansWithInstances(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{
-		{Filename: "plan-a.md"},
-		{Filename: "plan-b.md"},
+		{Filename: "plan-a"},
+		{Filename: "plan-b"},
 	}
 	instances := []*session.Instance{
-		makeInst("a-impl", "plan-a.md", session.Running),
-		makeInst("b-impl", "plan-b.md", session.Running),
+		makeInst("a-impl", "plan-a", session.Running),
+		makeInst("b-impl", "plan-b", session.Running),
 	}
 	statuses := map[string]TopicStatus{
-		"plan-a.md": {HasRunning: true},
-		"plan-b.md": {HasRunning: true},
+		"plan-a": {HasRunning: true},
+		"plan-b": {HasRunning: true},
 	}
 	n.SetData(plans, instances, nil, nil, statuses)
 
@@ -74,12 +74,12 @@ func TestRebuildRows_SoloInstances(t *testing.T) {
 
 func TestRebuildRows_MixedPlanAndSolo(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "plan.md"}}
+	plans := []PlanDisplay{{Filename: "plan"}}
 	instances := []*session.Instance{
-		makeInst("plan-impl", "plan.md", session.Running),
+		makeInst("plan-impl", "plan", session.Running),
 		makeInst("adhoc", "", session.Running),
 	}
-	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// plan header + plan instance + solo header + solo instance
@@ -94,8 +94,8 @@ func TestRebuildRows_MixedPlanAndSolo(t *testing.T) {
 
 func TestRebuildRows_HistoryAndCancelled(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "old-plan.md"}}
-	cancelled := []PlanDisplay{{Filename: "bad-plan.md"}}
+	history := []PlanDisplay{{Filename: "old-plan"}}
+	cancelled := []PlanDisplay{{Filename: "bad-plan"}}
 	n.SetData(nil, nil, history, cancelled, nil)
 
 	// history toggle + cancelled row
@@ -107,8 +107,8 @@ func TestRebuildRows_HistoryAndCancelled(t *testing.T) {
 func TestRebuildRows_HistoryExpanded(t *testing.T) {
 	n := newTestPanel()
 	history := []PlanDisplay{
-		{Filename: "old-a.md"},
-		{Filename: "old-b.md"},
+		{Filename: "old-a"},
+		{Filename: "old-b"},
 	}
 	n.SetData(nil, nil, history, nil, nil)
 	require.Len(t, n.rows, 1) // just the toggle, collapsed
@@ -126,9 +126,9 @@ func TestRebuildRows_HistoryExpanded(t *testing.T) {
 
 func TestRebuildRows_DeadSection_DonePlanWithNonRunningInstances(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "done-plan.md", Status: "done"}}
+	history := []PlanDisplay{{Filename: "done-plan", Status: "done"}}
 	// Ready (non-running) instance — plan goes to dead section.
-	instances := []*session.Instance{makeInst("worker", "done-plan.md", session.Ready)}
+	instances := []*session.Instance{makeInst("worker", "done-plan", session.Ready)}
 	n.SetData(nil, instances, history, nil, nil)
 
 	// Done plan with non-running instances goes to dead section (expanded by default).
@@ -145,16 +145,16 @@ func TestRebuildRows_DeadSection_DonePlanWithNonRunningInstances(t *testing.T) {
 
 func TestRebuildRows_DeadSection_Collapsible(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "done-plan.md", Status: "done"}}
+	history := []PlanDisplay{{Filename: "done-plan", Status: "done"}}
 	// Use Ready (non-running) instance so plan goes to dead section.
-	instances := []*session.Instance{makeInst("worker", "done-plan.md", session.Ready)}
+	instances := []*session.Instance{makeInst("worker", "done-plan", session.Ready)}
 	n.SetData(nil, instances, history, nil, nil)
 
 	// Dead section is expanded by default.
 	assert.True(t, n.deadExpanded)
 	require.True(t, len(n.rows) >= 2)
 	assert.Equal(t, navRowPlanHeader, n.rows[1].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[1].TaskFile)
+	assert.Equal(t, "done-plan", n.rows[1].TaskFile)
 	// Plan header is auto-collapsed (no running instances), so instance row is hidden.
 
 	// Collapse the dead section.
@@ -167,8 +167,8 @@ func TestRebuildRows_DeadSection_Collapsible(t *testing.T) {
 
 func TestRebuildRows_DonePlanWithRunningInstances_AppearsInActiveSection(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "done-plan.md", Status: "done"}}
-	instances := []*session.Instance{makeInst("worker", "done-plan.md", session.Running)}
+	history := []PlanDisplay{{Filename: "done-plan", Status: "done"}}
+	instances := []*session.Instance{makeInst("worker", "done-plan", session.Running)}
 	n.SetData(nil, instances, history, nil, nil)
 
 	// Done plan with running instances should NOT be in dead section.
@@ -180,16 +180,16 @@ func TestRebuildRows_DonePlanWithRunningInstances_AppearsInActiveSection(t *test
 	// Should have plan header + instance in the active area.
 	require.True(t, len(n.rows) >= 2, "expected at least plan header + instance, got %d rows", len(n.rows))
 	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[0].TaskFile)
+	assert.Equal(t, "done-plan", n.rows[0].TaskFile)
 	assert.Equal(t, navRowInstance, n.rows[1].Kind)
 	assert.Equal(t, "worker", n.rows[1].Label)
 }
 
 func TestRebuildRows_DonePlanWithDeadInstances_GoesToDeadSection(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "done-plan.md", Status: "done"}}
+	history := []PlanDisplay{{Filename: "done-plan", Status: "done"}}
 	// Ready (not running) instance — plan should go to dead section.
-	instances := []*session.Instance{makeInst("worker", "done-plan.md", session.Ready)}
+	instances := []*session.Instance{makeInst("worker", "done-plan", session.Ready)}
 	n.SetData(nil, instances, history, nil, nil)
 
 	// Done plan with only non-running instances goes to dead section.
@@ -202,11 +202,11 @@ func TestRebuildRows_DonePlanWithDeadInstances_GoesToDeadSection(t *testing.T) {
 
 func TestRebuildRows_DonePlanMixedInstances_RunningPromotesToActive(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "done-plan.md", Status: "done"}}
+	history := []PlanDisplay{{Filename: "done-plan", Status: "done"}}
 	// Mix of running and ready instances — running takes priority.
 	instances := []*session.Instance{
-		makeInst("ready-worker", "done-plan.md", session.Ready),
-		makeInst("running-worker", "done-plan.md", session.Running),
+		makeInst("ready-worker", "done-plan", session.Ready),
+		makeInst("running-worker", "done-plan", session.Running),
 	}
 	n.SetData(nil, instances, history, nil, nil)
 
@@ -216,12 +216,12 @@ func TestRebuildRows_DonePlanMixedInstances_RunningPromotesToActive(t *testing.T
 			"plan with running instances should not be in dead section")
 	}
 	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
-	assert.Equal(t, "done-plan.md", n.rows[0].TaskFile)
+	assert.Equal(t, "done-plan", n.rows[0].TaskFile)
 }
 
 func TestRebuildRows_DeadSection_DonePlanWithoutInstances_GoesToHistory(t *testing.T) {
 	n := newTestPanel()
-	history := []PlanDisplay{{Filename: "clean-done.md", Status: "done"}}
+	history := []PlanDisplay{{Filename: "clean-done", Status: "done"}}
 	n.SetData(nil, nil, history, nil, nil)
 
 	// No instances → goes to history, not dead.
@@ -232,8 +232,8 @@ func TestRebuildRows_DeadSection_DonePlanWithoutInstances_GoesToHistory(t *testi
 func TestInspectPlan_MovesHistoryToDead(t *testing.T) {
 	n := newTestPanel()
 	history := []PlanDisplay{
-		{Filename: "plan-a.md", Status: "done"},
-		{Filename: "plan-b.md", Status: "done"},
+		{Filename: "plan-a", Status: "done"},
+		{Filename: "plan-b", Status: "done"},
 	}
 	n.SetData(nil, nil, history, nil, nil)
 
@@ -242,7 +242,7 @@ func TestInspectPlan_MovesHistoryToDead(t *testing.T) {
 	assert.Equal(t, navRowHistoryToggle, n.rows[0].Kind)
 
 	// Inspect plan-a → moves to dead.
-	n.InspectPlan("plan-a.md")
+	n.InspectPlan("plan-a")
 	assert.True(t, n.deadExpanded)
 
 	// Should have dead toggle + plan header (expanded) + history toggle.
@@ -272,34 +272,34 @@ func TestRebuildRows_ClickUpAvailable(t *testing.T) {
 func TestSortOrder_NotificationsFirst(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{
-		{Filename: "running.md"},
-		{Filename: "notified.md"},
+		{Filename: "running"},
+		{Filename: "notified"},
 	}
 	instances := []*session.Instance{
-		makeInst("running-impl", "running.md", session.Running),
-		makeInst("notified-impl", "notified.md", session.Running),
+		makeInst("running-impl", "running", session.Running),
+		makeInst("notified-impl", "notified", session.Running),
 	}
 	instances[1].Notified = true
 	statuses := map[string]TopicStatus{
-		"running.md":  {HasRunning: true},
-		"notified.md": {HasNotification: true},
+		"running":  {HasRunning: true},
+		"notified": {HasNotification: true},
 	}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Notified plan should sort before running-only plan.
 	require.True(t, len(n.rows) >= 2)
-	assert.Contains(t, n.rows[0].TaskFile, "notified.md")
+	assert.Contains(t, n.rows[0].TaskFile, "notified")
 }
 
 func TestSortOrder_InstancesWithinPlan(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "plan.md"}}
+	plans := []PlanDisplay{{Filename: "plan"}}
 	instances := []*session.Instance{
-		makeInst("paused", "plan.md", session.Paused),
-		makeInst("running", "plan.md", session.Running),
-		{Title: "notified", TaskFile: "plan.md", Status: session.Running, Notified: true},
+		makeInst("paused", "plan", session.Paused),
+		makeInst("running", "plan", session.Running),
+		{Title: "notified", TaskFile: "plan", Status: session.Running, Notified: true},
 	}
-	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true, HasNotification: true}}
+	statuses := map[string]TopicStatus{"plan": {HasRunning: true, HasNotification: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Within plan: notified (0) < running (1) < paused (3)
@@ -313,11 +313,11 @@ func TestSortOrder_InstancesWithinPlan(t *testing.T) {
 
 func TestNavigation_UpDown(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 	// rows: [header, instance]
 	require.Len(t, n.rows, 2)
@@ -335,11 +335,11 @@ func TestNavigation_UpDown(t *testing.T) {
 
 func TestNavigation_LeftCollapsesAndJumpsToParent(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Select the instance (row 1)
@@ -359,9 +359,9 @@ func TestNavigation_LeftCollapsesAndJumpsToParent(t *testing.T) {
 
 func TestNavigation_RightExpandsAndDescends(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Ready), // Ready — not running
+		makeInst("inst", "p", session.Ready), // Ready — not running
 	}
 	n.SetData(plans, instances, nil, nil, nil)
 	// Plan has no running/notification → auto-collapsed
@@ -382,8 +382,8 @@ func TestNavigation_RightExpandsAndDescends(t *testing.T) {
 func TestRight_HistoryToggle_ExpandedDescendsIntoChild(t *testing.T) {
 	n := newTestPanel()
 	history := []PlanDisplay{
-		{Filename: "old-a.md"},
-		{Filename: "old-b.md"},
+		{Filename: "old-a"},
+		{Filename: "old-b"},
 	}
 	n.SetData(nil, nil, history, nil, nil)
 
@@ -404,11 +404,11 @@ func TestRight_HistoryToggle_ExpandedDescendsIntoChild(t *testing.T) {
 
 func TestToggleSelectedExpand_PlanHeader(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 	require.Len(t, n.rows, 2) // expanded
 
@@ -423,11 +423,11 @@ func TestToggleSelectedExpand_PlanHeader(t *testing.T) {
 
 func TestToggleSelectedExpand_Instance_ReturnsFalse(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 	n.selectedIdx = 1 // instance row
 
@@ -437,9 +437,9 @@ func TestToggleSelectedExpand_Instance_ReturnsFalse(t *testing.T) {
 
 func TestAutoCollapse_NoRunningNoNotification(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Paused),
+		makeInst("inst", "p", session.Paused),
 	}
 	n.SetData(plans, instances, nil, nil, nil)
 
@@ -450,11 +450,11 @@ func TestAutoCollapse_NoRunningNoNotification(t *testing.T) {
 
 func TestUserOverride_PreservesCollapsedState(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// User manually collapses (sets override)
@@ -483,21 +483,21 @@ func TestGetSelectedInstance(t *testing.T) {
 
 func TestGetSelectedPlanFile(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "plan.md"}}
+	plans := []PlanDisplay{{Filename: "plan"}}
 	n.SetData(plans, nil, nil, nil, nil)
 
 	// Plan header row
 	n.selectedIdx = 0
-	assert.Equal(t, "plan.md", n.GetSelectedPlanFile())
+	assert.Equal(t, "plan", n.GetSelectedPlanFile())
 }
 
 func TestIsSelectedPlanHeader(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "plan.md"}}
+	plans := []PlanDisplay{{Filename: "plan"}}
 	instances := []*session.Instance{
-		makeInst("inst", "plan.md", session.Running),
+		makeInst("inst", "plan", session.Running),
 	}
-	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	n.selectedIdx = 0
@@ -509,12 +509,12 @@ func TestIsSelectedPlanHeader(t *testing.T) {
 
 func TestSoloHeaderSkippedDuringNavigation(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "plan.md"}}
+	plans := []PlanDisplay{{Filename: "plan"}}
 	instances := []*session.Instance{
-		makeInst("plan-impl", "plan.md", session.Running),
+		makeInst("plan-impl", "plan", session.Running),
 		makeInst("adhoc", "", session.Running),
 	}
-	statuses := map[string]TopicStatus{"plan.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Layout: [0]=plan header, [1]=plan-impl, [2]=solo header, [3]=adhoc
@@ -544,14 +544,14 @@ func TestSoloHeaderSkippedBySelectFirst(t *testing.T) {
 func TestSelectByID(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{
-		{Filename: "a.md"},
-		{Filename: "b.md"},
+		{Filename: "a"},
+		{Filename: "b"},
 	}
 	n.SetData(plans, nil, nil, nil, nil)
 
-	ok := n.SelectByID(SidebarPlanPrefix + "b.md")
+	ok := n.SelectByID(SidebarPlanPrefix + "b")
 	assert.True(t, ok)
-	assert.Equal(t, "b.md", n.GetSelectedPlanFile())
+	assert.Equal(t, "b", n.GetSelectedPlanFile())
 }
 
 func TestSelectInstance(t *testing.T) {
@@ -567,10 +567,10 @@ func TestSelectInstance(t *testing.T) {
 
 func TestGetSelectedID(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "my-plan.md"}}
+	plans := []PlanDisplay{{Filename: "my-plan"}}
 	n.SetData(plans, nil, nil, nil, nil)
 
-	assert.Equal(t, SidebarPlanPrefix+"my-plan.md", n.GetSelectedID())
+	assert.Equal(t, SidebarPlanPrefix+"my-plan", n.GetSelectedID())
 }
 
 // ---------- selection persistence ----------
@@ -578,8 +578,8 @@ func TestGetSelectedID(t *testing.T) {
 func TestSelectionPersistence_AcrossRebuild(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{
-		{Filename: "a.md"},
-		{Filename: "b.md"},
+		{Filename: "a"},
+		{Filename: "b"},
 	}
 	n.SetData(plans, nil, nil, nil, nil)
 	n.selectedIdx = 1 // select plan-b header
@@ -646,16 +646,16 @@ func TestSearch_FiltersVisibleRows(t *testing.T) {
 	n := newTestPanel()
 	n.SetSize(80, 40)
 	plans := []PlanDisplay{
-		{Filename: "auth-plan.md"},
-		{Filename: "billing-plan.md"},
+		{Filename: "auth-plan"},
+		{Filename: "billing-plan"},
 	}
 	instances := []*session.Instance{
-		makeInst("auth-impl", "auth-plan.md", session.Running),
-		makeInst("billing-impl", "billing-plan.md", session.Running),
+		makeInst("auth-impl", "auth-plan", session.Running),
+		makeInst("billing-impl", "billing-plan", session.Running),
 	}
 	statuses := map[string]TopicStatus{
-		"auth-plan.md":    {HasRunning: true},
-		"billing-plan.md": {HasRunning: true},
+		"auth-plan":    {HasRunning: true},
+		"billing-plan": {HasRunning: true},
 	}
 	n.SetData(plans, instances, nil, nil, statuses)
 
@@ -672,11 +672,11 @@ func TestSearch_FiltersVisibleRows(t *testing.T) {
 func TestString_BasicOutput(t *testing.T) {
 	n := newTestPanel()
 	n.SetSize(60, 30)
-	plans := []PlanDisplay{{Filename: "my-plan.md"}}
+	plans := []PlanDisplay{{Filename: "my-plan"}}
 	instances := []*session.Instance{
-		makeInst("worker", "my-plan.md", session.Running),
+		makeInst("worker", "my-plan", session.Running),
 	}
-	statuses := map[string]TopicStatus{"my-plan.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"my-plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	output := n.String()
@@ -739,11 +739,11 @@ func TestSetFocused(t *testing.T) {
 
 func TestSelectedSpaceAction(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	instances := []*session.Instance{
-		makeInst("inst", "p.md", session.Running),
+		makeInst("inst", "p", session.Running),
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
 	// Plan header expanded → "collapse"
@@ -781,7 +781,7 @@ func TestClear(t *testing.T) {
 
 func TestSelectFirst(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "a.md"}, {Filename: "b.md"}}
+	plans := []PlanDisplay{{Filename: "a"}, {Filename: "b"}}
 	n.SetData(plans, nil, nil, nil, nil)
 	n.selectedIdx = 1
 
@@ -791,7 +791,7 @@ func TestSelectFirst(t *testing.T) {
 
 func TestClickItem(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "a.md"}, {Filename: "b.md"}}
+	plans := []PlanDisplay{{Filename: "a"}, {Filename: "b"}}
 	n.SetData(plans, nil, nil, nil, nil)
 
 	n.ClickItem(1)
@@ -802,8 +802,8 @@ func TestClickItem(t *testing.T) {
 
 func TestSelectInstance_ExpandsCollapsedPlan(t *testing.T) {
 	n := newTestPanel()
-	plans := []PlanDisplay{{Filename: "p.md"}}
-	inst := makeInst("worker", "p.md", session.Ready)
+	plans := []PlanDisplay{{Filename: "p"}}
+	inst := makeInst("worker", "p", session.Ready)
 	// No running/notification → plan auto-collapses, instance hidden
 	n.SetData(plans, []*session.Instance{inst}, nil, nil, nil)
 	require.Len(t, n.rows, 1, "plan should be auto-collapsed")
@@ -821,14 +821,14 @@ func TestSelectInstance_ExpandsCollapsedPlan(t *testing.T) {
 func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {
 	n := newTestPanel()
 	plans := []PlanDisplay{
-		{Filename: "a.md"},
-		{Filename: "b.md"},
+		{Filename: "a"},
+		{Filename: "b"},
 	}
-	instA := makeInst("a-worker", "a.md", session.Running)
-	instB := makeInst("b-worker", "b.md", session.Running)
+	instA := makeInst("a-worker", "a", session.Running)
+	instB := makeInst("b-worker", "b", session.Running)
 	statuses := map[string]TopicStatus{
-		"a.md": {HasRunning: true},
-		"b.md": {HasRunning: true},
+		"a": {HasRunning: true},
+		"b": {HasRunning: true},
 	}
 	n.SetData(plans, []*session.Instance{instA, instB}, nil, nil, statuses)
 
@@ -836,7 +836,7 @@ func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {
 	n.SelectInstance(instA)
 	// Find B's plan header and collapse it
 	for i, row := range n.rows {
-		if row.Kind == navRowPlanHeader && row.TaskFile == "b.md" {
+		if row.Kind == navRowPlanHeader && row.TaskFile == "b" {
 			n.selectedIdx = i
 			n.ToggleSelectedExpand()
 			break
@@ -854,20 +854,20 @@ func TestCycleActive_ExpandsCollapsedPlan(t *testing.T) {
 
 func TestFindPlanInstance_ReturnsRunning(t *testing.T) {
 	n := newTestPanel()
-	ready := &session.Instance{Title: "ready", TaskFile: "p.md", Status: session.Ready}
-	running := &session.Instance{Title: "running", TaskFile: "p.md", Status: session.Running}
+	ready := &session.Instance{Title: "ready", TaskFile: "p", Status: session.Ready}
+	running := &session.Instance{Title: "running", TaskFile: "p", Status: session.Running}
 	n.SetData(nil, []*session.Instance{ready, running}, nil, nil, nil)
 
-	result := n.FindPlanInstance("p.md")
+	result := n.FindPlanInstance("p")
 	assert.Equal(t, running, result, "should prefer running instance")
 }
 
 func TestFindPlanInstance_NoneStarted(t *testing.T) {
 	n := newTestPanel()
-	paused := makeInst("paused", "p.md", session.Paused)
+	paused := makeInst("paused", "p", session.Paused)
 	n.SetData(nil, []*session.Instance{paused}, nil, nil, nil)
 
-	result := n.FindPlanInstance("p.md")
+	result := n.FindPlanInstance("p")
 	assert.Nil(t, result, "paused-only plan should return nil")
 }
 
@@ -877,14 +877,14 @@ func TestString_SectionHeaders(t *testing.T) {
 	n := newTestPanel()
 	n.SetSize(60, 40)
 	plans := []PlanDisplay{
-		{Filename: "active-plan.md"},
-		{Filename: "idle-plan.md"},
+		{Filename: "active-plan"},
+		{Filename: "idle-plan"},
 	}
 	instances := []*session.Instance{
-		makeInst("worker", "active-plan.md", session.Running),
+		makeInst("worker", "active-plan", session.Running),
 	}
 	statuses := map[string]TopicStatus{
-		"active-plan.md": {HasRunning: true},
+		"active-plan": {HasRunning: true},
 	}
 	n.SetData(plans, instances, nil, nil, statuses)
 	output := n.String()
@@ -895,15 +895,15 @@ func TestString_SectionHeaders(t *testing.T) {
 func TestString_InstanceDisplayTitle(t *testing.T) {
 	n := newTestPanel()
 	n.SetSize(60, 30)
-	plans := []PlanDisplay{{Filename: "p.md"}}
+	plans := []PlanDisplay{{Filename: "p"}}
 	inst := &session.Instance{
 		Title:      "p-W2-T5",
-		TaskFile:   "p.md",
+		TaskFile:   "p",
 		Status:     session.Running,
 		WaveNumber: 2,
 		TaskNumber: 5,
 	}
-	statuses := map[string]TopicStatus{"p.md": {HasRunning: true}}
+	statuses := map[string]TopicStatus{"p": {HasRunning: true}}
 	n.SetData(plans, []*session.Instance{inst}, nil, nil, statuses)
 
 	output := n.String()
@@ -928,8 +928,8 @@ func TestString_ReviewingPlanAppearsActive(t *testing.T) {
 	// Plan in "reviewing" status with NO running instances — simulates restart
 	// where the reviewer's tmux session is gone.
 	plans := []PlanDisplay{
-		{Filename: "reviewing-plan.md", Status: "reviewing"},
-		{Filename: "idle-plan.md", Status: "ready"},
+		{Filename: "reviewing-plan", Status: "reviewing"},
+		{Filename: "idle-plan", Status: "ready"},
 	}
 	n.SetData(plans, nil, nil, nil, nil)
 	output := n.String()
@@ -941,8 +941,8 @@ func TestString_ImplementingPlanAppearsActive(t *testing.T) {
 	n.SetSize(60, 40)
 	// Plan in "implementing" status with NO running instances.
 	plans := []PlanDisplay{
-		{Filename: "impl-plan.md", Status: "implementing"},
-		{Filename: "idle-plan.md", Status: "ready"},
+		{Filename: "impl-plan", Status: "implementing"},
+		{Filename: "idle-plan", Status: "ready"},
 	}
 	n.SetData(plans, nil, nil, nil, nil)
 	output := n.String()

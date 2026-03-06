@@ -46,8 +46,8 @@ func newTestStateFromRecords(t *testing.T, records []instanceRecord) *config.Sta
 
 func TestInstanceList_Text(t *testing.T) {
 	state := newTestStateFromRaw(t, []instanceTestData{
-		{Title: "planner-foo", Status: 0 /* Running */, Branch: "plan/foo", Program: "claude", TaskFile: "foo.md"},
-		{Title: "coder-bar", Status: 1 /* Ready */, Branch: "plan/bar", Program: "opencode", TaskFile: "bar.md"},
+		{Title: "planner-foo", Status: 0 /* Running */, Branch: "plan/foo", Program: "claude", TaskFile: "foo"},
+		{Title: "coder-bar", Status: 1 /* Ready */, Branch: "plan/bar", Program: "opencode", TaskFile: "bar"},
 		{Title: "solo-baz", Status: 3 /* Paused */, Branch: "plan/baz", Program: "claude"},
 	})
 
@@ -178,7 +178,7 @@ func fullInstanceRecord(title string) instanceRecord {
 		Program:                "claude",
 		AutoYes:                true,
 		SkipPermissions:        true,
-		TaskFile:               title + ".md",
+		TaskFile:               title,
 		AgentType:              "coder",
 		TaskNumber:             3,
 		WaveNumber:             2,
@@ -342,14 +342,14 @@ func TestUpdateInstanceInState_NotFound(t *testing.T) {
 // key is migrated to "task_file" when unmarshalling, matching the behaviour of
 // session.InstanceData.UnmarshalJSON.
 func TestInstanceRecord_PlanFileMigration(t *testing.T) {
-	raw := `[{"title":"legacy","status":0,"program":"claude","plan_file":"old-plan.md"}]`
+	raw := `[{"title":"legacy","status":0,"program":"claude","plan_file":"old-plan"}]`
 	s := config.DefaultState()
 	s.InstancesData = []byte(raw)
 
 	records, err := loadInstanceRecords(s)
 	require.NoError(t, err)
 	require.Len(t, records, 1)
-	assert.Equal(t, "old-plan.md", records[0].TaskFile, "plan_file should be migrated to task_file")
+	assert.Equal(t, "old-plan", records[0].TaskFile, "plan_file should be migrated to task_file")
 }
 
 // TestKasTmuxName verifies the session name prefix logic replicates what

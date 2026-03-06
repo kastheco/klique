@@ -426,6 +426,9 @@ func (i *Instance) Pause() error {
 // AdoptOrphanTmuxSession wires the instance to an existing tmux session that was
 // not created through the normal lifecycle. No worktree is involved.
 func (i *Instance) AdoptOrphanTmuxSession(tmuxName string) error {
+	if NormalizeExecutionMode(i.ExecutionMode) != ExecutionModeTmux {
+		return fmt.Errorf("adopting orphan sessions is only supported for tmux execution")
+	}
 	ts := tmux.NewTmuxSessionFromExisting(tmuxName, i.Program, i.SkipPermissions)
 	w := &tmuxExecutionSession{s: ts}
 	i.executionSession = w

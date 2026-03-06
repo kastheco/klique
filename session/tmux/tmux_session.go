@@ -188,6 +188,11 @@ func (t *TmuxSession) SetTitleFunc(fn func(workDir string, beforeStart time.Time
 	t.titleFunc = fn
 }
 
+// SetProgressFunc sets the callback used to report progress during startup.
+func (t *TmuxSession) SetProgressFunc(fn func(stage int, desc string)) {
+	t.ProgressFunc = fn
+}
+
 // reportProgress calls ProgressFunc if set.
 func (t *TmuxSession) reportProgress(stage int, desc string) {
 	if t.ProgressFunc != nil {

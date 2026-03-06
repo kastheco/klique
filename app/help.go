@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -55,6 +56,8 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("T")+descStyle.Render("             - browse orphaned tmux sessions"),
 		keyStyle.Render("1/2")+descStyle.Render("           - filter: all / active only"),
 		keyStyle.Render("3")+descStyle.Render("             - cycle sort mode"),
+		descStyle.Render("agent profiles can choose tmux or headless execution; tmux stays attachable, headless favors automated wave work."),
+		descStyle.Render("headless sessions are not attachable; use the preview tab and logs for output while they run."),
 		"",
 		headerStyle.Render("plans:"),
 		keyStyle.Render("n")+descStyle.Render("             - new plan"),
@@ -85,8 +88,10 @@ func (h helpTypeInstanceStart) toContent() string {
 		descStyle.Render("new session created:"),
 		descStyle.Render(fmt.Sprintf("• git branch: %s (isolated worktree)",
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Branch))),
-		descStyle.Render(fmt.Sprintf("• %s running in background tmux session",
-			lipgloss.NewStyle().Bold(true).Render(h.instance.Program))),
+		descStyle.Render(fmt.Sprintf("• %s running via %s",
+			lipgloss.NewStyle().Bold(true).Render(h.instance.Program),
+			lipgloss.NewStyle().Bold(true).Render(config.NormalizeExecutionMode(string(h.instance.ExecutionMode))))),
+		descStyle.Render("interactive attach is only available for tmux sessions; headless sessions use preview/log output."),
 		"",
 		headerStyle.Render("managing:"),
 		keyStyle.Render("↵/o")+descStyle.Render("   - attach to session"),
@@ -198,7 +203,8 @@ func (m *home) handleHelpState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		pending := m.pendingAttachInstance
 		m.pendingAttachInstance = nil
 
-		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() {
+		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() &&
+			config.NormalizeExecutionMode(string(pending.ExecutionMode)) == config.ExecutionModeTmux {
 			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
 				if err != nil {
 					return err

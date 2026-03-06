@@ -15,13 +15,13 @@ func TestNewInstance_SetsPlanFile(t *testing.T) {
 		Title:    "plan-worker",
 		Path:     ".",
 		Program:  "claude",
-		TaskFile: "plan-orchestration.md",
+		TaskFile: "plan-orchestration",
 	})
 	if err != nil {
 		t.Fatalf("NewInstance() error = %v", err)
 	}
-	if inst.TaskFile != "plan-orchestration.md" {
-		t.Fatalf("PlanFile = %q, want %q", inst.TaskFile, "plan-orchestration.md")
+	if inst.TaskFile != "plan-orchestration" {
+		t.Fatalf("PlanFile = %q, want %q", inst.TaskFile, "plan-orchestration")
 	}
 }
 
@@ -32,7 +32,7 @@ func TestInstanceData_RoundTripPlanFile(t *testing.T) {
 		Branch:   "feature/test",
 		Status:   Paused,
 		Program:  "claude",
-		TaskFile: "plan.md",
+		TaskFile: "plan",
 		Worktree: GitWorktreeData{
 			RepoPath:      "/tmp/repo",
 			WorktreePath:  "/tmp/repo/.worktrees/persisted",
@@ -46,13 +46,13 @@ func TestInstanceData_RoundTripPlanFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromInstanceData() error = %v", err)
 	}
-	if inst.TaskFile != "plan.md" {
-		t.Fatalf("instance PlanFile = %q, want %q", inst.TaskFile, "plan.md")
+	if inst.TaskFile != "plan" {
+		t.Fatalf("instance PlanFile = %q, want %q", inst.TaskFile, "plan")
 	}
 
 	roundTrip := inst.ToInstanceData()
-	if roundTrip.TaskFile != "plan.md" {
-		t.Fatalf("ToInstanceData PlanFile = %q, want %q", roundTrip.TaskFile, "plan.md")
+	if roundTrip.TaskFile != "plan" {
+		t.Fatalf("ToInstanceData PlanFile = %q, want %q", roundTrip.TaskFile, "plan")
 	}
 }
 
@@ -63,7 +63,7 @@ func TestInstanceData_RoundTripImplementationComplete(t *testing.T) {
 		Branch:                 "feature/impl",
 		Status:                 Paused,
 		Program:                "opencode",
-		TaskFile:               "plan.md",
+		TaskFile:               "plan",
 		ImplementationComplete: true,
 		Worktree: GitWorktreeData{
 			RepoPath:      "/tmp/repo",
@@ -93,7 +93,7 @@ func TestNewInstance_SetsAgentType(t *testing.T) {
 		Title:     "planner-worker",
 		Path:      ".",
 		Program:   "opencode",
-		TaskFile:  "auth-refactor.md",
+		TaskFile:  "auth-refactor",
 		AgentType: AgentTypePlanner,
 	})
 	if err != nil {
@@ -111,7 +111,7 @@ func TestInstanceData_RoundTripAgentType(t *testing.T) {
 		Branch:    "plan/auth-refactor",
 		Status:    Paused,
 		Program:   "opencode",
-		TaskFile:  "auth-refactor.md",
+		TaskFile:  "auth-refactor",
 		AgentType: AgentTypeReviewer,
 		Worktree: GitWorktreeData{
 			RepoPath:      "/tmp/repo",

@@ -13,22 +13,24 @@ const TOMLConfigFileName = "config.toml"
 // TOMLAgent is the TOML-level representation of an agent.
 // Maps directly to [agents.*] tables in config.toml.
 type TOMLAgent struct {
-	Enabled     bool     `toml:"enabled"`
-	Program     string   `toml:"program"`
-	Model       string   `toml:"model,omitempty"`
-	Temperature *float64 `toml:"temperature,omitempty"`
-	Effort      string   `toml:"effort,omitempty"`
-	Flags       []string `toml:"flags,omitempty"`
+	Enabled       bool     `toml:"enabled"`
+	Program       string   `toml:"program"`
+	Model         string   `toml:"model,omitempty"`
+	Temperature   *float64 `toml:"temperature,omitempty"`
+	Effort        string   `toml:"effort,omitempty"`
+	ExecutionMode string   `toml:"execution_mode,omitempty"`
+	Flags         []string `toml:"flags,omitempty"`
 }
 
 func (a TOMLAgent) toProfile() AgentProfile {
 	return AgentProfile{
-		Program:     a.Program,
-		Model:       a.Model,
-		Temperature: a.Temperature,
-		Effort:      a.Effort,
-		Enabled:     a.Enabled,
-		Flags:       a.Flags,
+		Program:       a.Program,
+		Model:         a.Model,
+		Temperature:   a.Temperature,
+		Effort:        a.Effort,
+		ExecutionMode: NormalizeExecutionMode(a.ExecutionMode),
+		Enabled:       a.Enabled,
+		Flags:         a.Flags,
 	}
 }
 

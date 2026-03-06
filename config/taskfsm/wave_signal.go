@@ -15,7 +15,7 @@ type WaveSignal struct {
 	filePath   string // full path for deletion
 }
 
-var waveSignalRe = regexp.MustCompile(`^implement-wave-(\d+)-(.+\.md)$`)
+var waveSignalRe = regexp.MustCompile(`^implement-wave-(\d+)-(.+)$`)
 
 // ParseWaveSignal attempts to parse a filename as a wave signal.
 func ParseWaveSignal(filename string) (WaveSignal, bool) {

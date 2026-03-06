@@ -16,10 +16,10 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-foo.md"),
+		filepath.Join(signalsDir, "planner-finished-foo"),
 		nil, 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "review-changes-bar.md"),
+		filepath.Join(signalsDir, "review-changes-bar"),
 		[]byte("fix the tests"), 0o644))
 
 	signals := ScanSignals(signalsDir)
@@ -31,11 +31,11 @@ func TestScanSignals_ParsesValidSentinels(t *testing.T) {
 	}
 
 	assert.Equal(t, PlannerFinished, signals[1].Event)
-	assert.Equal(t, "foo.md", signals[1].TaskFile)
+	assert.Equal(t, "foo", signals[1].TaskFile)
 	assert.Empty(t, signals[1].Body)
 
 	assert.Equal(t, ReviewChangesRequested, signals[0].Event)
-	assert.Equal(t, "bar.md", signals[0].TaskFile)
+	assert.Equal(t, "bar", signals[0].TaskFile)
 	assert.Equal(t, "fix the tests", signals[0].Body)
 }
 
@@ -66,7 +66,7 @@ func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
 
 	// An agent trying to drop a cancel sentinel — should be ignored
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "cancel-foo.md"),
+		filepath.Join(signalsDir, "cancel-foo"),
 		nil, 0o644))
 
 	signals := ScanSignals(signalsDir)
@@ -74,9 +74,9 @@ func TestScanSignals_RejectsUserOnlyEvents(t *testing.T) {
 }
 
 func TestSignalKey_Dedup(t *testing.T) {
-	a := Signal{Event: ReviewChangesRequested, TaskFile: "foo.md"}
-	b := Signal{Event: ReviewChangesRequested, TaskFile: "foo.md"}
-	c := Signal{Event: ImplementFinished, TaskFile: "foo.md"}
+	a := Signal{Event: ReviewChangesRequested, TaskFile: "foo"}
+	b := Signal{Event: ReviewChangesRequested, TaskFile: "foo"}
+	c := Signal{Event: ImplementFinished, TaskFile: "foo"}
 
 	assert.Equal(t, a.Key(), b.Key(), "same event+planFile should produce same key")
 	assert.NotEqual(t, a.Key(), c.Key(), "different events should produce different keys")
@@ -87,10 +87,10 @@ func TestConsumeSignal_DeletesFile(t *testing.T) {
 	signalsDir := filepath.Join(dir, ".signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
-	path := filepath.Join(signalsDir, "planner-finished-test.md")
+	path := filepath.Join(signalsDir, "planner-finished-test")
 	require.NoError(t, os.WriteFile(path, nil, 0o644))
 
-	sig := Signal{Event: PlannerFinished, TaskFile: "test.md", filePath: path}
+	sig := Signal{Event: PlannerFinished, TaskFile: "test", filePath: path}
 	ConsumeSignal(sig)
 
 	_, err := os.Stat(path)
@@ -101,7 +101,7 @@ func TestScanSignals_KasmosSignalsDir(t *testing.T) {
 	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-test.md"),
+		filepath.Join(signalsDir, "planner-finished-test"),
 		[]byte(""), 0o644,
 	))
 
@@ -119,14 +119,14 @@ func TestSignals_WithStoreFSM(t *testing.T) {
 
 	store := taskstore.NewHTTPStore(srv.URL, "test-project")
 	err := store.Create("test-project", taskstore.TaskEntry{
-		Filename: "test.md", Status: "planning",
+		Filename: "test", Status: "planning",
 	})
 	require.NoError(t, err)
 
 	// Write a sentinel file in a temp signals dir
 	signalsDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "planner-finished-test.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "planner-finished-test"), nil, 0o644))
 
 	signals := ScanSignals(signalsDir)
 	require.Len(t, signals, 1)
@@ -134,9 +134,9 @@ func TestSignals_WithStoreFSM(t *testing.T) {
 
 	// Apply via store-backed FSM
 	fsm := New(store, "test-project", signalsDir)
-	require.NoError(t, fsm.Transition("test.md", signals[0].Event))
+	require.NoError(t, fsm.Transition("test", signals[0].Event))
 
-	entry, err := store.Get("test-project", "test.md")
+	entry, err := store.Get("test-project", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "ready", string(entry.Status))
 }

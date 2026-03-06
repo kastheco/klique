@@ -17,7 +17,7 @@ import (
 
 func TestBuildPlanFilename(t *testing.T) {
 	got := buildPlanFilename("Auth Refactor", time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
-	want := "auth-refactor.md"
+	want := "auth-refactor"
 	if got != want {
 		t.Fatalf("buildPlanFilename() = %q, want %q", got, want)
 	}
@@ -44,7 +44,7 @@ func TestCreatePlanRecord(t *testing.T) {
 
 	h := &home{taskStateDir: plansDir, taskState: ps}
 
-	planFile := "auth-refactor.md"
+	planFile := "auth-refactor"
 	branch := "plan/auth-refactor"
 	err = h.createPlanRecord(planFile, "Refactor JWT auth", branch, time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)

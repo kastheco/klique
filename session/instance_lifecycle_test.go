@@ -60,6 +60,7 @@ func TestStartTransfersQueuedPromptForOpenCode(t *testing.T) {
 		QueuedPrompt:     "Plan auth.",
 		executionSession: newMockTmuxSession("test-transfer", "opencode", &testPtyFactory{}, cmdExec),
 	}
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-transfer", "opencode", false, &testPtyFactory{}, cmdExec))
 
 	// Simulate StartOnMainBranch which is the simplest path.
 	err := inst.StartOnMainBranch()
@@ -84,6 +85,7 @@ func TestStartKeepsQueuedPromptForAider(t *testing.T) {
 		QueuedPrompt:     "Fix the bug.",
 		executionSession: newMockTmuxSession("test-aider", "aider --model ollama_chat/gemma3:1b", &testPtyFactory{}, cmdExec),
 	}
+	inst.SetTmuxSession(tmux.NewTmuxSessionWithDeps("test-aider", "aider --model ollama_chat/gemma3:1b", false, &testPtyFactory{}, cmdExec))
 
 	err := inst.StartOnMainBranch()
 	require.NoError(t, err)

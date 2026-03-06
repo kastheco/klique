@@ -18,13 +18,13 @@ func TestParseElaborationSignal(t *testing.T) {
 	}{
 		{
 			name:     "valid elaboration signal",
-			filename: "elaborator-finished-my-feature.md",
+			filename: "elaborator-finished-my-feature",
 			wantOk:   true,
-			wantFile: "my-feature.md",
+			wantFile: "my-feature",
 		},
 		{
 			name:     "not an elaboration signal",
-			filename: "planner-finished-test.md",
+			filename: "planner-finished-test",
 			wantOk:   false,
 		},
 		{
@@ -51,21 +51,21 @@ func TestScanElaborationSignals(t *testing.T) {
 
 	// Write an elaboration signal and a non-matching file
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "elaborator-finished-test.md"), nil, 0o644))
+		filepath.Join(signalsDir, "elaborator-finished-test"), nil, 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-test.md"), nil, 0o644))
+		filepath.Join(signalsDir, "planner-finished-test"), nil, 0o644))
 
 	signals := ScanElaborationSignals(signalsDir)
 	require.Len(t, signals, 1)
-	assert.Equal(t, "test.md", signals[0].TaskFile)
+	assert.Equal(t, "test", signals[0].TaskFile)
 }
 
 func TestConsumeElaborationSignal(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "elaborator-finished-test.md")
+	path := filepath.Join(dir, "elaborator-finished-test")
 	require.NoError(t, os.WriteFile(path, nil, 0o644))
 
-	sig := ElaborationSignal{TaskFile: "test.md", filePath: path}
+	sig := ElaborationSignal{TaskFile: "test", filePath: path}
 	ConsumeElaborationSignal(sig)
 
 	_, err := os.Stat(path)

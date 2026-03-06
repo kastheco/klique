@@ -51,6 +51,7 @@ func TestCollectMetadata_DoesNotMutateCachedPreviewState(t *testing.T) {
 		started:          true,
 		executionSession: &tmuxExecutionSession{s: tmuxSession},
 	}
+	inst.SetTmuxSession(tmuxSession)
 
 	_ = inst.CollectMetadata()
 

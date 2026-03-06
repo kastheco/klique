@@ -9,7 +9,7 @@ import (
 )
 
 // TaskBranchFromFile derives the git branch name from a plan filename.
-// "auth-refactor.md" → "plan/auth-refactor"
+// "auth-refactor" → "plan/auth-refactor"
 func TaskBranchFromFile(planFile string) string {
 	name := taskstate.DisplayName(planFile)
 	name = sanitizeBranchName(name)
