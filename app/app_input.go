@@ -1243,8 +1243,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 		m.tabbedWindow.SetActiveTab(ui.InfoTab)
 		return m, nil
-	case keys.KeyTabAgent, keys.KeyTabInfo:
+	case keys.KeyTabInfo:
 		return m.switchToTab(name)
+	case keys.KeyTabAgent:
+		return m.exclamationAutoFocus()
 	case keys.KeySendPrompt:
 		// Ensure the agent tab is visible when entering focus mode.
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
