@@ -341,13 +341,17 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDisplayName_NoSuffix(t *testing.T) {
+	assert.Equal(t, "auth-refactor", DisplayName("auth-refactor"))
+}
+
 func TestRename(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
 	// Create old plan file on disk
-	oldFile := "my-feature.md"
-	newFile := "auth-refactor.md"
+	oldFile := "my-feature"
+	newFile := "auth-refactor"
 	oldPath := filepath.Join(dir, oldFile)
 	newPath := filepath.Join(dir, newFile)
 	require.NoError(t, os.WriteFile(oldPath, []byte("# old plan"), 0o644))
@@ -370,11 +374,11 @@ func TestRename(t *testing.T) {
 	assert.Equal(t, StatusReady, ps.Plans[newFile].Status)
 	assert.Equal(t, "plan/my-feature", ps.Plans[newFile].Branch)
 
-	// File renamed on disk
+	// No on-disk rename in task state mode.
 	_, err = os.Stat(oldPath)
-	assert.True(t, os.IsNotExist(err), "old file should not exist")
+	require.NoError(t, err, "old file should still exist on disk")
 	_, err = os.Stat(newPath)
-	assert.NoError(t, err, "new file should exist")
+	assert.Error(t, err, "new file should not be auto-created")
 
 	// Persisted to store
 	ps2, err := Load(store, "proj", dir)
@@ -394,8 +398,8 @@ func TestRenameNoFileOnDisk(t *testing.T) {
 	// Rename should succeed even if the .md file doesn't exist on disk
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
-	oldFile := "my-feature.md"
-	newFile := "new-name.md"
+	oldFile := "my-feature"
+	newFile := "new-name"
 
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
 		Filename: oldFile, Status: taskstore.StatusPlanning,

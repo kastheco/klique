@@ -2,8 +2,6 @@ package taskstate
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -540,15 +538,14 @@ func (ps *TaskState) Save() error {
 	return nil
 }
 
-// DisplayName strips the .md extension from a plan filename.
-// "auth-refactor.md" → "auth-refactor"
+// DisplayName converts a plan filename to its display name.
+// For bare slugs, it is a pass-through.
 func DisplayName(filename string) string {
-	return strings.TrimSuffix(filename, ".md")
+	return filename
 }
 
 // Rename renames a plan by giving it a new display name slug.
-// It renames the .md file on disk (if it exists), rekeys the planstate entry,
-// and persists the updated state.
+// It rekeys the planstate entry and persists the updated state.
 // newName should be a human-readable name (e.g., "auth refactor") which will be
 // slugified automatically. Returns the new filename on success.
 func (ps *TaskState) Rename(oldFilename, newName string) (string, error) {
@@ -565,22 +562,13 @@ func (ps *TaskState) Rename(oldFilename, newName string) (string, error) {
 	if newSlug == "" {
 		return "", fmt.Errorf("new name produced an empty slug")
 	}
-	newFilename := newSlug + ".md"
+	newFilename := newSlug
 
 	if newFilename == oldFilename {
 		return oldFilename, nil // nothing to do
 	}
 	if _, exists := ps.Plans[newFilename]; exists {
 		return "", fmt.Errorf("a plan named %q already exists", newFilename)
-	}
-
-	// Rename file on disk if it exists.
-	oldPath := filepath.Join(ps.Dir, oldFilename)
-	newPath := filepath.Join(ps.Dir, newFilename)
-	if _, err := os.Stat(oldPath); err == nil {
-		if err := os.Rename(oldPath, newPath); err != nil {
-			return "", fmt.Errorf("rename plan file: %w", err)
-		}
 	}
 
 	// Rekey the planstate entry.
