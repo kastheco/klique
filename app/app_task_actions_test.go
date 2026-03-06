@@ -59,6 +59,13 @@ func TestBuildImplementPrompt(t *testing.T) {
 	prompt := buildImplementPrompt("auth-refactor.md")
 	assert.Contains(t, prompt, "kas task show auth-refactor.md")
 	assert.NotContains(t, prompt, "docs/plans/")
+	assert.NotContains(t, prompt, "kasmos-coder", "implement prompt must not reference skill to avoid skill-load overhead")
+}
+
+func TestSoloAgentPrompt_ContainsTestScopingRule(t *testing.T) {
+	prompt := buildSoloPrompt("auth-refactor", "Refactor JWT auth", "auth-refactor.md")
+	assert.Contains(t, prompt, "-run Test")
+	assert.Contains(t, prompt, "Do not load skills")
 }
 
 func TestBuildSoloPrompt_WithDescription(t *testing.T) {
