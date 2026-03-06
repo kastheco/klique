@@ -189,7 +189,7 @@ classify before writing any tasks. this determines wave structure and review ove
 | **large** | 6+ hours | 10–20 | 2–4 | review per wave |
 
 **sizing rules:**
-- every task = 5–15 minutes of mechanical work. Tasks must be small enough that a low-context coder agent can execute without reading the full codebase. < 3 min → merge into adjacent task. > 15 min → split further.
+- every task = 5–15 minutes of mechanical work. tasks must be small enough that a low-context coder agent can execute without reading the full codebase. < 3 min → merge into adjacent task. > 15 min → split further.
 - never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.
 - a task is a commit-worthy unit — leaves the codebase compilable and testable.
 - waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.
