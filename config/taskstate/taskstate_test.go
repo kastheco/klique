@@ -1,8 +1,6 @@
 package taskstate
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -33,17 +31,17 @@ func newTestPSWithStore(t *testing.T) (*TaskState, taskstore.Store) {
 func TestLoad(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "my-plan.md", Status: taskstore.StatusReady,
+		Filename: "my-plan", Status: taskstore.StatusReady,
 	}))
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "done-plan.md", Status: taskstore.StatusDone,
+		Filename: "done-plan", Status: taskstore.StatusDone,
 	}))
 
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 	assert.Len(t, ps.Plans, 2)
-	assert.Equal(t, StatusReady, ps.Plans["my-plan.md"].Status)
-	assert.Equal(t, StatusDone, ps.Plans["done-plan.md"].Status)
+	assert.Equal(t, StatusReady, ps.Plans["my-plan"].Status)
+	assert.Equal(t, StatusDone, ps.Plans["done-plan"].Status)
 }
 
 func TestLoadMissing(t *testing.T) {
@@ -61,16 +59,16 @@ func TestLoad_BackfillsGoalFromContent(t *testing.T) {
 	require.NotEmpty(t, plan.Goal)
 
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "goal-backfill.md",
+		Filename: "goal-backfill",
 		Status:   taskstore.StatusReady,
 		Content:  content,
 	}))
 
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, plan.Goal, ps.Plans["goal-backfill.md"].Goal)
+	assert.Equal(t, plan.Goal, ps.Plans["goal-backfill"].Goal)
 
-	entry, err := store.Get("proj", "goal-backfill.md")
+	entry, err := store.Get("proj", "goal-backfill")
 	require.NoError(t, err)
 	assert.Equal(t, plan.Goal, entry.Goal)
 }
@@ -79,11 +77,11 @@ func TestUnfinished(t *testing.T) {
 	ps := &TaskState{
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
-			"a.md": {Status: StatusReady},
-			"b.md": {Status: StatusImplementing},
-			"c.md": {Status: StatusReviewing},
-			"d.md": {Status: StatusDone},
-			"e.md": {Status: StatusDone},
+			"a": {Status: StatusReady},
+			"b": {Status: StatusImplementing},
+			"c": {Status: StatusReviewing},
+			"d": {Status: StatusDone},
+			"e": {Status: StatusDone},
 		},
 	}
 
@@ -91,8 +89,8 @@ func TestUnfinished(t *testing.T) {
 	// done and completed are both excluded
 	assert.Len(t, unfinished, 3)
 	for _, p := range unfinished {
-		assert.NotEqual(t, "d.md", p.Filename, "done should be excluded")
-		assert.NotEqual(t, "e.md", p.Filename, "completed should be excluded")
+		assert.NotEqual(t, "d", p.Filename, "done should be excluded")
+		assert.NotEqual(t, "e", p.Filename, "completed should be excluded")
 	}
 }
 
@@ -100,55 +98,55 @@ func TestIsDone(t *testing.T) {
 	ps := &TaskState{
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
-			"a.md": {Status: StatusDone},
-			"b.md": {Status: StatusDone},
+			"a": {Status: StatusDone},
+			"b": {Status: StatusDone},
 		},
 	}
 
-	assert.True(t, ps.IsDone("a.md"))
-	ps.Plans["c.md"] = TaskEntry{Status: StatusImplementing}
-	assert.True(t, ps.IsDone("a.md"))
-	assert.False(t, ps.IsDone("missing.md"))
+	assert.True(t, ps.IsDone("a"))
+	ps.Plans["c"] = TaskEntry{Status: StatusImplementing}
+	assert.True(t, ps.IsDone("a"))
+	assert.False(t, ps.IsDone("missing"))
 
 	// Non-terminal statuses are not done
-	ps.Plans["rev.md"] = TaskEntry{Status: StatusReviewing}
-	assert.False(t, ps.IsDone("rev.md"), "reviewing should not be treated as done")
-	ps.Plans["impl.md"] = TaskEntry{Status: StatusImplementing}
-	assert.False(t, ps.IsDone("impl.md"), "implementing should not be treated as done")
+	ps.Plans["rev"] = TaskEntry{Status: StatusReviewing}
+	assert.False(t, ps.IsDone("rev"), "reviewing should not be treated as done")
+	ps.Plans["impl"] = TaskEntry{Status: StatusImplementing}
+	assert.False(t, ps.IsDone("impl"), "implementing should not be treated as done")
 }
 
 func TestPlanLifecycle(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "test-plan.md", Status: taskstore.StatusReady,
+		Filename: "test-plan", Status: taskstore.StatusReady,
 	}))
 
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	// Coder picks it up
-	require.NoError(t, ps.setStatus("test-plan.md", StatusImplementing))
+	require.NoError(t, ps.setStatus("test-plan", StatusImplementing))
 	unfinished := ps.Unfinished()
 	require.Len(t, unfinished, 1)
 	assert.Equal(t, StatusImplementing, unfinished[0].Status)
-	assert.False(t, ps.IsDone("test-plan.md"))
+	assert.False(t, ps.IsDone("test-plan"))
 
 	// Coder finishes — transitions to reviewing
-	require.NoError(t, ps.setStatus("test-plan.md", StatusReviewing))
-	assert.False(t, ps.IsDone("test-plan.md"))
+	require.NoError(t, ps.setStatus("test-plan", StatusReviewing))
+	assert.False(t, ps.IsDone("test-plan"))
 	unfinished = ps.Unfinished()
 	require.Len(t, unfinished, 1)
 	assert.Equal(t, StatusReviewing, unfinished[0].Status)
 
 	// Reviewer approves — FSM transitions to done (terminal)
-	require.NoError(t, ps.setStatus("test-plan.md", StatusDone))
-	assert.True(t, ps.IsDone("test-plan.md"))
+	require.NoError(t, ps.setStatus("test-plan", StatusDone))
+	assert.True(t, ps.IsDone("test-plan"))
 	assert.Empty(t, ps.Unfinished())
 
 	// Verify persistence: reload and check final state
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, StatusDone, ps2.Plans["test-plan.md"].Status)
+	assert.Equal(t, StatusDone, ps2.Plans["test-plan"].Status)
 }
 
 // TestFullLifecycleNoRespawnLoop walks the complete orchestration state machine and
@@ -159,50 +157,50 @@ func TestPlanLifecycle(t *testing.T) {
 func TestFullLifecycleNoRespawnLoop(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "feature.md", Status: taskstore.StatusReady,
+		Filename: "feature", Status: taskstore.StatusReady,
 	}))
 
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
 	// Step 1: ready → implementing
-	require.NoError(t, ps.setStatus("feature.md", StatusImplementing))
-	assert.False(t, ps.IsDone("feature.md"))
+	require.NoError(t, ps.setStatus("feature", StatusImplementing))
+	assert.False(t, ps.IsDone("feature"))
 	assert.Len(t, ps.Unfinished(), 1)
 
 	// Step 2: implementing → reviewing
-	require.NoError(t, ps.setStatus("feature.md", StatusReviewing))
-	assert.False(t, ps.IsDone("feature.md"), "reviewing is not done")
+	require.NoError(t, ps.setStatus("feature", StatusReviewing))
+	assert.False(t, ps.IsDone("feature"), "reviewing is not done")
 	assert.Len(t, ps.Unfinished(), 1, "reviewing should appear in sidebar")
 
 	// Step 3: reviewer approves → done (terminal)
-	require.NoError(t, ps.setStatus("feature.md", StatusDone))
-	assert.True(t, ps.IsDone("feature.md"), "done must satisfy IsDone")
+	require.NoError(t, ps.setStatus("feature", StatusDone))
+	assert.True(t, ps.IsDone("feature"), "done must satisfy IsDone")
 	assert.Empty(t, ps.Unfinished(), "done must not appear in sidebar unfinished list")
 
 	// Verify persistence
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, StatusDone, ps2.Plans["feature.md"].Status)
-	assert.True(t, ps2.IsDone("feature.md"))
+	assert.Equal(t, StatusDone, ps2.Plans["feature"].Status)
+	assert.True(t, ps2.IsDone("feature"))
 	assert.Empty(t, ps2.Unfinished())
 }
 
 func TestSetStatus(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "a.md", Status: taskstore.StatusImplementing,
+		Filename: "a", Status: taskstore.StatusImplementing,
 	}))
 
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
-	require.NoError(t, ps.setStatus("a.md", StatusReviewing))
-	assert.Equal(t, StatusReviewing, ps.Plans["a.md"].Status)
+	require.NoError(t, ps.setStatus("a", StatusReviewing))
+	assert.Equal(t, StatusReviewing, ps.Plans["a"].Status)
 
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, StatusReviewing, ps2.Plans["a.md"].Status)
+	assert.Equal(t, StatusReviewing, ps2.Plans["a"].Status)
 }
 
 func TestTaskEntryWithTopic(t *testing.T) {
@@ -212,7 +210,7 @@ func TestTaskEntryWithTopic(t *testing.T) {
 		Name: "ui-refactor", CreatedAt: createdAt,
 	}))
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename:    "sidebar.md",
+		Filename:    "sidebar",
 		Status:      taskstore.StatusImplementing,
 		Description: "refactor sidebar",
 		Branch:      "plan/sidebar",
@@ -223,7 +221,7 @@ func TestTaskEntryWithTopic(t *testing.T) {
 	ps, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
 
-	entry := ps.Plans["sidebar.md"]
+	entry := ps.Plans["sidebar"]
 	assert.Equal(t, StatusImplementing, entry.Status)
 	assert.Equal(t, "refactor sidebar", entry.Description)
 	assert.Equal(t, "plan/sidebar", entry.Branch)
@@ -238,9 +236,9 @@ func TestPlansByTopic(t *testing.T) {
 	ps := &TaskState{
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
-			"a.md": {Status: StatusImplementing, Topic: "ui"},
-			"b.md": {Status: StatusReady, Topic: "ui"},
-			"c.md": {Status: StatusReady, Topic: ""},
+			"a": {Status: StatusImplementing, Topic: "ui"},
+			"b": {Status: StatusReady, Topic: "ui"},
+			"c": {Status: StatusReady, Topic: ""},
 		},
 		TopicEntries: map[string]TopicEntry{
 			"ui": {CreatedAt: time.Now()},
@@ -252,21 +250,21 @@ func TestPlansByTopic(t *testing.T) {
 
 	ungrouped := ps.UngroupedTasks()
 	assert.Len(t, ungrouped, 1)
-	assert.Equal(t, "c.md", ungrouped[0].Filename)
+	assert.Equal(t, "c", ungrouped[0].Filename)
 }
 
 func TestCreatePlanWithTopic(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Now().UTC()
-	require.NoError(t, ps.Create("feat.md", "a feature", "plan/feat", "my-topic", now))
+	require.NoError(t, ps.Create("feat", "a feature", "plan/feat", "my-topic", now))
 
 	// Topic should be auto-created
 	topics := ps.Topics()
 	require.Len(t, topics, 1)
 	assert.Equal(t, "my-topic", topics[0].Name)
 
-	entry := ps.Plans["feat.md"]
+	entry := ps.Plans["feat"]
 	assert.Equal(t, "my-topic", entry.Topic)
 	assert.Equal(t, StatusReady, entry.Status)
 }
@@ -275,12 +273,12 @@ func TestCreatePlanUngrouped(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Now().UTC()
-	require.NoError(t, ps.Create("fix.md", "a fix", "plan/fix", "", now))
+	require.NoError(t, ps.Create("fix", "a fix", "plan/fix", "", now))
 
 	topics := ps.Topics()
 	assert.Len(t, topics, 0)
 
-	entry := ps.Plans["fix.md"]
+	entry := ps.Plans["fix"]
 	assert.Equal(t, "", entry.Topic)
 }
 
@@ -288,19 +286,19 @@ func TestHasRunningCoderInTopic(t *testing.T) {
 	ps := &TaskState{
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
-			"a.md": {Status: StatusImplementing, Topic: "ui"},
-			"b.md": {Status: StatusReady, Topic: "ui"},
+			"a": {Status: StatusImplementing, Topic: "ui"},
+			"b": {Status: StatusReady, Topic: "ui"},
 		},
 	}
 
-	running, planFile := ps.HasRunningCoderInTopic("ui", "b.md")
+	running, planFile := ps.HasRunningCoderInTopic("ui", "b")
 	assert.True(t, running)
-	assert.Equal(t, "a.md", planFile)
+	assert.Equal(t, "a", planFile)
 
-	running, _ = ps.HasRunningCoderInTopic("ui", "a.md")
+	running, _ = ps.HasRunningCoderInTopic("ui", "a")
 	assert.False(t, running, "should not flag self")
 
-	running, _ = ps.HasRunningCoderInTopic("other", "x.md")
+	running, _ = ps.HasRunningCoderInTopic("other", "x")
 	assert.False(t, running)
 }
 
@@ -308,10 +306,10 @@ func TestRegisterPlan(t *testing.T) {
 	ps := newTestPS(t)
 
 	now := time.Date(2026, 2, 21, 15, 4, 5, 0, time.UTC)
-	err := ps.Register("auth-refactor.md", "refactor auth flow", "plan/auth-refactor", now)
+	err := ps.Register("auth-refactor", "refactor auth flow", "plan/auth-refactor", now)
 	require.NoError(t, err)
 
-	entry, ok := ps.Entry("auth-refactor.md")
+	entry, ok := ps.Entry("auth-refactor")
 	require.True(t, ok)
 	assert.Equal(t, StatusReady, entry.Status)
 	assert.Equal(t, "refactor auth flow", entry.Description)
@@ -323,7 +321,7 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	ps := &TaskState{
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
-			"auth-refactor.md": {
+			"auth-refactor": {
 				Status:      StatusReady,
 				Description: "existing",
 				Branch:      "plan/auth-refactor",
@@ -333,7 +331,7 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	}
 
 	err := ps.Register(
-		"auth-refactor.md",
+		"auth-refactor",
 		"new description",
 		"plan/auth-refactor",
 		time.Now().UTC(),
@@ -341,16 +339,16 @@ func TestRegisterPlan_RejectsDuplicate(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDisplayName_NoSuffix(t *testing.T) {
+	assert.Equal(t, "auth-refactor", DisplayName("auth-refactor"))
+}
+
 func TestRename(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
 
-	// Create old plan file on disk
-	oldFile := "my-feature.md"
-	newFile := "auth-refactor.md"
-	oldPath := filepath.Join(dir, oldFile)
-	newPath := filepath.Join(dir, newFile)
-	require.NoError(t, os.WriteFile(oldPath, []byte("# old plan"), 0o644))
+	oldFile := "my-feature"
+	newFile := "auth-refactor"
 
 	// Seed the store
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
@@ -370,12 +368,6 @@ func TestRename(t *testing.T) {
 	assert.Equal(t, StatusReady, ps.Plans[newFile].Status)
 	assert.Equal(t, "plan/my-feature", ps.Plans[newFile].Branch)
 
-	// File renamed on disk
-	_, err = os.Stat(oldPath)
-	assert.True(t, os.IsNotExist(err), "old file should not exist")
-	_, err = os.Stat(newPath)
-	assert.NoError(t, err, "new file should exist")
-
 	// Persisted to store
 	ps2, err := Load(store, "proj", dir)
 	require.NoError(t, err)
@@ -386,16 +378,16 @@ func TestRename(t *testing.T) {
 func TestRenameNonExistentPlan(t *testing.T) {
 	ps := newTestPS(t)
 
-	_, err := ps.Rename("nonexistent.md", "new-name")
+	_, err := ps.Rename("nonexistent", "new-name")
 	assert.Error(t, err)
 }
 
 func TestRenameNoFileOnDisk(t *testing.T) {
-	// Rename should succeed even if the .md file doesn't exist on disk
+	// Rename should succeed even if the file doesn't exist on disk
 	store := taskstore.NewTestSQLiteStore(t)
 	dir := t.TempDir()
-	oldFile := "my-feature.md"
-	newFile := "new-name.md"
+	oldFile := "my-feature"
+	newFile := "new-name"
 
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
 		Filename: oldFile, Status: taskstore.StatusPlanning,
@@ -416,21 +408,21 @@ func TestTaskState_WithStore(t *testing.T) {
 
 	// Create via store
 	require.NoError(t, store.Create("test-project", taskstore.TaskEntry{
-		Filename: "test.md", Status: "ready", Description: "remote plan",
+		Filename: "test", Status: "ready", Description: "remote plan",
 	}))
 
 	// Load TaskState with store
 	ps, err := Load(store, "test-project", "/tmp/unused")
 	require.NoError(t, err)
 	assert.Len(t, ps.Plans, 1)
-	assert.Equal(t, StatusReady, ps.Plans["test.md"].Status)
+	assert.Equal(t, StatusReady, ps.Plans["test"].Status)
 }
 
 func TestSetTopic_WithStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "feat.md", Status: "ready", Topic: "old-topic",
+		Filename: "feat", Status: "ready", Topic: "old-topic",
 	}))
 	require.NoError(t, store.CreateTopic("proj", taskstore.TopicEntry{Name: "old-topic", CreatedAt: time.Now().UTC()}))
 
@@ -438,8 +430,8 @@ func TestSetTopic_WithStore(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to a new topic (auto-creates topic entry)
-	require.NoError(t, ps.SetTopic("feat.md", "new-topic"))
-	assert.Equal(t, "new-topic", ps.Plans["feat.md"].Topic)
+	require.NoError(t, ps.SetTopic("feat", "new-topic"))
+	assert.Equal(t, "new-topic", ps.Plans["feat"].Topic)
 
 	// Topic entry should be auto-created
 	topics := ps.Topics()
@@ -452,13 +444,13 @@ func TestSetTopic_WithStore(t *testing.T) {
 	// Persisted to store
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, "new-topic", ps2.Plans["feat.md"].Topic)
+	assert.Equal(t, "new-topic", ps2.Plans["feat"].Topic)
 }
 
 func TestSetTopic_ClearTopic(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "feat.md", Status: "ready", Topic: "some-topic",
+		Filename: "feat", Status: "ready", Topic: "some-topic",
 	}))
 	require.NoError(t, store.CreateTopic("proj", taskstore.TopicEntry{Name: "some-topic", CreatedAt: time.Now().UTC()}))
 
@@ -466,19 +458,19 @@ func TestSetTopic_ClearTopic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Clear topic (empty string)
-	require.NoError(t, ps.SetTopic("feat.md", ""))
-	assert.Equal(t, "", ps.Plans["feat.md"].Topic)
+	require.NoError(t, ps.SetTopic("feat", ""))
+	assert.Equal(t, "", ps.Plans["feat"].Topic)
 
 	// Persisted to store
 	ps2, err := Load(store, "proj", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, "", ps2.Plans["feat.md"].Topic)
+	assert.Equal(t, "", ps2.Plans["feat"].Topic)
 }
 
 func TestSetTopic_NotFound(t *testing.T) {
 	ps := newTestPS(t)
 
-	err := ps.SetTopic("nonexistent.md", "some-topic")
+	err := ps.SetTopic("nonexistent", "some-topic")
 	assert.Error(t, err)
 }
 
@@ -487,7 +479,7 @@ func TestSetTopic_RemoteStore(t *testing.T) {
 
 	// Create plan via store
 	require.NoError(t, store.Create("test-project", taskstore.TaskEntry{
-		Filename: "test.md", Status: "ready", Description: "remote plan", Topic: "old-topic",
+		Filename: "test", Status: "ready", Description: "remote plan", Topic: "old-topic",
 	}))
 	require.NoError(t, store.CreateTopic("test-project", taskstore.TopicEntry{Name: "old-topic", CreatedAt: time.Now().UTC()}))
 
@@ -495,13 +487,13 @@ func TestSetTopic_RemoteStore(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change topic via SetTopic — must write through to store
-	require.NoError(t, ps.SetTopic("test.md", "new-topic"))
-	assert.Equal(t, "new-topic", ps.Plans["test.md"].Topic)
+	require.NoError(t, ps.SetTopic("test", "new-topic"))
+	assert.Equal(t, "new-topic", ps.Plans["test"].Topic)
 
 	// Verify persisted in store by reloading
 	ps2, err := Load(store, "test-project", "/tmp/unused")
 	require.NoError(t, err)
-	assert.Equal(t, "new-topic", ps2.Plans["test.md"].Topic)
+	assert.Equal(t, "new-topic", ps2.Plans["test"].Topic)
 }
 
 func TestTaskState_CreateWithContent(t *testing.T) {
@@ -510,10 +502,10 @@ func TestTaskState_CreateWithContent(t *testing.T) {
 	require.NoError(t, err)
 
 	content := "# Auth Refactor\n\n## Wave 1\n"
-	err = ps.CreateWithContent("auth.md", "auth refactor", "plan/auth", "", time.Now(), content)
+	err = ps.CreateWithContent("auth", "auth refactor", "plan/auth", "", time.Now(), content)
 	require.NoError(t, err)
 
-	got, err := store.GetContent("proj", "auth.md")
+	got, err := store.GetContent("proj", "auth")
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
 }
@@ -524,16 +516,16 @@ func TestTaskState_GetContent(t *testing.T) {
 	require.NoError(t, err)
 
 	content := "# Plan Content"
-	require.NoError(t, ps.CreateWithContent("test.md", "", "", "", time.Now(), content))
+	require.NoError(t, ps.CreateWithContent("test", "", "", "", time.Now(), content))
 
-	got, err := ps.GetContent("test.md")
+	got, err := ps.GetContent("test")
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
 }
 
 func TestTaskState_IngestContent_PopulatesGoalAndSubtasks(t *testing.T) {
 	ps := newTestPS(t)
-	require.NoError(t, ps.Create("plan.md", "", "plan/plan", "", time.Now().UTC()))
+	require.NoError(t, ps.Create("plan", "", "plan/plan", "", time.Now().UTC()))
 
 	content := `# Plan
 
@@ -553,17 +545,17 @@ write subtask rows
 persist task status updates
 `
 
-	require.NoError(t, ps.IngestContent("plan.md", content))
+	require.NoError(t, ps.IngestContent("plan", content))
 
-	storedContent, err := ps.GetContent("plan.md")
+	storedContent, err := ps.GetContent("plan")
 	require.NoError(t, err)
 	assert.Equal(t, content, storedContent)
 
-	entry, ok := ps.Entry("plan.md")
+	entry, ok := ps.Entry("plan")
 	require.True(t, ok)
 	assert.Equal(t, "improve info tab metadata", entry.Goal)
 
-	subtasks, err := ps.GetSubtasks("plan.md")
+	subtasks, err := ps.GetSubtasks("plan")
 	require.NoError(t, err)
 	require.Len(t, subtasks, 3)
 
@@ -582,25 +574,25 @@ persist task status updates
 
 func TestTaskState_IngestContent_ParseFailureStillStoresContent(t *testing.T) {
 	ps, store := newTestPSWithStore(t)
-	require.NoError(t, ps.Create("plan.md", "", "plan/plan", "", time.Now().UTC()))
+	require.NoError(t, ps.Create("plan", "", "plan/plan", "", time.Now().UTC()))
 
 	seeded := []taskstore.SubtaskEntry{{
 		TaskNumber: 1,
 		Title:      "existing",
 		Status:     taskstore.SubtaskStatusDone,
 	}}
-	require.NoError(t, store.SetSubtasks("test-proj", "plan.md", seeded))
+	require.NoError(t, store.SetSubtasks("test-proj", "plan", seeded))
 
 	invalidContent := "# Plan\n\n**Goal:** parsed but no waves"
-	err := ps.IngestContent("plan.md", invalidContent)
+	err := ps.IngestContent("plan", invalidContent)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse plan content")
 
-	storedContent, contentErr := ps.GetContent("plan.md")
+	storedContent, contentErr := ps.GetContent("plan")
 	require.NoError(t, contentErr)
 	assert.Equal(t, invalidContent, storedContent)
 
-	subtasks, subtaskErr := ps.GetSubtasks("plan.md")
+	subtasks, subtaskErr := ps.GetSubtasks("plan")
 	require.NoError(t, subtaskErr)
 	require.Len(t, subtasks, 1)
 	assert.Equal(t, seeded[0].TaskNumber, subtasks[0].TaskNumber)
@@ -611,7 +603,7 @@ func TestTaskState_IngestContent_ParseFailureStillStoresContent(t *testing.T) {
 func TestTaskState_LoadRequiresStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
-		Filename: "test.md", Status: taskstore.StatusReady,
+		Filename: "test", Status: taskstore.StatusReady,
 	}))
 
 	// Load should work with a store and no plan-state.json on disk
@@ -629,68 +621,68 @@ func TestFinished_SortedByDoneAtDescending(t *testing.T) {
 		Dir: "/tmp",
 		Plans: map[string]TaskEntry{
 			// created newest but done oldest — should sort last
-			"oldest-done.md": {Status: StatusDone, CreatedAt: t3, DoneAt: t1},
+			"oldest-done": {Status: StatusDone, CreatedAt: t3, DoneAt: t1},
 			// created oldest but done newest — should sort first
-			"newest-done.md": {Status: StatusDone, CreatedAt: t1, DoneAt: t3},
+			"newest-done": {Status: StatusDone, CreatedAt: t1, DoneAt: t3},
 			// in the middle by done time
-			"middle-done.md": {Status: StatusDone, CreatedAt: t2, DoneAt: t2},
+			"middle-done": {Status: StatusDone, CreatedAt: t2, DoneAt: t2},
 			// non-done plans must not appear
-			"active.md": {Status: StatusImplementing, CreatedAt: t3, DoneAt: time.Time{}},
+			"active": {Status: StatusImplementing, CreatedAt: t3, DoneAt: time.Time{}},
 		},
 	}
 
 	finished := ps.Finished()
 	require.Len(t, finished, 3)
-	assert.Equal(t, "newest-done.md", finished[0].Filename, "newest done must sort first")
-	assert.Equal(t, "middle-done.md", finished[1].Filename)
-	assert.Equal(t, "oldest-done.md", finished[2].Filename, "oldest done must sort last")
+	assert.Equal(t, "newest-done", finished[0].Filename, "newest done must sort first")
+	assert.Equal(t, "middle-done", finished[1].Filename)
+	assert.Equal(t, "oldest-done", finished[2].Filename, "oldest done must sort last")
 }
 
 func TestSetClickUpTaskID(t *testing.T) {
 	ps := newTestPS(t)
-	require.NoError(t, ps.Create("cu-test.md", "clickup test", "plan/cu-test", "", time.Now()))
+	require.NoError(t, ps.Create("cu-test", "clickup test", "plan/cu-test", "", time.Now()))
 
 	// Initially empty
-	entry, ok := ps.Entry("cu-test.md")
+	entry, ok := ps.Entry("cu-test")
 	require.True(t, ok)
 	assert.Equal(t, "", entry.ClickUpTaskID, "task ID must be empty before set")
 
 	// Set the task ID
-	require.NoError(t, ps.SetClickUpTaskID("cu-test.md", "CU-abc456"))
+	require.NoError(t, ps.SetClickUpTaskID("cu-test", "CU-abc456"))
 
 	// In-memory state is updated
-	entry, ok = ps.Entry("cu-test.md")
+	entry, ok = ps.Entry("cu-test")
 	require.True(t, ok)
 	assert.Equal(t, "CU-abc456", entry.ClickUpTaskID, "in-memory task ID must be updated")
 }
 
 func TestClickUpTaskIDEmpty(t *testing.T) {
 	ps := newTestPS(t)
-	require.NoError(t, ps.Create("empty-cu.md", "no clickup", "plan/empty-cu", "", time.Now()))
+	require.NoError(t, ps.Create("empty-cu", "no clickup", "plan/empty-cu", "", time.Now()))
 
 	// Entry without ClickUpTaskID must have empty string
-	entry, ok := ps.Entry("empty-cu.md")
+	entry, ok := ps.Entry("empty-cu")
 	require.True(t, ok)
 	assert.Equal(t, "", entry.ClickUpTaskID, "new plan must have empty ClickUpTaskID")
 }
 
 func TestSetClickUpTaskID_NotFound(t *testing.T) {
 	ps := newTestPS(t)
-	err := ps.SetClickUpTaskID("nonexistent.md", "CU-xyz")
+	err := ps.SetClickUpTaskID("nonexistent", "CU-xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestTaskState_ReviewCycle(t *testing.T) {
 	ps := newTestPS(t)
-	require.NoError(t, ps.Create("test.md", "desc", "plan/test", "", time.Now()))
+	require.NoError(t, ps.Create("test", "desc", "plan/test", "", time.Now()))
 
-	cycle, err := ps.ReviewCycle("test.md")
+	cycle, err := ps.ReviewCycle("test")
 	require.NoError(t, err)
 	assert.Equal(t, 0, cycle)
 
-	require.NoError(t, ps.IncrementReviewCycle("test.md"))
-	cycle, err = ps.ReviewCycle("test.md")
+	require.NoError(t, ps.IncrementReviewCycle("test"))
+	cycle, err = ps.ReviewCycle("test")
 	require.NoError(t, err)
 	assert.Equal(t, 1, cycle)
 }

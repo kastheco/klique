@@ -36,7 +36,7 @@ type jsonTaskState struct {
 // and topics into the store under the given project. If plan-state.json does
 // not exist, it returns (0, nil) — a no-op. The migration is idempotent:
 // plans and topics that already exist in the store are silently skipped.
-// For each plan entry that has a corresponding .md file in plansDir, the file
+// For each plan entry that has a corresponding plan content file in plansDir, the
 // content is also imported via SetContent.
 //
 // Returns the number of plans successfully migrated (newly created).
@@ -81,14 +81,14 @@ func MigrateFromJSON(store Store, project, plansDir string) (int, error) {
 		}
 		migrated++
 
-		// Import .md file content if it exists on disk.
+		// Import plan content file content if it exists on disk.
 		mdPath := filepath.Join(plansDir, filename)
 		content, err := os.ReadFile(mdPath)
 		if err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				return migrated, fmt.Errorf("read plan content %s: %w", filename, err)
 			}
-			// No .md file — that's fine, content stays empty.
+			// No legacy plan content file — that's fine, content stays empty.
 		} else {
 			if err := store.SetContent(project, filename, string(content)); err != nil {
 				return migrated, fmt.Errorf("set content for %s: %w", filename, err)

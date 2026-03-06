@@ -51,7 +51,7 @@ func TestLoadInstances_DropsStaleWaveInstancesWithoutTmuxSession(t *testing.T) {
 			Path:       repoDir,
 			Status:     Paused,
 			Program:    "opencode",
-			TaskFile:   "stale-wave.md",
+			TaskFile:   "stale-wave",
 			TaskNumber: 1,
 			WaveNumber: 1,
 			Worktree: GitWorktreeData{

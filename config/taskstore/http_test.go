@@ -26,18 +26,18 @@ func newTestHTTPStore(t *testing.T) *taskstore.HTTPStore {
 func TestHTTPStore_ContentRoundTrip(t *testing.T) {
 	store := newTestHTTPStore(t)
 	entry := taskstore.TaskEntry{
-		Filename: "test.md",
+		Filename: "test",
 		Status:   taskstore.StatusReady,
 		Content:  "# My Plan\n\nDetails here.",
 	}
 	require.NoError(t, store.Create("proj", entry))
 
-	content, err := store.GetContent("proj", "test.md")
+	content, err := store.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# My Plan\n\nDetails here.", content)
 
-	require.NoError(t, store.SetContent("proj", "test.md", "# Updated Plan"))
-	content, err = store.GetContent("proj", "test.md")
+	require.NoError(t, store.SetContent("proj", "test", "# Updated Plan"))
+	content, err = store.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# Updated Plan", content)
 }
@@ -50,17 +50,17 @@ func TestHTTPStore_RoundTrip(t *testing.T) {
 	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 
 	// Create
-	entry := taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady, Description: "test"}
+	entry := taskstore.TaskEntry{Filename: "test", Status: taskstore.StatusReady, Description: "test"}
 	require.NoError(t, client.Create("kasmos", entry))
 
 	// Get
-	got, err := client.Get("kasmos", "test.md")
+	got, err := client.Get("kasmos", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "test", got.Description)
 
 	// Update
 	got.Status = taskstore.StatusImplementing
-	require.NoError(t, client.Update("kasmos", "test.md", got))
+	require.NoError(t, client.Update("kasmos", "test", got))
 
 	// List
 	plans, err := client.List("kasmos")
@@ -92,26 +92,26 @@ func TestHTTPStore_SubtasksRoundTrip(t *testing.T) {
 	defer srv.Close()
 	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 
-	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, client.SetSubtasks("kasmos", "plan.md", []taskstore.SubtaskEntry{
+	require.NoError(t, client.SetSubtasks("kasmos", "plan", []taskstore.SubtaskEntry{
 		{TaskNumber: 1, Title: "first", Status: taskstore.SubtaskStatusPending},
 		{TaskNumber: 2, Title: "second", Status: taskstore.SubtaskStatusPending},
 	}))
 
-	subtasks, err := client.GetSubtasks("kasmos", "plan.md")
+	subtasks, err := client.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(subtasks))
 	assert.Equal(t, 1, subtasks[0].TaskNumber)
 	assert.Equal(t, taskstore.SubtaskStatusPending, subtasks[0].Status)
 
-	require.NoError(t, client.UpdateSubtaskStatus("kasmos", "plan.md", 1, taskstore.SubtaskStatusDone))
-	updated, err := client.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, client.UpdateSubtaskStatus("kasmos", "plan", 1, taskstore.SubtaskStatusDone))
+	updated, err := client.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.SubtaskStatusDone, updated[0].Status)
 
-	require.NoError(t, client.SetSubtasks("kasmos", "plan.md", nil))
-	empty, err := client.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, client.SetSubtasks("kasmos", "plan", nil))
+	empty, err := client.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Len(t, empty, 0)
 }
@@ -122,12 +122,12 @@ func TestHTTPStore_PhaseTimestamp(t *testing.T) {
 	defer srv.Close()
 	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 
-	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	require.NoError(t, client.SetPhaseTimestamp("kasmos", "plan.md", "planning", ts))
+	require.NoError(t, client.SetPhaseTimestamp("kasmos", "plan", "planning", ts))
 
-	got, err := backend.Get("kasmos", "plan.md")
+	got, err := backend.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, ts, got.PlanningAt)
 }
@@ -138,10 +138,10 @@ func TestHTTPStore_PlanGoal(t *testing.T) {
 	defer srv.Close()
 	client := taskstore.NewHTTPStore(srv.URL, "kasmos")
 
-	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, client.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, client.SetPlanGoal("kasmos", "plan.md", "ship faster"))
-	got, err := backend.Get("kasmos", "plan.md")
+	require.NoError(t, client.SetPlanGoal("kasmos", "plan", "ship faster"))
+	got, err := backend.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, "ship faster", got.Goal)
 }
@@ -152,7 +152,7 @@ func TestHTTPStore_SetPhaseTimestamp_UsesJSONErrorContractOnMalformedBody(t *tes
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(func() *http.Request {
-		req, rErr := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/tasks/plan.md/phase-timestamp", strings.NewReader("{"))
+		req, rErr := http.NewRequest(http.MethodPut, srv.URL+"/v1/projects/kasmos/tasks/plan/phase-timestamp", strings.NewReader("{"))
 		require.NoError(t, rErr)
 		req.Header.Set("Content-Type", "application/json")
 		return req

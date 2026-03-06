@@ -85,7 +85,7 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 			{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Only task"}}},
 		},
 	}
-	singleOrch := orchestration.NewWaveOrchestrator("single-wave-plan.md", singleWavePlan)
+	singleOrch := orchestration.NewWaveOrchestrator("single-wave-plan", singleWavePlan)
 
 	assert.False(t, singleOrch.ShouldPostWaveCompleteComment(),
 		"single-wave plans must not emit intermediate wave_complete comments")
@@ -96,7 +96,7 @@ func TestSingleWavePlanSkipsWaveComment(t *testing.T) {
 			{Number: 2, Tasks: []taskparser.Task{{Number: 2, Title: "Task 2"}}},
 		},
 	}
-	multiOrch := orchestration.NewWaveOrchestrator("multi-wave-plan.md", multiWavePlan)
+	multiOrch := orchestration.NewWaveOrchestrator("multi-wave-plan", multiWavePlan)
 
 	assert.True(t, multiOrch.ShouldPostWaveCompleteComment(),
 		"multi-wave plans must emit intermediate wave_complete comments")
@@ -116,7 +116,7 @@ func TestShouldPostWaveCompleteCommentNilOrch(t *testing.T) {
 // when there is no commenter (click-up not configured), we verify the
 // observable side-effect: pendingReviewFeedback is always cleared.
 func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
-	const planFile = "fixer-hook.md"
+	const planFile = "fixer-hook"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -180,7 +180,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 // hook does NOT fire when ImplementFinished is for an original coder (no
 // pending feedback). pendingReviewFeedback must remain empty/unchanged.
 func TestFixerCompleteHook_SkipsWhenNoFeedback(t *testing.T) {
-	const planFile = "no-feedback-hook.md"
+	const planFile = "no-feedback-hook"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

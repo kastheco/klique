@@ -59,9 +59,9 @@ func TestScaffoldPlan_WithCustomFields(t *testing.T) {
 
 func TestScaffoldFilename(t *testing.T) {
 	tests := map[string]string{
-		"Design Auth Flow":       "design-auth-flow.md",
-		"API v2 — New Endpoints": "api-v2-new-endpoints.md",
-		"  spaces & symbols!!! ": "spaces-symbols.md",
+		"Design Auth Flow":       "design-auth-flow",
+		"API v2 — New Endpoints": "api-v2-new-endpoints",
+		"  spaces & symbols!!! ": "spaces-symbols",
 	}
 
 	for input, want := range tests {

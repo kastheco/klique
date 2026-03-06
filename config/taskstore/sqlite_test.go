@@ -1,6 +1,8 @@
 package taskstore_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +22,7 @@ func newTestStore(t *testing.T) taskstore.Store {
 func TestSQLiteStore_CreateAndGet(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename:    "test-plan.md",
+		Filename:    "test-plan",
 		Status:      taskstore.StatusReady,
 		Description: "test plan",
 		Branch:      "plan/test-plan",
@@ -28,17 +30,46 @@ func TestSQLiteStore_CreateAndGet(t *testing.T) {
 	}
 	require.NoError(t, store.Create("kasmos", entry))
 
-	got, err := store.Get("kasmos", "test-plan.md")
+	got, err := store.Get("kasmos", "test-plan")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusReady, got.Status)
 	assert.Equal(t, "test plan", got.Description)
 }
 
+func TestSQLiteStore_MdSuffixMigration(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "taskstore.db")
+
+	store, err := taskstore.NewSQLiteStore(dbPath)
+	require.NoError(t, err)
+	// Insert legacy .md-suffixed entries to simulate a pre-migration database.
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "foo.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "bar.md", Status: taskstore.StatusDone}))
+	require.NoError(t, store.SetSubtasks("proj", "foo.md", []taskstore.SubtaskEntry{{TaskNumber: 1, Title: "sub1", Status: taskstore.SubtaskStatusPending}}))
+	require.NoError(t, store.Close())
+
+	// Reopen — migration must strip '.md' from both tasks and subtasks.
+	store2, err := taskstore.NewSQLiteStore(dbPath)
+	require.NoError(t, err)
+	defer store2.Close()
+
+	plans, err := store2.List("proj")
+	require.NoError(t, err)
+	for _, plan := range plans {
+		assert.False(t, strings.HasSuffix(plan.Filename, ".md"), "filename %q should not have .md suffix after migration", plan.Filename)
+	}
+
+	// Subtasks must be retrievable by the stripped filename.
+	subs, err := store2.GetSubtasks("proj", "foo")
+	require.NoError(t, err)
+	assert.Len(t, subs, 1)
+}
+
 func TestSQLiteStore_ListByStatus(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusDone}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b", Status: taskstore.StatusDone}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c", Status: taskstore.StatusReady}))
 
 	plans, err := store.ListByStatus("kasmos", taskstore.StatusReady)
 	require.NoError(t, err)
@@ -47,19 +78,19 @@ func TestSQLiteStore_ListByStatus(t *testing.T) {
 
 func TestSQLiteStore_ProjectIsolation(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("project-a", taskstore.TaskEntry{Filename: "x.md", Status: taskstore.StatusReady}))
-	require.NoError(t, store.Create("project-b", taskstore.TaskEntry{Filename: "y.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("project-a", taskstore.TaskEntry{Filename: "x", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("project-b", taskstore.TaskEntry{Filename: "y", Status: taskstore.StatusReady}))
 
 	plans, err := store.List("project-a")
 	require.NoError(t, err)
 	assert.Len(t, plans, 1)
-	assert.Equal(t, "x.md", plans[0].Filename)
+	assert.Equal(t, "x", plans[0].Filename)
 }
 
 func TestSQLiteStore_Update(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename:    "update-test.md",
+		Filename:    "update-test",
 		Status:      taskstore.StatusReady,
 		Description: "original description",
 		Branch:      "plan/update-test",
@@ -69,9 +100,9 @@ func TestSQLiteStore_Update(t *testing.T) {
 
 	entry.Status = taskstore.StatusImplementing
 	entry.Description = "updated description"
-	require.NoError(t, store.Update("kasmos", "update-test.md", entry))
+	require.NoError(t, store.Update("kasmos", "update-test", entry))
 
-	got, err := store.Get("kasmos", "update-test.md")
+	got, err := store.Get("kasmos", "update-test")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusImplementing, got.Status)
 	assert.Equal(t, "updated description", got.Description)
@@ -84,18 +115,18 @@ func TestSQLiteStore_Update(t *testing.T) {
 func TestSQLiteStore_UpdatePreservesContent(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename: "content-preserve.md",
+		Filename: "content-preserve",
 		Status:   taskstore.StatusPlanning,
 		Branch:   "plan/content-preserve",
 	}
 	require.NoError(t, store.Create("kasmos", entry))
-	require.NoError(t, store.SetContent("kasmos", "content-preserve.md", "# My Plan\n\n## Wave 1\n"))
+	require.NoError(t, store.SetContent("kasmos", "content-preserve", "# My Plan\n\n## Wave 1\n"))
 
 	// Simulate an FSM transition: update status without setting content.
 	entry.Status = taskstore.StatusReady
-	require.NoError(t, store.Update("kasmos", "content-preserve.md", entry))
+	require.NoError(t, store.Update("kasmos", "content-preserve", entry))
 
-	content, err := store.GetContent("kasmos", "content-preserve.md")
+	content, err := store.GetContent("kasmos", "content-preserve")
 	require.NoError(t, err)
 	assert.Equal(t, "# My Plan\n\n## Wave 1\n", content, "content must survive a metadata-only Update")
 }
@@ -103,27 +134,27 @@ func TestSQLiteStore_UpdatePreservesContent(t *testing.T) {
 func TestSQLiteStore_Rename(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename:  "old-name.md",
+		Filename:  "old-name",
 		Status:    taskstore.StatusReady,
 		CreatedAt: time.Now().UTC(),
 	}
 	require.NoError(t, store.Create("kasmos", entry))
 
-	require.NoError(t, store.Rename("kasmos", "old-name.md", "new-name.md"))
+	require.NoError(t, store.Rename("kasmos", "old-name", "new-name"))
 
-	_, err := store.Get("kasmos", "old-name.md")
+	_, err := store.Get("kasmos", "old-name")
 	assert.Error(t, err)
 
-	got, err := store.Get("kasmos", "new-name.md")
+	got, err := store.Get("kasmos", "new-name")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusReady, got.Status)
 }
 
 func TestSQLiteStore_ListByTopic(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady, Topic: "auth"}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusReady, Topic: "auth"}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady, Topic: "storage"}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a", Status: taskstore.StatusReady, Topic: "auth"}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b", Status: taskstore.StatusReady, Topic: "auth"}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c", Status: taskstore.StatusReady, Topic: "storage"}))
 
 	plans, err := store.ListByTopic("kasmos", "auth")
 	require.NoError(t, err)
@@ -151,13 +182,13 @@ func TestSQLiteStore_Ping(t *testing.T) {
 
 func TestSQLiteStore_GetNotFound(t *testing.T) {
 	store := newTestStore(t)
-	_, err := store.Get("kasmos", "nonexistent.md")
+	_, err := store.Get("kasmos", "nonexistent")
 	assert.Error(t, err)
 }
 
 func TestSQLiteStore_CreateDuplicate(t *testing.T) {
 	store := newTestStore(t)
-	entry := taskstore.TaskEntry{Filename: "dup.md", Status: taskstore.StatusReady}
+	entry := taskstore.TaskEntry{Filename: "dup", Status: taskstore.StatusReady}
 	require.NoError(t, store.Create("kasmos", entry))
 	err := store.Create("kasmos", entry)
 	assert.Error(t, err)
@@ -165,27 +196,27 @@ func TestSQLiteStore_CreateDuplicate(t *testing.T) {
 
 func TestSQLiteStore_ListSortedByFilename(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c.md", Status: taskstore.StatusReady}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a.md", Status: taskstore.StatusReady}))
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "c", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "a", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "b", Status: taskstore.StatusReady}))
 
 	plans, err := store.List("kasmos")
 	require.NoError(t, err)
 	require.Len(t, plans, 3)
-	assert.Equal(t, "a.md", plans[0].Filename)
-	assert.Equal(t, "b.md", plans[1].Filename)
-	assert.Equal(t, "c.md", plans[2].Filename)
+	assert.Equal(t, "a", plans[0].Filename)
+	assert.Equal(t, "b", plans[1].Filename)
+	assert.Equal(t, "c", plans[2].Filename)
 }
 
 func TestSQLiteStore_CreateWithContent(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename: "test.md",
+		Filename: "test",
 		Status:   taskstore.StatusReady,
 		Content:  "# Test Plan\n\n## Wave 1\n\n### Task 1: Do thing\n",
 	}
 	require.NoError(t, store.Create("proj", entry))
-	got, err := store.Get("proj", "test.md")
+	got, err := store.Get("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, entry.Content, got.Content)
 }
@@ -193,41 +224,41 @@ func TestSQLiteStore_CreateWithContent(t *testing.T) {
 func TestSQLiteStore_GetContent(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename: "test.md",
+		Filename: "test",
 		Status:   taskstore.StatusReady,
 		Content:  "# Full Plan Content",
 	}
 	require.NoError(t, store.Create("proj", entry))
-	content, err := store.GetContent("proj", "test.md")
+	content, err := store.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# Full Plan Content", content)
 }
 
 func TestSQLiteStore_SetContent(t *testing.T) {
 	store := newTestStore(t)
-	entry := taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady}
+	entry := taskstore.TaskEntry{Filename: "test", Status: taskstore.StatusReady}
 	require.NoError(t, store.Create("proj", entry))
-	require.NoError(t, store.SetContent("proj", "test.md", "# Updated"))
-	content, err := store.GetContent("proj", "test.md")
+	require.NoError(t, store.SetContent("proj", "test", "# Updated"))
+	content, err := store.GetContent("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, "# Updated", content)
 }
 
 func TestClickUpTaskIDRoundTrip(t *testing.T) {
 	store := newTestStore(t)
-	entry := taskstore.TaskEntry{Filename: "clickup-test.md", Status: taskstore.StatusReady}
+	entry := taskstore.TaskEntry{Filename: "clickup-test", Status: taskstore.StatusReady}
 	require.NoError(t, store.Create("proj", entry))
 
 	// Initially no task ID
-	got, err := store.Get("proj", "clickup-test.md")
+	got, err := store.Get("proj", "clickup-test")
 	require.NoError(t, err)
 	assert.Equal(t, "", got.ClickUpTaskID, "task ID must be empty before set")
 
 	// Set the task ID
-	require.NoError(t, store.SetClickUpTaskID("proj", "clickup-test.md", "CU-abc123"))
+	require.NoError(t, store.SetClickUpTaskID("proj", "clickup-test", "CU-abc123"))
 
 	// Verify it round-trips through Get
-	got, err = store.Get("proj", "clickup-test.md")
+	got, err = store.Get("proj", "clickup-test")
 	require.NoError(t, err)
 	assert.Equal(t, "CU-abc123", got.ClickUpTaskID, "task ID must be persisted after SetClickUpTaskID")
 
@@ -240,7 +271,7 @@ func TestClickUpTaskIDRoundTrip(t *testing.T) {
 
 func TestClickUpTaskIDRoundTrip_NotFound(t *testing.T) {
 	store := newTestStore(t)
-	err := store.SetClickUpTaskID("proj", "nonexistent.md", "CU-xyz")
+	err := store.SetClickUpTaskID("proj", "nonexistent", "CU-xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -251,65 +282,65 @@ func TestSQLiteMigration_PlansTableToTasks(t *testing.T) {
 	defer store.Close()
 
 	// Store should work — the migration creates the tasks table
-	err = store.Create("proj", taskstore.TaskEntry{Filename: "test.md", Status: taskstore.StatusReady})
+	err = store.Create("proj", taskstore.TaskEntry{Filename: "test", Status: taskstore.StatusReady})
 	require.NoError(t, err)
 
 	entries, err := store.List("proj")
 	require.NoError(t, err)
 	assert.Len(t, entries, 1)
-	assert.Equal(t, "test.md", entries[0].Filename)
+	assert.Equal(t, "test", entries[0].Filename)
 }
 
 func TestSQLiteStore_ReviewCycle(t *testing.T) {
 	store := newTestStore(t)
 	entry := taskstore.TaskEntry{
-		Filename: "test.md",
+		Filename: "test",
 		Status:   taskstore.StatusReady,
 	}
 	require.NoError(t, store.Create("proj", entry))
 
 	// Default review cycle is 0.
-	got, err := store.Get("proj", "test.md")
+	got, err := store.Get("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, 0, got.ReviewCycle)
 
 	// Increment and verify.
-	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
-	got, err = store.Get("proj", "test.md")
+	require.NoError(t, store.IncrementReviewCycle("proj", "test"))
+	got, err = store.Get("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.ReviewCycle)
 
 	// Increment again.
-	require.NoError(t, store.IncrementReviewCycle("proj", "test.md"))
-	got, err = store.Get("proj", "test.md")
+	require.NoError(t, store.IncrementReviewCycle("proj", "test"))
+	got, err = store.Get("proj", "test")
 	require.NoError(t, err)
 	assert.Equal(t, 2, got.ReviewCycle)
 }
 
 func TestSQLiteStore_SubtaskCRUD(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, store.SetSubtasks("kasmos", "plan.md", []taskstore.SubtaskEntry{
+	require.NoError(t, store.SetSubtasks("kasmos", "plan", []taskstore.SubtaskEntry{
 		{TaskNumber: 1, Title: "one", Status: taskstore.SubtaskStatusPending},
 		{TaskNumber: 2, Title: "two", Status: taskstore.SubtaskStatusPending},
 	}))
 
-	got, err := store.GetSubtasks("kasmos", "plan.md")
+	got, err := store.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
 	assert.Equal(t, 1, got[0].TaskNumber)
 	assert.Equal(t, taskstore.SubtaskStatusPending, got[0].Status)
 
-	require.NoError(t, store.UpdateSubtaskStatus("kasmos", "plan.md", 1, taskstore.SubtaskStatusClosed))
-	updated, err := store.GetSubtasks("kasmos", "plan.md")
+	require.NoError(t, store.UpdateSubtaskStatus("kasmos", "plan", 1, taskstore.SubtaskStatusClosed))
+	updated, err := store.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.SubtaskStatusClosed, updated[0].Status)
 
-	require.NoError(t, store.SetSubtasks("kasmos", "plan.md", []taskstore.SubtaskEntry{
+	require.NoError(t, store.SetSubtasks("kasmos", "plan", []taskstore.SubtaskEntry{
 		{TaskNumber: 2, Title: "replacement", Status: taskstore.SubtaskStatusDone},
 	}))
-	replaced, err := store.GetSubtasks("kasmos", "plan.md")
+	replaced, err := store.GetSubtasks("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Len(t, replaced, 1)
 	assert.Equal(t, "replacement", replaced[0].Title)
@@ -318,32 +349,32 @@ func TestSQLiteStore_SubtaskCRUD(t *testing.T) {
 
 func TestSQLiteStore_PhaseTimestamps(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "planning", time.Now().UTC()))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "implementing", time.Now().UTC()))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "reviewing", time.Now().UTC()))
-	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan.md", "done", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan", "planning", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan", "implementing", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan", "reviewing", time.Now().UTC()))
+	require.NoError(t, store.SetPhaseTimestamp("kasmos", "plan", "done", time.Now().UTC()))
 
-	got, err := store.Get("kasmos", "plan.md")
+	got, err := store.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.False(t, got.PlanningAt.IsZero())
 	assert.False(t, got.ImplementingAt.IsZero())
 	assert.False(t, got.ReviewingAt.IsZero())
 	assert.False(t, got.DoneAt.IsZero())
 
-	err = store.SetPhaseTimestamp("kasmos", "plan.md", "unknown", time.Now().UTC())
+	err = store.SetPhaseTimestamp("kasmos", "plan", "unknown", time.Now().UTC())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown phase")
 }
 
 func TestSQLiteStore_PlanGoal(t *testing.T) {
 	store := newTestStore(t)
-	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("kasmos", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, store.SetPlanGoal("kasmos", "plan.md", "ship resilient workflow"))
+	require.NoError(t, store.SetPlanGoal("kasmos", "plan", "ship resilient workflow"))
 
-	got, err := store.Get("kasmos", "plan.md")
+	got, err := store.Get("kasmos", "plan")
 	require.NoError(t, err)
 	assert.Equal(t, "ship resilient workflow", got.Goal)
 }
@@ -353,12 +384,12 @@ func TestSQLiteStore_PRMetadata(t *testing.T) {
 	defer store.Close()
 
 	project := "test"
-	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: "plan.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
 
-	require.NoError(t, store.SetPRURL(project, "plan.md", "https://github.com/org/repo/pull/42"))
-	require.NoError(t, store.SetPRState(project, "plan.md", "APPROVED", "SUCCESS"))
+	require.NoError(t, store.SetPRURL(project, "plan", "https://github.com/org/repo/pull/42"))
+	require.NoError(t, store.SetPRState(project, "plan", "APPROVED", "SUCCESS"))
 
-	entry, err := store.Get(project, "plan.md")
+	entry, err := store.Get(project, "plan")
 	require.NoError(t, err)
 	assert.Equal(t, "https://github.com/org/repo/pull/42", entry.PRURL)
 	assert.Equal(t, "APPROVED", entry.PRReviewDecision)
@@ -368,11 +399,11 @@ func TestSQLiteStore_PRMetadata(t *testing.T) {
 func TestSQLiteStore_PRMetadata_NotFound(t *testing.T) {
 	store := newTestStore(t)
 
-	err := store.SetPRURL("test", "nonexistent.md", "https://github.com/org/repo/pull/42")
+	err := store.SetPRURL("test", "nonexistent", "https://github.com/org/repo/pull/42")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 
-	err = store.SetPRState("test", "nonexistent.md", "APPROVED", "SUCCESS")
+	err = store.SetPRState("test", "nonexistent", "APPROVED", "SUCCESS")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }

@@ -29,9 +29,9 @@ func executeTaskRegister(project, filePath, branch, topic, description string, s
 	if err != nil {
 		return err
 	}
-	planFile := filepath.Base(filePath)
+	planFile := strings.TrimSuffix(filepath.Base(filePath), ".md")
 	if description == "" {
-		description = strings.TrimSuffix(planFile, ".md")
+		description = planFile
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.HasPrefix(line, "# ") {
 				description = strings.TrimPrefix(line, "# ")
@@ -40,8 +40,7 @@ func executeTaskRegister(project, filePath, branch, topic, description string, s
 		}
 	}
 	if branch == "" {
-		slug := strings.TrimSuffix(planFile, ".md")
-		branch = "plan/" + slug
+		branch = "plan/" + planFile
 	}
 	info, _ := os.Stat(filePath)
 	createdAt := info.ModTime()
@@ -245,11 +244,11 @@ func resolveTaskEntry(project, filename string, store taskstore.Store) (taskstat
 	return entry, nil
 }
 
-// executeTaskCreate creates a new task entry in the store. name is the plan
-// name without the .md extension. branch defaults to "plan/<name>" when empty.
-// If content is non-empty, it is stored alongside the metadata.
+// executeTaskCreate creates a new task entry in the store. name is the plan slug.
+// branch defaults to "plan/<name>" when empty. If content is non-empty, it is
+// stored alongside the metadata.
 func executeTaskCreate(project, name, description, branch, topic, content string, store taskstore.Store) error {
-	filename := name + ".md"
+	filename := name
 	if branch == "" {
 		branch = "plan/" + name
 	}
@@ -646,9 +645,7 @@ func NewTaskCmd() *cobra.Command {
 				storeProject = project
 			}
 			filename := args[0]
-			if !strings.HasSuffix(filename, ".md") {
-				filename += ".md"
-			}
+			filename = strings.TrimSuffix(filename, ".md")
 			contentFile, _ := cmd.Flags().GetString("file")
 			var data []byte
 			if contentFile != "" {
@@ -709,7 +706,7 @@ func NewTaskCmd() *cobra.Command {
 			if err := executeTaskCreate(project, name, createDescription, createBranch, createTopic, createContent, resolveStore(project)); err != nil {
 				return err
 			}
-			fmt.Printf("created: %s.md → ready\n", name)
+			fmt.Printf("created: %s → ready\n", name)
 			return nil
 		},
 	}

@@ -10,7 +10,9 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -20,17 +22,29 @@ import (
 
 func TestShouldPromptPushAfterCoderExit(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder}
+	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeCoder}
 
 	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
 		t.Fatal("expected push prompt for exited coder")
 	}
 }
 
+func TestShouldPromptPushAfterCoderExit_HeadlessCoderExited(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:      "p.md",
+		AgentType:     session.AgentTypeCoder,
+		ExecutionMode: config.ExecutionModeHeadless,
+		Exited:        true,
+	}
+
+	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true))
+}
+
 func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
-		TaskFile:       "p.md",
+		TaskFile:       "p",
 		AgentType:      session.AgentTypeCoder,
 		PromptDetected: true,
 		AwaitingWork:   false,
@@ -45,7 +59,7 @@ func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
-		TaskFile:       "p.md",
+		TaskFile:       "p",
 		AgentType:      session.AgentTypeCoder,
 		PromptDetected: true,
 		AwaitingWork:   true,
@@ -59,7 +73,7 @@ func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeCoder, SoloAgent: true}
+	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeCoder, SoloAgent: true}
 
 	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, false),
 		"solo agents must not trigger automatic push prompt")
@@ -67,7 +81,7 @@ func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
 
 func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
-	inst := &session.Instance{TaskFile: "p.md", AgentType: session.AgentTypeReviewer}
+	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeReviewer}
 
 	if shouldPromptPushAfterCoderExit(entry, inst, false) {
 		t.Fatal("did not expect push prompt for reviewer")
@@ -79,7 +93,7 @@ func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
 // StatusImplementing, it wires through to promptPushBranchThenAdvance and sets
 // the confirmation overlay (proving the push-prompt lifecycle path is connected).
 func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
-	const planFile = "test-feature.md"
+	const planFile = "test-feature"
 
 	// Build a planState with the plan in StatusImplementing.
 	dir := t.TempDir()
@@ -147,7 +161,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 // the push-prompt confirmation overlay is shown. This is the key path that enables
 // the review→fix→re-review automation cycle.
 func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
-	const planFile = "test-feature.md"
+	const planFile = "test-feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -208,6 +222,76 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 		"expected confirmation overlay for push-prompt on prompt-detected coder")
 }
 
+func TestMetadataTick_TaskFinishedSignalMarksWaveTaskComplete(t *testing.T) {
+	const planFile = "task-finished.md"
+
+	plan := &taskparser.Plan{
+		Waves: []taskparser.Wave{{
+			Number: 1,
+			Tasks:  []taskparser.Task{{Number: 1, Title: "Only task", Body: "do it"}},
+		}},
+	}
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.StartNextWave()
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "task finished test", "plan/task-finished", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      "task-finished-W1-T1",
+		Path:       t.TempDir(),
+		Program:    "claude",
+		TaskFile:   planFile,
+		TaskNumber: 1,
+		WaveNumber: 1,
+	})
+	require.NoError(t, err)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(inst)
+
+	h := &home{
+		ctx:               context.Background(),
+		state:             stateDefault,
+		appConfig:         config.DefaultConfig(),
+		nav:               list,
+		menu:              ui.NewMenu(),
+		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:      overlay.NewToastManager(&sp),
+		overlays:          overlay.NewManager(),
+		taskState:         ps,
+		taskStateDir:      plansDir,
+		fsm:               newPlanFSMForTest(t, plansDir),
+		waveOrchestrators: map[string]*orchestration.WaveOrchestrator{planFile: orch},
+	}
+
+	msg := metadataResultMsg{
+		Results:   []instanceMetadata{{Title: inst.Title, TmuxAlive: true}},
+		PlanState: ps,
+		TaskSignals: []taskfsm.TaskSignal{{
+			WaveNumber: 1,
+			TaskNumber: 1,
+			TaskFile:   planFile,
+		}},
+	}
+
+	model, _ := h.Update(msg)
+	updated, ok := model.(*home)
+	require.True(t, ok)
+
+	assert.Empty(t, updated.waveOrchestrators, "orchestrator must be deleted after final task signal")
+	assert.True(t, inst.ImplementationComplete, "task instance must be marked complete")
+	assert.Equal(t, session.Ready, inst.Status, "task instance should be left ready for wave completion handling")
+	assert.Equal(t, stateConfirm, updated.state, "final task signal should trigger the review prompt")
+	assert.True(t, updated.overlays.IsActive(), "review prompt should be shown after final task signal")
+}
+
 // TestPromptPushBranchThenAdvance_SetStatusErrorPropagates verifies that when
 // SetStatus fails inside the push-action closure, the error is returned as a
 // tea.Msg rather than being silently swallowed with _ =.
@@ -216,7 +300,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 // confirm action returns a coderCompleteMsg so the Update handler can perform
 // the FSM transition and spawn a reviewer.
 func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
-	const planFile = "test-feature.md"
+	const planFile = "test-feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -260,7 +344,7 @@ func TestPromptPushBranchThenAdvance_ReturnsCoderCompleteMsg(t *testing.T) {
 // metadata tick does NOT re-trigger promptPushBranchThenAdvance and overwrite
 // the existing overlay. Without this guard the modal re-appears every tick.
 func TestMetadataTickHandler_NoRepromptWhenConfirmPending(t *testing.T) {
-	const planFile = "test-feature.md"
+	const planFile = "test-feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -330,18 +414,18 @@ func TestFullPlanLifecycle_StateTransitions(t *testing.T) {
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(
-		"auth-refactor.md",
+		"auth-refactor",
 		"Refactor JWT auth",
 		"plan/auth-refactor",
 		time.Date(2026, 2, 21, 10, 0, 0, 0, time.UTC),
 	))
 
-	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusPlanning)
-	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusImplementing)
-	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusReviewing)
-	seedPlanStatus(t, ps, "auth-refactor.md", taskstate.StatusDone)
+	seedPlanStatus(t, ps, "auth-refactor", taskstate.StatusPlanning)
+	seedPlanStatus(t, ps, "auth-refactor", taskstate.StatusImplementing)
+	seedPlanStatus(t, ps, "auth-refactor", taskstate.StatusReviewing)
+	seedPlanStatus(t, ps, "auth-refactor", taskstate.StatusDone)
 
-	entry, ok := ps.Entry("auth-refactor.md")
+	entry, ok := ps.Entry("auth-refactor")
 	require.True(t, ok)
 	assert.Equal(t, taskstate.StatusDone, entry.Status)
 	assert.Equal(t, "plan/auth-refactor", entry.Branch)
@@ -360,7 +444,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 
-	const planFile = "feature.md"
+	const planFile = "feature"
 	ps, err := newTestPlanState(t, plansDir)
 	require.NoError(t, err)
 	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
@@ -421,7 +505,7 @@ func TestMetadataResultMsg_SignalDoesNotClobberFreshPlanState(t *testing.T) {
 // list and a start cmd is returned. This is the sentinel-driven equivalent of
 // the old checkPlanCompletion → transitionToReview path.
 func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -496,7 +580,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 // sentinel is processed, the plan transitions back to implementing and a new
 // coder instance is added with the reviewer's feedback in its prompt.
 func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	const feedback = "Fix the error handling in auth.go"
 
 	dir := t.TempDir()
@@ -585,7 +669,7 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 // reimplementation that drops the started check — a started instance would require
 // an integration test. The behavioral contract is: no auto-approve on reviewer death.
 func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -647,7 +731,7 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 // signal the spawned coder gets title "feature-fix-1"; after the subsequent
 // ImplementFinished the spawned reviewer gets "feature-review-2".
 func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 	const feedback = "Fix the error handling in auth.go"
 
 	dir := t.TempDir()
@@ -745,7 +829,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 // With review_cycle=0 in planstate (initial), the first reviewer gets ReviewCycle=1
 // (1-indexed for humans: display value = stored cycle + 1).
 func TestReviewCycle_InstanceStructHasCycleSet(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -815,7 +899,7 @@ func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
 // panel but transitioned to Paused status (not killed/removed), and the plan
 // status transitions to done.
 func TestReviewApproved_PausesReviewerInsteadOfKilling(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -883,7 +967,7 @@ func TestReviewApproved_PausesReviewerInsteadOfKilling(t *testing.T) {
 // away from a paused reviewer whose plan is done, the reviewer instance is
 // automatically removed from the nav panel and allInstances list.
 func TestPausedReviewer_CleanedUpOnNavigateAway(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
@@ -951,7 +1035,7 @@ func TestPausedReviewer_CleanedUpOnNavigateAway(t *testing.T) {
 // with no matching reviewer instance in nav still transitions the FSM to done
 // without panicking.
 func TestReviewApproved_NoReviewerNoPanic(t *testing.T) {
-	const planFile = "feature.md"
+	const planFile = "feature"
 
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")

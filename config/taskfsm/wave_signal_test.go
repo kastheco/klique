@@ -19,26 +19,26 @@ func TestParseWaveSignal(t *testing.T) {
 	}{
 		{
 			name:     "valid wave 1 signal",
-			filename: "implement-wave-1-test-plan.md",
+			filename: "implement-wave-1-test-plan",
 			wantOK:   true,
 			wantWave: 1,
-			wantPlan: "test-plan.md",
+			wantPlan: "test-plan",
 		},
 		{
 			name:     "valid wave 3 signal",
-			filename: "implement-wave-3-multi-wave.md",
+			filename: "implement-wave-3-multi-wave",
 			wantOK:   true,
 			wantWave: 3,
-			wantPlan: "multi-wave.md",
+			wantPlan: "multi-wave",
 		},
 		{
 			name:     "not a wave signal",
-			filename: "planner-finished-test-plan.md",
+			filename: "planner-finished-test-plan",
 			wantOK:   false,
 		},
 		{
 			name:     "malformed wave number",
-			filename: "implement-wave-abc-test-plan.md",
+			filename: "implement-wave-abc-test-plan",
 			wantOK:   false,
 		},
 	}
@@ -61,9 +61,9 @@ func TestScanSignals_IncludesWaveSignals(t *testing.T) {
 
 	// Write a regular signal and a wave signal
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "planner-finished-test.md"), nil, 0o644))
+		filepath.Join(signalsDir, "planner-finished-test"), nil, 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(signalsDir, "implement-wave-2-test.md"), nil, 0o644))
+		filepath.Join(signalsDir, "implement-wave-2-test"), nil, 0o644))
 
 	signals := ScanSignals(signalsDir)
 	// Regular signal should be present
@@ -73,5 +73,5 @@ func TestScanSignals_IncludesWaveSignals(t *testing.T) {
 	waveSignals := ScanWaveSignals(signalsDir)
 	require.Len(t, waveSignals, 1)
 	assert.Equal(t, 2, waveSignals[0].WaveNumber)
-	assert.Equal(t, "test.md", waveSignals[0].TaskFile)
+	assert.Equal(t, "test", waveSignals[0].TaskFile)
 }
