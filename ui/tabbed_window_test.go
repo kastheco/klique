@@ -10,9 +10,8 @@ import (
 func TestUpdatePreview_SkipsWhenFocusMode(t *testing.T) {
 	preview := NewPreviewPane()
 	preview.SetSize(80, 24)
-	diff := NewDiffPane()
 	info := NewInfoPane()
-	tw := NewTabbedWindow(preview, diff, info)
+	tw := NewTabbedWindow(preview, info)
 	tw.SetActiveTab(PreviewTab)
 
 	// Clear the initial welcome fallback state so we can verify the no-op.
@@ -36,9 +35,8 @@ func TestUpdatePreview_SkipsWhenFocusMode(t *testing.T) {
 func TestUpdatePreview_WorksWhenNotFocusMode(t *testing.T) {
 	preview := NewPreviewPane()
 	preview.SetSize(80, 24)
-	diff := NewDiffPane()
 	info := NewInfoPane()
-	tw := NewTabbedWindow(preview, diff, info)
+	tw := NewTabbedWindow(preview, info)
 	tw.SetActiveTab(PreviewTab)
 
 	// Focus mode OFF - normal path.
@@ -56,9 +54,8 @@ func TestHalfPageUp_WorksRegardlessOfActiveTab(t *testing.T) {
 	preview := NewPreviewPane()
 	preview.SetSize(80, 24)
 	preview.SetDocumentContent(testDocumentLines(100))
-	diff := NewDiffPane()
 	info := NewInfoPane()
-	tw := NewTabbedWindow(preview, diff, info)
+	tw := NewTabbedWindow(preview, info)
 
 	// Default activeTab is InfoTab (0), NOT PreviewTab.
 	// Ctrl+U/D should still scroll the preview pane.
@@ -83,27 +80,25 @@ func TestHalfPageDown_WorksRegardlessOfActiveTab(t *testing.T) {
 	preview := NewPreviewPane()
 	preview.SetSize(80, 24)
 	preview.SetDocumentContent(testDocumentLines(100))
-	diff := NewDiffPane()
 	info := NewInfoPane()
-	tw := NewTabbedWindow(preview, diff, info)
+	tw := NewTabbedWindow(preview, info)
 
-	// Set to DiffTab — ctrl+u/d should still scroll the preview.
-	tw.SetActiveTab(DiffTab)
+	// Set to InfoTab — ctrl+u/d should still scroll the preview.
+	tw.SetActiveTab(InfoTab)
 
 	initialOffset := preview.viewport.YOffset()
 	tw.HalfPageDown()
 	afterDown := preview.viewport.YOffset()
 	assert.Greater(t, afterDown, initialOffset,
-		"HalfPageDown should scroll the preview even when activeTab is DiffTab")
+		"HalfPageDown should scroll the preview even when activeTab is InfoTab")
 }
 
 func TestViewportUpdate_DelegatesOnlyForPreviewTab(t *testing.T) {
 	preview := NewPreviewPane()
 	preview.SetSize(30, 5)
 	preview.SetDocumentContent(testDocumentLines(40))
-	diff := NewDiffPane()
 	info := NewInfoPane()
-	tw := NewTabbedWindow(preview, diff, info)
+	tw := NewTabbedWindow(preview, info)
 
 	before := preview.viewport.View()
 
@@ -113,10 +108,10 @@ func TestViewportUpdate_DelegatesOnlyForPreviewTab(t *testing.T) {
 	assert.Nil(t, cmd)
 	assert.NotEqual(t, before, afterPreview)
 
-	tw.SetActiveTab(DiffTab)
-	beforeDiff := preview.viewport.View()
+	tw.SetActiveTab(InfoTab)
+	beforeInfo := preview.viewport.View()
 	cmd = tw.ViewportUpdate(tea.KeyPressMsg{Code: tea.KeyPgDown})
-	afterDiff := preview.viewport.View()
+	afterInfo := preview.viewport.View()
 	assert.Nil(t, cmd)
-	assert.Equal(t, beforeDiff, afterDiff)
+	assert.Equal(t, beforeInfo, afterInfo)
 }

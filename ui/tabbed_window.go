@@ -49,7 +49,6 @@ var (
 const (
 	InfoTab    int = iota // 0 — plan / metadata pane
 	PreviewTab            // 1 — live agent session pane
-	DiffTab               // 2 — git diff pane
 )
 
 // Tab describes a single tab entry (kept for API compatibility).
@@ -58,9 +57,9 @@ type Tab struct {
 	Render func(width int, height int) string
 }
 
-// TabbedWindow composes three content panes (info, preview, diff) behind a
-// tab bar. It tracks which tab is active, manages focus state, and delegates
-// rendering and scroll operations to the appropriate child pane.
+// TabbedWindow composes two content panes (info, preview) behind a tab bar.
+// It tracks which tab is active, manages focus state, and delegates rendering
+// and scroll operations to the appropriate child pane.
 type TabbedWindow struct {
 	// tabs holds the icon+label string for each tab header.
 	tabs []string
@@ -71,7 +70,6 @@ type TabbedWindow struct {
 	width      int // total allocated width (post AdjustPreviewWidth)
 
 	preview  *PreviewPane
-	diff     *DiffPane
 	info     *InfoPane
 	instance *session.Instance // last known selected instance
 
@@ -83,18 +81,16 @@ type TabbedWindow struct {
 	showWelcome bool
 }
 
-// NewTabbedWindow creates a TabbedWindow wiring the three child panes together.
+// NewTabbedWindow creates a TabbedWindow wiring the two child panes together.
 // The info tab is active by default and the welcome banner is shown.
-func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, info *InfoPane) *TabbedWindow {
+func NewTabbedWindow(preview *PreviewPane, info *InfoPane) *TabbedWindow {
 	return &TabbedWindow{
 		tabs: []string{
 			"\uea74 info",
 			"\uea85 agent",
-			"\ueae1 diff",
 		},
 		// activeTab defaults to InfoTab (0) via zero value.
 		preview:     preview,
-		diff:        diff,
 		info:        info,
 		focusedTab:  -1,
 		showWelcome: true,
@@ -138,7 +134,6 @@ func (w *TabbedWindow) SetSize(width, height int) {
 	contentW := w.width - windowStyle.GetHorizontalFrameSize()
 
 	w.preview.SetSize(contentW, contentH)
-	w.diff.SetSize(contentW, contentH)
 	w.info.SetSize(contentW, contentH)
 }
 
@@ -149,7 +144,7 @@ func (w *TabbedWindow) GetPreviewSize() (int, int) {
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
-// Toggle advances to the next tab, wrapping from diff back to info.
+// Toggle advances to the next tab, wrapping from agent back to info.
 func (w *TabbedWindow) Toggle() {
 	w.activeTab = (w.activeTab + 1) % len(w.tabs)
 }
@@ -176,9 +171,6 @@ func (w *TabbedWindow) SetActiveTab(tab int) {
 
 // GetActiveTab returns the currently active tab index.
 func (w *TabbedWindow) GetActiveTab() int { return w.activeTab }
-
-// IsInDiffTab reports whether the diff tab is currently active.
-func (w *TabbedWindow) IsInDiffTab() bool { return w.activeTab == DiffTab }
 
 // IsInInfoTab reports whether the info tab is currently active.
 func (w *TabbedWindow) IsInInfoTab() bool { return w.activeTab == InfoTab }
@@ -243,16 +235,6 @@ func (w *TabbedWindow) ResetPreviewToNormalMode(instance *session.Instance) erro
 // IsPreviewInScrollMode reports whether the preview pane is in scroll mode.
 func (w *TabbedWindow) IsPreviewInScrollMode() bool { return w.preview.isScrolling }
 
-// ── Diff pane delegation ──────────────────────────────────────────────────────
-
-// UpdateDiff refreshes the diff pane when the diff tab is active.
-func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
-	if w.activeTab != DiffTab {
-		return
-	}
-	w.diff.SetDiff(instance)
-}
-
 // ── Info pane delegation ──────────────────────────────────────────────────────
 
 // SetInfoData updates the metadata shown in the info pane.
@@ -263,38 +245,24 @@ func (w *TabbedWindow) GetInfoData() InfoData { return w.info.data }
 
 // ── Scroll / pagination ───────────────────────────────────────────────────────
 
-// ScrollUp scrolls the active pane upward. In the diff tab, navigates to the
-// previous file when files are available; otherwise scrolls the diff view.
+// ScrollUp scrolls the active pane upward.
 func (w *TabbedWindow) ScrollUp() {
 	switch w.activeTab {
 	case PreviewTab:
 		if err := w.preview.ScrollUp(w.instance); err != nil {
 			log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
 		}
-	case DiffTab:
-		if w.diff.HasFiles() {
-			w.diff.FileUp()
-		} else {
-			w.diff.ScrollUp()
-		}
 	case InfoTab:
 		w.info.ScrollUp()
 	}
 }
 
-// ScrollDown scrolls the active pane downward. In the diff tab, navigates to
-// the next file when files are available; otherwise scrolls the diff view.
+// ScrollDown scrolls the active pane downward.
 func (w *TabbedWindow) ScrollDown() {
 	switch w.activeTab {
 	case PreviewTab:
 		if err := w.preview.ScrollDown(w.instance); err != nil {
 			log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
-		}
-	case DiffTab:
-		if w.diff.HasFiles() {
-			w.diff.FileDown()
-		} else {
-			w.diff.ScrollDown()
 		}
 	case InfoTab:
 		w.info.ScrollDown()
@@ -325,8 +293,6 @@ func (w *TabbedWindow) ContentScrollUp() {
 		if err := w.preview.ScrollUp(w.instance); err != nil {
 			log.InfoLog.Printf("tabbed window failed to content scroll up: %v", err)
 		}
-	case DiffTab:
-		w.diff.ScrollUp()
 	case InfoTab:
 		w.info.ScrollUp()
 	}
@@ -340,8 +306,6 @@ func (w *TabbedWindow) ContentScrollDown() {
 		if err := w.preview.ScrollDown(w.instance); err != nil {
 			log.InfoLog.Printf("tabbed window failed to content scroll down: %v", err)
 		}
-	case DiffTab:
-		w.diff.ScrollDown()
 	case InfoTab:
 		w.info.ScrollDown()
 	}
@@ -450,8 +414,6 @@ func (w *TabbedWindow) String() string {
 		content = w.preview.String()
 	case w.activeTab == PreviewTab:
 		content = w.preview.String()
-	case w.activeTab == DiffTab:
-		content = w.diff.String()
 	case w.activeTab == InfoTab:
 		content = w.info.String()
 	}

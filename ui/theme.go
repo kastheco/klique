@@ -24,9 +24,4 @@ var (
 	// Gradient endpoints for the banner and focused tab label
 	GradientStart = "#9ccfd8" // foam
 	GradientEnd   = "#c4a7e7" // iris
-
-	// Diff-specific (keep readable semantic greens/reds)
-	ColorDiffAdd    = lipgloss.Color("#9ccfd8") // foam for additions
-	ColorDiffDelete = lipgloss.Color("#eb6f92") // love for deletions
-	ColorDiffHunk   = lipgloss.Color("#c4a7e7") // iris for hunk headers
 )

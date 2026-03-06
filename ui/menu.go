@@ -48,7 +48,6 @@ type Menu struct {
 	width              int
 	state              MenuState
 	instance           *session.Instance
-	isInDiffTab        bool
 	isFocusMode        bool
 	focusSlot          int
 	sidebarSpaceAction string
@@ -125,12 +124,6 @@ func (m *Menu) SetInstance(inst *session.Instance) {
 			m.state = StateEmpty
 		}
 	}
-	m.updateOptions()
-}
-
-// SetInDiffTab notes whether the diff tab is currently displayed.
-func (m *Menu) SetInDiffTab(active bool) {
-	m.isInDiffTab = active
 	m.updateOptions()
 }
 

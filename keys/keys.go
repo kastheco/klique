@@ -45,9 +45,8 @@ const (
 
 	KeyInfoTab // Key for jumping directly to info tab
 
-	// Tab switching keybindings (Shift+1/2/3 = !/@ /#)
+	// Tab switching keybindings (Shift+1/2 = !/#)
 	KeyTabAgent
-	KeyTabDiff
 	KeyTabInfo
 
 	KeySpawnAgent    // s - spawn ad-hoc agent session
@@ -102,7 +101,6 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"ctrl+s": KeyToggleSidebar,
 	"g":      KeyInfoTab,
 	"!":      KeyTabAgent,
-	"@":      KeyTabDiff,
 	"#":      KeyTabInfo,
 }
 
@@ -222,11 +220,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyTabAgent: key.NewBinding(
 		key.WithKeys("!"),
-		key.WithHelp("!/@ /#", "switch tab"),
-	),
-	KeyTabDiff: key.NewBinding(
-		key.WithKeys("@"),
-		key.WithHelp("@", "diff tab"),
+		key.WithHelp("!/#", "switch tab"),
 	),
 	KeyTabInfo: key.NewBinding(
 		key.WithKeys("#"),
