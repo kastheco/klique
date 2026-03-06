@@ -425,12 +425,9 @@ func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.St
 	if branch == "" {
 		branch = git.TaskBranchFromFile(planFile)
 	}
-	defaultTitle := git.BuildPRTitle(entry.Description, "", strings.TrimSuffix(planFile, ".md"))
+	defaultTitle := git.BuildPRTitle(entry.Description, strings.TrimSuffix(planFile, ".md"))
 	if title == "" {
-		title = git.BuildPRTitle("", "", defaultTitle)
-	}
-	if title == "" {
-		title = "update"
+		title = defaultTitle
 	}
 	worktreePath := git.TaskWorktreePath(repoRoot, branch)
 	wt := git.NewGitWorktreeFromStorage(repoRoot, worktreePath, "pr", branch, "")
@@ -438,6 +435,7 @@ func executeTaskPR(repoRoot, project, planFile, title string, store taskstore.St
 	gitChanges := ""
 	gitCommits := ""
 	gitStats := ""
+	// If the branch cannot be resolved against main, keep PR metadata text-only.
 	if baseOut, err := exec.Command("git", "-C", repoRoot, "merge-base", "HEAD", branch).CombinedOutput(); err == nil {
 		base := strings.TrimSpace(string(baseOut))
 		if base != "" {
@@ -490,7 +488,7 @@ func buildCLIPRMetadata(
 	for _, subtask := range subtasks {
 		meta.Subtasks = append(meta.Subtasks, git.PRSubtask{
 			Number: subtask.TaskNumber,
-			Title:  subtask.Title,
+			Title:  strings.TrimSpace(subtask.Title),
 			Status: string(subtask.Status),
 		})
 	}
