@@ -211,3 +211,37 @@ func TestInfoPane_InstanceWithResources(t *testing.T) {
 	assert.Contains(t, output, "13%")
 	assert.Contains(t, output, "340M")
 }
+
+func TestInfoPane_ShowsReviewOutcome(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(60, 40)
+	pane.SetData(InfoData{
+		IsPlanHeaderSelected: true,
+		PlanName:             "test-plan",
+		PlanStatus:           "done",
+		HasPlan:              true,
+		ReviewCycle:          1,
+		ReviewOutcome:        "approved",
+	})
+
+	output := pane.String()
+	assert.Contains(t, output, "review")
+	assert.Contains(t, output, "approved")
+	assert.Contains(t, output, "cycle")
+}
+
+func TestInfoPane_NoReviewSectionWhenOutcomeEmpty(t *testing.T) {
+	pane := NewInfoPane()
+	pane.SetSize(60, 40)
+	pane.SetData(InfoData{
+		IsPlanHeaderSelected: true,
+		PlanName:             "test-plan",
+		PlanStatus:           "implementing",
+		HasPlan:              true,
+		ReviewOutcome:        "",
+	})
+
+	output := pane.String()
+	// Review section must not appear when ReviewOutcome is empty.
+	assert.NotContains(t, output, "approved")
+}

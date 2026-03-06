@@ -895,10 +895,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd := m.postClickUpProgress(sig.TaskFile, "review_approved", ""); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
-				// Kill the reviewer instance — it's done.
+				// Keep reviewer visible so the user can inspect output.
 				for _, inst := range m.nav.GetInstances() {
 					if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
-						_ = inst.Kill()
+						inst.SetStatus(session.Paused)
+						m.nav.SelectInstance(inst)
+						m.updateNavPanelStatus()
+						if cmd := m.instanceChanged(); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
 						break
 					}
 				}

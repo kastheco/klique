@@ -586,6 +586,15 @@ func (m *home) updateInfoPaneForPlanHeader() {
 	data.CompletedTasks, data.TotalSubtasks, data.AllWaveSubtasks =
 		m.buildSubtaskProgress(planFile, orch, 0, 0, nil)
 
+	// Review outcome — shown when the plan has been approved.
+	if entry.Status == taskstate.StatusDone {
+		data.ReviewOutcome = "approved"
+		data.ReviewCycle = 1 // default display cycle
+		if cycle, err := m.taskState.ReviewCycle(planFile); err == nil {
+			data.ReviewCycle = cycle + 1
+		}
+	}
+
 	m.tabbedWindow.SetInfoData(data)
 }
 
@@ -641,6 +650,14 @@ func (m *home) updateInfoPane() {
 				data.ImplementingAt = entry.ImplementingAt
 				data.ReviewingAt = entry.ReviewingAt
 				data.DoneAt = entry.DoneAt
+				// Review outcome — shown when the plan has been approved.
+				if entry.Status == taskstate.StatusDone {
+					data.ReviewOutcome = "approved"
+					data.ReviewCycle = 1 // default display cycle
+					if cycle, err := m.taskState.ReviewCycle(selected.TaskFile); err == nil {
+						data.ReviewCycle = cycle + 1
+					}
+				}
 			}
 		}
 

@@ -809,3 +809,122 @@ func TestIsLocked_FinishedLockedWhenDone(t *testing.T) {
 	assert.False(t, isLocked(taskstate.StatusReviewing, "finished"),
 		"finished stage must be unlocked when plan is reviewing")
 }
+
+// TestReviewApproved_PausesReviewerInsteadOfKilling verifies that when a
+// ReviewApproved signal is processed, the reviewer instance is kept in the nav
+// panel but transitioned to Paused status (not killed/removed), and the plan
+// status transitions to done.
+func TestReviewApproved_PausesReviewerInsteadOfKilling(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	reviewer, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review-1",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewer.IsReviewer = true
+	reviewer.SetStatus(session.Running)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	nav := ui.NewNavigationPanel(&sp)
+	_ = nav.AddInstance(reviewer)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          nav,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	_, _ = h.Update(metadataResultMsg{
+		PlanState: ps,
+		Signals: []taskfsm.Signal{{
+			Event:    taskfsm.ReviewApproved,
+			TaskFile: planFile,
+		}},
+	})
+
+	var reviewerAfter *session.Instance
+	for _, inst := range h.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			reviewerAfter = inst
+			break
+		}
+	}
+	require.NotNil(t, reviewerAfter, "reviewer must remain in nav after approval")
+	assert.Equal(t, session.Paused, reviewerAfter.Status)
+
+	reloaded, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
+}
+
+// TestReviewApproved_NoReviewerNoPanic verifies that a ReviewApproved signal
+// with no matching reviewer instance in nav still transitions the FSM to done
+// without panicking.
+func TestReviewApproved_NoReviewerNoPanic(t *testing.T) {
+	const planFile = "feature.md"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	nav := ui.NewNavigationPanel(&sp)
+
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          nav,
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewInfoPane()),
+		toastManager: overlay.NewToastManager(&sp),
+		taskState:    ps,
+		taskStateDir: plansDir,
+		fsm:          newPlanFSMForTest(t, plansDir),
+	}
+
+	// Should not panic even with no reviewer instance in nav.
+	require.NotPanics(t, func() {
+		_, _ = h.Update(metadataResultMsg{
+			PlanState: ps,
+			Signals: []taskfsm.Signal{{
+				Event:    taskfsm.ReviewApproved,
+				TaskFile: planFile,
+			}},
+		})
+	})
+
+	// Plan status must still transition to done.
+	reloaded, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusDone, entry.Status)
+}

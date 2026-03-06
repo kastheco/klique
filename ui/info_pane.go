@@ -68,6 +68,10 @@ type InfoData struct {
 	WaveTasks  []WaveTaskInfo
 	TaskTitle  string
 
+	// Review outcome (populated when plan is done)
+	ReviewCycle   int
+	ReviewOutcome string
+
 	// Selection state flags
 	HasPlan              bool
 	HasInstance          bool
@@ -393,6 +397,21 @@ func (p *InfoPane) renderInstanceSection() string {
 	return strings.Join(rows, "\n")
 }
 
+// renderReviewSection renders the review outcome block (cycle and outcome)
+// for plans that have been approved. Only appended to the plan summary when
+// ReviewOutcome is non-empty.
+func (p *InfoPane) renderReviewSection() string {
+	rows := []string{
+		infoSectionStyle.Render("review"),
+		p.renderDivider(),
+	}
+	if p.data.ReviewCycle > 0 {
+		rows = append(rows, p.renderRow("cycle", fmt.Sprintf("%d", p.data.ReviewCycle)))
+	}
+	rows = append(rows, p.renderStatusRow("outcome", p.data.ReviewOutcome))
+	return strings.Join(rows, "\n")
+}
+
 // renderPlanSummary renders the plan header view: metadata, instance counts,
 // line-change totals, and a "view plan doc" action button.
 func (p *InfoPane) renderPlanSummary() string {
@@ -400,6 +419,9 @@ func (p *InfoPane) renderPlanSummary() string {
 	rows = append(rows, p.renderGoalSection())
 	rows = append(rows, p.renderLifecycleSection())
 	rows = append(rows, p.renderProgressSection())
+	if p.data.ReviewOutcome != "" {
+		rows = append(rows, p.renderReviewSection())
+	}
 	if p.data.PlanInstanceCount > 0 {
 		instanceSummary := fmt.Sprintf("%d", p.data.PlanInstanceCount)
 		var parts []string
