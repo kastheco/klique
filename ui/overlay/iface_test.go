@@ -14,6 +14,14 @@ type stubOverlay struct {
 	w, h      int
 }
 
+type mouseStubOverlay struct {
+	stubOverlay
+	lastX   int
+	lastY   int
+	lastBtn tea.MouseButton
+	result  Result
+}
+
 func (s *stubOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 	if msg.Code == tea.KeyEscape {
 		s.dismissed = true
@@ -27,6 +35,26 @@ func (s *stubOverlay) HandleKey(msg tea.KeyPressMsg) Result {
 
 func (s *stubOverlay) View() string     { return s.rendered }
 func (s *stubOverlay) SetSize(w, h int) { s.w = w; s.h = h }
+
+func (s *mouseStubOverlay) HandleMouse(relX, relY int, button tea.MouseButton) Result {
+	s.lastX = relX
+	s.lastY = relY
+	s.lastBtn = button
+	return s.result
+}
+
+func TestMouseHandler_Interface(t *testing.T) {
+	var _ MouseHandler = (*mouseStubOverlay)(nil)
+
+	o := &mouseStubOverlay{result: Result{Dismissed: true, Action: "action", Value: "value"}}
+
+	result := o.HandleMouse(4, 3, tea.MouseRight)
+
+	assert.Equal(t, 4, o.lastX)
+	assert.Equal(t, 3, o.lastY)
+	assert.Equal(t, tea.MouseRight, o.lastBtn)
+	assert.Equal(t, o.result, result)
+}
 
 func TestOverlayInterface_Dismiss(t *testing.T) {
 	var o Overlay = &stubOverlay{rendered: "hello"}

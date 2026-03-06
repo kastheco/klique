@@ -24,3 +24,8 @@ type Overlay interface {
 	// SetSize updates the available dimensions for the overlay.
 	SetSize(w, h int)
 }
+
+// MouseHandler is an optional interface for overlays that support mouse interaction.
+type MouseHandler interface {
+	HandleMouse(relX, relY int, button tea.MouseButton) Result
+}

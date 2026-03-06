@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"regexp"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/spinner"
@@ -13,6 +15,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var testANSISequenceRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+func permissionOverlayClickTarget(t *testing.T, view, needle string) (int, int) {
+	t.Helper()
+	for y, line := range strings.Split(view, "\n") {
+		clean := overlayStripANSIForTest(line)
+		x := strings.Index(clean, needle)
+		if x >= 0 {
+			return x, y
+		}
+	}
+	require.FailNowf(t, "missing target", "could not find %q in view", needle)
+	return 0, 0
+}
+
+func overlayStripANSIForTest(s string) string {
+	return testANSISequenceRE.ReplaceAllString(s, "")
+}
 
 // newTestHomeWithCache returns a home with a real permissionStore backed by an in-memory SQLite DB.
 func newTestHomeWithCache(t *testing.T) *home {
@@ -210,6 +231,54 @@ func TestHandleKeyPress_PermissionEsc_DismissesWithoutSending(t *testing.T) {
 	// Esc must not send any permission response (nil cmd is fine; no auto-approve)
 	approvals := collectAutoApproveMsgs(cmd)
 	assert.Len(t, approvals, 0, "esc should not trigger any auto-approve")
+}
+
+func TestHandleMouseClick_PermissionOverlay_InsideClickSendsResponse(t *testing.T) {
+	m := newTestHomeWithCache(t)
+	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
+	inst.MarkStartedForTest()
+	m.nav.AddInstance(inst)()
+
+	po := overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*")
+	m.state = statePermission
+	m.overlays.ShowPositioned(po, 0, 0, false)
+	m.pendingPermissionInstance = inst
+	m.pendingPermissionPattern = "/opt/*"
+	m.pendingPermissionDesc = "Access /opt"
+
+	x, y := permissionOverlayClickTarget(t, po.View(), "allow once")
+	_, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+
+	assert.Equal(t, stateDefault, m.state)
+	assert.False(t, m.overlays.IsActive())
+	assert.Nil(t, m.pendingPermissionInstance)
+	assert.Empty(t, m.pendingPermissionPattern)
+	assert.Empty(t, m.pendingPermissionDesc)
+	assert.NotNil(t, cmd)
+}
+
+func TestHandleMouseClick_PermissionOverlay_OutsideClickDismissesWithoutSending(t *testing.T) {
+	m := newTestHomeWithCache(t)
+	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
+	inst.MarkStartedForTest()
+	m.nav.AddInstance(inst)()
+
+	po := overlay.NewPermissionOverlay(inst.Title, "Access /opt", "/opt/*")
+	m.state = statePermission
+	m.overlays.ShowPositioned(po, 5, 5, false)
+	m.pendingPermissionInstance = inst
+	m.pendingPermissionPattern = "/opt/*"
+	m.pendingPermissionDesc = "Access /opt"
+
+	_, cmd := m.Update(tea.MouseClickMsg{X: 0, Y: 0, Button: tea.MouseLeft})
+
+	assert.Equal(t, stateDefault, m.state)
+	assert.False(t, m.overlays.IsActive())
+	assert.Nil(t, m.pendingPermissionInstance)
+	assert.Empty(t, m.pendingPermissionPattern)
+	assert.Empty(t, m.pendingPermissionDesc)
+	approvals := collectAutoApproveMsgs(cmd)
+	assert.Len(t, approvals, 0)
 }
 
 // TestPermissionOverlay_PatternExposed verifies the overlay exposes its pattern

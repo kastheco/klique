@@ -79,16 +79,8 @@ func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 
 // handleMouseClick processes mouse click events for left/right click interactions.
 func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
-	// Dismiss overlays on click-outside
-	if m.state == stateContextMenu && msg.Button == tea.MouseLeft {
-		m.overlays.Dismiss()
-		m.state = stateDefault
-		return m, nil
-	}
-	if m.state == stateTmuxBrowser && msg.Button == tea.MouseLeft {
-		m.overlays.Dismiss()
-		m.state = stateDefault
-		return m, nil
+	if m.overlays.IsActive() {
+		return m.handleActiveOverlayMouse(msg)
 	}
 	if m.state != stateDefault {
 		return m, nil
@@ -139,6 +131,324 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Click in tabbed window area — sidebar retains focus.
+	return m, nil
+}
+
+func (m *home) handleActiveOverlayMouse(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if msg.Button != tea.MouseLeft {
+		return m, nil
+	}
+
+	current := m.overlays.Current()
+	result := m.overlays.HandleMouse(msg)
+	if result == (overlay.Result{}) && m.overlays.IsActive() {
+		return m, nil
+	}
+
+	switch m.state {
+	case stateContextMenu:
+		m.state = stateDefault
+		if result.Action != "" {
+			return m.executeContextAction(result.Action)
+		}
+		return m, nil
+
+	case stateHelp:
+		if to, ok := current.(*overlay.TextOverlay); ok && to.OnDismiss != nil {
+			to.OnDismiss()
+		}
+		m.state = stateDefault
+		pending := m.pendingAttachInstance
+		m.pendingAttachInstance = nil
+		if pending != nil && pending.Started() && !pending.Paused() && pending.TmuxAlive() {
+			return m, tea.Exec(tmux.NewAttachExecCommand(pending), func(err error) tea.Msg {
+				if err != nil {
+					return err
+				}
+				return instanceChangedMsg{}
+			})
+		}
+		return m, tea.Sequence(tea.RequestWindowSize, func() tea.Msg {
+			m.menu.SetState(ui.StateDefault)
+			return nil
+		})
+
+	case statePermission:
+		return m.finishPermissionOverlay(result)
+
+	case stateConfirm:
+		if result.Submitted {
+			action := m.pendingConfirmAction
+			m.state = stateDefault
+			m.pendingConfirmAction = nil
+			m.pendingWaveAbortAction = nil
+			m.pendingWaveNextAction = nil
+			m.pendingWaveConfirmTaskFile = ""
+			return m, action
+		}
+		if m.pendingWaveConfirmTaskFile != "" {
+			if orch, ok := m.waveOrchestrators[m.pendingWaveConfirmTaskFile]; ok {
+				orch.ResetConfirm()
+			}
+			m.pendingWaveConfirmTaskFile = ""
+			m.waveConfirmDismissedAt = time.Now()
+		}
+		if m.pendingPlannerTaskFile != "" {
+			m.plannerPrompted[m.pendingPlannerTaskFile] = true
+			m.killExistingPlanAgent(m.pendingPlannerTaskFile, session.AgentTypePlanner)
+			_ = m.saveAllInstances()
+			m.updateNavPanelStatus()
+			m.pendingPlannerInstanceTitle = ""
+			m.pendingPlannerTaskFile = ""
+		}
+		m.state = stateDefault
+		m.pendingConfirmAction = nil
+		m.pendingWaveAbortAction = nil
+		m.pendingWaveNextAction = nil
+		return m, nil
+
+	case statePrompt:
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.RequestWindowSize
+		}
+		m.state = stateDefault
+		return m, tea.Sequence(
+			tea.RequestWindowSize,
+			func() tea.Msg {
+				m.menu.SetState(ui.StateDefault)
+				m.showHelpScreen(helpStart(selected), nil)
+				return nil
+			},
+		)
+
+	case statePRTitle:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case statePRBody:
+		m.pendingPRTitle = ""
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateRenameInstance:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateRenameTask:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateChatAboutTask:
+		m.pendingChatAboutTask = ""
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateSendPrompt:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateNewPlan:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateNewPlanTopic:
+		topic := ""
+		if result.Submitted {
+			picked := result.Value
+			if picked != "(No topic)" {
+				topic = picked
+			}
+		}
+		if err := m.createTaskEntry(m.pendingPlanName, m.pendingPlanDesc, topic); err != nil {
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			m.pendingPlanName = ""
+			m.pendingPlanDesc = ""
+			return m, m.handleError(err)
+		}
+		m.loadTaskState()
+		m.updateSidebarTasks()
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		m.pendingPlanName = ""
+		m.pendingPlanDesc = ""
+		return m, tea.RequestWindowSize
+
+	case stateSpawnAgent:
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.RequestWindowSize
+
+	case stateChangeTopic:
+		if result.Submitted && m.taskState != nil && m.pendingChangeTopicTask != "" {
+			picked := result.Value
+			newTopic := ""
+			if picked != "(No topic)" {
+				newTopic = picked
+			}
+			if err := m.taskState.SetTopic(m.pendingChangeTopicTask, newTopic); err != nil {
+				m.state = stateDefault
+				m.pendingChangeTopicTask = ""
+				return m, m.handleError(err)
+			}
+			m.updateSidebarTasks()
+		}
+		m.state = stateDefault
+		m.pendingChangeTopicTask = ""
+		return m, tea.RequestWindowSize
+
+	case stateSetStatus:
+		if result.Submitted && m.taskState != nil && m.pendingSetStatusTask != "" {
+			picked := result.Value
+			if picked != "" {
+				if err := m.taskState.ForceSetStatus(m.pendingSetStatusTask, taskstate.Status(picked)); err != nil {
+					m.state = stateDefault
+					m.pendingSetStatusTask = ""
+					return m, m.handleError(err)
+				}
+				m.audit(auditlog.EventPlanTransition, "manual override → "+picked,
+					auditlog.WithPlan(m.pendingSetStatusTask),
+					auditlog.WithDetail("manual override"))
+				m.loadTaskState()
+				m.updateSidebarTasks()
+				m.toastManager.Success(fmt.Sprintf("status → %s", picked))
+				m.state = stateDefault
+				m.pendingSetStatusTask = ""
+				return m, tea.Batch(tea.RequestWindowSize, m.toastTickCmd())
+			}
+		}
+		m.state = stateDefault
+		m.pendingSetStatusTask = ""
+		return m, tea.RequestWindowSize
+
+	case stateClickUpSearch:
+		m.state = stateDefault
+		return m, nil
+
+	case stateClickUpPicker:
+		if result.Submitted {
+			selected := result.Value
+			if selected != "" {
+				for _, r := range m.clickUpResults {
+					label := r.ID + " · " + r.Name
+					if strings.HasPrefix(selected, label) {
+						m.state = stateClickUpFetching
+						m.toastManager.Info("fetching task details...")
+						return m, tea.Batch(m.fetchClickUpTaskWithTimeout(r.ID), m.toastTickCmd())
+					}
+				}
+			}
+		}
+		m.state = stateDefault
+		return m, nil
+
+	case stateClickUpWorkspacePicker:
+		if result.Submitted {
+			selected := result.Value
+			if selected != "" && m.clickUpImporter != nil {
+				wsID := selected
+				if id, ok := m.clickUpWorkspaceMap[selected]; ok {
+					wsID = id
+				}
+				m.clickUpImporter.SetWorkspaceID(wsID)
+				if err := clickup.SaveProjectConfig(m.activeRepoPath, &clickup.ProjectConfig{WorkspaceID: wsID}); err != nil {
+					log.WarningLog.Printf("failed to save clickup workspace config: %v", err)
+				}
+				query := m.clickUpPendingQuery
+				m.clickUpPendingQuery = ""
+				m.clickUpWorkspaceMap = nil
+				m.state = stateClickUpFetching
+				m.toastManager.Info("searching clickup...")
+				return m, tea.Batch(m.searchClickUp(query), m.toastTickCmd())
+			}
+		}
+		m.state = stateDefault
+		m.clickUpPendingQuery = ""
+		m.clickUpWorkspaceMap = nil
+		return m, nil
+
+	case stateTmuxBrowser:
+		browser, _ := current.(*overlay.TmuxBrowserOverlay)
+		m.state = stateDefault
+		return m.handleTmuxBrowserAction(browser, result.Action)
+	}
+
+	return m, nil
+}
+
+func (m *home) finishPermissionOverlay(result overlay.Result) (tea.Model, tea.Cmd) {
+	if result.Submitted {
+		cacheKey := config.CacheKey(m.pendingPermissionPattern, m.pendingPermissionDesc)
+		inst := m.pendingPermissionInstance
+
+		var choice overlay.PermissionChoice
+		switch result.Action {
+		case "allow_always":
+			choice = overlay.PermissionAllowAlways
+		case "reject":
+			choice = overlay.PermissionReject
+		default:
+			choice = overlay.PermissionAllowOnce
+		}
+
+		if choice == overlay.PermissionAllowAlways && cacheKey != "" && m.permissionStore != nil {
+			m.permissionStore.Remember(m.activeProject(), cacheKey)
+		}
+
+		m.state = stateDefault
+
+		if inst != nil {
+			guardKey := cacheKey
+			if guardKey == "" {
+				guardKey = "__handled__"
+			}
+			m.permissionHandled[inst] = guardKey
+		}
+
+		if inst != nil {
+			capturedInst := inst
+			capturedChoice := tmux.PermissionChoice(choice)
+			choiceStr := "allow once"
+			switch choice {
+			case overlay.PermissionAllowAlways:
+				choiceStr = "allow always"
+			case overlay.PermissionReject:
+				choiceStr = "reject"
+			}
+			m.audit(auditlog.EventPermissionAnswered, choiceStr,
+				auditlog.WithInstance(inst.Title),
+			)
+			m.pendingPermissionInstance = nil
+			m.pendingPermissionPattern = ""
+			m.pendingPermissionDesc = ""
+			return m, func() tea.Msg {
+				capturedInst.SendPermissionResponse(capturedChoice)
+				return nil
+			}
+		}
+	}
+
+	if m.pendingPermissionInstance != nil {
+		guardKey := m.pendingPermissionPattern
+		if guardKey == "" {
+			guardKey = "__handled__"
+		}
+		m.permissionHandled[m.pendingPermissionInstance] = guardKey
+	}
+	m.pendingPermissionInstance = nil
+	m.pendingPermissionPattern = ""
+	m.pendingPermissionDesc = ""
+	m.state = stateDefault
 	return m, nil
 }
 
@@ -669,78 +979,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 		result := m.overlays.HandleKey(msg)
 		if result.Dismissed {
-			if result.Submitted {
-				// Read the pattern/description captured at detection time.
-				cacheKey := config.CacheKey(m.pendingPermissionPattern, m.pendingPermissionDesc)
-				inst := m.pendingPermissionInstance
-
-				// Map action string to PermissionChoice.
-				var choice overlay.PermissionChoice
-				switch result.Action {
-				case "allow_always":
-					choice = overlay.PermissionAllowAlways
-				case "reject":
-					choice = overlay.PermissionReject
-				default:
-					choice = overlay.PermissionAllowOnce
-				}
-
-				// Cache "allow always" decisions
-				if choice == overlay.PermissionAllowAlways && cacheKey != "" && m.permissionStore != nil {
-					m.permissionStore.Remember(m.activeProject(), cacheKey)
-				}
-
-				m.state = stateDefault
-
-				// Guard against re-trigger: the pane still shows the permission
-				// prompt for a few ticks while the key sequence propagates.
-				// Without this, the next metadata tick re-opens the modal.
-				if inst != nil {
-					guardKey := cacheKey
-					if guardKey == "" {
-						guardKey = "__handled__"
-					}
-					m.permissionHandled[inst] = guardKey
-				}
-
-				if inst != nil {
-					// overlay.PermissionChoice and tmux.PermissionChoice share the same
-					// iota ordering, so a direct cast is safe.
-					capturedInst := inst
-					capturedChoice := tmux.PermissionChoice(choice)
-					// Emit audit event for permission answered.
-					choiceStr := "allow once"
-					switch choice {
-					case overlay.PermissionAllowAlways:
-						choiceStr = "allow always"
-					case overlay.PermissionReject:
-						choiceStr = "reject"
-					}
-					m.audit(auditlog.EventPermissionAnswered, choiceStr,
-						auditlog.WithInstance(inst.Title),
-					)
-					m.pendingPermissionInstance = nil
-					m.pendingPermissionPattern = ""
-					m.pendingPermissionDesc = ""
-					return m, func() tea.Msg {
-						capturedInst.SendPermissionResponse(capturedChoice)
-						return nil
-					}
-				}
-			}
-			// Esc dismiss — also guard so the same prompt doesn't re-open.
-			if m.pendingPermissionInstance != nil {
-				guardKey := m.pendingPermissionPattern
-				if guardKey == "" {
-					guardKey = "__handled__"
-				}
-				m.permissionHandled[m.pendingPermissionInstance] = guardKey
-			}
-			m.pendingPermissionInstance = nil
-			m.pendingPermissionPattern = ""
-			m.pendingPermissionDesc = ""
-			m.state = stateDefault
-			return m, nil
+			return m.finishPermissionOverlay(result)
 		}
 		return m, nil
 	}

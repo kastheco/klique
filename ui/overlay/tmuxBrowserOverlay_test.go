@@ -1,6 +1,7 @@
 package overlay
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -199,4 +200,44 @@ func TestTmuxBrowserOverlay_HandleKey_Attach(t *testing.T) {
 	result := b.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.True(t, result.Dismissed)
 	assert.Equal(t, "attach", result.Action)
+}
+
+func tmuxBrowserMouseTarget(t *testing.T, view, needle string) (int, int) {
+	t.Helper()
+	for y, line := range strings.Split(view, "\n") {
+		clean := stripANSI(line)
+		x := strings.Index(clean, needle)
+		if x >= 0 {
+			return x, y
+		}
+	}
+	require.FailNowf(t, "missing target", "could not find %q in view", needle)
+	return 0, 0
+}
+
+func TestTmuxBrowserOverlay_HandleMouse_TruncatedTitleMatchesRenderedRow(t *testing.T) {
+	items := []TmuxBrowserItem{{Name: "sess", Title: "this-is-a-very-long-session-title-that-truncates", Created: time.Now()}}
+	b := NewTmuxBrowserOverlay(items)
+	renderedTitle := truncateStr(items[0].Title, 28)
+	x, y := tmuxBrowserMouseTarget(t, b.View(), renderedTitle)
+
+	result := b.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "attach", result.Action)
+}
+
+func TestTmuxBrowserOverlay_HandleMouse_PrefixMatchUsesClickedRow(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "sess-a", Title: "a", Created: time.Now()},
+		{Name: "sess-alpha", Title: "alpha", Created: time.Now()},
+	}
+	b := NewTmuxBrowserOverlay(items)
+	x, y := tmuxBrowserMouseTarget(t, b.View(), "alpha")
+
+	result := b.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "attach", result.Action)
+	assert.Equal(t, 1, b.selectedIdx)
 }
