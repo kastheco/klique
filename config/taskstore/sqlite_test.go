@@ -42,11 +42,13 @@ func TestSQLiteStore_MdSuffixMigration(t *testing.T) {
 
 	store, err := taskstore.NewSQLiteStore(dbPath)
 	require.NoError(t, err)
-	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "foo", Status: taskstore.StatusReady}))
-	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "bar", Status: taskstore.StatusDone}))
-	require.NoError(t, store.SetSubtasks("proj", "foo", []taskstore.SubtaskEntry{{TaskNumber: 1, Title: "sub1", Status: taskstore.SubtaskStatusPending}}))
+	// Insert legacy .md-suffixed entries to simulate a pre-migration database.
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "foo.md", Status: taskstore.StatusReady}))
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "bar.md", Status: taskstore.StatusDone}))
+	require.NoError(t, store.SetSubtasks("proj", "foo.md", []taskstore.SubtaskEntry{{TaskNumber: 1, Title: "sub1", Status: taskstore.SubtaskStatusPending}}))
 	require.NoError(t, store.Close())
 
+	// Reopen — migration must strip '.md' from both tasks and subtasks.
 	store2, err := taskstore.NewSQLiteStore(dbPath)
 	require.NoError(t, err)
 	defer store2.Close()
@@ -54,9 +56,10 @@ func TestSQLiteStore_MdSuffixMigration(t *testing.T) {
 	plans, err := store2.List("proj")
 	require.NoError(t, err)
 	for _, plan := range plans {
-		assert.False(t, strings.HasSuffix(plan.Filename, ".md"))
+		assert.False(t, strings.HasSuffix(plan.Filename, ".md"), "filename %q should not have .md suffix after migration", plan.Filename)
 	}
 
+	// Subtasks must be retrievable by the stripped filename.
 	subs, err := store2.GetSubtasks("proj", "foo")
 	require.NoError(t, err)
 	assert.Len(t, subs, 1)
