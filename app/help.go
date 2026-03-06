@@ -88,7 +88,7 @@ func (h helpTypeInstanceStart) toContent() string {
 		"",
 		headerStyle.Render("managing:"),
 		keyStyle.Render("↵/o")+descStyle.Render("   - attach to session"),
-		keyStyle.Render("tab")+descStyle.Render("   - cycle panes (!/ # to jump to agent/info)"),
+		keyStyle.Render("tab")+descStyle.Render("   - cycle panes (!/# to jump to agent/info)"),
 		keyStyle.Render("k")+descStyle.Render("     - kill tmux session"),
 		keyStyle.Render("K")+descStyle.Render("     - stop session (branch preserved)"),
 		"",
