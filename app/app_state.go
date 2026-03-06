@@ -413,8 +413,6 @@ func (m *home) exitFocusMode() {
 func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 	var targetTab int
 	switch name {
-	case keys.KeyTabAgent:
-		targetTab = ui.PreviewTab
 	case keys.KeyTabInfo:
 		targetTab = ui.InfoTab
 	default:
