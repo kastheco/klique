@@ -69,7 +69,7 @@
       "textVerbosity": "medium"
     },
     "coder": {
-      "model": "openai/gpt-5.3-codex-spark",
+      "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
         "edit": "allow",

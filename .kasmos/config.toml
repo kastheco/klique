@@ -24,7 +24,7 @@
   [agents.coder]
     enabled = true
     program = "opencode"
-    model = "openai/gpt-5.3-codex-spark"
+    model = "anthropic/claude-sonnet-4-6"
     temperature = 0.1
     effort = "low"
   [agents.fixer]

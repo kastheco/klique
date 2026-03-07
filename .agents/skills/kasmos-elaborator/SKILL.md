@@ -272,7 +272,7 @@ leave it unchanged.
 pipe the full enriched plan (all waves, all tasks, complete header) into the task store:
 
 ```bash
-kas task update-content <plan-file> --file /tmp/enriched-plan.md
+kas task update-content <plan-file> < /tmp/enriched-plan.md
 ```
 
 or via stdin:
