@@ -240,6 +240,22 @@ func (d *Daemon) Run(ctx context.Context) error {
 	ticker := time.NewTicker(d.cfg.PollInterval)
 	defer ticker.Stop()
 
+	// Reaper goroutine: reset signals stuck in "processing" for >60s.
+	reaperTicker := time.NewTicker(30 * time.Second)
+	defer reaperTicker.Stop()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reaperTicker.C:
+				reapStuckSignals(d.repos.List(), 60*time.Second, d.logger)
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -271,13 +287,23 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 // tick executes one poll cycle across all registered repos.
 func (d *Daemon) tick(ctx context.Context) {
-	entries := d.repos.List()
-	for _, e := range entries {
-		if e.Store == nil || e.Processor == nil {
-			// Processor requires a store; skip repos whose store is unavailable.
-			continue
-		}
+	for _, e := range d.repos.List() {
+		d.tickRepo(ctx, e)
+	}
+}
 
+// tickRepo executes one poll cycle for a single repo entry.
+// If the entry has a SignalGateway, it uses the DB-backed pipeline:
+// bridge filesystem sentinels → claim via gateway → Processor.Tick → executeAction → MarkProcessed.
+// If SignalGateway is nil, it falls back to the legacy filesystem-only path.
+func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
+	if e.Store == nil || e.Processor == nil {
+		// Processor requires a store; skip repos whose store is unavailable.
+		return
+	}
+
+	if e.SignalGateway == nil {
+		// Legacy filesystem path — unchanged behavior.
 		scan := loop.ScanAllSignals(e.Path, sharedWorktreePaths(e.Path))
 
 		// Use the persistent per-repo processor so wave orchestrator state
@@ -302,7 +328,52 @@ func (d *Daemon) tick(ctx context.Context) {
 		for _, action := range actions {
 			d.executeAction(ctx, e, action)
 		}
+		return
 	}
+
+	// DB-backed gateway path.
+	workerID := fmt.Sprintf("daemon:%s:%d", e.Project, os.Getpid())
+
+	if _, err := loop.BridgeFilesystemSignals(e.SignalGateway, e.Project, e.Path, sharedWorktreePaths(e.Path)); err != nil {
+		d.logger.Error("bridge filesystem signals failed", "repo", e.Path, "err", err)
+		return
+	}
+
+	scan, ids, err := loop.ScanGateway(e.SignalGateway, e.Project, workerID)
+	if err != nil {
+		d.logger.Error("scan gateway failed", "repo", e.Path, "err", err)
+		return
+	}
+
+	actions := e.Processor.Tick(scan)
+	for _, action := range actions {
+		d.executeAction(ctx, e, action)
+	}
+
+	for _, id := range ids {
+		if err := e.SignalGateway.MarkProcessed(id, taskstore.SignalDone, ""); err != nil {
+			d.logger.Error("mark processed failed", "repo", e.Path, "id", id, "err", err)
+		}
+	}
+}
+
+// reapStuckSignals resets signals that have been stuck in "processing" for
+// longer than timeout across all repos with a SignalGateway. Returns the
+// total count of signals reset.
+func reapStuckSignals(repos []RepoEntry, timeout time.Duration, logger *slog.Logger) int {
+	total := 0
+	for _, e := range repos {
+		if e.SignalGateway == nil {
+			continue
+		}
+		n, err := e.SignalGateway.ResetStuck(timeout)
+		if err != nil {
+			logger.Error("reap stuck signals failed", "repo", e.Path, "project", e.Project, "err", err)
+			continue
+		}
+		total += n
+	}
+	return total
 }
 
 // executeAction dispatches a single action to the configured spawner.

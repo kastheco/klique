@@ -366,3 +366,145 @@ func TestNewSignalCmd_Structure(t *testing.T) {
 	require.NotNil(t, processCmd, "signal process command should exist")
 	assert.NotNil(t, processCmd.Flags().Lookup("once"), "--once flag should exist on process command")
 }
+
+// --- executeSignalEmit tests ---
+
+func TestExecuteSignalEmit(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	err = executeSignalEmit(gw, "myproject", "planner_finished", "my-plan", "plan done")
+	require.NoError(t, err)
+
+	signals, err := gw.List("myproject", taskstore.SignalPending)
+	require.NoError(t, err)
+	require.Len(t, signals, 1)
+	assert.Equal(t, "my-plan", signals[0].PlanFile)
+	assert.Equal(t, "planner_finished", signals[0].SignalType)
+	assert.Equal(t, `{"body":"plan done"}`, signals[0].Payload)
+}
+
+func TestExecuteSignalEmit_InvalidType(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	err = executeSignalEmit(gw, "proj", "invalid_type", "plan", "")
+	assert.Error(t, err)
+}
+
+func TestExecuteSignalEmit_EmptyPayloadFSMSignal(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	err = executeSignalEmit(gw, "proj", "implement_finished", "my-plan", "")
+	require.NoError(t, err)
+
+	signals, err := gw.List("proj", taskstore.SignalPending)
+	require.NoError(t, err)
+	require.Len(t, signals, 1)
+	assert.Equal(t, "", signals[0].Payload)
+}
+
+func TestExecuteSignalEmit_ElaboratorFinishedRejectsPayload(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	err = executeSignalEmit(gw, "proj", "elaborator_finished", "my-plan", "unexpected payload")
+	assert.Error(t, err)
+}
+
+func TestExecuteSignalEmit_ImplementTaskFinished(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	payload := `{"wave_number":2,"task_number":3}`
+	err = executeSignalEmit(gw, "proj", "implement_task_finished", "my-plan", payload)
+	require.NoError(t, err)
+
+	signals, err := gw.List("proj", taskstore.SignalPending)
+	require.NoError(t, err)
+	require.Len(t, signals, 1)
+	assert.Equal(t, payload, signals[0].Payload)
+}
+
+func TestNormalizeSignalPayload_FSMSignalWrapsBody(t *testing.T) {
+	payload, err := normalizeSignalPayload("planner_finished", "some message")
+	require.NoError(t, err)
+	assert.Equal(t, `{"body":"some message"}`, payload)
+}
+
+func TestNormalizeSignalPayload_FSMSignalPreservesJSON(t *testing.T) {
+	json := `{"key":"value"}`
+	payload, err := normalizeSignalPayload("review_approved", json)
+	require.NoError(t, err)
+	assert.Equal(t, json, payload)
+}
+
+func TestNormalizeSignalPayload_FSMSignalEmptyPayload(t *testing.T) {
+	payload, err := normalizeSignalPayload("implement_finished", "")
+	require.NoError(t, err)
+	assert.Equal(t, "", payload)
+}
+
+func TestNormalizeSignalPayload_ImplementWaveRequiresJSON(t *testing.T) {
+	_, err := normalizeSignalPayload("implement_wave", "not json")
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("implement_wave", `{"wave_number":1}`)
+	require.NoError(t, err)
+	assert.Equal(t, `{"wave_number":1}`, payload)
+}
+
+func TestNormalizeSignalPayload_ElaboratorFinishedRejectsPayload(t *testing.T) {
+	_, err := normalizeSignalPayload("elaborator_finished", "not empty")
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("elaborator_finished", "")
+	require.NoError(t, err)
+	assert.Equal(t, "", payload)
+}
+
+func TestNormalizeSignalPayload_ImplementTaskFinishedRejectsNonNumeric(t *testing.T) {
+	_, err := normalizeSignalPayload("implement_task_finished", `{"wave_number":"x","task_number":1}`)
+	assert.Error(t, err)
+
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1,"task_number":"y"}`)
+	assert.Error(t, err)
+
+	// Fractional values must also be rejected — they pass JSON float64 assertion
+	// but would cause json.Unmarshal-into-int failure in the gateway scanner.
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1.5,"task_number":1}`)
+	assert.Error(t, err)
+
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1,"task_number":2.5}`)
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("implement_task_finished", `{"wave_number":2,"task_number":3}`)
+	require.NoError(t, err)
+	assert.Equal(t, `{"wave_number":2,"task_number":3}`, payload)
+}
+
+func TestNormalizeSignalPayload_ImplementWaveRejectsNonNumeric(t *testing.T) {
+	_, err := normalizeSignalPayload("implement_wave", `{"wave_number":"not-a-number"}`)
+	assert.Error(t, err)
+
+	// Fractional value must also be rejected — it passes float64 assertion
+	// but would cause json.Unmarshal-into-int failure in the gateway scanner.
+	_, err = normalizeSignalPayload("implement_wave", `{"wave_number":1.5}`)
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("implement_wave", `{"wave_number":1}`)
+	require.NoError(t, err)
+	assert.Equal(t, `{"wave_number":1}`, payload)
+}
+
+func TestNewSignalEmitCmd_Structure(t *testing.T) {
+	cmd := newSignalEmitCmd()
+	assert.Equal(t, "emit <signal-type> <plan-file>", cmd.Use)
+	assert.NotNil(t, cmd.Flags().Lookup("payload"), "--payload flag should exist on emit command")
+}

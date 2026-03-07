@@ -63,7 +63,17 @@ func TestBuildTaskPrompt_InlineCoderRules(t *testing.T) {
 	assert.Contains(t, prompt, "feat(task-N):")
 	assert.Contains(t, prompt, "-run Test")
 	assert.Contains(t, prompt, "go build ./...")
+	// Primary gateway command
+	assert.Contains(t, prompt, "kas signal emit implement_task_finished feature.md")
+	// Fallback filesystem sentinel still present
 	assert.Contains(t, prompt, "touch .kasmos/signals/implement-task-finished-w1-t1-feature.md")
+}
+
+func TestBuildTaskPrompt_ContainsSignalEmit(t *testing.T) {
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "test", Body: "do stuff"}}}}}
+	prompt := BuildTaskPrompt("my-plan", plan, plan.Waves[0].Tasks[0], 1, 1, 1, nil)
+	assert.Contains(t, prompt, "kas signal emit implement_task_finished my-plan")
+	assert.Contains(t, prompt, "implement-task-finished-w1-t1-my-plan")
 }
 
 func TestBuildTaskPrompt_SingleTask(t *testing.T) {
@@ -113,6 +123,9 @@ func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	prompt := BuildWaveAnnotationPrompt("my-feature")
 	assert.Contains(t, prompt, "kas task show my-feature")
 	assert.Contains(t, prompt, "## Wave")
+	// Primary gateway command
+	assert.Contains(t, prompt, "kas signal emit planner_finished my-feature")
+	// Fallback filesystem sentinel still present
 	assert.Contains(t, prompt, "planner-finished-my-feature")
 	assert.NotContains(t, prompt, "The plan at docs/plans/")
 }
@@ -136,7 +149,9 @@ func TestBuildElaborationPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "kas task show my-feature")
 	// Must reference updating the plan
 	assert.Contains(t, prompt, "kas task update-content my-feature")
-	// Must reference the signal
+	// Primary gateway command
+	assert.Contains(t, prompt, "kas signal emit elaborator_finished my-feature")
+	// Fallback filesystem sentinel still present
 	assert.Contains(t, prompt, "elaborator-finished-my-feature")
 	// Must instruct to expand task bodies
 	assert.Contains(t, prompt, "implementation detail")
@@ -155,4 +170,7 @@ func TestBuildArchitectPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "architect-finished-my-feature")
 	assert.Contains(t, prompt, "architect-v1.json")
 	assert.Contains(t, prompt, "parallel")
+	// BuildArchitectPrompt intentionally remains a filesystem-only (touch) prompt
+	// until a gateway consumer for architect-finished is implemented.
+	assert.NotContains(t, prompt, "kas signal emit architect_finished")
 }
