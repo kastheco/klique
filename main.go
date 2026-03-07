@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/kastheco/kasmos/app"
 	cmd2 "github.com/kastheco/kasmos/cmd"
@@ -57,7 +59,11 @@ var (
 				if err != nil {
 					return fmt.Errorf("create daemon: %w", err)
 				}
-				return d.Run(ctx)
+				// Wrap context with signal handling so SIGTERM/SIGINT cancel the
+				// context and trigger the graceful-shutdown path in Daemon.Run().
+				sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+				defer stop()
+				return d.Run(sigCtx)
 			}
 
 			if daemonFlag {

@@ -32,6 +32,8 @@ type InstanceInfo struct {
 	PlanFile string
 	// AgentType is the type of agent (e.g. "coder", "reviewer").
 	AgentType string
+	// Project is the project name (basename of repo root) this instance belongs to.
+	Project string
 }
 
 // TmuxSpawner implements loop.AgentSpawner using tmux-backed sessions managed
@@ -48,6 +50,9 @@ type TmuxSpawner struct {
 	// planFileByKey stores the planFile portion of the key for RunningInstances.
 	planFileByKey  map[string]string
 	agentTypeByKey map[string]string
+	// projectByKey stores the project name for each running instance so that
+	// ListInstances can filter by project.
+	projectByKey map[string]string
 }
 
 // NewTmuxSpawner returns a TmuxSpawner. An optional TmuxSpawnerConfig may be
@@ -81,6 +86,7 @@ func newTmuxSpawnerWithConfig(logger *slog.Logger, drainTimeout time.Duration) *
 		instances:      make(map[string]*session.Instance),
 		planFileByKey:  make(map[string]string),
 		agentTypeByKey: make(map[string]string),
+		projectByKey:   make(map[string]string),
 	}
 }
 
@@ -94,6 +100,7 @@ func (s *TmuxSpawner) RunningInstances() []InstanceInfo {
 			Key:       key,
 			PlanFile:  s.planFileByKey[key],
 			AgentType: s.agentTypeByKey[key],
+			Project:   s.projectByKey[key],
 		})
 	}
 	return out
@@ -138,6 +145,7 @@ func (s *TmuxSpawner) DrainAll(ctx context.Context) {
 			delete(s.instances, key)
 			delete(s.planFileByKey, key)
 			delete(s.agentTypeByKey, key)
+			delete(s.projectByKey, key)
 			s.mu.Unlock()
 		}
 	}()
@@ -160,6 +168,7 @@ func (s *TmuxSpawner) DrainAll(ctx context.Context) {
 				delete(s.instances, key)
 				delete(s.planFileByKey, key)
 				delete(s.agentTypeByKey, key)
+				delete(s.projectByKey, key)
 			}
 			s.mu.Unlock()
 			if ok {
@@ -259,6 +268,7 @@ func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) 
 	s.instances[key] = inst
 	s.planFileByKey[key] = opts.PlanFile
 	s.agentTypeByKey[key] = session.AgentTypeElaborator
+	s.projectByKey[key] = opts.Project
 	s.mu.Unlock()
 	return nil
 }
@@ -277,6 +287,7 @@ func (s *TmuxSpawner) KillAgent(planFile, agentType string) error {
 		delete(s.instances, key)
 		delete(s.planFileByKey, key)
 		delete(s.agentTypeByKey, key)
+		delete(s.projectByKey, key)
 	}
 	s.mu.Unlock()
 
@@ -329,6 +340,7 @@ func (s *TmuxSpawner) spawnInSharedWorktree(_ context.Context, opts loop.SpawnOp
 	s.instances[key] = inst
 	s.planFileByKey[key] = opts.PlanFile
 	s.agentTypeByKey[key] = agentType
+	s.projectByKey[key] = opts.Project
 	s.mu.Unlock()
 	return nil
 }

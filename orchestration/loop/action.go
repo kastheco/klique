@@ -136,6 +136,9 @@ type SpawnOpts struct {
 	AgentType string
 	// RepoPath is the absolute filesystem path to the repository root.
 	RepoPath string
+	// Project is the project name (basename of RepoPath). Used by the daemon
+	// to associate running instances with their originating repository.
+	Project string
 	// Branch is the git branch for the plan's shared worktree.
 	Branch string
 	// Prompt is the initial prompt delivered to the agent on startup.

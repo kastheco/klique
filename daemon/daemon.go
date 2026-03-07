@@ -83,12 +83,32 @@ func (a *daemonStateAdapter) RemoveRepo(project string) error {
 	return a.d.repos.RemoveByProject(project)
 }
 
-func (a *daemonStateAdapter) ListPlans(_ string) ([]taskstore.TaskEntry, error) {
-	return nil, nil
+func (a *daemonStateAdapter) ListPlans(project string) ([]taskstore.TaskEntry, error) {
+	entries := a.d.repos.List()
+	for _, e := range entries {
+		if e.Project == project && e.Store != nil {
+			return e.Store.List(project)
+		}
+	}
+	return nil, fmt.Errorf("project not found: %s", project)
 }
 
-func (a *daemonStateAdapter) ListInstances(_ string) []api.InstanceStatus {
-	return nil
+func (a *daemonStateAdapter) ListInstances(project string) []api.InstanceStatus {
+	all := a.d.spawner.RunningInstances()
+	var out []api.InstanceStatus
+	for _, info := range all {
+		if info.Project != project {
+			continue
+		}
+		out = append(out, api.InstanceStatus{
+			ID:      info.Key,
+			Project: info.Project,
+			Plan:    info.PlanFile,
+			Role:    info.AgentType,
+			Active:  true,
+		})
+	}
+	return out
 }
 
 func (a *daemonStateAdapter) EventStream() <-chan api.Event {
@@ -298,6 +318,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		opts := loop.SpawnOpts{
 			PlanFile: a.PlanFile,
 			RepoPath: e.Path,
+			Project:  e.Project,
 			Branch:   branchFor(a.PlanFile),
 		}
 		if err := d.spawner.SpawnReviewer(ctx, opts); err != nil {
@@ -315,6 +336,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		opts := loop.SpawnOpts{
 			PlanFile: a.PlanFile,
 			RepoPath: e.Path,
+			Project:  e.Project,
 			Branch:   branchFor(a.PlanFile),
 			Feedback: a.Feedback,
 		}
@@ -333,6 +355,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		opts := loop.SpawnOpts{
 			PlanFile: a.PlanFile,
 			RepoPath: e.Path,
+			Project:  e.Project,
 		}
 		if err := d.spawner.SpawnElaborator(ctx, opts); err != nil {
 			d.logger.Error("spawn elaborator failed", "plan", a.PlanFile, "err", err)

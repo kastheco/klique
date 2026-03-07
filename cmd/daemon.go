@@ -16,13 +16,15 @@ import (
 )
 
 // daemonSocketPath returns the default Unix domain socket path for the daemon
-// control API. Located in ~/.config/kasmos/ for user-level daemon.
+// control API. Matches the defaultSocketPath() logic in the daemon package:
+// prefers $XDG_RUNTIME_DIR/kasmos/kas.sock, then falls back to
+// /tmp/kasmos-<uid>/kas.sock. This keeps `kas daemon status` (and friends)
+// talking to the same socket the daemon creates without requiring --socket.
 func daemonSocketPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp/kas-daemon.sock"
+	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
+		return filepath.Join(xdg, "kasmos", "kas.sock")
 	}
-	return filepath.Join(home, ".config", "kasmos", "daemon.sock")
+	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
 }
 
 // daemonPIDPath returns the path to the daemon PID file.
