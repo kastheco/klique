@@ -19,6 +19,12 @@ func (s Signal) Key() string {
 	return string(s.Event) + ":" + s.TaskFile
 }
 
+// Filename returns the base filename of the signal file.
+func (s Signal) Filename() string { return filepath.Base(s.filePath) }
+
+// Dir returns the directory containing the signal file.
+func (s Signal) Dir() string { return filepath.Dir(s.filePath) }
+
 // sentinelPrefixes maps filename prefixes to FSM events.
 var sentinelPrefixes = []struct {
 	prefix string
