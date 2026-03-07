@@ -206,6 +206,7 @@ func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool
 func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{
 		FocusMode:        m.state == stateFocusAgent,
+		Version:          m.version,
 		TmuxSessionCount: m.tmuxSessionCount,
 		ProjectDir:       filepath.Base(m.activeRepoPath),
 	}

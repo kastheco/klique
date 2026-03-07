@@ -8,6 +8,6 @@ import (
 )
 
 func TestNewHomeInitializesNavigationPanel(t *testing.T) {
-	h := newHome(context.Background(), "opencode", false)
+	h := newHome(context.Background(), "opencode", false, "")
 	require.NotNil(t, h.nav)
 }

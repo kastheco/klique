@@ -38,7 +38,7 @@ const GlobalInstanceLimit = 20
 const clickUpOpTimeout = 30 * time.Second
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, version string) error {
 	// Set the terminal's default background to the theme base color so every
 	// ANSI reset and unstyled cell falls back to #232136 instead of black.
 	restore := ui.SetTerminalBackground("#232136")
@@ -46,7 +46,7 @@ func Run(ctx context.Context, program string, autoYes bool) error {
 	defer sentrypkg.RecoverPanic()
 
 	zone.NewGlobal()
-	h := newHome(ctx, program, autoYes)
+	h := newHome(ctx, program, autoYes, version)
 	defer h.embeddedServer.Stop()
 	defer h.auditLogger.Close()
 	if h.permissionStore != nil {
@@ -121,6 +121,7 @@ type home struct {
 	// -- Storage and Configuration --
 
 	program string
+	version string
 	autoYes bool
 
 	// activeRepoPath is the currently active repository path for filtering and new instances
@@ -345,7 +346,7 @@ type home struct {
 	permissionHandled map[*session.Instance]string
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+func newHome(ctx context.Context, program string, autoYes bool, version string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -376,6 +377,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		storage:               storage,
 		appConfig:             appConfig,
 		program:               program,
+		version:               version,
 		autoYes:               autoYes,
 		state:                 stateDefault,
 		appState:              appState,
