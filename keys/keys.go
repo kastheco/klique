@@ -54,6 +54,7 @@ const (
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
 	KeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)
+	KeySubmitExit    // Key for submitting input and exiting focus/interactive mode (ctrl+enter)
 	KeySpaceExpand   // Space key with expand/collapse label (sidebar context)
 
 	KeyTmuxBrowser // t - browse orphaned tmux sessions
@@ -229,6 +230,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyExitFocus: key.NewBinding(
 		key.WithKeys("ctrl+space"),
 		key.WithHelp("ctrl+space", "exit focus"),
+	),
+	KeySubmitExit: key.NewBinding(
+		key.WithKeys("ctrl+enter"),
+		key.WithHelp("ctrl+↵", "submit + exit"),
 	),
 
 	KeySpaceExpand: key.NewBinding(
