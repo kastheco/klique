@@ -638,8 +638,8 @@ func (n *NavigationPanel) availRows() int {
 	)
 	overhead := baseOverhead
 	if n.auditView != "" && n.auditContentLines > 0 {
-		// Reserve: 1 gap below legend + 1 audit header + contentLines body
-		auditReserve := 2 + n.auditContentLines
+		// Reserve: 2 gap below legend + 1 audit header + contentLines body
+		auditReserve := 3 + n.auditContentLines
 		// Cap at 50% of inner height so the task list isn't squished.
 		innerHeight := n.height - baseOverhead
 		halfPanel := innerHeight / 2
@@ -1559,9 +1559,9 @@ func (n *NavigationPanel) String() string {
 		}
 	}
 
-	// Fixed 1-line gaps around the legend; all leftover space goes above
-	// (between nav items and legend) to keep legend pinned near the bottom.
-	const legendGapBelow = 1
+	// Fixed 2-line gap below the legend (breathing room above the log header);
+	// all leftover space goes above to keep legend pinned near the bottom.
+	const legendGapBelow = 2
 	gapAbove := innerHeight - topLines - legendLines - auditLines - legendGapBelow + 1
 	if gapAbove < 1 {
 		gapAbove = 1

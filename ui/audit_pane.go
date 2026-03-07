@@ -89,8 +89,8 @@ func (p *AuditPane) ToggleVisible() { p.visible = !p.visible }
 
 // Audit-pane styles — Rosé Pine Moon palette.
 var (
-	auditDividerStyle = lipgloss.NewStyle().Foreground(ColorMuted)
-	auditMinuteStyle  = lipgloss.NewStyle().Foreground(ColorMuted)
+	auditDividerStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+	auditMinuteStyle  = lipgloss.NewStyle().Foreground(ColorOverlay)
 	auditMsgStyle     = lipgloss.NewStyle().Foreground(ColorSubtle)
 	auditWarnMsgStyle = lipgloss.NewStyle().Foreground(ColorGold)
 	auditErrMsgStyle  = lipgloss.NewStyle().Foreground(ColorLove)
@@ -154,7 +154,8 @@ func (p *AuditPane) renderBody() string {
 
 	// Walk events newest-first so that we can detect minute boundaries, then
 	// append in reverse order so oldest events end up at the top of the output.
-	lines := make([]string, 0, len(p.events))
+	lines := make([]string, 0, len(p.events)+1)
+	lines = append(lines, "") // blank line below section header
 	var lastMinute string
 
 	for i := len(p.events) - 1; i >= 0; i-- {
