@@ -38,7 +38,7 @@ type AgentState struct {
 
 // DefaultAgentRoles returns the built-in agent role names.
 func DefaultAgentRoles() []string {
-	return []string{"coder", "elaborator", "reviewer", "planner", "chat", "fixer"}
+	return []string{"coder", "architect", "reviewer", "planner", "chat", "fixer"}
 }
 
 // RoleDefaults returns sensible per-role defaults for fresh inits.
@@ -52,8 +52,8 @@ func RoleDefaults() map[string]AgentState {
 			Temperature: "0.1",
 			Enabled:     true,
 		},
-		"elaborator": {
-			Role:        "elaborator",
+		"architect": {
+			Role:        "architect",
 			Model:       "openai/gpt-5.3-codex",
 			Effort:      "high",
 			Temperature: "0.1",

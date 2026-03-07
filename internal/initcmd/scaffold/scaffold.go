@@ -125,7 +125,7 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 	}
 
 	// Substitute per-role placeholders for wizard-configurable agents
-	for _, role := range []string{"coder", "elaborator", "planner", "reviewer", "fixer"} {
+	for _, role := range []string{"coder", "architect", "planner", "reviewer", "fixer"} {
 		upper := strings.ToUpper(role)
 		agent, ok := agentByRole[role]
 		if !ok {
@@ -607,6 +607,7 @@ func SymlinkHarnessSkills(dir, harnessName string) error {
 // Each path is relative to the project root.
 var runtimeDirs = []string{
 	filepath.Join(".kasmos", "signals"),
+	filepath.Join(".kasmos", "cache"),
 	".worktrees",
 }
 

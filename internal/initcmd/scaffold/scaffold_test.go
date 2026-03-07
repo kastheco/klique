@@ -736,7 +736,7 @@ func TestPatchWorktreeConfig_AddsMissingAgentBlocks(t *testing.T) {
 			Effort:      effort,
 		},
 		{
-			Role:        "elaborator",
+			Role:        "architect",
 			Harness:     "opencode",
 			Model:       "anthropic/claude-opus-4-6",
 			Temperature: &temp,
@@ -755,18 +755,18 @@ func TestPatchWorktreeConfig_AddsMissingAgentBlocks(t *testing.T) {
 	require.NoError(t, json.Unmarshal(updated, &parsed))
 	agent, ok := parsed["agent"].(map[string]any)
 	require.True(t, ok)
-	assert.Contains(t, agent, "elaborator")
+	assert.Contains(t, agent, "architect")
 
 	plannerCfg, ok := agent["planner"].(map[string]any)
 	require.True(t, ok)
-	elabCfg, ok := agent["elaborator"].(map[string]any)
+	architectCfg, ok := agent["architect"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "anthropic/claude-opus-4-6", plannerCfg["model"])
 	assert.Equal(t, temp, plannerCfg["temperature"])
 	assert.Equal(t, effort, plannerCfg["reasoningEffort"])
-	assert.Equal(t, "anthropic/claude-opus-4-6", elabCfg["model"])
-	assert.Equal(t, temp, elabCfg["temperature"])
-	assert.Equal(t, effort, elabCfg["reasoningEffort"])
+	assert.Equal(t, "anthropic/claude-opus-4-6", architectCfg["model"])
+	assert.Equal(t, temp, architectCfg["temperature"])
+	assert.Equal(t, effort, architectCfg["reasoningEffort"])
 }
 
 func TestPatchWorktreeConfig_UsesHarnessForModelNormalization(t *testing.T) {
