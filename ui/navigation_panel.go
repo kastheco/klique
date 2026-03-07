@@ -454,8 +454,7 @@ func (n *NavigationPanel) rebuildRows() {
 
 	emitted := make(map[string]bool)
 
-	// Active plans: topic-grouped (topics alphabetically, plans alpha within), then ungrouped.
-	emitTopicGrouped(activePlans, emitted)
+	// Active plans: flat list — no topic nesting in the active section.
 	emitPlanGroup(activePlans, 0, emitted)
 
 	// Solo agents (between active plans and idle plans).
