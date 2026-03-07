@@ -77,3 +77,10 @@ func TestComputeStatusBarData_Baseline(t *testing.T) {
 	data := h.computeStatusBarData()
 	assert.Equal(t, "main", data.Branch)
 }
+
+func TestComputeStatusBarData_IncludesVersion(t *testing.T) {
+	h := &home{activeRepoPath: "/home/user/repos/kasmos", version: "v2.0.0-beta-abc1234"}
+	h.nav = ui.NewNavigationPanel(&h.spinner)
+	data := h.computeStatusBarData()
+	assert.Equal(t, "v2.0.0-beta-abc1234", data.Version)
+}

@@ -20,6 +20,7 @@ const (
 // StatusBarData holds the contextual information displayed in the status bar.
 type StatusBarData struct {
 	Branch           string
+	Version          string
 	PlanName         string      // empty = no plan context
 	PlanStatus       string      // "ready", "planning", "implementing", "reviewing", "done"
 	WaveLabel        string      // "wave 2/4" or empty
@@ -61,6 +62,10 @@ var statusBarStyle = lipgloss.NewStyle().
 var statusBarAppNameStyle = lipgloss.NewStyle().
 	Background(ColorSurface).
 	Bold(true)
+
+var statusBarVersionStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted).
+	Background(ColorSurface)
 
 var statusBarSepStyle = lipgloss.NewStyle().
 	Foreground(ColorOverlay).
@@ -179,6 +184,9 @@ func (s *StatusBar) String() string {
 
 	// Build left section: logo + optional status group.
 	left := statusBarAppNameStyle.Render(GradientText("kasmos", GradientStart, GradientEnd))
+	if s.data.Version != "" {
+		left += " " + statusBarVersionStyle.Render(s.data.Version)
+	}
 	if ls := s.leftStatusGroup(); ls != "" {
 		left = left + statusBarSepStyle.Render(" · ") + ls
 	}

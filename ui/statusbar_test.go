@@ -75,6 +75,30 @@ func TestStatusBar_StatusLeftAlignedAfterLogo(t *testing.T) {
 	assert.Greater(t, branchIdx, statusIdx, "branch should no longer be grouped with status")
 }
 
+func TestStatusBar_VersionRenderedAfterLogo(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(120)
+	sb.SetData(StatusBarData{Version: "v1.4.2-abc1234", PlanStatus: "implementing"})
+	plain := stripANSI(sb.String())
+
+	appIdx := strings.Index(plain, "kasmos")
+	versionIdx := strings.Index(plain, "v1.4.2-abc1234")
+	statusIdx := strings.Index(plain, "implementing")
+
+	require.NotEqual(t, -1, appIdx)
+	require.NotEqual(t, -1, versionIdx)
+	require.NotEqual(t, -1, statusIdx)
+	assert.Greater(t, versionIdx, appIdx)
+	assert.Greater(t, statusIdx, versionIdx)
+}
+
+func TestStatusBar_EmptyVersionSkipped(t *testing.T) {
+	sb := NewStatusBar()
+	sb.SetSize(80)
+	sb.SetData(StatusBarData{})
+	assert.NotContains(t, stripANSI(sb.String()), "v1.")
+}
+
 func TestStatusBar_BranchGroupCentered(t *testing.T) {
 	sb := NewStatusBar()
 	sb.SetSize(100)
