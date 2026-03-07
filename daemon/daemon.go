@@ -201,11 +201,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("daemon: create socket dir: %w", err)
 	}
 
+	lock, err := AcquirePIDLock(d.pidLockPath())
+	if err != nil {
+		return fmt.Errorf("daemon: acquire pid lock: %w", err)
+	}
+	d.pidLock = lock
+
 	// Remove any stale socket file before listening.
 	_ = os.Remove(d.cfg.SocketPath)
 
 	ln, err := net.Listen("unix", d.cfg.SocketPath)
 	if err != nil {
+		_ = d.pidLock.Release()
+		d.pidLock = nil
 		return fmt.Errorf("daemon: listen unix %s: %w", d.cfg.SocketPath, err)
 	}
 	defer func() {
@@ -270,7 +278,7 @@ func (d *Daemon) tick(ctx context.Context) {
 			continue
 		}
 
-		scan := loop.ScanAllSignals(e.Path, nil)
+		scan := loop.ScanAllSignals(e.Path, sharedWorktreePaths(e.Path))
 
 		// Use the persistent per-repo processor so wave orchestrator state
 		// survives between ticks (prevents duplicate AdvanceWave emission).
@@ -333,13 +341,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			})
 		}
 	case loop.SpawnCoderAction:
-		opts := loop.SpawnOpts{
-			PlanFile: a.PlanFile,
-			RepoPath: e.Path,
-			Project:  e.Project,
-			Branch:   branchFor(a.PlanFile),
-			Feedback: a.Feedback,
-		}
+		opts := coderSpawnOpts(e, a.PlanFile, branchFor(a.PlanFile), a.Feedback)
 		if err := d.spawner.SpawnCoder(ctx, opts); err != nil {
 			d.logger.Error("spawn coder failed", "plan", a.PlanFile, "err", err)
 		} else {
@@ -414,6 +416,37 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		})
 	default:
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
+	}
+}
+
+func (d *Daemon) pidLockPath() string {
+	return d.cfg.SocketPath + ".pid"
+}
+
+func sharedWorktreePaths(repoPath string) []string {
+	entries, err := os.ReadDir(filepath.Join(repoPath, ".worktrees"))
+	if err != nil {
+		return nil
+	}
+
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		paths = append(paths, filepath.Join(repoPath, ".worktrees", entry.Name()))
+	}
+	return paths
+}
+
+func coderSpawnOpts(e RepoEntry, planFile, branch, feedback string) loop.SpawnOpts {
+	return loop.SpawnOpts{
+		PlanFile: planFile,
+		RepoPath: e.Path,
+		Project:  e.Project,
+		Branch:   branch,
+		Prompt:   feedback,
+		Feedback: feedback,
 	}
 }
 

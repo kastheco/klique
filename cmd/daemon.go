@@ -50,8 +50,9 @@ func NewDaemonCmd() *cobra.Command {
 
 	cmd.AddCommand(newDaemonStartCmd())
 	cmd.AddCommand(newDaemonStopCmd())
-	// newDaemonStatusCmd takes socket path so tests can inject a fake path.
-	statusCmd := newDaemonStatusCmd(daemonSocketPath())
+	// newDaemonStatusCmd takes a pointer so the persistent --socket flag is
+	// respected when the subcommand executes.
+	statusCmd := newDaemonStatusCmd(&socketPath)
 	cmd.AddCommand(statusCmd)
 	cmd.AddCommand(newDaemonAddCmd(&socketPath))
 	cmd.AddCommand(newDaemonRemoveCmd(&socketPath))
@@ -179,13 +180,14 @@ func stopDaemonByPID(pidPath string) error {
 }
 
 // newDaemonStatusCmd returns the `kas daemon status` subcommand.
-// socketPath is accepted as a parameter so tests can inject a fake path.
-func newDaemonStatusCmd(socketPath string) *cobra.Command {
+// socketPath is accepted as a pointer so parent flag binding updates are
+// observed at execution time while tests can still inject a fixed value.
+func newDaemonStatusCmd(socketPath *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "show daemon status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client := daemonHTTPClient(socketPath)
+			client := daemonHTTPClient(*socketPath)
 
 			resp, err := client.Get("http://kas/v1/status")
 			if err != nil {

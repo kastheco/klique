@@ -21,7 +21,8 @@ func TestDaemonCmd_HasSubcommands(t *testing.T) {
 }
 
 func TestDaemonStatusCmd_NotRunning(t *testing.T) {
-	cmd := newDaemonStatusCmd("/nonexistent/kas.sock")
+	socketPath := "/nonexistent/kas.sock"
+	cmd := newDaemonStatusCmd(&socketPath)
 	buf := &bytes.Buffer{}
 	cmd.SetOut(buf)
 	err := cmd.RunE(cmd, nil)
@@ -30,4 +31,19 @@ func TestDaemonStatusCmd_NotRunning(t *testing.T) {
 		combined += err.Error()
 	}
 	assert.Contains(t, combined, "not running")
+}
+
+func TestDaemonStatusCmd_UsesUpdatedSocketFlagValue(t *testing.T) {
+	socketPath := "/tmp/initial.sock"
+	cmd := newDaemonStatusCmd(&socketPath)
+	socketPath = "/nonexistent/override.sock"
+
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	err := cmd.RunE(cmd, nil)
+	combined := buf.String()
+	if err != nil {
+		combined += err.Error()
+	}
+	assert.Contains(t, combined, "/nonexistent/override.sock")
 }
