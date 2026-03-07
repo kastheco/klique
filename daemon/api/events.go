@@ -31,12 +31,29 @@ func NewEventBroadcaster() *EventBroadcaster {
 
 // Subscribe registers a new subscriber and returns a buffered receive channel.
 // The channel has capacity 64 to allow non-blocking fan-out under normal load.
+// Callers must call Unsubscribe when they are done to prevent the subscriber
+// list from growing without bound over the daemon's lifetime.
 func (b *EventBroadcaster) Subscribe() <-chan Event {
 	ch := make(chan Event, 64)
 	b.mu.Lock()
 	b.subs = append(b.subs, ch)
 	b.mu.Unlock()
 	return ch
+}
+
+// Unsubscribe removes the subscription identified by ch, closes the channel,
+// and signals EOF to the caller. It is safe to call concurrently with Emit and
+// Close. If ch is not found (e.g. Close already ran), Unsubscribe is a no-op.
+func (b *EventBroadcaster) Unsubscribe(ch <-chan Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i, sub := range b.subs {
+		if (<-chan Event)(sub) == ch {
+			close(sub)
+			b.subs = append(b.subs[:i], b.subs[i+1:]...)
+			return
+		}
+	}
 }
 
 // Emit broadcasts ev to all current subscribers in a non-blocking fashion.

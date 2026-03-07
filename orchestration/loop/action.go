@@ -161,5 +161,8 @@ type AgentSpawner interface {
 	// SpawnElaborator launches an elaborator agent for the given plan.
 	SpawnElaborator(ctx context.Context, opts SpawnOpts) error
 	// KillAgent stops the running agent of the given type for the plan.
-	KillAgent(planFile, agentType string) error
+	// repoPath is the absolute path to the repository root and is required to
+	// disambiguate agents across multiple registered repos that share the same
+	// plan filename.
+	KillAgent(repoPath, planFile, agentType string) error
 }

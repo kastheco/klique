@@ -37,3 +37,12 @@ func TestRepoManager_ProjectName(t *testing.T) {
 	repos := rm.List()
 	assert.Equal(t, "my-project", repos[0].Project)
 }
+
+func TestRepoManager_AddDuplicateBasename(t *testing.T) {
+	rm := NewRepoManager()
+	require.NoError(t, rm.Add("/org-a/my-project"))
+	// Different absolute path but same basename — must be rejected.
+	err := rm.Add("/org-b/my-project")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "my-project")
+}

@@ -303,7 +303,9 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// fall back to the StateProvider's shared channel.
 	var events <-chan Event
 	if h.broadcaster != nil {
-		events = h.broadcaster.Subscribe()
+		ch := h.broadcaster.Subscribe()
+		defer h.broadcaster.Unsubscribe(ch)
+		events = ch
 	} else {
 		events = h.state.EventStream()
 	}

@@ -38,7 +38,7 @@ type InstanceInfo struct {
 
 // TmuxSpawner implements loop.AgentSpawner using tmux-backed sessions managed
 // by the session package. It tracks running instances in a map keyed by
-// "planFile:agentType" and provides a KillAgent method to stop them.
+// "repoPath:planFile:agentType" and provides a KillAgent method to stop them.
 //
 // TmuxSpawner does not handle UI concerns (toasts, navigation, overlay focus).
 // It only manages process lifecycle.
@@ -212,9 +212,11 @@ func (s *TmuxSpawner) DiscoverOrphanSessions() []tmuxpkg.SessionInfo {
 	return orphans
 }
 
-// instanceKey returns the map key for the given plan file and agent type.
-func instanceKey(planFile, agentType string) string {
-	return planFile + ":" + agentType
+// instanceKey returns the map key for the given repo path, plan file, and agent
+// type. Including repoPath prevents key collisions when two registered repos
+// share the same plan filename.
+func instanceKey(repoPath, planFile, agentType string) string {
+	return repoPath + ":" + planFile + ":" + agentType
 }
 
 // SpawnReviewer launches a reviewer agent in the plan's shared worktree.
@@ -263,7 +265,7 @@ func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) 
 		return fmt.Errorf("TmuxSpawner.SpawnElaborator: start: %w", err)
 	}
 
-	key := instanceKey(opts.PlanFile, session.AgentTypeElaborator)
+	key := instanceKey(opts.RepoPath, opts.PlanFile, session.AgentTypeElaborator)
 	s.mu.Lock()
 	s.instances[key] = inst
 	s.planFileByKey[key] = opts.PlanFile
@@ -274,12 +276,13 @@ func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) 
 }
 
 // KillAgent stops the running agent of the given type for the plan and removes
-// it from the tracked instances map. It is a no-op when no matching instance is
-// found.
-func (s *TmuxSpawner) KillAgent(planFile, agentType string) error {
-	s.logger.Info("kill agent", "plan", planFile, "type", agentType)
+// it from the tracked instances map. repoPath must match the value used when
+// the agent was spawned so the correct instance is identified across repos.
+// It is a no-op when no matching instance is found.
+func (s *TmuxSpawner) KillAgent(repoPath, planFile, agentType string) error {
+	s.logger.Info("kill agent", "repo", repoPath, "plan", planFile, "type", agentType)
 
-	key := instanceKey(planFile, agentType)
+	key := instanceKey(repoPath, planFile, agentType)
 
 	s.mu.Lock()
 	inst, ok := s.instances[key]
@@ -335,7 +338,7 @@ func (s *TmuxSpawner) spawnInSharedWorktree(_ context.Context, opts loop.SpawnOp
 		return fmt.Errorf("TmuxSpawner.%s: start in shared worktree: %w", agentType, err)
 	}
 
-	key := instanceKey(opts.PlanFile, agentType)
+	key := instanceKey(opts.RepoPath, opts.PlanFile, agentType)
 	s.mu.Lock()
 	s.instances[key] = inst
 	s.planFileByKey[key] = opts.PlanFile

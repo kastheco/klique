@@ -46,13 +46,16 @@ func (m *RepoManager) Add(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	project := filepath.Base(path)
+
 	for _, r := range m.repos {
 		if r.Path == path {
 			return fmt.Errorf("repo already registered: %s", path)
 		}
+		if r.Project == project {
+			return fmt.Errorf("repo with basename %q already registered (path: %s); rename one of the directories or use distinct names", project, r.Path)
+		}
 	}
-
-	project := filepath.Base(path)
 	kasmosDir := filepath.Join(path, ".kasmos")
 	signalsDir := filepath.Join(kasmosDir, "signals")
 	dbPath := filepath.Join(kasmosDir, "taskstore.db")

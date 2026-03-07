@@ -28,13 +28,15 @@ func TestSpawnOpts_InstanceTitle(t *testing.T) {
 func TestTmuxSpawner_KillAgent_NoOp(t *testing.T) {
 	s := NewTmuxSpawner()
 	// KillAgent on a non-existent key should return nil (no error).
-	err := s.KillAgent("missing.md", "coder")
+	err := s.KillAgent("/tmp/repo", "missing.md", "coder")
 	assert.NoError(t, err)
 }
 
 func TestTmuxSpawner_instanceKey(t *testing.T) {
-	assert.Equal(t, "plan.md:coder", instanceKey("plan.md", "coder"))
-	assert.Equal(t, "plan.md:reviewer", instanceKey("plan.md", "reviewer"))
+	assert.Equal(t, "/repo:plan.md:coder", instanceKey("/repo", "plan.md", "coder"))
+	assert.Equal(t, "/repo:plan.md:reviewer", instanceKey("/repo", "plan.md", "reviewer"))
+	// Two repos with the same plan filename must produce distinct keys.
+	assert.NotEqual(t, instanceKey("/repo-a", "task.md", "coder"), instanceKey("/repo-b", "task.md", "coder"))
 }
 
 func TestTmuxSpawner_SpawnReviewer_MissingRepoPath(t *testing.T) {

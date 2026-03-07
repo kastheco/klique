@@ -39,6 +39,33 @@ func TestEventBroadcaster_MultipleSubscribers(t *testing.T) {
 	assert.Equal(t, ev1.Kind, ev2.Kind)
 }
 
+func TestEventBroadcaster_Unsubscribe(t *testing.T) {
+	b := NewEventBroadcaster()
+
+	ch := b.Subscribe()
+	b.Unsubscribe(ch)
+
+	// After unsubscribe the channel must be closed (readable with zero value, ok==false).
+	select {
+	case _, ok := <-ch:
+		assert.False(t, ok, "channel should be closed after Unsubscribe")
+	case <-time.After(time.Second):
+		t.Fatal("timeout: channel was not closed by Unsubscribe")
+	}
+
+	// The broadcaster's subscriber list must now be empty.
+	b.Emit(Event{Kind: "test"}) // must not panic
+}
+
+func TestEventBroadcaster_Unsubscribe_AfterClose(t *testing.T) {
+	b := NewEventBroadcaster()
+	ch := b.Subscribe()
+
+	b.Close()
+	// Calling Unsubscribe after Close must be a no-op (not panic).
+	b.Unsubscribe(ch)
+}
+
 func TestHandler_EventsSSE(t *testing.T) {
 	broadcaster := NewEventBroadcaster()
 	state := &DaemonState{Running: true}

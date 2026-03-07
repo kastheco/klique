@@ -369,7 +369,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			})
 		}
 	case loop.PausePlanAgentAction:
-		if err := d.spawner.KillAgent(a.PlanFile, a.AgentType); err != nil {
+		if err := d.spawner.KillAgent(e.Path, a.PlanFile, a.AgentType); err != nil {
 			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)
 		} else {
 			d.broadcaster.Emit(api.Event{
