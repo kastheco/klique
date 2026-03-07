@@ -365,8 +365,22 @@ func (ps *TaskState) SetContent(filename, content string) error {
 	return ps.store.SetContent(ps.project, filename, content)
 }
 
+// IngestWarning is returned by IngestContent when content was stored
+// successfully but plan-structure parsing failed (e.g. no Wave sections yet).
+// Only parse failures are downgraded; store write errors remain fatal.
+// The raw content is always persisted; callers may treat this as non-fatal.
+type IngestWarning struct {
+	err error
+}
+
+func (w *IngestWarning) Error() string { return w.err.Error() }
+func (w *IngestWarning) Unwrap() error { return w.err }
+
 // IngestContent stores plan content and parses metadata for goal/subtasks.
-// Content is always persisted even when parsing fails.
+// Content is always persisted even when parsing fails. A parse failure is
+// returned as [IngestWarning] (non-fatal) so draft plans without full wave
+// structure don't break automation. Store write failures after SetContent
+// remain hard errors.
 func (ps *TaskState) IngestContent(filename, content string) error {
 	if _, ok := ps.Plans[filename]; !ok {
 		return fmt.Errorf("plan not found: %s", filename)
@@ -378,7 +392,9 @@ func (ps *TaskState) IngestContent(filename, content string) error {
 
 	plan, err := taskparser.Parse(content)
 	if err != nil {
-		return fmt.Errorf("parse plan content: %w", err)
+		// Content is stored; structure is not yet valid. Downgrade to warning
+		// so callers (e.g. kas task update-content) can exit 0 on drafts.
+		return &IngestWarning{err: fmt.Errorf("parse plan content: %w", err)}
 	}
 
 	if err := ps.store.SetPlanGoal(ps.project, filename, plan.Goal); err != nil {

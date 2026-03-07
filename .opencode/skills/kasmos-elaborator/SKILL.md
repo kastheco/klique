@@ -267,7 +267,7 @@ leave it unchanged.
 pipe the full enriched plan (all waves, all tasks, complete header) into the task store:
 
 ```bash
-kas task update-content <plan-file> --file /tmp/enriched-plan.md
+kas task update-content <plan-file> < /tmp/enriched-plan.md
 ```
 
 or via stdin:
@@ -277,7 +277,7 @@ cat /tmp/enriched-plan.md | kas task update-content <plan-file>
 ```
 
 write the enriched content to `/tmp/enriched-plan.md` first so you can review it before
-committing it to the store.
+committing it to the store via stdin.
 
 **verify the round-trip:** after writing, run `kas task show <plan-file>` and confirm the
 first 10 lines match your header and the wave structure is intact.

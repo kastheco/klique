@@ -587,6 +587,8 @@ func TestTaskState_IngestContent_ParseFailureStillStoresContent(t *testing.T) {
 	err := ps.IngestContent("plan", invalidContent)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse plan content")
+	var warn *IngestWarning
+	assert.ErrorAs(t, err, &warn, "expected IngestWarning so callers can treat it as non-fatal")
 
 	storedContent, contentErr := ps.GetContent("plan")
 	require.NoError(t, contentErr)
