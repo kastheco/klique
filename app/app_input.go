@@ -1707,11 +1707,11 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.overlays.Show(tio)
 			return m, nil
 		}
-		// Right on an instance while in the info tab: jump to the agent tab.
-		if m.nav.GetSelectedInstance() != nil && m.tabbedWindow.IsInInfoTab() {
-			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-			return m, nil
+		// Right on an instance: open the instance context menu (same as space).
+		if m.nav.GetSelectedInstance() != nil {
+			return m.openContextMenu()
 		}
+		// Right on plan/topic headers: expand/collapse.
 		m.nav.ToggleSelectedExpand()
 		return m, nil
 	case keys.KeyNewPlan:

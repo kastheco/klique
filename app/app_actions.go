@@ -656,7 +656,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	}
 	// Position at the left edge of the instance list (middle column)
 	x := m.navWidth
-	y := 1 + 4 + m.nav.GetSelectedIdx()*4 // PaddingTop(1) + header rows + item offset
+	y := 1 + 4 + m.nav.GetSelectedIdx() // PaddingTop(1) + header rows + item offset
 	m.overlays.ShowPositioned(overlay.NewContextMenu(items), x, y, false)
 	m.state = stateContextMenu
 	return m, nil
