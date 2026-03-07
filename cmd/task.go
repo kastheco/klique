@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -187,6 +188,38 @@ func executeTaskShow(project, planFile string, store taskstore.Store) (string, e
 		return "", fmt.Errorf("no content stored for %s", planFile)
 	}
 	return content, nil
+}
+
+func executeTaskUpdateContent(project, filename string, reader io.Reader, store taskstore.Store) error {
+	contentBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read content: %w", err)
+	}
+	content := string(contentBytes)
+	if strings.TrimSpace(content) == "" {
+		return fmt.Errorf("no content provided; pipe plan content via stdin: cat plan.md | kas task update-content <plan>")
+	}
+
+	filename = strings.TrimSuffix(filename, ".md")
+	ps, err := loadTaskStateByProject(project, store)
+	if err != nil {
+		return err
+	}
+	if err := ps.IngestContent(filename, content); err != nil {
+		return fmt.Errorf("update content for %s: %w", filename, err)
+	}
+	return nil
+}
+
+func validateUpdateContentStdin(stdin *os.File) error {
+	info, err := stdin.Stat()
+	if err != nil {
+		return fmt.Errorf("stat stdin: %w", err)
+	}
+	if info.Mode()&os.ModeCharDevice != 0 {
+		return fmt.Errorf("stdin is a tty; pipe plan content via stdin: cat plan.md | kas task update-content <plan>")
+	}
+	return nil
 }
 
 // executeTaskLinkClickUp iterates all plans in the given project, reads their
@@ -628,62 +661,33 @@ func NewTaskCmd() *cobra.Command {
 	// kq task update-content <plan-file> < content.md
 	updateContentCmd := &cobra.Command{
 		Use:   "update-content <plan-file>",
-		Short: "replace plan content in the task store (reads from stdin or --file)",
+		Short: "replace plan content in the task store (reads from stdin)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, project, err := resolveRepoInfo()
 			if err != nil {
 				return err
 			}
-			store, storeProject := resolveStoreConfig(project)
+			store, _ := resolveStoreConfig(project)
 			if store == nil {
 				store, err = localSQLiteStore()
 				if err != nil {
 					return fmt.Errorf("open local task store: %w", err)
 				}
 				defer store.Close()
-				storeProject = project
 			}
 			filename := args[0]
-			filename = strings.TrimSuffix(filename, ".md")
-			contentFile, _ := cmd.Flags().GetString("file")
-			var data []byte
-			if contentFile != "" {
-				data, err = os.ReadFile(contentFile)
-			} else {
-				data, err = os.ReadFile("/dev/stdin")
-			}
-			if err != nil {
-				return fmt.Errorf("read content: %w", err)
-			}
-			content := string(data)
-			if err := store.SetContent(storeProject, filename, content); err != nil {
+			trimmedFilename := strings.TrimSuffix(filename, ".md")
+			if err := validateUpdateContentStdin(os.Stdin); err != nil {
 				return err
 			}
-			// Parse plan metadata (goal, subtasks) and persist alongside content.
-			if plan, parseErr := taskparser.Parse(content); parseErr == nil {
-				if err := store.SetPlanGoal(storeProject, filename, plan.Goal); err != nil {
-					return fmt.Errorf("set plan goal: %w", err)
-				}
-				subtasks := make([]taskstore.SubtaskEntry, 0)
-				for _, wave := range plan.Waves {
-					for _, task := range wave.Tasks {
-						subtasks = append(subtasks, taskstore.SubtaskEntry{
-							TaskNumber: task.Number,
-							Title:      task.Title,
-							Status:     taskstore.SubtaskStatusPending,
-						})
-					}
-				}
-				if err := store.SetSubtasks(storeProject, filename, subtasks); err != nil {
-					return fmt.Errorf("set subtasks: %w", err)
-				}
+			if err := executeTaskUpdateContent(project, filename, os.Stdin, store); err != nil {
+				return err
 			}
-			fmt.Printf("updated content for %s\n", filename)
+			fmt.Printf("updated content for %s\n", trimmedFilename)
 			return nil
 		},
 	}
-	updateContentCmd.Flags().String("file", "", "read content from file instead of stdin")
 	planCmd.AddCommand(updateContentCmd)
 
 	// kas task create
