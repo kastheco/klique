@@ -27,6 +27,12 @@ func ParseElaborationSignal(filename string) (ElaborationSignal, bool) {
 	return ElaborationSignal{TaskFile: planFile}, true
 }
 
+// Filename returns the base filename of the signal file.
+func (es ElaborationSignal) Filename() string { return filepath.Base(es.filePath) }
+
+// Dir returns the directory containing the signal file.
+func (es ElaborationSignal) Dir() string { return filepath.Dir(es.filePath) }
+
 // ScanElaborationSignals reads the given signals directory and returns parsed
 // elaboration signals. Like wave signals, these are handled separately from FSM
 // signals — they don't map to state transitions but trigger orchestration actions.

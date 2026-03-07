@@ -133,34 +133,54 @@ func executeSignalList(signalsDir string) string {
 }
 
 // executeSignalProcess scans the signals directory, applies FSM transitions for
-// each valid signal, and consumes (deletes) the signal files. Returns the number
-// of signals that resulted in a successful FSM transition.
+// each valid signal using atomic processing (move → processing → complete/failed).
+// Returns the number of signals that resulted in a successful FSM transition.
 //
-// Signals for unknown plans are consumed without error and do not count toward
-// the returned total. Wave and elaboration signals are consumed but do not
-// trigger FSM transitions (they are handled by the TUI wave orchestrator).
+// Signals for unknown plans or invalid transitions are dead-lettered into the
+// failed/ subdirectory with a companion .reason file. Wave and elaboration signals
+// are consumed atomically but do not trigger FSM transitions (handled by TUI).
 func executeSignalProcess(opts signalProcessOptions) (int, error) {
+	if err := taskfsm.EnsureSignalDirs(opts.signalsDir); err != nil {
+		return 0, fmt.Errorf("ensure signal dirs: %w", err)
+	}
+
+	// Recover any signals that were moved to processing/ by a previous run
+	// that was interrupted (crash or CTRL-C) before it could complete or
+	// dead-letter them. Without this, those files would be invisible to every
+	// future scan because ScanSignals only reads the base signals directory.
+	if n := taskfsm.RecoverInFlight(opts.signalsDir); n > 0 {
+		log.Printf("signal: recovered %d in-flight signals from processing dir", n)
+	}
+
 	fsm := newFSMByProject(opts.project, opts.store)
 	processed := 0
 
 	// Process FSM signals (implement-finished, review-approved, etc.).
 	for _, sig := range taskfsm.ScanSignals(opts.signalsDir) {
+		fn := sig.Filename()
+
+		procPath, err := taskfsm.BeginProcessing(opts.signalsDir, fn)
+		if err != nil {
+			log.Printf("signal: begin processing failed file=%s event=%s: %v", fn, sig.Event, err)
+			continue
+		}
+
 		ps, err := taskstate.Load(opts.store, opts.project, "")
 		if err != nil {
+			taskfsm.FailProcessing(opts.signalsDir, fn, fmt.Sprintf("load task state: %v", err))
 			return processed, fmt.Errorf("load task state: %w", err)
 		}
+
 		_, ok := ps.Entry(sig.TaskFile)
 		if !ok {
-			// Unknown plan — consume the signal but don't count it.
-			log.Printf("signal: unknown plan %q for event %s — consuming", sig.TaskFile, sig.Event)
-			taskfsm.ConsumeSignal(sig)
+			log.Printf("signal: unknown plan file=%s event=%s plan=%s outcome=dead-letter", fn, sig.Event, sig.TaskFile)
+			taskfsm.FailProcessing(opts.signalsDir, fn, "unknown plan: "+sig.TaskFile)
 			continue
 		}
 
 		if err := fsm.Transition(sig.TaskFile, sig.Event); err != nil {
-			// Invalid transition (e.g. wrong state) — log and consume.
-			log.Printf("signal: transition failed for %q event %s: %v — consuming", sig.TaskFile, sig.Event, err)
-			taskfsm.ConsumeSignal(sig)
+			log.Printf("signal: transition failed file=%s event=%s plan=%s outcome=dead-letter: %v", fn, sig.Event, sig.TaskFile, err)
+			taskfsm.FailProcessing(opts.signalsDir, fn, fmt.Sprintf("transition %s: %v", sig.Event, err))
 			continue
 		}
 
@@ -176,20 +196,33 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 			}
 		}
 
-		taskfsm.ConsumeSignal(sig)
+		log.Printf("signal: completed file=%s event=%s plan=%s outcome=success", fn, sig.Event, sig.TaskFile)
+		taskfsm.CompleteProcessing(procPath)
 		processed++
 	}
 
-	// Consume wave signals (no FSM transition — handled by TUI orchestrator).
+	// Consume wave signals atomically (no FSM transition — handled by TUI orchestrator).
 	for _, ws := range taskfsm.ScanWaveSignals(opts.signalsDir) {
-		log.Printf("signal: wave signal wave=%d plan=%s — consuming (TUI handles orchestration)", ws.WaveNumber, ws.TaskFile)
-		taskfsm.ConsumeWaveSignal(ws)
+		fn := ws.Filename()
+		procPath, err := taskfsm.BeginProcessing(opts.signalsDir, fn)
+		if err != nil {
+			log.Printf("signal: begin processing wave signal file=%s wave=%d plan=%s: %v", fn, ws.WaveNumber, ws.TaskFile, err)
+			continue
+		}
+		log.Printf("signal: completed file=%s event=implement_wave plan=%s wave=%d outcome=consumed", fn, ws.TaskFile, ws.WaveNumber)
+		taskfsm.CompleteProcessing(procPath)
 	}
 
-	// Consume elaboration signals (no FSM transition).
+	// Consume elaboration signals atomically (no FSM transition).
 	for _, es := range taskfsm.ScanElaborationSignals(opts.signalsDir) {
-		log.Printf("signal: elaboration signal plan=%s — consuming", es.TaskFile)
-		taskfsm.ConsumeElaborationSignal(es)
+		fn := es.Filename()
+		procPath, err := taskfsm.BeginProcessing(opts.signalsDir, fn)
+		if err != nil {
+			log.Printf("signal: begin processing elaboration signal file=%s plan=%s: %v", fn, es.TaskFile, err)
+			continue
+		}
+		log.Printf("signal: completed file=%s event=elaborator_finished plan=%s outcome=consumed", fn, es.TaskFile)
+		taskfsm.CompleteProcessing(procPath)
 	}
 
 	return processed, nil
