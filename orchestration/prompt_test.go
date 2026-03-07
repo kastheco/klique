@@ -94,6 +94,8 @@ func TestBuildTaskPrompt_WithMeta(t *testing.T) {
 	assert.Contains(t, prompt, "go test ./widget/... -v")
 	assert.Contains(t, prompt, "go vet ./widget/...")
 	assert.Contains(t, prompt, "## Verification Commands")
+	assert.NotContains(t, prompt, "ref://widget-interface")
+	assert.NotContains(t, prompt, "openai/gpt-5.3-codex-spark")
 }
 
 func TestBuildTaskPrompt_NilMeta(t *testing.T) {
