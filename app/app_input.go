@@ -28,7 +28,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask || m.state == stateAuditCursor {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -151,6 +151,8 @@ func (m *home) handleActiveOverlayMouse(msg tea.MouseClickMsg) (tea.Model, tea.C
 		if result.Action != "" {
 			return m.executeContextAction(result.Action)
 		}
+		// If dismissed without an action and there was a pending log event, clear it.
+		m.handleAuditCursorContextMenuDismissed()
 		return m, nil
 
 	case stateHelp:
@@ -481,6 +483,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	if m.state == stateContextMenu {
 		if !m.overlays.IsActive() {
 			m.state = stateDefault
+			m.handleAuditCursorContextMenuDismissed()
 			return m, nil
 		}
 		result := m.overlays.HandleKey(msg)
@@ -489,9 +492,16 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			if result.Action != "" {
 				return m.executeContextAction(result.Action)
 			}
+			// Dismissed without action — clear any pending log event.
+			m.handleAuditCursorContextMenuDismissed()
 			return m, nil
 		}
 		return m, nil
+	}
+
+	// stateAuditCursor: navigate log lines with ↑/↓, open context menu on enter/space, exit on esc.
+	if m.state == stateAuditCursor {
+		return m.handleAuditCursorKey(msg)
 	}
 
 	if m.state == stateHelp {
@@ -1743,6 +1753,8 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.auditPane.ToggleVisible()
 		}
 		return m, tea.RequestWindowSize
+	case keys.KeyAuditCursor:
+		return m.enterAuditCursorMode()
 	case keys.KeyArrowLeft:
 		// Sidebar always has focus — no-op.
 		return m, nil

@@ -2443,12 +2443,15 @@ func (m *home) refreshAuditPane() {
 			}
 		}
 		displays = append(displays, ui.AuditEventDisplay{
-			Time:    timeStr,
-			Kind:    string(e.Kind),
-			Icon:    icon,
-			Message: msg,
-			Color:   color,
-			Level:   e.Level,
+			Time:          timeStr,
+			Kind:          string(e.Kind),
+			Icon:          icon,
+			Message:       msg,
+			Color:         color,
+			Level:         e.Level,
+			TaskFile:      e.TaskFile,
+			InstanceTitle: e.InstanceTitle,
+			AgentType:     e.AgentType,
 		})
 	}
 

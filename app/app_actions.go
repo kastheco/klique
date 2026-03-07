@@ -505,6 +505,77 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		// Persist to disk (best-effort)
 		_ = config.SaveConfig(m.appConfig)
 		return m, m.toastTickCmd()
+
+	// ── Log-line context menu actions ──────────────────────────────────────
+	// These are triggered from the audit pane cursor (stateAuditCursor).
+	// m.pendingLogEvent holds the event that was selected.
+
+	case "log_send_to_fixer":
+		if m.pendingLogEvent == nil || m.pendingLogEvent.TaskFile == "" {
+			return m, nil
+		}
+		planFile := m.pendingLogEvent.TaskFile
+		m.pendingLogEvent = nil
+		// Use spawnFixerWithFeedback with the event message as context so the
+		// fixer knows what went wrong.
+		return m, m.spawnFixerWithFeedback(planFile, "")
+
+	case "log_retry_wave":
+		if m.pendingLogEvent == nil || m.pendingLogEvent.TaskFile == "" {
+			return m, nil
+		}
+		planFile := m.pendingLogEvent.TaskFile
+		m.pendingLogEvent = nil
+		orch, ok := m.waveOrchestrators[planFile]
+		if !ok {
+			m.toastManager.Error("no active wave orchestrator for this plan")
+			return m, m.toastTickCmd()
+		}
+		if m.taskState == nil {
+			return m, nil
+		}
+		entry, ok2 := m.taskState.Plans[planFile]
+		if !ok2 {
+			return m, nil
+		}
+		return m.retryFailedWaveTasks(orch, entry)
+
+	case "log_restart_agent":
+		if m.pendingLogEvent == nil || m.pendingLogEvent.InstanceTitle == "" {
+			return m, nil
+		}
+		title := m.pendingLogEvent.InstanceTitle
+		m.pendingLogEvent = nil
+		for _, inst := range m.allInstances {
+			if inst.Title == title {
+				capturedTitle := inst.Title
+				capturedAgent := inst.AgentType
+				capturedPlan := inst.TaskFile
+				return m, func() tea.Msg {
+					err := inst.Restart()
+					if err != nil {
+						return err
+					}
+					m.audit(auditlog.EventAgentRestarted, "agent restarted via log action",
+						auditlog.WithInstance(capturedTitle),
+						auditlog.WithAgent(capturedAgent),
+						auditlog.WithPlan(capturedPlan),
+					)
+					_ = m.saveAllInstances()
+					return instanceChangedMsg{}
+				}
+			}
+		}
+		m.toastManager.Error(fmt.Sprintf("instance '%s' not found", title))
+		return m, m.toastTickCmd()
+
+	case "log_start_review":
+		if m.pendingLogEvent == nil || m.pendingLogEvent.TaskFile == "" {
+			return m, nil
+		}
+		planFile := m.pendingLogEvent.TaskFile
+		m.pendingLogEvent = nil
+		return m.triggerTaskStage(planFile, "review")
 	}
 
 	return m, nil

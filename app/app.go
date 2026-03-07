@@ -115,6 +115,9 @@ const (
 	stateTmuxBrowser
 	// stateChatAboutTask is the state when the user is typing a question about a plan.
 	stateChatAboutTask
+	// stateAuditCursor is the state when the user is navigating log lines in the
+	// audit pane to open per-line context menus.
+	stateAuditCursor
 )
 
 type home struct {
@@ -203,6 +206,9 @@ type home struct {
 	pendingSetStatusTask string
 	// pendingChatAboutTask stores the plan filename during the chat-about-plan flow
 	pendingChatAboutTask string
+	// pendingLogEvent stores the audit event that triggered the log-action context
+	// menu. Consumed by executeContextAction for "log_*" actions.
+	pendingLogEvent *ui.AuditEventDisplay
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
 	pendingPRToastID string
 	// pendingAttachInstance is the instance queued for tea.Exec attach after the

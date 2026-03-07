@@ -60,6 +60,7 @@ const (
 	KeyTmuxBrowser // t - browse orphaned tmux sessions
 
 	KeyAuditToggle // L - toggle audit log pane visibility
+	KeyAuditCursor // A - enter audit log cursor mode (navigate log lines)
 )
 
 // Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.
@@ -97,6 +98,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"t":          KeyTmuxBrowser,
 	"s":          KeySpawnAgent,
 	"L":          KeyAuditToggle,
+	"A":          KeyAuditCursor,
 	"T":          KeyFocusList,
 	"p":          KeyViewPlan,
 	"ctrl+s":     KeyToggleSidebar,
@@ -250,6 +252,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyAuditToggle: key.NewBinding(
 		key.WithKeys("L"),
 		key.WithHelp("L", "log"),
+	),
+
+	KeyAuditCursor: key.NewBinding(
+		key.WithKeys("A"),
+		key.WithHelp("A", "log actions"),
 	),
 
 	// -- Special keybindings --
