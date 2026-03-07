@@ -1,6 +1,8 @@
 package orchestration
 
 import (
+	"sort"
+
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstore"
 )
@@ -32,10 +34,17 @@ type WaveOrchestrator struct {
 	plan              *taskparser.Plan
 	store             taskstore.Store
 	project           string
+	architectMeta     *ArchitectMeta
 	state             WaveState
 	currentWave       int                // 0-indexed into plan.Waves
 	taskStates        map[int]taskStatus // task number → status
 	waitingForConfirm bool               // true once we've shown the wave-complete dialog
+}
+
+// FileConflict represents a file modified by multiple tasks in the same wave.
+type FileConflict struct {
+	File        string
+	TaskNumbers []int
 }
 
 // NewWaveOrchestrator creates an orchestrator for the given plan.
@@ -281,7 +290,108 @@ func (o *WaveOrchestrator) RestoreToWave(targetWave int, completedTasks []int) {
 // BuildTaskPrompt is a convenience wrapper that builds the task prompt for a
 // task in the current wave.
 func (o *WaveOrchestrator) BuildTaskPrompt(task taskparser.Task, peerCount int) string {
-	return BuildTaskPrompt(o.taskFile, o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount)
+	return BuildTaskPrompt(o.taskFile, o.plan, task, o.CurrentWaveNumber(), o.TotalWaves(), peerCount, o.GetTaskMeta(task.Number))
+}
+
+// LoadArchitectMeta loads architect metadata for this plan slug from cacheDir.
+// On read or parse failure, architect metadata is cleared.
+func (o *WaveOrchestrator) LoadArchitectMeta(cacheDir string) {
+	meta, err := LoadArchitectMeta(cacheDir, o.taskFile)
+	if err != nil {
+		o.architectMeta = nil
+		return
+	}
+	o.architectMeta = meta
+}
+
+// DetectFileConflicts returns files that are declared for 2+ distinct tasks
+// in the specified wave metadata.
+func (o *WaveOrchestrator) DetectFileConflicts(waveNumber int) []FileConflict {
+	if o.architectMeta == nil {
+		return nil
+	}
+
+	fileToTasks := make(map[string]map[int]struct{})
+	for _, wave := range o.architectMeta.Waves {
+		if wave.Wave != waveNumber {
+			continue
+		}
+
+		for _, task := range wave.Tasks {
+			seenInTask := make(map[string]struct{})
+			for _, file := range task.FilesToModify {
+				if _, duplicate := seenInTask[file]; duplicate {
+					continue
+				}
+				seenInTask[file] = struct{}{}
+
+				tasks, ok := fileToTasks[file]
+				if !ok {
+					tasks = make(map[int]struct{})
+					fileToTasks[file] = tasks
+				}
+				tasks[task.TaskNumber] = struct{}{}
+			}
+		}
+	}
+
+	var conflicts []FileConflict
+	for file, taskSet := range fileToTasks {
+		if len(taskSet) < 2 {
+			continue
+		}
+
+		taskNumbers := make([]int, 0, len(taskSet))
+		for num := range taskSet {
+			taskNumbers = append(taskNumbers, num)
+		}
+		sort.Ints(taskNumbers)
+		conflicts = append(conflicts, FileConflict{File: file, TaskNumbers: taskNumbers})
+	}
+
+	sort.Slice(conflicts, func(i, j int) bool {
+		return conflicts[i].File < conflicts[j].File
+	})
+
+	if len(conflicts) == 0 {
+		return nil
+	}
+
+	return conflicts
+}
+
+// GetTaskMeta returns architect task metadata if available, or nil.
+func (o *WaveOrchestrator) GetTaskMeta(taskNumber int) *TaskMeta {
+	if o.architectMeta == nil {
+		return nil
+	}
+	return o.architectMeta.TaskByNumber(taskNumber)
+}
+
+// PreferredModelForTask returns the architect-preferred model for a task, if set.
+// It returns an empty string when metadata is unavailable or missing.
+func (o *WaveOrchestrator) PreferredModelForTask(taskNumber int) string {
+	if o == nil {
+		return ""
+	}
+	meta := o.GetTaskMeta(taskNumber)
+	if meta == nil {
+		return ""
+	}
+	return meta.PreferredModel
+}
+
+// FallbackModelForTask returns the architect-fallback model for a task, if set.
+// It returns an empty string when metadata is unavailable or missing.
+func (o *WaveOrchestrator) FallbackModelForTask(taskNumber int) string {
+	if o == nil {
+		return ""
+	}
+	meta := o.GetTaskMeta(taskNumber)
+	if meta == nil {
+		return ""
+	}
+	return meta.FallbackModel
 }
 
 func (o *WaveOrchestrator) checkWaveComplete() {

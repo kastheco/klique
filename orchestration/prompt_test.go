@@ -19,7 +19,7 @@ func TestBuildTaskPrompt(t *testing.T) {
 		Body:   "**Step 1:** Write the test\n\n**Step 2:** Run it",
 	}
 
-	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 3, 4)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 3, 4, nil)
 
 	// Plan context
 	assert.Contains(t, prompt, "Build a feature")
@@ -52,7 +52,7 @@ func TestBuildTaskPrompt_InlineCoderRules(t *testing.T) {
 	plan := &taskparser.Plan{Goal: "Test feature"}
 	task := taskparser.Task{Number: 1, Title: "Do thing", Body: "Make the change"}
 
-	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1, nil)
 
 	assert.NotContains(t, prompt, "kasmos-coder")
 	assert.NotContains(t, prompt, "cli-tools")
@@ -70,7 +70,7 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 	plan := &taskparser.Plan{Goal: "Simple"}
 	task := taskparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
 
-	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1)
+	prompt := BuildTaskPrompt("feature.md", plan, task, 1, 1, 1, nil)
 
 	// Single task shouldn't mention parallel coordination
 	assert.NotContains(t, prompt, "parallel")
@@ -79,12 +79,54 @@ func TestBuildTaskPrompt_SingleTask(t *testing.T) {
 	assert.NotContains(t, prompt, "build failure caused by missing types")
 }
 
+func TestBuildTaskPrompt_WithMeta(t *testing.T) {
+	plan := &taskparser.Plan{Goal: "Feature X", Architecture: "Modular", TechStack: "Go"}
+	task := taskparser.Task{Number: 1, Title: "Add widget", Body: "Implement the widget"}
+	meta := &TaskMeta{
+		TaskNumber:     1,
+		VerifyChecks:   []string{"go test ./widget/... -v", "go vet ./widget/..."},
+		ContextRefs:    []string{"ref://widget-interface"},
+		PreferredModel: "openai/gpt-5.3-codex-spark",
+	}
+
+	prompt := BuildTaskPrompt("feat.md", plan, task, 1, 2, 1, meta)
+
+	assert.Contains(t, prompt, "go test ./widget/... -v")
+	assert.Contains(t, prompt, "go vet ./widget/...")
+	assert.Contains(t, prompt, "## Verification Commands")
+	assert.NotContains(t, prompt, "ref://widget-interface")
+	assert.NotContains(t, prompt, "openai/gpt-5.3-codex-spark")
+}
+
+func TestBuildTaskPrompt_NilMeta(t *testing.T) {
+	plan := &taskparser.Plan{Goal: "Simple"}
+	task := taskparser.Task{Number: 1, Title: "Only Task", Body: "Do it"}
+
+	prompt := BuildTaskPrompt("feat.md", plan, task, 1, 1, 1, nil)
+
+	assert.NotContains(t, prompt, "## Verification Commands")
+	assert.Contains(t, prompt, "## Rules")
+	assert.Contains(t, prompt, "Task 1")
+}
+
 func TestBuildWaveAnnotationPrompt(t *testing.T) {
 	prompt := BuildWaveAnnotationPrompt("my-feature")
 	assert.Contains(t, prompt, "kas task show my-feature")
 	assert.Contains(t, prompt, "## Wave")
 	assert.Contains(t, prompt, "planner-finished-my-feature")
 	assert.NotContains(t, prompt, "The plan at docs/plans/")
+}
+
+func TestBuildMasterReviewPrompt(t *testing.T) {
+	prompt := BuildMasterReviewPrompt("my-feature", "diff content here", "PASS: 42 tests")
+
+	assert.Contains(t, prompt, "my-feature")
+	assert.Contains(t, prompt, "diff content here")
+	assert.Contains(t, prompt, "PASS: 42 tests")
+	assert.Contains(t, prompt, "kasmos-master")
+	assert.Contains(t, prompt, "master-approved-my-feature")
+	assert.Contains(t, prompt, "## Test Results")
+	assert.Contains(t, prompt, "## Diff")
 }
 
 func TestBuildElaborationPrompt(t *testing.T) {
@@ -102,4 +144,15 @@ func TestBuildElaborationPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Preserve")
 	// Must reference reading the codebase
 	assert.Contains(t, prompt, "codebase")
+}
+
+func TestBuildArchitectPrompt(t *testing.T) {
+	prompt := BuildArchitectPrompt("my-feature")
+
+	assert.Contains(t, prompt, "kasmos-architect")
+	assert.Contains(t, prompt, "kas task show my-feature")
+	assert.Contains(t, prompt, "kas task update-content my-feature")
+	assert.Contains(t, prompt, "architect-finished-my-feature")
+	assert.Contains(t, prompt, "architect-v1.json")
+	assert.Contains(t, prompt, "parallel")
 }
