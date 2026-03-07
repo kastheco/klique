@@ -210,3 +210,66 @@ func TestTmuxSpawner_DiscoverOrphans(t *testing.T) {
 	orphans := s.DiscoverOrphanSessions()
 	assert.NotNil(t, orphans)
 }
+
+func TestDaemon_TickRepoUsesGateway(t *testing.T) {
+	dir := t.TempDir()
+	signalsDir := filepath.Join(dir, ".kasmos", "signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "planner-finished-gw-plan"), nil, 0o644))
+
+	store := taskstore.NewTestStore(t)
+	require.NoError(t, store.Create("test-project", taskstore.TaskEntry{Filename: "gw-plan", Status: taskstore.StatusPlanning}))
+
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	entry := RepoEntry{
+		Path:          dir,
+		Project:       "test-project",
+		Store:         store,
+		SignalsDir:    signalsDir,
+		Processor:     loop.NewProcessor(loop.ProcessorConfig{Store: store, Project: "test-project"}),
+		SignalGateway: gw,
+	}
+	d := &Daemon{
+		cfg:         &DaemonConfig{PollInterval: time.Second},
+		repos:       NewRepoManager(),
+		spawner:     newTmuxSpawner(slog.Default()),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+
+	d.tickRepo(context.Background(), entry)
+
+	files, err := os.ReadDir(signalsDir)
+	require.NoError(t, err)
+	assert.Empty(t, files)
+
+	done, err := gw.List("test-project", taskstore.SignalDone)
+	require.NoError(t, err)
+	assert.Len(t, done, 1)
+
+	updated, err := store.Get("test-project", "gw-plan")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusReady, updated.Status)
+}
+
+func TestReapStuckSignals(t *testing.T) {
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+
+	require.NoError(t, gw.Create("proj", taskstore.SignalEntry{PlanFile: "stuck-plan", SignalType: "implement_finished"}))
+	claimed, err := gw.Claim("proj", "worker-1")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	require.NoError(t, gw.BackdateClaimedAt(claimed.ID, 2*time.Minute))
+
+	n := reapStuckSignals([]RepoEntry{{SignalGateway: gw}}, 60*time.Second, slog.Default())
+	assert.Equal(t, 1, n)
+
+	pending, err := gw.List("proj", taskstore.SignalPending)
+	require.NoError(t, err)
+	assert.Len(t, pending, 1)
+}

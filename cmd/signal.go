@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,18 @@ import (
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/spf13/cobra"
 )
+
+// validSignalTypes lists the signal types that the gateway pipeline can consume today.
+// architect_finished is intentionally excluded — its FSM consumption is follow-up work.
+var validSignalTypes = map[string]struct{}{
+	"planner_finished":         {},
+	"implement_finished":       {},
+	"review_approved":          {},
+	"review_changes_requested": {},
+	"implement_task_finished":  {},
+	"implement_wave":           {},
+	"elaborator_finished":      {},
+}
 
 // signalProcessOptions holds the dependencies for executeSignalProcess,
 // enabling injection in tests without cobra plumbing.
@@ -31,6 +44,7 @@ func NewSignalCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newSignalListCmd())
 	cmd.AddCommand(newSignalProcessCmd())
+	cmd.AddCommand(newSignalEmitCmd())
 	return cmd
 }
 
@@ -198,4 +212,128 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 // defaultSignalsDir returns the canonical signals directory path for a repo root.
 func defaultSignalsDir(repoRoot string) string {
 	return filepath.Join(repoRoot, ".kasmos", "signals")
+}
+
+// normalizeSignalPayload validates and normalises the raw payload string for a
+// given signal type, returning the value that should be stored in the gateway.
+//
+//   - FSM signals (planner_finished, implement_finished, review_approved,
+//     review_changes_requested): empty → ""; JSON → kept; plain text → {"body":"..."}
+//   - implement_task_finished: must be JSON with numeric wave_number and task_number
+//   - implement_wave: must be JSON with numeric wave_number
+//   - elaborator_finished: payload must be empty
+func normalizeSignalPayload(signalType, payload string) (string, error) {
+	switch signalType {
+	case "planner_finished", "implement_finished", "review_approved", "review_changes_requested":
+		if payload == "" {
+			return "", nil
+		}
+		if json.Valid([]byte(payload)) {
+			return payload, nil
+		}
+		b, _ := json.Marshal(map[string]string{"body": payload})
+		return string(b), nil
+
+	case "implement_task_finished":
+		if payload == "" {
+			return "", fmt.Errorf("implement_task_finished requires JSON with wave_number and task_number")
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(payload), &m); err != nil {
+			return "", fmt.Errorf("implement_task_finished: payload must be valid JSON: %w", err)
+		}
+		if _, ok := m["wave_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_task_finished: wave_number must be a number")
+		}
+		if _, ok := m["task_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_task_finished: task_number must be a number")
+		}
+		return payload, nil
+
+	case "implement_wave":
+		if payload == "" {
+			return "", fmt.Errorf("implement_wave requires JSON with wave_number")
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(payload), &m); err != nil {
+			return "", fmt.Errorf("implement_wave: payload must be valid JSON: %w", err)
+		}
+		if _, ok := m["wave_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_wave: wave_number must be a number")
+		}
+		return payload, nil
+
+	case "elaborator_finished":
+		if payload != "" {
+			return "", fmt.Errorf("elaborator_finished does not accept a payload")
+		}
+		return "", nil
+
+	default:
+		return "", fmt.Errorf("unknown signal type %q", signalType)
+	}
+}
+
+// executeSignalEmit validates the signal type, normalises the payload, and
+// inserts a pending signal row via the provided gateway.
+func executeSignalEmit(gw taskstore.SignalGateway, project, signalType, planFile, payload string) error {
+	if _, ok := validSignalTypes[signalType]; !ok {
+		return fmt.Errorf("unknown signal type %q; valid types: planner_finished, implement_finished, review_approved, review_changes_requested, implement_task_finished, implement_wave, elaborator_finished", signalType)
+	}
+
+	normalized, err := normalizeSignalPayload(signalType, payload)
+	if err != nil {
+		return fmt.Errorf("invalid payload: %w", err)
+	}
+
+	return gw.Create(project, taskstore.SignalEntry{
+		PlanFile:   planFile,
+		SignalType: signalType,
+		Payload:    normalized,
+	})
+}
+
+// newSignalEmitCmd returns the "kas signal emit" subcommand.
+func newSignalEmitCmd() *cobra.Command {
+	var payload string
+	cmd := &cobra.Command{
+		Use:   "emit <signal-type> <plan-file>",
+		Short: "emit a signal into the gateway database",
+		Long: `emit inserts a pending signal row into the gateway database for the given
+signal type and plan file. This is the primary mechanism for agents to signal
+completion of a lifecycle phase.
+
+Valid signal types: planner_finished, implement_finished, review_approved,
+review_changes_requested, implement_task_finished, implement_wave, elaborator_finished`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			signalType := args[0]
+			planFile := args[1]
+
+			_, project, err := resolveRepoInfo()
+			if err != nil {
+				return err
+			}
+
+			dbPath := taskstore.ResolvedDBPath()
+			if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+				return fmt.Errorf("create kasmos config dir: %w", err)
+			}
+
+			gw, err := taskstore.NewSQLiteSignalGateway(dbPath)
+			if err != nil {
+				return fmt.Errorf("open signal gateway: %w", err)
+			}
+			defer gw.Close() //nolint:errcheck
+
+			if err := executeSignalEmit(gw, project, signalType, planFile, payload); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "signal emitted: type=%s plan=%s\n", signalType, planFile)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&payload, "payload", "", "optional JSON payload for the signal")
+	return cmd
 }
