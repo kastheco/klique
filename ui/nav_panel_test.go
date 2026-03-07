@@ -100,14 +100,14 @@ func TestRebuildRows_MixedPlanAndSolo(t *testing.T) {
 	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
-	// solo agents first, then plan — solo header, adhoc, plan header, plan-impl
+	// active plan first, then solo agents — plan header, plan-impl, solo header, adhoc
 	require.Len(t, n.rows, 4)
-	assert.Equal(t, navRowSoloHeader, n.rows[0].Kind)
+	assert.Equal(t, navRowPlanHeader, n.rows[0].Kind)
 	assert.Equal(t, navRowInstance, n.rows[1].Kind)
-	assert.Equal(t, "adhoc", n.rows[1].Label)
-	assert.Equal(t, navRowPlanHeader, n.rows[2].Kind)
+	assert.Equal(t, "plan-impl", n.rows[1].Label)
+	assert.Equal(t, navRowSoloHeader, n.rows[2].Kind)
 	assert.Equal(t, navRowInstance, n.rows[3].Kind)
-	assert.Equal(t, "plan-impl", n.rows[3].Label)
+	assert.Equal(t, "adhoc", n.rows[3].Label)
 }
 
 func TestRebuildRows_HistoryAndCancelled(t *testing.T) {
@@ -537,20 +537,20 @@ func TestSoloHeaderSkippedDuringNavigation(t *testing.T) {
 	statuses := map[string]TopicStatus{"plan": {HasRunning: true}}
 	n.SetData(plans, instances, nil, nil, statuses)
 
-	// New layout: [0]=solo header, [1]=adhoc, [2]=plan header, [3]=plan-impl
+	// New layout: [0]=plan header, [1]=plan-impl, [2]=solo header, [3]=adhoc
 
-	// Down from adhoc lands on plan header (no header in between).
+	// Down from plan-impl skips solo header, lands on adhoc.
 	n.selectedIdx = 1
 	n.Down()
-	assert.Equal(t, 2, n.selectedIdx, "Down from adhoc should land on plan header")
+	assert.Equal(t, 3, n.selectedIdx, "Down from plan-impl should skip solo header and land on adhoc")
 
-	// Up from plan header lands on adhoc (skips nothing directly, but solo header is above).
+	// Up from adhoc skips solo header, lands on plan-impl.
 	n.Up()
-	assert.Equal(t, 1, n.selectedIdx, "Up from plan header should land on adhoc")
+	assert.Equal(t, 1, n.selectedIdx, "Up from adhoc should skip solo header and land on plan-impl")
 
-	// Up from adhoc stays at adhoc — solo header at [0] is skipped, no item above it.
+	// Up from plan-impl lands on plan header.
 	n.Up()
-	assert.Equal(t, 1, n.selectedIdx, "Up from adhoc should stay (solo header at top is skipped)")
+	assert.Equal(t, 0, n.selectedIdx, "Up from plan-impl should land on plan header")
 }
 
 func TestSoloHeaderSkippedBySelectFirst(t *testing.T) {
