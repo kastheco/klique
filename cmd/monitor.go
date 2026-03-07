@@ -92,9 +92,9 @@ func printMonitorEvent(out io.Writer, payload, repoFilter, planFilter string) er
 		return err
 	}
 
-	eventType, _ := event["type"].(string)
+	eventType, _ := event["kind"].(string)
 	repo, _ := event["repo"].(string)
-	plan, _ := event["plan"].(string)
+	plan, _ := event["plan_file"].(string)
 
 	// Apply filters.
 	if repoFilter != "" && repo != repoFilter {
