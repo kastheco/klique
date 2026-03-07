@@ -14,3 +14,9 @@ func NewTestSQLiteStore(t testing.TB) Store {
 	t.Cleanup(func() { store.Close() })
 	return store
 }
+
+// NewTestStore creates an in-memory Store for use in tests.
+// Alias for NewTestSQLiteStore.
+func NewTestStore(t testing.TB) Store {
+	return NewTestSQLiteStore(t)
+}
