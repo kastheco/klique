@@ -3,7 +3,7 @@ package loop
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
@@ -53,7 +53,7 @@ func ScanGateway(gw taskstore.SignalGateway, project, claimedBy string) (ScanRes
 			// Mark the bad row as failed immediately so it does not cycle through
 			// the reaper and block older valid signals from progressing.
 			if markErr := gw.MarkProcessed(entry.ID, taskstore.SignalFailed, convertErr.Error()); markErr != nil {
-				log.Printf("gateway_scanner: mark signal %d as failed: %v", entry.ID, markErr)
+				slog.Default().Error("gateway_scanner: mark signal as failed", "id", entry.ID, "err", markErr)
 			}
 			return result, ids, fmt.Errorf("signal %d (%s): %w", entry.ID, entry.SignalType, convertErr)
 		}
