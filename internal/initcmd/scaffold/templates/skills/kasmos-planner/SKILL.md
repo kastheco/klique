@@ -147,7 +147,7 @@ plans are stored in the **task store** (sqlite or remote http api), not as files
 **CLI commands for plan content:**
 - **read** existing plan content: `kas task show <plan-file>`
 - **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)
-- **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)
+- **update** existing plan content: `kas task update-content <plan-file>` (reads from stdin)
 
 **full task lifecycle CLI:**
 | Command | Purpose |
@@ -156,7 +156,7 @@ plans are stored in the **task store** (sqlite or remote http api), not as files
 | `kas task show <file>` | print plan content from the task store |
 | `kas task create <name>` | create a new task entry (`--content`, `--description`, `--branch`, `--topic`) |
 | `kas task register <file>` | register a plan file from disk into the store |
-| `kas task update-content <file>` | replace plan content (reads stdin or `--file`) |
+| `kas task update-content <file>` | replace plan content (reads from stdin) |
 | `kas task set-status <file> <s>` | force-override status (requires `--force`) |
 | `kas task transition <file> <event>` | apply FSM event (e.g. `plan_start`, `review_approved`) |
 | `kas task start <file>` | transition to implementing + set up worktree |

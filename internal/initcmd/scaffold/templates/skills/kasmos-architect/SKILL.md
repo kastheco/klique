@@ -69,14 +69,14 @@ the plan lifecycle fsm: `ready -> elaborating -> implementing -> reviewing -> do
 You produce **both** in a single run, not incrementally:
 
 - updated plan markdown written with: 
-  `kas task update-content <plan-file> --file /tmp/enriched-plan.md`
+  `kas task update-content <plan-file> < /tmp/enriched-plan.md`
 - metadata JSON written to `.kasmos/cache/<plan-file>-architect.json` using the raw plan filename slug (for example `.kasmos/cache/skill-prompt-rewrites-architect.json`)
 
 ### required commands
 
 ```bash
 kas task show <plan-file>
-kas task update-content <plan-file> --file /tmp/enriched-plan.md
+kas task update-content <plan-file> < /tmp/enriched-plan.md
 mkdir -p .kasmos/cache
 touch .kasmos/signals/elaborator-finished-<plan-file>
 ```
@@ -183,7 +183,7 @@ Use `openai/gpt-5.4` cost logic as follows:
 2. write both outputs:
 
 ```bash
-kas task update-content <plan-file> --file /tmp/enriched-plan.md
+kas task update-content <plan-file> < /tmp/enriched-plan.md
 mkdir -p .kasmos/cache
 cat > .kasmos/cache/<plan-file>-architect.json <<'EOF'
 ...json...
