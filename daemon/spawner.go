@@ -53,6 +53,13 @@ type TmuxSpawner struct {
 	// projectByKey stores the project name for each running instance so that
 	// ListInstances can filter by project.
 	projectByKey map[string]string
+
+	// injectable seams for testability and grace-period checks.
+	hasAttachedClients func(cmd.Executor, string) bool
+	sleep              func(time.Duration)
+	kill               func(*session.Instance) error
+	cmdExec            cmd.Executor
+	cleanupGracePeriod time.Duration
 }
 
 // NewTmuxSpawner returns a TmuxSpawner. An optional TmuxSpawnerConfig may be
@@ -87,7 +94,39 @@ func newTmuxSpawnerWithConfig(logger *slog.Logger, drainTimeout time.Duration) *
 		planFileByKey:  make(map[string]string),
 		agentTypeByKey: make(map[string]string),
 		projectByKey:   make(map[string]string),
+
+		hasAttachedClients: tmuxpkg.HasAttachedClients,
+		sleep:              time.Sleep,
+		kill:               func(inst *session.Instance) error { return inst.Kill() },
+		cmdExec:            cmd.MakeExecutor(),
+		cleanupGracePeriod: 30 * time.Second,
 	}
+}
+
+// shouldSkipCleanup returns true when a tmux client is attached, indicating
+// that cleanup should be deferred to avoid interrupting a live user session.
+func shouldSkipCleanup(hasClients bool) bool {
+	return hasClients
+}
+
+// gracefulKill stops the instance only when no tmux clients are attached. It
+// checks for attached clients before the grace period and once more after
+// sleeping. If a client is present at either check the instance is left
+// running (the orphan-discovery path will handle it later). If both checks
+// show no client, kill is called.
+func (s *TmuxSpawner) gracefulKill(inst *session.Instance, sessionName string) error {
+	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
+		s.logger.Info("grace period: client attached, skipping cleanup",
+			"session", sessionName, "title", inst.Title)
+		return nil
+	}
+	s.sleep(s.cleanupGracePeriod)
+	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
+		s.logger.Info("grace period: client attached after sleep, skipping cleanup",
+			"session", sessionName, "title", inst.Title)
+		return nil
+	}
+	return s.kill(inst)
 }
 
 // RunningInstances returns a snapshot of all currently tracked agent instances.
@@ -297,7 +336,8 @@ func (s *TmuxSpawner) KillAgent(repoPath, planFile, agentType string) error {
 	if !ok {
 		return nil
 	}
-	return inst.Kill()
+	sessionName := tmuxpkg.ToKasTmuxNamePublic(inst.Title)
+	return s.gracefulKill(inst, sessionName)
 }
 
 // spawnInSharedWorktree creates an instance for the given agent type, sets up

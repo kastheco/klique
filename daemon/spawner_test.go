@@ -3,8 +3,11 @@ package daemon
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/orchestration/loop"
+	"github.com/kastheco/kasmos/session"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -69,4 +72,48 @@ func TestTmuxSpawner_SpawnElaborator_MissingRepoPath(t *testing.T) {
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "RepoPath")
+}
+
+func TestShouldSkipCleanup_AttachedClient(t *testing.T) {
+	assert.True(t, shouldSkipCleanup(true), "should skip cleanup when a client is attached")
+}
+
+func TestShouldSkipCleanup_NoClient(t *testing.T) {
+	assert.False(t, shouldSkipCleanup(false), "should not skip cleanup when no client is attached")
+}
+
+func TestTmuxSpawner_GracefulKill_SkipsWhenClientAttached(t *testing.T) {
+	s := NewTmuxSpawner()
+
+	killCalled := false
+	s.hasAttachedClients = func(_ cmd.Executor, _ string) bool { return true }
+	s.sleep = func(_ time.Duration) {}
+	s.kill = func(_ *session.Instance) error {
+		killCalled = true
+		return nil
+	}
+	s.cleanupGracePeriod = 0
+
+	inst := &session.Instance{Title: "plan-coder"}
+	err := s.gracefulKill(inst, "kas_plan-coder")
+	assert.NoError(t, err)
+	assert.False(t, killCalled, "kill must not be called when a client is attached")
+}
+
+func TestTmuxSpawner_GracefulKill_KillsAfterSecondCheck(t *testing.T) {
+	s := NewTmuxSpawner()
+
+	killCalled := false
+	s.hasAttachedClients = func(_ cmd.Executor, _ string) bool { return false }
+	s.sleep = func(_ time.Duration) {}
+	s.kill = func(_ *session.Instance) error {
+		killCalled = true
+		return nil
+	}
+	s.cleanupGracePeriod = 0
+
+	inst := &session.Instance{Title: "plan-coder"}
+	err := s.gracefulKill(inst, "kas_plan-coder")
+	assert.NoError(t, err)
+	assert.True(t, killCalled, "kill must be called when no client is attached after grace period")
 }
