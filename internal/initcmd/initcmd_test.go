@@ -69,3 +69,39 @@ func TestWritePhase(t *testing.T) {
 	assert.Equal(t, "coder", result.PhaseRoles["implementing"])
 	assert.Equal(t, "opencode", result.Profiles["coder"].Program)
 }
+
+func TestInitCreatesConfigWithMasterPhase(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	t.Setenv("HOME", t.TempDir())
+
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, ".kasmos"), 0o755))
+
+	temp := 0.2
+	tc := &config.TOMLConfig{
+		Phases: map[string]string{
+			"implementing":  "coder",
+			"planning":      "planner",
+			"master_review": "master",
+		},
+		Agents: map[string]config.TOMLAgent{
+			"master": {
+				Enabled:     true,
+				Program:     "opencode",
+				Model:       "openai/gpt-5.4",
+				Temperature: &temp,
+				Effort:      "high",
+				Flags:       []string{},
+			},
+		},
+	}
+
+	require.NoError(t, config.SaveTOMLConfig(tc))
+
+	result, err := config.LoadTOMLConfigFrom(filepath.Join(projectDir, ".kasmos", "config.toml"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "master", result.PhaseRoles["master_review"])
+	assert.Equal(t, "opencode", result.Profiles["master"].Program)
+	assert.Equal(t, "openai/gpt-5.4", result.Profiles["master"].Model)
+}

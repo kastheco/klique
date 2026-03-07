@@ -46,6 +46,7 @@ func newRootModel(registry *harness.Registry, existing *config.TOMLConfigResult)
 			"spec_review":    "reviewer",
 			"quality_review": "reviewer",
 			"planning":       "planner",
+			"master_review":  "master",
 			"fixer":          "fixer",
 		},
 	}

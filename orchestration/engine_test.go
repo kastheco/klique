@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/kastheco/kasmos/config/taskparser"
@@ -27,6 +28,44 @@ func TestNewWaveOrchestrator(t *testing.T) {
 	assert.Equal(t, WaveStateIdle, orch.State())
 	assert.Equal(t, 2, orch.TotalWaves())
 	assert.Equal(t, 3, orch.TotalTasks())
+}
+
+func TestWaveOrchestrator_LoadsArchitectMeta(t *testing.T) {
+	tmp := t.TempDir()
+	cacheDir := filepath.Join(tmp, ".kasmos", "cache")
+	meta := &ArchitectMeta{
+		PlanID: "test-plan",
+		Waves: []WaveMeta{{
+			Wave: 1,
+			Tasks: []TaskMeta{{
+				TaskNumber:     1,
+				PreferredModel: "openai/gpt-5.3-codex-spark",
+				VerifyChecks:   []string{"go test ./..."},
+			}},
+		}},
+	}
+	require.NoError(t, SaveArchitectMeta(cacheDir, "test-plan", meta))
+
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1"}}},
+	}}
+	orch := NewWaveOrchestrator("test-plan", plan)
+	orch.LoadArchitectMeta(cacheDir)
+
+	got := orch.GetTaskMeta(1)
+	require.NotNil(t, got)
+	assert.Equal(t, "openai/gpt-5.3-codex-spark", got.PreferredModel)
+	assert.Nil(t, orch.GetTaskMeta(99))
+}
+
+func TestWaveOrchestrator_NoArchitectMeta(t *testing.T) {
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1, Title: "Task 1"}}},
+	}}
+	orch := NewWaveOrchestrator("test-plan", plan)
+	orch.LoadArchitectMeta(t.TempDir())
+
+	assert.Nil(t, orch.GetTaskMeta(1))
 }
 
 func TestWaveOrchestrator_StartWave(t *testing.T) {
@@ -358,6 +397,41 @@ func TestBuildTaskPrompt_Method(t *testing.T) {
 	assert.Contains(t, prompt, "Test goal")
 	assert.Contains(t, prompt, "Wave 1 of 1")
 	assert.Contains(t, prompt, "parallel") // peerCount > 1
+}
+
+func TestWaveOrchestrator_PreferredModelForTask(t *testing.T) {
+	cacheDir := t.TempDir()
+	meta := &ArchitectMeta{
+		PlanID: "model-plan",
+		Waves: []WaveMeta{{
+			Wave: 1,
+			Tasks: []TaskMeta{
+				{TaskNumber: 1, PreferredModel: "openai/gpt-5.3-codex-spark", FallbackModel: "openai/gpt-5.4"},
+				{TaskNumber: 2},
+			},
+		}},
+	}
+	require.NoError(t, SaveArchitectMeta(cacheDir, "model-plan", meta))
+
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
+	}}
+	orch := NewWaveOrchestrator("model-plan", plan)
+	orch.LoadArchitectMeta(cacheDir)
+
+	assert.Equal(t, "openai/gpt-5.3-codex-spark", orch.PreferredModelForTask(1))
+	assert.Equal(t, "openai/gpt-5.4", orch.FallbackModelForTask(1))
+	assert.Empty(t, orch.PreferredModelForTask(2))
+	assert.Empty(t, orch.FallbackModelForTask(2))
+	assert.Empty(t, orch.PreferredModelForTask(99))
+}
+
+func TestWaveOrchestrator_PreferredModelForTask_NoMeta(t *testing.T) {
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+	}}
+	orch := NewWaveOrchestrator("no-meta", plan)
+	assert.Empty(t, orch.PreferredModelForTask(1))
 }
 
 func TestWaveOrchestrator_PersistsSubtaskStatus(t *testing.T) {

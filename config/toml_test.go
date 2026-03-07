@@ -15,11 +15,12 @@ func TestLoadTOMLConfig(t *testing.T) {
 		tomlPath := filepath.Join(tmpDir, "config.toml")
 
 		content := `
-[phases]
-implementing = "coder"
-spec_review = "reviewer"
-quality_review = "reviewer"
-planning = "planner"
+		[phases]
+		implementing = "coder"
+		spec_review = "reviewer"
+		quality_review = "reviewer"
+		master_review = "master"
+		planning = "planner"
 
 [agents.coder]
 enabled = true
@@ -52,6 +53,7 @@ flags = []
 		// Verify phases
 		assert.Equal(t, "coder", tc.PhaseRoles["implementing"])
 		assert.Equal(t, "reviewer", tc.PhaseRoles["spec_review"])
+		assert.Equal(t, "master", tc.PhaseRoles["master_review"])
 		assert.Equal(t, "planner", tc.PhaseRoles["planning"])
 
 		// Verify agent profiles
