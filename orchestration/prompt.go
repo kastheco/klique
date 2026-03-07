@@ -8,7 +8,7 @@ import (
 )
 
 // BuildTaskPrompt constructs the prompt for a single task instance.
-func BuildTaskPrompt(planFile string, plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int) string {
+func BuildTaskPrompt(planFile string, plan *taskparser.Plan, task taskparser.Task, waveNumber, totalWaves, peerCount int, meta *TaskMeta) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Implement Task %d: %s\n\n", task.Number, task.Title))
@@ -65,6 +65,13 @@ func BuildTaskPrompt(planFile string, plan *taskparser.Plan, task taskparser.Tas
 	sb.WriteString(task.Body)
 	sb.WriteString("\n")
 
+	if meta != nil && len(meta.VerifyChecks) > 0 {
+		sb.WriteString("\n## Verification Commands\n\n")
+		for _, check := range meta.VerifyChecks {
+			sb.WriteString("- `" + check + "`\n")
+		}
+	}
+
 	return sb.String()
 }
 
@@ -95,6 +102,25 @@ func BuildElaborationPrompt(planFile string) string {
 	)
 }
 
+// BuildArchitectPrompt returns the prompt for an architect agent session.
+// The architect identifies task relationships and emits metadata for planning
+// and orchestration decisions.
+func BuildArchitectPrompt(planFile string) string {
+	return fmt.Sprintf(
+		"You are the architect agent. Your job: analyze a plan, identify architectural dependencies, and emit compact metadata for downstream orchestration.\n\n"+
+			"Load the `kasmos-architect` and `cli-tools` skills before starting.\n\n"+
+			"## Instructions\n\n"+
+			"1. Retrieve the plan: `kas task show %[1]s`\n"+
+			"2. For each task, classify it as `parallel` when it has no file or execution dependency on other tasks in the same wave; otherwise classify it as serial.\n"+
+			"3. Estimate token budgets for each task, including required context depth and expected implementation footprint.\n"+
+			"4. Write the enriched plan back: pipe content to `kas task update-content %[1]s`\n"+
+			"5. Write architect metadata to `.kasmos/cache/%[1]s-architect.json` using the schema example in `architect-v1.json`.\n"+
+			"6. Signal completion: `touch .kasmos/signals/architect-finished-%[1]s`\n"+
+			"7. Note: app/FSM consumption of this new architect-finished signal is follow-up work and should be implemented separately.\n",
+		planFile,
+	)
+}
+
 // BuildWaveAnnotationPrompt returns the prompt used when a planner is respawned
 // to add ## Wave headers to an existing plan that is missing them.
 // It instructs the planner to annotate the plan, commit the change, and write
@@ -111,5 +137,25 @@ func BuildWaveAnnotationPrompt(planFile string) string {
 			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
 			"Do not edit plan-state.json directly.",
 		planFile,
+	)
+}
+
+// BuildMasterReviewPrompt defines the review task prompt for the kasmos-master role.
+// Signal consumption is intentionally left for follow-up app/FSM work, so this builder
+// only standardizes the instructions and completion signal contract.
+func BuildMasterReviewPrompt(planFile, diffContent, testResults string) string {
+	return fmt.Sprintf(
+		"You are the master review agent. Load the `kasmos-master` skill, read the plan with "+
+			"`kas task show %[1]s`, then review the proposed change for plan alignment and merge readiness.\n\n"+
+			"## Review Task\n"+
+			"- Determine whether the diff should be merged and signal your decision with `touch .kasmos/signals/master-approved-%[1]s` when complete.\n\n"+
+			"## Task\n"+
+			"%s\n\n"+
+			"## Test Results\n%s\n\n"+
+			"## Diff\n%s\n",
+		planFile,
+		planFile,
+		testResults,
+		diffContent,
 	)
 }
