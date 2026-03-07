@@ -1,0 +1,310 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+)
+
+// daemonSocketPath returns the default Unix domain socket path for the daemon
+// control API. Located in ~/.config/kasmos/ for user-level daemon.
+func daemonSocketPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/kas-daemon.sock"
+	}
+	return filepath.Join(home, ".config", "kasmos", "daemon.sock")
+}
+
+// daemonPIDPath returns the path to the daemon PID file.
+func daemonPIDPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/kas-daemon.pid"
+	}
+	return filepath.Join(home, ".config", "kasmos", "daemon.pid")
+}
+
+// NewDaemonCmd returns the `kas daemon` cobra command with subcommands.
+func NewDaemonCmd() *cobra.Command {
+	var socketPath string
+
+	cmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "manage the kasmos background daemon",
+		Long:  "control the kasmos multi-repo background daemon that manages plan lifecycles.",
+	}
+
+	cmd.PersistentFlags().StringVar(&socketPath, "socket", daemonSocketPath(), "path to the daemon unix domain socket")
+
+	cmd.AddCommand(newDaemonStartCmd())
+	cmd.AddCommand(newDaemonStopCmd())
+	// newDaemonStatusCmd takes socket path so tests can inject a fake path.
+	statusCmd := newDaemonStatusCmd(daemonSocketPath())
+	cmd.AddCommand(statusCmd)
+	cmd.AddCommand(newDaemonAddCmd(&socketPath))
+	cmd.AddCommand(newDaemonRemoveCmd(&socketPath))
+	cmd.AddCommand(newDaemonReloadCmd())
+
+	return cmd
+}
+
+// newDaemonStartCmd returns the `kas daemon start` subcommand.
+func newDaemonStartCmd() *cobra.Command {
+	var foreground bool
+	var configPath string
+
+	cmd := &cobra.Command{
+		Use:   "start",
+		Short: "start the kasmos daemon",
+		Long:  "start the kasmos multi-repo orchestration daemon. by default it daemonizes; use --foreground for systemd.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if foreground {
+				// Foreground mode: exec self with the hidden --daemon-v2 flag.
+				// main.go intercepts this flag and runs the new multi-repo daemon.
+				return fmt.Errorf("foreground mode: re-exec with kas --daemon-v2 (not yet fully wired in this build)")
+			}
+
+			// Daemonize: fork-and-exec self with --daemon-v2 flag.
+			execPath, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("resolve executable: %w", err)
+			}
+
+			childArgs := []string{execPath, "--daemon-v2"}
+			if configPath != "" {
+				childArgs = append(childArgs, "--daemon-config", configPath)
+			}
+
+			pidDir := filepath.Dir(daemonPIDPath())
+			if err := os.MkdirAll(pidDir, 0o755); err != nil {
+				return fmt.Errorf("create daemon dir: %w", err)
+			}
+
+			proc, err := os.StartProcess(execPath, childArgs, &os.ProcAttr{
+				Files: []*os.File{nil, nil, nil},
+				Sys:   daemonSysProcAttr(),
+			})
+			if err != nil {
+				return fmt.Errorf("start daemon process: %w", err)
+			}
+
+			// Write PID file.
+			pidContent := fmt.Sprintf("%d\n", proc.Pid)
+			if werr := os.WriteFile(daemonPIDPath(), []byte(pidContent), 0o644); werr != nil {
+				// Non-fatal: process is already running.
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write PID file: %v\n", werr)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "daemon started (pid=%d)\n", proc.Pid)
+			return proc.Release()
+		},
+	}
+
+	cmd.Flags().BoolVar(&foreground, "foreground", false, "run in foreground (for systemd / direct invocation)")
+	cmd.Flags().StringVar(&configPath, "config", "", "path to daemon TOML config file")
+	return cmd
+}
+
+// newDaemonStopCmd returns the `kas daemon stop` subcommand.
+func newDaemonStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "stop the running daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := stopDaemonByPID(daemonPIDPath()); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "daemon stopped")
+			return nil
+		},
+	}
+}
+
+// stopDaemonByPID reads the PID file at path and sends SIGTERM to the process.
+func stopDaemonByPID(pidPath string) error {
+	raw, err := os.ReadFile(pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("daemon not running (no PID file)")
+		}
+		return fmt.Errorf("read PID file: %w", err)
+	}
+
+	var pid int
+	if _, err := fmt.Sscanf(string(raw), "%d", &pid); err != nil {
+		return fmt.Errorf("malformed PID file: %w", err)
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("find process %d: %w", pid, err)
+	}
+
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("signal process %d: %w", pid, err)
+	}
+
+	_ = os.Remove(pidPath)
+	return nil
+}
+
+// newDaemonStatusCmd returns the `kas daemon status` subcommand.
+// socketPath is accepted as a parameter so tests can inject a fake path.
+func newDaemonStatusCmd(socketPath string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "show daemon status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := daemonHTTPClient(socketPath)
+
+			resp, err := client.Get("http://kas/status")
+			if err != nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "daemon not running")
+				return fmt.Errorf("daemon not running: %w", err)
+			}
+			defer resp.Body.Close()
+
+			var status map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+				return fmt.Errorf("decode status: %w", err)
+			}
+
+			fmt.Fprintln(cmd.OutOrStdout(), "daemon status:")
+			repos, _ := status["repos"].([]interface{})
+			if len(repos) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "  no repos registered")
+			} else {
+				for _, r := range repos {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", r)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// newDaemonAddCmd returns the `kas daemon add <repo-path>` subcommand.
+func newDaemonAddCmd(socketPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "add <repo-path>",
+		Short: "register a repository with the daemon",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, err := filepath.Abs(args[0])
+			if err != nil {
+				return fmt.Errorf("resolve path: %w", err)
+			}
+
+			body, _ := json.Marshal(map[string]string{"path": repoPath})
+			resp, err := daemonPost(*socketPath, "/repos/add", body)
+			if err != nil {
+				return fmt.Errorf("daemon not running: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("add repo failed (status %d)", resp.StatusCode)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "registered repo: %s\n", repoPath)
+			return nil
+		},
+	}
+}
+
+// newDaemonRemoveCmd returns the `kas daemon remove <repo-path>` subcommand.
+func newDaemonRemoveCmd(socketPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <repo-path>",
+		Short: "unregister a repository from the daemon",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, err := filepath.Abs(args[0])
+			if err != nil {
+				return fmt.Errorf("resolve path: %w", err)
+			}
+
+			body, _ := json.Marshal(map[string]string{"path": repoPath})
+			resp, err := daemonPost(*socketPath, "/repos/remove", body)
+			if err != nil {
+				return fmt.Errorf("daemon not running: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("remove repo failed (status %d)", resp.StatusCode)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "unregistered repo: %s\n", repoPath)
+			return nil
+		},
+	}
+}
+
+// newDaemonReloadCmd returns the `kas daemon reload` subcommand.
+func newDaemonReloadCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reload",
+		Short: "reload daemon configuration (sends SIGHUP)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			raw, err := os.ReadFile(daemonPIDPath())
+			if err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("daemon not running")
+				}
+				return fmt.Errorf("read PID file: %w", err)
+			}
+
+			var pid int
+			if _, err := fmt.Sscanf(string(raw), "%d", &pid); err != nil {
+				return fmt.Errorf("malformed PID file: %w", err)
+			}
+
+			proc, err := os.FindProcess(pid)
+			if err != nil {
+				return fmt.Errorf("find process %d: %w", pid, err)
+			}
+
+			if err := proc.Signal(syscall.SIGHUP); err != nil {
+				return fmt.Errorf("signal process %d: %w", pid, err)
+			}
+
+			fmt.Fprintln(cmd.OutOrStdout(), "daemon reloaded")
+			return nil
+		},
+	}
+}
+
+// daemonHTTPClient returns an http.Client configured to connect to the daemon's
+// Unix domain socket at the given path.
+func daemonHTTPClient(socketPath string) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+			},
+		},
+		Timeout: 3 * time.Second,
+	}
+}
+
+// daemonPost sends a POST request to the daemon control socket.
+func daemonPost(socketPath, endpoint string, body []byte) (*http.Response, error) {
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+	return client.Post("http://kas"+endpoint, "application/json", bytes.NewReader(body))
+}
