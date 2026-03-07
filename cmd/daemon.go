@@ -68,19 +68,37 @@ func newDaemonStartCmd() *cobra.Command {
 		Short: "start the kasmos daemon",
 		Long:  "start the kasmos multi-repo orchestration daemon. by default it daemonizes; use --foreground for systemd.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if foreground {
-				// Foreground mode: exec self with the hidden --daemon-v2 flag.
-				// main.go intercepts this flag and runs the new multi-repo daemon.
-				return fmt.Errorf("foreground mode: re-exec with kas --daemon-v2 (not yet fully wired in this build)")
-			}
-
-			// Daemonize: fork-and-exec self with --daemon-v2 flag.
 			execPath, err := os.Executable()
 			if err != nil {
 				return fmt.Errorf("resolve executable: %w", err)
 			}
 
-			childArgs := []string{execPath, "--daemon-v2"}
+			if foreground {
+				// Foreground mode: re-exec self with the hidden --run-daemon-foreground
+				// flag. main.go intercepts this flag and runs the new multi-repo daemon
+				// directly (avoiding a circular import between cmd and daemon packages).
+				fgArgs := []string{execPath, "--run-daemon-foreground"}
+				if configPath != "" {
+					fgArgs = append(fgArgs, "--daemon-config", configPath)
+				}
+				proc, err := os.StartProcess(execPath, fgArgs, &os.ProcAttr{
+					Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+				})
+				if err != nil {
+					return fmt.Errorf("start daemon foreground: %w", err)
+				}
+				state, err := proc.Wait()
+				if err != nil {
+					return fmt.Errorf("daemon foreground exited: %w", err)
+				}
+				if !state.Success() {
+					return fmt.Errorf("daemon foreground exited with code %d", state.ExitCode())
+				}
+				return nil
+			}
+
+			// Daemonize: fork-and-exec self with --run-daemon-foreground and detach.
+			childArgs := []string{execPath, "--run-daemon-foreground"}
 			if configPath != "" {
 				childArgs = append(childArgs, "--daemon-config", configPath)
 			}

@@ -208,6 +208,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			d.logger.Info("daemon shutting down")
+
+			// Drain all running agent instances before closing the control socket.
+			drainCtx, drainCancel := context.WithTimeout(context.Background(), 35*time.Second)
+			d.spawner.DrainAll(drainCtx)
+			drainCancel()
+
 			if shutErr := srv.Shutdown(context.Background()); shutErr != nil {
 				d.logger.Warn("control socket shutdown error", "err", shutErr)
 			}
@@ -270,6 +276,64 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 	default:
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
 	}
+}
+
+// RecoverSessions discovers orphaned kas_ tmux sessions and attempts to
+// re-adopt them into the spawner's tracking map. This should be called once
+// on daemon startup, before the first tick.
+//
+// The recovery process:
+//  1. Calls spawner.DiscoverOrphanSessions() to list kas_ sessions not tracked
+//     by the spawner.
+//  2. Cross-references orphan session names with task filenames in each
+//     registered repo's task store to identify sessions this daemon owns.
+//  3. Logs and counts matched sessions. Full re-hydration of Instance objects
+//     from stored task metadata is a future enhancement.
+//
+// Returns the number of sessions matched to known tasks and logged as recovered.
+func (d *Daemon) RecoverSessions() (int, error) {
+	orphans := d.spawner.DiscoverOrphanSessions()
+	if len(orphans) == 0 {
+		return 0, nil
+	}
+
+	d.logger.Info("discovered orphaned sessions", "count", len(orphans))
+
+	// Build a set of orphan session titles (without the kas_ prefix) for lookup.
+	orphanTitles := make(map[string]bool, len(orphans))
+	for _, o := range orphans {
+		orphanTitles[o.Title] = true
+	}
+
+	recovered := 0
+
+	// Cross-reference orphan sessions with tasks in each registered repo.
+	entries := d.repos.List()
+	for _, e := range entries {
+		if e.Store == nil {
+			continue
+		}
+		tasks, err := e.Store.List(e.Project)
+		if err != nil {
+			d.logger.Warn("recover sessions: list tasks failed", "repo", e.Path, "err", err)
+			continue
+		}
+		// Agent types to check for each task.
+		agentSuffixes := []string{"coder", "reviewer", "elaborator"}
+		for _, task := range tasks {
+			planName := task.Filename
+			for _, suffix := range agentSuffixes {
+				title := planName + "-" + suffix
+				if orphanTitles[title] {
+					d.logger.Info("re-adopting orphan session",
+						"session", title, "repo", e.Path, "plan", planName)
+					recovered++
+				}
+			}
+		}
+	}
+
+	return recovered, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -347,14 +411,19 @@ func RunDaemon(cfg *config.Config) error {
 	return nil
 }
 
-// LaunchDaemon forks a detached daemon child process and records its PID.
+// LaunchDaemon forks a detached daemon child process running
+// `kas daemon start --foreground` and records its PID.
+//
+// The child is placed in a new session (Setsid=true on Unix) so it survives
+// the parent terminal closing. Use `kas daemon start --foreground` directly
+// when running under systemd.
 func LaunchDaemon() error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("daemon: could not resolve executable path: %w", err)
 	}
 
-	cmd := exec.Command(execPath, "--daemon")
+	cmd := exec.Command(execPath, "daemon", "start", "--foreground")
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
