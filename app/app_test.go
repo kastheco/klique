@@ -1353,6 +1353,24 @@ func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {
 		"previewTerminalInstance should NOT be cleared by exitFocusMode")
 }
 
+func TestHandleKeyPress_CtrlEnterSubmitsAndExitsFocusMode(t *testing.T) {
+	h := newTestHome()
+	h.state = stateFocusAgent
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = "test-agent"
+	h.keySent = true
+
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
+	updated := model.(*home)
+
+	sent := updated.previewTerminal.SentKeys()
+	require.Len(t, sent, 1)
+	assert.Equal(t, []byte{0x0D}, sent[0])
+	assert.Equal(t, stateDefault, updated.state)
+	assert.Equal(t, "test-agent", updated.previewTerminalInstance)
+	require.NotNil(t, cmd)
+}
+
 func TestRestartInstance_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
 	inst, _ := session.NewInstance(session.InstanceOptions{

@@ -48,6 +48,7 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("s")+descStyle.Render("             - spawn agent"),
 		keyStyle.Render("i")+descStyle.Render("             - interactive mode (type in pane)"),
 		keyStyle.Render("ctrl+space")+descStyle.Render("    - exit fullscreen or interactive mode"),
+		keyStyle.Render("ctrl+enter")+descStyle.Render("    - submit + exit interactive mode"),
 		keyStyle.Render("k")+descStyle.Render("             - kill tmux session (keeps instance)"),
 		keyStyle.Render("K")+descStyle.Render("             - stop session (branch preserved)"),
 		keyStyle.Render("r")+descStyle.Render("             - resume paused session"),

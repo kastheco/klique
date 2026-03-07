@@ -31,6 +31,8 @@ type EmbeddedTerminal struct {
 	cmd  *exec.Cmd // tmux attach-session process
 	emu  *vt.SafeEmulator
 
+	sentKeys [][]byte
+
 	cancel chan struct{}
 
 	// Signal channels (buffered, cap 1) for event-driven rendering.
@@ -169,6 +171,13 @@ func drainChannel(ch chan struct{}) {
 
 // SendKey writes raw bytes directly to the PTY.
 func (t *EmbeddedTerminal) SendKey(data []byte) error {
+	if t.ptmx == nil {
+		copied := make([]byte, len(data))
+		copy(copied, data)
+		t.sentKeys = append(t.sentKeys, copied)
+		return nil
+	}
+
 	_, err := t.ptmx.Write(data)
 	return err
 }
@@ -217,10 +226,22 @@ func NewDummyTerminal() *EmbeddedTerminal {
 	emu := vt.NewSafeEmulator(1, 1)
 	return &EmbeddedTerminal{
 		emu:         emu,
+		sentKeys:    make([][]byte, 0),
 		cancel:      make(chan struct{}),
 		dataReady:   make(chan struct{}, 1),
 		renderReady: make(chan struct{}, 1),
 	}
+}
+
+// SentKeys returns a deep copy of all key writes captured on the terminal.
+func (t *EmbeddedTerminal) SentKeys() [][]byte {
+	keys := make([][]byte, len(t.sentKeys))
+	for i, key := range t.sentKeys {
+		copyKey := make([]byte, len(key))
+		copy(copyKey, key)
+		keys[i] = copyKey
+	}
+	return keys
 }
 
 // Close shuts down the terminal: stops all goroutines, closes the PTY,

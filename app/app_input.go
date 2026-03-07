@@ -842,6 +842,18 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			return m, tea.RequestWindowSize
 		}
 
+		if msg.Code == tea.KeyEnter && msg.Mod.Contains(tea.ModCtrl) {
+			if m.previewTerminal == nil {
+				m.exitFocusMode()
+				return m, tea.RequestWindowSize
+			}
+			if err := m.previewTerminal.SendKey([]byte{0x0D}); err != nil {
+				return m, m.handleError(err)
+			}
+			m.exitFocusMode()
+			return m, tea.RequestWindowSize
+		}
+
 		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
 		if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) || msg.Code == tea.KeyDown && msg.Mod.Contains(tea.ModCtrl) {
 			if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) {
