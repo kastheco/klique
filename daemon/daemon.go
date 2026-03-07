@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,6 +15,8 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
@@ -26,12 +30,67 @@ import (
 // repositories for signal files and executes the resulting actions via the
 // configured AgentSpawner.
 type Daemon struct {
-	cfg     *DaemonConfig
-	repos   *RepoManager
-	spawner *TmuxSpawner
-	logger  *slog.Logger
-	pidLock *PIDLock
-	mu      sync.RWMutex
+	cfg       *DaemonConfig
+	repos     *RepoManager
+	spawner   *TmuxSpawner
+	logger    *slog.Logger
+	pidLock   *PIDLock
+	mu        sync.RWMutex
+	startedAt time.Time
+}
+
+// daemonStateAdapter adapts the Daemon to the api.StateProvider interface.
+type daemonStateAdapter struct {
+	d *Daemon
+}
+
+func (a *daemonStateAdapter) Status() api.StatusResponse {
+	a.d.mu.RLock()
+	defer a.d.mu.RUnlock()
+	uptime := ""
+	if !a.d.startedAt.IsZero() {
+		uptime = time.Since(a.d.startedAt).Round(time.Second).String()
+	}
+	repos := a.d.repos.List()
+	repoStatuses := make([]api.RepoStatus, len(repos))
+	for i, r := range repos {
+		repoStatuses[i] = api.RepoStatus{Path: r.Path, Project: r.Project}
+	}
+	return api.StatusResponse{
+		Running:   true,
+		Repos:     repoStatuses,
+		RepoCount: len(repoStatuses),
+		Uptime:    uptime,
+	}
+}
+
+func (a *daemonStateAdapter) ListRepos() []api.RepoStatus {
+	repos := a.d.repos.List()
+	out := make([]api.RepoStatus, len(repos))
+	for i, r := range repos {
+		out[i] = api.RepoStatus{Path: r.Path, Project: r.Project}
+	}
+	return out
+}
+
+func (a *daemonStateAdapter) AddRepo(path string) error {
+	return a.d.repos.Add(path)
+}
+
+func (a *daemonStateAdapter) RemoveRepo(project string) error {
+	return a.d.repos.Remove(project)
+}
+
+func (a *daemonStateAdapter) ListPlans(_ string) ([]taskstore.TaskEntry, error) {
+	return nil, nil
+}
+
+func (a *daemonStateAdapter) ListInstances(_ string) []api.InstanceStatus {
+	return nil
+}
+
+func (a *daemonStateAdapter) EventStream() <-chan api.Event {
+	return make(chan api.Event)
 }
 
 // NewDaemon creates a new Daemon from the given configuration. The daemon is
@@ -42,6 +101,9 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = 2 * time.Second
+	}
+	if cfg.SocketPath == "" {
+		cfg.SocketPath = defaultSocketPath()
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -65,6 +127,16 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 	return d, nil
 }
 
+// defaultSocketPath returns the default Unix domain socket path for the daemon.
+// It prefers $XDG_RUNTIME_DIR/kasmos/kas.sock, then falls back to
+// /tmp/kasmos-<uid>/kas.sock.
+func defaultSocketPath() string {
+	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
+		return filepath.Join(xdg, "kasmos", "kas.sock")
+	}
+	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
+}
+
 // AddRepo registers a repository root with the daemon. The repo will be
 // polled on the next tick. Safe to call concurrently.
 func (d *Daemon) AddRepo(root string) error {
@@ -86,11 +158,48 @@ func (d *Daemon) ListRepos() []string {
 //
 // The event loop:
 //  1. Creates a ticker at cfg.PollInterval.
-//  2. On each tick: scans all registered repos for signal files, feeds results
+//  2. Listens on the Unix domain socket (cfg.SocketPath) and serves the
+//     control API via api.Handler.
+//  3. On each tick: scans all registered repos for signal files, feeds results
 //     to per-repo Processor.Tick(), and executes the returned actions.
-//  3. On context cancellation: releases the PID lock and returns nil.
+//  4. On context cancellation: releases the PID lock and closes the socket.
 func (d *Daemon) Run(ctx context.Context) error {
-	d.logger.Info("daemon starting", "poll_interval", d.cfg.PollInterval)
+	d.logger.Info("daemon starting", "poll_interval", d.cfg.PollInterval, "socket", d.cfg.SocketPath)
+
+	d.mu.Lock()
+	d.startedAt = time.Now()
+	d.mu.Unlock()
+
+	// Ensure the socket directory exists.
+	if err := os.MkdirAll(filepath.Dir(d.cfg.SocketPath), 0o700); err != nil {
+		return fmt.Errorf("daemon: create socket dir: %w", err)
+	}
+
+	// Remove any stale socket file before listening.
+	_ = os.Remove(d.cfg.SocketPath)
+
+	ln, err := net.Listen("unix", d.cfg.SocketPath)
+	if err != nil {
+		return fmt.Errorf("daemon: listen unix %s: %w", d.cfg.SocketPath, err)
+	}
+	defer func() {
+		ln.Close()
+		_ = os.Remove(d.cfg.SocketPath)
+	}()
+
+	// Build and start the HTTP server on the control socket.
+	state := &daemonStateAdapter{d: d}
+	handler := api.NewHandler(state)
+	srv := &http.Server{Handler: handler}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if serveErr := srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			d.logger.Error("control socket server error", "err", serveErr)
+		}
+	}()
 
 	ticker := time.NewTicker(d.cfg.PollInterval)
 	defer ticker.Stop()
@@ -99,6 +208,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			d.logger.Info("daemon shutting down")
+			if shutErr := srv.Shutdown(context.Background()); shutErr != nil {
+				d.logger.Warn("control socket shutdown error", "err", shutErr)
+			}
+			wg.Wait()
 			if d.pidLock != nil {
 				_ = d.pidLock.Release()
 				d.pidLock = nil
