@@ -125,7 +125,7 @@ func renderOpenCodeConfig(dir string, agents []harness.AgentConfig) (string, err
 	}
 
 	// Substitute per-role placeholders for wizard-configurable agents
-	for _, role := range []string{"coder", "architect", "planner", "reviewer", "fixer"} {
+	for _, role := range []string{"coder", "architect", "planner", "reviewer", "fixer", "master"} {
 		upper := strings.ToUpper(role)
 		agent, ok := agentByRole[role]
 		if !ok {

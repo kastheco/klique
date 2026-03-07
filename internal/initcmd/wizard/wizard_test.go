@@ -95,7 +95,7 @@ func TestStateToAgentConfigs(t *testing.T) {
 
 func TestDefaultAgentRoles(t *testing.T) {
 	roles := DefaultAgentRoles()
-	assert.Equal(t, []string{"coder", "architect", "reviewer", "planner", "chat", "fixer"}, roles)
+	assert.Equal(t, []string{"coder", "architect", "reviewer", "planner", "chat", "fixer", "master"}, roles)
 }
 
 func TestRoleDefaults(t *testing.T) {
@@ -107,6 +107,7 @@ func TestRoleDefaults(t *testing.T) {
 		assert.Contains(t, defaults, "planner")
 		assert.Contains(t, defaults, "chat")
 		assert.Contains(t, defaults, "fixer")
+		assert.Contains(t, defaults, "master")
 	})
 
 	t.Run("coder defaults", func(t *testing.T) {
@@ -147,6 +148,14 @@ func TestRoleDefaults(t *testing.T) {
 		assert.Equal(t, "high", ch.Effort)
 		assert.Equal(t, "0.3", ch.Temperature)
 		assert.True(t, ch.Enabled)
+	})
+
+	t.Run("master defaults", func(t *testing.T) {
+		m := defaults["master"]
+		assert.Equal(t, "openai/gpt-5.4", m.Model)
+		assert.Equal(t, "high", m.Effort)
+		assert.Equal(t, "0.2", m.Temperature)
+		assert.True(t, m.Enabled)
 	})
 }
 

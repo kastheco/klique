@@ -9,6 +9,7 @@ func RoleDescription(role string) string {
 		"planner":   "Breaks features into implementation plans.\nDecomposes specs into ordered tasks with file paths and tests.",
 		"chat":      "General-purpose assistant for questions and exploration.\nAuto-configured for all selected harnesses.",
 		"fixer":     "debugger, investigator, and operational troubleshooter.\nInvestigates failures, fixes stuck states, cleans worktrees and branches.",
+		"master":    "final holistic reviewer before merge.\nChecks the full implementation against plan spec and acceptance criteria.",
 	}
 	return descs[role]
 }
@@ -22,6 +23,7 @@ func RolePhaseText(role string) string {
 		"planner":   "Default for phases: planning",
 		"chat":      "Available in all phases (ad-hoc)",
 		"fixer":     "Default for phases: fixer",
+		"master":    "Default for phases: master_review",
 	}
 	return phases[role]
 }

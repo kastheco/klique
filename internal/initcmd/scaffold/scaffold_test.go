@@ -661,6 +661,26 @@ func TestScaffold_IncludesFixerAgent(t *testing.T) {
 	assert.True(t, foundConfig)
 }
 
+func TestScaffold_IncludesMasterAgent(t *testing.T) {
+	dir := t.TempDir()
+	temp := 0.2
+	agents := []harness.AgentConfig{
+		{Harness: "opencode", Role: "master", Model: "openai/gpt-5.4", Temperature: &temp, Effort: "high", Enabled: true},
+		{Harness: "opencode", Role: "coder", Model: "anthropic/claude-sonnet-4-6", Temperature: &temp, Effort: "medium", Enabled: true},
+	}
+
+	_, err := WriteOpenCodeProject(dir, agents, nil, true)
+	require.NoError(t, err)
+
+	masterPath := filepath.Join(dir, ".opencode", "agents", "master.md")
+	assert.FileExists(t, masterPath)
+
+	content, err := os.ReadFile(filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), `"master"`)
+	assert.Contains(t, string(content), `"openai/gpt-5.4"`)
+}
+
 func TestPatchWorktreeConfig_UpdatesModelTempEffortPreservesOtherFields(t *testing.T) {
 	dir := t.TempDir()
 	opencodeConfig := `{

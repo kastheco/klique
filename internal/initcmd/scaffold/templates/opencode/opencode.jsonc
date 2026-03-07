@@ -165,6 +165,35 @@
       {{FIXER_EFFORT_LINE}}
       "temperature": {{FIXER_TEMP}},
       "textVerbosity": "low"
+    },
+    "master": {
+      "model": "{{MASTER_MODEL}}",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "{{PROJECT_DIR}}/*": "allow",
+          "{{PROJECT_DIR}}/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      {{MASTER_EFFORT_LINE}}
+      "temperature": {{MASTER_TEMP}},
+      "textVerbosity": "low"
     }
   }
 }
