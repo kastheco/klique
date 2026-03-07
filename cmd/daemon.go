@@ -185,7 +185,7 @@ func newDaemonStatusCmd(socketPath string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := daemonHTTPClient(socketPath)
 
-			resp, err := client.Get("http://kas/status")
+			resp, err := client.Get("http://kas/v1/status")
 			if err != nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "daemon not running")
 				return fmt.Errorf("daemon not running: %w", err)
@@ -224,7 +224,7 @@ func newDaemonAddCmd(socketPath *string) *cobra.Command {
 			}
 
 			body, _ := json.Marshal(map[string]string{"path": repoPath})
-			resp, err := daemonPost(*socketPath, "/repos/add", body)
+			resp, err := daemonPost(*socketPath, "/v1/repos", body)
 			if err != nil {
 				return fmt.Errorf("daemon not running: %w", err)
 			}

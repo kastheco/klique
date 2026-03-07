@@ -47,7 +47,7 @@ raw JSON suitable for piping to jq.`,
 func runMonitorTail(cmd *cobra.Command, socketPath, repoFilter, planFilter string, jsonOutput bool) error {
 	client := daemonHTTPClient(socketPath)
 
-	resp, err := client.Get("http://kas/events")
+	resp, err := client.Get("http://kas/v1/events")
 	if err != nil {
 		return fmt.Errorf("daemon not running: %w", err)
 	}
@@ -125,7 +125,7 @@ func newMonitorStatusCmd(socketPath *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := daemonHTTPClient(*socketPath)
 
-			resp, err := client.Get("http://kas/status")
+			resp, err := client.Get("http://kas/v1/status")
 			if err != nil {
 				return fmt.Errorf("daemon not running: %w", err)
 			}
