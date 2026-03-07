@@ -42,7 +42,7 @@ func newRootModel(registry *harness.Registry, existing *config.TOMLConfigResult)
 		Registry: registry,
 		PhaseMapping: map[string]string{
 			"implementing":   "coder",
-			"elaborating":    "elaborator",
+			"elaborating":    "architect",
 			"spec_review":    "reviewer",
 			"quality_review": "reviewer",
 			"planning":       "planner",

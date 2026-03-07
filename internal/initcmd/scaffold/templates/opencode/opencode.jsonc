@@ -37,8 +37,8 @@
       "temperature": 0.3,
       "textVerbosity": "medium"
     },
-    "elaborator": {
-      "model": "{{ELABORATOR_MODEL}}",
+    "architect": {
+      "model": "{{ARCHITECT_MODEL}}",
       "permission": {
         "bash": "allow",
         "edit": {
@@ -64,8 +64,8 @@
           "/tmp/**": "allow"
         }
       },
-      {{ELABORATOR_EFFORT_LINE}}
-      "temperature": {{ELABORATOR_TEMP}},
+      {{ARCHITECT_EFFORT_LINE}}
+      "temperature": {{ARCHITECT_TEMP}},
       "textVerbosity": "medium"
     },
     "coder": {

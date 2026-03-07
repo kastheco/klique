@@ -16,6 +16,7 @@ kas
 **/.kasmos/taskstore.db-wal
 **/.kasmos/config.json
 **/.kasmos/config.toml
+**/.kasmos/cache/
 dist/
 *.bak
 # Plan markdown files — content lives in the task store DB, not on disk
