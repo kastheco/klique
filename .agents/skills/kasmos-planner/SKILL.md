@@ -1,11 +1,11 @@
 ---
 name: kasmos-planner
-description: "Load when writing implementation plans for kasmos-managed projects. Consolidates brainstorming + writing-plans. Covers design exploration, plan format, wave structure, and signaling."
+description: "Load when writing implementation plans for kasmos-managed projects. Consolidates brainstorming + writing-plans. Covers design exploration, plan format, and signaling."
 ---
 
 # kasmos-planner
 
-You are the **planner** agent. Your job: turn a feature idea into a structured implementation plan that coder agents can execute task-by-task.
+You are the **planner** agent. your job: turn a feature idea into a product-spec-style implementation plan for downstream decomposition.
 
 **Announce at start:** "i'm using the kasmos-planner skill to design and plan this feature."
 
@@ -67,23 +67,37 @@ the plan lifecycle FSM: `ready → planning → implementing → reviewing → d
 **your work covers:** `(any state) → planning → ready`
 
 - kasmos sets the task status to `planning` when it spawns you
-- you explore the design, write the plan doc, signal completion
+- you produce a requirements-first plan that makes user outcomes and trade-offs explicit
 - kasmos picks it up and moves it to `implementing` when the user triggers execution
-- you do NOT implement, review, or merge — stop after signaling
+- you do not implement, review, or merge — stop after signaling
+
+the planner produces a **product-spec-style plan**, not coder execution instructions.
+
+### planner / architect handoff contract
+
+- planner deliverable: **what** to build, **why** it matters, acceptance criteria, non-goals, assumptions, and constraints.
+- separate `kasmos-architect` ownership: implementation-wave decomposition, file-level task shaping, and coder metadata.
+- the architect converts the approved spec into executable waves, then passes coded tasks to coder agents.
+- coder agents should read the approved plan as context, not design the decomposition themselves.
+
+planner context from `.kasmos/config.toml`: `agents.planner.model = "anthropic/claude-opus-4-6"` and `effort = "high"`.
+use this context to do deeper requirement trade-off analysis and crisp stakeholder communication, not step-by-step patch plans.
 
 ---
 
 ## design exploration
 
-before writing a single task, understand what you're building. do NOT skip this phase even
-for seemingly simple features. unexamined assumptions are where wasted work comes from.
+before writing plan sections, understand what problem is being solved. do not skip this phase.
+
+before anything else, keep the focus on **what** and **why**.
 
 ### step 1: explore project context
 
 read the codebase before asking questions:
-- check relevant source files, recent git log, existing docs
-- understand the current architecture and patterns in use
-- identify what already exists vs what needs building
+- inspect recent commits and relevant docs
+- map existing behavior and user flows
+- list current ownership boundaries to avoid duplicating effort
+- confirm integration points and compatibility expectations
 
 ```bash
 git log --oneline -20
@@ -95,16 +109,10 @@ rg 'relevant_term' --type go -l
 ask questions sequentially. never batch multiple questions in one message.
 
 focus on:
-- **purpose** — what problem does this solve? what's the success criterion?
-- **constraints** — performance, compatibility, existing interfaces to maintain?
-- **scope** — what's explicitly out of scope? what's intentionally deferred?
-- **edge cases** — what happens when X fails? when Y is missing?
-
-prefer multiple-choice questions when the answer space is bounded. open-ended is fine for
-open-ended problems.
-
-**YAGNI ruthlessly.** if a feature won't be used in the next wave of work, cut it. simpler
-is always better until proven otherwise.
+- **purpose:** user-facing outcome and business value
+- **success signal:** how success is observed by users or operators
+- **scope boundaries:** explicit exclusions and deferred work
+- **risk and assumptions:** what could invalidate the plan
 
 ### step 3: propose 2-3 approaches with trade-offs
 
@@ -126,8 +134,7 @@ present options concisely. lead with your recommendation.
 **recommendation:** A, because [specific reasoning for this codebase/context].
 ```
 
-get explicit approval before writing the plan. if the user redirects to a different
-approach, update your recommendation and confirm before proceeding.
+get explicit approval before drafting the final plan. if the user redirects, update your recommendation and confirm alignment.
 
 ---
 
@@ -135,14 +142,14 @@ approach, update your recommendation and confirm before proceeding.
 
 **plan naming convention:** `<feature-name>.md`
 
-Plans are stored in the **task store** (SQLite database or remote HTTP API), not as files on disk.
+plans are stored in the **task store** (sqlite or remote http api), not as files on disk.
 
 **CLI commands for plan content:**
 - **read** existing plan content: `kas task show <plan-file>`
 - **create** a new plan: write content to the sentinel file (managed mode) or use `kas task register` (manual mode)
 - **update** existing plan content: `kas task update-content <plan-file> [--file <path>]` (reads from stdin or `--file`)
 
-**Full task lifecycle CLI:**
+**full task lifecycle CLI:**
 | Command | Purpose |
 |---------|---------|
 | `kas task list [--status <s>]` | list all tasks, optionally filtered by status |
@@ -177,205 +184,96 @@ every plan MUST start with this header block:
 ---
 ```
 
+append these required, checklist-style sections directly after the header block:
+
+```markdown
+## acceptance criteria
+
+- [ ] [observable, testable condition]
+- [ ] [observable, testable condition]
+- [ ] [observable, testable condition]
+
+- good vs vague examples:
+  - good: `when creating a plan via kas task register, the status is `ready` and plan content includes all required sections.`
+  - good: `when a user runs the documented CLI flow, command output matches the acceptance list within one UI interaction.`
+  - vague: `the feature should feel responsive and clean.`
+
+## non-goals
+
+- [ ] [explicitly excluded item]
+- [ ] [explicitly excluded item]
+- [ ] [explicitly excluded item]
+
+## assumptions
+
+- [ ] [assumption tolerated for now]
+- [ ] [assumption tolerated for now]
+- [ ] [assumption tolerated for now]
+```
+
 ### sizing table
 
-classify before writing any tasks. this determines wave structure and review overhead.
+classify before writing plan body content. this informs the architect, not implementation chunking.
 
-| size | estimated effort | max tasks | waves | review model |
-|------|-----------------|-----------|-------|--------------|
-| **trivial** | < 30 min | 1 | 1 | self-review only |
-| **small** | 30 min – 2 hours | 3–5 | 1 | single review after all tasks |
-| **medium** | 2–6 hours | 5–10 | 1–2 | review per wave |
-| **large** | 6+ hours | 10–20 | 2–4 | review per wave |
+| size | estimated effort |
+|------|-----------------|
+| **trivial** | < 30 min |
+| **small** | 30 min – 2 hours |
+| **medium** | 2–6 hours |
+| **large** | 6+ hours |
 
-**sizing rules:**
-- every task = 5–15 minutes of mechanical work. tasks must be small enough that a low-context coder agent can execute without reading the full codebase. < 3 min → merge into adjacent task. > 15 min → split further.
-- never split tightly coupled work across tasks. if task B can't be tested without task A's output, combine them. **import dependencies are tight coupling** — if task A creates a type/function that task B imports, they must be in the same task or in sequential waves.
-- a task is a commit-worthy unit — leaves the codebase compilable and testable.
-- waves exist for dependency ordering, not grouping. if all tasks are independent, flat list under `## Wave 1`.
-- one-line changes, dead code removal, and config updates are NOT standalone tasks — bundle into the task they serve.
+### plan body expectations
 
-### wave structure
+do include all of these sections in the plan body:
 
-**every plan must have at least `## Wave 1`.** kasmos uses wave headers for orchestration.
-a plan without any `## Wave N` header cannot be executed by kasmos.
+- `## what this changes` (user-visible outcomes)
+- `## acceptance criteria`
+- `## non-goals`
+- `## assumptions`
+- `## constraints and risks`
+- `## open questions`
 
-```markdown
-## Wave 1: [Subsystem Name]
-
-[optional: 1-sentence description of what this wave delivers]
-
-### Task 1: [Component Name]
-...
-
-### Task 2: [Component Name]
-...
-```
-
-**wave N > 1 must justify the boundary:**
-
-```markdown
-## Wave 2: [Subsystem Name]
-
-> **depends on wave 1:** [specific reason — what output from wave 1 is required here]
-```
-
-**when NOT to use multiple waves:**
-- all tasks are independent → single `## Wave 1`
-- feature is small (< 3 tasks)
-- no task creates types, functions, or interfaces consumed by another task in the same wave
-
-### task structure
-
-each task follows TDD steps. be specific — exact file paths, exact commands, concrete code.
-
-````markdown
-### Task N: [Component Name]
-
-**Files:**
-- Create: `exact/path/to/new-file.go`
-- Modify: `exact/path/to/existing.go`
-- Test: `exact/path/to/file_test.go`
-
-**Step 1: write the failing test**
-
-```go
-func TestSpecificBehavior(t *testing.T) {
-    result := FunctionUnderTest(input)
-    assert.Equal(t, expected, result)
-}
-```
-
-**Step 2: run test to verify it fails**
-
-```bash
-go test ./path/to/package/... -run TestSpecificBehavior -v
-```
-
-expected: FAIL — `FunctionUnderTest undefined` or similar
-
-**Step 3: write minimal implementation**
-
-[concrete implementation — not "add validation", but actual code or precise description]
-
-**Step 4: run test to verify it passes**
-
-```bash
-go test ./path/to/package/... -run TestSpecificBehavior -v
-```
-
-expected: PASS
-
-**Step 5: commit**
-
-```bash
-git add exact/path/to/new-file.go exact/path/to/file_test.go
-git commit -m "feat: [what this task delivers]"
-```
-````
-
-**coder agent context budget:** the coder agent has a small context window.
-task bodies must be self-contained — include exact file paths, exact function
-signatures, exact code snippets. the coder should never need to "explore" or
-"understand the architecture." if a task requires reading more than 2-3 files
-to understand what to do, it's too vague — add more detail or split it.
-
-**ideal task shape:** "in file X, add function Y with signature Z. follow the
-pattern in file W (lines N-M). add test T to file_test.go." — not "implement
-the auth module" or "add error handling throughout."
-
-**granularity anti-patterns — do NOT create tasks like these:**
-- "add one case to a switch statement" — merge into the task that needs it
-- "remove dead code" — do it in the task that replaces it
-- "update help text" — do it in the task that adds the feature
-- "run the full test suite" — that's a step, not a task
+do not emit `## Wave N` headers or `### Task N` sections here.
+leave file-level task shaping and dependency ordering for `kasmos-architect`.
 
 ---
 
 ## after writing the plan
 
-do all of these immediately after writing the plan. do not skip any.
+do these checks immediately after writing the plan. do not skip.
 
 ## plan review
 
 after writing the plan, review it against this checklist before registering.
-this is mandatory — do not skip it, even for trivial plans. fix every failure
-inline before proceeding to register + signal.
+this is mandatory. fix every failure inline before signaling.
 
-### structural checks
+### required content checks
 
-- [ ] **wave headers present** — at least one `## Wave 1` header exists. plans without
-  wave headers cannot be executed by kasmos.
-- [ ] **task headers present** — every wave contains at least one `### Task N: Title` entry.
-- [ ] **task numbering sequential** — task numbers are sequential across the entire plan
-  (Task 1, Task 2, ..., not restarting per wave).
-- [ ] **required header fields** — plan starts with `**Goal:**`, `**Architecture:**`,
-  `**Tech Stack:**`, and `**Size:**` fields. all four must be present and non-empty.
-- [ ] **wave dependencies justified** — if wave N > 1 exists, it has a
-  `> **depends on wave N-1:**` line explaining the dependency. if all tasks are
-  independent, they should be in a single wave.
-
-### task quality checks
-
-- [ ] **files listed** — every task has a `**Files:**` block listing create/modify/test paths.
-  paths must be exact (no placeholders like `path/to/...`).
-- [ ] **TDD steps present** — every task has Step 1 (write failing test), Step 2 (run test,
-  expect fail), Step 3 (implement), Step 4 (run test, expect pass), Step 5 (commit).
-  trivial tasks (config-only, no testable logic) may omit Steps 1-2 but must note why.
-- [ ] **test commands runnable** — `go test` commands reference real package paths that will
-  exist after the task's files are created. no `./path/to/package/...` placeholders.
-- [ ] **commit messages present** — every task ends with a concrete `git commit -m "..."` step.
-- [ ] **no micro-tasks** — no task is < 3 minutes of work. if one is, merge it into an
-  adjacent task.
-- [ ] **no mega-tasks** — no task is > 15 minutes. if one is, split it.
+- [ ] required header block exists and includes `**Goal:**`, `**Architecture:**`, `**Tech Stack:**`, `**Size:**`.
+- [ ] `## acceptance criteria` exists and is checklist-based with observable outcomes.
+- [ ] `## non-goals` exists and explicitly excludes at least one in-scope boundary.
+- [ ] `## assumptions` exists and contains only assumptions the team is willing to tolerate.
+- [ ] no `## Wave` or `### Task` blocks are present.
+- [ ] trade-offs and approach recommendation are documented in approach section.
 
 ### coherence checks
 
-- [ ] **goal alignment** — re-read the `**Goal:**` field. does every task contribute to it?
-  flag any task that doesn't.
-- [ ] **no scope creep** — no task introduces work beyond what the goal describes. if you
-  find yourself adding "while we're at it" tasks, remove them.
-- [ ] **dependency ordering** — tasks in wave N do not depend on outputs from tasks in the
-  same wave (those should be in separate waves). tasks within a wave must be independently
-  implementable. **import dependencies count:** if task A creates a type, function, or
-  interface that task B imports, they MUST be in different waves — even if they touch
-  different directories. "different packages" does not mean "independent."
-- [ ] **file conflict check** — no two tasks in the same wave modify the same file. if they
-  do, either merge the tasks or move one to a later wave.
-
-### review outcome
+- [ ] acceptance criteria map to success signals in the `## what this changes` section.
+- [ ] scope boundaries are explicit and aligned with `goal`.
+- [ ] unresolved risks and open questions are logged with owners or follow-up plan.
+- [ ] the plan is readable by an architect who can translate it into execution waves.
 
 if all checks pass: proceed to register + signal.
 
-if any check fails: fix the plan inline, then re-run the failed checks. do not
-proceed until all checks pass. common fixes:
-- missing wave headers → wrap all tasks under `## Wave 1`
-- missing TDD steps → add the 5-step structure to each task
-- vague file paths → look up actual paths with `fd` or `rg`
-- micro-task → merge into adjacent task, renumber
-- file conflicts in same wave → reorder into separate waves
+if any check fails: fix inline, then re-run these checks.
 
-### 1. create todos
+### 1. register and signal the plan
 
-call `TodoWrite` with one entry per `### Task N:` in the plan, all `pending`:
+**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it in the task store. you don't need to commit a separate file.
 
-```
-TodoWrite([
-  { content: "Task 1: [Component Name]", status: "pending", priority: "high" },
-  { content: "Task 2: [Component Name]", status: "pending", priority: "high" },
-  ...
-])
-```
+**manual mode:** use `kas task register` to register the plan in the task store, then commit any supporting files if needed.
 
-### 2. register and commit the plan
-
-**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it
-in the task store. you don't need to commit a separate file.
-
-**manual mode:** use the `kas task register` CLI command to register the plan in the store,
-then commit any supporting files (design docs, etc.) if needed.
-
-do NOT commit sentinel files — kasmos consumes and deletes them automatically.
+do not commit sentinel files — kasmos consumes and deletes them automatically.
 
 ---
 
@@ -427,5 +325,7 @@ then offer execution choices:
 >
 > which approach?"
 
-if option 1: execute tasks sequentially in this session using TDD discipline from `kasmos-coder`.
+if option 1: execute tasks sequentially in this session using `kasmos-coder` requirements.
 if option 2: stop and let the user open a new session.
+
+(End of file)
