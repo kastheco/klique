@@ -50,7 +50,7 @@
     program = "opencode"
     model = "anthropic/claude-sonnet-4-6"
     temperature = 0.2
-    effort = "high"
+    effort = "medium"
 
 [ui]
 animate_banner = false

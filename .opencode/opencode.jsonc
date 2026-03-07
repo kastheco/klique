@@ -139,7 +139,7 @@
           "/tmp/**": "allow"
         }
       },
-      "reasoningEffort": "high",
+      "reasoningEffort": "medium",
       "temperature": 0.2,
       "textVerbosity": "medium"
     },
