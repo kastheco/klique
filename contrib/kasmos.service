@@ -1,0 +1,18 @@
+[Unit]
+Description=kasmos orchestration daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/kas/go/bin/kas daemon start --foreground
+ExecStop=/home/kas/go/bin/kas daemon stop
+Restart=on-failure
+RestartSec=5
+User=kas
+Environment=HOME=/home/kas
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kasmos
+
+[Install]
+WantedBy=default.target

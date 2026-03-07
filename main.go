@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/kastheco/kasmos/app"
 	cmd2 "github.com/kastheco/kasmos/cmd"
@@ -22,12 +24,14 @@ import (
 )
 
 var (
-	version     = "1.4.1"
-	commitHash  = ""
-	programFlag string
-	autoYesFlag bool
-	daemonFlag  bool
-	rootCmd     = &cobra.Command{
+	version              = "1.4.1"
+	commitHash           = ""
+	programFlag          string
+	autoYesFlag          bool
+	daemonFlag           bool
+	daemonForegroundFlag bool
+	daemonConfigFlag     string
+	rootCmd              = &cobra.Command{
 		Use:   "kas",
 		Short: "kas - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,6 +47,24 @@ var (
 
 			log.Initialize(daemonFlag, cfg.IsTelemetryEnabled())
 			defer log.Close()
+
+			// New multi-repo daemon foreground mode: started by `kas daemon start --foreground`
+			// which re-execs the binary with this hidden flag.
+			if daemonForegroundFlag {
+				daemonCfg, err := daemon.LoadDaemonConfig(daemonConfigFlag)
+				if err != nil {
+					return fmt.Errorf("load daemon config: %w", err)
+				}
+				d, err := daemon.NewDaemon(daemonCfg)
+				if err != nil {
+					return fmt.Errorf("create daemon: %w", err)
+				}
+				// Wrap context with signal handling so SIGTERM/SIGINT cancel the
+				// context and trigger the graceful-shutdown path in Daemon.Run().
+				sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+				defer stop()
+				return d.Run(sigCtx)
+			}
 
 			if daemonFlag {
 				session.NotificationsEnabled = cfg.AreNotificationsEnabled()
@@ -186,9 +208,23 @@ func init() {
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
 
-	// Hide the daemonFlag as it's only for internal use
-	err := rootCmd.Flags().MarkHidden("daemon")
+	// Deprecate the --daemon flag; use `kas daemon start --foreground` instead.
+	// Kept for one release cycle for backward compatibility.
+	err := rootCmd.Flags().MarkDeprecated("daemon", "use 'kas daemon start --foreground' instead")
 	if err != nil {
+		panic(err)
+	}
+
+	// Hidden internal flag used by `kas daemon start --foreground` (re-exec path).
+	// This allows cmd/daemon.go to avoid a circular import with the daemon package.
+	rootCmd.Flags().BoolVar(&daemonForegroundFlag, "run-daemon-foreground", false,
+		"run the multi-repo orchestration daemon in foreground (internal use)")
+	rootCmd.Flags().StringVar(&daemonConfigFlag, "daemon-config", "",
+		"path to daemon TOML config file (used with --run-daemon-foreground)")
+	if err := rootCmd.Flags().MarkHidden("run-daemon-foreground"); err != nil {
+		panic(err)
+	}
+	if err := rootCmd.Flags().MarkHidden("daemon-config"); err != nil {
 		panic(err)
 	}
 
@@ -225,6 +261,8 @@ func init() {
 	rootCmd.AddCommand(cmd2.NewAuditCmd())
 	rootCmd.AddCommand(cmd2.NewTmuxCmd())
 	rootCmd.AddCommand(cmd2.NewSignalCmd())
+	rootCmd.AddCommand(cmd2.NewDaemonCmd())
+	rootCmd.AddCommand(cmd2.NewMonitorCmd())
 }
 
 func main() {
