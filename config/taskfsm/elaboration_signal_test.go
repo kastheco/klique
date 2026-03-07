@@ -71,3 +71,22 @@ func TestConsumeElaborationSignal(t *testing.T) {
 	_, err := os.Stat(path)
 	assert.True(t, os.IsNotExist(err))
 }
+
+func TestClearElaborationSignal(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("removes stale signal file", func(t *testing.T) {
+		path := filepath.Join(dir, "elaborator-finished-my-plan")
+		require.NoError(t, os.WriteFile(path, nil, 0o644))
+
+		ClearElaborationSignal(dir, "my-plan")
+
+		_, err := os.Stat(path)
+		assert.True(t, os.IsNotExist(err), "stale signal file should be removed")
+	})
+
+	t.Run("no-op when file does not exist", func(t *testing.T) {
+		// Should not panic or error when the file is already absent.
+		ClearElaborationSignal(dir, "nonexistent-plan")
+	})
+}

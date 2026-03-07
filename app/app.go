@@ -827,6 +827,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				taskSignals = taskfsm.ScanTaskSignals(signalsDir)
 			}
 
+			var elaborationSignals []taskfsm.ElaborationSignal
+			if signalsDir != "" {
+				elaborationSignals = taskfsm.ScanElaborationSignals(signalsDir)
+			}
+
 			// Also scan signals from active worktrees — agents write
 			// sentinel files relative to their CWD which is the worktree,
 			// not the main repo. Worktrees use .kasmos/signals/ as well.
@@ -837,6 +842,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			seenTaskSignals := make(map[string]bool)
 			for _, ts := range taskSignals {
 				seenTaskSignals[ts.Key()] = true
+			}
+			seenElabSignals := make(map[string]bool)
+			for _, es := range elaborationSignals {
+				seenElabSignals[es.TaskFile] = true
 			}
 			for _, inst := range snapshots {
 				wt := inst.GetWorktreePath()
@@ -856,16 +865,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						taskSignals = append(taskSignals, ts)
 					}
 				}
+				for _, es := range taskfsm.ScanElaborationSignals(wtSignalsDir) {
+					if !seenElabSignals[es.TaskFile] {
+						seenElabSignals[es.TaskFile] = true
+						elaborationSignals = append(elaborationSignals, es)
+					}
+				}
 			}
 
 			var waveSignals []taskfsm.WaveSignal
 			if signalsDir != "" {
 				waveSignals = taskfsm.ScanWaveSignals(signalsDir)
-			}
-
-			var elaborationSignals []taskfsm.ElaborationSignal
-			if signalsDir != "" {
-				elaborationSignals = taskfsm.ScanElaborationSignals(signalsDir)
 			}
 
 			tmuxCount := tmux.CountKasSessions(cmd2.MakeExecutor())

@@ -1456,6 +1456,12 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 	planName := taskstate.DisplayName(planFile)
 	prompt := orchestration.BuildElaborationPrompt(planFile)
 
+	// Clear any stale elaborator-finished sentinel from a prior run before
+	// spawning a new elaborator. Without this, a leftover file (e.g. from a
+	// TUI restart mid-elaboration) would be picked up on the next tick and
+	// advance the orchestrator to wave 1 before the new elaborator finishes.
+	taskfsm.ClearElaborationSignal(m.signalsDir, planFile)
+
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:         fmt.Sprintf("%s-elaborator", planName),
 		Path:          m.activeRepoPath,

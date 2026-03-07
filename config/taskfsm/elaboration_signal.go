@@ -54,3 +54,12 @@ func ScanElaborationSignals(signalsDir string) []ElaborationSignal {
 func ConsumeElaborationSignal(es ElaborationSignal) {
 	_ = os.Remove(es.filePath)
 }
+
+// ClearElaborationSignal removes any stale elaborator-finished-<planFile> sentinel
+// from signalsDir before a new elaborator run begins. This prevents a leftover file
+// from a prior run (e.g. after a TUI restart) from being picked up immediately and
+// skipping the new elaborator's output.
+func ClearElaborationSignal(signalsDir, planFile string) {
+	name := elaborationPrefix + planFile
+	_ = os.Remove(filepath.Join(signalsDir, name))
+}

@@ -19,12 +19,20 @@ func TestParseTaskSignal(t *testing.T) {
 		wantPlan string
 	}{
 		{
-			name:     "valid signal",
+			name:     "valid signal with .md plan extension",
 			filename: "implement-task-finished-w2-t3-feature.md",
 			wantOK:   true,
 			wantWave: 2,
 			wantTask: 3,
 			wantPlan: "feature.md",
+		},
+		{
+			name:     "valid signal without .md extension (post drop-md-suffix)",
+			filename: "implement-task-finished-w1-t1-skill-prompt-rewrites",
+			wantOK:   true,
+			wantWave: 1,
+			wantTask: 1,
+			wantPlan: "skill-prompt-rewrites",
 		},
 		{
 			name:     "not a task signal",
@@ -66,15 +74,20 @@ func TestScanTaskSignals_ParsesAndIgnoresInvalid(t *testing.T) {
 	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
 
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "implement-task-finished-w1-t2-task.md"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "implement-task-finished-w1-t3-my-plan"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "implement-task-finished-w0-t2-task.md"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "garbage.txt"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, ".hidden"), nil, 0o644))
 
 	signals := ScanTaskSignals(signalsDir)
-	require.Len(t, signals, 1)
-	assert.Equal(t, 1, signals[0].WaveNumber)
-	assert.Equal(t, 2, signals[0].TaskNumber)
-	assert.Equal(t, "task.md", signals[0].TaskFile)
+	require.Len(t, signals, 2)
+	// order from ReadDir is alphabetical; task.md < my-plan won't hold — sort by TaskNumber for assertions
+	byTask := make(map[int]TaskSignal)
+	for _, s := range signals {
+		byTask[s.TaskNumber] = s
+	}
+	assert.Equal(t, "task.md", byTask[2].TaskFile)
+	assert.Equal(t, "my-plan", byTask[3].TaskFile)
 }
 
 func TestTaskSignal_Dedup(t *testing.T) {
