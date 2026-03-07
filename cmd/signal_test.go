@@ -469,6 +469,27 @@ func TestNormalizeSignalPayload_ElaboratorFinishedRejectsPayload(t *testing.T) {
 	assert.Equal(t, "", payload)
 }
 
+func TestNormalizeSignalPayload_ImplementTaskFinishedRejectsNonNumeric(t *testing.T) {
+	_, err := normalizeSignalPayload("implement_task_finished", `{"wave_number":"x","task_number":1}`)
+	assert.Error(t, err)
+
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1,"task_number":"y"}`)
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("implement_task_finished", `{"wave_number":2,"task_number":3}`)
+	require.NoError(t, err)
+	assert.Equal(t, `{"wave_number":2,"task_number":3}`, payload)
+}
+
+func TestNormalizeSignalPayload_ImplementWaveRejectsNonNumeric(t *testing.T) {
+	_, err := normalizeSignalPayload("implement_wave", `{"wave_number":"not-a-number"}`)
+	assert.Error(t, err)
+
+	payload, err := normalizeSignalPayload("implement_wave", `{"wave_number":1}`)
+	require.NoError(t, err)
+	assert.Equal(t, `{"wave_number":1}`, payload)
+}
+
 func TestNewSignalEmitCmd_Structure(t *testing.T) {
 	cmd := newSignalEmitCmd()
 	assert.Equal(t, "emit <signal-type> <plan-file>", cmd.Use)

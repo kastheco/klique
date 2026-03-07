@@ -242,11 +242,11 @@ func normalizeSignalPayload(signalType, payload string) (string, error) {
 		if err := json.Unmarshal([]byte(payload), &m); err != nil {
 			return "", fmt.Errorf("implement_task_finished: payload must be valid JSON: %w", err)
 		}
-		if _, ok := m["wave_number"]; !ok {
-			return "", fmt.Errorf("implement_task_finished: payload must contain wave_number")
+		if _, ok := m["wave_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_task_finished: wave_number must be a number")
 		}
-		if _, ok := m["task_number"]; !ok {
-			return "", fmt.Errorf("implement_task_finished: payload must contain task_number")
+		if _, ok := m["task_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_task_finished: task_number must be a number")
 		}
 		return payload, nil
 
@@ -258,8 +258,8 @@ func normalizeSignalPayload(signalType, payload string) (string, error) {
 		if err := json.Unmarshal([]byte(payload), &m); err != nil {
 			return "", fmt.Errorf("implement_wave: payload must be valid JSON: %w", err)
 		}
-		if _, ok := m["wave_number"]; !ok {
-			return "", fmt.Errorf("implement_wave: payload must contain wave_number")
+		if _, ok := m["wave_number"].(float64); !ok {
+			return "", fmt.Errorf("implement_wave: wave_number must be a number")
 		}
 		return payload, nil
 
