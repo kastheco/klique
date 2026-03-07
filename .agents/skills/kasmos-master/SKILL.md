@@ -121,10 +121,11 @@ Do not produce any other final status wording.
 
 ## Reporting Rules and Signal Conventions
 
-Signal names use bare slugs only (no `.md` extension in filenames). Use either:
+Signal names use bare slugs only (no `.md` extension in filenames). Use the
+existing scanner-recognised prefixes so the TUI metadata tick picks them up:
 
-- `approve-merge-<plan>` when all criteria pass.
-- `follow-up-required-<plan>` when work is blocked.
+- `review-approved-<plan>` when all criteria pass.
+- `review-changes-<plan>` when work is blocked and follow-up is required.
 
 Signal content should contain only what is needed for the next action, no prose-heavy preamble.
 
