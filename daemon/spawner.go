@@ -109,14 +109,14 @@ func shouldSkipCleanup(hasClients bool) bool {
 	return hasClients
 }
 
-// gracefulKill stops the instance only when no tmux clients are attached. It
-// returns (true, nil) when the instance was killed, (false, nil) when cleanup
-// was skipped because a client is still attached, and (false, err) on kill
-// failure.
-// checks for attached clients before the grace period and once more after
+// gracefulKill stops the instance only when no tmux clients are attached.
+// It checks for attached clients before the grace period and once more after
 // sleeping. If a client is present at either check the instance is left
 // running (the orphan-discovery path will handle it later). If both checks
 // show no client, kill is called.
+// Returns (true, nil) when the instance was killed, (false, nil) when cleanup
+// was skipped because a client is still attached, and (true, err) when the
+// kill was attempted but failed.
 func (s *TmuxSpawner) gracefulKill(inst *session.Instance, sessionName string) (bool, error) {
 	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
 		s.logger.Info("grace period: client attached, skipping cleanup",
