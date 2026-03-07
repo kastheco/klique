@@ -981,7 +981,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if cmd := m.spawnReviewer(a.PlanFile); cmd != nil {
 						signalCmds = append(signalCmds, cmd)
 					}
-				case loop.CreatePRAction:
+				case loop.ReviewApprovedAction:
+					// ReviewApproved: audit, toast, ClickUp progress, pause reviewer.
+					// Always fires on approval — independently of whether a PR will be created.
 					planName := taskstate.DisplayName(a.PlanFile)
 					m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
 						auditlog.WithPlan(a.PlanFile))
@@ -1002,14 +1004,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
-					// Auto-create PR if the plan has a branch and no PR yet.
-					if m.taskStore != nil {
-						if entry, err := m.taskStore.Get(m.taskStoreProject, a.PlanFile); err == nil {
-							if shouldCreatePR(entry) {
-								signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
-							}
-						}
-					}
+				case loop.CreatePRAction:
+					// CreatePR: only emitted when the plan is eligible (has a branch, no PR yet).
+					signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
 				case loop.IncrementReviewCycleAction:
 					// ReviewChangesRequested: store feedback, post ClickUp comment, pause reviewer.
 					feedback := signalBodies[a.PlanFile]

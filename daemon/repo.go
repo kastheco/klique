@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/kastheco/kasmos/orchestration/loop"
 )
 
 // RepoEntry holds per-repo registration metadata.
@@ -19,6 +20,9 @@ type RepoEntry struct {
 	Store taskstore.Store
 	// SignalsDir is the path to the signals directory (<repo>/.kasmos/signals/).
 	SignalsDir string
+	// Processor is the signal processor for this repo. It persists across ticks
+	// so that wave orchestrator state is maintained between poll cycles.
+	Processor *loop.Processor
 }
 
 // RepoManager tracks registered repositories for the daemon.
@@ -58,16 +62,24 @@ func (m *RepoManager) Add(path string) error {
 		store = s
 	}
 
+	// Create a per-repo processor that persists across poll ticks so that wave
+	// orchestrator state is maintained between cycles.
+	proc := loop.NewProcessor(loop.ProcessorConfig{
+		Store:   store,
+		Project: project,
+	})
+
 	m.repos = append(m.repos, RepoEntry{
 		Path:       path,
 		Project:    project,
 		Store:      store,
 		SignalsDir: signalsDir,
+		Processor:  proc,
 	})
 	return nil
 }
 
-// Remove deregisters a repository by path, closing its store if open.
+// Remove deregisters a repository by absolute path, closing its store if open.
 // Returns an error if path is not registered.
 func (m *RepoManager) Remove(path string) error {
 	m.mu.Lock()
@@ -83,6 +95,24 @@ func (m *RepoManager) Remove(path string) error {
 		}
 	}
 	return fmt.Errorf("repo not registered: %s", path)
+}
+
+// RemoveByProject deregisters a repository by its project name (the basename
+// of the repo path). Closing its store if open. Returns an error if not found.
+func (m *RepoManager) RemoveByProject(project string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, r := range m.repos {
+		if r.Project == project {
+			if r.Store != nil {
+				_ = r.Store.Close()
+			}
+			m.repos = append(m.repos[:i], m.repos[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("repo not registered: %s", project)
 }
 
 // List returns a snapshot of all currently registered repositories.

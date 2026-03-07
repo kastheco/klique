@@ -109,7 +109,15 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 			actions = append(actions, SpawnReviewerAction{PlanFile: sig.TaskFile})
 
 		case taskfsm.ReviewApproved:
-			// Auto-create PR if the plan has a branch and no PR yet.
+			// Always emit ReviewApprovedAction so callers can perform side effects
+			// (audit log, toast, ClickUp progress, reviewer pause) regardless of
+			// whether a PR will be created.
+			actions = append(actions, ReviewApprovedAction{
+				PlanFile:   sig.TaskFile,
+				ReviewBody: sig.Body,
+			})
+			// Additionally emit CreatePRAction only when the plan is eligible
+			// (has a branch and no existing PR URL).
 			if p.config.Store != nil {
 				if entry, err := p.config.Store.Get(p.config.Project, sig.TaskFile); err == nil {
 					if shouldCreatePR(entry) {

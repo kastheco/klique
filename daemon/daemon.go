@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/kastheco/kasmos/log"
@@ -78,7 +79,7 @@ func (a *daemonStateAdapter) AddRepo(path string) error {
 }
 
 func (a *daemonStateAdapter) RemoveRepo(project string) error {
-	return a.d.repos.Remove(project)
+	return a.d.repos.RemoveByProject(project)
 }
 
 func (a *daemonStateAdapter) ListPlans(_ string) ([]taskstore.TaskEntry, error) {
@@ -234,20 +235,32 @@ func (d *Daemon) Run(ctx context.Context) error {
 func (d *Daemon) tick(ctx context.Context) {
 	entries := d.repos.List()
 	for _, e := range entries {
-		scan := loop.ScanAllSignals(e.Path, nil)
-
-		if e.Store == nil {
+		if e.Store == nil || e.Processor == nil {
 			// Processor requires a store; skip repos whose store is unavailable.
 			continue
 		}
 
-		// Build a processor for this entry using the per-repo store.
-		proc := loop.NewProcessor(loop.ProcessorConfig{
-			Store:   e.Store,
-			Project: e.Project,
-		})
+		scan := loop.ScanAllSignals(e.Path, nil)
 
-		actions := proc.Tick(scan)
+		// Use the persistent per-repo processor so wave orchestrator state
+		// survives between ticks (prevents duplicate AdvanceWave emission).
+		actions := e.Processor.Tick(scan)
+
+		// Consume all signals now that the processor has validated them.
+		// This prevents re-processing the same signals on the next tick.
+		for _, sig := range scan.FSMSignals {
+			taskfsm.ConsumeSignal(sig)
+		}
+		for _, ts := range scan.TaskSignals {
+			taskfsm.ConsumeTaskSignal(ts)
+		}
+		for _, ws := range scan.WaveSignals {
+			taskfsm.ConsumeWaveSignal(ws)
+		}
+		for _, es := range scan.ElaborationSignals {
+			taskfsm.ConsumeElaborationSignal(es)
+		}
+
 		for _, action := range actions {
 			d.executeAction(ctx, e, action)
 		}
@@ -255,24 +268,57 @@ func (d *Daemon) tick(ctx context.Context) {
 }
 
 // executeAction dispatches a single action to the configured spawner.
+// It resolves RepoPath from e.Path and looks up Branch from the task store so
+// that spawnInSharedWorktree has the required context.
 func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Action) {
+	// branchFor looks up the git branch for a plan from the task store.
+	branchFor := func(planFile string) string {
+		if e.Store == nil {
+			return ""
+		}
+		entry, err := e.Store.Get(e.Project, planFile)
+		if err != nil {
+			return ""
+		}
+		return entry.Branch
+	}
+
 	switch a := action.(type) {
 	case loop.SpawnReviewerAction:
-		if err := d.spawner.SpawnReviewer(ctx, loop.SpawnOpts{PlanFile: a.PlanFile}); err != nil {
+		opts := loop.SpawnOpts{
+			PlanFile: a.PlanFile,
+			RepoPath: e.Path,
+			Branch:   branchFor(a.PlanFile),
+		}
+		if err := d.spawner.SpawnReviewer(ctx, opts); err != nil {
 			d.logger.Error("spawn reviewer failed", "plan", a.PlanFile, "err", err)
 		}
 	case loop.SpawnCoderAction:
-		if err := d.spawner.SpawnCoder(ctx, loop.SpawnOpts{PlanFile: a.PlanFile, Feedback: a.Feedback}); err != nil {
+		opts := loop.SpawnOpts{
+			PlanFile: a.PlanFile,
+			RepoPath: e.Path,
+			Branch:   branchFor(a.PlanFile),
+			Feedback: a.Feedback,
+		}
+		if err := d.spawner.SpawnCoder(ctx, opts); err != nil {
 			d.logger.Error("spawn coder failed", "plan", a.PlanFile, "err", err)
 		}
 	case loop.SpawnElaboratorAction:
-		if err := d.spawner.SpawnElaborator(ctx, loop.SpawnOpts{PlanFile: a.PlanFile}); err != nil {
+		opts := loop.SpawnOpts{
+			PlanFile: a.PlanFile,
+			RepoPath: e.Path,
+		}
+		if err := d.spawner.SpawnElaborator(ctx, opts); err != nil {
 			d.logger.Error("spawn elaborator failed", "plan", a.PlanFile, "err", err)
 		}
 	case loop.PausePlanAgentAction:
 		if err := d.spawner.KillAgent(a.PlanFile, a.AgentType); err != nil {
 			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)
 		}
+	case loop.ReviewApprovedAction:
+		d.logger.Info("review approved", "plan", a.PlanFile, "repo", e.Path)
+	case loop.CreatePRAction:
+		d.logger.Info("create pr requested", "plan", a.PlanFile, "repo", e.Path)
 	default:
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
 	}

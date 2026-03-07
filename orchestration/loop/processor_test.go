@@ -43,14 +43,52 @@ func TestProcessor_ProcessFSMSignals_ReviewApproved(t *testing.T) {
 	}
 
 	actions := p.ProcessFSMSignals(signals)
-	var foundPR bool
+
+	// ReviewApprovedAction must always be emitted (carries side-effect obligation).
+	var foundApproved, foundPR bool
 	for _, a := range actions {
+		if ra, ok := a.(ReviewApprovedAction); ok {
+			assert.Equal(t, "my-plan.md", ra.PlanFile)
+			assert.Equal(t, "LGTM", ra.ReviewBody)
+			foundApproved = true
+		}
 		if pr, ok := a.(CreatePRAction); ok {
 			assert.Equal(t, "my-plan.md", pr.PlanFile)
 			foundPR = true
 		}
 	}
-	assert.True(t, foundPR, "expected CreatePRAction")
+	assert.True(t, foundApproved, "expected ReviewApprovedAction")
+	// Plan has a branch and no PR URL so CreatePRAction should also be emitted.
+	assert.True(t, foundPR, "expected CreatePRAction when plan has branch and no PR yet")
+}
+
+func TestProcessor_ProcessFSMSignals_ReviewApproved_NoBranch(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("test", taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusReviewing,
+		Branch:   "", // no branch — PR not eligible
+	})
+
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	signals := []taskfsm.Signal{
+		{Event: taskfsm.ReviewApproved, TaskFile: "my-plan.md", Body: "LGTM"},
+	}
+
+	actions := p.ProcessFSMSignals(signals)
+
+	// ReviewApprovedAction must be emitted even when no PR will be created.
+	var foundApproved, foundPR bool
+	for _, a := range actions {
+		if _, ok := a.(ReviewApprovedAction); ok {
+			foundApproved = true
+		}
+		if _, ok := a.(CreatePRAction); ok {
+			foundPR = true
+		}
+	}
+	assert.True(t, foundApproved, "expected ReviewApprovedAction regardless of branch")
+	assert.False(t, foundPR, "expected no CreatePRAction when plan has no branch")
 }
 
 func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {

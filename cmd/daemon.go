@@ -251,8 +251,16 @@ func newDaemonRemoveCmd(socketPath *string) *cobra.Command {
 				return fmt.Errorf("resolve path: %w", err)
 			}
 
-			body, _ := json.Marshal(map[string]string{"path": repoPath})
-			resp, err := daemonPost(*socketPath, "/repos/remove", body)
+			// The API identifies repos by project name (basename of path).
+			project := filepath.Base(repoPath)
+
+			// Issue DELETE /v1/repos/{project} — no request body needed.
+			client := daemonHTTPClient(*socketPath)
+			req, err := http.NewRequest(http.MethodDelete, "http://kas/v1/repos/"+project, nil)
+			if err != nil {
+				return fmt.Errorf("build request: %w", err)
+			}
+			resp, err := client.Do(req)
 			if err != nil {
 				return fmt.Errorf("daemon not running: %w", err)
 			}

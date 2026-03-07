@@ -52,7 +52,22 @@ type AdvanceWaveAction struct {
 func (AdvanceWaveAction) Kind() string  { return "advance_wave" }
 func (AdvanceWaveAction) sealedAction() {}
 
+// ReviewApprovedAction is emitted whenever a ReviewApproved FSM signal is
+// processed, regardless of whether a PR will be created. It carries the review
+// body so callers can perform side effects (audit log, toast, ClickUp progress,
+// reviewer pause) independently of PR-creation eligibility.
+type ReviewApprovedAction struct {
+	PlanFile   string
+	ReviewBody string
+}
+
+func (ReviewApprovedAction) Kind() string  { return "review_approved" }
+func (ReviewApprovedAction) sealedAction() {}
+
 // CreatePRAction instructs the caller to open a pull request for the plan.
+// It is only emitted when the plan has a branch and no PR URL yet.
+// Callers that need to react to approval unconditionally should handle
+// ReviewApprovedAction instead.
 type CreatePRAction struct {
 	PlanFile   string
 	ReviewBody string
