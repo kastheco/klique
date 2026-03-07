@@ -117,6 +117,16 @@ func (TransitionAction) sealedAction() {}
 type SpawnOpts struct {
 	// PlanFile is the path to the plan markdown file relative to the repo root.
 	PlanFile string
+	// AgentType identifies the agent role: coder, reviewer, elaborator, etc.
+	AgentType string
+	// RepoPath is the absolute filesystem path to the repository root.
+	RepoPath string
+	// Branch is the git branch for the plan's shared worktree.
+	Branch string
+	// Prompt is the initial prompt delivered to the agent on startup.
+	Prompt string
+	// Program is the agent executable command (e.g. "opencode", "claude").
+	Program string
 	// Feedback is forwarded to coder agents as review feedback (may be empty).
 	Feedback string
 	// Wave is the current wave number (used to set KASMOS_WAVE env var).

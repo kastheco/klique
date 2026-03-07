@@ -19,40 +19,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// TmuxSpawner (minimal placeholder; satisfies loop.AgentSpawner)
-// ---------------------------------------------------------------------------
-
-// TmuxSpawner implements loop.AgentSpawner by launching agents in tmux
-// sessions.
-type TmuxSpawner struct {
-	logger *slog.Logger
-}
-
-func newTmuxSpawner(logger *slog.Logger) *TmuxSpawner {
-	return &TmuxSpawner{logger: logger}
-}
-
-func (s *TmuxSpawner) SpawnReviewer(ctx context.Context, opts loop.SpawnOpts) error {
-	s.logger.Info("spawn reviewer", "plan", opts.PlanFile, "wave", opts.Wave)
-	return nil
-}
-
-func (s *TmuxSpawner) SpawnCoder(ctx context.Context, opts loop.SpawnOpts) error {
-	s.logger.Info("spawn coder", "plan", opts.PlanFile, "wave", opts.Wave)
-	return nil
-}
-
-func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) error {
-	s.logger.Info("spawn elaborator", "plan", opts.PlanFile)
-	return nil
-}
-
-func (s *TmuxSpawner) KillAgent(planFile, agentType string) error {
-	s.logger.Info("kill agent", "plan", planFile, "type", agentType)
-	return nil
-}
-
-// ---------------------------------------------------------------------------
 // Daemon
 // ---------------------------------------------------------------------------
 
