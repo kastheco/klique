@@ -20,16 +20,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldPromptPushAfterCoderExit(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeCoder}
 
-	if !shouldPromptPushAfterCoderExit(entry, inst, false) {
+	if !shouldPromptPushAfterImplementerExit(entry, inst, false) {
 		t.Fatal("expected push prompt for exited coder")
 	}
 }
 
-func TestShouldPromptPushAfterCoderExit_HeadlessCoderExited(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit_HeadlessCoderExited(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
 		TaskFile:      "p.md",
@@ -38,10 +38,10 @@ func TestShouldPromptPushAfterCoderExit_HeadlessCoderExited(t *testing.T) {
 		Exited:        true,
 	}
 
-	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true))
+	assert.True(t, shouldPromptPushAfterImplementerExit(entry, inst, true))
 }
 
-func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit_PromptDetectedTriggers(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
 		TaskFile:       "p",
@@ -50,13 +50,13 @@ func TestShouldPromptPushAfterCoderExit_PromptDetectedTriggers(t *testing.T) {
 		AwaitingWork:   false,
 	}
 
-	// Tmux is still alive but the coder returned to prompt after finishing
-	// its queued work — this is the "applying fixes" coder completion path.
-	assert.True(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+	// Tmux is still alive but the implementer returned to prompt after finishing
+	// its queued work — this covers the "applying fixes" completion path.
+	assert.True(t, shouldPromptPushAfterImplementerExit(entry, inst, true),
 		"expected push prompt for coder at prompt (PromptDetected && !AwaitingWork)")
 }
 
-func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit_AwaitingWorkSuppresses(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{
 		TaskFile:       "p",
@@ -67,23 +67,36 @@ func TestShouldPromptPushAfterCoderExit_AwaitingWorkSuppresses(t *testing.T) {
 
 	// Coder is at prompt but still waiting for its queued prompt to be
 	// delivered — must NOT trigger push prompt yet.
-	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, true),
+	assert.False(t, shouldPromptPushAfterImplementerExit(entry, inst, true),
 		"must not trigger push prompt while AwaitingWork is true")
 }
 
-func TestShouldPromptPushAfterCoderExit_NoPromptForSoloAgent(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit_FixerPromptDetectedTriggers(t *testing.T) {
+	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
+	inst := &session.Instance{
+		TaskFile:       "p",
+		AgentType:      session.AgentTypeFixer,
+		PromptDetected: true,
+		AwaitingWork:   false,
+	}
+
+	assert.True(t, shouldPromptPushAfterImplementerExit(entry, inst, true),
+		"expected push prompt for fixer at prompt (PromptDetected && !AwaitingWork)")
+}
+
+func TestShouldPromptPushAfterImplementerExit_NoPromptForSoloAgent(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeCoder, SoloAgent: true}
 
-	assert.False(t, shouldPromptPushAfterCoderExit(entry, inst, false),
+	assert.False(t, shouldPromptPushAfterImplementerExit(entry, inst, false),
 		"solo agents must not trigger automatic push prompt")
 }
 
-func TestShouldPromptPushAfterCoderExit_NoPromptForReviewer(t *testing.T) {
+func TestShouldPromptPushAfterImplementerExit_NoPromptForReviewer(t *testing.T) {
 	entry := taskstate.TaskEntry{Status: taskstate.StatusImplementing}
 	inst := &session.Instance{TaskFile: "p", AgentType: session.AgentTypeReviewer}
 
-	if shouldPromptPushAfterCoderExit(entry, inst, false) {
+	if shouldPromptPushAfterImplementerExit(entry, inst, false) {
 		t.Fatal("did not expect push prompt for reviewer")
 	}
 }
@@ -156,7 +169,7 @@ func TestMetadataTickHandler_CoderExitTriggersPrompt(t *testing.T) {
 }
 
 // TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt verifies that when
-// a "fix coder" (spawned by spawnCoderWithFeedback) finishes its work and returns
+// a fixer (spawned by spawnFixerWithFeedback) finishes its work and returns
 // to prompt (PromptDetected=true, AwaitingWork=false) while tmux is still alive,
 // the push-prompt confirmation overlay is shown. This is the key path that enables
 // the review→fix→re-review automation cycle.
@@ -171,13 +184,13 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 	require.NoError(t, ps.Register(planFile, "test feature", "plan/test-feature", time.Now()))
 	seedPlanStatus(t, ps, planFile, taskstate.StatusImplementing)
 
-	// Build a coder instance that has finished its queued work and returned to prompt.
+	// Build a fixer instance that has finished its queued work and returned to prompt.
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:     "test-feature-implement",
 		Path:      t.TempDir(),
 		Program:   "opencode",
 		TaskFile:  planFile,
-		AgentType: session.AgentTypeCoder,
+		AgentType: session.AgentTypeFixer,
 	})
 	require.NoError(t, err)
 	inst.PromptDetected = true
@@ -219,7 +232,7 @@ func TestMetadataTickHandler_CoderPromptDetectedTriggersPrompt(t *testing.T) {
 	assert.Equal(t, stateConfirm, updated.state,
 		"expected stateConfirm when coder is at prompt (PromptDetected && !AwaitingWork)")
 	assert.True(t, updated.overlays.IsActive(),
-		"expected confirmation overlay for push-prompt on prompt-detected coder")
+		"expected confirmation overlay for push-prompt on prompt-detected fixer")
 }
 
 func TestMetadataTick_TaskFinishedSignalMarksWaveTaskComplete(t *testing.T) {
@@ -579,7 +592,7 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 // TestReviewChangesSignal_RespawnsCoder verifies that when a review-changes
 // sentinel is processed, the plan transitions back to implementing and a new
 // coder instance is added with the reviewer's feedback in its prompt.
-func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
+func TestReviewChangesSignal_RespawnsFixer(t *testing.T) {
 	const planFile = "feature"
 	const feedback = "Fix the error handling in auth.go"
 
@@ -640,18 +653,18 @@ func TestReviewChangesSignal_RespawnsCoder(t *testing.T) {
 
 	_, _ = h.Update(msg)
 
-	// A coder instance must have been added with feedback in its prompt.
-	var foundCoder bool
+	// A fixer instance must have been added with feedback in its prompt.
+	var foundFixer bool
 	for _, inst := range h.nav.GetInstances() {
-		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
-			foundCoder = true
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeFixer {
+			foundFixer = true
 			assert.Contains(t, inst.QueuedPrompt, feedback,
-				"coder prompt must contain reviewer feedback")
+				"fixer prompt must contain reviewer feedback")
 			break
 		}
 	}
-	assert.True(t, foundCoder,
-		"review-changes signal must spawn a coder instance")
+	assert.True(t, foundFixer,
+		"review-changes signal must spawn a fixer instance")
 
 	// Plan status must be "implementing" on disk.
 	reloaded, _ := newTestPlanState(t, plansDir)
@@ -779,7 +792,7 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		program:               "claude",
 	}
 
-	// === Part 1: ReviewChangesRequested → coder with cycle suffix ===
+	// === Part 1: ReviewChangesRequested → fixer with cycle suffix ===
 	signal1 := taskfsm.Signal{
 		Event:    taskfsm.ReviewChangesRequested,
 		TaskFile: planFile,
@@ -790,15 +803,15 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 		Signals:   []taskfsm.Signal{signal1},
 	})
 
-	var coderTitle string
+	var fixerTitle string
 	for _, inst := range h.nav.GetInstances() {
-		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
-			coderTitle = inst.Title
+		if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeFixer {
+			fixerTitle = inst.Title
 			break
 		}
 	}
-	assert.Equal(t, "feature-fix-1", coderTitle,
-		"coder spawned after first ReviewChangesRequested must have title 'feature-fix-1'")
+	assert.Equal(t, "feature-fix-1", fixerTitle,
+		"fixer spawned after first ReviewChangesRequested must have title 'feature-fix-1'")
 
 	// === Part 2: ImplementFinished → reviewer with next cycle suffix ===
 	// At this point m.taskState has ReviewCycle=1 in-memory (incremented by part 1).

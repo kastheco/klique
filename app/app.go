@@ -307,7 +307,7 @@ type home struct {
 	// been answered (yes or no) or dismissed (esc). Prevents the dialog from
 	// re-firing on every metadata tick while the coder instance is still in
 	// the list. Cleared when a new coder is spawned for the same plan
-	// (e.g. via spawnCoderWithFeedback) so the next round can prompt again.
+	// (e.g. via spawnFixerWithFeedback) so the next round can prompt again.
 	coderPushPrompted map[string]bool
 
 	// deferredPlannerDialogs holds plan files whose PlannerFinished dialog
@@ -928,7 +928,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// after completing their individual task, but the wave orchestrator
 			// owns the implementing→reviewing transition. Without this guard,
 			// the first task to finish prematurely triggers review and pauses
-			// sibling tasks, spawning a "applying fixes" coder alongside the
+			// sibling tasks, spawning a fixer alongside the
 			// reviewer.
 			if sig.Event == taskfsm.ImplementFinished {
 				if _, hasOrch := m.waveOrchestrators[sig.TaskFile]; hasOrch {
@@ -948,17 +948,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Side effects: spawn agents in response to successful transitions.
 			switch sig.Event {
 			case taskfsm.ImplementFinished:
-				// Pause the coder that wrote this signal.
+				// Pause the single-plan implementer that wrote this signal.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.TaskFile == sig.TaskFile && inst.AgentType == session.AgentTypeCoder {
+					if inst.TaskFile == sig.TaskFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
 						inst.ImplementationComplete = true
 						_ = inst.Pause()
 						break
 					}
 				}
-				// If this coder was spawned to apply reviewer feedback, post fixer_complete.
+				// If this implementer was spawned to apply reviewer feedback, post fixer_complete.
 				// pendingReviewFeedback is set when ReviewChangesRequested fires and
-				// cleared here once the fix-coder delivers its implement-finished signal.
+				// cleared here once the fixer delivers its implement-finished signal.
 				if _, hasFeedback := m.pendingReviewFeedback[sig.TaskFile]; hasFeedback {
 					delete(m.pendingReviewFeedback, sig.TaskFile)
 					if cmd := m.postClickUpProgress(sig.TaskFile, "fixer_complete", ""); cmd != nil {
@@ -1017,12 +1017,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-				// Increment the review cycle counter before spawning the fix coder so
-				// that spawnCoderWithFeedback reads the updated (post-increment) value.
+				// Increment the review cycle counter before spawning the fixer so
+				// that spawnFixerWithFeedback reads the updated (post-increment) value.
 				if err := m.taskState.IncrementReviewCycle(sig.TaskFile); err != nil {
 					log.WarningLog.Printf("could not increment review cycle for %q: %v", sig.TaskFile, err)
 				}
-				if cmd := m.spawnCoderWithFeedback(sig.TaskFile, feedback); cmd != nil {
+				if cmd := m.spawnFixerWithFeedback(sig.TaskFile, feedback); cmd != nil {
 					signalCmds = append(signalCmds, cmd)
 				}
 			case taskfsm.PlannerFinished:
@@ -1379,9 +1379,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tmuxAliveMap[md.Title] = md.TmuxAlive
 			}
 
-			// Coder-exit → push-prompt: when a coder session's tmux pane has exited
-			// and the plan is still in StatusImplementing, prompt the user to push the
-			// implementation branch before advancing to reviewing.
+			// Implementer-exit → push-prompt: when a coder or fixer session's tmux
+			// pane has exited and the plan is still in StatusImplementing, prompt the
+			// user to push the implementation branch before advancing to reviewing.
 			// Skip when a confirmation overlay is already showing to avoid re-prompting
 			// on every tick while the user is deciding.
 			for _, inst := range m.nav.GetInstances() {
@@ -1393,7 +1393,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				entry := m.taskState.Plans[inst.TaskFile]
-				if !shouldPromptPushAfterCoderExit(entry, inst, alive) {
+				if !shouldPromptPushAfterImplementerExit(entry, inst, alive) {
 					continue
 				}
 				// Wave task instances never trigger the single-coder completion flow.
@@ -1402,11 +1402,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				// Skip if the push prompt was already shown and dismissed for this plan.
-				// Cleared when a new coder is spawned (spawnCoderWithFeedback).
+				// Cleared when a new implementer is spawned for the next round.
 				if m.coderPushPrompted[inst.TaskFile] {
 					continue
 				}
-				// Focus the coder instance so the user can see its output behind the overlay.
+				// Focus the implementer instance so the user can see its output behind the overlay.
 				m.exitFocusModeForDialog()
 				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
@@ -1698,7 +1698,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		asyncCmds = append(asyncCmds, signalCmds...)
 		asyncCmds = append(asyncCmds, tickUpdateMetadataCmd, completionCmd)
 		// Restart toast tick loop if any toasts were created during this tick
-		// (e.g. by transitionToReview or spawnCoderWithFeedback).
+		// (e.g. by transitionToReview or spawnFixerWithFeedback).
 		if m.toastManager.HasActiveToasts() {
 			asyncCmds = append(asyncCmds, m.toastTickCmd())
 		}
@@ -1845,7 +1845,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toastManager.Info(fmt.Sprintf("all waves complete for '%s' — starting review", planName))
 		return m, tea.Batch(tea.RequestWindowSize, reviewerCmd, m.toastTickCmd())
 	case coderCompleteMsg:
-		// Single-coder (non-wave) implementation finished and user confirmed push.
+		// Single-plan implementation finished and user confirmed push.
 		// Transition FSM and spawn reviewer — mirrors waveAllCompleteMsg flow.
 		planFile := msg.planFile
 		planName := taskstate.DisplayName(planFile)
@@ -1855,13 +1855,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Clear the push-prompt dedup flag — the plan is now in reviewing, so
-		// if a review round sends it back to implementing the next coder can
+		// if a review round sends it back to implementing the next implementer can
 		// trigger the push prompt cleanly.
 		delete(m.coderPushPrompted, planFile)
 
-		// Mark the coder instance as implementation-complete and pause it.
+		// Mark the current implementer instance as implementation-complete and pause it.
 		for _, inst := range m.nav.GetInstances() {
-			if inst.TaskFile == planFile && inst.AgentType == session.AgentTypeCoder {
+			if inst.TaskFile == planFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
 				inst.ImplementationComplete = true
 				_ = inst.Pause()
 				break

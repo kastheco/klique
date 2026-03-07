@@ -110,7 +110,7 @@ func TestShouldPostWaveCompleteCommentNilOrch(t *testing.T) {
 
 // TestFixerCompleteHook_ClearsPendingFeedback verifies that when an
 // ImplementFinished signal fires while pendingReviewFeedback is set (meaning
-// a fix-coder was spawned after ReviewChangesRequested), the feedback is
+// a fixer was spawned after ReviewChangesRequested), the feedback is
 // cleared from pendingReviewFeedback and a tea.Cmd is returned for the
 // fixer_complete ClickUp comment. Since home.postClickUpProgress returns nil
 // when there is no commenter (click-up not configured), we verify the
@@ -173,7 +173,7 @@ func TestFixerCompleteHook_ClearsPendingFeedback(t *testing.T) {
 	// pendingReviewFeedback must be cleared — fixer_complete hook consumed it.
 	_, hasFeedback := updated.pendingReviewFeedback[planFile]
 	assert.False(t, hasFeedback,
-		"pendingReviewFeedback must be cleared after ImplementFinished fires for a fix-coder")
+		"pendingReviewFeedback must be cleared after ImplementFinished fires for a fixer")
 }
 
 // TestFixerCompleteHook_SkipsWhenNoFeedback verifies that the fixer_complete
