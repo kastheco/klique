@@ -1405,7 +1405,6 @@ func (n *NavigationPanel) String() string {
 	items := make([]visItem, 0, len(n.rows)+4)
 	selectedDisplayIdx := 0
 	lastPlanKey := -1 // -1 = no section emitted yet; 0/1 = active; 2 = idle
-	pastSoloSection := false
 	inDeadSection := false
 
 	for i, row := range n.rows {
@@ -1425,22 +1424,12 @@ func (n *NavigationPanel) String() string {
 			inDeadSection = false
 		}
 
-		// Track when we pass the solo-agents section so topic headers after it
-		// are treated as belonging to the idle section.
-		if row.Kind == navRowSoloHeader {
-			pastSoloSection = true
-		}
-
 		// Inject "active" / "plans" dividers at section transitions.
 		if (row.Kind == navRowPlanHeader || row.Kind == navRowTopicHeader) && !inDeadSection {
 			var sk int
 			if row.Kind == navRowTopicHeader {
-				// Topic headers carry no active/idle flag; infer from position.
-				if pastSoloSection {
-					sk = 2
-				} else {
-					sk = 0
-				}
+				// Topic groups always appear in the idle/plans section.
+				sk = 2
 			} else {
 				// Plan header: derive from status flags.
 				if row.HasNotification || row.HasRunning ||
