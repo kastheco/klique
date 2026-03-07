@@ -149,11 +149,8 @@ func BuildMasterReviewPrompt(planFile, diffContent, testResults string) string {
 			"`kas task show %[1]s`, then review the proposed change for plan alignment and merge readiness.\n\n"+
 			"## Review Task\n"+
 			"- Determine whether the diff should be merged and signal your decision with `touch .kasmos/signals/master-approved-%[1]s` when complete.\n\n"+
-			"## Task\n"+
-			"%s\n\n"+
 			"## Test Results\n%s\n\n"+
 			"## Diff\n%s\n",
-		planFile,
 		planFile,
 		testResults,
 		diffContent,

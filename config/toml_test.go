@@ -20,6 +20,7 @@ implementing = "coder"
 spec_review = "reviewer"
 quality_review = "reviewer"
 planning = "planner"
+master_review = "master"
 
 [agents.coder]
 enabled = true
@@ -53,6 +54,7 @@ flags = []
 		assert.Equal(t, "coder", tc.PhaseRoles["implementing"])
 		assert.Equal(t, "reviewer", tc.PhaseRoles["spec_review"])
 		assert.Equal(t, "planner", tc.PhaseRoles["planning"])
+		assert.Equal(t, "master", tc.PhaseRoles["master_review"])
 
 		// Verify agent profiles
 		coder, ok := tc.Profiles["coder"]

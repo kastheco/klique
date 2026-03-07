@@ -47,6 +47,7 @@ func newRootModel(registry *harness.Registry, existing *config.TOMLConfigResult)
 			"quality_review": "reviewer",
 			"planning":       "planner",
 			"fixer":          "fixer",
+			"master_review":  "master",
 		},
 	}
 	if registry != nil {
