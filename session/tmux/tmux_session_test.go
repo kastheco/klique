@@ -315,13 +315,15 @@ func TestHasAttachedClients(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("tmux error returns false", func(t *testing.T) {
+	t.Run("tmux error returns true to defer cleanup", func(t *testing.T) {
 		cmdExec := cmd_test.NewMockExecutor()
 		cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
 			return nil, fmt.Errorf("tmux unavailable")
 		}
 		result := HasAttachedClients(cmdExec, "kas_mysession")
-		assert.False(t, result)
+		// Probe failures must be treated as "attached" so the grace-period
+		// safety guarantee is preserved on transient tmux errors.
+		assert.True(t, result)
 	})
 }
 

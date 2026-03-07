@@ -650,14 +650,17 @@ func DiscoverAll(cmdExec cmd.Executor, knownNames []string) ([]SessionInfo, erro
 }
 
 // HasAttachedClients returns true if the given tmux session currently has one
-// or more attached clients. Returns false on any error (missing session, tmux
-// unavailable, or non-zero exit) so callers can treat the result as a safe
-// conservative check before cleanup.
+// or more attached clients. On any error (executor failure, tmux hiccup,
+// non-zero exit) it returns true so that callers defer cleanup rather than
+// risk terminating a session that may have active attached users.
 func HasAttachedClients(cmdExec cmd.Executor, sessionName string) bool {
 	dmCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{session_attached}")
 	output, err := cmdExec.Output(dmCmd)
 	if err != nil {
-		return false
+		// Treat probe failures as "attached" to preserve the grace-period
+		// safety guarantee — it is safer to defer cleanup than to kill a
+		// session whose client state cannot be determined.
+		return true
 	}
 	return parseClientCount(strings.TrimSpace(string(output))) > 0
 }

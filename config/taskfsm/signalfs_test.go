@@ -144,6 +144,34 @@ func TestRecoverInFlight_MovesSignalsBackToBaseDir(t *testing.T) {
 	}
 }
 
+func TestRecoverInFlight_SkipsWhenNewerSignalAlreadyInBaseDir(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), ".kasmos", "signals")
+	require.NoError(t, EnsureSignalDirs(baseDir))
+
+	filename := "implement-task-finished-w1-t1-alpha"
+
+	// Place stale copy in processing dir (simulating interrupted previous run).
+	stalePath := filepath.Join(baseDir, ProcessingDir, filename)
+	require.NoError(t, os.WriteFile(stalePath, []byte("stale"), 0o644))
+
+	// Place newer signal with the same name directly in the base dir.
+	newerPath := filepath.Join(baseDir, filename)
+	require.NoError(t, os.WriteFile(newerPath, []byte("newer"), 0o644))
+
+	count := RecoverInFlight(baseDir)
+	// Stale in-flight file should be discarded, not counted as recovered.
+	assert.Equal(t, 0, count)
+
+	// Newer signal must be untouched.
+	content, err := os.ReadFile(newerPath)
+	require.NoError(t, err)
+	assert.Equal(t, "newer", string(content))
+
+	// Stale processing file must be removed.
+	_, err = os.Stat(stalePath)
+	assert.True(t, os.IsNotExist(err), "stale processing file should be removed")
+}
+
 func TestSignalPathAccessors(t *testing.T) {
 	t.Run("Signal", func(t *testing.T) {
 		s := Signal{filePath: "/repo/.kasmos/signals/planner-finished-foo"}

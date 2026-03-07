@@ -114,6 +114,15 @@ func RecoverInFlight(baseDir string) int {
 		}
 		src := filepath.Join(processingDir, entry.Name())
 		dst := filepath.Join(baseDir, entry.Name())
+		// If a newer signal with the same name is already in the base directory
+		// (written after this one was moved to processing/), skip the stale
+		// in-flight copy and remove it so it does not overwrite the newer payload.
+		if _, statErr := os.Lstat(dst); statErr == nil {
+			slog.Warn("signalfs: skipping recovery, newer signal already in base dir",
+				"file", entry.Name())
+			_ = os.Remove(src)
+			continue
+		}
 		if err := os.Rename(src, dst); err != nil {
 			slog.Warn("signalfs: failed to recover in-flight signal", "file", entry.Name(), "err", err)
 			continue
