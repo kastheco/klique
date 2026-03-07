@@ -230,7 +230,8 @@ func newDaemonAddCmd(socketPath *string) *cobra.Command {
 			}
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
+			// Server returns 201 Created on success; treat any 2xx as success.
+			if resp.StatusCode >= 300 {
 				return fmt.Errorf("add repo failed (status %d)", resp.StatusCode)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "registered repo: %s\n", repoPath)
