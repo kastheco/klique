@@ -76,3 +76,45 @@ func TestDaemon_AddRepo(t *testing.T) {
 	repos := d.ListRepos()
 	assert.Len(t, repos, 1)
 }
+
+func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
+	cfg := &DaemonConfig{
+		PollInterval: 100 * time.Millisecond,
+	}
+	d, err := NewDaemon(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	err = <-errCh
+	assert.NoError(t, err)
+	assert.Empty(t, d.spawner.RunningInstances())
+}
+
+func TestDaemon_RecoverOnRestart(t *testing.T) {
+	cfg := &DaemonConfig{
+		PollInterval: 100 * time.Millisecond,
+	}
+	d, err := NewDaemon(cfg)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, d.AddRepo(dir))
+
+	recovered, err := d.RecoverSessions()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, recovered)
+}
+
+func TestTmuxSpawner_DiscoverOrphans(t *testing.T) {
+	s := NewTmuxSpawner(TmuxSpawnerConfig{})
+	orphans := s.DiscoverOrphanSessions()
+	assert.NotNil(t, orphans)
+}
