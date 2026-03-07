@@ -24,6 +24,7 @@ import (
 	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration"
+	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
@@ -37,6 +38,24 @@ import (
 // the plan is done, has a branch, and does not already have a PR URL.
 func shouldCreatePR(entry taskstore.TaskEntry) bool {
 	return entry.Status == taskstore.StatusDone && entry.Branch != "" && entry.PRURL == ""
+}
+
+// ensureProcessor lazily initializes and returns the signal Processor.
+// Returns nil when taskStore is not set (e.g. in tests that don't need signal processing),
+// in which case the caller must fall back to the legacy FSM signal handling code.
+func (m *home) ensureProcessor() *loop.Processor {
+	if m.processor != nil {
+		return m.processor
+	}
+	if m.taskStore == nil {
+		return nil
+	}
+	m.processor = loop.NewProcessor(loop.ProcessorConfig{
+		Store:   m.taskStore,
+		Project: m.taskStoreProject,
+		Dir:     m.taskStateDir,
+	})
+	return m.processor
 }
 
 func assemblePRMetadata(
