@@ -1534,7 +1534,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m.switchToTab(name)
 	case keys.KeyTabAgent:
 		return m.exclamationAutoFocus()
-	case keys.KeySendPrompt:
+	case keys.KeySendPrompt, keys.KeyExitFocus:
 		// Ensure the agent tab is visible when entering focus mode.
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		selected := m.nav.GetSelectedInstance()
@@ -1793,6 +1793,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 
 // keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.
 func keyToBytes(msg tea.KeyPressMsg) []byte {
+	if msg.Code == tea.KeyEnter && msg.Mod != 0 {
+		return kittyCSIu(13, msg.Mod)
+	}
+
 	// Handle modifier combinations first.
 	if msg.Mod.Contains(tea.ModCtrl) {
 		// Ctrl+letter → raw control character byte (0x01..0x1A).
@@ -1857,6 +1861,20 @@ func keyToBytes(msg tea.KeyPressMsg) []byte {
 	default:
 		return nil
 	}
+}
+
+func kittyCSIu(code rune, mod tea.KeyMod) []byte {
+	modifier := 1
+	if mod.Contains(tea.ModShift) {
+		modifier++
+	}
+	if mod.Contains(tea.ModAlt) {
+		modifier += 2
+	}
+	if mod.Contains(tea.ModCtrl) {
+		modifier += 4
+	}
+	return []byte(fmt.Sprintf("\x1b[%d;%du", code, modifier))
 }
 
 func (m *home) handleError(err error) tea.Cmd {

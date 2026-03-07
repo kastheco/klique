@@ -1371,6 +1371,28 @@ func TestHandleKeyPress_CtrlEnterSubmitsAndExitsFocusMode(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestHandleKeyPress_CtrlSpaceTogglesIntoFocusMode(t *testing.T) {
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test-focus-toggle",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.keySent = true
+
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	updated := model.(*home)
+
+	assert.Equal(t, stateFocusAgent, updated.state)
+	assert.Nil(t, cmd)
+}
+
 func TestRestartInstance_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
 	inst, _ := session.NewInstance(session.InstanceOptions{

@@ -573,6 +573,8 @@ func (m *home) instanceChanged() tea.Cmd {
 		}
 		m.previewTerminal = nil
 		m.previewTerminalInstance = ""
+		m.previewClipboardPending = false
+		m.previewClipboardTarget = 0
 	} else if selected.Title != m.previewTerminalInstance {
 		// Different instance selected — swap terminal.
 		if m.previewTerminal != nil {
@@ -580,6 +582,8 @@ func (m *home) instanceChanged() tea.Cmd {
 		}
 		m.previewTerminal = nil
 		m.previewTerminalInstance = ""
+		m.previewClipboardPending = false
+		m.previewClipboardTarget = 0
 
 		cols, rows := m.tabbedWindow.GetPreviewSize()
 		if cols < 10 {

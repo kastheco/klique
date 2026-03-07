@@ -1,11 +1,13 @@
 package session
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
@@ -47,6 +49,8 @@ type EmbeddedTerminal struct {
 	cacheMu sync.Mutex
 	cached  string
 	hasNew  bool
+
+	clipboardRequests chan byte
 }
 
 // NewEmbeddedTerminal creates an embedded terminal connected to a tmux session.
@@ -66,18 +70,63 @@ func NewEmbeddedTerminal(sessionName string, cols, rows int) (*EmbeddedTerminal,
 	}
 
 	t := &EmbeddedTerminal{
-		ptmx:        ptmx,
-		cmd:         cmd,
-		emu:         emu,
-		cancel:      make(chan struct{}),
-		dataReady:   make(chan struct{}, 1),
-		renderReady: make(chan struct{}, 1),
+		ptmx:              ptmx,
+		cmd:               cmd,
+		emu:               emu,
+		cancel:            make(chan struct{}),
+		dataReady:         make(chan struct{}, 1),
+		renderReady:       make(chan struct{}, 1),
+		clipboardRequests: make(chan byte, 8),
 	}
+	t.registerClipboardHandlers()
 
 	go t.readLoop()
 	go t.responseLoop()
 	go t.renderLoop()
 	return t, nil
+}
+
+func (t *EmbeddedTerminal) registerClipboardHandlers() {
+	t.emu.RegisterOscHandler(52, func(data []byte) bool {
+		if selection, ok := parseClipboardReadRequest(data); ok {
+			t.EnqueueClipboardRequest(selection)
+		}
+		// Consume all OSC 52 sequences so the embedded terminal doesn't render or
+		// log raw clipboard control sequences. Query requests are bridged back to
+		// Bubble Tea; clipboard writes can be wired separately later.
+		return true
+	})
+}
+
+func parseClipboardReadRequest(data []byte) (byte, bool) {
+	parts := bytes.SplitN(data, []byte{';'}, 3)
+	if len(parts) < 2 {
+		return 0, false
+	}
+
+	selectionPart := parts[0]
+	payloadPart := parts[1]
+	if bytes.Equal(selectionPart, []byte("52")) {
+		if len(parts) < 3 {
+			return 0, false
+		}
+		selectionPart = parts[1]
+		payloadPart = parts[2]
+	}
+
+	selection := byte(ansi.SystemClipboard)
+	if len(selectionPart) == 1 {
+		switch selectionPart[0] {
+		case ansi.SystemClipboard, ansi.PrimaryClipboard:
+			selection = selectionPart[0]
+		}
+	}
+
+	if len(payloadPart) == 1 && payloadPart[0] == '?' {
+		return selection, true
+	}
+
+	return 0, false
 }
 
 // readLoop continuously reads PTY output and feeds it to the VT emulator.
@@ -208,6 +257,39 @@ func (t *EmbeddedTerminal) WaitForRender(timeout time.Duration) {
 	}
 }
 
+// EnqueueClipboardRequest queues a clipboard-read request emitted by the
+// embedded program via OSC 52.
+func (t *EmbeddedTerminal) EnqueueClipboardRequest(selection byte) {
+	if selection == 0 {
+		selection = ansi.SystemClipboard
+	}
+	select {
+	case t.clipboardRequests <- selection:
+	default:
+		select {
+		case <-t.clipboardRequests:
+		default:
+		}
+		select {
+		case t.clipboardRequests <- selection:
+		default:
+		}
+	}
+}
+
+// PollClipboardRequest returns the next pending clipboard-read request, if any.
+func (t *EmbeddedTerminal) PollClipboardRequest() (byte, bool) {
+	if t == nil || t.clipboardRequests == nil {
+		return 0, false
+	}
+	select {
+	case selection := <-t.clipboardRequests:
+		return selection, true
+	default:
+		return 0, false
+	}
+}
+
 // Resize updates the terminal dimensions.
 func (t *EmbeddedTerminal) Resize(cols, rows int) {
 	t.emu.Resize(cols, rows)
@@ -224,13 +306,16 @@ func (t *EmbeddedTerminal) Resize(cols, rows int) {
 // to verify terminal lifecycle management without real infrastructure.
 func NewDummyTerminal() *EmbeddedTerminal {
 	emu := vt.NewSafeEmulator(1, 1)
-	return &EmbeddedTerminal{
-		emu:         emu,
-		sentKeys:    make([][]byte, 0),
-		cancel:      make(chan struct{}),
-		dataReady:   make(chan struct{}, 1),
-		renderReady: make(chan struct{}, 1),
+	t := &EmbeddedTerminal{
+		emu:               emu,
+		sentKeys:          make([][]byte, 0),
+		cancel:            make(chan struct{}),
+		dataReady:         make(chan struct{}, 1),
+		renderReady:       make(chan struct{}, 1),
+		clipboardRequests: make(chan byte, 8),
 	}
+	t.registerClipboardHandlers()
+	return t
 }
 
 // SentKeys returns a deep copy of all key writes captured on the terminal.

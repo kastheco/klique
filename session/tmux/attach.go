@@ -10,6 +10,14 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/kastheco/kasmos/log"
+	"golang.org/x/term"
+)
+
+var (
+	stdinFD         = func() int { return int(os.Stdin.Fd()) }
+	terminalIsTTY   = term.IsTerminal
+	terminalMakeRaw = term.MakeRaw
+	terminalRestore = term.Restore
 )
 
 // Attach connects the calling terminal to the tmux session.
@@ -28,6 +36,10 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 	t.outerMouseWasEnabled = outerMouseEnabled(outer)
 	if t.outerMouseWasEnabled && outer != "" {
 		_ = exec.Command("tmux", "set-option", "-t", outer, "mouse", "off").Run()
+	}
+	if err := t.enterRawInputMode(); err != nil {
+		t.restoreOuterMouse()
+		return nil, err
 	}
 
 	ch := make(chan struct{})
@@ -105,6 +117,7 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 //  5. Calls Restore() to create a background monitoring PTY.
 //  6. Closes the attach channel (signals callers that detach is complete).
 func (t *TmuxSession) Detach() {
+	t.exitRawInputMode()
 	t.restoreOuterMouse()
 
 	// Cancel context to signal goroutines.
@@ -183,4 +196,30 @@ func (t *TmuxSession) restoreOuterMouse() {
 	}
 	_ = exec.Command("tmux", "set-option", "-t", outer, "mouse", "on").Run()
 	t.outerMouseWasEnabled = false
+}
+
+func (t *TmuxSession) enterRawInputMode() error {
+	fd := stdinFD()
+	if !terminalIsTTY(fd) {
+		t.stdinFD = 0
+		t.rawInputState = nil
+		return nil
+	}
+	state, err := terminalMakeRaw(fd)
+	if err != nil {
+		return err
+	}
+	t.stdinFD = fd
+	t.rawInputState = state
+	return nil
+}
+
+func (t *TmuxSession) exitRawInputMode() {
+	if t.rawInputState == nil {
+		t.stdinFD = 0
+		return
+	}
+	_ = terminalRestore(t.stdinFD, t.rawInputState)
+	t.rawInputState = nil
+	t.stdinFD = 0
 }

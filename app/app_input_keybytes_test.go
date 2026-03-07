@@ -54,3 +54,11 @@ func TestKeyToBytes_CtrlShiftV(t *testing.T) {
 	// Currently returns Ctrl+V because Ctrl+letter matches before Shift check.
 	require.Equal(t, []byte{0x16}, got, "Ctrl+Shift+V should produce Ctrl+V (0x16)")
 }
+
+func TestKeyToBytes_ShiftEnterUsesKittySequence(t *testing.T) {
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
+
+	got := keyToBytes(msg)
+
+	require.Equal(t, []byte("\x1b[13;2u"), got)
+}

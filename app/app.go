@@ -30,6 +30,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
 
@@ -241,6 +242,8 @@ type home struct {
 	// Also used for focus mode — entering focus just forwards keys to this terminal.
 	previewTerminal         *session.EmbeddedTerminal
 	previewTerminalInstance string // title of the instance the terminal is attached to
+	previewClipboardPending bool
+	previewClipboardTarget  byte
 
 	// taskState holds the parsed task state from the store for the active repo.
 	taskState *taskstate.TaskState
@@ -682,6 +685,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if content, changed := m.previewTerminal.Render(); changed {
 				m.tabbedWindow.SetPreviewContent(content)
 			}
+			if !m.previewClipboardPending {
+				if selection, ok := m.previewTerminal.PollClipboardRequest(); ok {
+					m.previewClipboardPending = true
+					m.previewClipboardTarget = selection
+					term := m.previewTerminal
+					return m, tea.Batch(nextPreviewTickCmd(term), readClipboardCmd(selection))
+				}
+			}
 		} else if m.previewTerminal == nil && !m.tabbedWindow.IsDocumentMode() {
 			// No terminal — show appropriate fallback state.
 			selected := m.nav.GetSelectedInstance()
@@ -705,14 +716,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Use event-driven wakeup when terminal is live, fall back to 50ms poll otherwise.
 		term := m.previewTerminal
-		return m, func() tea.Msg {
-			if term != nil {
-				term.WaitForRender(16 * time.Millisecond)
-			} else {
-				time.Sleep(50 * time.Millisecond)
-			}
-			return previewTickMsg{}
-		}
+		return m, nextPreviewTickCmd(term)
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -1991,6 +1995,21 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.instance.AutoYes = true
 		}
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
+	case tea.ClipboardMsg:
+		if m.previewClipboardPending {
+			selection := m.previewClipboardTarget
+			if selection == 0 {
+				selection = ansi.SystemClipboard
+			}
+			m.previewClipboardPending = false
+			m.previewClipboardTarget = 0
+			if m.previewTerminal != nil {
+				if err := m.previewTerminal.SendKey([]byte(ansi.SetClipboard(selection, msg.Content))); err != nil {
+					return m, m.handleError(err)
+				}
+			}
+			return m, nil
+		}
 	case tea.PasteMsg:
 		// Forward pasted text to the embedded PTY in focus mode.
 		if m.state == stateFocusAgent && m.previewTerminal != nil {
@@ -2027,6 +2046,26 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func nextPreviewTickCmd(term *session.EmbeddedTerminal) tea.Cmd {
+	return func() tea.Msg {
+		if term != nil {
+			term.WaitForRender(16 * time.Millisecond)
+		} else {
+			time.Sleep(50 * time.Millisecond)
+		}
+		return previewTickMsg{}
+	}
+}
+
+func readClipboardCmd(selection byte) tea.Cmd {
+	return func() tea.Msg {
+		if selection == ansi.PrimaryClipboard {
+			return tea.ReadPrimaryClipboard()
+		}
+		return tea.ReadClipboard()
+	}
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {

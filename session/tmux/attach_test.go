@@ -7,6 +7,7 @@ import (
 	"github.com/kastheco/kasmos/cmd/cmd_test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/term"
 )
 
 func TestDetachSafely_WhenNotAttached(t *testing.T) {
@@ -46,4 +47,49 @@ func TestUpdateWindowSize_NilPTY(t *testing.T) {
 	assert.Nil(t, s.ptmx)
 	err := s.updateWindowSize(80, 24)
 	assert.NoError(t, err)
+}
+
+func TestRawInputMode_RestoresTTYState(t *testing.T) {
+	oldStdinFD := stdinFD
+	oldIsTTY := terminalIsTTY
+	oldMakeRaw := terminalMakeRaw
+	oldRestore := terminalRestore
+	defer func() {
+		stdinFD = oldStdinFD
+		terminalIsTTY = oldIsTTY
+		terminalMakeRaw = oldMakeRaw
+		terminalRestore = oldRestore
+	}()
+
+	stdinFD = func() int { return 42 }
+	terminalIsTTY = func(fd int) bool {
+		require.Equal(t, 42, fd)
+		return true
+	}
+
+	state := &term.State{}
+	madeRaw := false
+	restored := false
+	terminalMakeRaw = func(fd int) (*term.State, error) {
+		madeRaw = true
+		require.Equal(t, 42, fd)
+		return state, nil
+	}
+	terminalRestore = func(fd int, got *term.State) error {
+		restored = true
+		require.Equal(t, 42, fd)
+		require.Same(t, state, got)
+		return nil
+	}
+
+	s := &TmuxSession{}
+	require.NoError(t, s.enterRawInputMode())
+	require.True(t, madeRaw)
+	require.Same(t, state, s.rawInputState)
+	require.Equal(t, 42, s.stdinFD)
+
+	s.exitRawInputMode()
+	require.True(t, restored)
+	require.Nil(t, s.rawInputState)
+	require.Zero(t, s.stdinFD)
 }

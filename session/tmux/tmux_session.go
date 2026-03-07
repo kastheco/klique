@@ -15,6 +15,7 @@ import (
 
 	"github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/log"
+	"golang.org/x/term"
 )
 
 const ProgramClaude = "claude"
@@ -87,6 +88,8 @@ type TmuxSession struct {
 	// outerMouseWasEnabled is set when Attach() disables mouse on the outer tmux
 	// session so Detach() can restore it.
 	outerMouseWasEnabled bool
+	stdinFD              int
+	rawInputState        *term.State
 }
 
 // TmuxPrefix is the prefix added to all kas-managed tmux session names.
