@@ -282,14 +282,30 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, m.confirmAction(message, pushAction)
 
 	case "create_plan_pr":
-		planInst := m.findTaskInstance()
-		if planInst == nil {
-			return m, m.handleError(fmt.Errorf("no active session for this plan"))
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" || m.taskState == nil {
+			return m, m.handleError(fmt.Errorf("no plan selected"))
 		}
-		// Select the plan's instance so the PR flow can find it via GetSelectedInstance().
-		m.nav.SelectInstance(planInst)
+		entry, ok := m.taskState.Entry(planFile)
+		if !ok || entry.Branch == "" {
+			return m, m.handleError(fmt.Errorf("plan has no branch — implement it first"))
+		}
+		// Prefer to use the running instance so GetSelectedInstance() works
+		// in the PR-body submission path. Fall back to a worktree-only approach
+		// (pendingPRWorktree) when there is no instance or the instance has an
+		// empty branch (e.g. started on main without a worktree).
+		planInst := m.findTaskInstance()
+		if planInst != nil && planInst.Branch != "" {
+			m.nav.SelectInstance(planInst)
+			m.pendingPRWorktree = nil
+		} else {
+			// No valid running instance — build a GitWorktree directly from the
+			// task store's authoritative branch so PR creation still works.
+			m.pendingPRWorktree = gitpkg.NewSharedTaskWorktree(m.activeRepoPath, entry.Branch)
+		}
+		defaultTitle := taskstate.DisplayName(planFile)
 		m.state = statePRTitle
-		tio := overlay.NewTextInputOverlay("pr title", planInst.Title)
+		tio := overlay.NewTextInputOverlay("pr title", defaultTitle)
 		tio.SetSize(60, 3)
 		m.overlays.Show(tio)
 		return m, nil

@@ -76,10 +76,14 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 }
 
 // GetGitWorktree returns the git worktree associated with this instance.
-// Returns an error if the instance has not been started.
+// Returns an error if the instance has not been started, has no worktree
+// (e.g. started on main branch), or has an empty branch name.
 func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 	if !i.started {
 		return nil, fmt.Errorf("cannot get git worktree for instance that has not been started")
+	}
+	if i.gitWorktree == nil || i.gitWorktree.GetBranchName() == "" {
+		return nil, fmt.Errorf("instance '%s' has no git worktree branch (started on main branch or branch not set)", i.Title)
 	}
 	return i.gitWorktree, nil
 }
