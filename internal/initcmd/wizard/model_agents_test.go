@@ -167,6 +167,38 @@ func TestAgentStepPrePopulatesFromExisting(t *testing.T) {
 	assert.Equal(t, "openai/gpt-5.3-codex", agents[1].Model)
 }
 
+func TestAgentStepPrePopulatesArchitectFromLegacyElaborator(t *testing.T) {
+	temp := 0.7
+	existing := &config.TOMLConfigResult{
+		Profiles: map[string]config.AgentProfile{
+			"elaborator": {
+				Program:     "opencode",
+				Model:       "anthropic/claude-opus-4-6",
+				Temperature: &temp,
+				Effort:      "max",
+				Enabled:     true,
+			},
+		},
+	}
+
+	agents := initAgentsFromExisting([]string{"opencode"}, existing)
+
+	// find the architect agent
+	var arch AgentState
+	for _, a := range agents {
+		if a.Role == "architect" {
+			arch = a
+			break
+		}
+	}
+	require.Equal(t, "architect", arch.Role, "architect role must be present")
+	assert.Equal(t, "opencode", arch.Harness, "harness should migrate from legacy elaborator profile")
+	assert.Equal(t, "anthropic/claude-opus-4-6", arch.Model)
+	assert.Equal(t, "max", arch.Effort)
+	assert.Equal(t, "0.7", arch.Temperature)
+	assert.True(t, arch.Enabled)
+}
+
 func TestAgentStep_ViewSeparatorFillsPanelHeight(t *testing.T) {
 	agents := []AgentState{
 		{Role: "coder", Harness: "claude", Model: "anthropic/claude-sonnet-4-6", Enabled: true},

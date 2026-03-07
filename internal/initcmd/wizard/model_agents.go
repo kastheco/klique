@@ -57,7 +57,14 @@ func initAgentsFromExisting(harnesses []string, existing *config.TOMLConfigResul
 		}
 
 		if existing != nil {
-			if profile, ok := existing.Profiles[role]; ok {
+			// Look up the profile by current role name; for "architect" also
+			// check the legacy "elaborator" key from configs written before the
+			// rename so that re-running kas init preserves existing settings.
+			profileKey := role
+			if _, ok := existing.Profiles[profileKey]; !ok && role == "architect" {
+				profileKey = "elaborator"
+			}
+			if profile, ok := existing.Profiles[profileKey]; ok {
 				as.Harness = profile.Program
 				as.Model = profile.Model
 				as.Effort = profile.Effort

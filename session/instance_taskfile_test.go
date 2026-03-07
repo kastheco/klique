@@ -7,7 +7,9 @@ import (
 )
 
 func TestAgentTypeElaborator_Constant(t *testing.T) {
-	assert.Equal(t, "elaborator", AgentTypeElaborator)
+	// AgentTypeElaborator was renamed from "elaborator" to "architect" to match
+	// the opencode config block name after the elaborator→architect role rename.
+	assert.Equal(t, "architect", AgentTypeElaborator)
 }
 
 func TestNewInstance_SetsPlanFile(t *testing.T) {

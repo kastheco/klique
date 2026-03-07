@@ -28,7 +28,7 @@ const (
 	AgentTypeCoder      = "coder"
 	AgentTypeReviewer   = "reviewer"
 	AgentTypeFixer      = "fixer"
-	AgentTypeElaborator = "elaborator"
+	AgentTypeElaborator = "architect"
 )
 
 // Instance represents a managed agent session with its associated execution backend and git state.
