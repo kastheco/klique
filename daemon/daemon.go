@@ -31,13 +31,14 @@ import (
 // repositories for signal files and executes the resulting actions via the
 // configured AgentSpawner.
 type Daemon struct {
-	cfg       *DaemonConfig
-	repos     *RepoManager
-	spawner   *TmuxSpawner
-	logger    *slog.Logger
-	pidLock   *PIDLock
-	mu        sync.RWMutex
-	startedAt time.Time
+	cfg         *DaemonConfig
+	repos       *RepoManager
+	spawner     *TmuxSpawner
+	logger      *slog.Logger
+	pidLock     *PIDLock
+	broadcaster *api.EventBroadcaster
+	mu          sync.RWMutex
+	startedAt   time.Time
 }
 
 // daemonStateAdapter adapts the Daemon to the api.StateProvider interface.
@@ -91,6 +92,9 @@ func (a *daemonStateAdapter) ListInstances(_ string) []api.InstanceStatus {
 }
 
 func (a *daemonStateAdapter) EventStream() <-chan api.Event {
+	if a.d.broadcaster != nil {
+		return a.d.broadcaster.Subscribe()
+	}
 	return make(chan api.Event)
 }
 
@@ -112,10 +116,11 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 	}))
 
 	d := &Daemon{
-		cfg:     cfg,
-		repos:   NewRepoManager(),
-		spawner: newTmuxSpawner(logger),
-		logger:  logger,
+		cfg:         cfg,
+		repos:       NewRepoManager(),
+		spawner:     newTmuxSpawner(logger),
+		logger:      logger,
+		broadcaster: api.NewEventBroadcaster(),
 	}
 
 	// Pre-register repos from config.
@@ -189,8 +194,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}()
 
 	// Build and start the HTTP server on the control socket.
+	// Use NewHandlerWithBroadcaster so each connecting client gets its own
+	// subscription to the live event stream rather than a dead channel.
 	state := &daemonStateAdapter{d: d}
-	handler := api.NewHandler(state)
+	handler := api.NewHandlerWithBroadcaster(state, d.broadcaster)
 	srv := &http.Server{Handler: handler}
 
 	var wg sync.WaitGroup
@@ -223,6 +230,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 				_ = d.pidLock.Release()
 				d.pidLock = nil
 			}
+			// Close broadcaster after HTTP server shuts down so no new SSE
+			// connections are started after we signal EOF.
+			d.broadcaster.Close()
 			return nil
 
 		case <-ticker.C:
@@ -292,6 +302,14 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		}
 		if err := d.spawner.SpawnReviewer(ctx, opts); err != nil {
 			d.logger.Error("spawn reviewer failed", "plan", a.PlanFile, "err", err)
+		} else {
+			d.broadcaster.Emit(api.Event{
+				Kind:      "agent_spawned",
+				Message:   "reviewer spawned for " + a.PlanFile,
+				Repo:      e.Path,
+				PlanFile:  a.PlanFile,
+				AgentType: "reviewer",
+			})
 		}
 	case loop.SpawnCoderAction:
 		opts := loop.SpawnOpts{
@@ -302,6 +320,14 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		}
 		if err := d.spawner.SpawnCoder(ctx, opts); err != nil {
 			d.logger.Error("spawn coder failed", "plan", a.PlanFile, "err", err)
+		} else {
+			d.broadcaster.Emit(api.Event{
+				Kind:      "agent_spawned",
+				Message:   "coder spawned for " + a.PlanFile,
+				Repo:      e.Path,
+				PlanFile:  a.PlanFile,
+				AgentType: "coder",
+			})
 		}
 	case loop.SpawnElaboratorAction:
 		opts := loop.SpawnOpts{
@@ -310,15 +336,59 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		}
 		if err := d.spawner.SpawnElaborator(ctx, opts); err != nil {
 			d.logger.Error("spawn elaborator failed", "plan", a.PlanFile, "err", err)
+		} else {
+			d.broadcaster.Emit(api.Event{
+				Kind:      "agent_spawned",
+				Message:   "elaborator spawned for " + a.PlanFile,
+				Repo:      e.Path,
+				PlanFile:  a.PlanFile,
+				AgentType: "elaborator",
+			})
 		}
 	case loop.PausePlanAgentAction:
 		if err := d.spawner.KillAgent(a.PlanFile, a.AgentType); err != nil {
 			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)
+		} else {
+			d.broadcaster.Emit(api.Event{
+				Kind:      "agent_killed",
+				Message:   a.AgentType + " killed for " + a.PlanFile,
+				Repo:      e.Path,
+				PlanFile:  a.PlanFile,
+				AgentType: a.AgentType,
+			})
 		}
+	case loop.AdvanceWaveAction:
+		d.logger.Info("wave advanced", "plan", a.PlanFile, "wave", a.Wave, "repo", e.Path)
+		d.broadcaster.Emit(api.Event{
+			Kind:     "wave_advanced",
+			Message:  fmt.Sprintf("wave %d started for %s", a.Wave, a.PlanFile),
+			Repo:     e.Path,
+			PlanFile: a.PlanFile,
+		})
+	case loop.TransitionAction:
+		d.logger.Info("fsm transition", "plan", a.PlanFile, "event", a.Event, "repo", e.Path)
+		d.broadcaster.Emit(api.Event{
+			Kind:     "transition_applied",
+			Message:  fmt.Sprintf("fsm event %v for %s", a.Event, a.PlanFile),
+			Repo:     e.Path,
+			PlanFile: a.PlanFile,
+		})
 	case loop.ReviewApprovedAction:
 		d.logger.Info("review approved", "plan", a.PlanFile, "repo", e.Path)
+		d.broadcaster.Emit(api.Event{
+			Kind:     "signal_processed",
+			Message:  "review approved for " + a.PlanFile,
+			Repo:     e.Path,
+			PlanFile: a.PlanFile,
+		})
 	case loop.CreatePRAction:
 		d.logger.Info("create pr requested", "plan", a.PlanFile, "repo", e.Path)
+		d.broadcaster.Emit(api.Event{
+			Kind:     "signal_processed",
+			Message:  "create PR for " + a.PlanFile,
+			Repo:     e.Path,
+			PlanFile: a.PlanFile,
+		})
 	default:
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
 	}
