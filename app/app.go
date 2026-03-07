@@ -192,6 +192,9 @@ type home struct {
 	pendingPlanDesc string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
+	// pendingPRWorktree is a GitWorktree built from taskState for plan-level PR
+	// creation flows where no running instance is available. Cleared after use.
+	pendingPRWorktree *gitpkg.GitWorktree
 	// pendingChangeTopicTask stores the plan filename during the change-topic flow
 	pendingChangeTopicTask string
 	// pendingSetStatusTask stores the plan filename during the set-status flow
@@ -1996,6 +1999,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// as a paste event rather than typed input.
 				data := []byte("\x1b[200~" + content + "\x1b[201~")
 				_ = m.previewTerminal.SendKey(data)
+			} else {
+				// Empty paste content means the clipboard holds non-text data
+				// (e.g. an image). Forward raw ctrl+v (0x16) so the embedded
+				// program can request clipboard contents via OSC 52 or its own
+				// native paste mechanism.
+				_ = m.previewTerminal.SendKey([]byte{0x16})
 			}
 			return m, nil
 		}
