@@ -426,6 +426,42 @@ func TestWaveOrchestrator_PreferredModelForTask(t *testing.T) {
 	assert.Empty(t, orch.PreferredModelForTask(99))
 }
 
+func TestWaveOrchestrator_DetectFileConflicts(t *testing.T) {
+	cacheDir := t.TempDir()
+	meta := &ArchitectMeta{
+		PlanID: "conflict-plan",
+		Waves: []WaveMeta{{
+			Wave: 1,
+			Tasks: []TaskMeta{
+				{TaskNumber: 1, FilesToModify: []string{"shared.go", "task1.go"}},
+				{TaskNumber: 2, FilesToModify: []string{"shared.go", "task2.go"}},
+			},
+		}},
+	}
+	require.NoError(t, SaveArchitectMeta(cacheDir, "conflict-plan", meta))
+
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}, {Number: 2}}},
+	}}
+	orch := NewWaveOrchestrator("conflict-plan", plan)
+	orch.LoadArchitectMeta(cacheDir)
+
+	conflicts := orch.DetectFileConflicts(1)
+	require.Len(t, conflicts, 1)
+	assert.Equal(t, "shared.go", conflicts[0].File)
+	assert.ElementsMatch(t, []int{1, 2}, conflicts[0].TaskNumbers)
+}
+
+func TestWaveOrchestrator_DetectFileConflicts_NoMeta(t *testing.T) {
+	plan := &taskparser.Plan{Waves: []taskparser.Wave{
+		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
+	}}
+	orch := NewWaveOrchestrator("no-meta", plan)
+
+	conflicts := orch.DetectFileConflicts(1)
+	assert.Empty(t, conflicts)
+}
+
 func TestWaveOrchestrator_PreferredModelForTask_NoMeta(t *testing.T) {
 	plan := &taskparser.Plan{Waves: []taskparser.Wave{
 		{Number: 1, Tasks: []taskparser.Task{{Number: 1}}},
