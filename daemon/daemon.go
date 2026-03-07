@@ -207,6 +207,24 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	d.pidLock = lock
 
+	// Ensure signal directories exist and recover any in-flight signals that
+	// were interrupted by a previous crash before beginning the poll loop.
+	for _, e := range d.repos.List() {
+		allSignalDirs := []string{filepath.Join(e.Path, ".kasmos", "signals")}
+		for _, wt := range sharedWorktreePaths(e.Path) {
+			allSignalDirs = append(allSignalDirs, filepath.Join(wt, ".kasmos", "signals"))
+		}
+		for _, sd := range allSignalDirs {
+			if ensErr := taskfsm.EnsureSignalDirs(sd); ensErr != nil {
+				d.logger.Warn("ensure signal dirs failed on startup", "dir", sd, "err", ensErr)
+				continue
+			}
+			if n := taskfsm.RecoverInFlight(sd); n > 0 {
+				d.logger.Info("recovered in-flight signals", "dir", sd, "count", n)
+			}
+		}
+	}
+
 	// Remove any stale socket file before listening.
 	_ = os.Remove(d.cfg.SocketPath)
 
@@ -269,7 +287,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
-// tick executes one poll cycle across all registered repos.
+// tick executes one poll cycle across all registered repos using atomic
+// per-signal processing: each signal is moved to processing/ before handling,
+// then either completed (deleted) or dead-lettered into failed/.
 func (d *Daemon) tick(ctx context.Context) {
 	entries := d.repos.List()
 	for _, e := range entries {
@@ -280,26 +300,119 @@ func (d *Daemon) tick(ctx context.Context) {
 
 		scan := loop.ScanAllSignals(e.Path, sharedWorktreePaths(e.Path))
 
-		// Use the persistent per-repo processor so wave orchestrator state
-		// survives between ticks (prevents duplicate AdvanceWave emission).
-		actions := e.Processor.Tick(scan)
+		var actions []loop.Action
 
-		// Consume all signals now that the processor has validated them.
-		// This prevents re-processing the same signals on the next tick.
+		// --- FSM signals ---
 		for _, sig := range scan.FSMSignals {
-			taskfsm.ConsumeSignal(sig)
+			sigDir := sig.Dir()
+			sigFile := sig.Filename()
+
+			if err := taskfsm.EnsureSignalDirs(sigDir); err != nil {
+				d.logger.Warn("ensure signal dirs failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			procPath, err := taskfsm.BeginProcessing(sigDir, sigFile)
+			if err != nil {
+				d.logger.Warn("begin processing failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			d.logger.Info("processing fsm signal", "file", sigFile, "event", sig.Event, "repo", e.Path)
+
+			acts := e.Processor.ProcessFSMSignals([]taskfsm.Signal{sig})
+			if len(acts) > 0 {
+				actions = append(actions, acts...)
+				taskfsm.CompleteProcessing(procPath)
+			} else if sig.Event == taskfsm.ImplementFinished {
+				// Benign suppressed/duplicate implement-finished — wave orchestrator
+				// owns this transition; silently complete without dead-lettering.
+				d.logger.Info("suppressed implement-finished signal", "file", sigFile, "plan", sig.TaskFile, "repo", e.Path)
+				taskfsm.CompleteProcessing(procPath)
+			} else {
+				d.logger.Warn("dead-lettering fsm signal", "file", sigFile, "event", sig.Event, "repo", e.Path)
+				taskfsm.FailProcessing(sigDir, sigFile, "signal rejected by processor")
+			}
 		}
+
+		// --- Task signals ---
 		for _, ts := range scan.TaskSignals {
-			taskfsm.ConsumeTaskSignal(ts)
+			sigDir := ts.Dir()
+			sigFile := ts.Filename()
+
+			if err := taskfsm.EnsureSignalDirs(sigDir); err != nil {
+				d.logger.Warn("ensure signal dirs failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			procPath, err := taskfsm.BeginProcessing(sigDir, sigFile)
+			if err != nil {
+				d.logger.Warn("begin processing failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			d.logger.Info("processing task signal", "file", sigFile, "repo", e.Path)
+
+			acts := e.Processor.ProcessTaskSignals([]taskfsm.TaskSignal{ts})
+			if len(acts) > 0 {
+				actions = append(actions, acts...)
+				taskfsm.CompleteProcessing(procPath)
+			} else {
+				d.logger.Warn("dead-lettering task signal", "file", sigFile, "repo", e.Path)
+				taskfsm.FailProcessing(sigDir, sigFile, "no active orchestrator / wrong wave / already-finished task")
+			}
 		}
+
+		// --- Wave signals ---
 		for _, ws := range scan.WaveSignals {
-			taskfsm.ConsumeWaveSignal(ws)
+			sigDir := ws.Dir()
+			sigFile := ws.Filename()
+
+			if err := taskfsm.EnsureSignalDirs(sigDir); err != nil {
+				d.logger.Warn("ensure signal dirs failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			procPath, err := taskfsm.BeginProcessing(sigDir, sigFile)
+			if err != nil {
+				d.logger.Warn("begin processing failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			d.logger.Info("processing wave signal", "file", sigFile, "repo", e.Path)
+
+			acts := e.Processor.ProcessWaveSignals([]taskfsm.WaveSignal{ws})
+			if len(acts) > 0 {
+				actions = append(actions, acts...)
+				taskfsm.CompleteProcessing(procPath)
+			} else {
+				d.logger.Warn("dead-lettering wave signal", "file", sigFile, "repo", e.Path)
+				taskfsm.FailProcessing(sigDir, sigFile, "processor could not start the requested wave")
+			}
 		}
+
+		// --- Elaboration signals ---
 		for _, es := range scan.ElaborationSignals {
-			taskfsm.ConsumeElaborationSignal(es)
+			sigDir := es.Dir()
+			sigFile := es.Filename()
+
+			if err := taskfsm.EnsureSignalDirs(sigDir); err != nil {
+				d.logger.Warn("ensure signal dirs failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			procPath, err := taskfsm.BeginProcessing(sigDir, sigFile)
+			if err != nil {
+				d.logger.Warn("begin processing failed", "file", sigFile, "repo", e.Path, "err", err)
+				continue
+			}
+			d.logger.Info("processing elaboration signal", "file", sigFile, "repo", e.Path)
+
+			acts := e.Processor.ProcessElaborationSignals([]taskfsm.ElaborationSignal{es})
+			if len(acts) > 0 {
+				actions = append(actions, acts...)
+				taskfsm.CompleteProcessing(procPath)
+			} else {
+				d.logger.Warn("dead-lettering elaboration signal", "file", sigFile, "repo", e.Path)
+				taskfsm.FailProcessing(sigDir, sigFile, "no active elaboration state to resume")
+			}
 		}
 
 		for _, action := range actions {
+			d.logger.Info("executing action", "kind", action.Kind(), "repo", e.Path)
 			d.executeAction(ctx, e, action)
 		}
 	}
