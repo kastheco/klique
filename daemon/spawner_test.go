@@ -35,6 +35,38 @@ func TestTmuxSpawner_KillAgent_NoOp(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestTmuxSpawner_KillAgent_PreservesTrackingWhenClientAttached(t *testing.T) {
+	s := NewTmuxSpawner()
+
+	// Simulate a client always attached — gracefulKill should skip the kill.
+	s.hasAttachedClients = func(_ cmd.Executor, _ string) bool { return true }
+	s.sleep = func(_ time.Duration) {}
+	s.kill = func(_ *session.Instance) error { return nil }
+	s.cleanupGracePeriod = 0
+
+	// Manually register an instance so KillAgent can find it.
+	const repoPath = "/tmp/repo"
+	const planFile = "my-plan.md"
+	const agentType = "coder"
+	key := instanceKey(repoPath, planFile, agentType)
+	inst := &session.Instance{Title: "my-plan-coder"}
+	s.mu.Lock()
+	s.instances[key] = inst
+	s.planFileByKey[key] = planFile
+	s.agentTypeByKey[key] = agentType
+	s.projectByKey[key] = "my-project"
+	s.mu.Unlock()
+
+	err := s.KillAgent(repoPath, planFile, agentType)
+	assert.NoError(t, err)
+
+	// Instance must still be tracked because the kill was deferred.
+	s.mu.Lock()
+	_, stillTracked := s.instances[key]
+	s.mu.Unlock()
+	assert.True(t, stillTracked, "instance must remain in tracking maps when kill is deferred due to attached client")
+}
+
 func TestTmuxSpawner_instanceKey(t *testing.T) {
 	assert.Equal(t, "/repo:plan.md:coder", instanceKey("/repo", "plan.md", "coder"))
 	assert.Equal(t, "/repo:plan.md:reviewer", instanceKey("/repo", "plan.md", "reviewer"))
@@ -95,8 +127,9 @@ func TestTmuxSpawner_GracefulKill_SkipsWhenClientAttached(t *testing.T) {
 	s.cleanupGracePeriod = 0
 
 	inst := &session.Instance{Title: "plan-coder"}
-	err := s.gracefulKill(inst, "kas_plan-coder")
+	killed, err := s.gracefulKill(inst, "kas_plan-coder")
 	assert.NoError(t, err)
+	assert.False(t, killed, "should report not killed when a client is attached")
 	assert.False(t, killCalled, "kill must not be called when a client is attached")
 }
 
@@ -113,7 +146,8 @@ func TestTmuxSpawner_GracefulKill_KillsAfterSecondCheck(t *testing.T) {
 	s.cleanupGracePeriod = 0
 
 	inst := &session.Instance{Title: "plan-coder"}
-	err := s.gracefulKill(inst, "kas_plan-coder")
+	killed, err := s.gracefulKill(inst, "kas_plan-coder")
 	assert.NoError(t, err)
+	assert.True(t, killed, "should report killed when no client is attached")
 	assert.True(t, killCalled, "kill must be called when no client is attached after grace period")
 }

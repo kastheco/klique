@@ -257,6 +257,44 @@ func TestExecuteSignalProcess_UnknownPlan_SignalConsumed(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr))
 }
 
+// TestExecuteSignalProcess_RecoverInFlightBeforeScanning verifies that signals
+// stranded in the processing/ subdirectory by a previous interrupted run are
+// moved back to the base signals directory and processed in the same pass.
+// Without the RecoverInFlight call a signal left in processing/ would be
+// permanently invisible to future CLI invocations.
+func TestExecuteSignalProcess_RecoverInFlightBeforeScanning(t *testing.T) {
+	store, root, project := setupSignalTestStore(t)
+	signalsDir := filepath.Join(root, ".kasmos", "signals")
+	processingDir := filepath.Join(signalsDir, "processing")
+	require.NoError(t, os.MkdirAll(processingDir, 0o755))
+
+	// Simulate a signal that was already moved to processing/ by a prior run
+	// that crashed before completing the transition.
+	strandedFile := filepath.Join(processingDir, "implement-finished-implementing-plan")
+	require.NoError(t, os.WriteFile(strandedFile, nil, 0o644))
+
+	opts := signalProcessOptions{
+		repoRoot:   root,
+		project:    project,
+		signalsDir: signalsDir,
+		store:      store,
+	}
+	processed, err := executeSignalProcess(opts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, processed, "stranded in-flight signal must be recovered and processed")
+
+	// The stranded file must be gone from processing/ (consumed by recovery + processing).
+	_, statErr := os.Stat(strandedFile)
+	assert.True(t, os.IsNotExist(statErr), "stranded signal must not remain in processing/")
+
+	// The FSM transition should have applied: implementing → reviewing.
+	ps, err := taskstate.Load(store, project, "")
+	require.NoError(t, err)
+	entry, ok := ps.Entry("implementing-plan")
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status)
+}
+
 // TestExecuteSignalProcess_EmptyDir verifies that no-op when signals dir is empty.
 func TestExecuteSignalProcess_EmptyDirectory(t *testing.T) {
 	store, root, project := setupSignalTestStore(t)

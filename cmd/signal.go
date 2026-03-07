@@ -143,6 +143,15 @@ func executeSignalProcess(opts signalProcessOptions) (int, error) {
 	if err := taskfsm.EnsureSignalDirs(opts.signalsDir); err != nil {
 		return 0, fmt.Errorf("ensure signal dirs: %w", err)
 	}
+
+	// Recover any signals that were moved to processing/ by a previous run
+	// that was interrupted (crash or CTRL-C) before it could complete or
+	// dead-letter them. Without this, those files would be invisible to every
+	// future scan because ScanSignals only reads the base signals directory.
+	if n := taskfsm.RecoverInFlight(opts.signalsDir); n > 0 {
+		log.Printf("signal: recovered %d in-flight signals from processing dir", n)
+	}
+
 	fsm := newFSMByProject(opts.project, opts.store)
 	processed := 0
 

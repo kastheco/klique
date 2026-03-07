@@ -110,23 +110,26 @@ func shouldSkipCleanup(hasClients bool) bool {
 }
 
 // gracefulKill stops the instance only when no tmux clients are attached. It
+// returns (true, nil) when the instance was killed, (false, nil) when cleanup
+// was skipped because a client is still attached, and (false, err) on kill
+// failure.
 // checks for attached clients before the grace period and once more after
 // sleeping. If a client is present at either check the instance is left
 // running (the orphan-discovery path will handle it later). If both checks
 // show no client, kill is called.
-func (s *TmuxSpawner) gracefulKill(inst *session.Instance, sessionName string) error {
+func (s *TmuxSpawner) gracefulKill(inst *session.Instance, sessionName string) (bool, error) {
 	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
 		s.logger.Info("grace period: client attached, skipping cleanup",
 			"session", sessionName, "title", inst.Title)
-		return nil
+		return false, nil
 	}
 	s.sleep(s.cleanupGracePeriod)
 	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
 		s.logger.Info("grace period: client attached after sleep, skipping cleanup",
 			"session", sessionName, "title", inst.Title)
-		return nil
+		return false, nil
 	}
-	return s.kill(inst)
+	return true, s.kill(inst)
 }
 
 // RunningInstances returns a snapshot of all currently tracked agent instances.
@@ -323,21 +326,29 @@ func (s *TmuxSpawner) KillAgent(repoPath, planFile, agentType string) error {
 
 	key := instanceKey(repoPath, planFile, agentType)
 
+	// Look up the instance without removing it from the tracking maps yet.
+	// We only remove it after gracefulKill confirms the session was actually
+	// terminated. If a tmux client is attached gracefulKill returns (false,
+	// nil) and the daemon must retain ownership so it can target the session
+	// in future operations.
 	s.mu.Lock()
 	inst, ok := s.instances[key]
-	if ok {
-		delete(s.instances, key)
-		delete(s.planFileByKey, key)
-		delete(s.agentTypeByKey, key)
-		delete(s.projectByKey, key)
-	}
 	s.mu.Unlock()
 
 	if !ok {
 		return nil
 	}
 	sessionName := tmuxpkg.ToKasTmuxNamePublic(inst.Title)
-	return s.gracefulKill(inst, sessionName)
+	killed, err := s.gracefulKill(inst, sessionName)
+	if killed {
+		s.mu.Lock()
+		delete(s.instances, key)
+		delete(s.planFileByKey, key)
+		delete(s.agentTypeByKey, key)
+		delete(s.projectByKey, key)
+		s.mu.Unlock()
+	}
+	return err
 }
 
 // spawnInSharedWorktree creates an instance for the given agent type, sets up
