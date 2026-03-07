@@ -51,9 +51,10 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 ## Where You Fit
 
-> **Note:** When kasmos spawns you for a wave task, your task prompt already contains
-> all essential rules inline. You do NOT need to load this skill or `cli-tools` in that
-> case — doing so wastes context. This skill is for manual/ad-hoc coder sessions only.
+> **Note:** This skill is for manual or unmanaged sessions only. In managed wave mode,
+> kasmos already inlines your governing rules in the task prompt (including the
+> explicit "Do NOT load agent skills" rule). Do NOT load this skill or `cli-tools`
+> in managed mode.
 
 ### Env Vars
 
@@ -68,11 +69,23 @@ These legacy tools are NEVER permitted. Using them is a violation, not a prefere
 
 kasmos spawned you to implement **one specific task** identified by `KASMOS_TASK`. Your scope:
 
-1. Your task prompt contains the plan context, wave info, and task instructions. Do not
-   retrieve the full plan — it's already in your prompt. Start implementing immediately.
-2. Implement that single task following TDD discipline below.
-3. Commit your work with task number in the commit message.
-4. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
+1. Your task prompt contains the plan context, wave info, and task instructions. Do
+    not retrieve the full plan, do not explore unrelated directories, and do not load
+    additional agent skills.
+2. Implement only that one task, and follow the concrete path and behavior stated in
+    your prompt. Do not make creative architectural decisions or rewrite abstractions
+    when explicit instructions already define what to change.
+3. Prefer exact instructions over exploration: with coder profile defaults
+    (`openai/gpt-5.3-codex-spark`, `temperature=0.1`, `effort=low`), choose the
+    narrowest implementation that satisfies the failing test.
+4. Implement that single task following TDD discipline below.
+5. Commit your work with task number in the commit message.
+6. **Stop.** Do not implement other tasks — they belong to sibling agents or future waves.
+
+If you are blocked by missing context or a dependency that another task is still
+working on, finish any safe local edits, commit partial progress with a
+`partial: blocked on task ...` message, and stop without stubbing/mocking or
+inventing missing interfaces.
 
 **Do NOT write the implement-finished sentinel.** kasmos detects task completion via prompt
 detection (when your agent returns to its input prompt) and handles the
@@ -427,5 +440,5 @@ kas task set-status <task-file> done --force
 | Performative agreement with reviewer | Technical verification, then act |
 | Implementing unclear review feedback | Ask for clarification on ALL unclear items first |
 | Running project-wide formatters | Scope formatters to your changed files only |
-| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |
+| Modifying task state directly when `KASMOS_MANAGED=1` | Do NOT write sentinels either — kasmos detects task completion automatically when agent returns to prompt |
 | Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |
