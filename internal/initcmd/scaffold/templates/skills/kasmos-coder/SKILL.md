@@ -440,5 +440,5 @@ kas task set-status <task-file> done --force
 | Performative agreement with reviewer | Technical verification, then act |
 | Implementing unclear review feedback | Ask for clarification on ALL unclear items first |
 | Running project-wide formatters | Scope formatters to your changed files only |
-| Modifying task state directly when `KASMOS_MANAGED=1` | Write sentinel file instead — kasmos handles state |
+| Modifying task state directly when `KASMOS_MANAGED=1` | Do NOT write sentinels either — kasmos detects task completion automatically when agent returns to prompt |
 | Implementing sibling tasks in managed mode | Implement ONE task (KASMOS_TASK), then signal and stop |
