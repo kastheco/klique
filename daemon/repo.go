@@ -18,6 +18,9 @@ type RepoEntry struct {
 	// Store is the per-repo task store (embedded SQLite).
 	// It may be nil when the store has not yet been opened or is unavailable.
 	Store taskstore.Store
+	// SignalGateway is the DB-backed signal gateway for this repo.
+	// It may be nil when the gateway has not yet been opened or is unavailable.
+	SignalGateway taskstore.SignalGateway
 	// SignalsDir is the path to the signals directory (<repo>/.kasmos/signals/).
 	SignalsDir string
 	// Processor is the signal processor for this repo. It persists across ticks
@@ -65,6 +68,11 @@ func (m *RepoManager) Add(path string) error {
 		store = s
 	}
 
+	var gw taskstore.SignalGateway
+	if g, err := taskstore.NewSQLiteSignalGateway(dbPath); err == nil {
+		gw = g
+	}
+
 	// Create a per-repo processor that persists across poll ticks so that wave
 	// orchestrator state is maintained between cycles.
 	proc := loop.NewProcessor(loop.ProcessorConfig{
@@ -73,11 +81,12 @@ func (m *RepoManager) Add(path string) error {
 	})
 
 	m.repos = append(m.repos, RepoEntry{
-		Path:       path,
-		Project:    project,
-		Store:      store,
-		SignalsDir: signalsDir,
-		Processor:  proc,
+		Path:          path,
+		Project:       project,
+		Store:         store,
+		SignalGateway: gw,
+		SignalsDir:    signalsDir,
+		Processor:     proc,
 	})
 	return nil
 }
@@ -92,6 +101,9 @@ func (m *RepoManager) Remove(path string) error {
 		if r.Path == path {
 			if r.Store != nil {
 				_ = r.Store.Close()
+			}
+			if r.SignalGateway != nil {
+				_ = r.SignalGateway.Close()
 			}
 			m.repos = append(m.repos[:i], m.repos[i+1:]...)
 			return nil
@@ -110,6 +122,9 @@ func (m *RepoManager) RemoveByProject(project string) error {
 		if r.Project == project {
 			if r.Store != nil {
 				_ = r.Store.Close()
+			}
+			if r.SignalGateway != nil {
+				_ = r.SignalGateway.Close()
 			}
 			m.repos = append(m.repos[:i], m.repos[i+1:]...)
 			return nil
