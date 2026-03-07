@@ -4,6 +4,7 @@
   elaborating = "architect"
   fixer = "fixer"
   implementing = "coder"
+  master_review = "master"
   planning = "planner"
   quality_review = "reviewer"
   spec_review = "reviewer"
@@ -32,6 +33,12 @@
     model = "anthropic/claude-sonnet-4-6"
     temperature = 0.1
     effort = "medium"
+  [agents.master]
+    enabled = true
+    program = "opencode"
+    model = "openai/gpt-5.4"
+    temperature = 0.2
+    effort = "high"
   [agents.planner]
     enabled = true
     program = "opencode"
