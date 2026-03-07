@@ -17,3 +17,4 @@ When making the same change across 3+ files, use `sd`/`comby`/`ast-grep` — not
 It contains tool selection tables, quick references, and common mistakes for
 ast-grep, comby, difftastic, sd, yq, typos, and scc. The deep-dive reference
 files in `resources/` should be read when you need to use that specific tool —
+you don't need to read all of them upfront.
