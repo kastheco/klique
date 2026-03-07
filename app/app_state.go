@@ -1380,7 +1380,7 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 		inst := m.nav.RemoveByTitle(title)
 		m.removeFromAllInstances(title)
 		// Invalidate the preview terminal cache so that a replacement instance
-		// with the same title (e.g. a new "applying fixes" coder) gets a fresh
+		// with the same title (e.g. a new "applying fixes" fixer) gets a fresh
 		// terminal instead of showing stale output from the killed session.
 		if title == m.previewTerminalInstance {
 			if m.previewTerminal != nil {
@@ -1397,19 +1397,21 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	}
 }
 
-// spawnCoderWithFeedback creates and starts a coder session for the given plan,
+// spawnFixerWithFeedback creates and starts a fixer session for the given plan,
 // injecting reviewer feedback into the implementation prompt. Uses the plan's
 // shared worktree so fixes are applied to the actual implementation branch.
 // Does NOT perform any FSM transition — the caller is responsible for that.
-func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
+func (m *home) spawnFixerWithFeedback(planFile, feedback string) tea.Cmd {
 	planName := taskstate.DisplayName(planFile)
 	prompt := buildImplementPrompt(planFile)
 	if feedback != "" {
 		prompt += fmt.Sprintf("\n\nReviewer feedback from previous round:\n%s", feedback)
 	}
 
-	// Kill any previous coder for this plan so the new session gets a fresh
-	// tmux session instead of reattaching to a stale/errored one.
+	// Kill any previous fixer (and any legacy feedback-coder) for this plan so
+	// the new session gets a fresh tmux session instead of reattaching to a
+	// stale/errored one.
+	m.killExistingPlanAgent(planFile, session.AgentTypeFixer)
 	m.killExistingPlanAgent(planFile, session.AgentTypeCoder)
 
 	// Clear the push-prompt dedup flag so this new coder round can trigger
@@ -1424,24 +1426,24 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 	}
 
 	cycle, _ := m.taskState.ReviewCycle(planFile)
-	coderInst, err := session.NewInstance(session.InstanceOptions{
+	fixerInst, err := session.NewInstance(session.InstanceOptions{
 		Title:         fmt.Sprintf("%s-fix-%d", planName, cycle),
 		Path:          m.activeRepoPath,
-		Program:       m.programForAgent(session.AgentTypeCoder),
-		ExecutionMode: m.executionModeForAgent(session.AgentTypeCoder),
+		Program:       m.programForAgent(session.AgentTypeFixer),
+		ExecutionMode: m.executionModeForAgent(session.AgentTypeFixer),
 		TaskFile:      planFile,
-		AgentType:     session.AgentTypeCoder,
+		AgentType:     session.AgentTypeFixer,
 		ReviewCycle:   cycle,
 	})
 	if err != nil {
-		log.WarningLog.Printf("could not create coder instance for %q: %v", planFile, err)
+		log.WarningLog.Printf("could not create fixer instance for %q: %v", planFile, err)
 		return nil
 	}
-	coderInst.QueuedPrompt = prompt
-	coderInst.SetStatus(session.Loading)
+	fixerInst.QueuedPrompt = prompt
+	fixerInst.SetStatus(session.Loading)
 
-	m.addInstanceFinalizer(coderInst, m.nav.AddInstance(coderInst))
-	m.nav.SelectInstance(coderInst)
+	m.addInstanceFinalizer(fixerInst, m.nav.AddInstance(fixerInst))
+	m.nav.SelectInstance(fixerInst)
 
 	detail := ""
 	if feedback != "" {
@@ -1451,22 +1453,22 @@ func (m *home) spawnCoderWithFeedback(planFile, feedback string) tea.Cmd {
 			detail = feedback
 		}
 	}
-	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned coder with reviewer feedback for %s", planName),
+	m.audit(auditlog.EventAgentSpawned, fmt.Sprintf("spawned fixer with reviewer feedback for %s", planName),
 		auditlog.WithPlan(planFile),
-		auditlog.WithInstance(coderInst.Title),
-		auditlog.WithAgent(session.AgentTypeCoder),
+		auditlog.WithInstance(fixerInst.Title),
+		auditlog.WithAgent(session.AgentTypeFixer),
 		auditlog.WithDetail(detail),
 	)
 
-	m.toastManager.Info(fmt.Sprintf("review changes requested → re-implementing %s", planName))
+	m.toastManager.Info(fmt.Sprintf("review changes requested → applying fixes to %s", planName))
 
 	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
 	return func() tea.Msg {
 		if err := shared.Setup(); err != nil {
-			return instanceStartedMsg{instance: coderInst, err: err}
+			return instanceStartedMsg{instance: fixerInst, err: err}
 		}
-		err := coderInst.StartInSharedWorktree(shared, branch)
-		return instanceStartedMsg{instance: coderInst, err: err}
+		err := fixerInst.StartInSharedWorktree(shared, branch)
+		return instanceStartedMsg{instance: fixerInst, err: err}
 	}
 }
 
@@ -1753,20 +1755,19 @@ func dedupePlanFilenameInState(ps *taskstate.TaskState, filename string) string 
 	return filename
 }
 
-// shouldPromptPushAfterCoderExit returns true when a coder session has finished
-// and the plan is still in the implementing state. A coder is considered finished
-// when its tmux session has exited (tmuxAlive == false) OR when it has returned
-// to a prompt after completing its queued work (PromptDetected && !AwaitingWork).
-// The latter covers "applying fixes" coders spawned by spawnCoderWithFeedback,
-// which finish their work and return to prompt rather than exiting tmux.
-func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Instance, tmuxAlive bool) bool {
+// shouldPromptPushAfterImplementerExit returns true when a non-solo coder or
+// fixer session has finished and the plan is still in the implementing state.
+// An implementer is considered finished when its tmux session has exited
+// (tmuxAlive == false) OR when it has returned to a prompt after completing
+// its queued work (PromptDetected && !AwaitingWork).
+func shouldPromptPushAfterImplementerExit(entry taskstate.TaskEntry, inst *session.Instance, tmuxAlive bool) bool {
 	if inst == nil {
 		return false
 	}
 	if inst.TaskFile == "" {
 		return false
 	}
-	if inst.AgentType != session.AgentTypeCoder {
+	if inst.AgentType != session.AgentTypeCoder && inst.AgentType != session.AgentTypeFixer {
 		return false
 	}
 	if inst.SoloAgent {
@@ -1783,7 +1784,7 @@ func shouldPromptPushAfterCoderExit(entry taskstate.TaskEntry, inst *session.Ins
 		return true
 	}
 	// Agent returned to prompt after finishing queued work — covers the
-	// review-feedback coder ("applying fixes") which stays alive in tmux.
+	// review-feedback fixer ("applying fixes") which stays alive in tmux.
 	if inst.PromptDetected && !inst.AwaitingWork {
 		return true
 	}
