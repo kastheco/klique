@@ -16,7 +16,7 @@ type TaskSignal struct {
 	filePath   string // full path for deletion
 }
 
-var taskSignalRe = regexp.MustCompile(`^implement-task-finished-w(\d+)-t(\d+)-(.+\.md)$`)
+var taskSignalRe = regexp.MustCompile(`^implement-task-finished-w(\d+)-t(\d+)-(.+)$`)
 
 // ParseTaskSignal attempts to parse a filename as a wave-task completion signal.
 func ParseTaskSignal(filename string) (TaskSignal, bool) {
