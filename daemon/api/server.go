@@ -42,12 +42,6 @@ type InstanceStatus struct {
 	Active  bool   `json:"active"`
 }
 
-// Event is a daemon event emitted over the SSE stream.
-type Event struct {
-	Type    string `json:"type"`
-	Payload any    `json:"payload,omitempty"`
-}
-
 // addRepoRequest is the request body for POST /v1/repos.
 type addRepoRequest struct {
 	Path string `json:"path"`
@@ -152,16 +146,30 @@ func (s *DaemonState) EventStream() <-chan Event {
 
 // Handler is an http.Handler that exposes the daemon control API.
 type Handler struct {
-	state StateProvider
-	mux   *http.ServeMux
+	state       StateProvider
+	broadcaster *EventBroadcaster // optional; if set, SSE uses Subscribe()
+	mux         *http.ServeMux
 }
 
 // NewHandler creates a Handler backed by the given StateProvider and registers
-// all API routes.
+// all API routes. The SSE endpoint will use state.EventStream().
 func NewHandler(state StateProvider) http.Handler {
 	h := &Handler{
 		state: state,
 		mux:   http.NewServeMux(),
+	}
+	h.registerRoutes()
+	return h
+}
+
+// NewHandlerWithBroadcaster creates a Handler that uses the provided
+// EventBroadcaster for the SSE /v1/events endpoint, giving each connecting
+// client its own subscription channel.
+func NewHandlerWithBroadcaster(state StateProvider, b *EventBroadcaster) http.Handler {
+	h := &Handler{
+		state:       state,
+		broadcaster: b,
+		mux:         http.NewServeMux(),
 	}
 	h.registerRoutes()
 	return h
@@ -286,9 +294,19 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush() // send headers to client immediately
 
 	enc := json.NewEncoder(w)
-	events := h.state.EventStream()
+
+	// Prefer the broadcaster (per-client subscription) when available;
+	// fall back to the StateProvider's shared channel.
+	var events <-chan Event
+	if h.broadcaster != nil {
+		events = h.broadcaster.Subscribe()
+	} else {
+		events = h.state.EventStream()
+	}
 
 	for {
 		select {
