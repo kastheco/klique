@@ -214,8 +214,6 @@ Evidence-first approach before claiming anything is fixed or working:
    - If NO: State actual status with evidence.
    - If YES: State claim WITH evidence.
 5. ONLY THEN: Claim completion.
-
-For this role refinement task, verify with `git diff -- .agents/skills/kasmos-fixer/SKILL.md internal/initcmd/scaffold/templates/skills/kasmos-fixer/SKILL.md` that the change is limited to role-scoping and input-contract text, and that the available command inventory (`kas task list`, `kas task transition`, `kas task implement`, cleanup flows) remains intact.
 ```
 
 Skipping any step is not verification — it's guessing.

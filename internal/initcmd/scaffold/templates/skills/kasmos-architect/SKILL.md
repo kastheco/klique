@@ -119,7 +119,7 @@ Preserve plan structure exactly; only task bodies and added metadata blocks shou
 For each task body:
 - make it standalone for coder execution
 - keep instructions explicit and short
-- avoid exploratory steps such as "explore the codebase" or "inspect broader architecture"
+- avoid exploratory steps such as "inspect more files" or "explore the codebase"
 - include exact paths, function names, signatures, commands, and acceptance checks relevant to that task
 - split large logic into smaller `**Step**` items when needed
 

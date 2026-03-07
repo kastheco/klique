@@ -327,5 +327,3 @@ then offer execution choices:
 
 if option 1: execute tasks sequentially in this session using `kasmos-coder` requirements.
 if option 2: stop and let the user open a new session.
-
-(End of file)
