@@ -21,8 +21,8 @@ func BuildTaskPrompt(planFile string, plan *taskparser.Plan, task taskparser.Tas
 	sb.WriteString("- Run scoped tests before committing: `go test ./pkg/... -run Test<Name> -v`\n")
 	sb.WriteString("- Verify build: `go build ./...`\n")
 	sb.WriteString("- Commit: `git add <specific-files> && git commit -m \"feat(task-N): description\"`\n")
-	sb.WriteString(fmt.Sprintf("- When done: write completion sentinel `touch .kasmos/signals/implement-task-finished-w%d-t%d-%s`, then stop.\n\n",
-		waveNumber, task.Number, planFile))
+	sb.WriteString(fmt.Sprintf("- When done: signal completion with `kas signal emit implement_task_finished %s --payload '{\"wave_number\":%d,\"task_number\":%d}'` (or fallback: `touch .kasmos/signals/implement-task-finished-w%d-t%d-%s`), then stop.\n\n",
+		planFile, waveNumber, task.Number, waveNumber, task.Number, planFile))
 
 	// Plan context
 	header := plan.HeaderContext()
@@ -97,7 +97,7 @@ func BuildElaborationPrompt(planFile string) string {
 			"4. Preserve the plan structure — do not change wave organization, "+
 			"task numbering, file lists, or the header fields. Only expand task bodies.\n"+
 			"5. Write the updated plan: pipe content to `kas task update-content %[1]s`\n"+
-			"6. Signal completion: `touch .kasmos/signals/elaborator-finished-%[1]s`\n",
+			"6. Signal completion: `kas signal emit elaborator_finished %[1]s` (or fallback: `touch .kasmos/signals/elaborator-finished-%[1]s`)\n",
 		planFile,
 	)
 }
@@ -134,7 +134,7 @@ func BuildWaveAnnotationPrompt(planFile string) string {
 			"Keep all existing task content intact; only add the ## Wave headers.\n\n"+
 			"After annotating:\n"+
 			"1. Store the updated plan via `kas task update-content %[1]s` (pipe the content)\n"+
-			"2. Signal completion: touch .kasmos/signals/planner-finished-%[1]s\n"+
+			"2. Signal completion: `kas signal emit planner_finished %[1]s` (or fallback: `touch .kasmos/signals/planner-finished-%[1]s`)\n"+
 			"Do not edit plan-state.json directly.",
 		planFile,
 	)
