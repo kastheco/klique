@@ -23,6 +23,7 @@ import (
 
 var (
 	version     = "1.4.1"
+	commitHash  = ""
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
@@ -89,7 +90,7 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			return app.Run(ctx, program, autoYes, versionString())
 		},
 	}
 
@@ -159,11 +160,23 @@ var (
 		Use:   "version",
 		Short: "Print the version number of kas",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("kas version %s\n", version)
+			fmt.Printf("kas version %s\n", versionString())
 			fmt.Printf("https://github.com/kastheco/kasmos/releases/tag/v%s\n", version)
 		},
 	}
 )
+
+func versionString() string {
+	v := "v" + version
+	if commitHash == "" {
+		return v
+	}
+	short := commitHash
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	return v + "-" + short
+}
 
 func init() {
 	rootCmd.Flags().StringVarP(&programFlag, "program", "p", "",
