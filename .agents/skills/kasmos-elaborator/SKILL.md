@@ -11,6 +11,11 @@ coder agents can execute without making architectural guesses.
 
 **Announce at start:** "i'm using the kasmos-elaborator skill to enrich plan tasks."
 
+## deprecation notice
+
+kasmos-elaborator is being replaced by kasmos-architect, but remains supported for backward
+compatibility with plans and prompts that still reference the elaborator role.
+
 <HARD-GATE>
 ## banned tools
 
