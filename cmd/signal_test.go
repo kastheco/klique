@@ -296,10 +296,17 @@ func TestExecuteSignalProcess_MultipleSignals(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, processed)
 
-	// Both signals consumed.
+	// Both signals consumed — filter out subdirectories (staging/, processing/, failed/)
+	// that EnsureSignalDirs may have created.
 	entries, err := os.ReadDir(signalsDir)
 	require.NoError(t, err)
-	assert.Empty(t, entries)
+	var fileEntries []os.DirEntry
+	for _, e := range entries {
+		if !e.IsDir() {
+			fileEntries = append(fileEntries, e)
+		}
+	}
+	assert.Empty(t, fileEntries, "no top-level signal files should remain after processing")
 
 	// Both plans transitioned.
 	ps, err := taskstate.Load(store, project, "")
@@ -342,6 +349,88 @@ func TestExecuteSignalProcess_ReviewChanges_TransitionToImplementing(t *testing.
 	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 	// Review cycle should be incremented.
 	assert.Equal(t, 1, entry.ReviewCycle)
+}
+
+// TestExecuteSignalProcess_AtomicProcessing verifies that a valid signal is
+// processed atomically: base file is gone, processing dir is clean, no failed
+// entry, and the plan transitions correctly.
+func TestExecuteSignalProcess_AtomicProcessing(t *testing.T) {
+	store, root, project := setupSignalTestStore(t)
+	signalsDir := filepath.Join(root, ".kasmos", "signals")
+	require.NoError(t, taskfsm.EnsureSignalDirs(signalsDir))
+
+	// planner-finished on a planning-plan → ready.
+	sigFile := filepath.Join(signalsDir, "planner-finished-planning-plan")
+	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
+
+	opts := signalProcessOptions{
+		repoRoot:   root,
+		project:    project,
+		signalsDir: signalsDir,
+		store:      store,
+	}
+	processed, err := executeSignalProcess(opts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, processed)
+
+	// Base signal file must be gone.
+	_, statErr := os.Stat(sigFile)
+	assert.True(t, os.IsNotExist(statErr), "base signal file should be deleted after processing")
+
+	// processing/ dir must not contain the signal.
+	procPath := filepath.Join(signalsDir, "processing", "planner-finished-planning-plan")
+	_, statErr = os.Stat(procPath)
+	assert.True(t, os.IsNotExist(statErr), "processing file should be removed after success")
+
+	// failed/ dir must not contain the signal.
+	failedPath := filepath.Join(signalsDir, "failed", "planner-finished-planning-plan")
+	_, statErr = os.Stat(failedPath)
+	assert.True(t, os.IsNotExist(statErr), "successful signal must not appear in failed/")
+
+	// Plan should have transitioned to ready.
+	ps, err := taskstate.Load(store, project, "")
+	require.NoError(t, err)
+	entry, ok := ps.Entry("planning-plan")
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
+}
+
+// TestExecuteSignalProcess_InvalidTransition_MovesToFailed verifies that a
+// signal whose FSM transition is invalid is dead-lettered into failed/.
+func TestExecuteSignalProcess_InvalidTransition_MovesToFailed(t *testing.T) {
+	store, root, project := setupSignalTestStore(t)
+	signalsDir := filepath.Join(root, ".kasmos", "signals")
+	require.NoError(t, taskfsm.EnsureSignalDirs(signalsDir))
+
+	// implement-finished on a ready-plan is an invalid transition.
+	sigFile := filepath.Join(signalsDir, "implement-finished-ready-plan")
+	require.NoError(t, os.WriteFile(sigFile, nil, 0o644))
+
+	opts := signalProcessOptions{
+		repoRoot:   root,
+		project:    project,
+		signalsDir: signalsDir,
+		store:      store,
+	}
+	processed, err := executeSignalProcess(opts)
+	require.NoError(t, err)
+	assert.Equal(t, 0, processed, "invalid transition should not count as processed")
+
+	// failed/ must contain the signal and a reason file.
+	failedPath := filepath.Join(signalsDir, "failed", "implement-finished-ready-plan")
+	_, statErr := os.Stat(failedPath)
+	assert.False(t, os.IsNotExist(statErr), "signal should be in failed/ after invalid transition")
+
+	reasonPath := failedPath + ".reason"
+	_, statErr = os.Stat(reasonPath)
+	assert.False(t, os.IsNotExist(statErr), "reason file should exist in failed/")
+
+	// Plan status must remain ready.
+	ps, err := taskstate.Load(store, project, "")
+	require.NoError(t, err)
+	entry, ok := ps.Entry("ready-plan")
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
 }
 
 // TestNewSignalCmd_Structure verifies the cobra command tree structure.
