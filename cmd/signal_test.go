@@ -476,6 +476,14 @@ func TestNormalizeSignalPayload_ImplementTaskFinishedRejectsNonNumeric(t *testin
 	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1,"task_number":"y"}`)
 	assert.Error(t, err)
 
+	// Fractional values must also be rejected — they pass JSON float64 assertion
+	// but would cause json.Unmarshal-into-int failure in the gateway scanner.
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1.5,"task_number":1}`)
+	assert.Error(t, err)
+
+	_, err = normalizeSignalPayload("implement_task_finished", `{"wave_number":1,"task_number":2.5}`)
+	assert.Error(t, err)
+
 	payload, err := normalizeSignalPayload("implement_task_finished", `{"wave_number":2,"task_number":3}`)
 	require.NoError(t, err)
 	assert.Equal(t, `{"wave_number":2,"task_number":3}`, payload)
@@ -483,6 +491,11 @@ func TestNormalizeSignalPayload_ImplementTaskFinishedRejectsNonNumeric(t *testin
 
 func TestNormalizeSignalPayload_ImplementWaveRejectsNonNumeric(t *testing.T) {
 	_, err := normalizeSignalPayload("implement_wave", `{"wave_number":"not-a-number"}`)
+	assert.Error(t, err)
+
+	// Fractional value must also be rejected — it passes float64 assertion
+	// but would cause json.Unmarshal-into-int failure in the gateway scanner.
+	_, err = normalizeSignalPayload("implement_wave", `{"wave_number":1.5}`)
 	assert.Error(t, err)
 
 	payload, err := normalizeSignalPayload("implement_wave", `{"wave_number":1}`)

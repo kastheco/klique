@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -242,11 +243,19 @@ func normalizeSignalPayload(signalType, payload string) (string, error) {
 		if err := json.Unmarshal([]byte(payload), &m); err != nil {
 			return "", fmt.Errorf("implement_task_finished: payload must be valid JSON: %w", err)
 		}
-		if _, ok := m["wave_number"].(float64); !ok {
+		wn, ok := m["wave_number"].(float64)
+		if !ok {
 			return "", fmt.Errorf("implement_task_finished: wave_number must be a number")
 		}
-		if _, ok := m["task_number"].(float64); !ok {
+		if wn != math.Trunc(wn) {
+			return "", fmt.Errorf("implement_task_finished: wave_number must be a whole number")
+		}
+		tn, ok := m["task_number"].(float64)
+		if !ok {
 			return "", fmt.Errorf("implement_task_finished: task_number must be a number")
+		}
+		if tn != math.Trunc(tn) {
+			return "", fmt.Errorf("implement_task_finished: task_number must be a whole number")
 		}
 		return payload, nil
 
@@ -258,8 +267,12 @@ func normalizeSignalPayload(signalType, payload string) (string, error) {
 		if err := json.Unmarshal([]byte(payload), &m); err != nil {
 			return "", fmt.Errorf("implement_wave: payload must be valid JSON: %w", err)
 		}
-		if _, ok := m["wave_number"].(float64); !ok {
+		wn, ok := m["wave_number"].(float64)
+		if !ok {
 			return "", fmt.Errorf("implement_wave: wave_number must be a number")
+		}
+		if wn != math.Trunc(wn) {
+			return "", fmt.Errorf("implement_wave: wave_number must be a whole number")
 		}
 		return payload, nil
 

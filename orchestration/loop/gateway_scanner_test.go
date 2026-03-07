@@ -44,5 +44,10 @@ func TestScanGateway_BadPayloadReturnsError(t *testing.T) {
 
 	_, ids, err := ScanGateway(gw, "proj", "daemon:test")
 	require.Error(t, err)
-	assert.Len(t, ids, 1)
+	// Bad row is marked SignalFailed immediately inside ScanGateway, not returned in ids.
+	assert.Empty(t, ids)
+
+	failed, listErr := gw.List("proj", taskstore.SignalFailed)
+	require.NoError(t, listErr)
+	assert.Len(t, failed, 1)
 }
