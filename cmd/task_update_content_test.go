@@ -43,6 +43,25 @@ func TestExecuteTaskUpdateContent(t *testing.T) {
 		assert.Equal(t, taskstore.SubtaskStatusPending, subtasks[0].Status)
 	})
 
+	t.Run("exits 0 when content stored but parse fails (draft plan)", func(t *testing.T) {
+		store := taskstore.NewTestSQLiteStore(t)
+		project := "test-project"
+		require.NoError(t, store.Create(project, taskstore.TaskEntry{
+			Filename:  "my-plan",
+			Status:    taskstore.StatusReady,
+			CreatedAt: time.Now(),
+		}))
+
+		// Valid markdown but no Wave sections — typical during early drafting.
+		draftContent := "# My Plan\n\n**Goal:** in progress\n"
+		err := executeTaskUpdateContent(project, "my-plan.md", strings.NewReader(draftContent), store)
+		require.NoError(t, err, "parse warning must not cause non-zero exit")
+
+		got, err := store.GetContent(project, "my-plan")
+		require.NoError(t, err)
+		assert.Equal(t, draftContent, got, "content must still be persisted")
+	})
+
 	t.Run("rejects empty stdin", func(t *testing.T) {
 		store := taskstore.NewTestSQLiteStore(t)
 		project := "test-project"
