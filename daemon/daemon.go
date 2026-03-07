@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,12 +14,193 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/log"
+	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 )
 
-// RunDaemon is the entry point for daemon mode. It polls all active sessions
-// and automatically accepts prompts on their behalf. The daemon shuts down
-// cleanly when it receives SIGINT or SIGTERM.
+// ---------------------------------------------------------------------------
+// TmuxSpawner (minimal placeholder; satisfies loop.AgentSpawner)
+// ---------------------------------------------------------------------------
+
+// TmuxSpawner implements loop.AgentSpawner by launching agents in tmux
+// sessions.
+type TmuxSpawner struct {
+	logger *slog.Logger
+}
+
+func newTmuxSpawner(logger *slog.Logger) *TmuxSpawner {
+	return &TmuxSpawner{logger: logger}
+}
+
+func (s *TmuxSpawner) SpawnReviewer(ctx context.Context, opts loop.SpawnOpts) error {
+	s.logger.Info("spawn reviewer", "plan", opts.PlanFile, "wave", opts.Wave)
+	return nil
+}
+
+func (s *TmuxSpawner) SpawnCoder(ctx context.Context, opts loop.SpawnOpts) error {
+	s.logger.Info("spawn coder", "plan", opts.PlanFile, "wave", opts.Wave)
+	return nil
+}
+
+func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) error {
+	s.logger.Info("spawn elaborator", "plan", opts.PlanFile)
+	return nil
+}
+
+func (s *TmuxSpawner) KillAgent(planFile, agentType string) error {
+	s.logger.Info("kill agent", "plan", planFile, "type", agentType)
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Daemon
+// ---------------------------------------------------------------------------
+
+// Daemon is the multi-repo background orchestrator. It polls registered
+// repositories for signal files and executes the resulting actions via the
+// configured AgentSpawner.
+type Daemon struct {
+	cfg     *DaemonConfig
+	repos   *RepoManager
+	spawner *TmuxSpawner
+	logger  *slog.Logger
+	pidLock *PIDLock
+	mu      sync.RWMutex
+}
+
+// NewDaemon creates a new Daemon from the given configuration. The daemon is
+// not started until Run is called.
+func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
+	if cfg == nil {
+		cfg = defaultDaemonConfig()
+	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = 2 * time.Second
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	d := &Daemon{
+		cfg:     cfg,
+		repos:   NewRepoManager(),
+		spawner: newTmuxSpawner(logger),
+		logger:  logger,
+	}
+
+	// Pre-register repos from config.
+	for _, r := range cfg.Repos {
+		if err := d.repos.Add(r); err != nil {
+			return nil, fmt.Errorf("daemon: add repo %s: %w", r, err)
+		}
+	}
+
+	return d, nil
+}
+
+// AddRepo registers a repository root with the daemon. The repo will be
+// polled on the next tick. Safe to call concurrently.
+func (d *Daemon) AddRepo(root string) error {
+	return d.repos.Add(root)
+}
+
+// ListRepos returns the current list of registered repo root paths.
+func (d *Daemon) ListRepos() []string {
+	entries := d.repos.List()
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Path
+	}
+	return out
+}
+
+// Run starts the daemon event loop. It blocks until ctx is cancelled, then
+// performs a clean shutdown.
+//
+// The event loop:
+//  1. Creates a ticker at cfg.PollInterval.
+//  2. On each tick: scans all registered repos for signal files, feeds results
+//     to per-repo Processor.Tick(), and executes the returned actions.
+//  3. On context cancellation: releases the PID lock and returns nil.
+func (d *Daemon) Run(ctx context.Context) error {
+	d.logger.Info("daemon starting", "poll_interval", d.cfg.PollInterval)
+
+	ticker := time.NewTicker(d.cfg.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			d.logger.Info("daemon shutting down")
+			if d.pidLock != nil {
+				_ = d.pidLock.Release()
+				d.pidLock = nil
+			}
+			return nil
+
+		case <-ticker.C:
+			d.tick(ctx)
+		}
+	}
+}
+
+// tick executes one poll cycle across all registered repos.
+func (d *Daemon) tick(ctx context.Context) {
+	entries := d.repos.List()
+	for _, e := range entries {
+		scan := loop.ScanAllSignals(e.Path, nil)
+
+		if e.Store == nil {
+			// Processor requires a store; skip repos whose store is unavailable.
+			continue
+		}
+
+		// Build a processor for this entry using the per-repo store.
+		proc := loop.NewProcessor(loop.ProcessorConfig{
+			Store:   e.Store,
+			Project: e.Project,
+		})
+
+		actions := proc.Tick(scan)
+		for _, action := range actions {
+			d.executeAction(ctx, e, action)
+		}
+	}
+}
+
+// executeAction dispatches a single action to the configured spawner.
+func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Action) {
+	switch a := action.(type) {
+	case loop.SpawnReviewerAction:
+		if err := d.spawner.SpawnReviewer(ctx, loop.SpawnOpts{PlanFile: a.PlanFile}); err != nil {
+			d.logger.Error("spawn reviewer failed", "plan", a.PlanFile, "err", err)
+		}
+	case loop.SpawnCoderAction:
+		if err := d.spawner.SpawnCoder(ctx, loop.SpawnOpts{PlanFile: a.PlanFile, Feedback: a.Feedback}); err != nil {
+			d.logger.Error("spawn coder failed", "plan", a.PlanFile, "err", err)
+		}
+	case loop.SpawnElaboratorAction:
+		if err := d.spawner.SpawnElaborator(ctx, loop.SpawnOpts{PlanFile: a.PlanFile}); err != nil {
+			d.logger.Error("spawn elaborator failed", "plan", a.PlanFile, "err", err)
+		}
+	case loop.PausePlanAgentAction:
+		if err := d.spawner.KillAgent(a.PlanFile, a.AgentType); err != nil {
+			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)
+		}
+	default:
+		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Legacy API (deprecated)
+// ---------------------------------------------------------------------------
+
+// RunDaemon is the legacy auto-accept daemon entry point. Kept for backward
+// compatibility.
+//
+// Deprecated: use NewDaemon + Run instead.
 func RunDaemon(cfg *config.Config) error {
 	log.InfoLog.Printf("daemon starting")
 
