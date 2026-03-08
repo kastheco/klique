@@ -152,6 +152,14 @@ func runSkillsSync(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return nil
 	}
+	// $HOME/.agents/skills/ holds personal (global) skills, not a project root.
+	// Running project sync from $HOME would call SymlinkHarnessSkills(home, name),
+	// which writes to $HOME/.<harness>/skills/ — a path that differs from the real
+	// harness global config dir (e.g. ~/.config/opencode/skills/ for OpenCode).
+	// Skip project sync whenever cwd is the user's home directory.
+	if cwd == home {
+		return nil
+	}
 	projectSkillsDir := filepath.Join(cwd, ".agents", "skills")
 	if info, err := os.Stat(projectSkillsDir); err != nil || !info.IsDir() {
 		return nil
