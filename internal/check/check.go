@@ -40,9 +40,10 @@ func (s SkillStatus) String() string {
 
 // SkillEntry is one skill's audit result for one harness.
 type SkillEntry struct {
-	Name   string
-	Status SkillStatus
-	Detail string // e.g. symlink target, error message
+	Name       string
+	Status     SkillStatus
+	Detail     string // e.g. symlink target, error message
+	HasSkillMD bool   // whether SKILL.md exists in the canonical source dir
 }
 
 // HarnessResult holds audit results for one harness.

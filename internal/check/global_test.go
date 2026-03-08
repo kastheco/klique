@@ -94,6 +94,44 @@ func TestAuditGlobal_OrphanWithNoCanonical(t *testing.T) {
 	assert.Equal(t, StatusOrphan, byName["stale"].Status, "stale should be orphan even with no canonical dir")
 }
 
+func TestAuditGlobal_DetectsNonSymlinkCopy(t *testing.T) {
+	home := t.TempDir()
+	agentsSkills := filepath.Join(home, ".agents", "skills")
+	skillDir := filepath.Join(agentsSkills, "my-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".claude", "skills", "my-skill"), 0o755))
+	result := AuditGlobal(home, "claude")
+	byName := map[string]SkillEntry{}
+	for _, s := range result.Skills {
+		byName[s.Name] = s
+	}
+	assert.Equal(t, StatusCopy, byName["my-skill"].Status)
+}
+
+func TestAuditGlobal_SkillMDTracked(t *testing.T) {
+	home := t.TempDir()
+	agentsSkills := filepath.Join(home, ".agents", "skills")
+	withMD := filepath.Join(agentsSkills, "good-skill")
+	withoutMD := filepath.Join(agentsSkills, "bad-skill")
+	require.NoError(t, os.MkdirAll(withMD, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(withMD, "SKILL.md"), []byte("test"), 0o644))
+	require.NoError(t, os.MkdirAll(withoutMD, 0o755))
+	claudeSkills := filepath.Join(home, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(claudeSkills, 0o755))
+	for _, name := range []string{"good-skill", "bad-skill"} {
+		target, err := filepath.Rel(claudeSkills, filepath.Join(agentsSkills, name))
+		require.NoError(t, err)
+		require.NoError(t, os.Symlink(target, filepath.Join(claudeSkills, name)))
+	}
+	result := AuditGlobal(home, "claude")
+	byName := map[string]SkillEntry{}
+	for _, s := range result.Skills {
+		byName[s.Name] = s
+	}
+	assert.True(t, byName["good-skill"].HasSkillMD)
+	assert.False(t, byName["bad-skill"].HasSkillMD)
+}
+
 func TestAuditGlobal_Codex(t *testing.T) {
 	home := t.TempDir()
 
