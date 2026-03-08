@@ -49,16 +49,18 @@ func TestAuditProject_SyncedAndMissing(t *testing.T) {
 	assert.Equal(t, StatusMissing, planner.HarnessStatus["claude"], "kasmos-planner: claude should be missing")
 	assert.Equal(t, StatusMissing, planner.HarnessStatus["opencode"], "kasmos-planner: opencode should be missing")
 
-	// kasmos-reviewer: not in canonical (missing from .agents/skills/)
-	reviewer := byName["kasmos-reviewer"]
-	assert.False(t, reviewer.InCanonical, "kasmos-reviewer should not be in canonical")
+	// kasmos-reviewer: not in .agents/skills/ — should be absent from results entirely
+	_, exists := byName["kasmos-reviewer"]
+	assert.False(t, exists, "kasmos-reviewer should not appear in results (not in .agents/skills/)")
 }
 
 func TestAuditProject_AllSynced(t *testing.T) {
 	dir := t.TempDir()
 
+	skillNames := []string{"kasmos-coder", "kasmos-planner", "kasmos-reviewer", "kasmos-fixer", "kasmos-lifecycle"}
+
 	agentsSkills := filepath.Join(dir, ".agents", "skills")
-	for _, name := range EmbeddedSkillNames {
+	for _, name := range skillNames {
 		skillDir := filepath.Join(agentsSkills, name)
 		require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	}
@@ -66,17 +68,88 @@ func TestAuditProject_AllSynced(t *testing.T) {
 	// Symlink all skills for claude
 	claudeSkills := filepath.Join(dir, ".claude", "skills")
 	require.NoError(t, os.MkdirAll(claudeSkills, 0o755))
-	for _, name := range EmbeddedSkillNames {
+	for _, name := range skillNames {
 		target := filepath.Join("..", "..", ".agents", "skills", name)
 		require.NoError(t, os.Symlink(target, filepath.Join(claudeSkills, name)))
 	}
 
 	results := AuditProject(dir, []string{"claude"})
 
+	assert.Len(t, results, len(skillNames))
 	for _, r := range results {
 		assert.True(t, r.InCanonical, "%s should be in canonical", r.Name)
 		assert.Equal(t, StatusSynced, r.HarnessStatus["claude"], "%s: claude should be synced", r.Name)
 	}
+}
+
+func TestAuditProject_DynamicDiscovery(t *testing.T) {
+	dir := t.TempDir()
+	agentsSkills := filepath.Join(dir, ".agents", "skills")
+
+	// Create custom skill names (not the hardcoded 5)
+	customSkills := []string{"another-skill", "my-custom-skill", "third-skill"}
+	for _, name := range customSkills {
+		require.NoError(t, os.MkdirAll(filepath.Join(agentsSkills, name), 0o755))
+	}
+
+	results := AuditProject(dir, []string{"claude"})
+
+	assert.Len(t, results, 3, "should discover exactly the 3 skills in .agents/skills/")
+	byName := make(map[string]ProjectSkillEntry)
+	for _, r := range results {
+		byName[r.Name] = r
+	}
+	for _, name := range customSkills {
+		entry, ok := byName[name]
+		assert.True(t, ok, "%s should be in results", name)
+		assert.True(t, entry.InCanonical, "%s should be in canonical", name)
+	}
+}
+
+func TestAuditProject_SkillMDCheck(t *testing.T) {
+	dir := t.TempDir()
+	agentsSkills := filepath.Join(dir, ".agents", "skills")
+
+	// Skill with SKILL.md
+	withSkillMDDir := filepath.Join(agentsSkills, "skill-with-md")
+	require.NoError(t, os.MkdirAll(withSkillMDDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(withSkillMDDir, "SKILL.md"), []byte("test"), 0o644))
+
+	// Skill without SKILL.md
+	withoutSkillMDDir := filepath.Join(agentsSkills, "skill-without-md")
+	require.NoError(t, os.MkdirAll(withoutSkillMDDir, 0o755))
+
+	results := AuditProject(dir, []string{"claude"})
+
+	byName := make(map[string]ProjectSkillEntry)
+	for _, r := range results {
+		byName[r.Name] = r
+	}
+
+	assert.True(t, byName["skill-with-md"].HasSkillMD, "skill-with-md should have HasSkillMD=true")
+	assert.False(t, byName["skill-without-md"].HasSkillMD, "skill-without-md should have HasSkillMD=false")
+}
+
+func TestAuditProject_DetectsNonSymlinkCopy(t *testing.T) {
+	dir := t.TempDir()
+	agentsSkills := filepath.Join(dir, ".agents", "skills")
+	skillDir := filepath.Join(agentsSkills, "my-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+
+	// Create a non-symlink directory in harness dir (copy, not symlink)
+	claudeSkillPath := filepath.Join(dir, ".claude", "skills", "my-skill")
+	require.NoError(t, os.MkdirAll(claudeSkillPath, 0o755))
+
+	results := AuditProject(dir, []string{"claude"})
+
+	byName := make(map[string]ProjectSkillEntry)
+	for _, r := range results {
+		byName[r.Name] = r
+	}
+
+	skill := byName["my-skill"]
+	assert.True(t, skill.InCanonical)
+	assert.Equal(t, StatusCopy, skill.HarnessStatus["claude"], "non-symlink dir should be StatusCopy")
 }
 
 func TestAuditProject_BrokenSymlink(t *testing.T) {

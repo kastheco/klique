@@ -3,45 +3,38 @@ package check
 import (
 	"os"
 	"path/filepath"
+	"sort"
 )
 
-// EmbeddedSkillNames is the list of kasmos agent skill names that kas setup writes to .agents/skills/.
-var EmbeddedSkillNames = []string{
-	"kasmos-coder",
-	"kasmos-fixer",
-	"kasmos-lifecycle",
-	"kasmos-planner",
-	"kasmos-reviewer",
-}
-
-// AuditProject checks <dir>/.agents/skills/ against expected embedded skills
-// and verifies harness project skill dirs have valid symlinks.
+// AuditProject checks <dir>/.agents/skills/ dynamically and verifies harness
+// project skill dirs have valid symlinks. Results are derived from the skills
+// found in .agents/skills/ rather than a hardcoded list.
 func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 	canonicalDir := filepath.Join(dir, ".agents", "skills")
 
-	// Determine which embedded skills exist in canonical dir.
-	canonicalSet := make(map[string]bool)
 	entries, err := os.ReadDir(canonicalDir)
-	if err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				canonicalSet[e.Name()] = true
-			}
-		}
+	if err != nil {
+		return nil
 	}
 
-	var results []ProjectSkillEntry
-	for _, skillName := range EmbeddedSkillNames {
+	results := []ProjectSkillEntry{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue // skip plain files and symlinks
+		}
+
+		skillName := e.Name()
+		skillPath := filepath.Join(canonicalDir, skillName)
+
 		entry := ProjectSkillEntry{
 			Name:          skillName,
-			InCanonical:   canonicalSet[skillName],
+			InCanonical:   true,
 			HarnessStatus: make(map[string]SkillStatus),
 		}
 
-		if !entry.InCanonical {
-			results = append(results, entry)
-			continue
-		}
+		// Check SKILL.md existence.
+		_, statErr := os.Stat(filepath.Join(skillPath, "SKILL.md"))
+		entry.HasSkillMD = statErr == nil
 
 		// Check each harness's project skill dir for a symlink.
 		for _, harnessName := range harnessNames {
@@ -65,8 +58,8 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 			}
 
 			if lfi.Mode()&os.ModeSymlink == 0 {
-				// Non-symlink (user-managed) — treat as synced.
-				entry.HarnessStatus[harnessName] = StatusSynced
+				// Non-symlink directory — functional but may drift from source.
+				entry.HarnessStatus[harnessName] = StatusCopy
 				continue
 			}
 
@@ -91,6 +84,10 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 
 		results = append(results, entry)
 	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
 
 	return results
 }
