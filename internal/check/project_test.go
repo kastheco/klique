@@ -152,6 +152,38 @@ func TestAuditProject_DetectsNonSymlinkCopy(t *testing.T) {
 	assert.Equal(t, StatusCopy, skill.HarnessStatus["claude"], "non-symlink dir should be StatusCopy")
 }
 
+func TestAuditProject_SymlinkedSkillIncluded(t *testing.T) {
+	// A symlink in .agents/skills/ pointing to a real directory must be
+	// included in the audit, not silently skipped.
+	dir := t.TempDir()
+	agentsSkills := filepath.Join(dir, ".agents", "skills")
+	require.NoError(t, os.MkdirAll(agentsSkills, 0o755))
+
+	// Create an external skill directory and symlink it into .agents/skills/.
+	externalSkill := filepath.Join(dir, "external-skill-src")
+	require.NoError(t, os.MkdirAll(externalSkill, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(externalSkill, "SKILL.md"), []byte("test"), 0o644))
+	require.NoError(t, os.Symlink(externalSkill, filepath.Join(agentsSkills, "external-skill")))
+
+	results := AuditProject(dir, []string{"claude"})
+
+	require.Len(t, results, 1, "symlinked skill dir must appear in results")
+	assert.Equal(t, "external-skill", results[0].Name)
+	assert.True(t, results[0].InCanonical)
+	assert.True(t, results[0].HasSkillMD, "SKILL.md through symlink should be found")
+}
+
+func TestAuditProject_DanglingSymlinkSkipped(t *testing.T) {
+	// A dangling symlink in .agents/skills/ should not produce an entry.
+	dir := t.TempDir()
+	agentsSkills := filepath.Join(dir, ".agents", "skills")
+	require.NoError(t, os.MkdirAll(agentsSkills, 0o755))
+	require.NoError(t, os.Symlink("/nonexistent-target", filepath.Join(agentsSkills, "dangling-skill")))
+
+	results := AuditProject(dir, []string{"claude"})
+	assert.Empty(t, results, "dangling symlink must not appear in results")
+}
+
 func TestAuditProject_MissingCanonicalDir(t *testing.T) {
 	// .agents/ exists (project) but .agents/skills/ is absent — should surface
 	// a synthetic unhealthy entry rather than silently returning nil.

@@ -26,12 +26,20 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 
 	results := []ProjectSkillEntry{}
 	for _, e := range entries {
-		if !e.IsDir() {
-			continue // skip plain files and symlinks
-		}
-
 		skillName := e.Name()
 		skillPath := filepath.Join(canonicalDir, skillName)
+
+		if !e.IsDir() {
+			// For symlinks, follow the link and check whether it resolves to a
+			// directory — symlinked skill directories are valid canonical entries.
+			if e.Type()&os.ModeSymlink == 0 {
+				continue // plain file — not a skill directory
+			}
+			fi, statErr := os.Stat(skillPath)
+			if statErr != nil || !fi.IsDir() {
+				continue // dangling symlink or symlink-to-file — not a skill dir
+			}
+		}
 
 		entry := ProjectSkillEntry{
 			Name:          skillName,
