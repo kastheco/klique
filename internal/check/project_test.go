@@ -152,6 +152,20 @@ func TestAuditProject_DetectsNonSymlinkCopy(t *testing.T) {
 	assert.Equal(t, StatusCopy, skill.HarnessStatus["claude"], "non-symlink dir should be StatusCopy")
 }
 
+func TestAuditProject_MissingCanonicalDir(t *testing.T) {
+	// .agents/ exists (project) but .agents/skills/ is absent — should surface
+	// a synthetic unhealthy entry rather than silently returning nil.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".agents"), 0o755))
+	// Deliberately do NOT create .agents/skills/
+
+	results := AuditProject(dir, []string{"claude"})
+
+	require.Len(t, results, 1, "expected one synthetic entry for missing canonical dir")
+	assert.Equal(t, ".agents/skills", results[0].Name)
+	assert.False(t, results[0].InCanonical, "synthetic entry must not be marked as in-canonical")
+}
+
 func TestAuditProject_BrokenSymlink(t *testing.T) {
 	dir := t.TempDir()
 

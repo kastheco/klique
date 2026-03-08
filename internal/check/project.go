@@ -14,7 +14,14 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 
 	entries, err := os.ReadDir(canonicalDir)
 	if err != nil {
-		return nil
+		// Surface the missing/unreadable canonical dir as an unhealthy entry.
+		// AuditProject is only called when InProject=true (.agents/ exists), so a
+		// missing or unreadable .agents/skills/ directory is itself a health issue.
+		return []ProjectSkillEntry{{
+			Name:          ".agents/skills",
+			InCanonical:   false,
+			HarnessStatus: map[string]SkillStatus{},
+		}}
 	}
 
 	results := []ProjectSkillEntry{}

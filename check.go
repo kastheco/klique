@@ -94,8 +94,11 @@ func collectRemediationHints(result *check.AuditResult) []string {
 
 	for _, h := range result.Global {
 		for _, s := range h.Skills {
-			if s.Status == check.StatusMissing || s.Status == check.StatusCopy {
-				add("run `kas skills sync` to fix missing or copy-only skill links")
+			if s.Status == check.StatusMissing {
+				add("run `kas skills sync` to create missing skill links")
+			}
+			if s.Status == check.StatusCopy {
+				add("remove copy-only skill dirs and re-run `kas skills sync` to replace with symlinks")
 			}
 		}
 	}
@@ -108,8 +111,11 @@ func collectRemediationHints(result *check.AuditResult) []string {
 			add("add SKILL.md to skills missing documentation (e.g. .agents/skills/<name>/SKILL.md)")
 		}
 		for _, st := range p.HarnessStatus {
-			if st == check.StatusMissing || st == check.StatusCopy {
-				add("run `kas skills sync` to fix missing or copy-only skill links")
+			if st == check.StatusMissing {
+				add("run `kas skills sync` to create missing skill links")
+			}
+			if st == check.StatusCopy {
+				add("remove copy-only skill dirs and re-run `kas skills sync` to replace with symlinks")
 			}
 		}
 	}
