@@ -63,7 +63,7 @@ func GradientText(text, startHex, endHex string) string {
 		sb.WriteString(fmt.Sprintf("\033[38;2;%d;%d;%dm%c", cr, cg, cb, ch))
 		idx++
 	}
-	sb.WriteString("\033[0m")
+	sb.WriteString("\033[39m")
 	return sb.String()
 }
 
@@ -100,6 +100,6 @@ func GradientBar(width, filled int, startHex, endHex string) string {
 		sb.WriteString("\033[38;2;60;60;60m")
 		sb.WriteString(strings.Repeat("░", width-filled))
 	}
-	sb.WriteString("\033[0m")
+	sb.WriteString("\033[39m")
 	return sb.String()
 }

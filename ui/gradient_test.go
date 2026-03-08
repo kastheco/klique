@@ -29,8 +29,8 @@ func TestGradientText_MultiChar(t *testing.T) {
 			t.Errorf("expected result to contain %q", string(c))
 		}
 	}
-	if !strings.HasSuffix(result, "\033[0m") {
-		t.Errorf("expected ANSI reset at end")
+	if !strings.HasSuffix(result, "\033[39m") {
+		t.Errorf("expected foreground-only ANSI reset at end (\\033[39m), got %q", result)
 	}
 }
 
