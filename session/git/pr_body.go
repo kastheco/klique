@@ -26,16 +26,45 @@ type PRSubtask struct {
 	Status string
 }
 
-// BuildPRTitle derives a lowercase-friendly PR title from task metadata.
-// Priority: task description, then filename stem.
+// maxTitleLen is the maximum number of characters in a PR title before
+// truncating at a word boundary.
+const maxTitleLen = 72
+
+// BuildPRTitle derives a concise PR title from task metadata.
+// It takes the first sentence of the description and caps it at maxTitleLen,
+// falling back to the plan file slug when the description is empty.
 func BuildPRTitle(description, planFile string) string {
 	if trimmed := strings.TrimSpace(description); trimmed != "" {
-		return trimmed
+		return shortenTitle(trimmed)
 	}
 	if trimmed := strings.TrimSpace(planFile); trimmed != "" {
 		return trimmed
 	}
 	return "update"
+}
+
+// shortenTitle returns a concise version of s:
+// it stops at the first sentence boundary, then truncates to maxTitleLen
+// at a word boundary if the result is still over the limit.
+func shortenTitle(s string) string {
+	// Stop at first sentence boundary (period/question/exclamation followed
+	// by whitespace or end-of-string).
+	for _, sep := range []string{". ", "? ", "! ", ".\n", "?\n", "!\n"} {
+		if idx := strings.Index(s, sep); idx >= 0 {
+			s = s[:idx]
+			break
+		}
+	}
+	s = strings.TrimRight(s, ".!? \t\n")
+	if len(s) <= maxTitleLen {
+		return s
+	}
+	// Truncate at a word boundary.
+	truncated := s[:maxTitleLen]
+	if idx := strings.LastIndex(truncated, " "); idx > 0 {
+		truncated = truncated[:idx]
+	}
+	return strings.TrimRight(truncated, ".!? \t\n") + "..."
 }
 
 // BuildPRBody creates a lower-case, markdown-formatted PR body from PR metadata.

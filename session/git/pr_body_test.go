@@ -1,6 +1,7 @@
 package git
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -83,4 +84,30 @@ func TestBuildPRTitle_EmptyBoth(t *testing.T) {
 	title := BuildPRTitle("", "")
 	assert.NotEmpty(t, title)
 	assert.Equal(t, "update", title)
+}
+
+func TestBuildPRTitle_SingleSentenceUnderLimit(t *testing.T) {
+	// Short single sentence: returned as-is (no period to strip, under 72 chars).
+	assert.Equal(t, "Make kas check and kas skills sync actually useful", BuildPRTitle("Make kas check and kas skills sync actually useful", "check-cli"))
+}
+
+func TestBuildPRTitle_MultipleSentencesTruncatesToFirst(t *testing.T) {
+	// Two-sentence description: only the first sentence is kept.
+	desc := "Fix the login flow. Make sure tokens are refreshed on expiry."
+	got := BuildPRTitle(desc, "fix-login")
+	assert.Equal(t, "Fix the login flow", got)
+}
+
+func TestBuildPRTitle_LongFirstSentenceTruncatesAtWordBoundary(t *testing.T) {
+	// First sentence > 72 chars: truncated at word boundary with "...".
+	desc := "check-cli-useless the 'kas setup' and 'kas check' don't show you enough information. more detail here."
+	got := BuildPRTitle(desc, "check-cli-useless")
+	assert.LessOrEqual(t, len(got), maxTitleLen+3) // +3 for "..."
+	assert.True(t, strings.HasSuffix(got, "..."), "expected ellipsis suffix, got: %q", got)
+	// Must not contain the second sentence.
+	assert.NotContains(t, got, "more detail here")
+}
+
+func TestBuildPRTitle_StripsTrailingPunctuation(t *testing.T) {
+	assert.Equal(t, "Update authentication middleware", BuildPRTitle("Update authentication middleware.", "auth"))
 }
