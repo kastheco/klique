@@ -33,6 +33,12 @@ func ParseWaveSignal(filename string) (WaveSignal, bool) {
 	}, true
 }
 
+// Filename returns the base filename of the signal file.
+func (ws WaveSignal) Filename() string { return filepath.Base(ws.filePath) }
+
+// Dir returns the directory containing the signal file.
+func (ws WaveSignal) Dir() string { return filepath.Dir(ws.filePath) }
+
 // ScanWaveSignals reads the given signals directory and returns parsed wave signals.
 // These are handled separately from FSM signals because they don't map to
 // state transitions — they trigger wave orchestration in the TUI.

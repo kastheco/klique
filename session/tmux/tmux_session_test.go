@@ -289,6 +289,62 @@ func TestStart_WithInitialPrompt_OpenCode(t *testing.T) {
 	assert.Contains(t, cmd2.ToString(ptyFactory.cmds[0]), "--prompt 'Plan auth. Goal: JWT tokens.'")
 }
 
+func TestHasAttachedClients(t *testing.T) {
+	t.Run("attached", func(t *testing.T) {
+		var capturedCmd *exec.Cmd
+		cmdExec := cmd_test.NewMockExecutor()
+		cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+			capturedCmd = cmd
+			return []byte("2\n"), nil
+		}
+		result := HasAttachedClients(cmdExec, "kas_mysession")
+		assert.True(t, result)
+		require.NotNil(t, capturedCmd)
+		cmdStr := strings.Join(capturedCmd.Args, " ")
+		assert.Contains(t, cmdStr, "display-message")
+		assert.Contains(t, cmdStr, "-p")
+		assert.Contains(t, cmdStr, "#{session_attached}")
+	})
+
+	t.Run("detached", func(t *testing.T) {
+		cmdExec := cmd_test.NewMockExecutor()
+		cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("0\n"), nil
+		}
+		result := HasAttachedClients(cmdExec, "kas_mysession")
+		assert.False(t, result)
+	})
+
+	t.Run("tmux error returns true to defer cleanup", func(t *testing.T) {
+		cmdExec := cmd_test.NewMockExecutor()
+		cmdExec.OutputFunc = func(cmd *exec.Cmd) ([]byte, error) {
+			return nil, fmt.Errorf("tmux unavailable")
+		}
+		result := HasAttachedClients(cmdExec, "kas_mysession")
+		// Probe failures must be treated as "attached" so the grace-period
+		// safety guarantee is preserved on transient tmux errors.
+		assert.True(t, result)
+	})
+}
+
+func TestParseClientCount(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected int
+	}{
+		{"2", 2},
+		{"0", 0},
+		{"", 0},
+		{"invalid", 0},
+		{"-1", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			assert.Equal(t, tc.expected, parseClientCount(tc.input))
+		})
+	}
+}
+
 func TestStart_WithInitialPrompt_Claude(t *testing.T) {
 	ptyFactory := NewMockPtyFactory(t)
 	created := false

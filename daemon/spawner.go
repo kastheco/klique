@@ -53,6 +53,13 @@ type TmuxSpawner struct {
 	// projectByKey stores the project name for each running instance so that
 	// ListInstances can filter by project.
 	projectByKey map[string]string
+
+	// injectable seams for testability and grace-period checks.
+	hasAttachedClients func(cmd.Executor, string) bool
+	sleep              func(time.Duration)
+	kill               func(*session.Instance) error
+	cmdExec            cmd.Executor
+	cleanupGracePeriod time.Duration
 }
 
 // NewTmuxSpawner returns a TmuxSpawner. An optional TmuxSpawnerConfig may be
@@ -87,7 +94,42 @@ func newTmuxSpawnerWithConfig(logger *slog.Logger, drainTimeout time.Duration) *
 		planFileByKey:  make(map[string]string),
 		agentTypeByKey: make(map[string]string),
 		projectByKey:   make(map[string]string),
+
+		hasAttachedClients: tmuxpkg.HasAttachedClients,
+		sleep:              time.Sleep,
+		kill:               func(inst *session.Instance) error { return inst.Kill() },
+		cmdExec:            cmd.MakeExecutor(),
+		cleanupGracePeriod: 30 * time.Second,
 	}
+}
+
+// shouldSkipCleanup returns true when a tmux client is attached, indicating
+// that cleanup should be deferred to avoid interrupting a live user session.
+func shouldSkipCleanup(hasClients bool) bool {
+	return hasClients
+}
+
+// gracefulKill stops the instance only when no tmux clients are attached.
+// It checks for attached clients before the grace period and once more after
+// sleeping. If a client is present at either check the instance is left
+// running (the orphan-discovery path will handle it later). If both checks
+// show no client, kill is called.
+// Returns (true, nil) when the instance was killed, (false, nil) when cleanup
+// was skipped because a client is still attached, and (true, err) when the
+// kill was attempted but failed.
+func (s *TmuxSpawner) gracefulKill(inst *session.Instance, sessionName string) (bool, error) {
+	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
+		s.logger.Info("grace period: client attached, skipping cleanup",
+			"session", sessionName, "title", inst.Title)
+		return false, nil
+	}
+	s.sleep(s.cleanupGracePeriod)
+	if shouldSkipCleanup(s.hasAttachedClients(s.cmdExec, sessionName)) {
+		s.logger.Info("grace period: client attached after sleep, skipping cleanup",
+			"session", sessionName, "title", inst.Title)
+		return false, nil
+	}
+	return true, s.kill(inst)
 }
 
 // RunningInstances returns a snapshot of all currently tracked agent instances.
@@ -284,20 +326,29 @@ func (s *TmuxSpawner) KillAgent(repoPath, planFile, agentType string) error {
 
 	key := instanceKey(repoPath, planFile, agentType)
 
+	// Look up the instance without removing it from the tracking maps yet.
+	// We only remove it after gracefulKill confirms the session was actually
+	// terminated. If a tmux client is attached gracefulKill returns (false,
+	// nil) and the daemon must retain ownership so it can target the session
+	// in future operations.
 	s.mu.Lock()
 	inst, ok := s.instances[key]
-	if ok {
-		delete(s.instances, key)
-		delete(s.planFileByKey, key)
-		delete(s.agentTypeByKey, key)
-		delete(s.projectByKey, key)
-	}
 	s.mu.Unlock()
 
 	if !ok {
 		return nil
 	}
-	return inst.Kill()
+	sessionName := tmuxpkg.ToKasTmuxNamePublic(inst.Title)
+	killed, err := s.gracefulKill(inst, sessionName)
+	if killed {
+		s.mu.Lock()
+		delete(s.instances, key)
+		delete(s.planFileByKey, key)
+		delete(s.agentTypeByKey, key)
+		delete(s.projectByKey, key)
+		s.mu.Unlock()
+	}
+	return err
 }
 
 // spawnInSharedWorktree creates an instance for the given agent type, sets up

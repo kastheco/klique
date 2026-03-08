@@ -44,6 +44,12 @@ func (s TaskSignal) Key() string {
 	return strconv.Itoa(s.WaveNumber) + ":" + strconv.Itoa(s.TaskNumber) + ":" + s.TaskFile
 }
 
+// Filename returns the base filename of the signal file.
+func (s TaskSignal) Filename() string { return filepath.Base(s.filePath) }
+
+// Dir returns the directory containing the signal file.
+func (s TaskSignal) Dir() string { return filepath.Dir(s.filePath) }
+
 // ScanTaskSignals reads the given signals directory and returns parsed task signals.
 // The caller is responsible for passing the full signals directory path
 // (e.g. filepath.Join(repoRoot, ".kasmos", "signals")).

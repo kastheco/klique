@@ -649,6 +649,33 @@ func DiscoverAll(cmdExec cmd.Executor, knownNames []string) ([]SessionInfo, erro
 	return sessions, nil
 }
 
+// HasAttachedClients returns true if the given tmux session currently has one
+// or more attached clients. On any error (executor failure, tmux hiccup,
+// non-zero exit) it returns true so that callers defer cleanup rather than
+// risk terminating a session that may have active attached users.
+func HasAttachedClients(cmdExec cmd.Executor, sessionName string) bool {
+	dmCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{session_attached}")
+	output, err := cmdExec.Output(dmCmd)
+	if err != nil {
+		// Treat probe failures as "attached" to preserve the grace-period
+		// safety guarantee — it is safer to defer cleanup than to kill a
+		// session whose client state cannot be determined.
+		return true
+	}
+	return parseClientCount(strings.TrimSpace(string(output))) > 0
+}
+
+// parseClientCount parses the integer client count from tmux display-message
+// output. Returns 0 for any parse error or negative value.
+func parseClientCount(s string) int {
+	s = strings.TrimSpace(s)
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // CountKasSessions returns the number of kas_-prefixed tmux sessions.
 // Returns 0 if no tmux server is running or on any error.
 func CountKasSessions(cmdExec cmd.Executor) int {
