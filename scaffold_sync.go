@@ -34,9 +34,27 @@ settings — does not re-run the interactive wizard or modify config.`,
 
 // profilesToAgentConfigs converts a map of AgentProfile (keyed by role name)
 // to a deterministic slice of harness.AgentConfig, including only enabled profiles.
+//
+// The "chat" role is special: the wizard stores it with a single harness but fans
+// it out to every selected harness when building agent configs (so chat.md is
+// written into every harness directory). We replicate that behaviour here by
+// collecting all distinct harness names from enabled non-chat profiles and emitting
+// one chat entry per harness. If no other harnesses are present, we fall back to
+// chat's own stored Program.
 func profilesToAgentConfigs(profiles map[string]config.AgentProfile) []harness.AgentConfig {
 	if len(profiles) == 0 {
 		return nil
+	}
+
+	// Collect the distinct harness programs used by all enabled non-chat profiles.
+	harnessSet := map[string]struct{}{}
+	for role, p := range profiles {
+		if role == "chat" || !p.Enabled {
+			continue
+		}
+		if p.Program != "" {
+			harnessSet[p.Program] = struct{}{}
+		}
 	}
 
 	roles := make([]string, 0, len(profiles))
@@ -49,6 +67,31 @@ func profilesToAgentConfigs(profiles map[string]config.AgentProfile) []harness.A
 	for _, role := range roles {
 		p := profiles[role]
 		if !p.Enabled {
+			continue
+		}
+		if role == "chat" {
+			// Fan chat out to every harness present in the project, mirroring
+			// wizard.State.ToAgentConfigs so chat.md lands in every harness dir.
+			chatHarnesses := make([]string, 0, len(harnessSet))
+			for h := range harnessSet {
+				chatHarnesses = append(chatHarnesses, h)
+			}
+			sort.Strings(chatHarnesses)
+			if len(chatHarnesses) == 0 && p.Program != "" {
+				// Fallback: no other enabled agents; use chat's own program.
+				chatHarnesses = []string{p.Program}
+			}
+			for _, h := range chatHarnesses {
+				configs = append(configs, harness.AgentConfig{
+					Role:        role,
+					Harness:     h,
+					Model:       p.Model,
+					Temperature: p.Temperature,
+					Effort:      p.Effort,
+					Enabled:     p.Enabled,
+					ExtraFlags:  p.Flags,
+				})
+			}
 			continue
 		}
 		configs = append(configs, harness.AgentConfig{
@@ -80,9 +123,17 @@ func runScaffoldSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config has no enabled agents — run 'kas setup' to configure agents")
 	}
 
-	projectDir, err := os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
+	}
+	// Always sync into the repository root, not wherever the user invoked the
+	// command from. config.LoadTOMLConfig already read config from the repo root
+	// (via config.GetConfigDir → config.ResolveRepoRoot), so scaffold writes must
+	// target the same directory.
+	projectDir := cwd
+	if root, rErr := config.ResolveRepoRoot(cwd); rErr == nil {
+		projectDir = root
 	}
 
 	fmt.Fprintf(out, "Syncing scaffold: %s\n", projectDir)
