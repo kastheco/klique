@@ -894,3 +894,90 @@ func TestLoadReviewPrompt_UsesMergeBase(t *testing.T) {
 }
 
 func ptrFloat(f float64) *float64 { return &f }
+
+func TestSyncScaffold_UpdatesSkillsAndAgentPrompts(t *testing.T) {
+	dir := t.TempDir()
+	temp := 0.1
+	agents := []harness.AgentConfig{{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Temperature: &temp, Enabled: true}, {Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: &temp, Effort: "medium", Enabled: true}}
+	_, err := ScaffoldAll(dir, agents, nil, false)
+	require.NoError(t, err)
+	skillFile := filepath.Join(dir, ".agents", "skills", "cli-tools", "SKILL.md")
+	require.NoError(t, os.WriteFile(skillFile, []byte("old"), 0o644))
+	agentFile := filepath.Join(dir, ".claude", "agents", "coder.md")
+	require.NoError(t, os.WriteFile(agentFile, []byte("old"), 0o644))
+	cfgPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0o755))
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"agent":{"coder":{"model":"anthropic/claude-sonnet-4-6","temperature":0.1,"reasoningEffort":"medium","customField":"preserved"}}}`), 0o644))
+	results, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	assert.NotEmpty(t, results)
+	content, err := os.ReadFile(skillFile)
+	require.NoError(t, err)
+	assert.NotEqual(t, "old", string(content))
+	content, err = os.ReadFile(agentFile)
+	require.NoError(t, err)
+	assert.NotEqual(t, "old", string(content))
+	content, err = os.ReadFile(cfgPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "preserved")
+	_, err = os.Readlink(filepath.Join(dir, ".claude", "skills", "cli-tools"))
+	assert.NoError(t, err)
+}
+
+func TestSyncScaffold_CreatesFromScratch(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true}}
+	results, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	assert.NotEmpty(t, results)
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "cli-tools", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(dir, ".claude", "agents", "coder.md"))
+	_, err = os.Readlink(filepath.Join(dir, ".claude", "skills", "cli-tools"))
+	assert.NoError(t, err)
+}
+
+func TestSyncScaffold_RendersConfigWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	temp := 0.1
+	agents := []harness.AgentConfig{{Role: "coder", Harness: "opencode", Model: "anthropic/claude-sonnet-4-6", Temperature: &temp, Effort: "medium", Enabled: true}}
+	results, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	configPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	assert.FileExists(t, configPath)
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "anthropic/claude-sonnet-4-6")
+	assert.Contains(t, results, WriteResult{Path: ".opencode/opencode.jsonc", Created: true})
+}
+
+// TestSyncScaffold_SkipsOpencodeConfigForNonOpencodeRepo verifies that SyncScaffold
+// does not create .opencode/opencode.jsonc when no opencode agents are configured and
+// no existing file is present — matching ScaffoldAll behaviour.
+func TestSyncScaffold_SkipsOpencodeConfigForNonOpencodeRepo(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+	}
+	_, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(dir, ".opencode", "opencode.jsonc"),
+		"opencode.jsonc must not be created for claude-only repos")
+}
+
+// TestSyncScaffold_PatchesExistingOpencodeConfigEvenWithoutOpencodeHarness verifies
+// that an existing opencode.jsonc is still patched even when no opencode agents are
+// passed — keeping a pre-existing config in sync when the user later switches profiles.
+func TestSyncScaffold_PatchesExistingOpencodeConfigEvenWithoutOpencodeHarness(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0o755))
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"agent":{"coder":{"model":"old","customKey":"keep"}}}`), 0o644))
+
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+	}
+	_, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	// File must still exist (patched, not deleted).
+	assert.FileExists(t, cfgPath)
+}
