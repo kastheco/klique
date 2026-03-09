@@ -73,12 +73,11 @@ the plan lifecycle FSM: `ready → planning → implementing → reviewing → d
 
 the planner produces a **product-spec-style plan**, not coder execution instructions.
 
-### planner / architect handoff contract
+### planner / implementation handoff contract
 
-- planner deliverable: **what** to build, **why** it matters, acceptance criteria, non-goals, assumptions, and constraints.
-- separate `kasmos-architect` ownership: implementation-wave decomposition, file-level task shaping, and coder metadata.
-- the architect converts the approved spec into executable waves, then passes coded tasks to coder agents.
-- coder agents should read the approved plan as context, not design the decomposition themselves.
+- planner deliverable: a complete implementation plan with **what** to build, **why** it matters, acceptance criteria, risks, and executable `## Wave N` / `### Task N` sections.
+- downstream elaboration may enrich task bodies later, but the planner owns the initial wave and task structure.
+- coder agents should be able to parse the stored plan immediately after planning completes.
 
 planner context from `.kasmos/config.toml`: `agents.planner.model = "anthropic/claude-opus-4-6"` and `effort = "high"`.
 use this context to do deeper requirement trade-off analysis and crisp stakeholder communication, not step-by-step patch plans.
@@ -166,7 +165,7 @@ plans are stored in the **task store** (sqlite or remote http api), not as files
 | `kas task merge <file>` | merge branch into main, transition to done |
 | `kas task implement <file> [--wave N]` | trigger wave implementation |
 
-### required header
+### required plan structure
 
 every plan MUST start with this header block:
 
@@ -211,6 +210,25 @@ append these required, checklist-style sections directly after the header block:
 - [ ] [assumption tolerated for now]
 ```
 
+after the checklist sections, add one or more executable wave sections:
+
+```markdown
+## Wave 1
+
+### Task 1: [short title]
+
+**Files:**
+- Modify: `path/to/file`
+
+[task-specific implementation notes]
+```
+
+rules:
+- every plan needs at least `## Wave 1`
+- every task must live under a wave
+- task headers must use `### Task N: Title`
+- include a `**Files:**` block for each task with concrete paths when known
+
 ### sizing table
 
 classify before writing plan body content. this informs the architect, not implementation chunking.
@@ -232,9 +250,7 @@ do include all of these sections in the plan body:
 - `## assumptions`
 - `## constraints and risks`
 - `## open questions`
-
-do not emit `## Wave N` headers or `### Task N` sections here.
-leave file-level task shaping and dependency ordering for `kasmos-architect`.
+- one or more `## Wave N` sections containing `### Task N:` blocks
 
 ---
 
@@ -253,7 +269,9 @@ this is mandatory. fix every failure inline before signaling.
 - [ ] `## acceptance criteria` exists and is checklist-based with observable outcomes.
 - [ ] `## non-goals` exists and explicitly excludes at least one in-scope boundary.
 - [ ] `## assumptions` exists and contains only assumptions the team is willing to tolerate.
-- [ ] no `## Wave` or `### Task` blocks are present.
+- [ ] at least one `## Wave N` section is present.
+- [ ] every implementation task appears under a `## Wave N` section with a `### Task N:` header.
+- [ ] each task includes a `**Files:**` block or a short reason why exact files are still unknown.
 - [ ] trade-offs and approach recommendation are documented in approach section.
 
 ### coherence checks
@@ -261,17 +279,17 @@ this is mandatory. fix every failure inline before signaling.
 - [ ] acceptance criteria map to success signals in the `## what this changes` section.
 - [ ] scope boundaries are explicit and aligned with `goal`.
 - [ ] unresolved risks and open questions are logged with owners or follow-up plan.
-- [ ] the plan is readable by an architect who can translate it into execution waves.
+- [ ] the stored plan is immediately parseable for execution without a follow-up wave-annotation pass.
 
 if all checks pass: proceed to register + signal.
 
 if any check fails: fix inline, then re-run these checks.
 
-### 1. register and signal the plan
+### 1. store and signal the plan
 
-**managed mode:** the task content is passed to kasmos via sentinel — kasmos registers it in the task store. you don't need to commit a separate file.
+**managed mode:** write the finished plan into the existing task entry with `kas task update-content <plan-file>`, then signal completion.
 
-**manual mode:** use `kas task register` to register the plan in the task store, then commit any supporting files if needed.
+**manual mode:** update the existing task entry with `kas task update-content <plan-file>`. only use `kas task register` when creating a brand-new standalone plan outside kasmos.
 
 do not commit sentinel files — kasmos consumes and deletes them automatically.
 
@@ -287,37 +305,42 @@ echo "${KASMOS_MANAGED:-}"
 
 ### managed mode (`KASMOS_MANAGED=1`)
 
-kasmos is orchestrating this session. write a sentinel file and stop.
+kasmos is orchestrating this session. store the plan content first, then write a sentinel file and stop.
 
 ```bash
+cat /tmp/plan.md | kas task update-content <feature-name>
 mkdir -p .kasmos/signals
-touch .kasmos/signals/planner-finished-<feature-name>.md
+touch .kasmos/signals/planner-finished-<feature-name>
 ```
 
-the filename must match the task filename exactly (with `planner-finished-` prefix).
+the signal filename must match the task filename exactly (with `planner-finished-` prefix).
 
 **do NOT modify task state directly** — kasmos manages the task store.
 
 announce completion and stop:
 
-> "plan complete: `<feature-name>.md`. kasmos will prompt you to start implementation."
+> "plan complete: `<feature-name>`. kasmos will prompt you to start implementation."
 
 **stop here. do not offer execution choices. do not implement.**
 
 ### manual mode (`KASMOS_MANAGED` unset)
 
-register the plan in the task store using the CLI:
+store the plan in the task store using the CLI:
+
+```bash
+cat /tmp/plan.md | kas task update-content <feature-name>
+```
+
+if the task does not exist yet, register it once before updating:
 
 ```bash
 kas task register <feature-name>.md
+cat /tmp/plan.md | kas task update-content <feature-name>
 ```
-
-this creates an entry in the task store with status `ready`. the task content should be
-written to the store via `kas task register`.
 
 then offer execution choices:
 
-> "plan complete: `<feature-name>.md` (registered in task store). two execution options:
+> "plan complete: `<feature-name>` (stored in task store). two execution options:
 >
 > **1. this session** — i dispatch a fresh subagent per task, self-review between waves.
 >

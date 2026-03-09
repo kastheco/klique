@@ -22,25 +22,29 @@ The feature branch for implementation is created by kasmos when the user trigger
 
 Only register implementation plans — never register design docs (*-design.md) as separate entries.
 
-## Plan Registration (CRITICAL — must follow every time)
+## Plan Storage (CRITICAL — must follow every time)
 
 Task state is stored in the **task store** (SQLite database or HTTP API), not in files on disk.
 Never modify task state directly — use `kas task` CLI commands or sentinel files.
 
-**You MUST register every plan you write.** How you register depends on the environment.
+Kasmos creates the task entry before it spawns you. Your job is to replace that
+entry's placeholder content with the finished plan.
 
-Registration steps (do both, never skip step 2):
-1. Write the task content
-2. Register the plan — check `$KASMOS_MANAGED` to determine method:
+Storage steps (do both, never skip step 2):
+1. Write the full plan content, including required `## Wave N` sections.
+2. Store the plan in the task store with `kas task update-content <plan-file>`.
 
-**If `KASMOS_MANAGED=1` (running inside kasmos):** Create a sentinel file:
-`.kasmos/signals/planner-finished-<date>-<name>.md` (empty file — just `touch` it).
-kasmos will detect this and register the plan. **Do not modify task state directly.**
+**If `KASMOS_MANAGED=1` (running inside kasmos):**
+- First store the plan with `kas task update-content <plan-file>`.
+- Then signal completion with `.kasmos/signals/planner-finished-<plan-file>`.
+- **Do not modify task state directly.**
 
-**If `KASMOS_MANAGED` is unset (raw terminal):** Use the CLI to register:
-`kas task register <date>-<name>.md`
+**If `KASMOS_MANAGED` is unset (raw terminal):**
+- Update the existing task with `kas task update-content <plan-file>`.
+- If you are creating a brand-new standalone plan outside kasmos, register it once with
+  `kas task register <plan-file>.md` before updating it.
 
-**Never modify task statuses directly.** Only register NEW plans. Status transitions (`ready` →
+**Never modify task statuses directly.** Status transitions (`planning` → `ready` →
 `implementing` → `reviewing` → `done`) are managed by kasmos or the relevant workflow skill.
 
 ## CLI Tools (MANDATORY)
