@@ -680,6 +680,95 @@ func ScaffoldAll(dir string, agents []harness.AgentConfig, selectedTools []strin
 	return results, nil
 }
 
+// SyncScaffold incrementally re-syncs embedded skills, agent prompt templates, and harness
+// symlinks without running the interactive wizard or modifying TOML config. If
+// .opencode/opencode.jsonc already exists it is patched via PatchWorktreeConfig so that
+// unrelated keys are preserved; otherwise it is rendered from the template and written fresh.
+func SyncScaffold(dir string, agents []harness.AgentConfig) ([]WriteResult, error) {
+	var results []WriteResult
+
+	if dirResults, err := EnsureRuntimeDirs(dir); err != nil {
+		return results, fmt.Errorf("ensure runtime dirs: %w", err)
+	} else {
+		results = append(results, dirResults...)
+	}
+
+	if skillResults, err := WriteProjectSkills(dir, true); err != nil {
+		return results, fmt.Errorf("sync skills: %w", err)
+	} else {
+		results = append(results, skillResults...)
+	}
+
+	byHarness := map[string][]harness.AgentConfig{}
+	for _, a := range agents {
+		byHarness[a.Harness] = append(byHarness[a.Harness], a)
+	}
+
+	for _, harnessName := range []string{"claude", "opencode", "codex"} {
+		harnessAgents, ok := byHarness[harnessName]
+		if !ok {
+			continue
+		}
+
+		var harnessResults []WriteResult
+		var err error
+
+		switch harnessName {
+		case "codex":
+			harnessResults, err = WriteCodexProject(dir, harnessAgents, nil, true)
+			if err != nil {
+				return results, fmt.Errorf("sync %s: %w", harnessName, err)
+			}
+		default:
+			perRoleResults, err := writePerRoleProject(dir, harnessName, harnessAgents, nil, true)
+			if err != nil {
+				return results, fmt.Errorf("sync %s agents: %w", harnessName, err)
+			}
+			harnessResults = append(harnessResults, perRoleResults...)
+
+			staticResults, err := writeStaticAgents(dir, harnessName, true)
+			if err != nil {
+				return results, fmt.Errorf("sync %s static agents: %w", harnessName, err)
+			}
+			harnessResults = append(harnessResults, staticResults...)
+		}
+
+		results = append(results, harnessResults...)
+
+		if err := SymlinkHarnessSkills(dir, harnessName); err != nil {
+			return results, fmt.Errorf("symlink %s skills: %w", harnessName, err)
+		}
+	}
+
+	// Handle .opencode/opencode.jsonc: patch if it exists, render fresh if not.
+	configPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	if _, err := os.Stat(configPath); err == nil {
+		// File exists — patch it to preserve unrelated keys.
+		if err := PatchWorktreeConfig(dir, agents); err != nil {
+			return results, fmt.Errorf("patch opencode.jsonc: %w", err)
+		}
+	} else {
+		// File missing — render from template and write.
+		configContent, err := renderOpenCodeConfig(dir, agents)
+		if err != nil {
+			return results, fmt.Errorf("render opencode.jsonc: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+			return results, fmt.Errorf("create .opencode dir: %w", err)
+		}
+		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+			return results, fmt.Errorf("write opencode.jsonc: %w", err)
+		}
+		rel, relErr := filepath.Rel(dir, configPath)
+		if relErr != nil {
+			rel = configPath
+		}
+		results = append(results, WriteResult{Path: rel, Created: true})
+	}
+
+	return results, nil
+}
+
 // LoadReviewPrompt reads the embedded review prompt template and fills in the plan placeholders.
 // Falls back to a minimal inline prompt if the template is missing from the binary.
 func LoadReviewPrompt(planFile, planName string) string {
