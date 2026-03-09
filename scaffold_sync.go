@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/kastheco/kasmos/config"
@@ -131,12 +132,14 @@ func runScaffoldSync(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
 	}
-	// Always sync into the repository root, not wherever the user invoked the
-	// command from. config.LoadTOMLConfig already read config from the repo root
-	// (via config.GetConfigDir → config.ResolveRepoRoot), so scaffold writes must
-	// target the same directory.
+	// Resolve to the nearest checkout root (the directory that contains the .git
+	// file or directory). For a normal repo this is the repo root; for a git
+	// worktree this is the worktree root — NOT the main repo root. This matches
+	// kas setup (initcmd.go) which also scaffolds into os.Getwd() at the checkout
+	// root, and avoids scattering scaffold files into subdirectories when the user
+	// invokes the command from below the root.
 	projectDir := cwd
-	if root, rErr := config.ResolveRepoRoot(cwd); rErr == nil {
+	if root, rErr := resolveCheckoutRoot(cwd); rErr == nil {
 		projectDir = root
 	}
 
@@ -198,6 +201,23 @@ func runScaffoldSync(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resolveCheckoutRoot walks up from dir until it finds a directory containing a
+// .git file or directory and returns that directory. It stops at the first .git
+// entry found, so for a git worktree it returns the worktree root (the directory
+// with the .git file), not the main repo root. Falls back to dir on failure.
+func resolveCheckoutRoot(dir string) (string, error) {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("not a git repository (or any parent of %s)", dir)
+		}
+		dir = parent
+	}
 }
 
 func init() {

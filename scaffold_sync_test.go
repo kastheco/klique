@@ -109,6 +109,41 @@ func TestProfilesToAgentConfigs_ChatFanOut_IncludesDisabledHarnesses(t *testing.
 		"disabled harnesses must still receive a chat entry")
 }
 
+func TestResolveCheckoutRoot_RegularRepo(t *testing.T) {
+	// Regular repo: .git directory at root.
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+
+	// Resolves from root itself.
+	got, err := resolveCheckoutRoot(root)
+	require.NoError(t, err)
+	assert.Equal(t, root, got)
+
+	// Resolves from a subdirectory — must walk up to root, not return the subdir.
+	sub := filepath.Join(root, "pkg", "foo")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	got, err = resolveCheckoutRoot(sub)
+	require.NoError(t, err)
+	assert.Equal(t, root, got)
+}
+
+func TestResolveCheckoutRoot_Worktree(t *testing.T) {
+	// Worktree: .git is a file, not a directory.
+	// resolveCheckoutRoot must stop here (not navigate to the main repo root).
+	wt := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /main/.git/worktrees/wt"), 0o644))
+
+	got, err := resolveCheckoutRoot(wt)
+	require.NoError(t, err)
+	assert.Equal(t, wt, got, "must return worktree root, not main repo root")
+}
+
+func TestResolveCheckoutRoot_NotARepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := resolveCheckoutRoot(dir)
+	assert.Error(t, err)
+}
+
 func TestScaffoldSync_RequiresTomlConfig(t *testing.T) {
 	// Isolate HOME so GetConfigDir() migration cannot copy legacy config.toml
 	// from ~/.config/kasmos (or similar) into the temp project dir.
