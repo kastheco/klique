@@ -949,3 +949,35 @@ func TestSyncScaffold_RendersConfigWhenMissing(t *testing.T) {
 	assert.Contains(t, string(content), "anthropic/claude-sonnet-4-6")
 	assert.Contains(t, results, WriteResult{Path: ".opencode/opencode.jsonc", Created: true})
 }
+
+// TestSyncScaffold_SkipsOpencodeConfigForNonOpencodeRepo verifies that SyncScaffold
+// does not create .opencode/opencode.jsonc when no opencode agents are configured and
+// no existing file is present — matching ScaffoldAll behaviour.
+func TestSyncScaffold_SkipsOpencodeConfigForNonOpencodeRepo(t *testing.T) {
+	dir := t.TempDir()
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+	}
+	_, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(dir, ".opencode", "opencode.jsonc"),
+		"opencode.jsonc must not be created for claude-only repos")
+}
+
+// TestSyncScaffold_PatchesExistingOpencodeConfigEvenWithoutOpencodeHarness verifies
+// that an existing opencode.jsonc is still patched even when no opencode agents are
+// passed — keeping a pre-existing config in sync when the user later switches profiles.
+func TestSyncScaffold_PatchesExistingOpencodeConfigEvenWithoutOpencodeHarness(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cfgPath), 0o755))
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"agent":{"coder":{"model":"old","customKey":"keep"}}}`), 0o644))
+
+	agents := []harness.AgentConfig{
+		{Role: "coder", Harness: "claude", Model: "claude-sonnet-4-6", Enabled: true},
+	}
+	_, err := SyncScaffold(dir, agents)
+	require.NoError(t, err)
+	// File must still exist (patched, not deleted).
+	assert.FileExists(t, cfgPath)
+}

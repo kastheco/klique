@@ -38,18 +38,22 @@ settings — does not re-run the interactive wizard or modify config.`,
 // The "chat" role is special: the wizard stores it with a single harness but fans
 // it out to every selected harness when building agent configs (so chat.md is
 // written into every harness directory). We replicate that behaviour here by
-// collecting all distinct harness names from enabled non-chat profiles and emitting
-// one chat entry per harness. If no other harnesses are present, we fall back to
-// chat's own stored Program.
+// collecting all distinct harness names from ALL non-chat profiles (enabled or
+// disabled) and emitting one chat entry per harness — mirroring the wizard which
+// fans chat to every selected harness regardless of role enablement. If no other
+// harnesses are present, we fall back to chat's own stored Program.
 func profilesToAgentConfigs(profiles map[string]config.AgentProfile) []harness.AgentConfig {
 	if len(profiles) == 0 {
 		return nil
 	}
 
-	// Collect the distinct harness programs used by all enabled non-chat profiles.
+	// Collect the distinct harness programs used by all non-chat profiles,
+	// regardless of enabled state. wizard.State.ToAgentConfigs fans chat to
+	// every *selected* harness independent of whether other roles on that harness
+	// are currently enabled, so we mirror that behaviour here.
 	harnessSet := map[string]struct{}{}
 	for role, p := range profiles {
-		if role == "chat" || !p.Enabled {
+		if role == "chat" {
 			continue
 		}
 		if p.Program != "" {

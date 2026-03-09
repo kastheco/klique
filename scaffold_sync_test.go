@@ -87,6 +87,28 @@ func TestProfilesToAgentConfigs_ChatFallback(t *testing.T) {
 	assert.Equal(t, "opencode", configs[0].Harness)
 }
 
+// TestProfilesToAgentConfigs_ChatFanOut_IncludesDisabledHarnesses verifies that the
+// chat fan-out includes harnesses from disabled non-chat profiles. wizard.State.ToAgentConfigs
+// fans chat to every *selected* harness regardless of role enablement; we must match that.
+func TestProfilesToAgentConfigs_ChatFanOut_IncludesDisabledHarnesses(t *testing.T) {
+	profiles := map[string]config.AgentProfile{
+		"coder":    {Program: "opencode", Model: "m1", Enabled: true},
+		"reviewer": {Program: "claude", Model: "m2", Enabled: false}, // disabled
+		"chat":     {Program: "opencode", Model: "chat-model", Enabled: true},
+	}
+	configs := profilesToAgentConfigs(profiles)
+
+	var chatHarnesses []string
+	for _, c := range configs {
+		if c.Role == "chat" {
+			chatHarnesses = append(chatHarnesses, c.Harness)
+		}
+	}
+	// claude must be in the fan-out even though its reviewer role is disabled.
+	assert.ElementsMatch(t, []string{"claude", "opencode"}, chatHarnesses,
+		"disabled harnesses must still receive a chat entry")
+}
+
 func TestScaffoldSync_RequiresTomlConfig(t *testing.T) {
 	// Isolate HOME so GetConfigDir() migration cannot copy legacy config.toml
 	// from ~/.config/kasmos (or similar) into the temp project dir.

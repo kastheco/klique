@@ -740,30 +740,38 @@ func SyncScaffold(dir string, agents []harness.AgentConfig) ([]WriteResult, erro
 		}
 	}
 
-	// Handle .opencode/opencode.jsonc: patch if it exists, render fresh if not.
+	// Handle .opencode/opencode.jsonc: only touch it when opencode is configured
+	// OR when the file already exists (so we keep an existing config in sync).
+	// Skipping when neither condition holds matches ScaffoldAll behaviour and
+	// avoids creating a stray .opencode tree in Claude-only or Codex-only repos.
 	configPath := filepath.Join(dir, ".opencode", "opencode.jsonc")
-	if _, err := os.Stat(configPath); err == nil {
-		// File exists — patch it to preserve unrelated keys.
-		if err := PatchWorktreeConfig(dir, agents); err != nil {
-			return results, fmt.Errorf("patch opencode.jsonc: %w", err)
+	_, configExists := byHarness["opencode"]
+	_, statErr := os.Stat(configPath)
+	fileExists := statErr == nil
+	if configExists || fileExists {
+		if fileExists {
+			// File exists — patch it to preserve unrelated keys.
+			if err := PatchWorktreeConfig(dir, agents); err != nil {
+				return results, fmt.Errorf("patch opencode.jsonc: %w", err)
+			}
+		} else {
+			// OpenCode is configured but no file yet — render from template.
+			configContent, err := renderOpenCodeConfig(dir, agents)
+			if err != nil {
+				return results, fmt.Errorf("render opencode.jsonc: %w", err)
+			}
+			if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+				return results, fmt.Errorf("create .opencode dir: %w", err)
+			}
+			if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+				return results, fmt.Errorf("write opencode.jsonc: %w", err)
+			}
+			rel, relErr := filepath.Rel(dir, configPath)
+			if relErr != nil {
+				rel = configPath
+			}
+			results = append(results, WriteResult{Path: rel, Created: true})
 		}
-	} else {
-		// File missing — render from template and write.
-		configContent, err := renderOpenCodeConfig(dir, agents)
-		if err != nil {
-			return results, fmt.Errorf("render opencode.jsonc: %w", err)
-		}
-		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-			return results, fmt.Errorf("create .opencode dir: %w", err)
-		}
-		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
-			return results, fmt.Errorf("write opencode.jsonc: %w", err)
-		}
-		rel, relErr := filepath.Rel(dir, configPath)
-		if relErr != nil {
-			rel = configPath
-		}
-		results = append(results, WriteResult{Path: rel, Created: true})
 	}
 
 	return results, nil
