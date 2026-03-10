@@ -205,8 +205,10 @@ max_review_fix_cycles = 5
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	result, err := LoadTOMLConfigFrom(path)
 	require.NoError(t, err)
-	assert.True(t, result.AutoReviewFix)
-	assert.Equal(t, 5, result.MaxReviewFixCycles)
+	require.NotNil(t, result.AutoReviewFix)
+	require.NotNil(t, result.MaxReviewFixCycles)
+	assert.True(t, *result.AutoReviewFix)
+	assert.Equal(t, 5, *result.MaxReviewFixCycles)
 }
 
 func TestAutoAdvanceWaves(t *testing.T) {

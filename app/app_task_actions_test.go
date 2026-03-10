@@ -760,7 +760,9 @@ func TestEnsureProcessor_RefreshesReviewFixConfig(t *testing.T) {
 		TaskFile: "disabled.md",
 		Body:     "fix this",
 	}})
-	assert.Empty(t, actions)
+	require.Len(t, actions, 1)
+	_, ok := actions[0].(loop.ReviewChangesAction)
+	assert.True(t, ok)
 
 	h.appConfig.AutoReviewFix = true
 	h.appConfig.MaxReviewFixCycles = 4

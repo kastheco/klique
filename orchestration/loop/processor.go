@@ -142,6 +142,10 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 			}
 
 		case taskfsm.ReviewChangesRequested:
+			actions = append(actions, ReviewChangesAction{
+				PlanFile: sig.TaskFile,
+				Feedback: sig.Body,
+			})
 			if !p.config.AutoReviewFix {
 				break
 			}

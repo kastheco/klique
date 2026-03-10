@@ -106,8 +106,12 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {
 	}
 
 	actions := p.ProcessFSMSignals(signals)
-	var foundCoder, foundIncrement bool
+	var foundReviewChanges, foundCoder, foundIncrement bool
 	for _, a := range actions {
+		if rc, ok := a.(ReviewChangesAction); ok {
+			assert.Equal(t, feedback, rc.Feedback)
+			foundReviewChanges = true
+		}
 		if sc, ok := a.(SpawnCoderAction); ok {
 			assert.Equal(t, feedback, sc.Feedback)
 			foundCoder = true
@@ -116,8 +120,27 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {
 			foundIncrement = true
 		}
 	}
+	assert.True(t, foundReviewChanges, "expected ReviewChangesAction")
 	assert.True(t, foundCoder, "expected SpawnCoderAction")
 	assert.True(t, foundIncrement, "expected IncrementReviewCycleAction")
+}
+
+func TestProcessor_ProcessFSMSignals_InvalidReviewChangesRequested_HasNoActions(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("test", taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusImplementing,
+		Branch:   "plan/my-plan",
+	})
+
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
+	actions := p.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "my-plan.md",
+		Body:     "stale feedback",
+	}})
+
+	assert.Empty(t, actions, "invalid review_changes_requested should not emit side-effect actions")
 }
 
 func TestProcessor_ProcessFSMSignals_ReviewChangesRequested_AutoReviewFixDisabled(t *testing.T) {
@@ -132,7 +155,11 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested_AutoReviewFixDisable
 	signals := []taskfsm.Signal{{Event: taskfsm.ReviewChangesRequested, TaskFile: "my-plan.md", Body: "fix this"}}
 
 	actions := p.ProcessFSMSignals(signals)
-	assert.Empty(t, actions, "expected no auto-fix actions when auto review-fix is disabled")
+	require.Len(t, actions, 1)
+	rc, ok := actions[0].(ReviewChangesAction)
+	require.True(t, ok, "expected ReviewChangesAction when auto review-fix is disabled")
+	assert.Equal(t, "my-plan.md", rc.PlanFile)
+	assert.Equal(t, "fix this", rc.Feedback)
 }
 
 func TestProcessor_ProcessFSMSignals_PlannerFinished(t *testing.T) {

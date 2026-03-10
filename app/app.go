@@ -943,22 +943,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				proc.SetWaveOrchestratorActive(planFile, true)
 			}
 
-			signalBodies := make(map[string]string, len(msg.Signals))
-			for _, sig := range msg.Signals {
-				signalBodies[sig.TaskFile] = sig.Body
-			}
-
 			feedbackBeforeTick := make(map[string]bool, len(m.pendingReviewFeedback))
 			for planFile := range m.pendingReviewFeedback {
 				feedbackBeforeTick[planFile] = true
-			}
-			for _, sig := range msg.Signals {
-				if sig.Event != taskfsm.ReviewChangesRequested {
-					continue
-				}
-				if cmd := m.handleReviewChangesRequested(sig.TaskFile, sig.Body); cmd != nil {
-					signalCmds = append(signalCmds, cmd)
-				}
 			}
 
 			actions := proc.ProcessFSMSignals(msg.Signals)
@@ -1006,6 +993,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case loop.CreatePRAction:
 					signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
+				case loop.ReviewChangesAction:
+					if cmd := m.handleReviewChangesRequested(a.PlanFile, a.Feedback); cmd != nil {
+						signalCmds = append(signalCmds, cmd)
+					}
 				case loop.IncrementReviewCycleAction:
 					if err := m.taskState.IncrementReviewCycle(a.PlanFile); err != nil {
 						log.WarningLog.Printf("could not increment review cycle for %q: %v", a.PlanFile, err)
