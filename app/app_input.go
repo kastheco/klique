@@ -120,8 +120,10 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Zone-based click: tab headers — switch visible tab without stealing sidebar focus.
 	for i, zoneID := range ui.TabZoneIDs {
 		if zone.Get(zoneID).InBounds(msg) {
-			m.tabbedWindow.SetActiveTab(i)
-			return m, nil
+			if i == ui.PreviewTab {
+				return m, m.activateLivePreviewTab()
+			}
+			return m, m.activateInfoTab()
 		}
 	}
 
@@ -1447,8 +1449,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 
 	// Shift+Tab: reverse focus ring cycle (don't call instanceChanged — it auto-switches tabs)
 	if msg.String() == "shift+tab" {
-		m.prevFocusSlot()
-		return m, nil
+		return m, m.prevFocusSlot()
 	}
 
 	// Delete key: dismiss a finished (non-running) instance from the list.
@@ -1532,8 +1533,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		m.nav.Down()
 		return m, m.instanceChanged()
 	case keys.KeyTab:
-		m.nextFocusSlot()
-		return m, nil
+		return m, m.nextFocusSlot()
 	case keys.KeySpace:
 		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
@@ -1551,14 +1551,14 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if m.tabbedWindow.IsInInfoTab() {
 			return m, nil
 		}
-		m.tabbedWindow.SetActiveTab(ui.InfoTab)
-		return m, nil
+		return m, m.activateInfoTab()
 	case keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeyTabAgent:
 		return m.exclamationAutoFocus()
 	case keys.KeySendPrompt, keys.KeyExitFocus:
 		// Ensure the agent tab is visible when entering focus mode.
+		m.previewRequested = true
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		selected := m.nav.GetSelectedInstance()
 		// When a plan header is selected (no instance), find the best instance for that plan.

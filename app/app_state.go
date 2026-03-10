@@ -418,6 +418,7 @@ func (m *home) setFocusSlot(slot int) {
 	// When focusing a center tab, switch the visible tab to match and track which tab is focused.
 	if centerFocused {
 		m.tabbedWindow.SetActiveTab(slot - slotInfo) // slotInfo=1 → InfoTab=0, etc.
+		m.previewRequested = slot == slotAgent
 	}
 	// focusedTab always tracks activeTab so the gradient header is visible
 	// regardless of which pane has keyboard focus.
@@ -426,24 +427,102 @@ func (m *home) setFocusSlot(slot int) {
 // nextFocusSlot cycles the visible center tab forward (info ↔ agent).
 // The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
 // displayed tab changes. This is called by Tab and →.
-func (m *home) nextFocusSlot() {
+func (m *home) nextFocusSlot() tea.Cmd {
 	switch m.tabbedWindow.GetActiveTab() {
 	case ui.InfoTab:
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		return m.activateLivePreviewTab()
 	default: // ui.PreviewTab — wraps to info
-		m.tabbedWindow.SetActiveTab(ui.InfoTab)
+		return m.activateInfoTab()
 	}
 }
 
 // prevFocusSlot cycles the visible center tab backward (agent ↔ info).
 // The sidebar always retains keyboard focus (focusSlot stays slotNav).
-func (m *home) prevFocusSlot() {
+func (m *home) prevFocusSlot() tea.Cmd {
 	switch m.tabbedWindow.GetActiveTab() {
 	case ui.PreviewTab:
-		m.tabbedWindow.SetActiveTab(ui.InfoTab)
+		return m.activateInfoTab()
 	default: // ui.InfoTab — wraps to agent
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		return m.activateLivePreviewTab()
 	}
+}
+
+func asyncClosePreviewTerminal(term *session.EmbeddedTerminal) tea.Cmd {
+	if term == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		term.Close()
+		return nil
+	}
+}
+
+func (m *home) shouldAttachPreviewTerminal(selected *session.Instance) bool {
+	return m.previewRequested &&
+		selected != nil &&
+		selected.Started() &&
+		selected.Status != session.Paused &&
+		selected.Status != session.Loading &&
+		!selected.Exited
+}
+
+func (m *home) spawnPreviewTerminal(selected *session.Instance) tea.Cmd {
+	if selected == nil {
+		return nil
+	}
+	cols, rows := m.tabbedWindow.GetPreviewSize()
+	if cols < 10 {
+		cols = 80
+	}
+	if rows < 5 {
+		rows = 24
+	}
+	capturedTitle := selected.Title
+	capturedInstance := selected
+	return func() tea.Msg {
+		term, err := capturedInstance.NewEmbeddedTerminalForInstance(cols, rows)
+		return previewTerminalReadyMsg{term: term, instanceTitle: capturedTitle, err: err}
+	}
+}
+
+func (m *home) syncPreviewTerminal() tea.Cmd {
+	selected := m.nav.GetSelectedInstance()
+	needsPreview := m.shouldAttachPreviewTerminal(selected)
+	currentMatches := needsPreview && m.previewTerminal != nil && m.previewTerminalInstance == selected.Title
+
+	var cmds []tea.Cmd
+	if m.previewTerminal != nil && !currentMatches {
+		oldTerm := m.previewTerminal
+		m.previewTerminal = nil
+		m.previewTerminalInstance = ""
+		m.previewClipboardPending = false
+		m.previewClipboardTarget = 0
+		cmds = append(cmds, asyncClosePreviewTerminal(oldTerm))
+	}
+
+	if needsPreview && !currentMatches {
+		cmds = append(cmds, m.spawnPreviewTerminal(selected))
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+	if len(cmds) == 1 {
+		return cmds[0]
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *home) activateInfoTab() tea.Cmd {
+	m.previewRequested = false
+	m.tabbedWindow.SetActiveTab(ui.InfoTab)
+	return m.syncPreviewTerminal()
+}
+
+func (m *home) activateLivePreviewTab() tea.Cmd {
+	m.previewRequested = true
+	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+	return m.syncPreviewTerminal()
 }
 
 // enterFocusMode enters focus/insert mode and starts the fast preview ticker.
@@ -452,6 +531,7 @@ func (m *home) prevFocusSlot() {
 // terminal. Only spawns a new terminal if none is attached yet (rare fallback).
 func (m *home) enterFocusMode() tea.Cmd {
 	m.tabbedWindow.ClearDocumentMode()
+	m.previewRequested = true
 	selected := m.nav.GetSelectedInstance()
 	if selected == nil || !selected.Started() || selected.Status == session.Paused {
 		return nil
@@ -465,25 +545,13 @@ func (m *home) enterFocusMode() tea.Cmd {
 		return nil
 	}
 
-	// No terminal yet (shouldn't normally happen) — spawn one synchronously-ish.
-	cols, rows := m.tabbedWindow.GetPreviewSize()
-	if cols < 10 {
-		cols = 80
-	}
-	if rows < 5 {
-		rows = 24
-	}
-	term, err := selected.NewEmbeddedTerminalForInstance(cols, rows)
-	if err != nil {
-		return m.handleError(err)
-	}
-	m.previewTerminal = term
-	m.previewTerminalInstance = selected.Title
+	// No terminal yet — attach asynchronously so focus transitions don't block.
+	cmd := m.syncPreviewTerminal()
 	m.state = stateFocusAgent
 	m.tabbedWindow.SetFocusMode(true)
 	m.menu.SetFocusMode(true)
 
-	return nil
+	return cmd
 }
 
 // exclamationAutoFocus handles the `!` key in stateDefault: it switches to the
@@ -493,6 +561,7 @@ func (m *home) enterFocusMode() tea.Cmd {
 // No-ops gracefully when no selected/running instance exists.
 func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
 	// Switch to agent tab first (same as KeySendPrompt convention).
+	m.previewRequested = true
 	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
 	// Resolve selected instance (mirrors KeySendPrompt logic).
@@ -552,8 +621,10 @@ func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.tabbedWindow.SetActiveTab(targetTab)
-	return m, nil
+	if targetTab == ui.InfoTab {
+		return m, m.activateInfoTab()
+	}
+	return m, m.activateLivePreviewTab()
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
@@ -637,41 +708,7 @@ func (m *home) instanceChanged() tea.Cmd {
 		m.seenNotified = selected
 	}
 
-	// Manage preview terminal lifecycle on selection change.
-	var spawnCmd tea.Cmd
-	if selected == nil || !selected.Started() || selected.Status == session.Paused || selected.Exited {
-		// No valid instance (or dead tmux session) — tear down terminal.
-		if m.previewTerminal != nil {
-			m.previewTerminal.Close()
-		}
-		m.previewTerminal = nil
-		m.previewTerminalInstance = ""
-		m.previewClipboardPending = false
-		m.previewClipboardTarget = 0
-	} else if selected.Title != m.previewTerminalInstance {
-		// Different instance selected — swap terminal.
-		if m.previewTerminal != nil {
-			m.previewTerminal.Close()
-		}
-		m.previewTerminal = nil
-		m.previewTerminalInstance = ""
-		m.previewClipboardPending = false
-		m.previewClipboardTarget = 0
-
-		cols, rows := m.tabbedWindow.GetPreviewSize()
-		if cols < 10 {
-			cols = 80
-		}
-		if rows < 5 {
-			rows = 24
-		}
-		capturedTitle := selected.Title
-		capturedInstance := selected
-		spawnCmd = func() tea.Msg {
-			term, err := capturedInstance.NewEmbeddedTerminalForInstance(cols, rows)
-			return previewTerminalReadyMsg{term: term, instanceTitle: capturedTitle, err: err}
-		}
-	}
+	previewCmd := m.syncPreviewTerminal()
 
 	m.tabbedWindow.SetInstance(selected)
 	m.updateInfoPane()
@@ -681,17 +718,17 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Auto-switch tab based on selection type: plan header → info tab, instance → agent tab.
 	// Only auto-switch when the nav panel is focused to avoid hijacking explicit tab selection.
 	if m.focusSlot == slotNav {
-		if selected != nil {
+		if selected != nil && m.previewRequested {
 			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		} else if m.nav.IsSelectedPlanHeader() {
+		} else {
 			m.tabbedWindow.SetActiveTab(ui.InfoTab)
 		}
 	}
 
 	// Collect async commands.
 	var cmds []tea.Cmd
-	if spawnCmd != nil {
-		cmds = append(cmds, spawnCmd)
+	if previewCmd != nil {
+		cmds = append(cmds, previewCmd)
 	}
 
 	if len(cmds) == 0 {
@@ -1660,6 +1697,7 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 
 	// Cache hit — reuse previously rendered content (instant).
 	if planFile == m.cachedPlanFile && m.cachedPlanRendered != "" {
+		m.previewRequested = false
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		m.tabbedWindow.SetDocumentContent(m.cachedPlanRendered)
 		return m, nil

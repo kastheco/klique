@@ -779,6 +779,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 
 	t.Run("swap terminal when selection changes from A to B", func(t *testing.T) {
 		h, _, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
 
 		// Simulate: previewTerminal is attached to instance "A".
 		dummyTerm := session.NewDummyTerminal()
@@ -820,12 +821,13 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 
 		assert.Nil(t, h.previewTerminal, "previewTerminal should be torn down")
 		assert.Empty(t, h.previewTerminalInstance, "previewTerminalInstance should be cleared")
-		// No spawn cmd — nothing to attach to.
-		assert.Nil(t, cmd, "no spawn cmd when no valid instance is selected")
+		// Old terminal close now happens asynchronously.
+		assert.NotNil(t, cmd, "selection clear should return async close cmd when a terminal is attached")
 	})
 
 	t.Run("no-op when selection matches current terminal", func(t *testing.T) {
 		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
 
 		dummyTerm := session.NewDummyTerminal()
 		h.previewTerminal = dummyTerm
@@ -848,6 +850,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 
 	t.Run("previewTerminalReadyMsg attaches terminal on match", func(t *testing.T) {
 		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
 		h.nav.SelectInstance(instA) // select instance-A
 
 		readyTerm := session.NewDummyTerminal()
@@ -868,6 +871,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 
 	t.Run("previewTerminalReadyMsg discards stale terminal", func(t *testing.T) {
 		h, _, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
 		h.nav.SelectInstance(instB) // select instance-B (different from msg)
 
 		staleTerm := session.NewDummyTerminal()
@@ -881,12 +885,13 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 		// Stale terminal should NOT be attached.
 		assert.Nil(t, h.previewTerminal, "stale terminal should not be attached")
 		assert.Empty(t, h.previewTerminalInstance, "previewTerminalInstance should remain empty")
-		assert.Nil(t, cmd, "no follow-up cmd expected")
+		assert.NotNil(t, cmd, "stale terminals should be closed asynchronously")
 		// staleTerm.Close() was called internally by the handler
 	})
 
 	t.Run("previewTerminalReadyMsg discards on error", func(t *testing.T) {
 		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
 		h.nav.SelectInstance(instA)
 
 		errTerm := session.NewDummyTerminal()
@@ -900,7 +905,7 @@ func TestPreviewTerminal_SelectionChange(t *testing.T) {
 
 		assert.Nil(t, h.previewTerminal, "terminal should not be attached on error")
 		assert.Empty(t, h.previewTerminalInstance)
-		assert.Nil(t, cmd)
+		assert.NotNil(t, cmd, "errored terminals should be closed asynchronously")
 		// errTerm.Close() was called internally by the handler
 	})
 }
@@ -944,6 +949,7 @@ func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
 
 	t.Run("full flow: attach → tick → selection change → discard old terminal", func(t *testing.T) {
 		h, instA, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
 
 		// Step 1: Select instance A and simulate instanceChanged returning a spawn cmd.
 		require.True(t, h.nav.SelectInstance(instA))
@@ -1002,6 +1008,7 @@ func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
 
 	t.Run("stale ready msg after second selection change is discarded", func(t *testing.T) {
 		h, instA, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
 
 		// Select A, spawn starts.
 		require.True(t, h.nav.SelectInstance(instA))
@@ -1021,7 +1028,7 @@ func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
 		// Stale terminal must be discarded (not attached).
 		assert.Nil(t, h.previewTerminal, "stale terminal for A should not be attached when B is selected")
 		assert.Empty(t, h.previewTerminalInstance)
-		assert.Nil(t, cmd)
+		assert.NotNil(t, cmd, "stale ready terminals should be closed asynchronously")
 	})
 }
 
@@ -1037,6 +1044,7 @@ func TestPreviewTerminalReadyMsg_StaleDiscard(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
+	h.previewRequested = true
 
 	// Add instance "B" and select it (simulating selection change after spawn started for "A").
 	instB, err := session.NewInstance(session.InstanceOptions{
@@ -1147,6 +1155,7 @@ func TestPreviewTerminalReadyMsg_AcceptsCurrentInstance(t *testing.T) {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
+	h.previewRequested = true
 
 	// Add instance "A" and select it.
 	instA, err := session.NewInstance(session.InstanceOptions{
@@ -1155,6 +1164,8 @@ func TestPreviewTerminalReadyMsg_AcceptsCurrentInstance(t *testing.T) {
 		Program: "claude",
 	})
 	require.NoError(t, err)
+	instA.MarkStartedForTest()
+	instA.Status = session.Running
 	h.nav.AddInstance(instA)()
 	h.nav.SetSelectedInstance(0)
 
@@ -1173,6 +1184,41 @@ func TestPreviewTerminalReadyMsg_AcceptsCurrentInstance(t *testing.T) {
 	assert.Equal(t, "A", homeModel.previewTerminalInstance,
 		"previewTerminalInstance should be set when msg matches current selection")
 	assert.Nil(t, cmd, "no cmd should be returned")
+}
+
+func TestInstanceChanged_DoesNotSpawnPreviewWithoutExplicitRequest(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+	}
+
+	instA, err := session.NewInstance(session.InstanceOptions{
+		Title: "instance-A", Path: t.TempDir(), Program: "claude",
+	})
+	require.NoError(t, err)
+	instA.MarkStartedForTest()
+	instA.Status = session.Running
+
+	instB, err := session.NewInstance(session.InstanceOptions{
+		Title: "instance-B", Path: t.TempDir(), Program: "claude",
+	})
+	require.NoError(t, err)
+	instB.MarkStartedForTest()
+	instB.Status = session.Running
+
+	h.nav.AddInstance(instA)()
+	h.nav.AddInstance(instB)()
+
+	require.True(t, h.nav.SelectInstance(instB), "should find instance-B in list")
+	cmd := h.instanceChanged()
+
+	assert.Nil(t, cmd, "instanceChanged should not auto-attach preview without explicit request")
+	assert.Equal(t, ui.InfoTab, h.tabbedWindow.GetActiveTab(), "sidebar navigation should stay on info until preview is requested")
 }
 
 // TestFocusMode_ReusesPreviewTerminal verifies that enterFocusMode reuses the

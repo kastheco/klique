@@ -249,6 +249,7 @@ type home struct {
 	// Also used for focus mode — entering focus just forwards keys to this terminal.
 	previewTerminal         *session.EmbeddedTerminal
 	previewTerminalInstance string // title of the instance the terminal is attached to
+	previewRequested        bool   // true after the user explicitly selects the live agent pane
 	previewClipboardPending bool
 	previewClipboardTarget  byte
 
@@ -688,6 +689,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cachedPlanFile = msg.planFile
 		m.cachedPlanRendered = msg.rendered
+		m.previewRequested = false
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		m.tabbedWindow.SetDocumentContent(msg.rendered)
 		return m, nil
@@ -708,7 +710,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.previewTerminal == nil && !m.tabbedWindow.IsDocumentMode() {
 			// No terminal — show appropriate fallback state.
 			selected := m.nav.GetSelectedInstance()
-			if selected != nil && selected.Started() && selected.Status != session.Paused && selected.Status != session.Loading {
+			if m.shouldAttachPreviewTerminal(selected) {
 				// Instance is running but terminal hasn't attached yet — show connecting indicator.
 				m.tabbedWindow.SetConnectingState()
 			} else {
@@ -1839,11 +1841,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewTerminalReadyMsg:
 		// Discard stale attach if selection changed while spawning.
 		selected := m.nav.GetSelectedInstance()
-		if msg.err != nil || selected == nil || selected.Title != msg.instanceTitle {
-			if msg.term != nil {
-				msg.term.Close()
-			}
-			return m, nil
+		if msg.err != nil || !m.shouldAttachPreviewTerminal(selected) || selected.Title != msg.instanceTitle {
+			return m, asyncClosePreviewTerminal(msg.term)
 		}
 		m.previewTerminal = msg.term
 		m.previewTerminalInstance = msg.instanceTitle
