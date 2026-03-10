@@ -120,6 +120,32 @@ func TestBuildHookRegistry_InvalidEventNamesIgnored(t *testing.T) {
 	// the registry was built (not skipped) even with bad event names.
 }
 
+func TestBuildHookRegistry_AllEventsInvalid_HookSkipped(t *testing.T) {
+	cfg := []HookConfig{
+		{
+			Type:   "notify",
+			Events: []string{"not_a_real_event", "another_bogus_event"},
+		},
+	}
+	// When every event name is unknown, the hook must be skipped entirely
+	// rather than registering with an empty filter (which would fire on all
+	// transitions — the exact opposite of what the user intended).
+	reg := BuildHookRegistry(cfg)
+	assert.Equal(t, 0, reg.Len(), "hook with all-unknown events should be skipped")
+}
+
+func TestBuildHookRegistry_AllEventsInvalid_WebhookSkipped(t *testing.T) {
+	cfg := []HookConfig{
+		{
+			Type:   "webhook",
+			URL:    "https://example.com/hook",
+			Events: []string{"totally_bogus"},
+		},
+	}
+	reg := BuildHookRegistry(cfg)
+	assert.Equal(t, 0, reg.Len(), "webhook with all-unknown events should be skipped")
+}
+
 func TestParseHookEvents_AllKnownEvents(t *testing.T) {
 	all := []string{
 		"plan_start",

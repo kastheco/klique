@@ -62,7 +62,7 @@ func (w *WebhookHook) Run(ctx context.Context, ev TransitionEvent) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= http.StatusBadRequest {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("webhook: server returned status %d", resp.StatusCode)
 	}
 	return nil

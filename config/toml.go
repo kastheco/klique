@@ -137,6 +137,24 @@ func LoadTOMLConfig() (*TOMLConfigResult, error) {
 	return LoadTOMLConfigFrom(path)
 }
 
+// LoadHooksForRepo reads the [[hooks]] entries from <repoPath>/.kasmos/config.toml
+// without any side effects (no config creation, no writes). Returns nil when the
+// file does not exist or contains no hooks. Errors are returned to the caller.
+func LoadHooksForRepo(repoPath string) ([]TOMLHook, error) {
+	path := filepath.Join(repoPath, ".kasmos", TOMLConfigFileName)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat TOML config for repo %s: %w", repoPath, err)
+	}
+	result, err := LoadTOMLConfigFrom(path)
+	if err != nil {
+		return nil, err
+	}
+	return result.Hooks, nil
+}
+
 // SaveTOMLConfigTo writes a TOMLConfig to the given path.
 func SaveTOMLConfigTo(tc *TOMLConfig, path string) (retErr error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
