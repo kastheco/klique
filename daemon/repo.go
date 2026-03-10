@@ -2,9 +2,12 @@ package daemon
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sync"
 
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/orchestration/loop"
 )
@@ -75,6 +78,26 @@ func (m *RepoManager) Add(path string) error {
 		gw = g
 	}
 
+	// Build a hook registry by reading the per-repo config.toml.
+	// This is side-effect-free (no implicit writes) and anchored to the repo
+	// being registered, so each repo gets its own hook configuration.
+	var hooks *taskfsm.HookRegistry
+	if hookCfgs, err := config.LoadHooksForRepo(path); err != nil {
+		slog.Warn("daemon: failed to load hooks for repo, hooks disabled", "repo", path, "error", err)
+	} else if len(hookCfgs) > 0 {
+		cfgs := make([]taskfsm.HookConfig, len(hookCfgs))
+		for i, h := range hookCfgs {
+			cfgs[i] = taskfsm.HookConfig{
+				Type:    h.Type,
+				URL:     h.URL,
+				Headers: h.Headers,
+				Command: h.Command,
+				Events:  h.Events,
+			}
+		}
+		hooks = taskfsm.BuildHookRegistry(cfgs)
+	}
+
 	// Create a per-repo processor that persists across poll ticks so that wave
 	// orchestrator state is maintained between cycles.
 	proc := loop.NewProcessor(loop.ProcessorConfig{
@@ -82,6 +105,7 @@ func (m *RepoManager) Add(path string) error {
 		Store:              store,
 		Project:            project,
 		MaxReviewFixCycles: m.maxReviewFixCycles,
+		Hooks:              hooks,
 	})
 
 	m.repos = append(m.repos, RepoEntry{

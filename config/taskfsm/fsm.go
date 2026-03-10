@@ -100,12 +100,17 @@ type TaskStateMachine struct {
 	dir     string          // legacy: retained for file rename operations (may be empty)
 	store   taskstore.Store // always non-nil
 	project string          // project name used with the store
+	hooks   *HookRegistry   // optional; fired asynchronously after each successful transition
 }
 
 // New creates a TaskStateMachine backed by the given store.
 func New(store taskstore.Store, project, dir string) *TaskStateMachine {
 	return &TaskStateMachine{dir: dir, store: store, project: project}
 }
+
+// SetHooks attaches a HookRegistry that will receive TransitionEvents after
+// each successful state write.
+func (m *TaskStateMachine) SetHooks(h *HookRegistry) { m.hooks = h }
 
 // Transition applies an event to a plan's current status. It reads the current
 // state from the store, validates the transition, writes the new state, and returns.
@@ -133,6 +138,14 @@ func (m *TaskStateMachine) Transition(planFile string, event Event) error {
 			return fmt.Errorf("set phase timestamp: %w", err)
 		}
 	}
+	m.hooks.FireAll(TransitionEvent{
+		PlanFile:   planFile,
+		FromStatus: currentStatus,
+		ToStatus:   newStatus,
+		Event:      event,
+		Timestamp:  time.Now().UTC(),
+		Project:    m.project,
+	})
 	return nil
 }
 

@@ -228,6 +228,100 @@ auto_advance_waves = true
 	})
 }
 
+func TestLoadTOMLConfig_Hooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[[hooks]]
+type = "webhook"
+url = "https://example.com/hook"
+events = ["plan_start", "implement_finished"]
+
+[hooks.headers]
+X-Token = "secret123"
+Authorization = "Bearer tok"
+
+[[hooks]]
+type = "notify"
+events = ["review_approved"]
+
+[[hooks]]
+type = "command"
+command = "echo done"
+events = ["review_approved"]
+`
+	err := os.WriteFile(tomlPath, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	result, err := LoadTOMLConfigFrom(tomlPath)
+	require.NoError(t, err)
+	require.Len(t, result.Hooks, 3, "expected three hook entries")
+
+	// First: webhook
+	webhook := result.Hooks[0]
+	assert.Equal(t, "webhook", webhook.Type)
+	assert.Equal(t, "https://example.com/hook", webhook.URL)
+	assert.Equal(t, []string{"plan_start", "implement_finished"}, webhook.Events)
+	require.NotNil(t, webhook.Headers)
+	assert.Equal(t, "secret123", webhook.Headers["X-Token"])
+	assert.Equal(t, "Bearer tok", webhook.Headers["Authorization"])
+
+	// Second: notify
+	notify := result.Hooks[1]
+	assert.Equal(t, "notify", notify.Type)
+	assert.Equal(t, []string{"review_approved"}, notify.Events)
+
+	// Third: command
+	command := result.Hooks[2]
+	assert.Equal(t, "command", command.Type)
+	assert.Equal(t, "echo done", command.Command)
+	assert.Equal(t, []string{"review_approved"}, command.Events)
+}
+
+func TestLoadHooksForRepo(t *testing.T) {
+	t.Run("returns nil when config.toml absent", func(t *testing.T) {
+		repoDir := t.TempDir()
+		hooks, err := LoadHooksForRepo(repoDir)
+		require.NoError(t, err)
+		assert.Nil(t, hooks)
+	})
+
+	t.Run("returns hooks from repo-local config.toml", func(t *testing.T) {
+		repoDir := t.TempDir()
+		kasmosDir := filepath.Join(repoDir, ".kasmos")
+		require.NoError(t, os.MkdirAll(kasmosDir, 0o755))
+
+		content := `
+[[hooks]]
+type = "webhook"
+url = "https://example.com/hook"
+events = ["plan_start"]
+
+[[hooks]]
+type = "notify"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(kasmosDir, "config.toml"), []byte(content), 0o644))
+
+		hooks, err := LoadHooksForRepo(repoDir)
+		require.NoError(t, err)
+		require.Len(t, hooks, 2)
+		assert.Equal(t, "webhook", hooks[0].Type)
+		assert.Equal(t, "https://example.com/hook", hooks[0].URL)
+		assert.Equal(t, "notify", hooks[1].Type)
+	})
+
+	t.Run("returns error on invalid TOML", func(t *testing.T) {
+		repoDir := t.TempDir()
+		kasmosDir := filepath.Join(repoDir, ".kasmos")
+		require.NoError(t, os.MkdirAll(kasmosDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(kasmosDir, "config.toml"), []byte("[bad toml\n"), 0o644))
+
+		_, err := LoadHooksForRepo(repoDir)
+		assert.Error(t, err)
+	})
+}
+
 func TestResolveProfileWithDisabledAgent(t *testing.T) {
 	t.Run("disabled agent falls back to default", func(t *testing.T) {
 		cfg := &Config{

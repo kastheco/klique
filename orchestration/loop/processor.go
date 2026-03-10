@@ -23,6 +23,10 @@ type ProcessorConfig struct {
 	// before emitting ReviewCycleLimitAction instead of SpawnCoderAction.
 	// Zero or negative means unlimited.
 	MaxReviewFixCycles int
+	// Hooks is an optional registry of FSM transition hooks. When non-nil and
+	// non-empty it is attached to the FSM so hooks fire after every successful
+	// state write.
+	Hooks *taskfsm.HookRegistry
 }
 
 // Processor converts signal scan results into typed Action values without
@@ -40,9 +44,13 @@ type Processor struct {
 
 // NewProcessor creates a Processor backed by the given store and project.
 func NewProcessor(cfg ProcessorConfig) *Processor {
+	fsm := taskfsm.New(cfg.Store, cfg.Project, cfg.Dir)
+	if cfg.Hooks != nil && cfg.Hooks.Len() > 0 {
+		fsm.SetHooks(cfg.Hooks)
+	}
 	return &Processor{
 		config:            cfg,
-		fsm:               taskfsm.New(cfg.Store, cfg.Project, cfg.Dir),
+		fsm:               fsm,
 		waveOrchestrators: make(map[string]*orchestration.WaveOrchestrator),
 		activeWaveOrchs:   make(map[string]bool),
 	}

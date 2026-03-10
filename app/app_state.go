@@ -40,6 +40,21 @@ func shouldCreatePR(entry taskstore.TaskEntry) bool {
 	return entry.Status == taskstore.StatusDone && entry.Branch != "" && entry.PRURL == ""
 }
 
+// toTaskFSMHooks converts a slice of config.TOMLHook to taskfsm.HookConfig entries.
+func toTaskFSMHooks(entries []config.TOMLHook) []taskfsm.HookConfig {
+	out := make([]taskfsm.HookConfig, len(entries))
+	for i, h := range entries {
+		out[i] = taskfsm.HookConfig{
+			Type:    h.Type,
+			URL:     h.URL,
+			Headers: h.Headers,
+			Command: h.Command,
+			Events:  h.Events,
+		}
+	}
+	return out
+}
+
 // ensureProcessor lazily initializes and returns the signal Processor.
 // Returns nil when taskStore is not set (e.g. in tests that don't need signal processing),
 // in which case the caller must fall back to the legacy FSM signal handling code.
@@ -57,12 +72,19 @@ func (m *home) ensureProcessor() *loop.Processor {
 	if m.taskStore == nil {
 		return nil
 	}
+	var hooks *taskfsm.HookRegistry
+	if m.appConfig != nil {
+		if len(m.appConfig.Hooks) > 0 {
+			hooks = taskfsm.BuildHookRegistry(toTaskFSMHooks(m.appConfig.Hooks))
+		}
+	}
 	m.processor = loop.NewProcessor(loop.ProcessorConfig{
 		AutoReviewFix:      autoReviewFix,
 		Store:              m.taskStore,
 		Project:            m.taskStoreProject,
 		Dir:                m.taskStateDir,
 		MaxReviewFixCycles: maxCycles,
+		Hooks:              hooks,
 	})
 	return m.processor
 }

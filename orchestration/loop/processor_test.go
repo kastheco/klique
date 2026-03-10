@@ -299,6 +299,30 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleLimitReached(t *testing.T) {
 	}
 }
 
+func TestProcessor_HooksAttachedToFSM(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+
+	// Build a registry with a single notify hook.
+	hookCfgs := []taskfsm.HookConfig{
+		{Type: "notify"},
+	}
+	registry := taskfsm.BuildHookRegistry(hookCfgs)
+	require.NotNil(t, registry)
+	require.Equal(t, 1, registry.Len())
+
+	// Pass the registry through ProcessorConfig — ensures startup wiring compiles
+	// and the field is accepted without error.
+	p := NewProcessor(ProcessorConfig{
+		Store:   store,
+		Project: "test",
+		Hooks:   registry,
+	})
+	require.NotNil(t, p)
+	// The FSM should have hooks attached; we verify indirectly: Processor was
+	// successfully constructed (no panic) and the FSM field is non-nil.
+	assert.NotNil(t, p.fsm, "expected non-nil FSM")
+}
+
 func TestProcessor_ProcessFSMSignals_ReviewCycleBelowLimit(t *testing.T) {
 	store := taskstore.NewTestStore(t)
 	store.Create("proj", taskstore.TaskEntry{

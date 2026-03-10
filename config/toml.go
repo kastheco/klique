@@ -47,6 +47,16 @@ type TOMLTelemetryConfig struct {
 	Enabled *bool `toml:"enabled,omitempty"`
 }
 
+// TOMLHook is the TOML/JSON representation of a single FSM transition hook.
+// Maps directly to [[hooks]] entries in config.toml or the "hooks" JSON array.
+type TOMLHook struct {
+	Type    string            `json:"type"              toml:"type"`
+	URL     string            `json:"url,omitempty"     toml:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" toml:"headers,omitempty"`
+	Command string            `json:"command,omitempty" toml:"command,omitempty"`
+	Events  []string          `json:"events,omitempty"  toml:"events,omitempty"`
+}
+
 // TOMLOrchestrationConfig holds orchestration settings from the [orchestration] TOML table.
 type TOMLOrchestrationConfig struct {
 	// BlueprintSkipThreshold is the maximum task count for single-agent mode.
@@ -62,6 +72,7 @@ type TOMLConfig struct {
 	Telemetry     TOMLTelemetryConfig     `toml:"telemetry"`
 	Orchestration TOMLOrchestrationConfig `toml:"orchestration"`
 	DatabaseURL   string                  `toml:"database_url,omitempty"`
+	Hooks         []TOMLHook              `toml:"hooks"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
@@ -75,6 +86,7 @@ type TOMLConfigResult struct {
 	TelemetryEnabled       *bool
 	DatabaseURL            string
 	BlueprintSkipThreshold *int
+	Hooks                  []TOMLHook
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -95,6 +107,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		TelemetryEnabled:       tc.Telemetry.Enabled,
 		DatabaseURL:            tc.DatabaseURL,
 		BlueprintSkipThreshold: tc.Orchestration.BlueprintSkipThreshold,
+		Hooks:                  tc.Hooks,
 	}
 
 	for name, agent := range tc.Agents {
@@ -122,6 +135,24 @@ func LoadTOMLConfig() (*TOMLConfigResult, error) {
 	}
 
 	return LoadTOMLConfigFrom(path)
+}
+
+// LoadHooksForRepo reads the [[hooks]] entries from <repoPath>/.kasmos/config.toml
+// without any side effects (no config creation, no writes). Returns nil when the
+// file does not exist or contains no hooks. Errors are returned to the caller.
+func LoadHooksForRepo(repoPath string) ([]TOMLHook, error) {
+	path := filepath.Join(repoPath, ".kasmos", TOMLConfigFileName)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat TOML config for repo %s: %w", repoPath, err)
+	}
+	result, err := LoadTOMLConfigFrom(path)
+	if err != nil {
+		return nil, err
+	}
+	return result.Hooks, nil
 }
 
 // SaveTOMLConfigTo writes a TOMLConfig to the given path.
