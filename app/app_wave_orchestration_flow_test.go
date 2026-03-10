@@ -28,10 +28,11 @@ func waveFlowHome(t *testing.T, ps *taskstate.TaskState, plansDir string, orchMa
 	t.Helper()
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewNavigationPanel(&sp)
+	threshold := 0
 	h := &home{
 		ctx:               context.Background(),
 		state:             stateDefault,
-		appConfig:         config.DefaultConfig(),
+		appConfig:         &config.Config{BlueprintSkipThresholdValue: &threshold},
 		nav:               list,
 		menu:              ui.NewMenu(),
 		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
@@ -1494,6 +1495,7 @@ func newWaveElabTestHarness(t *testing.T) *waveElabTestHarness {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	threshold := 0
 
 	store := taskstore.NewTestSQLiteStore(t)
 	ps, err := taskstate.Load(store, "proj", plansDir)
@@ -1516,7 +1518,7 @@ func newWaveElabTestHarness(t *testing.T) *waveElabTestHarness {
 		waveOrchestrators: make(map[string]*orchestration.WaveOrchestrator),
 		activeRepoPath:    dir,
 		program:           "opencode",
-		appConfig:         config.DefaultConfig(),
+		appConfig:         &config.Config{BlueprintSkipThresholdValue: &threshold},
 		state:             stateDefault,
 	}
 	return &waveElabTestHarness{t: t, dir: dir, plansDir: plansDir, store: store, h: h}

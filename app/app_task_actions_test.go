@@ -766,6 +766,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	threshold := 0
 
 	const planFile = "test-implement-from-db.md"
 	const planContent = "# Plan\n\n**Goal:** Test DB read\n\n## Wave 1\n\n### Task 1: Do the thing\n\nDo it.\n"
@@ -787,6 +788,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
+		appConfig:          &config.Config{BlueprintSkipThresholdValue: &threshold},
 		taskState:          ps,
 		taskStore:          store,
 		taskStoreProject:   "proj",
