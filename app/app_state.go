@@ -1540,6 +1540,37 @@ func (m *home) blueprintSkipThreshold() int {
 	return m.appConfig.BlueprintSkipThreshold()
 }
 
+// clearWaveOrchestratorState removes any wave-orchestrator bookkeeping for the
+// given plan from both the home model and the processor-backed signal gate.
+// This is required before switching an implementing plan onto the single-agent
+// blueprint-skip path so later implement_finished signals are not suppressed.
+func (m *home) clearWaveOrchestratorState(planFile string) {
+	delete(m.waveOrchestrators, planFile)
+	if proc := m.ensureProcessor(); proc != nil {
+		proc.SetWaveOrchestratorActive(planFile, false)
+	}
+}
+
+// hasActiveBlueprintSkipCoder reports whether a non-wave coder is already
+// active for this plan. Used to prevent duplicate small-plan implement spawns
+// when the user re-triggers "implement" while a single-agent implementation is
+// already in flight.
+func (m *home) hasActiveBlueprintSkipCoder(planFile string) bool {
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile != planFile || inst.AgentType != session.AgentTypeCoder {
+			continue
+		}
+		if inst.WaveNumber != 0 || inst.SoloAgent {
+			continue
+		}
+		if inst.ImplementationComplete || inst.Exited || inst.Paused() {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // spawnBlueprintSkipAgent transitions the plan to implementing and spawns a single
 // coder agent to implement all tasks sequentially. Used when the plan's task count
 // is at or below blueprintSkipThreshold(). No WaveOrchestrator is created — the

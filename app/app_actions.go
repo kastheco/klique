@@ -994,6 +994,10 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 
 		// Blueprint-skip: for small plans, bypass elaboration and wave orchestration.
 		if orchestration.ShouldBlueprintSkip(plan, m.blueprintSkipThreshold()) {
+			if m.hasActiveBlueprintSkipCoder(planFile) {
+				m.toastManager.Info("implementation already running — waiting for single agent to finish.")
+				return m, m.toastTickCmd()
+			}
 			return m.spawnBlueprintSkipAgent(planFile, plan)
 		}
 
@@ -1061,7 +1065,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 
 		// Blueprint-skip: for small plans, bypass elaboration and wave orchestration.
 		if orchestration.ShouldBlueprintSkip(plan, m.blueprintSkipThreshold()) {
-			delete(m.waveOrchestrators, planFile)
+			m.clearWaveOrchestratorState(planFile)
 			return m.spawnBlueprintSkipAgent(planFile, plan)
 		}
 
