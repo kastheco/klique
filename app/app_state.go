@@ -1154,8 +1154,12 @@ func (m *home) spawnReviewer(planFile string) tea.Cmd {
 	m.toastManager.Success(fmt.Sprintf("implementation complete → review started for %s", planName))
 
 	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
+	agents := m.opencodeAgentConfigs()
 	return func() tea.Msg {
 		if err := shared.Setup(); err != nil {
+			return instanceStartedMsg{instance: reviewerInst, err: err}
+		}
+		if err := scaffold.PatchWorktreeConfig(shared.GetWorktreePath(), agents); err != nil {
 			return instanceStartedMsg{instance: reviewerInst, err: err}
 		}
 		err := reviewerInst.StartInSharedWorktree(shared, branch)
@@ -1463,8 +1467,12 @@ func (m *home) spawnFixerWithFeedback(planFile, feedback string) tea.Cmd {
 	m.toastManager.Info(fmt.Sprintf("review changes requested → applying fixes to %s", planName))
 
 	shared := gitpkg.NewSharedTaskWorktree(m.activeRepoPath, branch)
+	agents := m.opencodeAgentConfigs()
 	return func() tea.Msg {
 		if err := shared.Setup(); err != nil {
+			return instanceStartedMsg{instance: fixerInst, err: err}
+		}
+		if err := scaffold.PatchWorktreeConfig(shared.GetWorktreePath(), agents); err != nil {
 			return instanceStartedMsg{instance: fixerInst, err: err}
 		}
 		err := fixerInst.StartInSharedWorktree(shared, branch)

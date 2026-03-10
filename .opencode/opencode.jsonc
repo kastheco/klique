@@ -1,14 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
-    "build": {
-      "disable": true
-    },
-    "plan": {
-      "disable": true
-    },
-    "chat": {
-      "model": "anthropic/claude-sonnet-4-6",
+    "architect": {
+      "model": "openai/gpt-5.4",
       "permission": {
         "bash": "allow",
         "edit": {
@@ -18,12 +12,46 @@
         },
         "external_directory": {
           "*": "ask",
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow",
           "/home/kas/dev/kasmos/*": "allow",
           "/home/kas/dev/kasmos/**": "allow",
           "/tmp/*": "allow",
-          "/tmp/**": "allow",
+          "/tmp/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      "reasoningEffort": "high",
+      "temperature": 0.2,
+      "textVerbosity": "medium"
+    },
+    "build": {
+      "disable": true
+    },
+    "chat": {
+      "model": "openai/gpt-5.4",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
           "/home/kas/.config/opencode/*": "allow",
-          "/home/kas/.config/opencode/**": "allow"
+          "/home/kas/.config/opencode/**": "allow",
+          "/home/kas/dev/kasmos/*": "allow",
+          "/home/kas/dev/kasmos/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
         },
         "glob": "allow",
         "grep": "allow",
@@ -37,37 +65,6 @@
       "temperature": 0.3,
       "textVerbosity": "medium"
     },
-    "architect": {
-      "model": "openai/gpt-5.4",
-      "permission": {
-        "bash": "allow",
-        "edit": {
-          "*": "ask",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow"
-        },
-        "external_directory": {
-          "*": "ask",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow",
-          "/home/kas/.config/opencode/*": "allow",
-          "/home/kas/.config/opencode/**": "allow"
-        },
-        "glob": "allow",
-        "grep": "allow",
-        "read": "allow",
-        "write": {
-          "*": "ask",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow"
-        }
-      },
-      "reasoningEffort": "high",
-      "temperature": 0.2,
-      "textVerbosity": "medium"
-    },
     "coder": {
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
@@ -75,12 +72,12 @@
         "edit": "allow",
         "external_directory": {
           "*": "ask",
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow",
           "/home/kas/dev/kasmos/*": "allow",
           "/home/kas/dev/kasmos/**": "allow",
           "/tmp/*": "allow",
-          "/tmp/**": "allow",
-          "/home/kas/.config/opencode/*": "allow",
-          "/home/kas/.config/opencode/**": "allow"
+          "/tmp/**": "allow"
         },
         "glob": "allow",
         "grep": "allow",
@@ -91,71 +88,19 @@
       "temperature": 0.1,
       "textVerbosity": "low"
     },
-    "planner": {
-      "model": "anthropic/claude-opus-4-6",
-      "permission": {
-        "bash": "allow",
-        "edit": "allow",
-        "external_directory": {
-          "*": "ask",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow",
-          "/home/kas/.config/opencode/*": "allow",
-          "/home/kas/.config/opencode/**": "allow"
-        },
-        "glob": "allow",
-        "grep": "allow",
-        "read": "allow",
-        "write": "allow"
-      },
-      "reasoningEffort": "high",
-      "temperature": 0.3,
-      "textVerbosity": "medium"
-    },
-    "reviewer": {
-      "model": "anthropic/claude-sonnet-4-6",
-      "permission": {
-        "bash": "allow",
-        "edit": {
-          "*": "ask",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow"
-        },
-        "external_directory": {
-          "*": "ask",
-          "/home/kas/dev/kasmos/*": "allow",
-          "/home/kas/dev/kasmos/**": "allow",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow"
-        },
-        "glob": "allow",
-        "grep": "allow",
-        "read": "allow",
-        "write": {
-          "*": "ask",
-          "/tmp/*": "allow",
-          "/tmp/**": "allow"
-        }
-      },
-      "reasoningEffort": "medium",
-      "temperature": 0.2,
-      "textVerbosity": "medium"
-    },
     "fixer": {
-      "model": "anthropic/claude-sonnet-4-6",
+      "model": "openai/gpt-5.4",
       "permission": {
         "bash": "allow",
         "edit": "allow",
         "external_directory": {
           "*": "ask",
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow",
           "/home/kas/dev/kasmos/*": "allow",
           "/home/kas/dev/kasmos/**": "allow",
           "/tmp/*": "allow",
-          "/tmp/**": "allow",
-          "/home/kas/.config/opencode/*": "allow",
-          "/home/kas/.config/opencode/**": "allow"
+          "/tmp/**": "allow"
         },
         "glob": "allow",
         "grep": "allow",
@@ -194,6 +139,61 @@
       "reasoningEffort": "high",
       "temperature": 0.2,
       "textVerbosity": "low"
+    },
+    "plan": {
+      "disable": true
+    },
+    "planner": {
+      "model": "anthropic/claude-opus-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "external_directory": {
+          "*": "ask",
+          "/home/kas/.config/opencode/*": "allow",
+          "/home/kas/.config/opencode/**": "allow",
+          "/home/kas/dev/kasmos/*": "allow",
+          "/home/kas/dev/kasmos/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": "allow"
+      },
+      "reasoningEffort": "high",
+      "temperature": 0.3,
+      "textVerbosity": "medium"
+    },
+    "reviewer": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "external_directory": {
+          "*": "ask",
+          "/home/kas/dev/kasmos/*": "allow",
+          "/home/kas/dev/kasmos/**": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        },
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "write": {
+          "*": "ask",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
+        }
+      },
+      "reasoningEffort": "medium",
+      "temperature": 0.2,
+      "textVerbosity": "medium"
     }
   }
 }

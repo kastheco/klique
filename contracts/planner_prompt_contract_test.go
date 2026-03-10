@@ -19,6 +19,7 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 		"Do NOT create feature branches for planning work.",
 		"Only register implementation plans",
 		"never register design docs",
+		"kas task update-content",
 		".kasmos/signals/planner-finished-",
 		"KASMOS_MANAGED",
 		"Never modify task state directly",
@@ -33,5 +34,9 @@ func TestPlannerPromptBranchPolicy(t *testing.T) {
 
 	if strings.Contains(text, "YYYY-MM-DD") {
 		t.Fatalf("planner prompt still references date prefix convention YYYY-MM-DD")
+	}
+
+	if strings.Contains(text, "kasmos will detect this and register the plan") {
+		t.Fatalf("planner prompt still claims the sentinel registers plan content")
 	}
 }
