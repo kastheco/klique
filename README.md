@@ -1,4 +1,4 @@
-# kasmos [![CI](https://github.com/kastheco/kasmos/actions/workflows/build.yml/badge.svg)](https://github.com/kastheco/kasmos/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/kastheco/kasmos)](https://github.com/kastheco/kasmos/releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+# kasmos [![CI](https://github.com/kastheco/kasmos/actions/workflows/build.yml/badge.svg)](https://github.com/kastheco/kasmos/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/kastheco/kasmos)](https://github.com/kastheco/kasmos/releases/latest) [![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE.md)
 
 > harness & model-agnostic ai orchestration tool with automated wave-based implementation — powered by superpowers, tmux, and git worktrees.
 
@@ -162,10 +162,30 @@ kas serve --port 7433 --db /path/to/kasmos.db
 a unit file is provided in `contrib/kasmosdb.service`:
 
 ```bash
-cp contrib/kasmosdb.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now kasmosdb
+just db-service-enable
 ```
+
+#### run the orchestration daemon as a systemd service
+
+`kas signal emit ...` writes to the signal gateway database. a running daemon is what
+claims those rows and advances plan lifecycle state outside the legacy filesystem
+sentinel path.
+
+a user unit is provided in `contrib/kasmos.service`:
+
+```bash
+just kasmosd-enable
+just doctord
+```
+
+or, if you want both the orchestration daemon and plan store service in one step:
+
+```bash
+just services-enable
+```
+
+if you only emit a signal but no daemon is running, the signal stays pending and the
+plan will not advance until the daemon processes it.
 
 #### rest api
 
@@ -205,4 +225,4 @@ plan_store = "http://localhost:7433"  # remote plan store (optional)
 
 ## license
 
-[MIT](LICENSE.md)
+[BSL 1.1](LICENSE.md) - converts to [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) on the change date. see LICENSE.md for details.

@@ -1010,6 +1010,15 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
 		}
 
+		// Blueprint-skip: for small plans, bypass elaboration and wave orchestration.
+		if orchestration.ShouldBlueprintSkip(plan, m.blueprintSkipThreshold()) {
+			if m.hasActiveBlueprintSkipCoder(planFile) {
+				m.toastManager.Info("implementation already running — waiting for single agent to finish.")
+				return m, m.toastTickCmd()
+			}
+			return m.spawnBlueprintSkipAgent(planFile, plan)
+		}
+
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)
 		orch.SetStore(m.taskStore, m.taskStoreProject)
 		m.waveOrchestrators[planFile] = orch
@@ -1070,6 +1079,12 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 			m.toastManager.Info("task needs ## Wave headers — respawning planner to annotate.")
 			_, spawnCmd := m.spawnTaskAgent(planFile, "plan", orchestration.BuildWaveAnnotationPrompt(planFile))
 			return m, tea.Batch(m.toastTickCmd(), func() tea.Msg { return taskRefreshMsg{} }, spawnCmd)
+		}
+
+		// Blueprint-skip: for small plans, bypass elaboration and wave orchestration.
+		if orchestration.ShouldBlueprintSkip(plan, m.blueprintSkipThreshold()) {
+			m.clearWaveOrchestratorState(planFile)
+			return m.spawnBlueprintSkipAgent(planFile, plan)
 		}
 
 		orch := orchestration.NewWaveOrchestrator(planFile, plan)

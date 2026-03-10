@@ -47,6 +47,20 @@ type FileConflict struct {
 	TaskNumbers []int
 }
 
+// ShouldBlueprintSkip returns true when the plan has ≤ threshold tasks total
+// and should be implemented by a single coder agent instead of wave orchestration.
+// When threshold is 0 or negative, blueprint skip is disabled.
+func ShouldBlueprintSkip(plan *taskparser.Plan, threshold int) bool {
+	if plan == nil || threshold <= 0 {
+		return false
+	}
+	total := 0
+	for _, wave := range plan.Waves {
+		total += len(wave.Tasks)
+	}
+	return total <= threshold
+}
+
 // NewWaveOrchestrator creates an orchestrator for the given plan.
 func NewWaveOrchestrator(planFile string, plan *taskparser.Plan) *WaveOrchestrator {
 	return &WaveOrchestrator{
