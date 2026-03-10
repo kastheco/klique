@@ -502,8 +502,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			label = "on"
 		}
 		m.toastManager.Success(fmt.Sprintf("auto-advance waves: %s", label))
-		// Persist to disk (best-effort)
-		_ = config.SaveConfig(m.appConfig)
 		return m, m.toastTickCmd()
 
 	case "toggle_auto_review_fix":
@@ -516,7 +514,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			label = "on"
 		}
 		m.toastManager.Success(fmt.Sprintf("auto review-fix loop: %s", label))
-		_ = config.SaveConfig(m.appConfig)
 		return m, m.toastTickCmd()
 
 	// ── Log-line context menu actions ──────────────────────────────────────

@@ -322,6 +322,32 @@ type = "notify"
 	})
 }
 
+func TestLoadTOMLConfigFrom_RuntimeFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+default_program = "/usr/bin/claude"
+auto_yes = true
+daemon_poll_interval = 2000
+branch_prefix = "dev/"
+notifications_enabled = false
+
+[phases]
+plan = "planner"
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	result, err := LoadTOMLConfigFrom(path)
+	require.NoError(t, err)
+	assert.Equal(t, "/usr/bin/claude", result.DefaultProgram)
+	assert.True(t, result.AutoYes)
+	assert.Equal(t, 2000, result.DaemonPollInterval)
+	assert.Equal(t, "dev/", result.BranchPrefix)
+	require.NotNil(t, result.NotificationsEnabled)
+	assert.False(t, *result.NotificationsEnabled)
+	assert.Equal(t, "planner", result.PhaseRoles["plan"])
+}
+
 func TestResolveProfileWithDisabledAgent(t *testing.T) {
 	t.Run("disabled agent falls back to default", func(t *testing.T) {
 		cfg := &Config{

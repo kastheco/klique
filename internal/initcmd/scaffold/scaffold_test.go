@@ -893,6 +893,14 @@ func TestLoadReviewPrompt_UsesMergeBase(t *testing.T) {
 	assert.NotContains(t, prompt, "git log main..HEAD")
 }
 
+func TestLoadReviewPrompt_UsesGatewayReviewSignals(t *testing.T) {
+	prompt := LoadReviewPrompt("test-plan.md", "test-plan")
+	assert.Contains(t, prompt, "kas signal emit review_approved test-plan.md")
+	assert.Contains(t, prompt, "kas signal emit review_changes_requested test-plan.md")
+	assert.NotContains(t, prompt, ".kasmos/signals/review-approved-")
+	assert.NotContains(t, prompt, ".kasmos/signals/review-changes-")
+}
+
 func ptrFloat(f float64) *float64 { return &f }
 
 func TestSyncScaffold_UpdatesSkillsAndAgentPrompts(t *testing.T) {

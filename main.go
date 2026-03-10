@@ -172,7 +172,7 @@ var (
 			}
 			configJson, _ := json.MarshalIndent(cfg, "", "  ")
 
-			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, config.ConfigFileName), configJson)
+			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, config.TOMLConfigFileName), configJson)
 
 			return nil
 		},

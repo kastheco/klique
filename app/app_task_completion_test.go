@@ -680,6 +680,108 @@ func TestReviewChangesSignal_RespawnsFixer(t *testing.T) {
 	assert.Equal(t, taskstate.StatusImplementing, entry.Status)
 }
 
+func TestMetadataResultMsg_DaemonManagedRepoIgnoresReviewChangesSignal(t *testing.T) {
+	const planFile = "feature"
+	const feedback = "Fix the error handling in auth.go"
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(plansDir, planFile), []byte("# Plan\n## Wave 1\n- Task 1\n"), 0o644))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	require.NoError(t, ps.Register(planFile, "feature", "plan/feature", time.Now()))
+	seedPlanStatus(t, ps, planFile, taskstate.StatusReviewing)
+
+	reviewerInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "feature-review",
+		Path:      dir,
+		Program:   "claude",
+		TaskFile:  planFile,
+		AgentType: session.AgentTypeReviewer,
+	})
+	require.NoError(t, err)
+	reviewerInst.IsReviewer = true
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	list := ui.NewNavigationPanel(&sp)
+	_ = list.AddInstance(reviewerInst)
+
+	h := &home{
+		ctx:                   context.Background(),
+		state:                 stateDefault,
+		appConfig:             config.DefaultConfig(),
+		nav:                   list,
+		menu:                  ui.NewMenu(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:          overlay.NewToastManager(&sp),
+		overlays:              overlay.NewManager(),
+		taskState:             ps,
+		taskStateDir:          plansDir,
+		fsm:                   newPlanFSMForTest(t, plansDir),
+		pendingReviewFeedback: make(map[string]string),
+		plannerPrompted:       make(map[string]bool),
+		coderPushPrompted:     make(map[string]bool),
+		activeRepoPath:        dir,
+		program:               "claude",
+	}
+
+	_, _ = h.Update(metadataResultMsg{
+		PlanState:         ps,
+		Signals:           []taskfsm.Signal{{Event: taskfsm.ReviewChangesRequested, TaskFile: planFile, Body: feedback}},
+		DaemonManagedRepo: true,
+	})
+
+	for _, inst := range h.nav.GetInstances() {
+		assert.NotEqual(t, session.AgentTypeFixer, inst.AgentType, "daemon-managed review signals must not spawn a local fixer")
+	}
+
+	reloaded, _ := newTestPlanState(t, plansDir)
+	entry, ok := reloaded.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReviewing, entry.Status)
+}
+
+func TestTickUpdateMetadata_DaemonManagedRepoSkipsFilesystemReviewSignals(t *testing.T) {
+	dir := t.TempDir()
+	signalsDir := filepath.Join(dir, ".kasmos", "signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(signalsDir, "review-approved-feature.md"), []byte("Approved."), 0o644))
+
+	old := repoManagedByDaemon
+	repoManagedByDaemon = func(repoPath string) bool {
+		return filepath.Clean(repoPath) == filepath.Clean(dir)
+	}
+	t.Cleanup(func() {
+		repoManagedByDaemon = old
+	})
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		state:            stateDefault,
+		nav:              ui.NewNavigationPanel(&sp),
+		menu:             ui.NewMenu(),
+		tabbedWindow:     ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:     overlay.NewToastManager(&sp),
+		overlays:         overlay.NewManager(),
+		activeRepoPath:   dir,
+		signalsDir:       signalsDir,
+		taskStoreProject: "test",
+	}
+
+	_, cmd := h.Update(tickUpdateMetadataMessage{})
+	require.NotNil(t, cmd)
+
+	msg, ok := cmd().(metadataResultMsg)
+	require.True(t, ok)
+	assert.True(t, msg.DaemonManagedRepo)
+	assert.Empty(t, msg.Signals)
+	assert.Empty(t, msg.TaskSignals)
+	assert.Empty(t, msg.WaveSignals)
+	assert.Empty(t, msg.ElaborationSignals)
+}
+
 // TestReviewerTmuxDeath_DoesNotAutoApprove verifies that when a reviewer's tmux
 // session dies (e.g. killed manually), the plan is NOT automatically transitioned
 // to done. Approval must come exclusively from an explicit review-approved sentinel.

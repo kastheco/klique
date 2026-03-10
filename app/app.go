@@ -13,6 +13,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
+	daemonpkg "github.com/kastheco/kasmos/daemon"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/mcpclient"
 	sentrypkg "github.com/kastheco/kasmos/internal/sentry"
@@ -38,6 +39,42 @@ import (
 const GlobalInstanceLimit = 20
 
 const clickUpOpTimeout = 30 * time.Second
+
+var repoManagedByDaemon = func(repoPath string) bool {
+	if repoPath == "" {
+		return false
+	}
+
+	cfg, err := daemonpkg.LoadDaemonConfig("")
+	if err != nil {
+		return false
+	}
+	socketPath := cfg.SocketPath
+	if socketPath == "" {
+		socketPath = defaultDaemonSocketPath()
+	}
+
+	client := daemonpkg.NewSocketClient(socketPath)
+	repos, err := client.ListRepos()
+	if err != nil {
+		return false
+	}
+
+	cleanRepoPath := filepath.Clean(repoPath)
+	for _, repo := range repos {
+		if filepath.Clean(repo.Path) == cleanRepoPath {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultDaemonSocketPath() string {
+	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
+		return filepath.Join(xdg, "kasmos", "kas.sock")
+	}
+	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
+}
 
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool, version string) error {
@@ -847,19 +884,21 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			daemonManagedRepo := repoManagedByDaemon(repoPath)
+
 			// Scan signals from the project-local signals directory (.kasmos/signals/).
 			var signals []taskfsm.Signal
-			if signalsDir != "" {
+			if signalsDir != "" && !daemonManagedRepo {
 				signals = taskfsm.ScanSignals(signalsDir)
 			}
 
 			var taskSignals []taskfsm.TaskSignal
-			if signalsDir != "" {
+			if signalsDir != "" && !daemonManagedRepo {
 				taskSignals = taskfsm.ScanTaskSignals(signalsDir)
 			}
 
 			var elaborationSignals []taskfsm.ElaborationSignal
-			if signalsDir != "" {
+			if signalsDir != "" && !daemonManagedRepo {
 				elaborationSignals = taskfsm.ScanElaborationSignals(signalsDir)
 			}
 
@@ -878,34 +917,36 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, es := range elaborationSignals {
 				seenElabSignals[es.TaskFile] = true
 			}
-			for _, inst := range snapshots {
-				wt := inst.GetWorktreePath()
-				if wt == "" {
-					continue
-				}
-				wtSignalsDir := filepath.Join(wt, ".kasmos", "signals")
-				for _, sig := range taskfsm.ScanSignals(wtSignalsDir) {
-					if !seen[sig.Key()] {
-						seen[sig.Key()] = true
-						signals = append(signals, sig)
+			if !daemonManagedRepo {
+				for _, inst := range snapshots {
+					wt := inst.GetWorktreePath()
+					if wt == "" {
+						continue
 					}
-				}
-				for _, ts := range taskfsm.ScanTaskSignals(wtSignalsDir) {
-					if !seenTaskSignals[ts.Key()] {
-						seenTaskSignals[ts.Key()] = true
-						taskSignals = append(taskSignals, ts)
+					wtSignalsDir := filepath.Join(wt, ".kasmos", "signals")
+					for _, sig := range taskfsm.ScanSignals(wtSignalsDir) {
+						if !seen[sig.Key()] {
+							seen[sig.Key()] = true
+							signals = append(signals, sig)
+						}
 					}
-				}
-				for _, es := range taskfsm.ScanElaborationSignals(wtSignalsDir) {
-					if !seenElabSignals[es.TaskFile] {
-						seenElabSignals[es.TaskFile] = true
-						elaborationSignals = append(elaborationSignals, es)
+					for _, ts := range taskfsm.ScanTaskSignals(wtSignalsDir) {
+						if !seenTaskSignals[ts.Key()] {
+							seenTaskSignals[ts.Key()] = true
+							taskSignals = append(taskSignals, ts)
+						}
+					}
+					for _, es := range taskfsm.ScanElaborationSignals(wtSignalsDir) {
+						if !seenElabSignals[es.TaskFile] {
+							seenElabSignals[es.TaskFile] = true
+							elaborationSignals = append(elaborationSignals, es)
+						}
 					}
 				}
 			}
 
 			var waveSignals []taskfsm.WaveSignal
-			if signalsDir != "" {
+			if signalsDir != "" && !daemonManagedRepo {
 				waveSignals = taskfsm.ScanWaveSignals(signalsDir)
 			}
 
@@ -939,255 +980,318 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			time.Sleep(200 * time.Millisecond)
-			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, TaskSignals: taskSignals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, TmuxSessionCount: tmuxCount, PRStateUpdates: prStateUpdates}
+			return metadataResultMsg{Results: results, PlanState: ps, Signals: signals, TaskSignals: taskSignals, WaveSignals: waveSignals, ElaborationSignals: elaborationSignals, DaemonManagedRepo: daemonManagedRepo, TmuxSessionCount: tmuxCount, PRStateUpdates: prStateUpdates}
 		}
 	case metadataResultMsg:
 		// Process agent sentinel signals — feed to FSM and consume sentinel files.
 		// Done in Update (main goroutine) so FSM writes are never concurrent.
 		// Side-effect cmds (reviewer/coder spawns) are collected and batched below.
 		var signalCmds []tea.Cmd
-		// Process FSM signals using the Processor when available, falling back to
-		// legacy inline code for home instances that don't have a taskStore
-		// (e.g. tests that build home without a store).
-		proc := m.ensureProcessor()
-		if proc != nil {
-			for planFile := range m.waveOrchestrators {
-				proc.SetWaveOrchestratorActive(planFile, true)
-			}
+		if !msg.DaemonManagedRepo {
+			// Process FSM signals using the Processor when available, falling back to
+			// legacy inline code for home instances that don't have a taskStore
+			// (e.g. tests that build home without a store).
+			proc := m.ensureProcessor()
+			if proc != nil {
+				for planFile := range m.waveOrchestrators {
+					proc.SetWaveOrchestratorActive(planFile, true)
+				}
 
-			feedbackBeforeTick := make(map[string]bool, len(m.pendingReviewFeedback))
-			for planFile := range m.pendingReviewFeedback {
-				feedbackBeforeTick[planFile] = true
-			}
+				feedbackBeforeTick := make(map[string]bool, len(m.pendingReviewFeedback))
+				for planFile := range m.pendingReviewFeedback {
+					feedbackBeforeTick[planFile] = true
+				}
 
-			actions := proc.ProcessFSMSignals(msg.Signals)
-			for _, sig := range msg.Signals {
-				taskfsm.ConsumeSignal(sig)
-			}
+				actions := proc.ProcessFSMSignals(msg.Signals)
+				for _, sig := range msg.Signals {
+					taskfsm.ConsumeSignal(sig)
+				}
 
-			for _, act := range actions {
-				switch a := act.(type) {
-				case loop.SpawnReviewerAction:
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == a.PlanFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
-							inst.ImplementationComplete = true
-							_ = inst.Pause()
-							break
+				for _, act := range actions {
+					switch a := act.(type) {
+					case loop.SpawnReviewerAction:
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == a.PlanFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
+								inst.ImplementationComplete = true
+								_ = inst.Pause()
+								break
+							}
 						}
-					}
-					if feedbackBeforeTick[a.PlanFile] {
-						delete(m.pendingReviewFeedback, a.PlanFile)
-						if cmd := m.postClickUpProgress(a.PlanFile, "fixer_complete", ""); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
-					}
-					if cmd := m.spawnReviewer(a.PlanFile); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-				case loop.ReviewApprovedAction:
-					planName := taskstate.DisplayName(a.PlanFile)
-					m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
-						auditlog.WithPlan(a.PlanFile))
-					m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
-					if cmd := m.postClickUpProgress(a.PlanFile, "review_approved", ""); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == a.PlanFile && inst.IsReviewer {
-							inst.SetStatus(session.Paused)
-							m.nav.SelectInstance(inst)
-							m.updateNavPanelStatus()
-							if cmd := m.instanceChanged(); cmd != nil {
+						if feedbackBeforeTick[a.PlanFile] {
+							delete(m.pendingReviewFeedback, a.PlanFile)
+							if cmd := m.postClickUpProgress(a.PlanFile, "fixer_complete", ""); cmd != nil {
 								signalCmds = append(signalCmds, cmd)
 							}
-							break
 						}
-					}
-				case loop.CreatePRAction:
-					signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
-				case loop.ReviewChangesAction:
-					if cmd := m.handleReviewChangesRequested(a.PlanFile, a.Feedback); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-				case loop.IncrementReviewCycleAction:
-					if err := m.taskState.IncrementReviewCycle(a.PlanFile); err != nil {
-						log.WarningLog.Printf("could not increment review cycle for %q: %v", a.PlanFile, err)
-					}
-				case loop.SpawnCoderAction:
-					if cmd := m.spawnFixerWithFeedback(a.PlanFile, a.Feedback); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-				case loop.ReviewCycleLimitAction:
-					planName := taskstate.DisplayName(a.PlanFile)
-					m.toastManager.Error(fmt.Sprintf(
-						"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
-						a.Cycle, a.Limit, planName))
-					m.audit(auditlog.EventPlanTransition,
-						fmt.Sprintf("review-fix cycle limit reached (%d/%d)", a.Cycle, a.Limit),
-						auditlog.WithPlan(a.PlanFile))
-				case loop.PlannerCompleteAction:
-					capturedPlanFile := a.PlanFile
-					{
-						summary := ""
-						if m.taskStore != nil {
-							if content, err := m.taskStore.GetContent(m.taskStoreProject, capturedPlanFile); err == nil {
-								if plan, err := taskparser.Parse(content); err == nil {
-									totalTasks := 0
-									for _, w := range plan.Waves {
-										totalTasks += len(w.Tasks)
+						if cmd := m.spawnReviewer(a.PlanFile); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+					case loop.ReviewApprovedAction:
+						planName := taskstate.DisplayName(a.PlanFile)
+						m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
+							auditlog.WithPlan(a.PlanFile))
+						m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
+						if cmd := m.postClickUpProgress(a.PlanFile, "review_approved", ""); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == a.PlanFile && inst.IsReviewer {
+								inst.SetStatus(session.Paused)
+								m.nav.SelectInstance(inst)
+								m.updateNavPanelStatus()
+								if cmd := m.instanceChanged(); cmd != nil {
+									signalCmds = append(signalCmds, cmd)
+								}
+								break
+							}
+						}
+					case loop.CreatePRAction:
+						signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
+					case loop.ReviewChangesAction:
+						if cmd := m.handleReviewChangesRequested(a.PlanFile, a.Feedback); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+					case loop.IncrementReviewCycleAction:
+						if err := m.taskState.IncrementReviewCycle(a.PlanFile); err != nil {
+							log.WarningLog.Printf("could not increment review cycle for %q: %v", a.PlanFile, err)
+						}
+					case loop.SpawnCoderAction:
+						if cmd := m.spawnFixerWithFeedback(a.PlanFile, a.Feedback); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+					case loop.ReviewCycleLimitAction:
+						planName := taskstate.DisplayName(a.PlanFile)
+						m.toastManager.Error(fmt.Sprintf(
+							"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
+							a.Cycle, a.Limit, planName))
+						m.audit(auditlog.EventPlanTransition,
+							fmt.Sprintf("review-fix cycle limit reached (%d/%d)", a.Cycle, a.Limit),
+							auditlog.WithPlan(a.PlanFile))
+					case loop.PlannerCompleteAction:
+						capturedPlanFile := a.PlanFile
+						{
+							summary := ""
+							if m.taskStore != nil {
+								if content, err := m.taskStore.GetContent(m.taskStoreProject, capturedPlanFile); err == nil {
+									if plan, err := taskparser.Parse(content); err == nil {
+										totalTasks := 0
+										for _, w := range plan.Waves {
+											totalTasks += len(w.Tasks)
+										}
+										summary = fmt.Sprintf("%d tasks, %d waves", totalTasks, len(plan.Waves))
 									}
-									summary = fmt.Sprintf("%d tasks, %d waves", totalTasks, len(plan.Waves))
 								}
 							}
-						}
-						if cmd := m.postClickUpProgress(capturedPlanFile, "plan_ready", summary); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
-					}
-					if m.plannerPrompted[capturedPlanFile] {
-						continue
-					}
-					m.exitFocusModeForDialog()
-					if m.isUserInOverlay() {
-						m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
-						continue
-					}
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == capturedPlanFile && inst.AgentType == session.AgentTypePlanner {
-							if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+							if cmd := m.postClickUpProgress(capturedPlanFile, "plan_ready", summary); cmd != nil {
 								signalCmds = append(signalCmds, cmd)
 							}
-							m.pendingPlannerInstanceTitle = inst.Title
-							break
+						}
+						if m.plannerPrompted[capturedPlanFile] {
+							continue
+						}
+						m.exitFocusModeForDialog()
+						if m.isUserInOverlay() {
+							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
+							continue
+						}
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == capturedPlanFile && inst.AgentType == session.AgentTypePlanner {
+								if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+									signalCmds = append(signalCmds, cmd)
+								}
+								m.pendingPlannerInstanceTitle = inst.Title
+								break
+							}
+						}
+						m.pendingPlannerTaskFile = capturedPlanFile
+						m.confirmAction(
+							fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
+							func() tea.Msg {
+								return plannerCompleteMsg{planFile: capturedPlanFile}
+							},
+						)
+					}
+				}
+			} else {
+				for _, sig := range msg.Signals {
+					if sig.Event == taskfsm.ImplementFinished {
+						if _, hasOrch := m.waveOrchestrators[sig.TaskFile]; hasOrch {
+							log.WarningLog.Printf("ignoring implement-finished signal for %q — wave orchestrator active", sig.TaskFile)
+							taskfsm.ConsumeSignal(sig)
+							continue
 						}
 					}
-					m.pendingPlannerTaskFile = capturedPlanFile
-					m.confirmAction(
-						fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
-						func() tea.Msg {
-							return plannerCompleteMsg{planFile: capturedPlanFile}
-						},
-					)
-				}
-			}
-		} else {
-			for _, sig := range msg.Signals {
-				if sig.Event == taskfsm.ImplementFinished {
-					if _, hasOrch := m.waveOrchestrators[sig.TaskFile]; hasOrch {
-						log.WarningLog.Printf("ignoring implement-finished signal for %q — wave orchestrator active", sig.TaskFile)
+
+					if err := m.fsm.Transition(sig.TaskFile, sig.Event); err != nil {
+						log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.TaskFile, err)
 						taskfsm.ConsumeSignal(sig)
 						continue
 					}
-				}
-
-				if err := m.fsm.Transition(sig.TaskFile, sig.Event); err != nil {
-					log.WarningLog.Printf("signal %s for %s rejected: %v", sig.Event, sig.TaskFile, err)
 					taskfsm.ConsumeSignal(sig)
-					continue
-				}
-				taskfsm.ConsumeSignal(sig)
 
-				switch sig.Event {
-				case taskfsm.ImplementFinished:
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == sig.TaskFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
-							inst.ImplementationComplete = true
-							_ = inst.Pause()
-							break
+					switch sig.Event {
+					case taskfsm.ImplementFinished:
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == sig.TaskFile && (inst.AgentType == session.AgentTypeCoder || inst.AgentType == session.AgentTypeFixer) {
+								inst.ImplementationComplete = true
+								_ = inst.Pause()
+								break
+							}
 						}
-					}
-					if _, hasFeedback := m.pendingReviewFeedback[sig.TaskFile]; hasFeedback {
-						delete(m.pendingReviewFeedback, sig.TaskFile)
-						if cmd := m.postClickUpProgress(sig.TaskFile, "fixer_complete", ""); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
-					}
-					if cmd := m.spawnReviewer(sig.TaskFile); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-				case taskfsm.ReviewApproved:
-					planName := taskstate.DisplayName(sig.TaskFile)
-					m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
-						auditlog.WithPlan(sig.TaskFile))
-					m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
-					if cmd := m.postClickUpProgress(sig.TaskFile, "review_approved", ""); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
-							inst.SetStatus(session.Paused)
-							m.nav.SelectInstance(inst)
-							m.updateNavPanelStatus()
-							if cmd := m.instanceChanged(); cmd != nil {
+						if _, hasFeedback := m.pendingReviewFeedback[sig.TaskFile]; hasFeedback {
+							delete(m.pendingReviewFeedback, sig.TaskFile)
+							if cmd := m.postClickUpProgress(sig.TaskFile, "fixer_complete", ""); cmd != nil {
 								signalCmds = append(signalCmds, cmd)
 							}
-							break
 						}
-					}
-					if m.taskStore != nil {
-						if entry, err := m.taskStore.Get(m.taskStoreProject, sig.TaskFile); err == nil {
-							if shouldCreatePR(entry) {
-								signalCmds = append(signalCmds, m.createPRAfterApproval(sig.TaskFile, sig.Body))
+						if cmd := m.spawnReviewer(sig.TaskFile); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+					case taskfsm.ReviewApproved:
+						planName := taskstate.DisplayName(sig.TaskFile)
+						m.audit(auditlog.EventPlanTransition, "reviewing → done (review approved)",
+							auditlog.WithPlan(sig.TaskFile))
+						m.toastManager.Success(fmt.Sprintf("review approved: %s", planName))
+						if cmd := m.postClickUpProgress(sig.TaskFile, "review_approved", ""); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
+								inst.SetStatus(session.Paused)
+								m.nav.SelectInstance(inst)
+								m.updateNavPanelStatus()
+								if cmd := m.instanceChanged(); cmd != nil {
+									signalCmds = append(signalCmds, cmd)
+								}
+								break
 							}
 						}
-					}
-				case taskfsm.ReviewChangesRequested:
-					feedback := sig.Body
-					if cmd := m.handleReviewChangesRequested(sig.TaskFile, feedback); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-					if m.appConfig == nil || !m.appConfig.AutoReviewFix {
-						break
-					}
-					if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
-						if cycle, err := m.taskState.ReviewCycle(sig.TaskFile); err == nil {
-							if cycle+1 > m.appConfig.MaxReviewFixCycles {
-								planName := taskstate.DisplayName(sig.TaskFile)
-								m.toastManager.Error(fmt.Sprintf(
-									"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
-									cycle+1, m.appConfig.MaxReviewFixCycles, planName))
-								m.audit(auditlog.EventPlanTransition,
-									fmt.Sprintf("review-fix cycle limit reached (%d/%d)", cycle+1, m.appConfig.MaxReviewFixCycles),
-									auditlog.WithPlan(sig.TaskFile))
-								continue // skip spawning fixer
-							}
-						}
-					}
-					if err := m.taskState.IncrementReviewCycle(sig.TaskFile); err != nil {
-						log.WarningLog.Printf("could not increment review cycle for %q: %v", sig.TaskFile, err)
-					}
-					if cmd := m.spawnFixerWithFeedback(sig.TaskFile, feedback); cmd != nil {
-						signalCmds = append(signalCmds, cmd)
-					}
-				case taskfsm.PlannerFinished:
-					capturedPlanFile := sig.TaskFile
-					{
-						summary := ""
 						if m.taskStore != nil {
-							if content, err := m.taskStore.GetContent(m.taskStoreProject, capturedPlanFile); err == nil {
-								if plan, err := taskparser.Parse(content); err == nil {
-									totalTasks := 0
-									for _, w := range plan.Waves {
-										totalTasks += len(w.Tasks)
-									}
-									summary = fmt.Sprintf("%d tasks, %d waves", totalTasks, len(plan.Waves))
+							if entry, err := m.taskStore.Get(m.taskStoreProject, sig.TaskFile); err == nil {
+								if shouldCreatePR(entry) {
+									signalCmds = append(signalCmds, m.createPRAfterApproval(sig.TaskFile, sig.Body))
 								}
 							}
 						}
-						if cmd := m.postClickUpProgress(capturedPlanFile, "plan_ready", summary); cmd != nil {
+					case taskfsm.ReviewChangesRequested:
+						feedback := sig.Body
+						if cmd := m.handleReviewChangesRequested(sig.TaskFile, feedback); cmd != nil {
 							signalCmds = append(signalCmds, cmd)
 						}
+						if m.appConfig == nil || !m.appConfig.AutoReviewFix {
+							break
+						}
+						if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
+							if cycle, err := m.taskState.ReviewCycle(sig.TaskFile); err == nil {
+								if cycle+1 > m.appConfig.MaxReviewFixCycles {
+									planName := taskstate.DisplayName(sig.TaskFile)
+									m.toastManager.Error(fmt.Sprintf(
+										"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
+										cycle+1, m.appConfig.MaxReviewFixCycles, planName))
+									m.audit(auditlog.EventPlanTransition,
+										fmt.Sprintf("review-fix cycle limit reached (%d/%d)", cycle+1, m.appConfig.MaxReviewFixCycles),
+										auditlog.WithPlan(sig.TaskFile))
+									continue // skip spawning fixer
+								}
+							}
+						}
+						if err := m.taskState.IncrementReviewCycle(sig.TaskFile); err != nil {
+							log.WarningLog.Printf("could not increment review cycle for %q: %v", sig.TaskFile, err)
+						}
+						if cmd := m.spawnFixerWithFeedback(sig.TaskFile, feedback); cmd != nil {
+							signalCmds = append(signalCmds, cmd)
+						}
+					case taskfsm.PlannerFinished:
+						capturedPlanFile := sig.TaskFile
+						{
+							summary := ""
+							if m.taskStore != nil {
+								if content, err := m.taskStore.GetContent(m.taskStoreProject, capturedPlanFile); err == nil {
+									if plan, err := taskparser.Parse(content); err == nil {
+										totalTasks := 0
+										for _, w := range plan.Waves {
+											totalTasks += len(w.Tasks)
+										}
+										summary = fmt.Sprintf("%d tasks, %d waves", totalTasks, len(plan.Waves))
+									}
+								}
+							}
+							if cmd := m.postClickUpProgress(capturedPlanFile, "plan_ready", summary); cmd != nil {
+								signalCmds = append(signalCmds, cmd)
+							}
+						}
+						if m.plannerPrompted[capturedPlanFile] {
+							break
+						}
+						m.exitFocusModeForDialog()
+						if m.isUserInOverlay() {
+							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
+							break
+						}
+						for _, inst := range m.nav.GetInstances() {
+							if inst.TaskFile == sig.TaskFile && inst.AgentType == session.AgentTypePlanner {
+								if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
+									signalCmds = append(signalCmds, cmd)
+								}
+								m.pendingPlannerInstanceTitle = inst.Title
+								break
+							}
+						}
+						m.pendingPlannerTaskFile = capturedPlanFile
+						m.confirmAction(
+							fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
+							func() tea.Msg {
+								return plannerCompleteMsg{planFile: capturedPlanFile}
+							},
+						)
 					}
-					if m.plannerPrompted[capturedPlanFile] {
-						break
+				}
+			}
+
+			for _, ts := range msg.TaskSignals {
+				orch, exists := m.waveOrchestrators[ts.TaskFile]
+				if !exists {
+					log.WarningLog.Printf("ignoring task-finished signal for %q — no active wave orchestrator", ts.TaskFile)
+					taskfsm.ConsumeTaskSignal(ts)
+					continue
+				}
+				if ts.WaveNumber != orch.CurrentWaveNumber() {
+					log.WarningLog.Printf("ignoring task-finished signal for %q wave %d — active wave is %d", ts.TaskFile, ts.WaveNumber, orch.CurrentWaveNumber())
+					taskfsm.ConsumeTaskSignal(ts)
+					continue
+				}
+				if !orch.IsTaskRunning(ts.TaskNumber) {
+					taskfsm.ConsumeTaskSignal(ts)
+					continue
+				}
+
+				orch.MarkTaskComplete(ts.TaskNumber)
+				for _, inst := range m.nav.GetInstances() {
+					if inst.TaskFile != ts.TaskFile || inst.TaskNumber != ts.TaskNumber || inst.WaveNumber != ts.WaveNumber {
+						continue
 					}
-					m.exitFocusModeForDialog()
-					if m.isUserInOverlay() {
-						m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
-						break
-					}
+					inst.ImplementationComplete = true
+					inst.SetStatus(session.Ready)
+					break
+				}
+				taskfsm.ConsumeTaskSignal(ts)
+			}
+
+			if len(msg.Signals) > 0 || len(msg.TaskSignals) > 0 {
+				m.loadTaskState() // refresh after signal processing
+			}
+
+			// Retry deferred PlannerFinished dialogs — show the first queued plan
+			// whose dialog was skipped because an overlay was active at signal time.
+			if len(m.deferredPlannerDialogs) > 0 {
+				m.exitFocusModeForDialog()
+			}
+			if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
+				planFile := m.deferredPlannerDialogs[0]
+				m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
+				if !m.plannerPrompted[planFile] {
 					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == sig.TaskFile && inst.AgentType == session.AgentTypePlanner {
+						if inst.TaskFile == planFile && inst.AgentType == session.AgentTypePlanner {
 							if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 								signalCmds = append(signalCmds, cmd)
 							}
@@ -1195,177 +1299,116 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
-					m.pendingPlannerTaskFile = capturedPlanFile
+					m.pendingPlannerTaskFile = planFile
 					m.confirmAction(
-						fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(capturedPlanFile)),
+						fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
 						func() tea.Msg {
-							return plannerCompleteMsg{planFile: capturedPlanFile}
+							return plannerCompleteMsg{planFile: planFile}
 						},
 					)
 				}
 			}
-		}
 
-		for _, ts := range msg.TaskSignals {
-			orch, exists := m.waveOrchestrators[ts.TaskFile]
-			if !exists {
-				log.WarningLog.Printf("ignoring task-finished signal for %q — no active wave orchestrator", ts.TaskFile)
-				taskfsm.ConsumeTaskSignal(ts)
-				continue
-			}
-			if ts.WaveNumber != orch.CurrentWaveNumber() {
-				log.WarningLog.Printf("ignoring task-finished signal for %q wave %d — active wave is %d", ts.TaskFile, ts.WaveNumber, orch.CurrentWaveNumber())
-				taskfsm.ConsumeTaskSignal(ts)
-				continue
-			}
-			if !orch.IsTaskRunning(ts.TaskNumber) {
-				taskfsm.ConsumeTaskSignal(ts)
-				continue
-			}
+			// Process wave signals — trigger implementation for specific waves.
+			for _, ws := range msg.WaveSignals {
+				taskfsm.ConsumeWaveSignal(ws)
 
-			orch.MarkTaskComplete(ts.TaskNumber)
-			for _, inst := range m.nav.GetInstances() {
-				if inst.TaskFile != ts.TaskFile || inst.TaskNumber != ts.TaskNumber || inst.WaveNumber != ts.WaveNumber {
+				// Check if orchestrator already exists
+				if _, exists := m.waveOrchestrators[ws.TaskFile]; exists {
+					m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", taskstate.DisplayName(ws.TaskFile)))
 					continue
 				}
-				inst.ImplementationComplete = true
-				inst.SetStatus(session.Ready)
-				break
+
+				// Read and parse the plan from store
+				content, err := m.taskStore.GetContent(m.taskStoreProject, ws.TaskFile)
+				if err != nil {
+					log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.TaskFile, err)
+					continue
+				}
+				plan, err := taskparser.Parse(content)
+				if err != nil {
+					m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", taskstate.DisplayName(ws.TaskFile)))
+					continue
+				}
+
+				if ws.WaveNumber > len(plan.Waves) {
+					m.toastManager.Error(fmt.Sprintf("plan has %d waves, requested wave %d", len(plan.Waves), ws.WaveNumber))
+					continue
+				}
+
+				entry, ok := m.taskState.Entry(ws.TaskFile)
+				if !ok {
+					log.WarningLog.Printf("wave signal: plan %s not found in plan state", ws.TaskFile)
+					continue
+				}
+
+				orch := orchestration.NewWaveOrchestrator(ws.TaskFile, plan)
+				orch.SetStore(m.taskStore, m.taskStoreProject)
+				m.waveOrchestrators[ws.TaskFile] = orch
+
+				// Fast-forward to the requested wave
+				for i := 1; i < ws.WaveNumber; i++ {
+					tasks := orch.StartNextWave()
+					for _, t := range tasks {
+						orch.MarkTaskComplete(t.Number)
+					}
+				}
+
+				mdl, cmd := m.startNextWave(orch, entry)
+				m = mdl.(*home)
+				if cmd != nil {
+					signalCmds = append(signalCmds, cmd)
+				}
 			}
-			taskfsm.ConsumeTaskSignal(ts)
-		}
 
-		if len(msg.Signals) > 0 || len(msg.TaskSignals) > 0 {
-			m.loadTaskState() // refresh after signal processing
-		}
+			// Process elaboration signals — elaborator-finished files written by the
+			// elaborator agent once it has enriched all task bodies and stored the
+			// updated plan in the task store. On receipt we re-read the plan,
+			// replace it in the orchestrator, kill the elaborator instance, and
+			// start wave 1 normally.
+			for _, es := range msg.ElaborationSignals {
+				taskfsm.ConsumeElaborationSignal(es)
 
-		// Retry deferred PlannerFinished dialogs — show the first queued plan
-		// whose dialog was skipped because an overlay was active at signal time.
-		if len(m.deferredPlannerDialogs) > 0 {
-			m.exitFocusModeForDialog()
-		}
-		if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
-			planFile := m.deferredPlannerDialogs[0]
-			m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
-			if !m.plannerPrompted[planFile] {
+				orch, exists := m.waveOrchestrators[es.TaskFile]
+				if !exists || orch.State() != orchestration.WaveStateElaborating {
+					log.WarningLog.Printf("ignoring elaborator-finished signal for %q — no active elaboration", es.TaskFile)
+					continue
+				}
+
+				// Re-read the enriched plan from the store.
+				content, err := m.taskStore.GetContent(m.taskStoreProject, es.TaskFile)
+				if err != nil {
+					log.WarningLog.Printf("elaboration signal: could not read plan %s: %v", es.TaskFile, err)
+					continue
+				}
+				plan, err := taskparser.Parse(content)
+				if err != nil {
+					log.WarningLog.Printf("elaboration signal: could not parse enriched plan %s: %v", es.TaskFile, err)
+					continue
+				}
+
+				// Replace the plan in the orchestrator with the enriched version.
+				orch.UpdatePlan(plan)
+
+				// Kill the elaborator instance.
 				for _, inst := range m.nav.GetInstances() {
-					if inst.TaskFile == planFile && inst.AgentType == session.AgentTypePlanner {
-						if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
-						m.pendingPlannerInstanceTitle = inst.Title
+					if inst.TaskFile == es.TaskFile && inst.AgentType == session.AgentTypeElaborator {
+						_ = inst.Kill()
 						break
 					}
 				}
-				m.pendingPlannerTaskFile = planFile
-				m.confirmAction(
-					fmt.Sprintf("task '%s' is ready. start implementation?", taskstate.DisplayName(planFile)),
-					func() tea.Msg {
-						return plannerCompleteMsg{planFile: planFile}
-					},
-				)
-			}
-		}
 
-		// Process wave signals — trigger implementation for specific waves.
-		for _, ws := range msg.WaveSignals {
-			taskfsm.ConsumeWaveSignal(ws)
-
-			// Check if orchestrator already exists
-			if _, exists := m.waveOrchestrators[ws.TaskFile]; exists {
-				m.toastManager.Error(fmt.Sprintf("wave already running for '%s'", taskstate.DisplayName(ws.TaskFile)))
-				continue
-			}
-
-			// Read and parse the plan from store
-			content, err := m.taskStore.GetContent(m.taskStoreProject, ws.TaskFile)
-			if err != nil {
-				log.WarningLog.Printf("wave signal: could not read plan %s: %v", ws.TaskFile, err)
-				continue
-			}
-			plan, err := taskparser.Parse(content)
-			if err != nil {
-				m.toastManager.Error(fmt.Sprintf("plan '%s' has no wave headers", taskstate.DisplayName(ws.TaskFile)))
-				continue
-			}
-
-			if ws.WaveNumber > len(plan.Waves) {
-				m.toastManager.Error(fmt.Sprintf("plan has %d waves, requested wave %d", len(plan.Waves), ws.WaveNumber))
-				continue
-			}
-
-			entry, ok := m.taskState.Entry(ws.TaskFile)
-			if !ok {
-				log.WarningLog.Printf("wave signal: plan %s not found in plan state", ws.TaskFile)
-				continue
-			}
-
-			orch := orchestration.NewWaveOrchestrator(ws.TaskFile, plan)
-			orch.SetStore(m.taskStore, m.taskStoreProject)
-			m.waveOrchestrators[ws.TaskFile] = orch
-
-			// Fast-forward to the requested wave
-			for i := 1; i < ws.WaveNumber; i++ {
-				tasks := orch.StartNextWave()
-				for _, t := range tasks {
-					orch.MarkTaskComplete(t.Number)
+				entry, ok := m.taskState.Entry(es.TaskFile)
+				if !ok {
+					continue
 				}
-			}
 
-			mdl, cmd := m.startNextWave(orch, entry)
-			m = mdl.(*home)
-			if cmd != nil {
-				signalCmds = append(signalCmds, cmd)
-			}
-		}
-
-		// Process elaboration signals — elaborator-finished files written by the
-		// elaborator agent once it has enriched all task bodies and stored the
-		// updated plan in the task store. On receipt we re-read the plan,
-		// replace it in the orchestrator, kill the elaborator instance, and
-		// start wave 1 normally.
-		for _, es := range msg.ElaborationSignals {
-			taskfsm.ConsumeElaborationSignal(es)
-
-			orch, exists := m.waveOrchestrators[es.TaskFile]
-			if !exists || orch.State() != orchestration.WaveStateElaborating {
-				log.WarningLog.Printf("ignoring elaborator-finished signal for %q — no active elaboration", es.TaskFile)
-				continue
-			}
-
-			// Re-read the enriched plan from the store.
-			content, err := m.taskStore.GetContent(m.taskStoreProject, es.TaskFile)
-			if err != nil {
-				log.WarningLog.Printf("elaboration signal: could not read plan %s: %v", es.TaskFile, err)
-				continue
-			}
-			plan, err := taskparser.Parse(content)
-			if err != nil {
-				log.WarningLog.Printf("elaboration signal: could not parse enriched plan %s: %v", es.TaskFile, err)
-				continue
-			}
-
-			// Replace the plan in the orchestrator with the enriched version.
-			orch.UpdatePlan(plan)
-
-			// Kill the elaborator instance.
-			for _, inst := range m.nav.GetInstances() {
-				if inst.TaskFile == es.TaskFile && inst.AgentType == session.AgentTypeElaborator {
-					_ = inst.Kill()
-					break
+				m.toastManager.Info(fmt.Sprintf("plan elaborated — starting wave 1 for '%s'", taskstate.DisplayName(es.TaskFile)))
+				mdl, cmd := m.startNextWave(orch, entry)
+				m = mdl.(*home)
+				if cmd != nil {
+					signalCmds = append(signalCmds, cmd)
 				}
-			}
-
-			entry, ok := m.taskState.Entry(es.TaskFile)
-			if !ok {
-				continue
-			}
-
-			m.toastManager.Info(fmt.Sprintf("plan elaborated — starting wave 1 for '%s'", taskstate.DisplayName(es.TaskFile)))
-			mdl, cmd := m.startNextWave(orch, entry)
-			m = mdl.(*home)
-			if cmd != nil {
-				signalCmds = append(signalCmds, cmd)
 			}
 		}
 
@@ -1494,7 +1537,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply plan state loaded in the goroutine (replaces synchronous loadTaskState call).
 		// Skip when signals were processed: loadTaskState() above already gave us fresh state.
 		// msg.PlanState was loaded before signals were scanned, so it would be stale.
-		if msg.PlanState != nil && len(msg.Signals) == 0 {
+		if msg.PlanState != nil && (msg.DaemonManagedRepo || len(msg.Signals) == 0) {
 			m.taskState = msg.PlanState
 		}
 
@@ -2469,6 +2512,7 @@ type metadataResultMsg struct {
 	TaskSignals        []taskfsm.TaskSignal        // task completion sentinel files found this tick
 	WaveSignals        []taskfsm.WaveSignal        // implement-wave-N signal files found this tick
 	ElaborationSignals []taskfsm.ElaborationSignal // elaborator-finished signal files found this tick
+	DaemonManagedRepo  bool                        // true when the active repo is managed by a running daemon
 	TmuxSessionCount   int                         // number of kas_-prefixed tmux sessions
 	PRStateUpdates     []prStateUpdateMsg          // PR review/check state refreshed this tick
 }

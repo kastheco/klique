@@ -256,6 +256,60 @@ func TestGetConfigDir(t *testing.T) {
 	})
 }
 
+func TestConfigFromTOML(t *testing.T) {
+	falseVal := false
+	zeroCycles := 0
+	threshold := 3
+	result := &TOMLConfigResult{
+		DefaultProgram:         "test-cmd",
+		AutoYes:                true,
+		DaemonPollInterval:     2500,
+		BranchPrefix:           "test/",
+		NotificationsEnabled:   &falseVal,
+		Profiles:               map[string]AgentProfile{"coder": {Program: "opencode", Enabled: true}},
+		PhaseRoles:             map[string]string{"implementing": "coder"},
+		AnimateBanner:          true,
+		AutoAdvanceWaves:       true,
+		AutoReviewFix:          &falseVal,
+		MaxReviewFixCycles:     &zeroCycles,
+		TelemetryEnabled:       &falseVal,
+		DatabaseURL:            "https://example.test/store",
+		BlueprintSkipThreshold: &threshold,
+	}
+
+	cfg := configFromTOML(result)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "test-cmd", cfg.DefaultProgram)
+	assert.True(t, cfg.AutoYes)
+	assert.Equal(t, 2500, cfg.DaemonPollInterval)
+	assert.Equal(t, "test/", cfg.BranchPrefix)
+	require.NotNil(t, cfg.NotificationsEnabled)
+	assert.False(t, cfg.AreNotificationsEnabled())
+	assert.True(t, cfg.AnimateBanner)
+	assert.True(t, cfg.AutoAdvanceWaves)
+	assert.False(t, cfg.AutoReviewFix)
+	assert.Equal(t, 0, cfg.MaxReviewFixCycles)
+	require.NotNil(t, cfg.TelemetryEnabled)
+	assert.False(t, cfg.IsTelemetryEnabled())
+	assert.Equal(t, "https://example.test/store", cfg.DatabaseURL)
+	assert.Equal(t, 3, cfg.BlueprintSkipThreshold())
+	assert.Equal(t, "opencode", cfg.Profiles["coder"].Program)
+}
+
+func TestConfigFromTOML_Defaults(t *testing.T) {
+	result := &TOMLConfigResult{
+		Profiles:   map[string]AgentProfile{},
+		PhaseRoles: map[string]string{},
+	}
+
+	cfg := configFromTOML(result)
+	require.NotNil(t, cfg)
+	assert.NotEmpty(t, cfg.DefaultProgram)
+	assert.Equal(t, 1000, cfg.DaemonPollInterval)
+	assert.NotEmpty(t, cfg.BranchPrefix)
+	assert.True(t, cfg.AreNotificationsEnabled())
+}
+
 func TestLoadConfig(t *testing.T) {
 	t.Run("returns default config when file doesn't exist", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -269,6 +323,7 @@ func TestLoadConfig(t *testing.T) {
 		assert.False(t, config.AutoYes)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 		assert.NotEmpty(t, config.BranchPrefix)
+		assert.FileExists(t, filepath.Join(tempDir, ".kasmos", TOMLConfigFileName))
 	})
 
 	t.Run("loads valid config file", func(t *testing.T) {
@@ -280,13 +335,12 @@ func TestLoadConfig(t *testing.T) {
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
-		configPath := filepath.Join(configDir, ConfigFileName)
-		configContent := `{
-			"default_program": "test-claude",
-			"auto_yes": true,
-			"daemon_poll_interval": 2000,
-			"branch_prefix": "test/"
-		}`
+		configPath := filepath.Join(configDir, TOMLConfigFileName)
+		configContent := `default_program = "test-claude"
+auto_yes = true
+daemon_poll_interval = 2000
+branch_prefix = "test/"
+`
 		err = os.WriteFile(configPath, []byte(configContent), 0644)
 		require.NoError(t, err)
 
@@ -299,7 +353,7 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, "test/", config.BranchPrefix)
 	})
 
-	t.Run("returns default config on invalid JSON", func(t *testing.T) {
+	t.Run("returns default config on invalid TOML", func(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Chdir(tempDir)
 		t.Setenv("HOME", t.TempDir())
@@ -308,8 +362,8 @@ func TestLoadConfig(t *testing.T) {
 		err := os.MkdirAll(configDir, 0755)
 		require.NoError(t, err)
 
-		configPath := filepath.Join(configDir, ConfigFileName)
-		invalidContent := `{"invalid": json content}`
+		configPath := filepath.Join(configDir, TOMLConfigFileName)
+		invalidContent := `[invalid toml content`
 		err = os.WriteFile(configPath, []byte(invalidContent), 0644)
 		require.NoError(t, err)
 
@@ -321,22 +375,13 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 	})
 
-	t.Run("toml review-fix settings override json false and zero values", func(t *testing.T) {
+	t.Run("toml false and zero values are respected", func(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Chdir(tempDir)
 		t.Setenv("HOME", t.TempDir())
 
 		configDir := filepath.Join(tempDir, ".kasmos")
 		require.NoError(t, os.MkdirAll(configDir, 0755))
-
-		jsonPath := filepath.Join(configDir, ConfigFileName)
-		jsonContent := `{
-			"default_program": "test-claude",
-			"auto_review_fix": true,
-			"max_review_fix_cycles": 7,
-			"branch_prefix": "test/"
-		}`
-		require.NoError(t, os.WriteFile(jsonPath, []byte(jsonContent), 0644))
 
 		tomlPath := filepath.Join(configDir, TOMLConfigFileName)
 		tomlContent := `[ui]
@@ -352,33 +397,48 @@ max_review_fix_cycles = 0
 	})
 }
 
-func TestSaveConfig(t *testing.T) {
-	t.Run("saves config to file", func(t *testing.T) {
-		tempDir := t.TempDir()
-		t.Chdir(tempDir)
-		t.Setenv("HOME", t.TempDir())
+func TestLoadConfig_MigratesJSON(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	t.Setenv("HOME", t.TempDir())
 
-		testConfig := &Config{
-			DefaultProgram:     "test-program",
-			AutoYes:            true,
-			DaemonPollInterval: 3000,
-			BranchPrefix:       "test-branch/",
-		}
+	configDir := filepath.Join(tempDir, ".kasmos")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
 
-		err := SaveConfig(testConfig)
-		assert.NoError(t, err)
+	jsonContent := `{
+		"default_program": "migrated-claude",
+		"auto_yes": true,
+		"daemon_poll_interval": 3000,
+		"branch_prefix": "migrated/",
+		"auto_advance_waves": true,
+		"auto_review_fix": false,
+		"max_review_fix_cycles": 0,
+		"notifications_enabled": false
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.json"), []byte(jsonContent), 0o644))
 
-		configDir := filepath.Join(tempDir, ".kasmos")
-		configPath := filepath.Join(configDir, ConfigFileName)
+	cfg := LoadConfig()
+	require.NotNil(t, cfg)
+	assert.Equal(t, "migrated-claude", cfg.DefaultProgram)
+	assert.True(t, cfg.AutoYes)
+	assert.Equal(t, 3000, cfg.DaemonPollInterval)
+	assert.Equal(t, "migrated/", cfg.BranchPrefix)
+	assert.True(t, cfg.AutoAdvanceWaves)
+	assert.False(t, cfg.AutoReviewFix)
+	assert.Equal(t, 0, cfg.MaxReviewFixCycles)
+	require.NotNil(t, cfg.NotificationsEnabled)
+	assert.False(t, cfg.AreNotificationsEnabled())
+	assert.NoFileExists(t, filepath.Join(configDir, "config.json"))
+	assert.FileExists(t, filepath.Join(configDir, "config.json.migrated"))
+	assert.FileExists(t, filepath.Join(configDir, TOMLConfigFileName))
 
-		assert.FileExists(t, configPath)
-
-		loadedConfig := LoadConfig()
-		assert.Equal(t, testConfig.DefaultProgram, loadedConfig.DefaultProgram)
-		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)
-		assert.Equal(t, testConfig.DaemonPollInterval, loadedConfig.DaemonPollInterval)
-		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
-	})
+	written, err := os.ReadFile(filepath.Join(configDir, TOMLConfigFileName))
+	require.NoError(t, err)
+	assert.Contains(t, string(written), `default_program = "migrated-claude"`)
+	assert.Contains(t, string(written), `auto_advance_waves = true`)
+	assert.Contains(t, string(written), `auto_review_fix = false`)
+	assert.Contains(t, string(written), `max_review_fix_cycles = 0`)
+	assert.Contains(t, string(written), `notifications_enabled = false`)
 }
 
 func boolPtr(b bool) *bool { return &b }
