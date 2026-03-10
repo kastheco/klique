@@ -720,6 +720,19 @@ func TestToggleAutoAdvanceWaves(t *testing.T) {
 	assert.False(t, m.appConfig.AutoAdvanceWaves)
 }
 
+func TestToggleAutoReviewFix(t *testing.T) {
+	m := &home{
+		appConfig: &config.Config{AutoReviewFix: false},
+	}
+	assert.False(t, m.appConfig.AutoReviewFix)
+
+	m.appConfig.AutoReviewFix = !m.appConfig.AutoReviewFix
+	assert.True(t, m.appConfig.AutoReviewFix)
+
+	m.appConfig.AutoReviewFix = !m.appConfig.AutoReviewFix
+	assert.False(t, m.appConfig.AutoReviewFix)
+}
+
 func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	planFile := "test.md"
