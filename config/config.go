@@ -191,7 +191,7 @@ type Config struct {
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
 	// DatabaseURL is the remote kasmos store URL; uses local file when empty.
 	DatabaseURL string `json:"database_url,omitempty"`
-	// Hooks configures FSM transition hooks loaded from config.json or overlaid from config.toml.
+	// Hooks configures FSM transition hooks loaded from config.toml.
 	Hooks []TOMLHook `json:"hooks,omitempty"`
 	// BlueprintSkipThresholdValue is the maximum task count below which single-agent
 	// blueprint-skip mode is used instead of wave orchestration.
@@ -209,24 +209,38 @@ func (c *Config) BlueprintSkipThreshold() int {
 	return *c.BlueprintSkipThresholdValue
 }
 
+// applyConfigDefaults fills in zero-value fields of cfg with sensible defaults.
+// It is nil-safe and centralises the default logic shared by DefaultConfig and configFromTOML.
+func applyConfigDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	if cfg.DefaultProgram == "" {
+		program, err := GetDefaultCommand()
+		if err != nil {
+			log.ErrorLog.Printf("failed to get default command: %v", err)
+			cfg.DefaultProgram = defaultProgram
+		} else {
+			cfg.DefaultProgram = program
+		}
+	}
+	if cfg.DaemonPollInterval == 0 {
+		cfg.DaemonPollInterval = 1000
+	}
+	if cfg.BranchPrefix == "" {
+		cfg.BranchPrefix = branchPrefix()
+	}
+}
+
 // DefaultConfig builds a Config populated with sensible out-of-the-box values.
 func DefaultConfig() *Config {
-	program, err := GetDefaultCommand()
-	if err != nil {
-		log.ErrorLog.Printf("failed to get default command: %v", err)
-		program = defaultProgram
-	}
-
 	trueVal := true
-	prefix := branchPrefix()
-
-	return &Config{
-		DefaultProgram:       program,
+	cfg := &Config{
 		AutoYes:              false,
-		DaemonPollInterval:   1000,
-		BranchPrefix:         prefix,
 		NotificationsEnabled: &trueVal,
 	}
+	applyConfigDefaults(cfg)
+	return cfg
 }
 
 // branchPrefix derives the git branch prefix from the current OS user.
@@ -318,9 +332,126 @@ func parseCommandOutput(output string) string {
 	return trimmed
 }
 
-// LoadConfig reads config.json from the config directory. When the file is
-// absent it creates and persists a default. On parse errors it returns a default.
-// TOML config is overlaid after JSON load for Profiles, PhaseRoles, and flags.
+// configFromTOML converts a TOMLConfigResult into a Config.
+// It builds a fresh Config so explicit false and 0 values from TOML survive without
+// being silently dropped by an overlay-only approach.
+// applyConfigDefaults fills in any omitted fields afterwards.
+func configFromTOML(result *TOMLConfigResult) *Config {
+	cfg := &Config{}
+	if result != nil {
+		cfg = &Config{
+			DefaultProgram:              result.DefaultProgram,
+			AutoYes:                     result.AutoYes,
+			DaemonPollInterval:          result.DaemonPollInterval,
+			BranchPrefix:                result.BranchPrefix,
+			NotificationsEnabled:        result.NotificationsEnabled,
+			Profiles:                    result.Profiles,
+			PhaseRoles:                  result.PhaseRoles,
+			AnimateBanner:               result.AnimateBanner,
+			AutoAdvanceWaves:            result.AutoAdvanceWaves,
+			TelemetryEnabled:            result.TelemetryEnabled,
+			DatabaseURL:                 result.DatabaseURL,
+			Hooks:                       result.Hooks,
+			BlueprintSkipThresholdValue: result.BlueprintSkipThreshold,
+		}
+		if result.AutoReviewFix != nil {
+			cfg.AutoReviewFix = *result.AutoReviewFix
+		}
+		if result.MaxReviewFixCycles != nil {
+			cfg.MaxReviewFixCycles = *result.MaxReviewFixCycles
+		}
+	}
+	applyConfigDefaults(cfg)
+	return cfg
+}
+
+// configToTOML converts a Config back into a TOMLConfig for serialisation.
+// It is used by migrateJSONToTOML and the default-config persistence path.
+// AutoReviewFix and MaxReviewFixCycles are always written as pointers so that
+// explicit false/0 values survive round-trips.
+func configToTOML(cfg *Config) *TOMLConfig {
+	if cfg == nil {
+		return &TOMLConfig{}
+	}
+	phases := make(map[string]string, len(cfg.PhaseRoles))
+	for phase, role := range cfg.PhaseRoles {
+		phases[phase] = role
+	}
+	agents := make(map[string]TOMLAgent, len(cfg.Profiles))
+	for name, p := range cfg.Profiles {
+		agents[name] = TOMLAgent{
+			Enabled:       p.Enabled,
+			Program:       p.Program,
+			Model:         p.Model,
+			Temperature:   p.Temperature,
+			Effort:        p.Effort,
+			ExecutionMode: NormalizeExecutionMode(p.ExecutionMode),
+			Flags:         p.Flags,
+		}
+	}
+	out := &TOMLConfig{
+		Phases: phases,
+		Agents: agents,
+		UI: TOMLUIConfig{
+			AnimateBanner:    cfg.AnimateBanner,
+			AutoAdvanceWaves: cfg.AutoAdvanceWaves,
+		},
+		Telemetry:            TOMLTelemetryConfig{Enabled: cfg.TelemetryEnabled},
+		Orchestration:        TOMLOrchestrationConfig{BlueprintSkipThreshold: cfg.BlueprintSkipThresholdValue},
+		DatabaseURL:          cfg.DatabaseURL,
+		DefaultProgram:       cfg.DefaultProgram,
+		AutoYes:              cfg.AutoYes,
+		DaemonPollInterval:   cfg.DaemonPollInterval,
+		BranchPrefix:         cfg.BranchPrefix,
+		NotificationsEnabled: cfg.NotificationsEnabled,
+		Hooks:                cfg.Hooks,
+	}
+	autoReviewFix := cfg.AutoReviewFix
+	out.UI.AutoReviewFix = &autoReviewFix
+	maxReviewFixCycles := cfg.MaxReviewFixCycles
+	out.UI.MaxReviewFixCycles = &maxReviewFixCycles
+	return out
+}
+
+// migrateJSONToTOML reads config.json from configDir, writes its contents to
+// config.toml, and renames config.json to config.json.migrated.
+// Returns the parsed Config and true when a JSON config was found and parsed.
+// All migration side effects (TOML write, rename) are best-effort: failures are
+// logged but do not prevent startup — the parsed Config is still returned.
+func migrateJSONToTOML(configDir string) (*Config, bool) {
+	jsonPath := filepath.Join(configDir, "config.json")
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false
+		}
+		log.WarningLog.Printf("failed to read JSON config: %v", err)
+		return nil, false
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		return nil, false
+	}
+	applyConfigDefaults(&cfg)
+
+	tomlPath := filepath.Join(configDir, TOMLConfigFileName)
+	if err := SaveTOMLConfigTo(configToTOML(&cfg), tomlPath); err != nil {
+		log.WarningLog.Printf("failed to migrate JSON config to TOML: %v", err)
+		return &cfg, true
+	}
+	if err := os.Rename(jsonPath, filepath.Join(configDir, "config.json.migrated")); err != nil {
+		log.WarningLog.Printf("failed to rename JSON config: %v", err)
+	}
+	return &cfg, true
+}
+
+// LoadConfig reads config.toml from the config directory as the authoritative source.
+// When config.toml is absent but config.json exists, it performs a one-time migration:
+// the JSON values are written to config.toml and config.json is renamed to
+// config.json.migrated. When neither file exists, a default config is created and
+// persisted as config.toml. On parse errors, defaults are returned without writing.
 func LoadConfig() *Config {
 	dir, err := GetConfigDir()
 	if err != nil {
@@ -328,63 +459,24 @@ func LoadConfig() *Config {
 		return DefaultConfig()
 	}
 
-	data, readErr := os.ReadFile(filepath.Join(dir, ConfigFileName))
-	if readErr != nil {
-		if os.IsNotExist(readErr) {
-			def := DefaultConfig()
-			if saveErr := saveConfig(def); saveErr != nil {
-				log.WarningLog.Printf("failed to save default config: %v", saveErr)
-			}
-			return def
-		}
-		log.WarningLog.Printf("failed to get config file: %v", readErr)
-		return DefaultConfig()
-	}
-
-	var cfg Config
-	if unmarshalErr := json.Unmarshal(data, &cfg); unmarshalErr != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", unmarshalErr)
-		return DefaultConfig()
-	}
-
-	// Overlay TOML config values where present — TOML is authoritative for these fields.
-	tomlCfg, tomlErr := LoadTOMLConfig()
+	tomlResult, tomlErr := LoadTOMLConfig()
 	if tomlErr != nil {
 		log.WarningLog.Printf("failed to load TOML config: %v", tomlErr)
-	} else if tomlCfg != nil {
-		if len(tomlCfg.Profiles) > 0 {
-			cfg.Profiles = tomlCfg.Profiles
-		}
-		if len(tomlCfg.PhaseRoles) > 0 {
-			cfg.PhaseRoles = tomlCfg.PhaseRoles
-		}
-		if tomlCfg.AnimateBanner {
-			cfg.AnimateBanner = true
-		}
-		if tomlCfg.AutoAdvanceWaves {
-			cfg.AutoAdvanceWaves = true
-		}
-		if tomlCfg.AutoReviewFix != nil {
-			cfg.AutoReviewFix = *tomlCfg.AutoReviewFix
-		}
-		if tomlCfg.MaxReviewFixCycles != nil {
-			cfg.MaxReviewFixCycles = *tomlCfg.MaxReviewFixCycles
-		}
-		if tomlCfg.TelemetryEnabled != nil {
-			cfg.TelemetryEnabled = tomlCfg.TelemetryEnabled
-		}
-		if tomlCfg.DatabaseURL != "" {
-			cfg.DatabaseURL = tomlCfg.DatabaseURL
-		}
-		if len(tomlCfg.Hooks) > 0 {
-			cfg.Hooks = tomlCfg.Hooks
-		}
-		if tomlCfg.BlueprintSkipThreshold != nil {
-			cfg.BlueprintSkipThresholdValue = tomlCfg.BlueprintSkipThreshold
-		}
+		return DefaultConfig()
+	}
+	if tomlResult != nil {
+		return configFromTOML(tomlResult)
 	}
 
-	return &cfg
+	if cfg, ok := migrateJSONToTOML(dir); ok {
+		return cfg
+	}
+
+	def := DefaultConfig()
+	if saveErr := SaveTOMLConfigTo(configToTOML(def), filepath.Join(dir, TOMLConfigFileName)); saveErr != nil {
+		log.WarningLog.Printf("failed to save default config: %v", saveErr)
+	}
+	return def
 }
 
 // saveConfig serialises cfg as indented JSON and writes it to the config directory.
