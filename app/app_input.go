@@ -82,6 +82,19 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.overlays.IsActive() {
 		return m.handleActiveOverlayMouse(msg)
 	}
+
+	// Focus/interactive mode: clicks outside the agent pane exit focus and
+	// fall through to normal click handling so the intended target is activated.
+	if m.state == stateFocusAgent {
+		if !zone.Get(ui.ZoneAgentPane).InBounds(msg) {
+			m.exitFocusMode()
+			// Fall through — stateDefault click handlers below will process the click.
+		} else {
+			// Click inside the agent pane — stay in focus mode, no-op.
+			return m, nil
+		}
+	}
+
 	if m.state != stateDefault {
 		return m, nil
 	}
