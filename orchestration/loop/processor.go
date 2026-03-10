@@ -17,6 +17,8 @@ type ProcessorConfig struct {
 	Project string
 	// Dir is the legacy directory path used for file rename operations (may be empty).
 	Dir string
+	// AutoReviewFix enables automatic fixer spawning after review changes.
+	AutoReviewFix bool
 	// MaxReviewFixCycles is the maximum number of review-fix cycles allowed
 	// before emitting ReviewCycleLimitAction instead of SpawnCoderAction.
 	// Zero or negative means unlimited.
@@ -44,6 +46,12 @@ func NewProcessor(cfg ProcessorConfig) *Processor {
 		waveOrchestrators: make(map[string]*orchestration.WaveOrchestrator),
 		activeWaveOrchs:   make(map[string]bool),
 	}
+}
+
+// SetReviewFixConfig updates the runtime review-fix loop settings.
+func (p *Processor) SetReviewFixConfig(enabled bool, maxCycles int) {
+	p.config.AutoReviewFix = enabled
+	p.config.MaxReviewFixCycles = maxCycles
 }
 
 // SetWaveOrchestratorActive marks or unmarks a plan as having an active wave
@@ -134,11 +142,11 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 			}
 
 		case taskfsm.ReviewChangesRequested:
-			actions = append(actions, IncrementReviewCycleAction{PlanFile: sig.TaskFile})
-			// Check if cycle limit is reached (after the pending increment).
+			if !p.config.AutoReviewFix {
+				break
+			}
 			if p.config.MaxReviewFixCycles > 0 && p.config.Store != nil {
 				if entry, err := p.config.Store.Get(p.config.Project, sig.TaskFile); err == nil {
-					// entry.ReviewCycle is pre-increment; compare current+1 against limit.
 					if entry.ReviewCycle+1 > p.config.MaxReviewFixCycles {
 						actions = append(actions, ReviewCycleLimitAction{
 							PlanFile: sig.TaskFile,
@@ -149,6 +157,7 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 					}
 				}
 			}
+			actions = append(actions, IncrementReviewCycleAction{PlanFile: sig.TaskFile})
 			actions = append(actions, SpawnCoderAction{
 				PlanFile: sig.TaskFile,
 				Feedback: sig.Body,

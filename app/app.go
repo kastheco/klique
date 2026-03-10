@@ -952,6 +952,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for planFile := range m.pendingReviewFeedback {
 				feedbackBeforeTick[planFile] = true
 			}
+			for _, sig := range msg.Signals {
+				if sig.Event != taskfsm.ReviewChangesRequested {
+					continue
+				}
+				if cmd := m.handleReviewChangesRequested(sig.TaskFile, sig.Body); cmd != nil {
+					signalCmds = append(signalCmds, cmd)
+				}
+			}
 
 			actions := proc.ProcessFSMSignals(msg.Signals)
 			for _, sig := range msg.Signals {
@@ -999,23 +1007,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case loop.CreatePRAction:
 					signalCmds = append(signalCmds, m.createPRAfterApproval(a.PlanFile, a.ReviewBody))
 				case loop.IncrementReviewCycleAction:
-					feedback := signalBodies[a.PlanFile]
-					m.pendingReviewFeedback[a.PlanFile] = feedback
-					{
-						truncated := feedback
-						if len(truncated) > 200 {
-							truncated = truncated[:200] + "..."
-						}
-						if cmd := m.postClickUpProgress(a.PlanFile, "review_changes_requested", truncated); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
-					}
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == a.PlanFile && inst.IsReviewer {
-							_ = inst.Pause()
-							break
-						}
-					}
 					if err := m.taskState.IncrementReviewCycle(a.PlanFile); err != nil {
 						log.WarningLog.Printf("could not increment review cycle for %q: %v", a.PlanFile, err)
 					}
@@ -1139,21 +1130,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case taskfsm.ReviewChangesRequested:
 					feedback := sig.Body
-					m.pendingReviewFeedback[sig.TaskFile] = feedback
-					{
-						truncated := feedback
-						if len(truncated) > 200 {
-							truncated = truncated[:200] + "..."
-						}
-						if cmd := m.postClickUpProgress(sig.TaskFile, "review_changes_requested", truncated); cmd != nil {
-							signalCmds = append(signalCmds, cmd)
-						}
+					if cmd := m.handleReviewChangesRequested(sig.TaskFile, feedback); cmd != nil {
+						signalCmds = append(signalCmds, cmd)
 					}
-					for _, inst := range m.nav.GetInstances() {
-						if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
-							_ = inst.Pause()
-							break
-						}
+					if m.appConfig == nil || !m.appConfig.AutoReviewFix {
+						break
 					}
 					if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
 						if cycle, err := m.taskState.ReviewCycle(sig.TaskFile); err == nil {

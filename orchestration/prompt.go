@@ -140,6 +140,46 @@ func BuildWaveAnnotationPrompt(planFile string) string {
 	)
 }
 
+// BuildBlueprintSkipPrompt builds the prompt for a single coder agent that must
+// implement all tasks in a small plan sequentially. Used when the plan's task
+// count is at or below the blueprint_skip_threshold so wave orchestration is skipped.
+// The agent signals implement_finished directly when done, which triggers the
+// existing review flow without any wave orchestration machinery.
+func BuildBlueprintSkipPrompt(planFile string, plan *taskparser.Plan) string {
+	var sb strings.Builder
+
+	totalTasks := 0
+	for _, wave := range plan.Waves {
+		totalTasks += len(wave.Tasks)
+	}
+
+	sb.WriteString(fmt.Sprintf("Implement the entire plan %s as a single coder agent.\n\n", planFile))
+	sb.WriteString(fmt.Sprintf("This is a small plan (%d total tasks), so kasmos is skipping wave orchestration.\n", totalTasks))
+	sb.WriteString("Implement all tasks sequentially in one session, preserving the plan intent and existing codebase patterns.\n\n")
+
+	header := plan.HeaderContext()
+	if header != "" {
+		sb.WriteString("## Plan Context\n\n")
+		sb.WriteString(header)
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## Tasks\n\n")
+	for _, wave := range plan.Waves {
+		sb.WriteString(fmt.Sprintf("### Wave %d\n\n", wave.Number))
+		for _, task := range wave.Tasks {
+			sb.WriteString(fmt.Sprintf("#### Task %d: %s\n\n", task.Number, task.Title))
+			sb.WriteString(task.Body)
+			sb.WriteString("\n\n")
+		}
+	}
+
+	sb.WriteString("## Completion\n\n")
+	sb.WriteString(fmt.Sprintf("When all tasks are implemented and verified, signal completion with `kas signal emit implement_finished %s` (or fallback: `touch .kasmos/signals/implement-finished-%s`).\n", planFile, planFile))
+
+	return sb.String()
+}
+
 // BuildMasterReviewPrompt defines the review task prompt for the kasmos-master role.
 // Signal consumption is intentionally left for follow-up app/FSM work, so this builder
 // only standardizes the instructions and completion signal contract.
