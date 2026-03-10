@@ -1602,7 +1602,19 @@ func TestHandleMouseClick_OutsideAgentPane_ExitsFocusMode(t *testing.T) {
 		"tabbed window focus mode should be cleared")
 }
 
+// TestHandleMouseClick_InsideAgentPane_StaysInFocusMode documents the expected
+// behaviour when a click lands inside the agent pane while in focus mode: the
+// handler should return early without calling exitFocusMode.
+//
+// NOTE: bubblezone zones are not registered in unit tests, so
+// zone.Get(ZoneAgentPane).InBounds always returns false.  There is therefore
+// no way to drive the else-branch (stay in focus mode) through handleMouseClick
+// in this test environment.  The branch is verified by code inspection — the
+// implementation's else-clause returns immediately — and by the OutsideAgentPane
+// test which exercises the mirror path.
 func TestHandleMouseClick_InsideAgentPane_StaysInFocusMode(t *testing.T) {
+	// This test exercises the initial-state setup that both click tests depend on,
+	// and provides a home for the zone-limitation comment above.
 	h := newTestHome()
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   "focus-click-inside-test",
@@ -1619,15 +1631,9 @@ func TestHandleMouseClick_InsideAgentPane_StaysInFocusMode(t *testing.T) {
 	h.tabbedWindow.SetFocusMode(true)
 	h.menu.SetFocusMode(true)
 
-	// In tests, no zones are registered so zone.Get(ZoneAgentPane).InBounds always
-	// returns false. We can't easily simulate an "inside" click without a real
-	// terminal layout. Instead this test verifies that the handling is correct
-	// when zones ARE registered by checking the logic path: in stateDefault after
-	// exitFocusMode, a click at (0,0) should still land in stateDefault.
-	// The key invariant tested here is that outside-pane clicks do exit focus mode.
-	// The inside-pane path is covered by the implementation's else branch.
-	assert.Equal(t, stateFocusAgent, h.state,
-		"state should start as stateFocusAgent")
-	assert.True(t, h.tabbedWindow.IsFocusMode(),
-		"tabbed window must be in focus mode initially")
+	// Preconditions — ensure the test harness enters the expected initial state.
+	require.Equal(t, stateFocusAgent, h.state,
+		"precondition: state must be stateFocusAgent")
+	require.True(t, h.tabbedWindow.IsFocusMode(),
+		"precondition: tabbed window must be in focus mode")
 }
