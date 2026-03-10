@@ -57,11 +57,22 @@ func TestWebhookHook_PostsJSON(t *testing.T) {
 }
 
 func TestWebhookHook_RespectsContextTimeout(t *testing.T) {
+	// handlerDone is closed by t.Cleanup to unblock the handler before srv.Close()
+	// waits for the WaitGroup to drain. Without this, srv.Close() deadlocks because
+	// Go's HTTP server does not cancel r.Context() when a non-reading handler is
+	// running and the client forcibly closes the connection.
+	handlerDone := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Block until the request context is done (client disconnected / timed out).
-		<-r.Context().Done()
+		// Block until the client disconnects/times out OR the test cleans up.
+		select {
+		case <-r.Context().Done():
+		case <-handlerDone:
+		}
 	}))
-	defer srv.Close()
+	t.Cleanup(func() {
+		close(handlerDone)
+		srv.Close()
+	})
 
 	hook := NewWebhookHook(srv.URL, nil)
 
