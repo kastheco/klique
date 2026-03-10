@@ -162,10 +162,30 @@ kas serve --port 7433 --db /path/to/kasmos.db
 a unit file is provided in `contrib/kasmosdb.service`:
 
 ```bash
-cp contrib/kasmosdb.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now kasmosdb
+just db-service-enable
 ```
+
+#### run the orchestration daemon as a systemd service
+
+`kas signal emit ...` writes to the signal gateway database. a running daemon is what
+claims those rows and advances plan lifecycle state outside the legacy filesystem
+sentinel path.
+
+a user unit is provided in `contrib/kasmos.service`:
+
+```bash
+just kasmosd-enable
+just doctord
+```
+
+or, if you want both the orchestration daemon and plan store service in one step:
+
+```bash
+just services-enable
+```
+
+if you only emit a signal but no daemon is running, the signal stays pending and the
+plan will not advance until the daemon processes it.
 
 #### rest api
 

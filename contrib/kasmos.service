@@ -1,15 +1,15 @@
 [Unit]
 Description=kasmos orchestration daemon
+Documentation=https://github.com/kastheco/kasmos
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/kas/go/bin/kas daemon start --foreground
-ExecStop=/home/kas/go/bin/kas daemon stop
+ExecStart=%h/go/bin/kas daemon start --foreground
+ExecStop=%h/go/bin/kas daemon stop
 Restart=on-failure
 RestartSec=5
-User=kas
-Environment=HOME=/home/kas
+Environment=HOME=%h
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=kasmos

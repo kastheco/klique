@@ -187,6 +187,20 @@ type Config struct {
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
 	// DatabaseURL is the remote kasmos store URL; uses local file when empty.
 	DatabaseURL string `json:"database_url,omitempty"`
+	// BlueprintSkipThresholdValue is the maximum task count below which single-agent
+	// blueprint-skip mode is used instead of wave orchestration.
+	// When nil, the default threshold of 2 applies.
+	BlueprintSkipThresholdValue *int `json:"blueprint_skip_threshold,omitempty"`
+}
+
+// BlueprintSkipThreshold returns the configured threshold for single-agent mode.
+// Plans with ≤ threshold tasks skip elaboration and wave orchestration.
+// Defaults to 2 when not configured.
+func (c *Config) BlueprintSkipThreshold() int {
+	if c.BlueprintSkipThresholdValue == nil {
+		return 2
+	}
+	return *c.BlueprintSkipThresholdValue
 }
 
 // DefaultConfig builds a Config populated with sensible out-of-the-box values.
@@ -349,6 +363,9 @@ func LoadConfig() *Config {
 		}
 		if tomlCfg.DatabaseURL != "" {
 			cfg.DatabaseURL = tomlCfg.DatabaseURL
+		}
+		if tomlCfg.BlueprintSkipThreshold != nil {
+			cfg.BlueprintSkipThresholdValue = tomlCfg.BlueprintSkipThreshold
 		}
 	}
 

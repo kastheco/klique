@@ -45,23 +45,32 @@ type TOMLTelemetryConfig struct {
 	Enabled *bool `toml:"enabled,omitempty"`
 }
 
+// TOMLOrchestrationConfig holds orchestration settings from the [orchestration] TOML table.
+type TOMLOrchestrationConfig struct {
+	// BlueprintSkipThreshold is the maximum task count for single-agent mode.
+	// When ≤ this value, elaboration and wave orchestration are skipped.
+	BlueprintSkipThreshold *int `toml:"blueprint_skip_threshold,omitempty"`
+}
+
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
-	Phases      map[string]string    `toml:"phases"`
-	Agents      map[string]TOMLAgent `toml:"agents"`
-	UI          TOMLUIConfig         `toml:"ui"`
-	Telemetry   TOMLTelemetryConfig  `toml:"telemetry"`
-	DatabaseURL string               `toml:"database_url,omitempty"`
+	Phases        map[string]string       `toml:"phases"`
+	Agents        map[string]TOMLAgent    `toml:"agents"`
+	UI            TOMLUIConfig            `toml:"ui"`
+	Telemetry     TOMLTelemetryConfig     `toml:"telemetry"`
+	Orchestration TOMLOrchestrationConfig `toml:"orchestration"`
+	DatabaseURL   string                  `toml:"database_url,omitempty"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
 type TOMLConfigResult struct {
-	Profiles         map[string]AgentProfile
-	PhaseRoles       map[string]string
-	AnimateBanner    bool
-	AutoAdvanceWaves bool
-	TelemetryEnabled *bool
-	DatabaseURL      string
+	Profiles               map[string]AgentProfile
+	PhaseRoles             map[string]string
+	AnimateBanner          bool
+	AutoAdvanceWaves       bool
+	TelemetryEnabled       *bool
+	DatabaseURL            string
+	BlueprintSkipThreshold *int
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -73,12 +82,13 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 	}
 
 	result := &TOMLConfigResult{
-		Profiles:         make(map[string]AgentProfile),
-		PhaseRoles:       tc.Phases,
-		AnimateBanner:    tc.UI.AnimateBanner,
-		AutoAdvanceWaves: tc.UI.AutoAdvanceWaves,
-		TelemetryEnabled: tc.Telemetry.Enabled,
-		DatabaseURL:      tc.DatabaseURL,
+		Profiles:               make(map[string]AgentProfile),
+		PhaseRoles:             tc.Phases,
+		AnimateBanner:          tc.UI.AnimateBanner,
+		AutoAdvanceWaves:       tc.UI.AutoAdvanceWaves,
+		TelemetryEnabled:       tc.Telemetry.Enabled,
+		DatabaseURL:            tc.DatabaseURL,
+		BlueprintSkipThreshold: tc.Orchestration.BlueprintSkipThreshold,
 	}
 
 	for name, agent := range tc.Agents {
