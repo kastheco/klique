@@ -1529,6 +1529,38 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(tea.RequestWindowSize, startCmd, m.toastTickCmd())
 }
 
+// blueprintSkipThreshold returns the configured threshold for blueprint-skip mode.
+// When the plan's total task count is ≤ this value, elaboration and wave orchestration
+// are skipped and a single coder agent implements all tasks sequentially.
+// Returns the default of 2 when appConfig is nil or not explicitly configured.
+func (m *home) blueprintSkipThreshold() int {
+	if m.appConfig == nil {
+		return 2
+	}
+	return m.appConfig.BlueprintSkipThreshold()
+}
+
+// spawnBlueprintSkipAgent transitions the plan to implementing and spawns a single
+// coder agent to implement all tasks sequentially. Used when the plan's task count
+// is at or below blueprintSkipThreshold(). No WaveOrchestrator is created — the
+// agent signals implement_finished directly, which triggers the existing review flow.
+func (m *home) spawnBlueprintSkipAgent(planFile string, plan *taskparser.Plan) (tea.Model, tea.Cmd) {
+	if err := m.fsmSetImplementing(planFile); err != nil {
+		return m, m.handleError(err)
+	}
+	m.loadTaskState()
+	m.updateSidebarTasks()
+
+	totalTasks := 0
+	for _, wave := range plan.Waves {
+		totalTasks += len(wave.Tasks)
+	}
+	m.toastManager.Info(fmt.Sprintf("small plan (%d tasks) - running single agent", totalTasks))
+
+	model, cmd := m.spawnTaskAgent(planFile, "implement", orchestration.BuildBlueprintSkipPrompt(planFile, plan))
+	return model, tea.Batch(cmd, m.toastTickCmd())
+}
+
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.
 // The rendered output is cached; on cache miss the glamour render runs async
 // via a tea.Cmd so the UI stays responsive.
