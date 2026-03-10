@@ -341,6 +341,9 @@ type home struct {
 	// into typed Action values. Lazily initialized via ensureProcessor() on first use.
 	// Nil when taskStore is not set (e.g. in tests that don't need signal processing).
 	processor *loop.Processor
+	// daemonStatusChecker verifies that the daemon is reachable and this repo is registered.
+	// Nil disables daemon gating, which keeps narrow unit tests lightweight.
+	daemonStatusChecker func(string) daemonStatusMsg
 
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
@@ -404,6 +407,7 @@ func newHome(ctx context.Context, program string, autoYes bool, version string) 
 		taskStateDir:          filepath.Join(activeRepoPath, "docs", "plans"), // legacy: only for JSON migration
 		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
 		taskStoreProject:      project,
+		daemonStatusChecker:   checkDaemonStatus,
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
@@ -648,6 +652,7 @@ func (m *home) Init() tea.Cmd {
 		},
 		tickUpdateMetadataCmd,
 		m.toastTickCmd(),
+		m.daemonStartupCheckCmd(),
 		detectClickUpCmd(m.activeRepoPath),
 	)
 }
@@ -667,6 +672,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			auditlog.WithInstance(msg.instanceTitle),
 		)
 		return m, m.toastTickCmd()
+	case daemonStatusMsg:
+		if !msg.ready {
+			m.showDaemonRequiredDialog(msg.message)
+		}
+		return m, nil
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)
 		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())

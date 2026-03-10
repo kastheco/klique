@@ -54,6 +54,9 @@ func newTestHome() *home {
 		overlays:       overlay.NewManager(),
 		activeRepoPath: os.TempDir(),
 		program:        "opencode",
+		daemonStatusChecker: func(string) daemonStatusMsg {
+			return daemonStatusMsg{ready: true}
+		},
 	}
 }
 

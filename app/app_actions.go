@@ -918,6 +918,12 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 	if m.taskState == nil {
 		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}
+	switch stage {
+	case "plan", "solo", "implement", "implement_direct", "review":
+		if !m.requireDaemonForAgents() {
+			return m, nil
+		}
+	}
 	entry, ok := m.taskState.Plans[planFile]
 	if !ok {
 		return m, m.handleError(fmt.Errorf("missing task state for %s", planFile))

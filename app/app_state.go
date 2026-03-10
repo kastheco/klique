@@ -1199,6 +1199,9 @@ func (m *home) transitionToReview(coderInst *session.Instance) tea.Cmd {
 // Does NOT perform any FSM transition — the caller is responsible for that.
 // Solo agent plans are excluded — the user ends those manually.
 func (m *home) spawnReviewer(planFile string) tea.Cmd {
+	if !m.requireDaemonForAgents() {
+		return nil
+	}
 	for _, inst := range m.nav.GetInstances() {
 		if inst.TaskFile == planFile && inst.SoloAgent {
 			return nil
@@ -1500,6 +1503,9 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 // shared worktree so fixes are applied to the actual implementation branch.
 // Does NOT perform any FSM transition — the caller is responsible for that.
 func (m *home) spawnFixerWithFeedback(planFile, feedback string) tea.Cmd {
+	if !m.requireDaemonForAgents() {
+		return nil
+	}
 	planName := taskstate.DisplayName(planFile)
 	prompt := buildImplementPrompt(planFile)
 	if feedback != "" {
@@ -1580,6 +1586,9 @@ func (m *home) spawnFixerWithFeedback(planFile, feedback string) tea.Cmd {
 // it writes an elaborator-finished-<planFile> sentinel that the metadata tick picks up
 // to advance the orchestrator from WaveStateElaborating to wave 1.
 func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
+	if !m.requireDaemonForAgents() {
+		return m, nil
+	}
 	planName := taskstate.DisplayName(planFile)
 	prompt := orchestration.BuildElaborationPrompt(planFile)
 
@@ -2059,6 +2068,9 @@ func agentTypeForSubItem(action string) (string, bool) {
 // spawnAdHocAgent creates and starts an ad-hoc agent session (no plan, no lifecycle).
 // branch and workPath are optional overrides - empty strings use defaults.
 func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cmd) {
+	if !m.requireDaemonForAgents() {
+		return m, nil
+	}
 	path := m.activeRepoPath
 	if workPath != "" {
 		path = workPath
@@ -2114,6 +2126,9 @@ func (m *home) spawnAdHocAgent(name, branch, workPath string) (tea.Model, tea.Cm
 
 // spawnTaskAgent creates and starts an agent session for the given plan and action.
 func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.Cmd) {
+	if !m.requireDaemonForAgents() {
+		return m, nil
+	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
 		return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
@@ -2337,6 +2352,9 @@ func (m *home) rebuildOrphanedOrchestrators() {
 // spawnWaveTasks creates and starts instances for the given task list within an orchestrator.
 // Used by both startNextWave (initial spawn) and retryFailedWaveTasks (re-spawn failed tasks).
 func (m *home) spawnWaveTasks(orch *orchestration.WaveOrchestrator, tasks []taskparser.Task, entry taskstate.TaskEntry) (tea.Model, tea.Cmd) {
+	if !m.requireDaemonForAgents() {
+		return m, nil
+	}
 	planFile := orch.TaskFile()
 	planName := taskstate.DisplayName(planFile)
 
@@ -2476,6 +2494,9 @@ func buildChatAboutTaskPrompt(planFile string, entry taskstate.TaskEntry, questi
 
 // spawnChatAboutTask spawns a custodian agent pre-loaded with the plan context and user question.
 func (m *home) spawnChatAboutTask(planFile, question string) (tea.Model, tea.Cmd) {
+	if !m.requireDaemonForAgents() {
+		return m, nil
+	}
 	if m.taskState == nil {
 		return m, m.handleError(fmt.Errorf("no task state loaded"))
 	}

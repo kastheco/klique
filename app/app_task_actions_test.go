@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -704,6 +705,80 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 	assert.Equal(t, stateSetStatus, h.state, "set_status action should enter stateSetStatus")
 	assert.True(t, h.overlays.IsActive(), "picker overlay should be created for status selection")
 	assert.Equal(t, planFile, h.pendingSetStatusTask, "pending plan file should be stored")
+}
+
+func TestExecuteTaskStage_BlocksWhenDaemonUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+
+	planFile := "daemon-block-plan.md"
+	require.NoError(t, ps.Register(planFile, "daemon block", "plan/daemon-block-plan", time.Now()))
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:      ps,
+		taskStateDir:   plansDir,
+		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
+		nav:            ui.NewNavigationPanel(&sp),
+		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:   overlay.NewToastManager(&sp),
+		overlays:       overlay.NewManager(),
+		activeRepoPath: dir,
+		daemonStatusChecker: func(string) daemonStatusMsg {
+			return daemonStatusMsg{message: "start it with kas daemon start"}
+		},
+	}
+
+	model, cmd := h.executeTaskStage(planFile, "plan")
+	updated := model.(*home)
+
+	require.Nil(t, cmd)
+	assert.Equal(t, stateConfirm, updated.state)
+	assert.True(t, updated.overlays.IsActive())
+	assert.Nil(t, updated.pendingConfirmAction)
+
+	entry, ok := updated.taskState.Entry(planFile)
+	require.True(t, ok)
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
+	co, ok := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok)
+	assert.Contains(t, co.View(), "kas daemon start")
+}
+
+func TestSpawnAdHocAgent_BlocksWhenDaemonUnavailable(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:            context.Background(),
+		state:          stateDefault,
+		appConfig:      config.DefaultConfig(),
+		nav:            ui.NewNavigationPanel(&spin),
+		menu:           ui.NewMenu(),
+		auditPane:      ui.NewAuditPane(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:   overlay.NewToastManager(&spin),
+		overlays:       overlay.NewManager(),
+		activeRepoPath: t.TempDir(),
+		program:        "opencode",
+		daemonStatusChecker: func(string) daemonStatusMsg {
+			return daemonStatusMsg{message: "register it with kas daemon add /tmp/repo"}
+		},
+	}
+
+	model, cmd := h.spawnAdHocAgent("my-agent", "", "")
+	updated := model.(*home)
+
+	require.Nil(t, cmd)
+	assert.Empty(t, updated.nav.GetInstances())
+	assert.Equal(t, stateConfirm, updated.state)
+	assert.True(t, updated.overlays.IsActive())
+	co, ok := updated.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok)
+	assert.Contains(t, co.View(), "kas daemon add")
 }
 
 func TestToggleAutoAdvanceWaves(t *testing.T) {

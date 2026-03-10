@@ -194,6 +194,11 @@ func defaultSocketPath() string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
 }
 
+// DefaultSocketPath returns the default Unix domain socket path for the daemon.
+func DefaultSocketPath() string {
+	return defaultSocketPath()
+}
+
 // AddRepo registers a repository root with the daemon. The repo will be
 // polled on the next tick. Safe to call concurrently.
 func (d *Daemon) AddRepo(root string) error {
