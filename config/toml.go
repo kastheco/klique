@@ -48,7 +48,8 @@ type TOMLTelemetryConfig struct {
 }
 
 // TOMLHook is the TOML/JSON representation of a single FSM transition hook.
-// Maps directly to [[hooks]] entries in config.toml or the "hooks" JSON array.
+// Maps directly to [[hooks]] entries in config.toml.
+// JSON tags are retained for marshaling (e.g. kas debug config output).
 type TOMLHook struct {
 	Type    string            `json:"type"              toml:"type"`
 	URL     string            `json:"url,omitempty"     toml:"url,omitempty"`
