@@ -194,6 +194,21 @@ func TestResolveProfile_ExecutionMode(t *testing.T) {
 	})
 }
 
+func TestAutoReviewFixConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+[ui]
+auto_review_fix = true
+max_review_fix_cycles = 5
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+	result, err := LoadTOMLConfigFrom(path)
+	require.NoError(t, err)
+	assert.True(t, result.AutoReviewFix)
+	assert.Equal(t, 5, result.MaxReviewFixCycles)
+}
+
 func TestAutoAdvanceWaves(t *testing.T) {
 	t.Run("parses auto_advance_waves from UI section", func(t *testing.T) {
 		tmpDir := t.TempDir()

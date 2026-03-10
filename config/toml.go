@@ -36,8 +36,10 @@ func (a TOMLAgent) toProfile() AgentProfile {
 
 // TOMLUIConfig holds UI-specific settings from the [ui] TOML table.
 type TOMLUIConfig struct {
-	AnimateBanner    bool `toml:"animate_banner"`
-	AutoAdvanceWaves bool `toml:"auto_advance_waves"`
+	AnimateBanner      bool `toml:"animate_banner"`
+	AutoAdvanceWaves   bool `toml:"auto_advance_waves"`
+	AutoReviewFix      bool `toml:"auto_review_fix"`
+	MaxReviewFixCycles int  `toml:"max_review_fix_cycles"`
 }
 
 // TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.
@@ -56,12 +58,14 @@ type TOMLConfig struct {
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
 type TOMLConfigResult struct {
-	Profiles         map[string]AgentProfile
-	PhaseRoles       map[string]string
-	AnimateBanner    bool
-	AutoAdvanceWaves bool
-	TelemetryEnabled *bool
-	DatabaseURL      string
+	Profiles           map[string]AgentProfile
+	PhaseRoles         map[string]string
+	AnimateBanner      bool
+	AutoAdvanceWaves   bool
+	AutoReviewFix      bool
+	MaxReviewFixCycles int
+	TelemetryEnabled   *bool
+	DatabaseURL        string
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -73,12 +77,14 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 	}
 
 	result := &TOMLConfigResult{
-		Profiles:         make(map[string]AgentProfile),
-		PhaseRoles:       tc.Phases,
-		AnimateBanner:    tc.UI.AnimateBanner,
-		AutoAdvanceWaves: tc.UI.AutoAdvanceWaves,
-		TelemetryEnabled: tc.Telemetry.Enabled,
-		DatabaseURL:      tc.DatabaseURL,
+		Profiles:           make(map[string]AgentProfile),
+		PhaseRoles:         tc.Phases,
+		AnimateBanner:      tc.UI.AnimateBanner,
+		AutoAdvanceWaves:   tc.UI.AutoAdvanceWaves,
+		AutoReviewFix:      tc.UI.AutoReviewFix,
+		MaxReviewFixCycles: tc.UI.MaxReviewFixCycles,
+		TelemetryEnabled:   tc.Telemetry.Enabled,
+		DatabaseURL:        tc.DatabaseURL,
 	}
 
 	for name, agent := range tc.Agents {

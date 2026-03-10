@@ -183,6 +183,10 @@ type Config struct {
 	AnimateBanner bool `json:"animate_banner,omitempty"`
 	// AutoAdvanceWaves skips the confirmation dialog after a clean wave.
 	AutoAdvanceWaves bool `json:"auto_advance_waves,omitempty"`
+	// AutoReviewFix enables the automatic review→fix→re-review loop.
+	AutoReviewFix bool `json:"auto_review_fix,omitempty"`
+	// MaxReviewFixCycles caps the review-fix loop iterations (0 = unlimited).
+	MaxReviewFixCycles int `json:"max_review_fix_cycles,omitempty"`
 	// TelemetryEnabled controls Sentry crash reporting; defaults to true when nil.
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
 	// DatabaseURL is the remote kasmos store URL; uses local file when empty.
@@ -343,6 +347,12 @@ func LoadConfig() *Config {
 		}
 		if tomlCfg.AutoAdvanceWaves {
 			cfg.AutoAdvanceWaves = true
+		}
+		if tomlCfg.AutoReviewFix {
+			cfg.AutoReviewFix = true
+		}
+		if tomlCfg.MaxReviewFixCycles > 0 {
+			cfg.MaxReviewFixCycles = tomlCfg.MaxReviewFixCycles
 		}
 		if tomlCfg.TelemetryEnabled != nil {
 			cfg.TelemetryEnabled = tomlCfg.TelemetryEnabled
