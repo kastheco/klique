@@ -16,6 +16,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/orchestration"
+	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/ui"
@@ -731,6 +732,58 @@ func TestToggleAutoReviewFix(t *testing.T) {
 
 	m.appConfig.AutoReviewFix = !m.appConfig.AutoReviewFix
 	assert.False(t, m.appConfig.AutoReviewFix)
+}
+
+func TestEnsureProcessor_RefreshesReviewFixConfig(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: "disabled.md",
+		Status:   taskstore.StatusReviewing,
+	}))
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: "enabled.md",
+		Status:   taskstore.StatusReviewing,
+	}))
+
+	h := &home{
+		appConfig:             &config.Config{AutoReviewFix: false, MaxReviewFixCycles: 2},
+		taskStore:             store,
+		taskStoreProject:      "proj",
+		taskStateDir:          t.TempDir(),
+		pendingReviewFeedback: make(map[string]string),
+	}
+
+	proc := h.ensureProcessor()
+	require.NotNil(t, proc)
+	actions := proc.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "disabled.md",
+		Body:     "fix this",
+	}})
+	require.Len(t, actions, 1)
+	_, ok := actions[0].(loop.ReviewChangesAction)
+	assert.True(t, ok)
+
+	h.appConfig.AutoReviewFix = true
+	h.appConfig.MaxReviewFixCycles = 4
+	proc = h.ensureProcessor()
+	actions = proc.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "enabled.md",
+		Body:     "fix this",
+	}})
+
+	var foundCoder, foundIncrement bool
+	for _, action := range actions {
+		if _, ok := action.(loop.SpawnCoderAction); ok {
+			foundCoder = true
+		}
+		if _, ok := action.(loop.IncrementReviewCycleAction); ok {
+			foundIncrement = true
+		}
+	}
+	assert.True(t, foundCoder)
+	assert.True(t, foundIncrement)
 }
 
 func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {

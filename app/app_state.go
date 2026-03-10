@@ -44,23 +44,50 @@ func shouldCreatePR(entry taskstore.TaskEntry) bool {
 // Returns nil when taskStore is not set (e.g. in tests that don't need signal processing),
 // in which case the caller must fall back to the legacy FSM signal handling code.
 func (m *home) ensureProcessor() *loop.Processor {
+	autoReviewFix := false
+	maxCycles := 0
+	if m.appConfig != nil {
+		autoReviewFix = m.appConfig.AutoReviewFix
+		maxCycles = m.appConfig.MaxReviewFixCycles
+	}
 	if m.processor != nil {
+		m.processor.SetReviewFixConfig(autoReviewFix, maxCycles)
 		return m.processor
 	}
 	if m.taskStore == nil {
 		return nil
 	}
-	var maxCycles int
-	if m.appConfig != nil {
-		maxCycles = m.appConfig.MaxReviewFixCycles
-	}
 	m.processor = loop.NewProcessor(loop.ProcessorConfig{
+		AutoReviewFix:      autoReviewFix,
 		Store:              m.taskStore,
 		Project:            m.taskStoreProject,
 		Dir:                m.taskStateDir,
 		MaxReviewFixCycles: maxCycles,
 	})
 	return m.processor
+}
+
+func (m *home) handleReviewChangesRequested(planFile, feedback string) tea.Cmd {
+	m.pendingReviewFeedback[planFile] = feedback
+
+	var cmds []tea.Cmd
+	truncated := feedback
+	if len(truncated) > 200 {
+		truncated = truncated[:200] + "..."
+	}
+	if cmd := m.postClickUpProgress(planFile, "review_changes_requested", truncated); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			_ = inst.Pause()
+			break
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func assemblePRMetadata(
@@ -1538,7 +1565,7 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 }
 
 // blueprintSkipThreshold returns the configured threshold for blueprint-skip mode.
-// When the plan's total task count is ≤ this value, elaboration and wave orchestration
+// When the plan's total task count is <= this value, elaboration and wave orchestration
 // are skipped and a single coder agent implements all tasks sequentially.
 // Returns the default of 2 when appConfig is nil or not explicitly configured.
 func (m *home) blueprintSkipThreshold() int {

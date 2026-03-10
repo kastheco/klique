@@ -36,10 +36,10 @@ func (a TOMLAgent) toProfile() AgentProfile {
 
 // TOMLUIConfig holds UI-specific settings from the [ui] TOML table.
 type TOMLUIConfig struct {
-	AnimateBanner      bool `toml:"animate_banner"`
-	AutoAdvanceWaves   bool `toml:"auto_advance_waves"`
-	AutoReviewFix      bool `toml:"auto_review_fix"`
-	MaxReviewFixCycles int  `toml:"max_review_fix_cycles"`
+	AnimateBanner      bool  `toml:"animate_banner"`
+	AutoAdvanceWaves   bool  `toml:"auto_advance_waves"`
+	AutoReviewFix      *bool `toml:"auto_review_fix"`
+	MaxReviewFixCycles *int  `toml:"max_review_fix_cycles"`
 }
 
 // TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.
@@ -50,7 +50,7 @@ type TOMLTelemetryConfig struct {
 // TOMLOrchestrationConfig holds orchestration settings from the [orchestration] TOML table.
 type TOMLOrchestrationConfig struct {
 	// BlueprintSkipThreshold is the maximum task count for single-agent mode.
-	// When ≤ this value, elaboration and wave orchestration are skipped.
+	// When <= this value, elaboration and wave orchestration are skipped.
 	BlueprintSkipThreshold *int `toml:"blueprint_skip_threshold,omitempty"`
 }
 
@@ -70,8 +70,8 @@ type TOMLConfigResult struct {
 	PhaseRoles             map[string]string
 	AnimateBanner          bool
 	AutoAdvanceWaves       bool
-	AutoReviewFix          bool
-	MaxReviewFixCycles     int
+	AutoReviewFix          *bool
+	MaxReviewFixCycles     *int
 	TelemetryEnabled       *bool
 	DatabaseURL            string
 	BlueprintSkipThreshold *int

@@ -320,6 +320,36 @@ func TestLoadConfig(t *testing.T) {
 		assert.False(t, config.AutoYes)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 	})
+
+	t.Run("toml review-fix settings override json false and zero values", func(t *testing.T) {
+		tempDir := t.TempDir()
+		t.Chdir(tempDir)
+		t.Setenv("HOME", t.TempDir())
+
+		configDir := filepath.Join(tempDir, ".kasmos")
+		require.NoError(t, os.MkdirAll(configDir, 0755))
+
+		jsonPath := filepath.Join(configDir, ConfigFileName)
+		jsonContent := `{
+			"default_program": "test-claude",
+			"auto_review_fix": true,
+			"max_review_fix_cycles": 7,
+			"branch_prefix": "test/"
+		}`
+		require.NoError(t, os.WriteFile(jsonPath, []byte(jsonContent), 0644))
+
+		tomlPath := filepath.Join(configDir, TOMLConfigFileName)
+		tomlContent := `[ui]
+auto_review_fix = false
+max_review_fix_cycles = 0
+`
+		require.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		config := LoadConfig()
+		require.NotNil(t, config)
+		assert.False(t, config.AutoReviewFix)
+		assert.Equal(t, 0, config.MaxReviewFixCycles)
+	})
 }
 
 func TestSaveConfig(t *testing.T) {

@@ -47,7 +47,7 @@ type FileConflict struct {
 	TaskNumbers []int
 }
 
-// ShouldBlueprintSkip returns true when the plan has ≤ threshold tasks total
+// ShouldBlueprintSkip returns true when the plan has <= threshold tasks total
 // and should be implemented by a single coder agent instead of wave orchestration.
 // When threshold is 0 or negative, blueprint skip is disabled.
 func ShouldBlueprintSkip(plan *taskparser.Plan, threshold int) bool {

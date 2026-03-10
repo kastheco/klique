@@ -13,6 +13,7 @@ func TestActionType_String(t *testing.T) {
 	}{
 		{SpawnReviewerAction{PlanFile: "foo.md"}, "spawn_reviewer"},
 		{SpawnCoderAction{PlanFile: "foo.md"}, "spawn_coder"},
+		{ReviewChangesAction{PlanFile: "foo.md"}, "review_changes"},
 		{AdvanceWaveAction{PlanFile: "foo.md", Wave: 2}, "advance_wave"},
 		{CreatePRAction{PlanFile: "foo.md"}, "create_pr"},
 		{PlannerCompleteAction{PlanFile: "foo.md"}, "planner_complete"},

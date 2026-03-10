@@ -17,7 +17,7 @@ func TestProcessor_ProcessFSMSignals_ImplementFinished(t *testing.T) {
 		Branch:   "plan/my-plan",
 	})
 
-	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
 	signals := []taskfsm.Signal{
 		{Event: taskfsm.ImplementFinished, TaskFile: "my-plan.md"},
 	}
@@ -37,7 +37,7 @@ func TestProcessor_ProcessFSMSignals_ReviewApproved(t *testing.T) {
 		Branch:   "plan/my-plan",
 	})
 
-	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
 	signals := []taskfsm.Signal{
 		{Event: taskfsm.ReviewApproved, TaskFile: "my-plan.md", Body: "LGTM"},
 	}
@@ -70,7 +70,7 @@ func TestProcessor_ProcessFSMSignals_ReviewApproved_NoBranch(t *testing.T) {
 		Branch:   "", // no branch — PR not eligible
 	})
 
-	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
 	signals := []taskfsm.Signal{
 		{Event: taskfsm.ReviewApproved, TaskFile: "my-plan.md", Body: "LGTM"},
 	}
@@ -99,15 +99,19 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {
 		Branch:   "plan/my-plan",
 	})
 
-	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
 	feedback := "fix the error handling in handler.go"
 	signals := []taskfsm.Signal{
 		{Event: taskfsm.ReviewChangesRequested, TaskFile: "my-plan.md", Body: feedback},
 	}
 
 	actions := p.ProcessFSMSignals(signals)
-	var foundCoder, foundIncrement bool
+	var foundReviewChanges, foundCoder, foundIncrement bool
 	for _, a := range actions {
+		if rc, ok := a.(ReviewChangesAction); ok {
+			assert.Equal(t, feedback, rc.Feedback)
+			foundReviewChanges = true
+		}
 		if sc, ok := a.(SpawnCoderAction); ok {
 			assert.Equal(t, feedback, sc.Feedback)
 			foundCoder = true
@@ -116,8 +120,46 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {
 			foundIncrement = true
 		}
 	}
+	assert.True(t, foundReviewChanges, "expected ReviewChangesAction")
 	assert.True(t, foundCoder, "expected SpawnCoderAction")
 	assert.True(t, foundIncrement, "expected IncrementReviewCycleAction")
+}
+
+func TestProcessor_ProcessFSMSignals_InvalidReviewChangesRequested_HasNoActions(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("test", taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusImplementing,
+		Branch:   "plan/my-plan",
+	})
+
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test", AutoReviewFix: true})
+	actions := p.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "my-plan.md",
+		Body:     "stale feedback",
+	}})
+
+	assert.Empty(t, actions, "invalid review_changes_requested should not emit side-effect actions")
+}
+
+func TestProcessor_ProcessFSMSignals_ReviewChangesRequested_AutoReviewFixDisabled(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("test", taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusReviewing,
+		Branch:   "plan/my-plan",
+	})
+
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	signals := []taskfsm.Signal{{Event: taskfsm.ReviewChangesRequested, TaskFile: "my-plan.md", Body: "fix this"}}
+
+	actions := p.ProcessFSMSignals(signals)
+	require.Len(t, actions, 1)
+	rc, ok := actions[0].(ReviewChangesAction)
+	require.True(t, ok, "expected ReviewChangesAction when auto review-fix is disabled")
+	assert.Equal(t, "my-plan.md", rc.PlanFile)
+	assert.Equal(t, "fix this", rc.Feedback)
 }
 
 func TestProcessor_ProcessFSMSignals_PlannerFinished(t *testing.T) {
@@ -222,6 +264,7 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleLimitReached(t *testing.T) {
 	store.IncrementReviewCycle("proj", "test.md")
 
 	p := NewProcessor(ProcessorConfig{
+		AutoReviewFix:      true,
 		Store:              store,
 		Project:            "proj",
 		MaxReviewFixCycles: 2,
@@ -233,7 +276,7 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleLimitReached(t *testing.T) {
 
 	actions := p.ProcessFSMSignals(signals)
 
-	var foundLimit bool
+	var foundLimit, foundIncrement bool
 	for _, a := range actions {
 		if lim, ok := a.(ReviewCycleLimitAction); ok {
 			assert.Equal(t, "test.md", lim.PlanFile)
@@ -241,8 +284,12 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleLimitReached(t *testing.T) {
 			assert.Equal(t, 2, lim.Limit)
 			foundLimit = true
 		}
+		if _, ok := a.(IncrementReviewCycleAction); ok {
+			foundIncrement = true
+		}
 	}
 	assert.True(t, foundLimit, "expected ReviewCycleLimitAction when cycle limit reached")
+	assert.False(t, foundIncrement, "should not increment review cycle when cycle limit reached")
 
 	// Should NOT have SpawnCoderAction
 	for _, a := range actions {
@@ -261,6 +308,7 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleBelowLimit(t *testing.T) {
 	// review_cycle = 0 (below limit of 3)
 
 	p := NewProcessor(ProcessorConfig{
+		AutoReviewFix:      true,
 		Store:              store,
 		Project:            "proj",
 		MaxReviewFixCycles: 3,

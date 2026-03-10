@@ -198,7 +198,7 @@ type Config struct {
 }
 
 // BlueprintSkipThreshold returns the configured threshold for single-agent mode.
-// Plans with ≤ threshold tasks skip elaboration and wave orchestration.
+// Plans with <= threshold tasks skip elaboration and wave orchestration.
 // Defaults to 2 when not configured.
 func (c *Config) BlueprintSkipThreshold() int {
 	if c.BlueprintSkipThresholdValue == nil {
@@ -362,11 +362,11 @@ func LoadConfig() *Config {
 		if tomlCfg.AutoAdvanceWaves {
 			cfg.AutoAdvanceWaves = true
 		}
-		if tomlCfg.AutoReviewFix {
-			cfg.AutoReviewFix = true
+		if tomlCfg.AutoReviewFix != nil {
+			cfg.AutoReviewFix = *tomlCfg.AutoReviewFix
 		}
-		if tomlCfg.MaxReviewFixCycles > 0 {
-			cfg.MaxReviewFixCycles = tomlCfg.MaxReviewFixCycles
+		if tomlCfg.MaxReviewFixCycles != nil {
+			cfg.MaxReviewFixCycles = *tomlCfg.MaxReviewFixCycles
 		}
 		if tomlCfg.TelemetryEnabled != nil {
 			cfg.TelemetryEnabled = tomlCfg.TelemetryEnabled

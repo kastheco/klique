@@ -33,6 +33,7 @@ type RepoEntry struct {
 type RepoManager struct {
 	mu                 sync.RWMutex
 	repos              []RepoEntry
+	autoReviewFix      bool
 	maxReviewFixCycles int
 }
 
@@ -77,6 +78,7 @@ func (m *RepoManager) Add(path string) error {
 	// Create a per-repo processor that persists across poll ticks so that wave
 	// orchestrator state is maintained between cycles.
 	proc := loop.NewProcessor(loop.ProcessorConfig{
+		AutoReviewFix:      m.autoReviewFix,
 		Store:              store,
 		Project:            project,
 		MaxReviewFixCycles: m.maxReviewFixCycles,

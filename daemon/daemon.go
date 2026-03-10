@@ -163,6 +163,7 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 	}))
 
 	repos := NewRepoManager()
+	repos.autoReviewFix = cfg.AutoReviewFix
 	repos.maxReviewFixCycles = cfg.MaxReviewFixCycles
 
 	d := &Daemon{
