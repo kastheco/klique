@@ -14,9 +14,6 @@ import (
 )
 
 const (
-	// ConfigFileName is the name of the JSON config file within the config dir.
-	ConfigFileName = "config.json"
-
 	// defaultProgram is the fallback program name when command detection fails.
 	defaultProgram = "opencode"
 )
@@ -477,25 +474,4 @@ func LoadConfig() *Config {
 		log.WarningLog.Printf("failed to save default config: %v", saveErr)
 	}
 	return def
-}
-
-// saveConfig serialises cfg as indented JSON and writes it to the config directory.
-func saveConfig(cfg *Config) error {
-	dir, err := GetConfigDir()
-	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
-	}
-	if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
-		return fmt.Errorf("failed to create config directory: %w", mkErr)
-	}
-	data, marshalErr := json.MarshalIndent(cfg, "", "  ")
-	if marshalErr != nil {
-		return fmt.Errorf("failed to marshal config: %w", marshalErr)
-	}
-	return os.WriteFile(filepath.Join(dir, ConfigFileName), data, 0644)
-}
-
-// SaveConfig is the exported wrapper around saveConfig.
-func SaveConfig(cfg *Config) error {
-	return saveConfig(cfg)
 }

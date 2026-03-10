@@ -441,35 +441,6 @@ func TestLoadConfig_MigratesJSON(t *testing.T) {
 	assert.Contains(t, string(written), `notifications_enabled = false`)
 }
 
-func TestSaveConfig(t *testing.T) {
-	t.Run("saves config to file", func(t *testing.T) {
-		tempDir := t.TempDir()
-		t.Chdir(tempDir)
-		t.Setenv("HOME", t.TempDir())
-
-		testConfig := &Config{
-			DefaultProgram:     "test-program",
-			AutoYes:            true,
-			DaemonPollInterval: 3000,
-			BranchPrefix:       "test-branch/",
-		}
-
-		err := SaveConfig(testConfig)
-		assert.NoError(t, err)
-
-		configDir := filepath.Join(tempDir, ".kasmos")
-		configPath := filepath.Join(configDir, ConfigFileName)
-
-		assert.FileExists(t, configPath)
-
-		loadedConfig := LoadConfig()
-		assert.Equal(t, testConfig.DefaultProgram, loadedConfig.DefaultProgram)
-		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)
-		assert.Equal(t, testConfig.DaemonPollInterval, loadedConfig.DaemonPollInterval)
-		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
-	})
-}
-
 func boolPtr(b bool) *bool { return &b }
 
 func TestIsTelemetryEnabled(t *testing.T) {
