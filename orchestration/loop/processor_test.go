@@ -210,3 +210,73 @@ func TestProcessor_ProcessWaveSignals(t *testing.T) {
 	}
 	assert.True(t, found, "expected AdvanceWaveAction")
 }
+
+func TestProcessor_ProcessFSMSignals_ReviewCycleLimitReached(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("proj", taskstore.TaskEntry{
+		Filename: "test.md",
+		Status:   taskstore.StatusReviewing,
+	})
+	// Increment review_cycle to 2 (the limit).
+	store.IncrementReviewCycle("proj", "test.md")
+	store.IncrementReviewCycle("proj", "test.md")
+
+	p := NewProcessor(ProcessorConfig{
+		Store:              store,
+		Project:            "proj",
+		MaxReviewFixCycles: 2,
+	})
+
+	signals := []taskfsm.Signal{
+		{Event: taskfsm.ReviewChangesRequested, TaskFile: "test.md", Body: "fix this"},
+	}
+
+	actions := p.ProcessFSMSignals(signals)
+
+	var foundLimit bool
+	for _, a := range actions {
+		if lim, ok := a.(ReviewCycleLimitAction); ok {
+			assert.Equal(t, "test.md", lim.PlanFile)
+			assert.Equal(t, 3, lim.Cycle) // current(2) + 1 for the pending increment
+			assert.Equal(t, 2, lim.Limit)
+			foundLimit = true
+		}
+	}
+	assert.True(t, foundLimit, "expected ReviewCycleLimitAction when cycle limit reached")
+
+	// Should NOT have SpawnCoderAction
+	for _, a := range actions {
+		if _, ok := a.(SpawnCoderAction); ok {
+			t.Fatal("should not emit SpawnCoderAction when cycle limit reached")
+		}
+	}
+}
+
+func TestProcessor_ProcessFSMSignals_ReviewCycleBelowLimit(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	store.Create("proj", taskstore.TaskEntry{
+		Filename: "test.md",
+		Status:   taskstore.StatusReviewing,
+	})
+	// review_cycle = 0 (below limit of 3)
+
+	p := NewProcessor(ProcessorConfig{
+		Store:              store,
+		Project:            "proj",
+		MaxReviewFixCycles: 3,
+	})
+
+	signals := []taskfsm.Signal{
+		{Event: taskfsm.ReviewChangesRequested, TaskFile: "test.md", Body: "fix this"},
+	}
+
+	actions := p.ProcessFSMSignals(signals)
+
+	var foundCoder bool
+	for _, a := range actions {
+		if _, ok := a.(SpawnCoderAction); ok {
+			foundCoder = true
+		}
+	}
+	assert.True(t, foundCoder, "expected SpawnCoderAction when below cycle limit")
+}
