@@ -137,6 +137,11 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 
 	repos := NewRepoManager()
 	repos.maxReviewFixCycles = cfg.MaxReviewFixCycles
+	// Load hook configs from the project-local app config (config.toml / config.json).
+	// This is best-effort — failures are silently ignored so the daemon always starts.
+	if appCfg := config.LoadConfig(); len(appCfg.Hooks) > 0 {
+		repos.hookConfigs = appCfg.Hooks
+	}
 
 	d := &Daemon{
 		cfg:         cfg,

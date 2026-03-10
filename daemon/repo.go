@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/kastheco/kasmos/config"
+	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/orchestration/loop"
 )
@@ -34,6 +36,9 @@ type RepoManager struct {
 	mu                 sync.RWMutex
 	repos              []RepoEntry
 	maxReviewFixCycles int
+	// hookConfigs holds hook configurations loaded from app config.
+	// When non-empty a HookRegistry is built and attached to each new Processor.
+	hookConfigs []config.TOMLHook
 }
 
 // NewRepoManager returns an empty, ready-to-use RepoManager.
@@ -74,12 +79,29 @@ func (m *RepoManager) Add(path string) error {
 		gw = g
 	}
 
+	// Build a hook registry if hook configs are present.
+	var hooks *taskfsm.HookRegistry
+	if len(m.hookConfigs) > 0 {
+		hookCfgs := make([]taskfsm.HookConfig, len(m.hookConfigs))
+		for i, h := range m.hookConfigs {
+			hookCfgs[i] = taskfsm.HookConfig{
+				Type:    h.Type,
+				URL:     h.URL,
+				Headers: h.Headers,
+				Command: h.Command,
+				Events:  h.Events,
+			}
+		}
+		hooks = taskfsm.BuildHookRegistry(hookCfgs)
+	}
+
 	// Create a per-repo processor that persists across poll ticks so that wave
 	// orchestrator state is maintained between cycles.
 	proc := loop.NewProcessor(loop.ProcessorConfig{
 		Store:              store,
 		Project:            project,
 		MaxReviewFixCycles: m.maxReviewFixCycles,
+		Hooks:              hooks,
 	})
 
 	m.repos = append(m.repos, RepoEntry{

@@ -47,6 +47,16 @@ type TOMLTelemetryConfig struct {
 	Enabled *bool `toml:"enabled,omitempty"`
 }
 
+// TOMLHook is the TOML/JSON representation of a single FSM transition hook.
+// Maps directly to [[hooks]] entries in config.toml or the "hooks" JSON array.
+type TOMLHook struct {
+	Type    string            `json:"type"              toml:"type"`
+	URL     string            `json:"url,omitempty"     toml:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" toml:"headers,omitempty"`
+	Command string            `json:"command,omitempty" toml:"command,omitempty"`
+	Events  []string          `json:"events,omitempty"  toml:"events,omitempty"`
+}
+
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
 	Phases      map[string]string    `toml:"phases"`
@@ -54,6 +64,7 @@ type TOMLConfig struct {
 	UI          TOMLUIConfig         `toml:"ui"`
 	Telemetry   TOMLTelemetryConfig  `toml:"telemetry"`
 	DatabaseURL string               `toml:"database_url,omitempty"`
+	Hooks       []TOMLHook           `toml:"hooks"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
@@ -66,6 +77,7 @@ type TOMLConfigResult struct {
 	MaxReviewFixCycles int
 	TelemetryEnabled   *bool
 	DatabaseURL        string
+	Hooks              []TOMLHook
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -85,6 +97,7 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		MaxReviewFixCycles: tc.UI.MaxReviewFixCycles,
 		TelemetryEnabled:   tc.Telemetry.Enabled,
 		DatabaseURL:        tc.DatabaseURL,
+		Hooks:              tc.Hooks,
 	}
 
 	for name, agent := range tc.Agents {

@@ -191,6 +191,8 @@ type Config struct {
 	TelemetryEnabled *bool `json:"telemetry_enabled,omitempty"`
 	// DatabaseURL is the remote kasmos store URL; uses local file when empty.
 	DatabaseURL string `json:"database_url,omitempty"`
+	// Hooks configures FSM transition hooks loaded from config.json or overlaid from config.toml.
+	Hooks []TOMLHook `json:"hooks,omitempty"`
 }
 
 // DefaultConfig builds a Config populated with sensible out-of-the-box values.
@@ -359,6 +361,9 @@ func LoadConfig() *Config {
 		}
 		if tomlCfg.DatabaseURL != "" {
 			cfg.DatabaseURL = tomlCfg.DatabaseURL
+		}
+		if len(tomlCfg.Hooks) > 0 {
+			cfg.Hooks = tomlCfg.Hooks
 		}
 	}
 
