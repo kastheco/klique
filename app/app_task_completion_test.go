@@ -13,6 +13,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/orchestration"
+	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -1042,6 +1043,18 @@ func TestPausedReviewer_CleanedUpOnNavigateAway(t *testing.T) {
 	for _, inst := range h.allInstances {
 		assert.NotEqual(t, "feature-review-1", inst.Title)
 	}
+}
+
+func TestReviewCycleLimitAction_Kind(t *testing.T) {
+	action := loop.ReviewCycleLimitAction{
+		PlanFile: "test.md",
+		Cycle:    3,
+		Limit:    3,
+	}
+	assert.Equal(t, "review_cycle_limit", action.Kind())
+	assert.Equal(t, "test.md", action.PlanFile)
+	assert.Equal(t, 3, action.Cycle)
+	assert.Equal(t, 3, action.Limit)
 }
 
 // TestReviewApproved_NoReviewerNoPanic verifies that a ReviewApproved signal
