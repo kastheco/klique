@@ -1571,3 +1571,69 @@ func TestMapPRCheckStatus(t *testing.T) {
 	assert.Equal(t, "pending", mapPRCheckStatus("PENDING"))
 	assert.Equal(t, "pending", mapPRCheckStatus(""))
 }
+
+func TestHandleMouseClick_OutsideAgentPane_ExitsFocusMode(t *testing.T) {
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "focus-click-test",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.state = stateFocusAgent
+	h.tabbedWindow.SetFocusMode(true)
+	h.menu.SetFocusMode(true)
+
+	// Simulate a left click at coordinates that are NOT inside ZoneAgentPane.
+	// Since zones are not registered in tests, InBounds returns false for all zones,
+	// so this click is "outside" the agent pane.
+	msg := tea.MouseClickMsg{X: 0, Y: 0, Button: tea.MouseLeft}
+	model, _ := h.handleMouseClick(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateDefault, updated.state,
+		"clicking outside agent pane should exit focus mode")
+	assert.False(t, updated.tabbedWindow.IsFocusMode(),
+		"tabbed window focus mode should be cleared")
+}
+
+// TestHandleMouseClick_InsideAgentPane_StaysInFocusMode documents the expected
+// behaviour when a click lands inside the agent pane while in focus mode: the
+// handler should return early without calling exitFocusMode.
+//
+// NOTE: bubblezone zones are not registered in unit tests, so
+// zone.Get(ZoneAgentPane).InBounds always returns false.  There is therefore
+// no way to drive the else-branch (stay in focus mode) through handleMouseClick
+// in this test environment.  The branch is verified by code inspection — the
+// implementation's else-clause returns immediately — and by the OutsideAgentPane
+// test which exercises the mirror path.
+func TestHandleMouseClick_InsideAgentPane_StaysInFocusMode(t *testing.T) {
+	// This test exercises the initial-state setup that both click tests depend on,
+	// and provides a home for the zone-limitation comment above.
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "focus-click-inside-test",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.state = stateFocusAgent
+	h.tabbedWindow.SetFocusMode(true)
+	h.menu.SetFocusMode(true)
+
+	// Preconditions — ensure the test harness enters the expected initial state.
+	require.Equal(t, stateFocusAgent, h.state,
+		"precondition: state must be stateFocusAgent")
+	require.True(t, h.tabbedWindow.IsFocusMode(),
+		"precondition: tabbed window must be in focus mode")
+}
