@@ -328,6 +328,15 @@ func TestDaemon_TickRepoUsesGateway(t *testing.T) {
 	assert.Equal(t, taskstore.StatusReady, updated.Status)
 }
 
+func TestDaemon_ExecuteAction_ReviewCycleLimit(t *testing.T) {
+	action := loop.ReviewCycleLimitAction{
+		PlanFile: "test.md",
+		Cycle:    3,
+		Limit:    3,
+	}
+	assert.Equal(t, "review_cycle_limit", action.Kind())
+}
+
 func TestReapStuckSignals(t *testing.T) {
 	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
 	require.NoError(t, err)

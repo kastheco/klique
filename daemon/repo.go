@@ -31,8 +31,9 @@ type RepoEntry struct {
 // RepoManager tracks registered repositories for the daemon.
 // It is safe for concurrent use.
 type RepoManager struct {
-	mu    sync.RWMutex
-	repos []RepoEntry
+	mu                 sync.RWMutex
+	repos              []RepoEntry
+	maxReviewFixCycles int
 }
 
 // NewRepoManager returns an empty, ready-to-use RepoManager.
@@ -76,8 +77,9 @@ func (m *RepoManager) Add(path string) error {
 	// Create a per-repo processor that persists across poll ticks so that wave
 	// orchestrator state is maintained between cycles.
 	proc := loop.NewProcessor(loop.ProcessorConfig{
-		Store:   store,
-		Project: project,
+		Store:              store,
+		Project:            project,
+		MaxReviewFixCycles: m.maxReviewFixCycles,
 	})
 
 	m.repos = append(m.repos, RepoEntry{

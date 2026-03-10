@@ -1023,6 +1023,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if cmd := m.spawnFixerWithFeedback(a.PlanFile, a.Feedback); cmd != nil {
 						signalCmds = append(signalCmds, cmd)
 					}
+				case loop.ReviewCycleLimitAction:
+					planName := taskstate.DisplayName(a.PlanFile)
+					m.toastManager.Error(fmt.Sprintf(
+						"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
+						a.Cycle, a.Limit, planName))
+					m.audit(auditlog.EventPlanTransition,
+						fmt.Sprintf("review-fix cycle limit reached (%d/%d)", a.Cycle, a.Limit),
+						auditlog.WithPlan(a.PlanFile))
 				case loop.PlannerCompleteAction:
 					capturedPlanFile := a.PlanFile
 					{
@@ -1145,6 +1153,20 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if inst.TaskFile == sig.TaskFile && inst.IsReviewer {
 							_ = inst.Pause()
 							break
+						}
+					}
+					if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
+						if cycle, err := m.taskState.ReviewCycle(sig.TaskFile); err == nil {
+							if cycle+1 > m.appConfig.MaxReviewFixCycles {
+								planName := taskstate.DisplayName(sig.TaskFile)
+								m.toastManager.Error(fmt.Sprintf(
+									"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
+									cycle+1, m.appConfig.MaxReviewFixCycles, planName))
+								m.audit(auditlog.EventPlanTransition,
+									fmt.Sprintf("review-fix cycle limit reached (%d/%d)", cycle+1, m.appConfig.MaxReviewFixCycles),
+									auditlog.WithPlan(sig.TaskFile))
+								continue // skip spawning fixer
+							}
 						}
 					}
 					if err := m.taskState.IncrementReviewCycle(sig.TaskFile); err != nil {

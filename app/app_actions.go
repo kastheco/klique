@@ -506,6 +506,19 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		_ = config.SaveConfig(m.appConfig)
 		return m, m.toastTickCmd()
 
+	case "toggle_auto_review_fix":
+		if m.appConfig == nil {
+			return m, nil
+		}
+		m.appConfig.AutoReviewFix = !m.appConfig.AutoReviewFix
+		label := "off"
+		if m.appConfig.AutoReviewFix {
+			label = "on"
+		}
+		m.toastManager.Success(fmt.Sprintf("auto review-fix loop: %s", label))
+		_ = config.SaveConfig(m.appConfig)
+		return m, m.toastTickCmd()
+
 	// ── Log-line context menu actions ──────────────────────────────────────
 	// These are triggered from the audit pane cursor (stateAuditCursor).
 	// m.pendingLogEvent holds the event that was selected.
@@ -799,12 +812,17 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 	if m.appConfig != nil && m.appConfig.AutoAdvanceWaves {
 		autoAdvanceLabel = "auto-advance waves: on"
 	}
+	autoReviewFixLabel := "auto review-fix loop: off"
+	if m.appConfig != nil && m.appConfig.AutoReviewFix {
+		autoReviewFixLabel = "auto review-fix loop: on"
+	}
 	items = append(items,
 		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
 		overlay.ContextMenuItem{Label: "view task", Action: "view_plan"},
 		overlay.ContextMenuItem{Label: "rename task", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
 		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
+		overlay.ContextMenuItem{Label: autoReviewFixLabel, Action: "toggle_auto_review_fix"},
 		overlay.ContextMenuItem{Label: "set status", Action: "set_status"},
 		overlay.ContextMenuItem{Label: "create pr", Action: "create_plan_pr"},
 		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},

@@ -17,6 +17,10 @@ type ProcessorConfig struct {
 	Project string
 	// Dir is the legacy directory path used for file rename operations (may be empty).
 	Dir string
+	// MaxReviewFixCycles is the maximum number of review-fix cycles allowed
+	// before emitting ReviewCycleLimitAction instead of SpawnCoderAction.
+	// Zero or negative means unlimited.
+	MaxReviewFixCycles int
 }
 
 // Processor converts signal scan results into typed Action values without
@@ -130,8 +134,21 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 			}
 
 		case taskfsm.ReviewChangesRequested:
-			// Spawn a fix-coder and bump the review cycle counter.
 			actions = append(actions, IncrementReviewCycleAction{PlanFile: sig.TaskFile})
+			// Check if cycle limit is reached (after the pending increment).
+			if p.config.MaxReviewFixCycles > 0 && p.config.Store != nil {
+				if entry, err := p.config.Store.Get(p.config.Project, sig.TaskFile); err == nil {
+					// entry.ReviewCycle is pre-increment; compare current+1 against limit.
+					if entry.ReviewCycle+1 > p.config.MaxReviewFixCycles {
+						actions = append(actions, ReviewCycleLimitAction{
+							PlanFile: sig.TaskFile,
+							Cycle:    entry.ReviewCycle + 1,
+							Limit:    p.config.MaxReviewFixCycles,
+						})
+						break // don't spawn coder
+					}
+				}
+			}
 			actions = append(actions, SpawnCoderAction{
 				PlanFile: sig.TaskFile,
 				Feedback: sig.Body,

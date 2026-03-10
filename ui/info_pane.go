@@ -69,8 +69,9 @@ type InfoData struct {
 	TaskTitle  string
 
 	// Review outcome (populated when plan is done)
-	ReviewCycle   int
-	ReviewOutcome string
+	ReviewCycle        int
+	ReviewOutcome      string
+	MaxReviewFixCycles int
 
 	// Selection state flags
 	HasPlan              bool
@@ -406,7 +407,11 @@ func (p *InfoPane) renderReviewSection() string {
 		p.renderDivider(),
 	}
 	if p.data.ReviewCycle > 0 {
-		rows = append(rows, p.renderRow("cycle", fmt.Sprintf("%d", p.data.ReviewCycle)))
+		cycleLabel := fmt.Sprintf("%d", p.data.ReviewCycle)
+		if p.data.MaxReviewFixCycles > 0 {
+			cycleLabel = fmt.Sprintf("%d / %d", p.data.ReviewCycle, p.data.MaxReviewFixCycles)
+		}
+		rows = append(rows, p.renderRow("cycle", cycleLabel))
 	}
 	rows = append(rows, p.renderStatusRow("outcome", p.data.ReviewOutcome))
 	return strings.Join(rows, "\n")

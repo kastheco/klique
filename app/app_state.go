@@ -50,10 +50,15 @@ func (m *home) ensureProcessor() *loop.Processor {
 	if m.taskStore == nil {
 		return nil
 	}
+	var maxCycles int
+	if m.appConfig != nil {
+		maxCycles = m.appConfig.MaxReviewFixCycles
+	}
 	m.processor = loop.NewProcessor(loop.ProcessorConfig{
-		Store:   m.taskStore,
-		Project: m.taskStoreProject,
-		Dir:     m.taskStateDir,
+		Store:              m.taskStore,
+		Project:            m.taskStoreProject,
+		Dir:                m.taskStateDir,
+		MaxReviewFixCycles: maxCycles,
 	})
 	return m.processor
 }
@@ -851,6 +856,9 @@ func (m *home) updateInfoPaneForPlanHeader() {
 		if cycle, err := m.taskState.ReviewCycle(planFile); err == nil {
 			data.ReviewCycle = cycle + 1
 		}
+	}
+	if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
+		data.MaxReviewFixCycles = m.appConfig.MaxReviewFixCycles
 	}
 
 	m.tabbedWindow.SetInfoData(data)

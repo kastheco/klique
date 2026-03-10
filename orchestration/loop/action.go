@@ -104,6 +104,18 @@ type IncrementReviewCycleAction struct {
 func (IncrementReviewCycleAction) Kind() string  { return "increment_review_cycle" }
 func (IncrementReviewCycleAction) sealedAction() {}
 
+// ReviewCycleLimitAction signals that the review-fix loop has hit its
+// configured maximum cycle count. The caller should notify the user
+// and leave the plan in reviewing state without spawning a fixer.
+type ReviewCycleLimitAction struct {
+	PlanFile string
+	Cycle    int
+	Limit    int
+}
+
+func (ReviewCycleLimitAction) Kind() string  { return "review_cycle_limit" }
+func (ReviewCycleLimitAction) sealedAction() {}
+
 // PausePlanAgentAction instructs the caller to pause (kill) the running agent
 // of the given type for the plan.
 type PausePlanAgentAction struct {

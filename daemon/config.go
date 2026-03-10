@@ -25,6 +25,11 @@ type DaemonConfig struct {
 	// waves when all tasks in a wave complete.
 	AutoAdvanceWaves bool `toml:"auto_advance_waves"`
 
+	// AutoReviewFix enables the automatic review→fix→re-review loop.
+	AutoReviewFix bool `toml:"auto_review_fix"`
+	// MaxReviewFixCycles caps the review-fix loop iterations (0 = unlimited).
+	MaxReviewFixCycles int `toml:"max_review_fix_cycles"`
+
 	// SocketPath is the Unix domain socket path for the control API.
 	// Defaults to ~/.config/kasmos/daemon.sock when empty.
 	SocketPath string `toml:"socket_path"`
@@ -33,11 +38,13 @@ type DaemonConfig struct {
 // tomlDaemonConfig is the raw TOML representation, using seconds for duration
 // fields so the config file stays human-readable.
 type tomlDaemonConfig struct {
-	PollIntervalSec  float64  `toml:"poll_interval_sec"`
-	Repos            []string `toml:"repos"`
-	AutoAdvance      bool     `toml:"auto_advance"`
-	AutoAdvanceWaves bool     `toml:"auto_advance_waves"`
-	SocketPath       string   `toml:"socket_path"`
+	PollIntervalSec    float64  `toml:"poll_interval_sec"`
+	Repos              []string `toml:"repos"`
+	AutoAdvance        bool     `toml:"auto_advance"`
+	AutoAdvanceWaves   bool     `toml:"auto_advance_waves"`
+	AutoReviewFix      bool     `toml:"auto_review_fix"`
+	MaxReviewFixCycles int      `toml:"max_review_fix_cycles"`
+	SocketPath         string   `toml:"socket_path"`
 }
 
 // defaultDaemonConfig returns a DaemonConfig populated with sensible defaults.
@@ -84,6 +91,8 @@ func LoadDaemonConfig(path string) (*DaemonConfig, error) {
 	}
 	cfg.AutoAdvance = tc.AutoAdvance
 	cfg.AutoAdvanceWaves = tc.AutoAdvanceWaves
+	cfg.AutoReviewFix = tc.AutoReviewFix
+	cfg.MaxReviewFixCycles = tc.MaxReviewFixCycles
 	cfg.SocketPath = tc.SocketPath
 
 	return cfg, nil
