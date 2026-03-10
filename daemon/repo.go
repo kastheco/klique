@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sync"
 
@@ -37,9 +38,6 @@ type RepoManager struct {
 	repos              []RepoEntry
 	autoReviewFix      bool
 	maxReviewFixCycles int
-	// hookConfigs holds hook configurations loaded from app config.
-	// When non-empty a HookRegistry is built and attached to each new Processor.
-	hookConfigs []config.TOMLHook
 }
 
 // NewRepoManager returns an empty, ready-to-use RepoManager.
@@ -80,12 +78,16 @@ func (m *RepoManager) Add(path string) error {
 		gw = g
 	}
 
-	// Build a hook registry if hook configs are present.
+	// Build a hook registry by reading the per-repo config.toml.
+	// This is side-effect-free (no implicit writes) and anchored to the repo
+	// being registered, so each repo gets its own hook configuration.
 	var hooks *taskfsm.HookRegistry
-	if len(m.hookConfigs) > 0 {
-		hookCfgs := make([]taskfsm.HookConfig, len(m.hookConfigs))
-		for i, h := range m.hookConfigs {
-			hookCfgs[i] = taskfsm.HookConfig{
+	if hookCfgs, err := config.LoadHooksForRepo(path); err != nil {
+		slog.Warn("daemon: failed to load hooks for repo, hooks disabled", "repo", path, "error", err)
+	} else if len(hookCfgs) > 0 {
+		cfgs := make([]taskfsm.HookConfig, len(hookCfgs))
+		for i, h := range hookCfgs {
+			cfgs[i] = taskfsm.HookConfig{
 				Type:    h.Type,
 				URL:     h.URL,
 				Headers: h.Headers,
@@ -93,7 +95,7 @@ func (m *RepoManager) Add(path string) error {
 				Events:  h.Events,
 			}
 		}
-		hooks = taskfsm.BuildHookRegistry(hookCfgs)
+		hooks = taskfsm.BuildHookRegistry(cfgs)
 	}
 
 	// Create a per-repo processor that persists across poll ticks so that wave

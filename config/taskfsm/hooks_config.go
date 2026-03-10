@@ -37,6 +37,15 @@ func BuildHookRegistry(configs []HookConfig) *HookRegistry {
 	reg := NewHookRegistry()
 	for _, cfg := range configs {
 		events := parseHookEvents(cfg.Events)
+		// If the user explicitly listed events but none were recognised, the
+		// hook would fire on every transition (because an empty filter means
+		// "all events"). That is almost certainly a misconfiguration, so skip
+		// the hook entirely and warn.
+		if len(cfg.Events) > 0 && len(events) == 0 {
+			slog.Warn("hook config: all event names are unknown, skipping hook to avoid firing on every transition",
+				"type", cfg.Type, "events", cfg.Events)
+			continue
+		}
 		switch cfg.Type {
 		case "webhook":
 			if cfg.URL == "" {
