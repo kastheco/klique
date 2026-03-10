@@ -66,13 +66,18 @@ type TOMLOrchestrationConfig struct {
 
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
-	Phases        map[string]string       `toml:"phases"`
-	Agents        map[string]TOMLAgent    `toml:"agents"`
-	UI            TOMLUIConfig            `toml:"ui"`
-	Telemetry     TOMLTelemetryConfig     `toml:"telemetry"`
-	Orchestration TOMLOrchestrationConfig `toml:"orchestration"`
-	DatabaseURL   string                  `toml:"database_url,omitempty"`
-	Hooks         []TOMLHook              `toml:"hooks"`
+	Phases               map[string]string       `toml:"phases"`
+	Agents               map[string]TOMLAgent    `toml:"agents"`
+	UI                   TOMLUIConfig            `toml:"ui"`
+	Telemetry            TOMLTelemetryConfig     `toml:"telemetry"`
+	Orchestration        TOMLOrchestrationConfig `toml:"orchestration"`
+	DatabaseURL          string                  `toml:"database_url,omitempty"`
+	DefaultProgram       string                  `toml:"default_program,omitempty"`
+	AutoYes              bool                    `toml:"auto_yes,omitempty"`
+	DaemonPollInterval   int                     `toml:"daemon_poll_interval,omitempty"`
+	BranchPrefix         string                  `toml:"branch_prefix,omitempty"`
+	NotificationsEnabled *bool                   `toml:"notifications_enabled,omitempty"`
+	Hooks                []TOMLHook              `toml:"hooks"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
@@ -86,6 +91,11 @@ type TOMLConfigResult struct {
 	TelemetryEnabled       *bool
 	DatabaseURL            string
 	BlueprintSkipThreshold *int
+	DefaultProgram         string
+	AutoYes                bool
+	DaemonPollInterval     int
+	BranchPrefix           string
+	NotificationsEnabled   *bool
 	Hooks                  []TOMLHook
 }
 
@@ -107,6 +117,11 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 		TelemetryEnabled:       tc.Telemetry.Enabled,
 		DatabaseURL:            tc.DatabaseURL,
 		BlueprintSkipThreshold: tc.Orchestration.BlueprintSkipThreshold,
+		DefaultProgram:         tc.DefaultProgram,
+		AutoYes:                tc.AutoYes,
+		DaemonPollInterval:     tc.DaemonPollInterval,
+		BranchPrefix:           tc.BranchPrefix,
+		NotificationsEnabled:   tc.NotificationsEnabled,
 		Hooks:                  tc.Hooks,
 	}
 
