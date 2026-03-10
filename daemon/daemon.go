@@ -135,9 +135,12 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 		Level: slog.LevelInfo,
 	}))
 
+	repos := NewRepoManager()
+	repos.maxReviewFixCycles = cfg.MaxReviewFixCycles
+
 	d := &Daemon{
 		cfg:         cfg,
-		repos:       NewRepoManager(),
+		repos:       repos,
 		spawner:     newTmuxSpawner(logger),
 		logger:      logger,
 		broadcaster: api.NewEventBroadcaster(),
@@ -595,6 +598,15 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		d.broadcaster.Emit(api.Event{
 			Kind:     "signal_processed",
 			Message:  "create PR for " + a.PlanFile,
+			Repo:     e.Path,
+			PlanFile: a.PlanFile,
+		})
+	case loop.ReviewCycleLimitAction:
+		d.logger.Warn("review-fix cycle limit reached",
+			"plan", a.PlanFile, "cycle", a.Cycle, "limit", a.Limit, "repo", e.Path)
+		d.broadcaster.Emit(api.Event{
+			Kind:     "review_cycle_limit",
+			Message:  fmt.Sprintf("review-fix cycle limit reached (%d/%d) for %s", a.Cycle, a.Limit, a.PlanFile),
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
