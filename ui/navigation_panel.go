@@ -577,7 +577,7 @@ func navPlanSortKey(p PlanDisplay, insts []*session.Instance, st TopicStatus) in
 	switch {
 	case hasNotif:
 		return 0
-	case hasRunning, p.Status == "implementing", p.Status == "reviewing":
+	case hasRunning, p.Status == "planning", p.Status == "implementing", p.Status == "reviewing":
 		return 1
 	default:
 		return 2
@@ -1433,7 +1433,7 @@ func (n *NavigationPanel) String() string {
 			} else {
 				// Plan header: derive from status flags.
 				if row.HasNotification || row.HasRunning ||
-					row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
+					row.PlanStatus == "planning" || row.PlanStatus == "implementing" || row.PlanStatus == "reviewing" {
 					sk = 0
 				} else {
 					sk = 2

@@ -974,3 +974,27 @@ func TestString_ImplementingPlanAppearsInPlansList(t *testing.T) {
 	// All plans appear under a single "plans" divider — no separate "active" section.
 	assert.Contains(t, output, "plans", "implementing plan should appear in plans section")
 }
+
+func TestNavPlanSortKey_PlanningStatusIsActive(t *testing.T) {
+	// A plan in "planning" lifecycle status with no instances must be treated as
+	// active (sort key 1), not idle (sort key 2).  The planner agent may have
+	// finished but the plan hasn't transitioned out of "planning" yet.
+	p := PlanDisplay{Filename: "p.md", Status: "planning"}
+	assert.Equal(t, 1, navPlanSortKey(p, nil, TopicStatus{}))
+}
+
+func TestString_PlanningStatusPlanAppearsInActiveSection(t *testing.T) {
+	n := newTestPanel()
+	n.SetSize(60, 40)
+	// Plan in "planning" lifecycle status with NO running instances — simulates the
+	// window between planner agent finishing and the user triggering implement_start.
+	plans := []PlanDisplay{
+		{Filename: "planning-plan", Status: "planning"},
+		{Filename: "idle-plan", Status: "ready"},
+	}
+	n.SetData(plans, nil, nil, nil, nil)
+	output := n.String()
+	// The "planning" lifecycle plan must appear under an "active" section divider,
+	// not dropped to the idle "plans" section.
+	assert.Contains(t, output, "active", "planning status plan should appear in active section")
+}

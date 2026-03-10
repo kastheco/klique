@@ -64,10 +64,63 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nHealth: %d/%d OK (%d%%)\n", ok, total, pct)
 
+	// Print deduplicated remediation hints.
+	hints := collectRemediationHints(result)
+	if len(hints) > 0 {
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintln(cmd.OutOrStdout(), "Remediation:")
+		for _, h := range hints {
+			fmt.Fprintf(cmd.OutOrStdout(), "  • %s\n", h)
+		}
+	}
+
 	if pct < 100 {
 		return errUnhealthy
 	}
 	return nil
+}
+
+// collectRemediationHints scans the audit result and returns deduplicated hint strings.
+func collectRemediationHints(result *check.AuditResult) []string {
+	seen := map[string]bool{}
+	var hints []string
+
+	add := func(h string) {
+		if !seen[h] {
+			seen[h] = true
+			hints = append(hints, h)
+		}
+	}
+
+	for _, h := range result.Global {
+		for _, s := range h.Skills {
+			if s.Status == check.StatusMissing {
+				add("run `kas skills sync` to create missing skill links")
+			}
+			if s.Status == check.StatusCopy {
+				add("remove copy-only skill dirs and re-run `kas skills sync` to replace with symlinks")
+			}
+		}
+	}
+
+	for _, p := range result.Project {
+		if !p.InCanonical {
+			continue
+		}
+		if !p.HasSkillMD {
+			add("add SKILL.md to skills missing documentation (e.g. .agents/skills/<name>/SKILL.md)")
+		}
+		for _, st := range p.HarnessStatus {
+			if st == check.StatusMissing {
+				add("run `kas skills sync` to create missing skill links")
+			}
+			if st == check.StatusCopy {
+				add("remove copy-only skill dirs and re-run `kas skills sync` to replace with symlinks")
+			}
+		}
+	}
+
+	return hints
 }
 
 func renderGlobal(cmd *cobra.Command, results []check.HarnessResult, verbose bool) {
@@ -97,6 +150,9 @@ func renderGlobal(cmd *cobra.Command, results []check.HarnessResult, verbose boo
 		)
 		if counts[check.StatusBroken] > 0 {
 			fmt.Fprintf(out, "  %d broken", counts[check.StatusBroken])
+		}
+		if counts[check.StatusCopy] > 0 {
+			fmt.Fprintf(out, "  %d copy", counts[check.StatusCopy])
 		}
 		fmt.Fprintln(out)
 
@@ -153,17 +209,24 @@ func renderProject(cmd *cobra.Command, entries []check.ProjectSkillEntry, verbos
 			st := e.HarnessStatus[h]
 			glyph := statusGlyph(st)
 			parts = append(parts, fmt.Sprintf("%s %s", h, glyph))
-			if st != check.StatusSynced {
+			// StatusSynced and StatusCopy both count as healthy for harness checks
+			if st != check.StatusSynced && st != check.StatusCopy {
 				allOK = false
 			}
 		}
 
+		// A skill is still overall unhealthy if SKILL.md is missing
 		overallGlyph := "✓"
-		if !allOK {
+		if !allOK || !e.HasSkillMD {
 			overallGlyph = "✗"
 		}
 
-		fmt.Fprintf(out, "  %s %-22s %s\n", overallGlyph, e.Name, strings.Join(parts, "  "))
+		annotation := ""
+		if e.InCanonical && !e.HasSkillMD {
+			annotation = "  no SKILL.md"
+		}
+
+		fmt.Fprintf(out, "  %s %-22s %s%s\n", overallGlyph, e.Name, strings.Join(parts, "  "), annotation)
 	}
 }
 
@@ -179,6 +242,8 @@ func statusGlyph(s check.SkillStatus) string {
 		return "✗"
 	case check.StatusBroken:
 		return "✗"
+	case check.StatusCopy:
+		return "≈"
 	default:
 		return "?"
 	}

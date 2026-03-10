@@ -24,8 +24,13 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 	}
 	// entries may be nil/empty if canonicalDir doesn't exist — that's fine.
 
-	// Codex reads ~/.agents/skills/ natively — all real dirs are synced.
-	if harnessName == "codex" {
+	// Build set of source skill names (dirs and symlinks to dirs; plain files skipped).
+	type sourceInfo struct {
+		isSymlink  bool
+		hasSkillMD bool
+	}
+	buildSourceSkills := func() map[string]sourceInfo {
+		skills := make(map[string]sourceInfo)
 		for _, entry := range entries {
 			name := entry.Name()
 			srcPath := filepath.Join(canonicalDir, name)
@@ -34,13 +39,25 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 				continue
 			}
 			isSymlink := fi.Mode()&os.ModeSymlink != 0
+			// Include real dirs and symlinks (symlinks may point to dirs)
 			if !entry.IsDir() && !isSymlink {
-				continue // plain file
+				continue // plain file, skip
 			}
-			if isSymlink {
-				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSkipped})
+			// Check if SKILL.md exists in the canonical (real) skill dir.
+			_, mdErr := os.Stat(filepath.Join(canonicalDir, name, "SKILL.md"))
+			skills[name] = sourceInfo{isSymlink: isSymlink, hasSkillMD: mdErr == nil}
+		}
+		return skills
+	}
+
+	// Codex reads ~/.agents/skills/ natively — all real dirs are synced.
+	if harnessName == "codex" {
+		sourceSkills := buildSourceSkills()
+		for name, info := range sourceSkills {
+			if info.isSymlink {
+				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSkipped, HasSkillMD: info.hasSkillMD})
 			} else {
-				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSynced})
+				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSynced, HasSkillMD: info.hasSkillMD})
 			}
 		}
 		return result
@@ -48,30 +65,12 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 
 	destDir := harness.GlobalSkillsDir(home, harnessName)
 
-	// Build set of source skill names (dirs and symlinks to dirs; plain files skipped).
-	type sourceInfo struct {
-		isSymlink bool
-	}
-	sourceSkills := make(map[string]sourceInfo)
-	for _, entry := range entries {
-		name := entry.Name()
-		srcPath := filepath.Join(canonicalDir, name)
-		fi, err := os.Lstat(srcPath)
-		if err != nil {
-			continue
-		}
-		isSymlink := fi.Mode()&os.ModeSymlink != 0
-		// Include real dirs and symlinks (symlinks may point to dirs)
-		if !entry.IsDir() && !isSymlink {
-			continue // plain file, skip
-		}
-		sourceSkills[name] = sourceInfo{isSymlink: isSymlink}
-	}
+	sourceSkills := buildSourceSkills()
 
 	// Check each source skill against the harness dir.
 	for name, info := range sourceSkills {
 		if info.isSymlink {
-			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSkipped})
+			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSkipped, HasSkillMD: info.hasSkillMD})
 			continue
 		}
 
@@ -79,23 +78,23 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 		lfi, err := os.Lstat(link)
 		if err != nil {
 			if os.IsNotExist(err) {
-				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusMissing})
+				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusMissing, HasSkillMD: info.hasSkillMD})
 			} else {
-				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: err.Error()})
+				result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: err.Error(), HasSkillMD: info.hasSkillMD})
 			}
 			continue
 		}
 
 		if lfi.Mode()&os.ModeSymlink == 0 {
-			// Non-symlink entry (user-managed dir) — treat as synced
-			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSynced})
+			// Non-symlink entry (user-managed copy) — functional but may drift
+			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusCopy, HasSkillMD: info.hasSkillMD})
 			continue
 		}
 
 		// Symlink exists — check if target resolves
 		target, err := os.Readlink(link)
 		if err != nil {
-			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: err.Error()})
+			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: err.Error(), HasSkillMD: info.hasSkillMD})
 			continue
 		}
 
@@ -106,11 +105,11 @@ func AuditGlobal(home, harnessName string) HarnessResult {
 		}
 
 		if _, err := os.Stat(resolvedTarget); err != nil {
-			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: target})
+			result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusBroken, Detail: target, HasSkillMD: info.hasSkillMD})
 			continue
 		}
 
-		result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSynced, Detail: target})
+		result.Skills = append(result.Skills, SkillEntry{Name: name, Status: StatusSynced, Detail: target, HasSkillMD: info.hasSkillMD})
 	}
 
 	// Check for orphans: entries in harness dir with no corresponding source.

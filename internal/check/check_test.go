@@ -83,3 +83,19 @@ func TestAudit_GlobalResultsPerHarness(t *testing.T) {
 		assert.True(t, ok, "should have global result for harness %s", name)
 	}
 }
+
+func TestStatusCopy_String(t *testing.T) { assert.Equal(t, "copy", StatusCopy.String()) }
+
+func TestSummary_CopyCountsAsOK(t *testing.T) {
+	result := &AuditResult{Project: []ProjectSkillEntry{{Name: "skill-a", InCanonical: true, HasSkillMD: true, HarnessStatus: map[string]SkillStatus{"claude": StatusCopy}}}, InProject: true}
+	ok, total := result.Summary()
+	assert.Equal(t, 2, ok)
+	assert.Equal(t, 2, total)
+}
+
+func TestSummary_MissingSkillMDCountsAsNotOK(t *testing.T) {
+	result := &AuditResult{Project: []ProjectSkillEntry{{Name: "skill-a", InCanonical: true, HasSkillMD: false, HarnessStatus: map[string]SkillStatus{"claude": StatusSynced}}}, InProject: true}
+	ok, total := result.Summary()
+	assert.Equal(t, 1, ok)
+	assert.Equal(t, 2, total)
+}

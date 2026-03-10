@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
+	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/spf13/cobra"
 )
 
@@ -114,6 +115,8 @@ skills (externally managed).`,
 }
 
 func runSkillsSync(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
@@ -121,25 +124,58 @@ func runSkillsSync(cmd *cobra.Command, args []string) error {
 
 	registry := harness.NewRegistry()
 	synced := 0
+	var installedHarnesses []string
 
 	for _, name := range registry.All() {
 		h := registry.Get(name)
 		if _, found := h.Detect(); !found {
-			fmt.Printf("  %-12s SKIP (not installed)\n", name)
+			fmt.Fprintf(out, "  %-12s SKIP (not installed)\n", name)
 			continue
 		}
 
-		fmt.Printf("  %-12s ", name)
+		installedHarnesses = append(installedHarnesses, name)
+		fmt.Fprintf(out, "  %-12s ", name)
 		if err := harness.SyncGlobalSkills(home, name); err != nil {
-			fmt.Printf("FAILED: %v\n", err)
+			fmt.Fprintf(out, "FAILED: %v\n", err)
 		} else {
-			fmt.Println("OK")
+			fmt.Fprintln(out, "OK")
 			synced++
 		}
 	}
 
 	if synced == 0 {
-		fmt.Println("\nNo harnesses detected. Install claude, opencode, or codex first.")
+		fmt.Fprintln(out, "\nNo harnesses detected. Install claude, opencode, or codex first.")
+	}
+
+	// Project-level sync: if cwd contains .agents/skills/, symlink skills into harness dirs.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	// $HOME/.agents/skills/ holds personal (global) skills, not a project root.
+	// Running project sync from $HOME would call SymlinkHarnessSkills(home, name),
+	// which writes to $HOME/.<harness>/skills/ — a path that differs from the real
+	// harness global config dir (e.g. ~/.config/opencode/skills/ for OpenCode).
+	// Skip project sync whenever cwd is the user's home directory.
+	if cwd == home {
+		return nil
+	}
+	projectSkillsDir := filepath.Join(cwd, ".agents", "skills")
+	if info, err := os.Stat(projectSkillsDir); err != nil || !info.IsDir() {
+		return nil
+	}
+
+	fmt.Fprintln(out, "\nProject skills:")
+	for _, name := range installedHarnesses {
+		if name == "codex" {
+			continue // codex reads .agents/skills/ natively
+		}
+		fmt.Fprintf(out, "  %-12s ", name)
+		if err := scaffold.SymlinkHarnessSkills(cwd, name); err != nil {
+			fmt.Fprintf(out, "FAILED: %v\n", err)
+		} else {
+			fmt.Fprintln(out, "OK")
+		}
 	}
 
 	return nil

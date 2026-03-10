@@ -3,45 +3,53 @@ package check
 import (
 	"os"
 	"path/filepath"
+	"sort"
 )
 
-// EmbeddedSkillNames is the list of kasmos agent skill names that kas setup writes to .agents/skills/.
-var EmbeddedSkillNames = []string{
-	"kasmos-coder",
-	"kasmos-fixer",
-	"kasmos-lifecycle",
-	"kasmos-planner",
-	"kasmos-reviewer",
-}
-
-// AuditProject checks <dir>/.agents/skills/ against expected embedded skills
-// and verifies harness project skill dirs have valid symlinks.
+// AuditProject checks <dir>/.agents/skills/ dynamically and verifies harness
+// project skill dirs have valid symlinks. Results are derived from the skills
+// found in .agents/skills/ rather than a hardcoded list.
 func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 	canonicalDir := filepath.Join(dir, ".agents", "skills")
 
-	// Determine which embedded skills exist in canonical dir.
-	canonicalSet := make(map[string]bool)
 	entries, err := os.ReadDir(canonicalDir)
-	if err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				canonicalSet[e.Name()] = true
-			}
-		}
+	if err != nil {
+		// Surface the missing/unreadable canonical dir as an unhealthy entry.
+		// AuditProject is only called when InProject=true (.agents/ exists), so a
+		// missing or unreadable .agents/skills/ directory is itself a health issue.
+		return []ProjectSkillEntry{{
+			Name:          ".agents/skills",
+			InCanonical:   false,
+			HarnessStatus: map[string]SkillStatus{},
+		}}
 	}
 
-	var results []ProjectSkillEntry
-	for _, skillName := range EmbeddedSkillNames {
+	results := []ProjectSkillEntry{}
+	for _, e := range entries {
+		skillName := e.Name()
+		skillPath := filepath.Join(canonicalDir, skillName)
+
+		if !e.IsDir() {
+			// For symlinks, follow the link and check whether it resolves to a
+			// directory — symlinked skill directories are valid canonical entries.
+			if e.Type()&os.ModeSymlink == 0 {
+				continue // plain file — not a skill directory
+			}
+			fi, statErr := os.Stat(skillPath)
+			if statErr != nil || !fi.IsDir() {
+				continue // dangling symlink or symlink-to-file — not a skill dir
+			}
+		}
+
 		entry := ProjectSkillEntry{
 			Name:          skillName,
-			InCanonical:   canonicalSet[skillName],
+			InCanonical:   true,
 			HarnessStatus: make(map[string]SkillStatus),
 		}
 
-		if !entry.InCanonical {
-			results = append(results, entry)
-			continue
-		}
+		// Check SKILL.md existence.
+		_, statErr := os.Stat(filepath.Join(skillPath, "SKILL.md"))
+		entry.HasSkillMD = statErr == nil
 
 		// Check each harness's project skill dir for a symlink.
 		for _, harnessName := range harnessNames {
@@ -65,8 +73,8 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 			}
 
 			if lfi.Mode()&os.ModeSymlink == 0 {
-				// Non-symlink (user-managed) — treat as synced.
-				entry.HarnessStatus[harnessName] = StatusSynced
+				// Non-symlink directory — functional but may drift from source.
+				entry.HarnessStatus[harnessName] = StatusCopy
 				continue
 			}
 
@@ -91,6 +99,10 @@ func AuditProject(dir string, harnessNames []string) []ProjectSkillEntry {
 
 		results = append(results, entry)
 	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
 
 	return results
 }

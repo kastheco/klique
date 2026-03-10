@@ -55,37 +55,29 @@ func (s *StatusBar) SetData(data StatusBarData) {
 
 // Package-level styles — defined once to avoid repeated allocations.
 var statusBarStyle = lipgloss.NewStyle().
-	Background(ColorSurface).
 	Foreground(ColorText).
 	Padding(0, 1)
 
 var statusBarAppNameStyle = lipgloss.NewStyle().
-	Background(ColorSurface).
 	Bold(true)
 
 var statusBarVersionStyle = lipgloss.NewStyle().
-	Foreground(ColorMuted).
-	Background(ColorSurface)
+	Foreground(ColorMuted)
 
 var statusBarSepStyle = lipgloss.NewStyle().
-	Foreground(ColorOverlay).
-	Background(ColorSurface)
+	Foreground(ColorOverlay)
 
 var statusBarBranchStyle = lipgloss.NewStyle().
-	Foreground(ColorFoam).
-	Background(ColorSurface)
+	Foreground(ColorFoam)
 
 var statusBarWaveLabelStyle = lipgloss.NewStyle().
-	Foreground(ColorSubtle).
-	Background(ColorSurface)
+	Foreground(ColorSubtle)
 
 var statusBarTmuxCountStyle = lipgloss.NewStyle().
-	Foreground(ColorMuted).
-	Background(ColorSurface)
+	Foreground(ColorMuted)
 
 var statusBarProjectDirStyle = lipgloss.NewStyle().
-	Foreground(ColorMuted).
-	Background(ColorSurface)
+	Foreground(ColorMuted)
 
 // planStatusStyle returns a styled version of status using semantic colors.
 func planStatusStyle(status string) string {
@@ -98,20 +90,20 @@ func planStatusStyle(status string) string {
 	default:
 		fg = ColorMuted
 	}
-	return lipgloss.NewStyle().Foreground(fg).Background(ColorSurface).Render(status)
+	return lipgloss.NewStyle().Foreground(fg).Render(status)
 }
 
 // taskGlyphStr renders a single TaskGlyph symbol with the appropriate color.
 func taskGlyphStr(g TaskGlyph) string {
 	switch g {
 	case TaskGlyphComplete:
-		return lipgloss.NewStyle().Foreground(ColorFoam).Background(ColorSurface).Render("✓")
+		return lipgloss.NewStyle().Foreground(ColorFoam).Render("✓")
 	case TaskGlyphRunning:
-		return lipgloss.NewStyle().Foreground(ColorIris).Background(ColorSurface).Render("●")
+		return lipgloss.NewStyle().Foreground(ColorIris).Render("●")
 	case TaskGlyphFailed:
-		return lipgloss.NewStyle().Foreground(ColorLove).Background(ColorSurface).Render("✕")
+		return lipgloss.NewStyle().Foreground(ColorLove).Render("✕")
 	case TaskGlyphPending:
-		return lipgloss.NewStyle().Foreground(ColorMuted).Background(ColorSurface).Render("○")
+		return lipgloss.NewStyle().Foreground(ColorMuted).Render("○")
 	default:
 		return ""
 	}
@@ -126,15 +118,15 @@ func (s *StatusBar) rightPRGroup() string {
 
 	// Failing checks is the strongest signal regardless of review decision.
 	if s.data.PRChecks == "failing" {
-		return lipgloss.NewStyle().Foreground(ColorLove).Background(ColorSurface).Render("✕ pr")
+		return lipgloss.NewStyle().Foreground(ColorLove).Render("✕ pr")
 	}
 	switch s.data.PRState {
 	case "approved":
-		return lipgloss.NewStyle().Foreground(ColorFoam).Background(ColorSurface).Render("✓ pr")
+		return lipgloss.NewStyle().Foreground(ColorFoam).Render("✓ pr")
 	case "changes_requested":
-		return lipgloss.NewStyle().Foreground(ColorRose).Background(ColorSurface).Render("● pr")
+		return lipgloss.NewStyle().Foreground(ColorRose).Render("● pr")
 	default:
-		return lipgloss.NewStyle().Foreground(ColorMuted).Background(ColorSurface).Render("○ pr")
+		return lipgloss.NewStyle().Foreground(ColorMuted).Render("○ pr")
 	}
 }
 

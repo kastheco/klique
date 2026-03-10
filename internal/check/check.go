@@ -16,6 +16,7 @@ const (
 	StatusMissing                    // source exists, no link in harness
 	StatusOrphan                     // link in harness, no source
 	StatusBroken                     // symlink exists, target doesn't resolve
+	StatusCopy                       // non-symlink dir in harness (functional but may drift)
 )
 
 func (s SkillStatus) String() string {
@@ -30,6 +31,8 @@ func (s SkillStatus) String() string {
 		return "orphan"
 	case StatusBroken:
 		return "broken"
+	case StatusCopy:
+		return "copy"
 	default:
 		return "unknown"
 	}
@@ -37,9 +40,10 @@ func (s SkillStatus) String() string {
 
 // SkillEntry is one skill's audit result for one harness.
 type SkillEntry struct {
-	Name   string
-	Status SkillStatus
-	Detail string // e.g. symlink target, error message
+	Name       string
+	Status     SkillStatus
+	Detail     string // e.g. symlink target, error message
+	HasSkillMD bool   // whether SKILL.md exists in the canonical source dir
 }
 
 // HarnessResult holds audit results for one harness.
@@ -53,6 +57,7 @@ type HarnessResult struct {
 type ProjectSkillEntry struct {
 	Name          string
 	InCanonical   bool                   // exists in .agents/skills/
+	HasSkillMD    bool                   // SKILL.md exists in .agents/skills/<name>/
 	HarnessStatus map[string]SkillStatus // harness name → status
 }
 
@@ -109,9 +114,15 @@ func (r *AuditResult) Summary() (int, int) {
 			total++
 			continue
 		}
+		// SKILL.md presence check
+		total++
+		if p.HasSkillMD {
+			ok++
+		}
+		// Harness checks: StatusCopy counts as healthy
 		for _, st := range p.HarnessStatus {
 			total++
-			if st == StatusSynced {
+			if st == StatusSynced || st == StatusCopy {
 				ok++
 			}
 		}

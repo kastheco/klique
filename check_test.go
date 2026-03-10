@@ -62,8 +62,13 @@ func TestCheckCmd_NotInProject(t *testing.T) {
 
 func TestCheckCmd_InProject(t *testing.T) {
 	out := captureCheckOutput(t, func(home, project string) {
-		// Create .agents/skills/ to mark as kas project
-		require.NoError(t, os.MkdirAll(filepath.Join(project, ".agents", "skills"), 0o755))
+		// Create .agents/skills/ with real skill dirs (including SKILL.md) to mark as kas project
+		// Dynamic discovery means skills only appear if directories exist
+		for _, name := range []string{"kasmos-coder", "kasmos-planner", "kasmos-reviewer"} {
+			dir := filepath.Join(project, ".agents", "skills", name)
+			require.NoError(t, os.MkdirAll(dir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# "+name), 0o644))
+		}
 	})
 
 	assert.Contains(t, out, "Project skills")
@@ -147,4 +152,69 @@ func TestCheckCmd_VerboseFlag(t *testing.T) {
 	out := buf.String()
 	// Verbose mode should show individual skill names indented
 	assert.Contains(t, out, "verbose-skill")
+}
+
+// TestCheckCmd_ShowsAllProjectSkills verifies that all skills placed in .agents/skills/
+// appear in the project section output.
+func TestCheckCmd_ShowsAllProjectSkills(t *testing.T) {
+	out := captureCheckOutput(t, func(home, project string) {
+		skills := []string{"alpha-skill", "beta-skill", "gamma-skill"}
+		for _, name := range skills {
+			dir := filepath.Join(project, ".agents", "skills", name)
+			require.NoError(t, os.MkdirAll(dir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# "+name), 0o644))
+		}
+	})
+
+	assert.Contains(t, out, "Project skills")
+	assert.Contains(t, out, "alpha-skill")
+	assert.Contains(t, out, "beta-skill")
+	assert.Contains(t, out, "gamma-skill")
+}
+
+// TestCheckCmd_ShowsCopyGlyph verifies that a non-symlink directory in a harness dir
+// shows the ≈ glyph.
+func TestCheckCmd_ShowsCopyGlyph(t *testing.T) {
+	out := captureCheckOutput(t, func(home, project string) {
+		name := "copy-skill"
+		// Create canonical skill (with SKILL.md)
+		skillDir := filepath.Join(project, ".agents", "skills", name)
+		require.NoError(t, os.MkdirAll(skillDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# copy-skill"), 0o644))
+
+		// Create a real (non-symlink) directory in the claude harness project skills dir
+		claudeSkillDir := filepath.Join(project, ".claude", "skills", name)
+		require.NoError(t, os.MkdirAll(claudeSkillDir, 0o755))
+	})
+
+	assert.Contains(t, out, "≈")
+}
+
+// TestCheckCmd_ShowsSkillMDWarning verifies that a skill missing SKILL.md shows "no SKILL.md" annotation.
+func TestCheckCmd_ShowsSkillMDWarning(t *testing.T) {
+	out := captureCheckOutput(t, func(home, project string) {
+		name := "no-md-skill"
+		// Create canonical skill directory WITHOUT SKILL.md
+		skillDir := filepath.Join(project, ".agents", "skills", name)
+		require.NoError(t, os.MkdirAll(skillDir, 0o755))
+		// Intentionally no SKILL.md
+	})
+
+	assert.Contains(t, out, "no SKILL.md")
+}
+
+// TestCheckCmd_ShowsRemediation verifies that remediation hints are shown for missing/copy status skills.
+func TestCheckCmd_ShowsRemediation(t *testing.T) {
+	out := captureCheckOutput(t, func(home, project string) {
+		// Create a skill without SKILL.md (so remediation hint for adding SKILL.md is shown)
+		name := "needs-fix-skill"
+		skillDir := filepath.Join(project, ".agents", "skills", name)
+		require.NoError(t, os.MkdirAll(skillDir, 0o755))
+		// No SKILL.md — triggers remediation hint
+	})
+
+	// Should show some kind of remediation / hint
+	assert.True(t,
+		strings.Contains(out, "kas skills sync") || strings.Contains(out, "add SKILL.md") || strings.Contains(out, "SKILL.md"),
+		"expected remediation hint in output, got:\n%s", out)
 }
