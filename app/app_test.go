@@ -57,6 +57,17 @@ func newTestHome() *home {
 	}
 }
 
+func TestView_UsesCellMotionMouseMode(t *testing.T) {
+	h := newTestHome()
+	h.termHeight = 20
+	h.contentHeight = 10
+	h.nav.SetSize(24, 10)
+	h.tabbedWindow.SetSize(56, 10)
+
+	v := h.View()
+	assert.Equal(t, tea.MouseModeCellMotion, v.MouseMode)
+}
+
 func TestSpawnAdHocAgent_DefaultCreatesWorktree(t *testing.T) {
 	h := newTestHome()
 	model, cmd := h.spawnAdHocAgent("my-agent", "", "")

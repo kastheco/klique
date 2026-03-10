@@ -2255,7 +2255,9 @@ func (m *home) View() tea.View {
 
 	v := tea.NewView(result)
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeAllMotion
+	// We only use click/release/wheel interactions. All-motion floods Update with
+	// hover events and makes the full-screen zone scan/path render laggy.
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
