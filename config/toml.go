@@ -36,10 +36,10 @@ func (a TOMLAgent) toProfile() AgentProfile {
 
 // TOMLUIConfig holds UI-specific settings from the [ui] TOML table.
 type TOMLUIConfig struct {
-	AnimateBanner      bool `toml:"animate_banner"`
-	AutoAdvanceWaves   bool `toml:"auto_advance_waves"`
-	AutoReviewFix      bool `toml:"auto_review_fix"`
-	MaxReviewFixCycles int  `toml:"max_review_fix_cycles"`
+	AnimateBanner      bool  `toml:"animate_banner"`
+	AutoAdvanceWaves   bool  `toml:"auto_advance_waves"`
+	AutoReviewFix      *bool `toml:"auto_review_fix"`
+	MaxReviewFixCycles *int  `toml:"max_review_fix_cycles"`
 }
 
 // TOMLTelemetryConfig holds telemetry settings from the [telemetry] TOML table.
@@ -57,27 +57,36 @@ type TOMLHook struct {
 	Events  []string          `json:"events,omitempty"  toml:"events,omitempty"`
 }
 
+// TOMLOrchestrationConfig holds orchestration settings from the [orchestration] TOML table.
+type TOMLOrchestrationConfig struct {
+	// BlueprintSkipThreshold is the maximum task count for single-agent mode.
+	// When <= this value, elaboration and wave orchestration are skipped.
+	BlueprintSkipThreshold *int `toml:"blueprint_skip_threshold,omitempty"`
+}
+
 // TOMLConfig is the top-level TOML file structure.
 type TOMLConfig struct {
-	Phases      map[string]string    `toml:"phases"`
-	Agents      map[string]TOMLAgent `toml:"agents"`
-	UI          TOMLUIConfig         `toml:"ui"`
-	Telemetry   TOMLTelemetryConfig  `toml:"telemetry"`
-	DatabaseURL string               `toml:"database_url,omitempty"`
-	Hooks       []TOMLHook           `toml:"hooks"`
+	Phases        map[string]string       `toml:"phases"`
+	Agents        map[string]TOMLAgent    `toml:"agents"`
+	UI            TOMLUIConfig            `toml:"ui"`
+	Telemetry     TOMLTelemetryConfig     `toml:"telemetry"`
+	Orchestration TOMLOrchestrationConfig `toml:"orchestration"`
+	DatabaseURL   string                  `toml:"database_url,omitempty"`
+	Hooks         []TOMLHook              `toml:"hooks"`
 }
 
 // TOMLConfigResult holds the parsed config in terms of internal types.
 type TOMLConfigResult struct {
-	Profiles           map[string]AgentProfile
-	PhaseRoles         map[string]string
-	AnimateBanner      bool
-	AutoAdvanceWaves   bool
-	AutoReviewFix      bool
-	MaxReviewFixCycles int
-	TelemetryEnabled   *bool
-	DatabaseURL        string
-	Hooks              []TOMLHook
+	Profiles               map[string]AgentProfile
+	PhaseRoles             map[string]string
+	AnimateBanner          bool
+	AutoAdvanceWaves       bool
+	AutoReviewFix          *bool
+	MaxReviewFixCycles     *int
+	TelemetryEnabled       *bool
+	DatabaseURL            string
+	BlueprintSkipThreshold *int
+	Hooks                  []TOMLHook
 }
 
 // LoadTOMLConfigFrom reads and parses a TOML config file,
@@ -89,15 +98,16 @@ func LoadTOMLConfigFrom(path string) (*TOMLConfigResult, error) {
 	}
 
 	result := &TOMLConfigResult{
-		Profiles:           make(map[string]AgentProfile),
-		PhaseRoles:         tc.Phases,
-		AnimateBanner:      tc.UI.AnimateBanner,
-		AutoAdvanceWaves:   tc.UI.AutoAdvanceWaves,
-		AutoReviewFix:      tc.UI.AutoReviewFix,
-		MaxReviewFixCycles: tc.UI.MaxReviewFixCycles,
-		TelemetryEnabled:   tc.Telemetry.Enabled,
-		DatabaseURL:        tc.DatabaseURL,
-		Hooks:              tc.Hooks,
+		Profiles:               make(map[string]AgentProfile),
+		PhaseRoles:             tc.Phases,
+		AnimateBanner:          tc.UI.AnimateBanner,
+		AutoAdvanceWaves:       tc.UI.AutoAdvanceWaves,
+		AutoReviewFix:          tc.UI.AutoReviewFix,
+		MaxReviewFixCycles:     tc.UI.MaxReviewFixCycles,
+		TelemetryEnabled:       tc.Telemetry.Enabled,
+		DatabaseURL:            tc.DatabaseURL,
+		BlueprintSkipThreshold: tc.Orchestration.BlueprintSkipThreshold,
+		Hooks:                  tc.Hooks,
 	}
 
 	for name, agent := range tc.Agents {

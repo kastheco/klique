@@ -16,6 +16,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/orchestration"
+	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/ui"
@@ -733,6 +734,58 @@ func TestToggleAutoReviewFix(t *testing.T) {
 	assert.False(t, m.appConfig.AutoReviewFix)
 }
 
+func TestEnsureProcessor_RefreshesReviewFixConfig(t *testing.T) {
+	store := taskstore.NewTestSQLiteStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: "disabled.md",
+		Status:   taskstore.StatusReviewing,
+	}))
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{
+		Filename: "enabled.md",
+		Status:   taskstore.StatusReviewing,
+	}))
+
+	h := &home{
+		appConfig:             &config.Config{AutoReviewFix: false, MaxReviewFixCycles: 2},
+		taskStore:             store,
+		taskStoreProject:      "proj",
+		taskStateDir:          t.TempDir(),
+		pendingReviewFeedback: make(map[string]string),
+	}
+
+	proc := h.ensureProcessor()
+	require.NotNil(t, proc)
+	actions := proc.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "disabled.md",
+		Body:     "fix this",
+	}})
+	require.Len(t, actions, 1)
+	_, ok := actions[0].(loop.ReviewChangesAction)
+	assert.True(t, ok)
+
+	h.appConfig.AutoReviewFix = true
+	h.appConfig.MaxReviewFixCycles = 4
+	proc = h.ensureProcessor()
+	actions = proc.ProcessFSMSignals([]taskfsm.Signal{{
+		Event:    taskfsm.ReviewChangesRequested,
+		TaskFile: "enabled.md",
+		Body:     "fix this",
+	}})
+
+	var foundCoder, foundIncrement bool
+	for _, action := range actions {
+		if _, ok := action.(loop.SpawnCoderAction); ok {
+			foundCoder = true
+		}
+		if _, ok := action.(loop.IncrementReviewCycleAction); ok {
+			foundIncrement = true
+		}
+	}
+	assert.True(t, foundCoder)
+	assert.True(t, foundIncrement)
+}
+
 func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 	store := taskstore.NewTestSQLiteStore(t)
 	planFile := "test.md"
@@ -779,6 +832,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 	dir := t.TempDir()
 	plansDir := filepath.Join(dir, "docs", "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	threshold := 0
 
 	const planFile = "test-implement-from-db.md"
 	const planContent = "# Plan\n\n**Goal:** Test DB read\n\n## Wave 1\n\n### Task 1: Do the thing\n\nDo it.\n"
@@ -800,6 +854,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
+		appConfig:          &config.Config{BlueprintSkipThresholdValue: &threshold},
 		taskState:          ps,
 		taskStore:          store,
 		taskStoreProject:   "proj",

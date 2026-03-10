@@ -35,6 +35,17 @@ type SpawnCoderAction struct {
 func (SpawnCoderAction) Kind() string  { return "spawn_coder" }
 func (SpawnCoderAction) sealedAction() {}
 
+// ReviewChangesAction signals a validated review-changes transition and carries
+// the reviewer feedback so callers can perform side effects only after the FSM
+// accepted the signal.
+type ReviewChangesAction struct {
+	PlanFile string
+	Feedback string
+}
+
+func (ReviewChangesAction) Kind() string  { return "review_changes" }
+func (ReviewChangesAction) sealedAction() {}
+
 // SpawnElaboratorAction instructs the caller to launch an elaborator agent.
 type SpawnElaboratorAction struct {
 	PlanFile string

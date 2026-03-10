@@ -543,10 +543,13 @@ func TestImplementFinishedSignal_SpawnsReviewer(t *testing.T) {
 	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(coderInst)
 
+	appCfg := config.DefaultConfig()
+	appCfg.AutoReviewFix = true
+
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
-		appConfig:             config.DefaultConfig(),
+		appConfig:             appCfg,
 		nav:                   list,
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
@@ -624,10 +627,13 @@ func TestReviewChangesSignal_RespawnsFixer(t *testing.T) {
 	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(reviewerInst)
 
+	appCfg := config.DefaultConfig()
+	appCfg.AutoReviewFix = true
+
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
-		appConfig:             config.DefaultConfig(),
+		appConfig:             appCfg,
 		nav:                   list,
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
@@ -707,10 +713,13 @@ func TestReviewerTmuxDeath_DoesNotAutoApprove(t *testing.T) {
 	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(reviewerInst)
 
+	appCfg := config.DefaultConfig()
+	appCfg.AutoReviewFix = true
+
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
-		appConfig:             config.DefaultConfig(),
+		appConfig:             appCfg,
 		nav:                   list,
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
@@ -775,10 +784,13 @@ func TestReviewCycle_InstanceTitlesIncludeCycleNumber(t *testing.T) {
 	list := ui.NewNavigationPanel(&sp)
 	_ = list.AddInstance(reviewerInst)
 
+	appCfg := config.DefaultConfig()
+	appCfg.AutoReviewFix = true
+
 	h := &home{
 		ctx:                   context.Background(),
 		state:                 stateDefault,
-		appConfig:             config.DefaultConfig(),
+		appConfig:             appCfg,
 		nav:                   list,
 		menu:                  ui.NewMenu(),
 		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),

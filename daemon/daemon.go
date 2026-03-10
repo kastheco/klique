@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -46,6 +47,30 @@ type daemonStateAdapter struct {
 	d *Daemon
 }
 
+// activePlansByProject counts distinct plan files currently running per project.
+func (a *daemonStateAdapter) activePlansByProject() map[string]int {
+	counts := map[string]int{}
+	for _, inst := range a.d.spawner.RunningInstances() {
+		if inst.Project == "" {
+			continue
+		}
+		key := inst.Project + "\x00" + inst.PlanFile
+		counts[key]++
+	}
+	// Collapse to unique-plan count per project.
+	perProject := map[string]int{}
+	seen := map[string]struct{}{}
+	for k := range counts {
+		parts := strings.SplitN(k, "\x00", 2)
+		proj := parts[0]
+		if _, ok := seen[k]; !ok {
+			seen[k] = struct{}{}
+			perProject[proj]++
+		}
+	}
+	return perProject
+}
+
 func (a *daemonStateAdapter) Status() api.StatusResponse {
 	a.d.mu.RLock()
 	defer a.d.mu.RUnlock()
@@ -54,9 +79,10 @@ func (a *daemonStateAdapter) Status() api.StatusResponse {
 		uptime = time.Since(a.d.startedAt).Round(time.Second).String()
 	}
 	repos := a.d.repos.List()
+	active := a.activePlansByProject()
 	repoStatuses := make([]api.RepoStatus, len(repos))
 	for i, r := range repos {
-		repoStatuses[i] = api.RepoStatus{Path: r.Path, Project: r.Project}
+		repoStatuses[i] = api.RepoStatus{Path: r.Path, Project: r.Project, ActivePlans: active[r.Project]}
 	}
 	return api.StatusResponse{
 		Running:   true,
@@ -67,10 +93,11 @@ func (a *daemonStateAdapter) Status() api.StatusResponse {
 }
 
 func (a *daemonStateAdapter) ListRepos() []api.RepoStatus {
+	active := a.activePlansByProject()
 	repos := a.d.repos.List()
 	out := make([]api.RepoStatus, len(repos))
 	for i, r := range repos {
-		out[i] = api.RepoStatus{Path: r.Path, Project: r.Project}
+		out[i] = api.RepoStatus{Path: r.Path, Project: r.Project, ActivePlans: active[r.Project]}
 	}
 	return out
 }
@@ -136,6 +163,7 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 	}))
 
 	repos := NewRepoManager()
+	repos.autoReviewFix = cfg.AutoReviewFix
 	repos.maxReviewFixCycles = cfg.MaxReviewFixCycles
 	// Load hook configs from the project-local app config (config.toml / config.json).
 	// This is best-effort — failures are silently ignored so the daemon always starts.

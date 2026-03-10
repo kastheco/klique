@@ -59,21 +59,27 @@ func toTaskFSMHooks(entries []config.TOMLHook) []taskfsm.HookConfig {
 // Returns nil when taskStore is not set (e.g. in tests that don't need signal processing),
 // in which case the caller must fall back to the legacy FSM signal handling code.
 func (m *home) ensureProcessor() *loop.Processor {
+	autoReviewFix := false
+	maxCycles := 0
+	if m.appConfig != nil {
+		autoReviewFix = m.appConfig.AutoReviewFix
+		maxCycles = m.appConfig.MaxReviewFixCycles
+	}
 	if m.processor != nil {
+		m.processor.SetReviewFixConfig(autoReviewFix, maxCycles)
 		return m.processor
 	}
 	if m.taskStore == nil {
 		return nil
 	}
-	var maxCycles int
 	var hooks *taskfsm.HookRegistry
 	if m.appConfig != nil {
-		maxCycles = m.appConfig.MaxReviewFixCycles
 		if len(m.appConfig.Hooks) > 0 {
 			hooks = taskfsm.BuildHookRegistry(toTaskFSMHooks(m.appConfig.Hooks))
 		}
 	}
 	m.processor = loop.NewProcessor(loop.ProcessorConfig{
+		AutoReviewFix:      autoReviewFix,
 		Store:              m.taskStore,
 		Project:            m.taskStoreProject,
 		Dir:                m.taskStateDir,
@@ -81,6 +87,29 @@ func (m *home) ensureProcessor() *loop.Processor {
 		Hooks:              hooks,
 	})
 	return m.processor
+}
+
+func (m *home) handleReviewChangesRequested(planFile, feedback string) tea.Cmd {
+	m.pendingReviewFeedback[planFile] = feedback
+
+	var cmds []tea.Cmd
+	truncated := feedback
+	if len(truncated) > 200 {
+		truncated = truncated[:200] + "..."
+	}
+	if cmd := m.postClickUpProgress(planFile, "review_changes_requested", truncated); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile == planFile && inst.IsReviewer {
+			_ = inst.Pause()
+			break
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func assemblePRMetadata(
@@ -1555,6 +1584,69 @@ func (m *home) spawnElaborator(planFile string) (tea.Model, tea.Cmd) {
 
 	m.toastManager.Info(fmt.Sprintf("elaborating plan '%s' before implementation", planName))
 	return m, tea.Batch(tea.RequestWindowSize, startCmd, m.toastTickCmd())
+}
+
+// blueprintSkipThreshold returns the configured threshold for blueprint-skip mode.
+// When the plan's total task count is <= this value, elaboration and wave orchestration
+// are skipped and a single coder agent implements all tasks sequentially.
+// Returns the default of 2 when appConfig is nil or not explicitly configured.
+func (m *home) blueprintSkipThreshold() int {
+	if m.appConfig == nil {
+		return 2
+	}
+	return m.appConfig.BlueprintSkipThreshold()
+}
+
+// clearWaveOrchestratorState removes any wave-orchestrator bookkeeping for the
+// given plan from both the home model and the processor-backed signal gate.
+// This is required before switching an implementing plan onto the single-agent
+// blueprint-skip path so later implement_finished signals are not suppressed.
+func (m *home) clearWaveOrchestratorState(planFile string) {
+	delete(m.waveOrchestrators, planFile)
+	if proc := m.ensureProcessor(); proc != nil {
+		proc.SetWaveOrchestratorActive(planFile, false)
+	}
+}
+
+// hasActiveBlueprintSkipCoder reports whether a non-wave coder is already
+// active for this plan. Used to prevent duplicate small-plan implement spawns
+// when the user re-triggers "implement" while a single-agent implementation is
+// already in flight.
+func (m *home) hasActiveBlueprintSkipCoder(planFile string) bool {
+	for _, inst := range m.nav.GetInstances() {
+		if inst.TaskFile != planFile || inst.AgentType != session.AgentTypeCoder {
+			continue
+		}
+		if inst.WaveNumber != 0 || inst.SoloAgent {
+			continue
+		}
+		if inst.ImplementationComplete || inst.Exited || inst.Paused() {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// spawnBlueprintSkipAgent transitions the plan to implementing and spawns a single
+// coder agent to implement all tasks sequentially. Used when the plan's task count
+// is at or below blueprintSkipThreshold(). No WaveOrchestrator is created — the
+// agent signals implement_finished directly, which triggers the existing review flow.
+func (m *home) spawnBlueprintSkipAgent(planFile string, plan *taskparser.Plan) (tea.Model, tea.Cmd) {
+	if err := m.fsmSetImplementing(planFile); err != nil {
+		return m, m.handleError(err)
+	}
+	m.loadTaskState()
+	m.updateSidebarTasks()
+
+	totalTasks := 0
+	for _, wave := range plan.Waves {
+		totalTasks += len(wave.Tasks)
+	}
+	m.toastManager.Info(fmt.Sprintf("small plan (%d tasks) - running single agent", totalTasks))
+
+	model, cmd := m.spawnTaskAgent(planFile, "implement", orchestration.BuildBlueprintSkipPrompt(planFile, plan))
+	return model, tea.Batch(cmd, m.toastTickCmd())
 }
 
 // viewSelectedPlan renders the selected plan's markdown in the preview pane.

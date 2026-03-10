@@ -193,6 +193,20 @@ type Config struct {
 	DatabaseURL string `json:"database_url,omitempty"`
 	// Hooks configures FSM transition hooks loaded from config.json or overlaid from config.toml.
 	Hooks []TOMLHook `json:"hooks,omitempty"`
+	// BlueprintSkipThresholdValue is the maximum task count below which single-agent
+	// blueprint-skip mode is used instead of wave orchestration.
+	// When nil, the default threshold of 2 applies.
+	BlueprintSkipThresholdValue *int `json:"blueprint_skip_threshold,omitempty"`
+}
+
+// BlueprintSkipThreshold returns the configured threshold for single-agent mode.
+// Plans with <= threshold tasks skip elaboration and wave orchestration.
+// Defaults to 2 when not configured.
+func (c *Config) BlueprintSkipThreshold() int {
+	if c.BlueprintSkipThresholdValue == nil {
+		return 2
+	}
+	return *c.BlueprintSkipThresholdValue
 }
 
 // DefaultConfig builds a Config populated with sensible out-of-the-box values.
@@ -350,11 +364,11 @@ func LoadConfig() *Config {
 		if tomlCfg.AutoAdvanceWaves {
 			cfg.AutoAdvanceWaves = true
 		}
-		if tomlCfg.AutoReviewFix {
-			cfg.AutoReviewFix = true
+		if tomlCfg.AutoReviewFix != nil {
+			cfg.AutoReviewFix = *tomlCfg.AutoReviewFix
 		}
-		if tomlCfg.MaxReviewFixCycles > 0 {
-			cfg.MaxReviewFixCycles = tomlCfg.MaxReviewFixCycles
+		if tomlCfg.MaxReviewFixCycles != nil {
+			cfg.MaxReviewFixCycles = *tomlCfg.MaxReviewFixCycles
 		}
 		if tomlCfg.TelemetryEnabled != nil {
 			cfg.TelemetryEnabled = tomlCfg.TelemetryEnabled
@@ -364,6 +378,9 @@ func LoadConfig() *Config {
 		}
 		if len(tomlCfg.Hooks) > 0 {
 			cfg.Hooks = tomlCfg.Hooks
+		}
+		if tomlCfg.BlueprintSkipThreshold != nil {
+			cfg.BlueprintSkipThresholdValue = tomlCfg.BlueprintSkipThreshold
 		}
 	}
 
