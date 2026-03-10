@@ -76,7 +76,11 @@ doctord:
     done
     echo
     echo "daemon api:"
-    socket_path="${XDG_RUNTIME_DIR:-/tmp}/kasmos/kas.sock"
+    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        socket_path="$XDG_RUNTIME_DIR/kasmos/kas.sock"
+    else
+        socket_path="/tmp/kasmos-$(id -u)/kas.sock"
+    fi
     if [ -S "$socket_path" ]; then
         echo "daemon socket present: $socket_path"
     else

@@ -1061,6 +1061,7 @@ func (m *home) executeTaskStage(planFile, stage string) (tea.Model, tea.Cmd) {
 
 		// Blueprint-skip: for small plans, bypass elaboration and wave orchestration.
 		if orchestration.ShouldBlueprintSkip(plan, m.blueprintSkipThreshold()) {
+			delete(m.waveOrchestrators, planFile)
 			return m.spawnBlueprintSkipAgent(planFile, plan)
 		}
 
