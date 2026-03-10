@@ -36,7 +36,7 @@ git diff $MERGE_BASE..HEAD
 
 If the diff is empty, approve immediately:
 ```bash
-echo "Approved. empty diff — no changes to review." > .kasmos/signals/review-approved-{{PLAN_FILENAME}}
+kas signal emit review_approved {{PLAN_FILENAME}} --payload "Approved. empty diff — no changes to review."
 ```
 Then stop. No further analysis is needed.
 
@@ -200,30 +200,31 @@ For trivial issues, fix them yourself instead of kicking back to the coder:
 - Obvious one-liner fixes (wrong constant name, missing return)
 - Import cleanup
 
-**Kick to coder (write review-changes signal):**
+**Kick to coder (emit `review_changes_requested`):**
 - Anything requiring debugging or investigation
 - Logic changes, even small ones
 - Missing test coverage
 - Architectural concerns
 
-If only self-fixable issues remain, fix them all and write review-approved.
-If any coder-required issues exist, self-fix what you can first, then write review-changes.
+If only self-fixable issues remain, fix them all and emit `review_approved`.
+If any coder-required issues exist, self-fix what you can first, then emit `review_changes_requested`.
 
 ---
 
-## Signal files
+## Signals
 
-You MUST write exactly one signal file before you finish. Without it, the orchestrator
+You MUST emit exactly one signal before you finish. Use `kas signal emit`; do not write
+legacy `.kasmos/signals/review-*` files directly. Without a signal, the orchestrator
 cannot progress the plan lifecycle.
 
 **Approved** (zero coder-required issues remaining after self-fixes):
 ```bash
-echo "Approved. <brief summary>" > .kasmos/signals/review-approved-{{PLAN_FILENAME}}
+kas signal emit review_approved {{PLAN_FILENAME}} --payload "Approved. <brief summary>"
 ```
 
 **Changes required** (issues that need a coder):
 ```bash
-cat > .kasmos/signals/review-changes-{{PLAN_FILENAME}} << 'SIGNAL'
+kas signal emit review_changes_requested {{PLAN_FILENAME}} --payload "$(cat <<'SIGNAL'
 ## review round N
 
 ### critical
@@ -241,6 +242,7 @@ cat > .kasmos/signals/review-changes-{{PLAN_FILENAME}} << 'SIGNAL'
 ### suggestions (non-blocking)
 - [file:line] optional improvement
 SIGNAL
+)"
 ```
 
 Include the round number (1 for first review, 2 for re-review after fixes, etc.).

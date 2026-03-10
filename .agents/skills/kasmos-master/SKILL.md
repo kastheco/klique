@@ -121,11 +121,11 @@ Do not produce any other final status wording.
 
 ## Reporting Rules and Signal Conventions
 
-Signal names use bare slugs only (no `.md` extension in filenames). Use the
-existing scanner-recognised prefixes so the TUI metadata tick picks them up:
+Emit review outcomes through the signal gateway with `kas signal emit`; do not
+write legacy `.kasmos/signals/review-*` files directly.
 
-- `review-approved-<plan>` when all criteria pass.
-- `review-changes-<plan>` when work is blocked and follow-up is required.
+- `kas signal emit review_approved <planfile>` when all criteria pass.
+- `kas signal emit review_changes_requested <planfile>` when work is blocked and follow-up is required.
 
 Signal content should contain only what is needed for the next action, no prose-heavy preamble.
 

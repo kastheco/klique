@@ -217,15 +217,14 @@ git diff $MERGE_BASE..HEAD --name-only | xargs typos
 ### Approved
 
 ```bash
-mkdir -p .kasmos/signals
-echo "Approved. <one-sentence summary of what was reviewed and confirmed>" \
-  > .kasmos/signals/review-approved-<planfile>
+kas signal emit review_approved <planfile> \
+  --payload "Approved. <one-sentence summary of what was reviewed and confirmed>"
 ```
 
 Example:
 ```bash
-echo "Approved. all 4 tasks complete, tests pass, no issues found." \
-  > .kasmos/signals/review-approved-2026-02-27-feature.md
+kas signal emit review_approved 2026-02-27-feature.md \
+  --payload "Approved. all 4 tasks complete, tests pass, no issues found."
 ```
 
 ### Changes Needed
@@ -234,8 +233,7 @@ Write a structured heredoc signal. Include the round number, all findings groupe
 and file:line citations for every item.
 
 ```bash
-mkdir -p .kasmos/signals
-cat > .kasmos/signals/review-changes-<planfile> << 'EOF'
+kas signal emit review_changes_requested <planfile> --payload "$(cat <<'EOF'
 Round N — changes required.
 
 acceptance criteria:
@@ -266,11 +264,13 @@ verdict: changes required
 items in "self-fixed" are already resolved. only items in critical/important/minor require
 coder action.
 EOF
+)"
 ```
 
 If there are no findings in a tier, omit that tier header entirely.
 
 Keep findings to short bullet points with concrete remediation requests. Avoid generic review prose.
+Do not write legacy `.kasmos/signals/review-*` files directly.
 
 ### Mode-Specific Behavior
 
