@@ -89,7 +89,7 @@
       "textVerbosity": "low"
     },
     "fixer": {
-      "model": "openai/gpt-5.4",
+      "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
         "edit": "allow",
