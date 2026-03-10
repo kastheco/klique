@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/spf13/cobra"
 )
 
@@ -196,18 +197,18 @@ func newDaemonStatusCmd(socketPath *string) *cobra.Command {
 			}
 			defer resp.Body.Close()
 
-			var status map[string]interface{}
+			var status api.StatusResponse
 			if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
 				return fmt.Errorf("decode status: %w", err)
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "daemon status:")
-			repos, _ := status["repos"].([]interface{})
-			if len(repos) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "  no repos registered")
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, "daemon status:")
+			if len(status.Repos) == 0 {
+				fmt.Fprintln(out, "  no repos registered")
 			} else {
-				for _, r := range repos {
-					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", r)
+				for _, r := range status.Repos {
+					fmt.Fprintf(out, "  - %s (%s) [%d active plans]\n", r.Project, r.Path, r.ActivePlans)
 				}
 			}
 			return nil
