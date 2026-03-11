@@ -590,6 +590,19 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 				AgentType: "elaborator",
 			})
 		}
+	case loop.SpawnFixerAction:
+		opts := coderSpawnOpts(e, a.PlanFile, branchFor(a.PlanFile), a.Feedback)
+		if err := d.spawner.SpawnFixer(ctx, opts); err != nil {
+			d.logger.Error("spawn fixer failed", "plan", a.PlanFile, "err", err)
+		} else {
+			d.broadcaster.Emit(api.Event{
+				Kind:      "agent_spawned",
+				Message:   "fixer spawned for " + a.PlanFile,
+				Repo:      e.Path,
+				PlanFile:  a.PlanFile,
+				AgentType: "fixer",
+			})
+		}
 	case loop.PausePlanAgentAction:
 		if err := d.spawner.KillAgent(e.Path, a.PlanFile, a.AgentType); err != nil {
 			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)

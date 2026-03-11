@@ -106,6 +106,68 @@ func TestTmuxSpawner_SpawnElaborator_MissingRepoPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "RepoPath")
 }
 
+func TestTmuxSpawner_SpawnFixer_MissingBranch(t *testing.T) {
+	s := NewTmuxSpawner()
+	err := s.SpawnFixer(context.Background(), loop.SpawnOpts{
+		PlanFile: "plan.md",
+		RepoPath: "/tmp/repo",
+		Program:  "opencode",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Branch")
+}
+
+func TestTmuxSpawner_SpawnFixer_MissingRepoPath(t *testing.T) {
+	s := NewTmuxSpawner()
+	err := s.SpawnFixer(context.Background(), loop.SpawnOpts{
+		PlanFile: "plan.md",
+		Branch:   "plan/plan",
+		Program:  "opencode",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoPath")
+}
+
+func TestTmuxSpawner_SpawnFixer_KillsExistingAgents(t *testing.T) {
+	s := NewTmuxSpawner()
+
+	// Inject no-op kill so we don't need real tmux sessions.
+	s.hasAttachedClients = func(_ cmd.Executor, _ string) bool { return false }
+	s.sleep = func(_ time.Duration) {}
+	killCalls := []string{}
+	s.kill = func(inst *session.Instance) error {
+		killCalls = append(killCalls, inst.Title)
+		return nil
+	}
+	s.cleanupGracePeriod = 0
+
+	const repoPath = "/tmp/repo"
+	const planFile = "my-plan.md"
+
+	// Pre-register a fixer and a coder instance.
+	for _, agentType := range []string{session.AgentTypeFixer, session.AgentTypeCoder} {
+		key := instanceKey(repoPath, planFile, agentType)
+		inst := &session.Instance{Title: "my-plan-" + agentType}
+		s.mu.Lock()
+		s.instances[key] = inst
+		s.planFileByKey[key] = planFile
+		s.agentTypeByKey[key] = agentType
+		s.projectByKey[key] = "my-project"
+		s.mu.Unlock()
+	}
+
+	// SpawnFixer should kill both existing agents before failing on missing git.
+	// The error from spawnInSharedWorktree is expected (no real git/tmux).
+	_ = s.SpawnFixer(context.Background(), loop.SpawnOpts{
+		PlanFile: planFile,
+		RepoPath: repoPath,
+		Branch:   "plan/my-plan",
+	})
+
+	// Both the fixer and coder must have been killed (kill called for each).
+	assert.Len(t, killCalls, 2, "expected kill calls for fixer and coder")
+}
+
 func TestShouldSkipCleanup_AttachedClient(t *testing.T) {
 	assert.True(t, shouldSkipCleanup(true), "should skip cleanup when a client is attached")
 }
