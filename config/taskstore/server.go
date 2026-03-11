@@ -383,6 +383,99 @@ func NewHandler(store Store) http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Record PR review (idempotent — duplicate review IDs are silently ignored)
+	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/pr-reviews", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		var req struct {
+			ReviewID      int    `json:"review_id"`
+			ReviewState   string `json:"review_state"`
+			ReviewBody    string `json:"review_body"`
+			ReviewerLogin string `json:"reviewer_login"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+		if err := store.RecordPRReview(project, filename, req.ReviewID, req.ReviewState, req.ReviewBody, req.ReviewerLogin); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	// List pending PR reviews (fixer not yet dispatched)
+	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}/pr-reviews/pending", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		entries, err := store.ListPendingReviews(project, filename)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, entries)
+	})
+
+	// Check if a PR review has been processed (row exists in pr_reviews)
+	mux.HandleFunc("GET /v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/processed", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		reviewIDRaw := r.PathValue("reviewID")
+		reviewID, err := strconv.Atoi(reviewIDRaw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid review ID: "+err.Error())
+			return
+		}
+		processed := store.IsReviewProcessed(project, filename, reviewID)
+		writeJSON(w, http.StatusOK, map[string]bool{"processed": processed})
+	})
+
+	// Mark a PR review reaction as posted
+	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/reacted", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		reviewIDRaw := r.PathValue("reviewID")
+		reviewID, err := strconv.Atoi(reviewIDRaw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid review ID: "+err.Error())
+			return
+		}
+		if err := store.MarkReviewReacted(project, filename, reviewID); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Mark a PR review's fixer agent as dispatched
+	mux.HandleFunc("POST /v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/fixer-dispatched", func(w http.ResponseWriter, r *http.Request) {
+		project := r.PathValue("project")
+		filename := r.PathValue("filename")
+		reviewIDRaw := r.PathValue("reviewID")
+		reviewID, err := strconv.Atoi(reviewIDRaw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid review ID: "+err.Error())
+			return
+		}
+		if err := store.MarkReviewFixerDispatched(project, filename, reviewID); err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	// List topics
 	mux.HandleFunc("GET /v1/projects/{project}/topics", func(w http.ResponseWriter, r *http.Request) {
 		project := r.PathValue("project")

@@ -5,6 +5,17 @@ package taskstore
 
 import "time"
 
+// PRReviewEntry holds a persisted PR review record for a single plan.
+type PRReviewEntry struct {
+	ReviewID        int       `json:"review_id"`
+	ReviewState     string    `json:"review_state"`
+	ReviewBody      string    `json:"review_body"`
+	ReviewerLogin   string    `json:"reviewer_login"`
+	ReactionPosted  bool      `json:"reaction_posted"`
+	FixerDispatched bool      `json:"fixer_dispatched"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+}
+
 // Status represents the lifecycle state of a plan.
 // These constants mirror taskstate.Status to keep planstore self-contained
 // and avoid circular imports.
@@ -102,6 +113,13 @@ type Store interface {
 	// PR metadata
 	SetPRURL(project, filename, url string) error
 	SetPRState(project, filename, reviewDecision, checkStatus string) error
+
+	// PR reviews
+	RecordPRReview(project, filename string, reviewID int, state, body, reviewer string) error
+	IsReviewProcessed(project, filename string, reviewID int) bool
+	MarkReviewReacted(project, filename string, reviewID int) error
+	MarkReviewFixerDispatched(project, filename string, reviewID int) error
+	ListPendingReviews(project, filename string) ([]PRReviewEntry, error)
 
 	// Queries
 	List(project string) ([]TaskEntry, error)
