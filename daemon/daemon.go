@@ -38,6 +38,7 @@ type Daemon struct {
 	logger      *slog.Logger
 	pidLock     *PIDLock
 	broadcaster *api.EventBroadcaster
+	prMonitor   *PRMonitor
 	mu          sync.RWMutex
 	startedAt   time.Time
 }
@@ -181,6 +182,10 @@ func NewDaemon(cfg *DaemonConfig) (*Daemon, error) {
 		}
 	}
 
+	if cfg.PRMonitor.Enabled {
+		d.prMonitor = NewPRMonitor(cfg.PRMonitor, cfg.MaxReviewFixCycles, repos, d.broadcaster, logger, d.executeAction)
+	}
+
 	return d, nil
 }
 
@@ -309,6 +314,20 @@ func (d *Daemon) Run(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// PR monitor goroutine: poll open pull requests for new review comments.
+	if d.prMonitor != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := d.prMonitor.Run(ctx); err != nil {
+				if ctx.Err() == nil {
+					// Monitor exited while context is still live — log as a warning.
+					d.logger.Warn("pr monitor exited unexpectedly", "err", err)
+				}
+			}
+		}()
+	}
 
 	for {
 		select {
@@ -528,7 +547,9 @@ func reapStuckSignals(repos []RepoEntry, timeout time.Duration, logger *slog.Log
 // executeAction dispatches a single action to the configured spawner.
 // It resolves RepoPath from e.Path and looks up Branch from the task store so
 // that spawnInSharedWorktree has the required context.
-func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Action) {
+// Returns an error if the action fails so that callers (e.g. PRMonitor) can
+// decide whether to persist side-effects such as MarkReviewFixerDispatched.
+func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Action) error {
 	// branchFor looks up the git branch for a plan from the task store.
 	branchFor := func(planFile string) string {
 		if e.Store == nil {
@@ -551,28 +572,30 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		}
 		if err := d.spawner.SpawnReviewer(ctx, opts); err != nil {
 			d.logger.Error("spawn reviewer failed", "plan", a.PlanFile, "err", err)
-		} else {
-			d.broadcaster.Emit(api.Event{
-				Kind:      "agent_spawned",
-				Message:   "reviewer spawned for " + a.PlanFile,
-				Repo:      e.Path,
-				PlanFile:  a.PlanFile,
-				AgentType: "reviewer",
-			})
+			return err
 		}
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_spawned",
+			Message:   "reviewer spawned for " + a.PlanFile,
+			Repo:      e.Path,
+			PlanFile:  a.PlanFile,
+			AgentType: "reviewer",
+		})
+		return nil
 	case loop.SpawnCoderAction:
 		opts := coderSpawnOpts(e, a.PlanFile, branchFor(a.PlanFile), a.Feedback)
 		if err := d.spawner.SpawnCoder(ctx, opts); err != nil {
 			d.logger.Error("spawn coder failed", "plan", a.PlanFile, "err", err)
-		} else {
-			d.broadcaster.Emit(api.Event{
-				Kind:      "agent_spawned",
-				Message:   "coder spawned for " + a.PlanFile,
-				Repo:      e.Path,
-				PlanFile:  a.PlanFile,
-				AgentType: "coder",
-			})
+			return err
 		}
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_spawned",
+			Message:   "coder spawned for " + a.PlanFile,
+			Repo:      e.Path,
+			PlanFile:  a.PlanFile,
+			AgentType: "coder",
+		})
+		return nil
 	case loop.SpawnElaboratorAction:
 		opts := loop.SpawnOpts{
 			PlanFile: a.PlanFile,
@@ -581,40 +604,43 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		}
 		if err := d.spawner.SpawnElaborator(ctx, opts); err != nil {
 			d.logger.Error("spawn elaborator failed", "plan", a.PlanFile, "err", err)
-		} else {
-			d.broadcaster.Emit(api.Event{
-				Kind:      "agent_spawned",
-				Message:   "elaborator spawned for " + a.PlanFile,
-				Repo:      e.Path,
-				PlanFile:  a.PlanFile,
-				AgentType: "elaborator",
-			})
+			return err
 		}
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_spawned",
+			Message:   "elaborator spawned for " + a.PlanFile,
+			Repo:      e.Path,
+			PlanFile:  a.PlanFile,
+			AgentType: "elaborator",
+		})
+		return nil
 	case loop.SpawnFixerAction:
 		opts := coderSpawnOpts(e, a.PlanFile, branchFor(a.PlanFile), a.Feedback)
 		if err := d.spawner.SpawnFixer(ctx, opts); err != nil {
 			d.logger.Error("spawn fixer failed", "plan", a.PlanFile, "err", err)
-		} else {
-			d.broadcaster.Emit(api.Event{
-				Kind:      "agent_spawned",
-				Message:   "fixer spawned for " + a.PlanFile,
-				Repo:      e.Path,
-				PlanFile:  a.PlanFile,
-				AgentType: "fixer",
-			})
+			return err
 		}
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_spawned",
+			Message:   "fixer spawned for " + a.PlanFile,
+			Repo:      e.Path,
+			PlanFile:  a.PlanFile,
+			AgentType: "fixer",
+		})
+		return nil
 	case loop.PausePlanAgentAction:
 		if err := d.spawner.KillAgent(e.Path, a.PlanFile, a.AgentType); err != nil {
 			d.logger.Error("kill agent failed", "plan", a.PlanFile, "type", a.AgentType, "err", err)
-		} else {
-			d.broadcaster.Emit(api.Event{
-				Kind:      "agent_killed",
-				Message:   a.AgentType + " killed for " + a.PlanFile,
-				Repo:      e.Path,
-				PlanFile:  a.PlanFile,
-				AgentType: a.AgentType,
-			})
+			return err
 		}
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_killed",
+			Message:   a.AgentType + " killed for " + a.PlanFile,
+			Repo:      e.Path,
+			PlanFile:  a.PlanFile,
+			AgentType: a.AgentType,
+		})
+		return nil
 	case loop.AdvanceWaveAction:
 		d.logger.Info("wave advanced", "plan", a.PlanFile, "wave", a.Wave, "repo", e.Path)
 		d.broadcaster.Emit(api.Event{
@@ -623,6 +649,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
+		return nil
 	case loop.TransitionAction:
 		d.logger.Info("fsm transition", "plan", a.PlanFile, "event", a.Event, "repo", e.Path)
 		d.broadcaster.Emit(api.Event{
@@ -631,6 +658,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
+		return nil
 	case loop.ReviewApprovedAction:
 		d.logger.Info("review approved", "plan", a.PlanFile, "repo", e.Path)
 		d.broadcaster.Emit(api.Event{
@@ -639,6 +667,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
+		return nil
 	case loop.CreatePRAction:
 		d.logger.Info("create pr requested", "plan", a.PlanFile, "repo", e.Path)
 		d.broadcaster.Emit(api.Event{
@@ -647,6 +676,7 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
+		return nil
 	case loop.ReviewCycleLimitAction:
 		d.logger.Warn("review-fix cycle limit reached",
 			"plan", a.PlanFile, "cycle", a.Cycle, "limit", a.Limit, "repo", e.Path)
@@ -656,8 +686,10 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 			Repo:     e.Path,
 			PlanFile: a.PlanFile,
 		})
+		return nil
 	default:
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
+		return nil
 	}
 }
 
