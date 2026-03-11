@@ -16,8 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestPlanState creates an in-memory SQLite store pre-populated with two
-// test plans and returns the store, the repo root, and the project name.
+// setupTestPlanState creates an in-memory SQLite store pre-populated with three
+// test plans (ready, implementing, and cancelled) and returns the store, the
+// repo root, and the project name.
 func setupTestPlanState(t *testing.T) (taskstore.Store, string, string) {
 	t.Helper()
 	store := taskstore.NewTestSQLiteStore(t)
@@ -39,6 +40,13 @@ func setupTestPlanState(t *testing.T) (taskstore.Store, string, string) {
 		Branch:      "plan/implementing-plan",
 		CreatedAt:   time.Now(),
 	}))
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename:    "cancelled-plan",
+		Status:      taskstore.StatusCancelled,
+		Description: "cancelled plan",
+		Branch:      "plan/cancelled-plan",
+		CreatedAt:   time.Now(),
+	}))
 
 	return store, root, project
 }
@@ -53,14 +61,21 @@ func TestPlanList(t *testing.T) {
 		wantNotContain []string
 	}{
 		{
-			name:         "all plans",
-			wantContains: []string{"test-plan", "implementing-plan"},
+			name:           "all plans hides cancelled by default",
+			wantContains:   []string{"test-plan", "implementing-plan"},
+			wantNotContain: []string{"cancelled-plan"},
 		},
 		{
 			name:           "filter by ready",
 			statusFilter:   "ready",
 			wantContains:   []string{"test-plan"},
-			wantNotContain: []string{"implementing-plan"},
+			wantNotContain: []string{"implementing-plan", "cancelled-plan"},
+		},
+		{
+			name:           "filter by cancelled shows only cancelled",
+			statusFilter:   "cancelled",
+			wantContains:   []string{"cancelled-plan"},
+			wantNotContain: []string{"test-plan", "implementing-plan"},
 		},
 	}
 
@@ -698,8 +713,19 @@ func TestPlanList_WithStore(t *testing.T) {
 		Filename: "test.md", Status: "ready", Description: "test plan",
 	})
 	require.NoError(t, err)
+	err = backend.Create("test-project", taskstore.TaskEntry{
+		Filename: "cancelled.md", Status: taskstore.StatusCancelled, Description: "cancelled plan",
+	})
+	require.NoError(t, err)
 
-	output := executeTaskListWithStore(srv.URL, "test-project")
+	// Default (no filter): should show ready, hide cancelled.
+	output := executeTaskListWithStore(srv.URL, "test-project", "")
 	assert.Contains(t, output, "test.md")
 	assert.Contains(t, output, "ready")
+	assert.NotContains(t, output, "cancelled.md")
+
+	// Explicit --status cancelled: should show only cancelled.
+	output = executeTaskListWithStore(srv.URL, "test-project", "cancelled")
+	assert.Contains(t, output, "cancelled.md")
+	assert.NotContains(t, output, "test.md")
 }
