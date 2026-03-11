@@ -352,5 +352,20 @@ func (f *failingSubtaskStore) SetPRURL(project, filename, url string) error {
 func (f *failingSubtaskStore) SetPRState(project, filename, reviewDecision, checkStatus string) error {
 	return f.inner.SetPRState(project, filename, reviewDecision, checkStatus)
 }
+func (f *failingSubtaskStore) RecordPRReview(project, filename string, reviewID int, state, body, reviewer string) error {
+	return f.inner.RecordPRReview(project, filename, reviewID, state, body, reviewer)
+}
+func (f *failingSubtaskStore) IsReviewProcessed(project, filename string, reviewID int) bool {
+	return f.inner.IsReviewProcessed(project, filename, reviewID)
+}
+func (f *failingSubtaskStore) MarkReviewReacted(project, filename string, reviewID int) error {
+	return f.inner.MarkReviewReacted(project, filename, reviewID)
+}
+func (f *failingSubtaskStore) MarkReviewFixerDispatched(project, filename string, reviewID int) error {
+	return f.inner.MarkReviewFixerDispatched(project, filename, reviewID)
+}
+func (f *failingSubtaskStore) ListPendingReviews(project, filename string) ([]taskstore.PRReviewEntry, error) {
+	return f.inner.ListPendingReviews(project, filename)
+}
 func (f *failingSubtaskStore) Ping() error  { return f.inner.Ping() }
 func (f *failingSubtaskStore) Close() error { return f.inner.Close() }
