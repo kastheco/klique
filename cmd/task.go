@@ -51,6 +51,7 @@ func executeTaskRegister(project, filePath, branch, topic, description string, s
 
 // executeTaskList returns a formatted string listing all plans, optionally
 // filtered by status. Exported for testing without cobra plumbing.
+// When statusFilter is empty, cancelled tasks are hidden from the output.
 func executeTaskList(project, statusFilter string, store taskstore.Store) string {
 	ps, err := loadTaskStateByProject(project, store)
 	if err != nil {
@@ -59,6 +60,9 @@ func executeTaskList(project, statusFilter string, store taskstore.Store) string
 	var sb strings.Builder
 	for _, info := range ps.List() {
 		if statusFilter != "" && string(info.Status) != statusFilter {
+			continue
+		}
+		if statusFilter == "" && string(info.Status) == string(taskstore.StatusCancelled) {
 			continue
 		}
 		line := fmt.Sprintf("%-14s %-50s %s", info.Status, info.Filename, info.Branch)
@@ -70,7 +74,8 @@ func executeTaskList(project, statusFilter string, store taskstore.Store) string
 // executeTaskListWithStore returns a formatted string listing all plans from a
 // remote store backend. storeURL is the base URL of the task store server
 // (e.g. "http://athena:7433") and project is the project name to query.
-func executeTaskListWithStore(storeURL, project string) string {
+// When statusFilter is empty, cancelled tasks are hidden from the output.
+func executeTaskListWithStore(storeURL, project, statusFilter string) string {
 	store := taskstore.NewHTTPStore(storeURL, project)
 	ps, err := taskstate.Load(store, project, "")
 	if err != nil {
@@ -78,6 +83,12 @@ func executeTaskListWithStore(storeURL, project string) string {
 	}
 	var sb strings.Builder
 	for _, info := range ps.List() {
+		if statusFilter != "" && string(info.Status) != statusFilter {
+			continue
+		}
+		if statusFilter == "" && string(info.Status) == string(taskstore.StatusCancelled) {
+			continue
+		}
 		line := fmt.Sprintf("%-14s %-50s %s", info.Status, info.Filename, info.Branch)
 		sb.WriteString(strings.TrimRight(line, " ") + "\n")
 	}
