@@ -141,10 +141,10 @@ func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
 }
 
 func TestDaemon_RecoverOnRestart(t *testing.T) {
-	dir := t.TempDir()
+	sockDir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
-		SocketPath:   filepath.Join(dir, "kas.sock"),
+		SocketPath:   filepath.Join(sockDir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -343,6 +343,49 @@ func TestDaemon_ExecuteAction_ReviewCycleLimit(t *testing.T) {
 		Limit:    3,
 	}
 	assert.Equal(t, "review_cycle_limit", action.Kind())
+}
+
+func TestDaemon_ExecuteAction_SpawnFixer_EmitsEvent(t *testing.T) {
+	// SpawnFixerAction.Kind() must return the expected string.
+	action := loop.SpawnFixerAction{
+		PlanFile: "fix-me.md",
+		Feedback: "address review comments",
+	}
+	assert.Equal(t, "spawn_fixer", action.Kind())
+}
+
+func TestDaemon_ExecuteAction_SpawnFixer_BranchEmpty_Fails(t *testing.T) {
+	// When the task store returns no branch, executeAction must propagate the
+	// error from SpawnFixer (which fails inside spawnInSharedWorktree with
+	// "Branch is required"). This test validates the wiring without real tmux.
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	// Task exists but has no branch — simulates a newly created task.
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "fix-me.md",
+		Status:   taskstore.StatusImplementing,
+	}))
+
+	d := &Daemon{
+		repos:       NewRepoManager(),
+		spawner:     NewTmuxSpawner(),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+	e := RepoEntry{
+		Path:    t.TempDir(),
+		Project: project,
+		Store:   store,
+	}
+
+	// SpawnFixer will fail with "Branch is required" because the store entry
+	// has no branch set. executeAction must return the error and not panic.
+	err := d.executeAction(context.Background(), e, loop.SpawnFixerAction{
+		PlanFile: "fix-me.md",
+		Feedback: "please fix the comments",
+	})
+	require.Error(t, err, "executeAction must propagate spawn error when branch is empty")
+	assert.Contains(t, err.Error(), "Branch is required")
 }
 
 func TestReapStuckSignals(t *testing.T) {

@@ -273,6 +273,20 @@ func (s *TmuxSpawner) SpawnCoder(ctx context.Context, opts loop.SpawnOpts) error
 	return s.spawnInSharedWorktree(ctx, opts, session.AgentTypeCoder)
 }
 
+// SpawnFixer launches a fixer agent in the plan's shared worktree to address
+// reviewer feedback. Any running fixer or coder for the same plan is killed
+// first so the fixer starts with a clean slate.
+func (s *TmuxSpawner) SpawnFixer(ctx context.Context, opts loop.SpawnOpts) error {
+	s.logger.Info("spawn fixer", "plan", opts.PlanFile, "wave", opts.Wave)
+	if err := s.KillAgent(opts.RepoPath, opts.PlanFile, session.AgentTypeFixer); err != nil {
+		return fmt.Errorf("spawn fixer: kill existing fixer: %w", err)
+	}
+	if err := s.KillAgent(opts.RepoPath, opts.PlanFile, session.AgentTypeCoder); err != nil {
+		return fmt.Errorf("spawn fixer: kill existing coder: %w", err)
+	}
+	return s.spawnInSharedWorktree(ctx, opts, session.AgentTypeFixer)
+}
+
 // SpawnElaborator launches an elaborator agent on the main branch (no worktree).
 // The elaborator only reads the codebase and updates the task store, so it
 // does not need an isolated worktree.

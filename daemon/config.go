@@ -4,10 +4,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
 )
+
+// PRMonitorConfig holds configuration for the PR monitoring subsystem.
+type PRMonitorConfig struct {
+	// Enabled controls whether the PR monitor goroutine runs.
+	Enabled bool
+
+	// PollInterval is how often the monitor polls open pull requests. Default: 60s.
+	PollInterval time.Duration
+
+	// Reactions is the list of GitHub reactions to add to unprocessed review comments.
+	// Default: ["eyes"].
+	Reactions []string
+}
 
 // DaemonConfig holds the configuration for the background daemon.
 type DaemonConfig struct {
@@ -33,18 +47,29 @@ type DaemonConfig struct {
 	// SocketPath is the Unix domain socket path for the control API.
 	// Defaults to ~/.config/kasmos/daemon.sock when empty.
 	SocketPath string `toml:"socket_path"`
+
+	// PRMonitor holds configuration for the PR monitoring subsystem.
+	PRMonitor PRMonitorConfig `toml:"pr_monitor"`
+}
+
+// tomlPRMonitorConfig is the raw TOML representation of PRMonitorConfig.
+type tomlPRMonitorConfig struct {
+	Enabled         bool     `toml:"enabled"`
+	PollIntervalSec float64  `toml:"poll_interval_sec"`
+	Reactions       []string `toml:"reactions"`
 }
 
 // tomlDaemonConfig is the raw TOML representation, using seconds for duration
 // fields so the config file stays human-readable.
 type tomlDaemonConfig struct {
-	PollIntervalSec    float64  `toml:"poll_interval_sec"`
-	Repos              []string `toml:"repos"`
-	AutoAdvance        bool     `toml:"auto_advance"`
-	AutoAdvanceWaves   bool     `toml:"auto_advance_waves"`
-	AutoReviewFix      bool     `toml:"auto_review_fix"`
-	MaxReviewFixCycles int      `toml:"max_review_fix_cycles"`
-	SocketPath         string   `toml:"socket_path"`
+	PollIntervalSec    float64             `toml:"poll_interval_sec"`
+	Repos              []string            `toml:"repos"`
+	AutoAdvance        bool                `toml:"auto_advance"`
+	AutoAdvanceWaves   bool                `toml:"auto_advance_waves"`
+	AutoReviewFix      bool                `toml:"auto_review_fix"`
+	MaxReviewFixCycles int                 `toml:"max_review_fix_cycles"`
+	SocketPath         string              `toml:"socket_path"`
+	PRMonitor          tomlPRMonitorConfig `toml:"pr_monitor"`
 }
 
 // defaultDaemonConfig returns a DaemonConfig populated with sensible defaults.
@@ -53,6 +78,11 @@ func defaultDaemonConfig() *DaemonConfig {
 		PollInterval:     2 * time.Second,
 		AutoAdvance:      false,
 		AutoAdvanceWaves: false,
+		PRMonitor: PRMonitorConfig{
+			Enabled:      false,
+			PollInterval: 60 * time.Second,
+			Reactions:    []string{"eyes"},
+		},
 	}
 }
 
@@ -94,6 +124,24 @@ func LoadDaemonConfig(path string) (*DaemonConfig, error) {
 	cfg.AutoReviewFix = tc.AutoReviewFix
 	cfg.MaxReviewFixCycles = tc.MaxReviewFixCycles
 	cfg.SocketPath = tc.SocketPath
+
+	// PRMonitor section
+	cfg.PRMonitor.Enabled = tc.PRMonitor.Enabled
+	if tc.PRMonitor.PollIntervalSec > 0 {
+		cfg.PRMonitor.PollInterval = time.Duration(tc.PRMonitor.PollIntervalSec * float64(time.Second))
+	}
+	if tc.PRMonitor.Reactions != nil {
+		reactions := make([]string, 0, len(tc.PRMonitor.Reactions))
+		for _, reaction := range tc.PRMonitor.Reactions {
+			if trimmed := strings.TrimSpace(reaction); trimmed != "" {
+				reactions = append(reactions, trimmed)
+			}
+		}
+		if len(reactions) == 0 {
+			reactions = []string{"eyes"}
+		}
+		cfg.PRMonitor.Reactions = reactions
+	}
 
 	return cfg, nil
 }

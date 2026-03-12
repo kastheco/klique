@@ -334,3 +334,133 @@ func TestServer_PhaseTimestampAndGoalEndpoints(t *testing.T) {
 	resp.Body.Close()
 	assert.Contains(t, missing["error"], "plan not found")
 }
+
+func TestServer_PRReviewsEndpoints(t *testing.T) {
+	store := newTestStore(t)
+	srv := httptest.NewServer(taskstore.NewHandler(store))
+	defer srv.Close()
+
+	// Create plan
+	resp, err := http.Post(srv.URL+"/v1/projects/proj/tasks", "application/json", strings.NewReader(`{"filename":"plan","status":"ready"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	// Record a review
+	req, err := http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews",
+		strings.NewReader(`{"review_id":101,"review_state":"CHANGES_REQUESTED","review_body":"fix it","reviewer_login":"alice"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	// Check processed — should be true now
+	resp, err = http.Get(srv.URL + "/v1/projects/proj/tasks/plan/pr-reviews/101/processed")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var processed map[string]bool
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&processed))
+	resp.Body.Close()
+	assert.True(t, processed["processed"])
+
+	// Check processed for non-existent review — should be false
+	resp, err = http.Get(srv.URL + "/v1/projects/proj/tasks/plan/pr-reviews/999/processed")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&processed))
+	resp.Body.Close()
+	assert.False(t, processed["processed"])
+
+	// List pending
+	resp, err = http.Get(srv.URL + "/v1/projects/proj/tasks/plan/pr-reviews/pending")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var pending []taskstore.PRReviewEntry
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&pending))
+	resp.Body.Close()
+	require.Len(t, pending, 1)
+	assert.Equal(t, 101, pending[0].ReviewID)
+
+	// Mark reacted
+	req, err = http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews/101/reacted", nil)
+	require.NoError(t, err)
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Mark fixer dispatched
+	req, err = http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews/101/fixer-dispatched", nil)
+	require.NoError(t, err)
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Pending list should now be empty
+	resp, err = http.Get(srv.URL + "/v1/projects/proj/tasks/plan/pr-reviews/pending")
+	require.NoError(t, err)
+	var empty []taskstore.PRReviewEntry
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&empty))
+	resp.Body.Close()
+	assert.Len(t, empty, 0)
+}
+
+func TestServer_PRReviews_NotFoundErrors(t *testing.T) {
+	store := newTestStore(t)
+	srv := httptest.NewServer(taskstore.NewHandler(store))
+	defer srv.Close()
+
+	// Create plan but no reviews
+	resp, err := http.Post(srv.URL+"/v1/projects/proj/tasks", "application/json", strings.NewReader(`{"filename":"plan","status":"ready"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	// Mark reacted on non-existent review
+	req, err := http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews/9999/reacted", nil)
+	require.NoError(t, err)
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	var errBody map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errBody))
+	resp.Body.Close()
+	assert.Contains(t, errBody["error"], "not found")
+
+	// Mark fixer dispatched on non-existent review
+	req, err = http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews/9999/fixer-dispatched", nil)
+	require.NoError(t, err)
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errBody))
+	resp.Body.Close()
+	assert.Contains(t, errBody["error"], "not found")
+}
+
+func TestServer_PRReviews_BadRequestOnMalformedBody(t *testing.T) {
+	store := newTestStore(t)
+	srv := httptest.NewServer(taskstore.NewHandler(store))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPost,
+		srv.URL+"/v1/projects/proj/tasks/plan/pr-reviews",
+		strings.NewReader("{"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var errBody map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errBody))
+	resp.Body.Close()
+	assert.Contains(t, errBody["error"], "invalid request body")
+}

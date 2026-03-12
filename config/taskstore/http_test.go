@@ -166,3 +166,102 @@ func TestHTTPStore_SetPhaseTimestamp_UsesJSONErrorContractOnMalformedBody(t *tes
 	_, has := errResp["error"]
 	assert.True(t, has)
 }
+
+func TestHTTPStore_PRReviews_RoundTrip(t *testing.T) {
+	backend, _ := taskstore.NewSQLiteStore(":memory:")
+	t.Cleanup(func() { backend.Close() })
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
+	t.Cleanup(srv.Close)
+	client := taskstore.NewHTTPStore(srv.URL, "proj")
+
+	// Create a task first
+	require.NoError(t, client.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	// Not processed before recording
+	assert.False(t, client.IsReviewProcessed("proj", "plan", 101))
+
+	// Record a review
+	require.NoError(t, client.RecordPRReview("proj", "plan", 101, "CHANGES_REQUESTED", "fix this", "alice"))
+
+	// Now processed
+	assert.True(t, client.IsReviewProcessed("proj", "plan", 101))
+
+	// List pending — should have one entry
+	pending, err := client.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, 101, pending[0].ReviewID)
+	assert.Equal(t, "CHANGES_REQUESTED", pending[0].ReviewState)
+	assert.Equal(t, "fix this", pending[0].ReviewBody)
+	assert.Equal(t, "alice", pending[0].ReviewerLogin)
+	assert.False(t, pending[0].ReactionPosted)
+	assert.False(t, pending[0].FixerDispatched)
+
+	// Mark as reacted
+	require.NoError(t, client.MarkReviewReacted("proj", "plan", 101))
+
+	// Still pending (fixer not dispatched)
+	pending, err = client.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.True(t, pending[0].ReactionPosted)
+
+	// Mark fixer dispatched — disappears from pending list
+	require.NoError(t, client.MarkReviewFixerDispatched("proj", "plan", 101))
+	pending, err = client.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 0)
+}
+
+func TestHTTPStore_PRReviews_DuplicateIdempotent(t *testing.T) {
+	backend, _ := taskstore.NewSQLiteStore(":memory:")
+	t.Cleanup(func() { backend.Close() })
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
+	t.Cleanup(srv.Close)
+	client := taskstore.NewHTTPStore(srv.URL, "proj")
+
+	require.NoError(t, client.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	require.NoError(t, client.RecordPRReview("proj", "plan", 42, "APPROVED", "lgtm", "alice"))
+	// Second call with same ID must succeed (idempotent)
+	require.NoError(t, client.RecordPRReview("proj", "plan", 42, "CHANGES_REQUESTED", "nope", "bob"))
+
+	// Only one row exists
+	pending, err := client.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 1)
+	assert.Equal(t, "APPROVED", pending[0].ReviewState, "first record must win")
+}
+
+func TestHTTPStore_PRReviews_EmptyPendingList(t *testing.T) {
+	backend, _ := taskstore.NewSQLiteStore(":memory:")
+	t.Cleanup(func() { backend.Close() })
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
+	t.Cleanup(srv.Close)
+	client := taskstore.NewHTTPStore(srv.URL, "proj")
+
+	require.NoError(t, client.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	pending, err := client.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.NotNil(t, pending)
+	assert.Len(t, pending, 0)
+}
+
+func TestHTTPStore_PRReviews_MarkNotFound(t *testing.T) {
+	backend, _ := taskstore.NewSQLiteStore(":memory:")
+	t.Cleanup(func() { backend.Close() })
+	srv := httptest.NewServer(taskstore.NewHandler(backend))
+	t.Cleanup(srv.Close)
+	client := taskstore.NewHTTPStore(srv.URL, "proj")
+
+	require.NoError(t, client.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	err := client.MarkReviewReacted("proj", "plan", 9999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+
+	err = client.MarkReviewFixerDispatched("proj", "plan", 9999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

@@ -76,6 +76,31 @@ func (s *HTTPStore) taskPRStateURL(project, filename string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-state", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
 }
 
+// prReviewsURL builds the base URL for a task's pr-reviews endpoint.
+func (s *HTTPStore) prReviewsURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-reviews", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
+// prReviewsPendingURL builds the URL for listing pending pr reviews.
+func (s *HTTPStore) prReviewsPendingURL(project, filename string) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-reviews/pending", s.baseURL, url.PathEscape(project), url.PathEscape(filename))
+}
+
+// prReviewProcessedURL builds the URL to check if a review has been processed.
+func (s *HTTPStore) prReviewProcessedURL(project, filename string, reviewID int) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-reviews/%d/processed", s.baseURL, url.PathEscape(project), url.PathEscape(filename), reviewID)
+}
+
+// prReviewReactedURL builds the URL for marking a review as reacted.
+func (s *HTTPStore) prReviewReactedURL(project, filename string, reviewID int) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-reviews/%d/reacted", s.baseURL, url.PathEscape(project), url.PathEscape(filename), reviewID)
+}
+
+// prReviewFixerDispatchedURL builds the URL for marking a review's fixer as dispatched.
+func (s *HTTPStore) prReviewFixerDispatchedURL(project, filename string, reviewID int) string {
+	return fmt.Sprintf("%s/v1/projects/%s/tasks/%s/pr-reviews/%d/fixer-dispatched", s.baseURL, url.PathEscape(project), url.PathEscape(filename), reviewID)
+}
+
 // topicURL builds the base URL for a project's topics endpoint.
 func (s *HTTPStore) topicURL(project string) string {
 	return fmt.Sprintf("%s/v1/projects/%s/topics", s.baseURL, url.PathEscape(project))
@@ -639,6 +664,128 @@ func (s *HTTPStore) SetPRState(project, filename, reviewDecision, checkStatus st
 		return decodeError(resp)
 	}
 	return nil
+}
+
+// RecordPRReview records a PR review comment in the remote store.
+func (s *HTTPStore) RecordPRReview(project, filename string, reviewID int, state, body, reviewer string) error {
+	payload := struct {
+		ReviewID      int    `json:"review_id"`
+		ReviewState   string `json:"review_state"`
+		ReviewBody    string `json:"review_body"`
+		ReviewerLogin string `json:"reviewer_login"`
+	}{ReviewID: reviewID, ReviewState: state, ReviewBody: body, ReviewerLogin: reviewer}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("task store: marshal pr review: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, s.prReviewsURL(project, filename), bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("task store: plan not found: %s", filename)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// IsReviewProcessed checks whether a PR review has been recorded (processed) in the remote store.
+// Returns false on any error or if the review is not found.
+func (s *HTTPStore) IsReviewProcessed(project, filename string, reviewID int) bool {
+	req, err := http.NewRequest(http.MethodGet, s.prReviewProcessedURL(project, filename, reviewID), nil)
+	if err != nil {
+		return false
+	}
+	resp, err := s.do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var result struct {
+		Processed bool `json:"processed"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+	return result.Processed
+}
+
+// MarkReviewReacted marks a PR review as having received an "eyes" reaction in the remote store.
+func (s *HTTPStore) MarkReviewReacted(project, filename string, reviewID int) error {
+	req, err := http.NewRequest(http.MethodPost, s.prReviewReactedURL(project, filename, reviewID), nil)
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("task store: pr review not found: %d", reviewID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// MarkReviewFixerDispatched marks a PR review's fixer agent as dispatched in the remote store.
+func (s *HTTPStore) MarkReviewFixerDispatched(project, filename string, reviewID int) error {
+	req, err := http.NewRequest(http.MethodPost, s.prReviewFixerDispatchedURL(project, filename, reviewID), nil)
+	if err != nil {
+		return fmt.Errorf("task store: build request: %w", err)
+	}
+	resp, err := s.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("task store: pr review not found: %d", reviewID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return decodeError(resp)
+	}
+	return nil
+}
+
+// ListPendingReviews returns PR reviews with fixer not yet dispatched from the remote store.
+func (s *HTTPStore) ListPendingReviews(project, filename string) ([]PRReviewEntry, error) {
+	req, err := http.NewRequest(http.MethodGet, s.prReviewsPendingURL(project, filename), nil)
+	if err != nil {
+		return nil, fmt.Errorf("task store: build request: %w", err)
+	}
+	resp, err := s.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, decodeError(resp)
+	}
+	var entries []PRReviewEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("task store: decode pr reviews: %w", err)
+	}
+	return entries, nil
 }
 
 // Close is a no-op for HTTPStore — the HTTP client has no persistent connection

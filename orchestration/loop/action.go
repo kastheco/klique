@@ -127,6 +127,16 @@ type ReviewCycleLimitAction struct {
 func (ReviewCycleLimitAction) Kind() string  { return "review_cycle_limit" }
 func (ReviewCycleLimitAction) sealedAction() {}
 
+// SpawnFixerAction instructs the caller to launch a fixer agent to address
+// reviewer feedback received from a pull request review comment.
+type SpawnFixerAction struct {
+	PlanFile string
+	Feedback string
+}
+
+func (SpawnFixerAction) Kind() string  { return "spawn_fixer" }
+func (SpawnFixerAction) sealedAction() {}
+
 // PausePlanAgentAction instructs the caller to pause (kill) the running agent
 // of the given type for the plan.
 type PausePlanAgentAction struct {
@@ -183,6 +193,8 @@ type AgentSpawner interface {
 	SpawnCoder(ctx context.Context, opts SpawnOpts) error
 	// SpawnElaborator launches an elaborator agent for the given plan.
 	SpawnElaborator(ctx context.Context, opts SpawnOpts) error
+	// SpawnFixer launches a fixer agent to address PR review feedback.
+	SpawnFixer(ctx context.Context, opts SpawnOpts) error
 	// KillAgent stops the running agent of the given type for the plan.
 	// repoPath is the absolute path to the repository root and is required to
 	// disambiguate agents across multiple registered repos that share the same

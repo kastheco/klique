@@ -40,6 +40,24 @@ CREATE TABLE IF NOT EXISTS topics (
 );
 `
 
+// prReviewsTableMigration creates the pr_reviews table for tracking processed PR review comments.
+const prReviewsTableMigration = `
+	CREATE TABLE IF NOT EXISTS pr_reviews (
+		id               INTEGER PRIMARY KEY,
+		project          TEXT    NOT NULL,
+		plan_filename    TEXT    NOT NULL,
+		review_id        INTEGER NOT NULL,
+		review_state     TEXT    NOT NULL DEFAULT '',
+		review_body      TEXT    NOT NULL DEFAULT '',
+		reviewer_login   TEXT    NOT NULL DEFAULT '',
+		reaction_posted  INTEGER NOT NULL DEFAULT 0,
+		fixer_dispatched INTEGER NOT NULL DEFAULT 0,
+		created_at       TEXT    NOT NULL DEFAULT '',
+		UNIQUE(project, plan_filename, review_id),
+		FOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE
+	)
+`
+
 // subtasksTableMigration creates the subtasks table for persisted plan subtasks.
 const subtasksTableMigration = `
 	CREATE TABLE IF NOT EXISTS subtasks (
@@ -193,6 +211,12 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	if _, err := db.Exec(subtasksTableMigration); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create subtasks table: %w", err)
+	}
+
+	// Create pr_reviews table if missing.
+	if _, err := db.Exec(prReviewsTableMigration); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create pr_reviews table: %w", err)
 	}
 
 	if err := migrateStripMdSuffix(db); err != nil {
@@ -762,6 +786,102 @@ func (s *SQLiteStore) SetPRState(project, filename, reviewDecision, checkStatus 
 		return fmt.Errorf("plan not found: %s/%s", project, filename)
 	}
 	return nil
+}
+
+// RecordPRReview inserts a new PR review record. INSERT OR IGNORE ensures
+// repeated polls for the same review ID are idempotent — only the first record wins.
+func (s *SQLiteStore) RecordPRReview(project, filename string, reviewID int, state, body, reviewer string) error {
+	const q = `
+		INSERT OR IGNORE INTO pr_reviews (project, plan_filename, review_id, review_state, review_body, reviewer_login, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err := s.db.Exec(q, project, filename, reviewID, state, body, reviewer, formatTime(time.Now().UTC()))
+	if err != nil {
+		return fmt.Errorf("record pr review: %w", err)
+	}
+	return nil
+}
+
+// IsReviewProcessed returns true if a review record exists for the given reviewID.
+// Returns false on any error or if the row is not found.
+func (s *SQLiteStore) IsReviewProcessed(project, filename string, reviewID int) bool {
+	const q = `SELECT COUNT(*) FROM pr_reviews WHERE project = ? AND plan_filename = ? AND review_id = ?`
+	var count int
+	err := s.db.QueryRow(q, project, filename, reviewID).Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
+}
+
+// MarkReviewReacted sets reaction_posted = 1 for the given review.
+// Returns an error if the review row is not found.
+func (s *SQLiteStore) MarkReviewReacted(project, filename string, reviewID int) error {
+	const q = `UPDATE pr_reviews SET reaction_posted = 1 WHERE project = ? AND plan_filename = ? AND review_id = ?`
+	result, err := s.db.Exec(q, project, filename, reviewID)
+	if err != nil {
+		return fmt.Errorf("mark review reacted: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark review reacted rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("pr review not found: %s/%s#%d", project, filename, reviewID)
+	}
+	return nil
+}
+
+// MarkReviewFixerDispatched sets fixer_dispatched = 1 for the given review.
+// Returns an error if the review row is not found.
+func (s *SQLiteStore) MarkReviewFixerDispatched(project, filename string, reviewID int) error {
+	const q = `UPDATE pr_reviews SET fixer_dispatched = 1 WHERE project = ? AND plan_filename = ? AND review_id = ?`
+	result, err := s.db.Exec(q, project, filename, reviewID)
+	if err != nil {
+		return fmt.Errorf("mark review fixer dispatched: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark review fixer dispatched rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("pr review not found: %s/%s#%d", project, filename, reviewID)
+	}
+	return nil
+}
+
+// ListPendingReviews returns all review entries where fixer_dispatched = 0,
+// ordered by review_id ascending. Returns an empty (non-nil) slice when there are no rows.
+func (s *SQLiteStore) ListPendingReviews(project, filename string) ([]PRReviewEntry, error) {
+	const q = `
+		SELECT review_id, review_state, review_body, reviewer_login, reaction_posted, fixer_dispatched, created_at
+		FROM pr_reviews
+		WHERE project = ? AND plan_filename = ? AND fixer_dispatched = 0
+		ORDER BY review_id ASC
+	`
+	rows, err := s.db.Query(q, project, filename)
+	if err != nil {
+		return nil, fmt.Errorf("list pending pr reviews: %w", err)
+	}
+	defer rows.Close()
+
+	entries := []PRReviewEntry{} // non-nil empty slice
+	for rows.Next() {
+		var e PRReviewEntry
+		var reactionPosted, fixerDispatched int
+		var createdAt string
+		if err := rows.Scan(&e.ReviewID, &e.ReviewState, &e.ReviewBody, &e.ReviewerLogin, &reactionPosted, &fixerDispatched, &createdAt); err != nil {
+			return nil, fmt.Errorf("list pending pr reviews: %w", err)
+		}
+		e.ReactionPosted = reactionPosted != 0
+		e.FixerDispatched = fixerDispatched != 0
+		e.CreatedAt = parseTime(createdAt)
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pending pr reviews: %w", err)
+	}
+	return entries, nil
 }
 
 // scanTaskEntry scans a single row into a TaskEntry.

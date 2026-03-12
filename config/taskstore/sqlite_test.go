@@ -407,3 +407,116 @@ func TestSQLiteStore_PRMetadata_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestSQLiteStore_PRReviews_RecordAndList(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	// Record two reviews
+	require.NoError(t, store.RecordPRReview("proj", "plan", 101, "CHANGES_REQUESTED", "fix this", "reviewer1"))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 102, "COMMENTED", "nit: rename", "reviewer2"))
+
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 2)
+	assert.Equal(t, 101, pending[0].ReviewID)
+	assert.Equal(t, "CHANGES_REQUESTED", pending[0].ReviewState)
+	assert.Equal(t, "fix this", pending[0].ReviewBody)
+	assert.Equal(t, "reviewer1", pending[0].ReviewerLogin)
+	assert.False(t, pending[0].ReactionPosted)
+	assert.False(t, pending[0].FixerDispatched)
+	assert.False(t, pending[0].CreatedAt.IsZero())
+}
+
+func TestSQLiteStore_PRReviews_DuplicateInsertIdempotent(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	// Insert same review ID twice — second call must be a no-op
+	require.NoError(t, store.RecordPRReview("proj", "plan", 42, "APPROVED", "lgtm", "alice"))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 42, "CHANGES_REQUESTED", "should error but won't", "bob"))
+
+	// Only one row should exist, with the original data
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 1)
+	assert.Equal(t, "APPROVED", pending[0].ReviewState, "first record must win")
+	assert.Equal(t, "alice", pending[0].ReviewerLogin, "first reviewer must win")
+}
+
+func TestSQLiteStore_PRReviews_IsReviewProcessed(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	// Not recorded yet
+	assert.False(t, store.IsReviewProcessed("proj", "plan", 99))
+
+	require.NoError(t, store.RecordPRReview("proj", "plan", 99, "COMMENTED", "looks good", "reviewer"))
+
+	// Now recorded
+	assert.True(t, store.IsReviewProcessed("proj", "plan", 99))
+}
+
+func TestSQLiteStore_PRReviews_MarkReacted(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 10, "COMMENTED", "body", "reviewer"))
+
+	require.NoError(t, store.MarkReviewReacted("proj", "plan", 10))
+
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 1)
+	assert.True(t, pending[0].ReactionPosted, "reaction_posted must be true after MarkReviewReacted")
+
+	// Not found error
+	err = store.MarkReviewReacted("proj", "plan", 9999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestSQLiteStore_PRReviews_MarkFixerDispatched(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 20, "CHANGES_REQUESTED", "fix it", "reviewer"))
+
+	require.NoError(t, store.MarkReviewFixerDispatched("proj", "plan", 20))
+
+	// After marking fixer dispatched, the review should no longer appear in pending list
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	assert.Len(t, pending, 0, "fixer-dispatched reviews must not appear in pending list")
+
+	// Not found error
+	err = store.MarkReviewFixerDispatched("proj", "plan", 9999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestSQLiteStore_PRReviews_EmptyPendingList(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	// Must return empty slice, not nil
+	assert.NotNil(t, pending)
+	assert.Len(t, pending, 0)
+}
+
+func TestSQLiteStore_PRReviews_OrderedByReviewID(t *testing.T) {
+	store := newTestStore(t)
+	require.NoError(t, store.Create("proj", taskstore.TaskEntry{Filename: "plan", Status: taskstore.StatusReady}))
+
+	// Insert in non-sequential order
+	require.NoError(t, store.RecordPRReview("proj", "plan", 300, "COMMENTED", "c", "r3"))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 100, "COMMENTED", "a", "r1"))
+	require.NoError(t, store.RecordPRReview("proj", "plan", 200, "COMMENTED", "b", "r2"))
+
+	pending, err := store.ListPendingReviews("proj", "plan")
+	require.NoError(t, err)
+	require.Len(t, pending, 3)
+	assert.Equal(t, 100, pending[0].ReviewID)
+	assert.Equal(t, 200, pending[1].ReviewID)
+	assert.Equal(t, 300, pending[2].ReviewID)
+}
