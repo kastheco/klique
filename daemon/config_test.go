@@ -101,6 +101,28 @@ reactions = ["", ""]
 	assert.Equal(t, []string{"eyes"}, cfg.PRMonitor.Reactions)
 }
 
+func TestLoadDaemonConfig_PRMonitorReactionsWhitespaceOnly(t *testing.T) {
+	toml := `
+[pr_monitor]
+reactions = ["", " "]
+`
+	cfg := loadFromString(t, toml)
+
+	// Whitespace-only strings should be trimmed; empty result falls back to default.
+	assert.Equal(t, []string{"eyes"}, cfg.PRMonitor.Reactions)
+}
+
+func TestLoadDaemonConfig_PRMonitorReactionsTrimmed(t *testing.T) {
+	toml := `
+[pr_monitor]
+reactions = [" rocket ", " eyes"]
+`
+	cfg := loadFromString(t, toml)
+
+	// Whitespace should be trimmed from reaction names, preserving order.
+	assert.Equal(t, []string{"rocket", "eyes"}, cfg.PRMonitor.Reactions)
+}
+
 func TestLoadDaemonConfig_PRMonitorAbsent(t *testing.T) {
 	// No [pr_monitor] section — all defaults should be preserved.
 	toml := `poll_interval_sec = 5`

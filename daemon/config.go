@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -130,18 +131,16 @@ func LoadDaemonConfig(path string) (*DaemonConfig, error) {
 		cfg.PRMonitor.PollInterval = time.Duration(tc.PRMonitor.PollIntervalSec * float64(time.Second))
 	}
 	if tc.PRMonitor.Reactions != nil {
-		// Trim empty strings from the reactions slice.
-		filtered := make([]string, 0, len(tc.PRMonitor.Reactions))
-		for _, r := range tc.PRMonitor.Reactions {
-			if r != "" {
-				filtered = append(filtered, r)
+		reactions := make([]string, 0, len(tc.PRMonitor.Reactions))
+		for _, reaction := range tc.PRMonitor.Reactions {
+			if trimmed := strings.TrimSpace(reaction); trimmed != "" {
+				reactions = append(reactions, trimmed)
 			}
 		}
-		if len(filtered) == 0 {
-			cfg.PRMonitor.Reactions = []string{"eyes"}
-		} else {
-			cfg.PRMonitor.Reactions = filtered
+		if len(reactions) == 0 {
+			reactions = []string{"eyes"}
 		}
+		cfg.PRMonitor.Reactions = reactions
 	}
 
 	return cfg, nil
