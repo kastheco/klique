@@ -381,6 +381,9 @@ type home struct {
 	// daemonStatusChecker verifies that the daemon is reachable and this repo is registered.
 	// Nil disables daemon gating, which keeps narrow unit tests lightweight.
 	daemonStatusChecker func(string) daemonStatusMsg
+	// daemonRepoRegistrar registers the active repo with the daemon on demand.
+	// Nil disables in-app repo registration, which keeps narrow unit tests lightweight.
+	daemonRepoRegistrar func(string) error
 
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
@@ -445,6 +448,7 @@ func newHome(ctx context.Context, program string, autoYes bool, version string) 
 		signalsDir:            filepath.Join(activeRepoPath, ".kasmos", "signals"),
 		taskStoreProject:      project,
 		daemonStatusChecker:   checkDaemonStatus,
+		daemonRepoRegistrar:   registerRepoWithDaemon,
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
@@ -711,9 +715,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toastTickCmd()
 	case daemonStatusMsg:
 		if !msg.ready {
-			m.showDaemonRequiredDialog(msg.message)
+			m.showDaemonRequiredDialog(msg)
 		}
 		return m, nil
+	case daemonRepoRegisteredMsg:
+		m.toastManager.Success(fmt.Sprintf("registered repo with daemon: %s", msg.path))
+		return m, m.toastTickCmd()
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)
 		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())

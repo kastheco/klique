@@ -57,7 +57,46 @@ func newTestHome() *home {
 		daemonStatusChecker: func(string) daemonStatusMsg {
 			return daemonStatusMsg{ready: true}
 		},
+		daemonRepoRegistrar: func(string) error { return nil },
 	}
+}
+
+func TestShowDaemonRequiredDialog_RegistersRepoOnConfirm(t *testing.T) {
+	registeredPath := ""
+	h := newTestHome()
+	h.activeRepoPath = filepath.Join(os.TempDir(), "kasmos-test-repo")
+	h.daemonRepoRegistrar = func(path string) error {
+		registeredPath = path
+		return nil
+	}
+
+	h.showDaemonRequiredDialog(daemonStatusMsg{
+		message:         "the kasmos daemon is running, but this repo is not registered.",
+		canRegisterRepo: true,
+	})
+	require.NotNil(t, h.pendingConfirmAction)
+
+	msg := h.pendingConfirmAction()
+	registered, ok := msg.(daemonRepoRegisteredMsg)
+	require.True(t, ok)
+	assert.Equal(t, h.activeRepoPath, registered.path)
+	assert.Equal(t, h.activeRepoPath, registeredPath)
+
+	co, ok := h.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok)
+	assert.Contains(t, co.View(), "to confirm")
+	assert.Contains(t, co.View(), "register")
+}
+
+func TestShowDaemonRequiredDialog_DoesNotRegisterWhenUnavailable(t *testing.T) {
+	h := newTestHome()
+	h.showDaemonRequiredDialog(daemonStatusMsg{message: "start the daemon first"})
+	assert.Nil(t, h.pendingConfirmAction)
+	assert.Equal(t, stateConfirm, h.state)
+	assert.True(t, h.overlays.IsActive())
+	co, ok := h.overlays.Current().(*overlay.ConfirmationOverlay)
+	require.True(t, ok)
+	assert.Contains(t, co.View(), "start the daemon first")
 }
 
 func TestView_UsesCellMotionMouseMode(t *testing.T) {

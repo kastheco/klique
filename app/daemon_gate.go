@@ -17,8 +17,13 @@ import (
 )
 
 type daemonStatusMsg struct {
-	ready   bool
-	message string
+	ready           bool
+	message         string
+	canRegisterRepo bool
+}
+
+type daemonRepoRegisteredMsg struct {
+	path string
 }
 
 func checkDaemonStatus(repoPath string) daemonStatusMsg {
@@ -70,11 +75,16 @@ func checkDaemonStatus(repoPath string) daemonStatusMsg {
 	}
 
 	return daemonStatusMsg{
+		canRegisterRepo: true,
 		message: fmt.Sprintf(
-			"the kasmos daemon is running, but this repo is not registered.\n\nregister it with:\n  kas daemon add %s",
+			"the kasmos daemon is running, but this repo is not registered.\n\npress y to register it now, or run:\n  kas daemon add %s",
 			repoPath,
 		),
 	}
+}
+
+func registerRepoWithDaemon(repoPath string) error {
+	return daemonpkg.NewSocketClient(daemonpkg.DefaultSocketPath()).AddRepo(repoPath)
 }
 
 func (m *home) daemonStartupCheckCmd() tea.Cmd {
@@ -96,17 +106,27 @@ func (m *home) requireDaemonForAgents() bool {
 	if status.ready {
 		return true
 	}
-	m.showDaemonRequiredDialog(status.message)
+	m.showDaemonRequiredDialog(status)
 	return false
 }
 
-func (m *home) showDaemonRequiredDialog(message string) {
+func (m *home) showDaemonRequiredDialog(status daemonStatusMsg) {
 	if m.overlays == nil {
 		m.overlays = overlay.NewManager()
 	}
 	m.state = stateConfirm
 	m.pendingConfirmAction = nil
-	co := overlay.NewConfirmationOverlay(message)
+	if status.canRegisterRepo && m.daemonRepoRegistrar != nil {
+		repoPath := m.activeRepoPath
+		registrar := m.daemonRepoRegistrar
+		m.pendingConfirmAction = func() tea.Msg {
+			if err := registrar(repoPath); err != nil {
+				return err
+			}
+			return daemonRepoRegisteredMsg{path: repoPath}
+		}
+	}
+	co := overlay.NewConfirmationOverlay(status.message)
 	co.SetSize(76, 0)
 	m.overlays.Show(co)
 }
