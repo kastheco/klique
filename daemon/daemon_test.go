@@ -17,8 +17,10 @@ import (
 )
 
 func TestDaemon_StartStop(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -99,8 +101,10 @@ func TestDaemon_RunRejectsSecondInstanceForSameSocket(t *testing.T) {
 }
 
 func TestDaemon_AddRepo(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -114,8 +118,10 @@ func TestDaemon_AddRepo(t *testing.T) {
 }
 
 func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -135,14 +141,16 @@ func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
 }
 
 func TestDaemon_RecoverOnRestart(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
 
-	dir := t.TempDir()
-	require.NoError(t, d.AddRepo(dir))
+	repoDir := t.TempDir()
+	require.NoError(t, d.AddRepo(repoDir))
 
 	recovered, err := d.RecoverSessions()
 	assert.NoError(t, err)
