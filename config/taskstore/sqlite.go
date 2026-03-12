@@ -53,7 +53,8 @@ const prReviewsTableMigration = `
 		reaction_posted  INTEGER NOT NULL DEFAULT 0,
 		fixer_dispatched INTEGER NOT NULL DEFAULT 0,
 		created_at       TEXT    NOT NULL DEFAULT '',
-		UNIQUE(project, plan_filename, review_id)
+		UNIQUE(project, plan_filename, review_id),
+		FOREIGN KEY (project, plan_filename) REFERENCES tasks(project, filename) ON DELETE CASCADE
 	)
 `
 

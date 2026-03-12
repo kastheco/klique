@@ -17,8 +17,10 @@ import (
 )
 
 func TestDaemon_StartStop(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -99,8 +101,10 @@ func TestDaemon_RunRejectsSecondInstanceForSameSocket(t *testing.T) {
 }
 
 func TestDaemon_AddRepo(t *testing.T) {
+	dir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(dir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -116,6 +120,7 @@ func TestDaemon_AddRepo(t *testing.T) {
 func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(t.TempDir(), "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -135,8 +140,10 @@ func TestDaemon_GracefulShutdown_DrainsAgents(t *testing.T) {
 }
 
 func TestDaemon_RecoverOnRestart(t *testing.T) {
+	sockDir := t.TempDir()
 	cfg := &DaemonConfig{
 		PollInterval: 100 * time.Millisecond,
+		SocketPath:   filepath.Join(sockDir, "kas.sock"),
 	}
 	d, err := NewDaemon(cfg)
 	require.NoError(t, err)
@@ -371,12 +378,13 @@ func TestDaemon_ExecuteAction_SpawnFixer_BranchEmpty_Fails(t *testing.T) {
 	}
 
 	// SpawnFixer will fail with "Branch is required" because the store entry
-	// has no branch set. executeAction should log the error, not panic.
-	d.executeAction(context.Background(), e, loop.SpawnFixerAction{
+	// has no branch set. executeAction must return the error and not panic.
+	err := d.executeAction(context.Background(), e, loop.SpawnFixerAction{
 		PlanFile: "fix-me.md",
 		Feedback: "please fix the comments",
 	})
-	// No panic = success; the spawner logs the error and moves on.
+	require.Error(t, err, "executeAction must propagate spawn error when branch is empty")
+	assert.Contains(t, err.Error(), "Branch is required")
 }
 
 func TestReapStuckSignals(t *testing.T) {
