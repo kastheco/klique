@@ -494,7 +494,9 @@ func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
 
 		for _, action := range actions {
 			d.logger.Info("executing action", "kind", action.Kind(), "repo", e.Path)
-			d.executeAction(ctx, e, action)
+			if err := d.executeAction(ctx, e, action); err != nil {
+				d.logger.Error("execute action failed", "kind", action.Kind(), "repo", e.Path, "err", err)
+			}
 		}
 		return
 	}
@@ -515,7 +517,9 @@ func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
 
 	actions := e.Processor.Tick(scan)
 	for _, action := range actions {
-		d.executeAction(ctx, e, action)
+		if err := d.executeAction(ctx, e, action); err != nil {
+			d.logger.Error("execute action failed", "kind", action.Kind(), "repo", e.Path, "err", err)
+		}
 	}
 
 	for _, id := range ids {
