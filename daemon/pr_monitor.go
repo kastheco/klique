@@ -87,9 +87,16 @@ func NewPRMonitor(
 
 // Run starts the PR monitor poll loop. It blocks until ctx is cancelled and
 // returns nil on clean shutdown. Goroutine/cancellation style mirrors daemon.go:285.
+//
+// An initial poll is performed before entering the ticker loop so the first
+// scan does not wait a full PollInterval after startup.
 func (m *PRMonitor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(m.cfg.PollInterval)
 	defer ticker.Stop()
+
+	// Poll immediately so enabling the daemon does not always wait a full
+	// PollInterval before the first PR scan.
+	m.pollOnce(ctx)
 
 	for {
 		select {
@@ -321,11 +328,18 @@ func (m *PRMonitor) isGHUnavailableErr(err error) bool {
 // shouldTriggerFixer reports whether a review warrants spawning a fixer agent.
 // Only reviews that request changes or leave substantive comments from real
 // (non-bot) humans qualify.
+//
+// State is normalised to uppercase so the helper is safe even if GitHub ever
+// returns mixed-case values.
 func shouldTriggerFixer(review gitpkg.PRReview) bool {
-	state := review.State
-	return (state == "CHANGES_REQUESTED" || state == "COMMENTED") &&
-		strings.TrimSpace(review.Body) != "" &&
-		!isBotLogin(review.User)
+	state := strings.ToUpper(strings.TrimSpace(review.State))
+	if state != "CHANGES_REQUESTED" && state != "COMMENTED" {
+		return false
+	}
+	if strings.TrimSpace(review.Body) == "" {
+		return false
+	}
+	return !isBotLogin(review.User)
 }
 
 // isBotLogin returns true when the GitHub login identifies an automated account.
