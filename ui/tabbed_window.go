@@ -2,13 +2,187 @@ package ui
 
 import (
 	"image/color"
+	"strings"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/session"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
+
+// ── Minimal PreviewPane stub ──────────────────────────────────────────────────
+//
+// The full PreviewPane (VT emulator, banner animation, scroll capture) has been
+// removed as part of the Wave 2→3 migration to a native tmux pane layout.
+// This stub preserves the public API surface so callers in app/ and tests in
+// ui/ continue to compile unchanged until Wave 3 completes the migration.
+
+// previewState holds the current display state of the preview pane.
+type previewState struct {
+	// fallback indicates the pane is in fallback (no active session) mode.
+	fallback bool
+	// fallbackMsg is shown in fallback mode.
+	fallbackMsg string
+	// text holds the raw content to display.
+	text string
+}
+
+// PreviewPane is a minimal stub replacing the full VT-emulator preview pane.
+// It retains the fields and methods required by tabbed_window_test.go and
+// callers in app/ so the codebase compiles during the Wave 2→3 transition.
+type PreviewPane struct {
+	width  int
+	height int
+
+	previewState previewState
+	isScrolling  bool // always false in stub; kept for API compatibility
+	viewport     viewport.Model
+
+	// isDocument is true while showing a rendered plan document.
+	// UpdateContent is a no-op when this flag is set.
+	isDocument bool
+}
+
+// NewPreviewPane constructs a PreviewPane with initial fallback state.
+func NewPreviewPane() *PreviewPane {
+	return &PreviewPane{
+		viewport: viewport.New(),
+		previewState: previewState{
+			fallback:    true,
+			fallbackMsg: "create [n]ew plan or select existing",
+		},
+	}
+}
+
+// SetSize stores the pane dimensions and configures the viewport.
+func (p *PreviewPane) SetSize(width, maxHeight int) {
+	p.width = width
+	p.height = maxHeight
+	p.viewport.SetWidth(max(0, width-1))
+	p.viewport.SetHeight(maxHeight)
+}
+
+// setFallbackState puts the pane into fallback mode with the given message.
+func (p *PreviewPane) setFallbackState(message string) {
+	p.previewState = previewState{
+		fallback:    true,
+		fallbackMsg: message,
+	}
+}
+
+// SetRawContent is a no-op stub (VT emulator path removed).
+func (p *PreviewPane) SetRawContent(_ string) {}
+
+// SetDocumentContent loads scrollable document content into the viewport.
+func (p *PreviewPane) SetDocumentContent(content string) {
+	p.previewState = previewState{fallback: false}
+	p.isScrolling = false
+	p.isDocument = true
+	p.viewport.SetContent(content)
+	p.viewport.GotoTop()
+}
+
+// IsDocumentMode reports whether the pane is displaying a static document.
+func (p *PreviewPane) IsDocumentMode() bool { return p.isDocument }
+
+// ClearDocumentMode exits document mode so UpdateContent resumes normal preview.
+func (p *PreviewPane) ClearDocumentMode() { p.isDocument = false }
+
+// ViewportUpdate forwards a tea.Msg to the viewport when in document mode.
+func (p *PreviewPane) ViewportUpdate(msg tea.Msg) tea.Cmd {
+	if !p.isDocument {
+		return nil
+	}
+	var cmd tea.Cmd
+	p.viewport, cmd = p.viewport.Update(msg)
+	return cmd
+}
+
+// ViewportHandlesKey reports whether the viewport keymap matches the given key
+// when the pane is in document mode.
+func (p *PreviewPane) ViewportHandlesKey(msg tea.KeyMsg) bool {
+	if !p.isDocument {
+		return false
+	}
+	km := p.viewport.KeyMap
+	return key.Matches(msg,
+		km.Up, km.Down, km.Left, km.Right,
+		km.PageUp, km.PageDown,
+		km.HalfPageUp, km.HalfPageDown,
+	)
+}
+
+// UpdateContent refreshes the pane based on the instance state.
+// It is a no-op when in document mode.
+func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
+	if p.isDocument {
+		return nil
+	}
+	if instance == nil {
+		p.setFallbackState("create [n]ew plan or select existing")
+		return nil
+	}
+	switch instance.Status {
+	case session.Paused:
+		p.setFallbackState("session paused")
+	default:
+		if instance.Exited {
+			p.setFallbackState("session exited")
+		}
+	}
+	return nil
+}
+
+// ScrollUp is a no-op stub (scroll capture removed; tmux pane handles scrolling).
+func (p *PreviewPane) ScrollUp(_ *session.Instance) error { return nil }
+
+// ScrollDown is a no-op stub.
+func (p *PreviewPane) ScrollDown(_ *session.Instance) error { return nil }
+
+// HalfPageUp scrolls the viewport up half a page when in document mode.
+func (p *PreviewPane) HalfPageUp(_ *session.Instance) error {
+	if p.isDocument {
+		p.viewport.HalfPageUp()
+	}
+	return nil
+}
+
+// HalfPageDown scrolls the viewport down half a page when in document mode.
+func (p *PreviewPane) HalfPageDown(_ *session.Instance) error {
+	if p.isDocument {
+		p.viewport.HalfPageDown()
+	}
+	return nil
+}
+
+// ResetToNormalMode is a no-op stub (scroll mode removed).
+func (p *PreviewPane) ResetToNormalMode(_ *session.Instance) error { return nil }
+
+// TickBanner is a no-op stub (banner animation removed).
+func (p *PreviewPane) TickBanner() {}
+
+// TickSpring is a no-op stub (spring animation removed).
+func (p *PreviewPane) TickSpring() {}
+
+// SetAnimateBanner is a no-op stub (banner animation removed).
+func (p *PreviewPane) SetAnimateBanner(_ bool) {}
+
+// String renders the preview pane to a string.
+func (p *PreviewPane) String() string {
+	if p.width == 0 || p.height == 0 {
+		return strings.Repeat("\n", p.height)
+	}
+	if p.isDocument {
+		return p.viewport.View()
+	}
+	// Fallback / placeholder: centered empty space.
+	return lipgloss.Place(p.width, p.height, lipgloss.Center, lipgloss.Center, "")
+}
+
+// ── tabBorderWithBottom ───────────────────────────────────────────────────────
 
 // tabBorderWithBottom constructs a rounded lipgloss border where the bottom
 // edge uses the three supplied characters (left corner, fill, right corner).
@@ -187,16 +361,11 @@ func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	return w.preview.UpdateContent(instance)
 }
 
-// SetPreviewContent sets preview content directly from a pre-rendered string.
-// Used by the embedded terminal in focus mode to bypass tmux capture-pane.
-func (w *TabbedWindow) SetPreviewContent(content string) {
-	w.preview.SetRawContent(content)
-}
+// SetPreviewContent is a no-op stub (VT emulator path removed; tmux pane owns content).
+func (w *TabbedWindow) SetPreviewContent(_ string) {}
 
-// SetConnectingState shows the animated banner with a "connecting…" message.
-func (w *TabbedWindow) SetConnectingState() {
-	w.preview.setFallbackState("connecting…")
-}
+// SetConnectingState is a no-op stub (banner animation removed).
+func (w *TabbedWindow) SetConnectingState() {}
 
 // SetDocumentContent puts the preview pane into document mode, showing the
 // supplied content (e.g. plan markdown) with scroll support.
@@ -233,6 +402,7 @@ func (w *TabbedWindow) ResetPreviewToNormalMode(instance *session.Instance) erro
 }
 
 // IsPreviewInScrollMode reports whether the preview pane is in scroll mode.
+// Always false in the stub (scroll capture removed).
 func (w *TabbedWindow) IsPreviewInScrollMode() bool { return w.preview.isScrolling }
 
 // ── Info pane delegation ──────────────────────────────────────────────────────
@@ -311,16 +481,16 @@ func (w *TabbedWindow) ContentScrollDown() {
 	}
 }
 
-// ── Banner animation ──────────────────────────────────────────────────────────
+// ── Banner animation (no-ops) ─────────────────────────────────────────────────
 
-// TickBanner advances the preview pane's banner animation by one frame.
-func (w *TabbedWindow) TickBanner() { w.preview.TickBanner() }
+// TickBanner is a no-op stub (banner animation removed).
+func (w *TabbedWindow) TickBanner() {}
 
-// TickSpring advances the spring load-in animation on the preview pane.
-func (w *TabbedWindow) TickSpring() { w.preview.TickSpring() }
+// TickSpring is a no-op stub (spring animation removed).
+func (w *TabbedWindow) TickSpring() {}
 
-// SetAnimateBanner enables or disables the idle banner animation.
-func (w *TabbedWindow) SetAnimateBanner(enabled bool) { w.preview.SetAnimateBanner(enabled) }
+// SetAnimateBanner is a no-op stub (banner animation removed).
+func (w *TabbedWindow) SetAnimateBanner(_ bool) {}
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
