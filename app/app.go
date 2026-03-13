@@ -217,8 +217,6 @@ type home struct {
 	auditBootstrapped bool // true after first audit query on boot
 	// menu displays the bottom menu
 	menu *ui.Menu
-	// statusBar displays the top contextual status bar
-	statusBar *ui.StatusBar
 	// toastManager manages toast notifications
 	toastManager *overlay.ToastManager
 	// global spinner instance. we plumb this down to where it's needed

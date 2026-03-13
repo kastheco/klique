@@ -15,7 +15,6 @@ import (
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
-	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	tea "charm.land/bubbletea/v2"
@@ -112,8 +111,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		// Switch to the agent preview tab; interaction happens via the native tmux pane.
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		// Interaction happens via the native tmux pane on the right.
 		return m, nil
 
 	case "copy_worktree_path":
@@ -711,19 +709,17 @@ func (m *home) findTaskInstance() *session.Instance {
 // openContextMenu builds a context menu for the currently focused/selected item
 // (plan or instance) and positions it next to the selected item.
 func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
-	if m.focusSlot == slotNav {
-		// Nav panel focused — instance rows get the instance menu,
-		// plan headers get the plan menu, everything else is a no-op.
-		if inst := m.nav.GetSelectedInstance(); inst != nil {
-			// fall through to instance context menu below
-		} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-			return m.openTaskContextMenu()
-		} else {
-			return m, nil
-		}
+	// Nav panel always has focus — instance rows get the instance menu,
+	// plan headers get the plan menu, everything else is a no-op.
+	if inst := m.nav.GetSelectedInstance(); inst != nil {
+		// fall through to instance context menu below
+	} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
+		return m.openTaskContextMenu()
+	} else {
+		return m, nil
 	}
 
-	// Build instance context menu (reached from nav or other slots)
+	// Build instance context menu
 	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		return m, nil

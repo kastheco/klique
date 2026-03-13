@@ -43,14 +43,7 @@ const (
 	KeyFilterActive // Key for showing only active instances
 	KeyCycleSort    // Key for cycling sort mode
 
-	KeyInfoTab // Key for jumping directly to info tab
-
-	// Tab switching keybindings (Shift+1/2 = !/#)
-	KeyTabAgent
-	KeyTabInfo
-
 	KeySpawnAgent    // s - spawn ad-hoc agent session
-	KeyFocusList     // Key for focusing the right sidebar / instance list
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
 	KeyExitFocus     // Key retained for ui/menu.go compatibility; ctrl+space now handled as raw pane-focus toggle
@@ -60,12 +53,6 @@ const (
 
 	KeyAuditToggle // L - toggle audit log pane visibility
 	KeyAuditCursor // A - enter audit log cursor mode (navigate log lines)
-)
-
-// Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.
-const (
-	KeyGitTab = KeyInfoTab
-	KeyTabGit = KeyTabInfo
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -98,13 +85,9 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"s":      KeySpawnAgent,
 	"L":      KeyAuditToggle,
 	"A":      KeyAuditCursor,
-	"T":      KeyFocusList,
 	"p":      KeyViewPlan,
 	"ctrl+s": KeyToggleSidebar,
 	// ctrl+space is handled directly as a raw key event in app/app_input.go (pane focus toggle).
-	"g": KeyInfoTab,
-	"!": KeyTabAgent,
-	"#": KeyTabInfo,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -205,10 +188,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("s"),
 		key.WithHelp("s", "spawn agent"),
 	),
-	KeyFocusList: key.NewBinding(
-		key.WithKeys("T"),
-		key.WithHelp("T", "right sidebar"),
-	),
 	KeyViewPlan: key.NewBinding(
 		key.WithKeys("p"),
 		key.WithHelp("p", "preview"),
@@ -216,18 +195,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyToggleSidebar: key.NewBinding(
 		key.WithKeys("ctrl+s"),
 		key.WithHelp("ctrl+s", "toggle sidebar"),
-	),
-	KeyInfoTab: key.NewBinding(
-		key.WithKeys("g"),
-		key.WithHelp("g", "info tab"),
-	),
-	KeyTabAgent: key.NewBinding(
-		key.WithKeys("!"),
-		key.WithHelp("!/#", "switch tab"),
-	),
-	KeyTabInfo: key.NewBinding(
-		key.WithKeys("#"),
-		key.WithHelp("#", "info tab"),
 	),
 	KeyExitFocus: key.NewBinding(
 		key.WithKeys("ctrl+space"),

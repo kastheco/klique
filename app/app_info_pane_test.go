@@ -79,7 +79,6 @@ func buildInfoPaneHome(t *testing.T) (*home, *taskstate.TaskState, taskstore.Sto
 		nav:               ui.NewNavigationPanel(&sp),
 		menu:              ui.NewMenu(),
 		auditPane:         ui.NewAuditPane(),
-		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&sp),
 		overlays:          overlay.NewManager(),
 		activeRepoPath:    os.TempDir(),
@@ -104,7 +103,7 @@ func TestUpdateInfoPaneForPlanHeader_GoalPopulated(t *testing.T) {
 
 	h.updateInfoPaneForPlanHeader()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.Equal(t, "improve the info tab display", data.PlanGoal)
 }
 
@@ -117,7 +116,7 @@ func TestUpdateInfoPaneForPlanHeader_LifecycleTimestamps(t *testing.T) {
 
 	h.updateInfoPaneForPlanHeader()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.Equal(t, 2025, data.PlanningAt.Year())
 	assert.Equal(t, time.Month(1), data.PlanningAt.Month())
 	assert.Equal(t, 10, data.PlanningAt.Day())
@@ -135,7 +134,7 @@ func TestUpdateInfoPaneForPlanHeader_SubtaskProgress(t *testing.T) {
 
 	h.updateInfoPaneForPlanHeader()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.Equal(t, 3, data.TotalSubtasks, "must count all 3 subtasks")
 	assert.Equal(t, 1, data.CompletedTasks, "task 1 is complete")
 
@@ -178,7 +177,7 @@ func TestUpdateInfoPane_InstanceView_GoalAndLifecycle(t *testing.T) {
 
 	h.updateInfoPane()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.True(t, data.HasInstance)
 	assert.Equal(t, "improve the info tab display", data.PlanGoal)
 	assert.False(t, data.PlanningAt.IsZero(), "PlanningAt must be set")
@@ -206,7 +205,7 @@ func TestUpdateInfoPane_InstanceView_TaskTitle(t *testing.T) {
 
 	h.updateInfoPane()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.Equal(t, "add lifecycle timestamps", data.TaskTitle)
 }
 
@@ -228,7 +227,7 @@ func TestUpdateInfoPane_InstanceView_SubtaskProgress(t *testing.T) {
 
 	h.updateInfoPane()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	assert.Equal(t, 3, data.TotalSubtasks)
 	assert.Equal(t, 1, data.CompletedTasks)
 	assert.Len(t, data.AllWaveSubtasks, 2)
@@ -257,14 +256,13 @@ func TestUpdateInfoPane_SubtaskReadFailure_PreservesSubtaskFields(t *testing.T) 
 
 	h.taskState = ps
 
-	// Pre-set info data with subtask fields via SetInfoData so the home has prior data.
-	prior := ui.InfoData{
+	// Pre-set currentDetailData with subtask fields so the home has prior data.
+	h.currentDetailData = ui.InfoData{
 		HasInstance:     true,
 		TotalSubtasks:   5,
 		CompletedTasks:  2,
 		AllWaveSubtasks: []ui.WaveSubtaskGroup{{WaveNumber: 1, Subtasks: []ui.SubtaskDisplay{{Number: 1, Title: "old", Status: "complete"}}}},
 	}
-	h.tabbedWindow.SetInfoData(prior)
 
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:    "coder",
@@ -280,7 +278,7 @@ func TestUpdateInfoPane_SubtaskReadFailure_PreservesSubtaskFields(t *testing.T) 
 
 	h.updateInfoPane()
 
-	data := h.tabbedWindow.GetInfoData()
+	data := h.currentDetailData
 	// Subtask fields must be preserved from prior data, not zeroed.
 	assert.Equal(t, 5, data.TotalSubtasks, "TotalSubtasks must be preserved on GetSubtasks error")
 	assert.Equal(t, 2, data.CompletedTasks, "CompletedTasks must be preserved on GetSubtasks error")

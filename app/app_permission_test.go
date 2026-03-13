@@ -49,7 +49,6 @@ func newTestHomeWithCache(t *testing.T) *home {
 		appConfig:         config.DefaultConfig(),
 		nav:               ui.NewNavigationPanel(&spin),
 		menu:              ui.NewMenu(),
-		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&spin),
 		overlays:          overlay.NewManager(),
 		activeRepoPath:    t.TempDir(),
@@ -411,13 +410,12 @@ func TestUpdate_PermissionPrompt_ShowsOverlay(t *testing.T) {
 func TestConfirmAction_ShowsDialog(t *testing.T) {
 	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		ctx:          context.Background(),
-		state:        stateDefault,
-		appConfig:    config.DefaultConfig(),
-		nav:          ui.NewNavigationPanel(&spin),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
-		overlays:     overlay.NewManager(),
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+		nav:       ui.NewNavigationPanel(&spin),
+		menu:      ui.NewMenu(),
+		overlays:  overlay.NewManager(),
 	}
 
 	h.confirmAction("test?", func() tea.Msg { return nil })

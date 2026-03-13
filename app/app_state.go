@@ -21,7 +21,6 @@ import (
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
-	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
@@ -395,90 +394,12 @@ func (m *home) updateNavPanelStatus() {
 	m.nav.SetItems(nil, nil, 0, nil, nil, m.computePlanStatuses())
 }
 
-// focusSlot constants for readability.
-// Order matches tab layout: info (first), agent (second).
-const (
-	slotNav   = 0
-	slotInfo  = 1
-	slotAgent = 2
-	slotCount = 3
-)
-
 // setFocusSlot updates which pane has focus and syncs visual state.
-func (m *home) setFocusSlot(slot int) {
-	m.focusSlot = slot
-	m.nav.SetFocused(slot == slotNav)
-	m.menu.SetFocusSlot(slot)
-
-	// Center pane is focused when any of the 2 center tabs is active.
-	centerFocused := slot >= slotInfo && slot <= slotAgent
-	m.tabbedWindow.SetFocused(centerFocused)
-
-	// When focusing a center tab, switch the visible tab to match.
-	if centerFocused {
-		m.tabbedWindow.SetActiveTab(slot - slotInfo) // slotInfo=1 → InfoTab=0, etc.
-	}
-}
-
-// nextFocusSlot cycles the visible center tab forward (info ↔ agent).
-// The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
-// displayed tab changes. This is called by Tab and →.
-func (m *home) nextFocusSlot() tea.Cmd {
-	switch m.tabbedWindow.GetActiveTab() {
-	case ui.InfoTab:
-		return m.activateLivePreviewTab()
-	default: // ui.PreviewTab — wraps to info
-		return m.activateInfoTab()
-	}
-}
-
-// prevFocusSlot cycles the visible center tab backward (agent ↔ info).
-// The sidebar always retains keyboard focus (focusSlot stays slotNav).
-func (m *home) prevFocusSlot() tea.Cmd {
-	switch m.tabbedWindow.GetActiveTab() {
-	case ui.PreviewTab:
-		return m.activateInfoTab()
-	default: // ui.InfoTab — wraps to agent
-		return m.activateLivePreviewTab()
-	}
-}
-
-func (m *home) activateInfoTab() tea.Cmd {
-	m.tabbedWindow.SetActiveTab(ui.InfoTab)
-	return nil
-}
-
-func (m *home) activateLivePreviewTab() tea.Cmd {
-	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-	return nil
-}
-
-// exclamationAutoFocus handles the `!` key: it switches to the agent preview tab.
-// Interaction with the agent happens via the native tmux pane on the right.
-func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
-	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-	return m, nil
-}
-
-// switchToTab changes the visible center tab without stealing focus from the sidebar.
-// The sidebar (slotNav) always retains keyboard focus.
-func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
-	var targetTab int
-	switch name {
-	case keys.KeyTabInfo:
-		targetTab = ui.InfoTab
-	default:
-		return m, nil
-	}
-
-	if m.tabbedWindow.GetActiveTab() == targetTab {
-		return m, nil
-	}
-
-	if targetTab == ui.InfoTab {
-		return m, m.activateInfoTab()
-	}
-	return m, m.activateLivePreviewTab()
+// With the tabbed window removed, only slotNav is meaningful; this method
+// is kept as a thin shim so call sites in app_input.go compile unchanged.
+func (m *home) setFocusSlot(_ int) {
+	m.nav.SetFocused(true)
+	m.menu.SetFocusSlot(0)
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
@@ -581,20 +502,9 @@ func (m *home) instanceChanged() tea.Cmd {
 		m.seenNotified = selected
 	}
 
-	m.tabbedWindow.SetInstance(selected)
 	m.updateInfoPane()
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
-
-	// Auto-switch tab based on selection type: plan header → info tab, instance → agent tab.
-	// Only auto-switch when the nav panel is focused to avoid hijacking explicit tab selection.
-	if m.focusSlot == slotNav {
-		if selected != nil {
-			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		} else {
-			m.tabbedWindow.SetActiveTab(ui.InfoTab)
-		}
-	}
 
 	// Collect async commands.
 	var cmds []tea.Cmd
@@ -743,12 +653,14 @@ func statusString(s session.Status) string {
 func (m *home) updateInfoPaneForPlanHeader() {
 	planFile := m.nav.GetSelectedPlanFile()
 	if planFile == "" || m.taskState == nil {
-		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
+		m.currentDetailData = ui.InfoData{IsPlanHeaderSelected: true}
+		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData})
 		return
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
+		m.currentDetailData = ui.InfoData{IsPlanHeaderSelected: true}
+		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData})
 		return
 	}
 	data := ui.InfoData{
@@ -821,8 +733,7 @@ func (m *home) updateInfoPaneForPlanHeader() {
 		data.MaxReviewFixCycles = m.appConfig.MaxReviewFixCycles
 	}
 
-	m.tabbedWindow.SetInfoData(data)
-	// Mirror the same data into the nav panel's inline detail drill-down.
+	m.currentDetailData = data
 	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
 }
 
@@ -835,7 +746,7 @@ func (m *home) updateInfoPane() {
 			m.updateInfoPaneForPlanHeader()
 			return
 		}
-		m.tabbedWindow.SetInfoData(ui.InfoData{HasInstance: false})
+		m.currentDetailData = ui.InfoData{HasInstance: false}
 		m.nav.SetDetailData(ui.NavDetailData{InfoData: ui.InfoData{HasInstance: false}})
 		return
 	}
@@ -856,8 +767,8 @@ func (m *home) updateInfoPane() {
 		data.Created = selected.CreatedAt.Format("2006-01-02 15:04")
 	}
 
-	// Capture prior subtask data from the current pane so we can preserve it on error.
-	prior := m.tabbedWindow.GetInfoData()
+	// Capture prior subtask data so we can preserve it on error.
+	prior := m.currentDetailData
 
 	if selected.TaskFile != "" {
 		var orch *orchestration.WaveOrchestrator
@@ -917,8 +828,7 @@ func (m *home) updateInfoPane() {
 				prior.CompletedTasks, prior.TotalSubtasks, prior.AllWaveSubtasks)
 	}
 
-	m.tabbedWindow.SetInfoData(data)
-	// Mirror the same data into the nav panel's inline detail drill-down.
+	m.currentDetailData = data
 	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
 }
 
@@ -1575,17 +1485,12 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 
 	// Cache hit — reuse previously rendered content (instant).
 	if planFile == m.cachedPlanFile && m.cachedPlanRendered != "" {
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		m.tabbedWindow.SetDocumentContent(m.cachedPlanRendered)
+		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData, RenderedPlan: m.cachedPlanRendered})
 		return m, nil
 	}
 
 	// Cache miss — render async so the UI doesn't freeze.
-	previewWidth, _ := m.tabbedWindow.GetPreviewSize()
-	wordWrap := previewWidth - 4
-	if wordWrap < 40 {
-		wordWrap = 40
-	}
+	const wordWrap = 80
 
 	return m, func() tea.Msg {
 		data, err := m.taskStore.GetContent(m.taskStoreProject, planFile)

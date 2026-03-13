@@ -55,26 +55,8 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 }
 
 // handleMouseWheel processes mouse wheel events for scrolling.
-func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
-	if m.tabbedWindow.IsDocumentMode() && m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
-		switch msg.Button {
-		case tea.MouseWheelUp:
-			m.tabbedWindow.ContentScrollUp()
-		case tea.MouseWheelDown:
-			m.tabbedWindow.ContentScrollDown()
-		}
-		return m, nil
-	}
-
-	selected := m.nav.GetSelectedInstance()
-	if selected != nil && selected.Status != session.Paused {
-		switch msg.Button {
-		case tea.MouseWheelUp:
-			m.tabbedWindow.ContentScrollUp()
-		case tea.MouseWheelDown:
-			m.tabbedWindow.ContentScrollDown()
-		}
-	}
+// With the tabbed window removed, mouse wheel events are no-ops at the app level.
+func (m *home) handleMouseWheel(_ tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
@@ -100,33 +82,15 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 
 	// Zone-based click: search box
 	if zone.Get(ui.ZoneNavSearch).InBounds(msg) {
-		m.setFocusSlot(slotNav)
 		m.nav.ActivateSearch()
 		m.state = stateSearch
 		return m, nil
 	}
 
-	// Zone-based click: tab headers — switch visible tab without stealing sidebar focus.
-	for i, zoneID := range ui.TabZoneIDs {
-		if zone.Get(zoneID).InBounds(msg) {
-			if i == ui.PreviewTab {
-				return m, m.activateLivePreviewTab()
-			}
-			return m, m.activateInfoTab()
-		}
-	}
-
-	// Zone-based click: "view plan doc" button in info tab
-	if zone.Get(ui.ZoneViewPlan).InBounds(msg) {
-		return m.viewSelectedPlan()
-	}
-
 	// Zone-based click: nav panel rows
 	if zone.Get(ui.ZoneNavPanel).InBounds(msg) {
-		m.setFocusSlot(slotNav)
 		for i := range m.nav.RowCount() {
 			if zone.Get(ui.NavRowZoneID(i)).InBounds(msg) {
-				m.tabbedWindow.ClearDocumentMode()
 				m.nav.ClickItem(i)
 				return m, m.instanceChanged()
 			}
@@ -1325,44 +1289,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	}
 
-	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode.
-	// Always check for escape key first to ensure it doesn't get intercepted elsewhere.
-	if msg.Code == tea.KeyEscape {
-		// Exit document mode (plan viewer) on Esc
-		if m.tabbedWindow.IsDocumentMode() {
-			m.tabbedWindow.ClearDocumentMode()
-			return m, m.instanceChanged()
-		}
-		// If in scroll mode, exit scroll mode
-		if m.tabbedWindow.IsPreviewInScrollMode() {
-			// Use the selected instance from the list
-			selected := m.nav.GetSelectedInstance()
-			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
-			if err != nil {
-				return m, m.handleError(err)
-			}
-			return m, m.instanceChanged()
-		}
-	}
-
-	// Forward key events to the viewport when in document or scroll mode.
-	// This enables viewport native keys like PgUp/PgDn and arrow keys.
-	if (m.tabbedWindow.IsDocumentMode() || m.tabbedWindow.IsPreviewInScrollMode()) &&
-		m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
-		cmd := m.tabbedWindow.ViewportUpdate(msg)
-
-		// Keep existing shift+up/down behavior as fallback handlers.
-		if msg.String() != "shift+up" && msg.String() != "shift+down" {
-			if m.tabbedWindow.ViewportHandlesKey(msg) {
-				return m, cmd
-			}
-		}
-
-		if cmd != nil {
-			return m, cmd
-		}
-	}
-
 	// Ctrl+Up/Down: cycle through active instances (wrapping)
 	if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) || msg.Code == tea.KeyDown && msg.Mod.Contains(tea.ModCtrl) {
 		if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) {
@@ -1371,16 +1297,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.nav.CycleNextActive()
 		}
 		return m, m.instanceChanged()
-	}
-
-	// Ctrl+U/D: half-page scroll in agent session preview
-	if msg.Code == 'u' && msg.Mod.Contains(tea.ModCtrl) || msg.Code == 'd' && msg.Mod.Contains(tea.ModCtrl) {
-		if msg.Code == 'u' && msg.Mod.Contains(tea.ModCtrl) {
-			m.tabbedWindow.HalfPageUp()
-		} else {
-			m.tabbedWindow.HalfPageDown()
-		}
-		return m, nil
 	}
 
 	// Ctrl+Space: focus the workspace (right) tmux pane so the user can interact
@@ -1410,9 +1326,9 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m.handleQuit()
 	}
 
-	// Shift+Tab: reverse focus ring cycle (don't call instanceChanged — it auto-switches tabs)
+	// Shift+Tab: no-op (tab cycling removed with tabbed window).
 	if msg.String() == "shift+tab" {
-		return m, m.prevFocusSlot()
+		return m, nil
 	}
 
 	// Delete key: dismiss a finished (non-running) instance from the list.
@@ -1482,47 +1398,29 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 
 		return m, nil
 	case keys.KeyUp:
-		m.tabbedWindow.ClearDocumentMode()
-		if m.focusSlot != slotNav {
-			m.setFocusSlot(slotNav)
-		}
 		m.nav.Up()
 		return m, m.instanceChanged()
 	case keys.KeyDown:
-		m.tabbedWindow.ClearDocumentMode()
-		if m.focusSlot != slotNav {
-			m.setFocusSlot(slotNav)
-		}
 		m.nav.Down()
 		return m, m.instanceChanged()
 	case keys.KeyTab:
-		return m, m.nextFocusSlot()
+		// Tab cycling removed with tabbed window — no-op.
+		return m, nil
 	case keys.KeySpace:
-		if m.focusSlot == slotNav && m.nav.GetSelectedID() == ui.SidebarImportClickUp {
+		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
 			tio := overlay.NewTextInputOverlay("enter clickup id or url", "")
 			tio.SetSize(50, 1)
 			m.overlays.Show(tio)
 			return m, nil
 		}
-		if m.focusSlot == slotNav && m.nav.ToggleSelectedExpand() {
+		if m.nav.ToggleSelectedExpand() {
 			return m, nil
 		}
 		return m.openContextMenu()
-	case keys.KeyInfoTab:
-		// Switch visible tab to info without stealing sidebar focus.
-		if m.tabbedWindow.IsInInfoTab() {
-			return m, nil
-		}
-		return m, m.activateInfoTab()
-	case keys.KeyTabInfo:
-		return m.switchToTab(name)
-	case keys.KeyTabAgent:
-		return m.exclamationAutoFocus()
 	case keys.KeySendPrompt:
-		// Switch to the agent preview tab. Interaction with the agent happens
-		// via the native tmux pane on the right (use Ctrl+Space to focus it).
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		// Interaction with the agent happens via the native tmux pane on the right
+		// (use Ctrl+Space to focus it).
 		return m, tea.RequestWindowSize
 	case keys.KeySendYes:
 		selected := m.nav.GetSelectedInstance()
@@ -1686,26 +1584,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			})
 		}
 		return m, nil
-	case keys.KeyFocusList:
-		// t key always jumps directly to the instance list — no-op when list is hidden.
-		if m.nav.TotalInstances() > 0 {
-			m.setFocusSlot(slotNav)
-		}
-		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
 	case keys.KeyToggleSidebar:
-		if m.sidebarHidden {
-			// Show sidebar, keep current focus
-			m.sidebarHidden = false
-		} else {
-			// Hide sidebar
-			m.sidebarHidden = true
-			// If sidebar was focused, move focus to agent tab
-			if m.focusSlot == slotNav {
-				m.setFocusSlot(slotAgent)
-			}
-		}
+		m.sidebarHidden = !m.sidebarHidden
 		return m, tea.RequestWindowSize
 	case keys.KeyAuditToggle:
 		if m.auditPane != nil {
@@ -1755,7 +1637,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		m.nav.ActivateSearch()
 		m.nav.SelectFirst()
 		m.state = stateSearch
-		m.setFocusSlot(slotNav)
 		return m, nil
 	default:
 		return m, nil
