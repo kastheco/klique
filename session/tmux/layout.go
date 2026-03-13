@@ -263,6 +263,34 @@ func readLayoutEnv(ex cmd.Executor, sessionName string) (Layout, error) {
 	}, nil
 }
 
+// ApplyStatusBar updates the tmux status bar for the named session by issuing
+// set-option calls for status-left, status-right, and the one-time style options
+// (status-style, status-left-length, status-right-length).
+//
+// It is safe to call repeatedly — tmux silently accepts duplicate set-option calls
+// so unchanged values are effectively no-ops. The caller is responsible for
+// skipping unchanged renders to avoid unnecessary subprocess spawns.
+//
+// Errors from individual set-option calls are logged but do not abort the loop;
+// the first error encountered is returned so callers can toast it if desired.
+func ApplyStatusBar(ex cmd.Executor, sessionName string, render StatusBarRender) error {
+	opts := []struct{ opt, val string }{
+		{"status-style", "bg=default,fg=default"},
+		{"status-left-length", "120"},
+		{"status-right-length", "80"},
+		{"status-left", render.Left},
+		{"status-right", render.Right},
+	}
+	var firstErr error
+	for _, o := range opts {
+		c := exec.Command("tmux", "set-option", "-t", sessionName, o.opt, o.val)
+		if err := ex.Run(c); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("apply status bar: set-option %s: %w", o.opt, err)
+		}
+	}
+	return firstErr
+}
+
 // showSessionEnvVar runs `tmux show-environment -t <session> <var>` and parses
 // the output (format: "VAR=value\n") returning the value portion.
 func showSessionEnvVar(ex cmd.Executor, sessionName, envVar string) (string, error) {

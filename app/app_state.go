@@ -274,6 +274,62 @@ func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool
 	return status
 }
 
+// uiToTmuxStatusBarData adapts a ui.StatusBarData to the tmux-package mirror type.
+// Direct integer cast for TaskGlyph is safe — both packages use iota in the same
+// order (Complete=0, Running=1, Failed=2, Pending=3).
+func uiToTmuxStatusBarData(d ui.StatusBarData) tmux.StatusBarData {
+	glyphs := make([]tmux.TaskGlyph, len(d.TaskGlyphs))
+	for i, g := range d.TaskGlyphs {
+		glyphs[i] = tmux.TaskGlyph(g)
+	}
+	return tmux.StatusBarData{
+		Branch:           d.Branch,
+		Version:          d.Version,
+		PlanName:         d.PlanName,
+		PlanStatus:       d.PlanStatus,
+		WaveLabel:        d.WaveLabel,
+		TaskGlyphs:       glyphs,
+		FocusMode:        d.FocusMode,
+		TmuxSessionCount: d.TmuxSessionCount,
+		ProjectDir:       d.ProjectDir,
+		PRState:          d.PRState,
+		PRChecks:         d.PRChecks,
+	}
+}
+
+// updateTmuxStatusBarCmd returns a tea.Cmd that asynchronously applies the
+// rendered status bar strings to the outer tmux layout session.
+//
+// Guards:
+//   - Returns nil when layoutSessionName is empty (not inside the two-pane layout).
+//   - Returns nil when KASMOS_LAYOUT env var is not "1".
+//   - Returns nil when the rendered strings are identical to the last applied
+//     values (m.lastTmuxStatusLeft / m.lastTmuxStatusRight), avoiding redundant
+//     subprocess calls on every metadata tick.
+//
+// On error the cmd logs the failure and returns nil so the metadata loop continues.
+func (m *home) updateTmuxStatusBarCmd(data ui.StatusBarData) tea.Cmd {
+	if m.layoutSessionName == "" || os.Getenv("KASMOS_LAYOUT") != "1" {
+		return nil
+	}
+	render := tmux.RenderStatusBar(uiToTmuxStatusBarData(data))
+	if render.Left == m.lastTmuxStatusLeft && render.Right == m.lastTmuxStatusRight {
+		return nil // no-op: nothing changed
+	}
+	// Update the cache before spawning the cmd so a second tick that fires
+	// before the first cmd completes does not send a duplicate request.
+	m.lastTmuxStatusLeft = render.Left
+	m.lastTmuxStatusRight = render.Right
+	sessionName := m.layoutSessionName
+	return func() tea.Msg {
+		ex := cmd2.MakeExecutor()
+		if err := tmux.ApplyStatusBar(ex, sessionName, render); err != nil {
+			log.WarningLog.Printf("updateTmuxStatusBarCmd: %v", err)
+		}
+		return nil
+	}
+}
+
 // computeStatusBarData builds the StatusBarData from the current app state.
 func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{

@@ -259,6 +259,10 @@ type home struct {
 	// two-pane layout (left nav pane + right workspace/agent pane). Empty when
 	// kas is not running inside tmux. Populated once in newHome().
 	layoutSessionName string
+	// lastTmuxStatusLeft and lastTmuxStatusRight cache the last applied tmux
+	// status bar strings so unchanged metadata ticks skip redundant subprocess calls.
+	lastTmuxStatusLeft  string
+	lastTmuxStatusRight string
 
 	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
 	tmuxSessionCount int
@@ -1813,6 +1817,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.updateSidebarTasks()
 		m.updateInfoPane()
+		// Push current state to the tmux status bar (no-op when not in layout).
+		if statusCmd := m.updateTmuxStatusBarCmd(m.computeStatusBarData()); statusCmd != nil {
+			asyncCmds = append(asyncCmds, statusCmd)
+		}
 		completionCmd := m.checkPlanCompletion()
 		asyncCmds = append(asyncCmds, signalCmds...)
 		asyncCmds = append(asyncCmds, tickUpdateMetadataCmd, completionCmd)

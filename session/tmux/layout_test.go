@@ -241,6 +241,117 @@ func TestFocusPane(t *testing.T) {
 	assert.Equal(t, "%42", selectPaneTarget)
 }
 
+// --- ApplyStatusBar tests ---
+
+func TestApplyStatusBar_SetsLeftRightAndStyleOptions(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	// tmux set-option command shape: tmux set-option -t <session> <opt> <val>
+	// args indices:                  [0]  [1]         [2] [3]      [4]   [5]
+	var optNames []string
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			args := cmd.Args
+			if strings.Contains(cmd.String(), "set-option") && len(args) >= 5 {
+				optNames = append(optNames, args[4])
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte(""), nil
+		},
+	}
+
+	render := StatusBarRender{Left: "kasmos v1.0.0", Right: "main · myproj"}
+	err := ApplyStatusBar(ex, "kas_main_testrepo", render)
+	require.NoError(t, err)
+
+	assert.Contains(t, optNames, "status-style")
+	assert.Contains(t, optNames, "status-left-length")
+	assert.Contains(t, optNames, "status-right-length")
+	assert.Contains(t, optNames, "status-left")
+	assert.Contains(t, optNames, "status-right")
+}
+
+func TestApplyStatusBar_SetsCorrectLeftAndRightValues(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	optValues := make(map[string]string)
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			args := cmd.Args
+			if strings.Contains(cmd.String(), "set-option") && len(args) >= 6 {
+				optName := args[4]
+				optVal := args[5]
+				optValues[optName] = optVal
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte(""), nil
+		},
+	}
+
+	render := StatusBarRender{Left: "#[bold]kasmos#[default]", Right: "main"}
+	err := ApplyStatusBar(ex, "kas_main_testrepo", render)
+	require.NoError(t, err)
+
+	assert.Equal(t, "#[bold]kasmos#[default]", optValues["status-left"])
+	assert.Equal(t, "main", optValues["status-right"])
+}
+
+func TestApplyStatusBar_ReturnsFirstErrorFromSetOption(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	callCount := 0
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			callCount++
+			if callCount == 1 && strings.Contains(cmd.String(), "status-style") {
+				return fmt.Errorf("tmux: unknown option: status-style")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte(""), nil
+		},
+	}
+
+	render := StatusBarRender{Left: "kasmos", Right: ""}
+	err := ApplyStatusBar(ex, "kas_main_testrepo", render)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status-style")
+	// Remaining options are still attempted (loop continues after first error).
+	assert.Greater(t, callCount, 1)
+}
+
+func TestApplyStatusBar_EmptyRender_SetsEmptyStrings(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	optValues := make(map[string]string)
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			args := cmd.Args
+			if strings.Contains(cmd.String(), "set-option") && len(args) >= 6 {
+				optValues[args[4]] = args[5]
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte(""), nil
+		},
+	}
+
+	err := ApplyStatusBar(ex, "kas_main_testrepo", StatusBarRender{})
+	require.NoError(t, err)
+	assert.Equal(t, "", optValues["status-left"])
+	assert.Equal(t, "", optValues["status-right"])
+}
+
 func TestShowSessionEnvVar_ParsesValue(t *testing.T) {
 	ex := cmd_test.MockCmdExec{
 		RunFunc: func(cmd *exec.Cmd) error { return nil },
