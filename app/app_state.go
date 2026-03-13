@@ -822,6 +822,8 @@ func (m *home) updateInfoPaneForPlanHeader() {
 	}
 
 	m.tabbedWindow.SetInfoData(data)
+	// Mirror the same data into the nav panel's inline detail drill-down.
+	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
 }
 
 // updateInfoPane refreshes the info tab data from the selected instance or plan header.
@@ -834,6 +836,7 @@ func (m *home) updateInfoPane() {
 			return
 		}
 		m.tabbedWindow.SetInfoData(ui.InfoData{HasInstance: false})
+		m.nav.SetDetailData(ui.NavDetailData{InfoData: ui.InfoData{HasInstance: false}})
 		return
 	}
 
@@ -915,6 +918,8 @@ func (m *home) updateInfoPane() {
 	}
 
 	m.tabbedWindow.SetInfoData(data)
+	// Mirror the same data into the nav panel's inline detail drill-down.
+	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
 }
 
 // loadTaskState reads plan state from the store for the active repo.
