@@ -219,8 +219,6 @@ type home struct {
 	menu *ui.Menu
 	// statusBar displays the top contextual status bar
 	statusBar *ui.StatusBar
-	// tabbedWindow displays the tabbed window with preview and info panes
-	tabbedWindow *ui.TabbedWindow
 	// toastManager manages toast notifications
 	toastManager *overlay.ToastManager
 	// global spinner instance. we plumb this down to where it's needed
@@ -230,10 +228,6 @@ type home struct {
 	// pendingConfirmAction stores the tea.Cmd to run asynchronously when confirmed
 	pendingConfirmAction tea.Cmd
 
-	// nav handles unified navigation state
-	// focusSlot tracks which pane has keyboard focus in the Tab ring:
-	// 0=nav, 1=info tab, 2=agent tab
-	focusSlot int
 	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
 	// pendingPlanDesc stores the plan description during the two-step plan creation flow
@@ -287,7 +281,6 @@ type home struct {
 
 	// Layout dimensions for mouse hit-testing
 	navWidth      int
-	tabsWidth     int
 	contentHeight int
 
 	// sidebarHidden tracks whether the nav is collapsed (ctrl+s toggle)
@@ -327,6 +320,10 @@ type home struct {
 	cachedPlanFile string
 	// cachedPlanRendered is the glamour-rendered markdown of cachedPlanFile.
 	cachedPlanRendered string
+	// currentDetailData holds the last InfoData pushed to the nav panel's inline
+	// detail drill-down. Used to preserve subtask data across ticks and to
+	// supply the rendered plan when a new plan render arrives.
+	currentDetailData ui.InfoData
 
 	// waveOrchestrators tracks active wave orchestrations by plan filename.
 	waveOrchestrators map[string]*orchestration.WaveOrchestrator
@@ -441,8 +438,6 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 		spinner:               spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:                  ui.NewMenu(),
 		auditPane:             ui.NewAuditPane(),
-		statusBar:             ui.NewStatusBar(),
-		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		storage:               storage,
 		appConfig:             appConfig,
 		program:               program,
@@ -547,8 +542,9 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 	}
 	h.permissionHandled = make(map[*session.Instance]string)
 
-	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
-	h.setFocusSlot(slotNav)
+	// The nav is always the active Bubble Tea widget; right-side focus belongs
+	// to tmux and is handled by the two-pane layout launcher (Task 4).
+	h.nav.SetFocused(true)
 	h.loadTaskState()
 
 	// Load saved instances
@@ -605,25 +601,16 @@ func (m *home) exitFocusModeForDialog() {}
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// Two-column layout: nav + preview
-	var navWidth int
-	if m.sidebarHidden {
-		navWidth = 0
-	} else {
-		navWidth = msg.Width * 30 / 100
-		if navWidth < 25 {
-			navWidth = 25
-		}
-	}
-	tabsWidth := msg.Width - navWidth
+	// Nav-only layout: the nav fills the full terminal width.
+	// The right side is owned by a native tmux pane outside this process.
+	navWidth := msg.Width
 
-	// Keep the keybind rail compact and give the saved rows to the three columns.
+	// Keep the keybind rail compact and give the saved rows to the nav.
 	menuHeight := 1
 	if msg.Height < 2 {
 		menuHeight = 0
 	}
-	statusBarHeight := 1
-	contentHeight := msg.Height - menuHeight - statusBarHeight
+	contentHeight := msg.Height - menuHeight
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -633,15 +620,10 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	m.termWidth = msg.Width
 	m.termHeight = msg.Height
 	m.toastManager.SetSize(msg.Width, msg.Height)
-	if m.statusBar != nil {
-		m.statusBar.SetSize(msg.Width)
-	}
-
-	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 
 	// Nav panel gets full content height — audit pane is rendered inside its border.
 	m.nav.SetSize(navWidth, contentHeight)
-	if m.auditPane != nil && m.auditPane.Visible() && navWidth > 0 {
+	if m.auditPane != nil && m.auditPane.Visible() {
 		// Size audit pane for the nav panel's inner content area.
 		// border (2) + border padding (2) + item padding (2) = 6
 		auditInnerW := navWidth - 6
@@ -663,12 +645,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	// Store for mouse hit-testing
 	m.navWidth = navWidth
-	m.tabsWidth = tabsWidth
 	m.contentHeight = contentHeight
-
-	if navWidth == 0 && m.focusSlot == slotNav {
-		m.setFocusSlot(slotAgent)
-	}
 
 	// Only resize overlays when the terminal dimensions actually changed.
 	// Many handlers emit tea.RequestWindowSize as a batched side-effect (e.g.
@@ -678,10 +655,6 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 		m.overlays.SetSize(msg.Width, msg.Height)
 	}
 
-	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
-	if err := m.nav.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
-		log.ErrorLog.Print(err)
-	}
 	m.menu.SetSize(msg.Width, menuHeight)
 }
 
@@ -748,25 +721,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cachedPlanFile = msg.planFile
 		m.cachedPlanRendered = msg.rendered
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		m.tabbedWindow.SetDocumentContent(msg.rendered)
+		// Update the nav panel's inline detail with the freshly rendered plan.
+		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData, RenderedPlan: msg.rendered})
 		return m, nil
 	case previewTickMsg:
-		if !m.tabbedWindow.IsDocumentMode() {
-			// No embedded terminal — delegate to UpdatePreview which renders the
-			// correct fallback (banner, progress bar, or paused message).
-			selected := m.nav.GetSelectedInstance()
-			if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-				log.ErrorLog.Printf("preview update error: %v", err)
-			}
-		}
-		// Advance spring animation every tick (20fps)
-		m.tabbedWindow.TickSpring()
-		// Banner animation.
-		m.previewTickCount++
-		if m.previewTickCount%20 == 0 {
-			m.tabbedWindow.TickBanner()
-		}
+		// Preview tick is a no-op in the nav-only layout — no embedded terminal.
 		return m, nextPreviewTickCmd()
 	case keyupMsg:
 		m.menu.ClearKeydown()
@@ -2203,30 +2162,18 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 }
 
 func (m *home) View() tea.View {
-	// All columns use identical padding and height for uniform alignment.
+	// Nav-only layout: the right side is a native tmux pane owned by the
+	// two-pane layout launcher.  We render the nav panel at full terminal
+	// width and the bottom menu row; nothing else.
 	colStyle := lipgloss.NewStyle().Height(m.contentHeight)
-	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
 
-	// Layout: nav | preview/tabs
-	var cols []string
-	if !m.sidebarHidden {
-		cols = append(cols, colStyle.Render(m.nav.String()))
-	}
-	cols = append(cols, previewWithPadding)
-	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
-	statusBarView := ""
-	if m.statusBar != nil {
-		m.statusBar.SetData(m.computeStatusBarData())
-		statusBarView = m.statusBar.String()
-	}
 	if m.menu != nil && m.nav != nil {
 		m.menu.SetSidebarSpaceAction(m.nav.SelectedSpaceAction())
 	}
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
-		statusBarView,
-		listAndPreview,
+		colStyle.Render(m.nav.String()),
 		m.menu.String(),
 	)
 
