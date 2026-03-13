@@ -11,6 +11,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/daemon/api"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -386,6 +387,109 @@ func TestDaemon_ExecuteAction_SpawnFixer_BranchEmpty_Fails(t *testing.T) {
 	})
 	require.Error(t, err, "executeAction must propagate spawn error when branch is empty")
 	assert.Contains(t, err.Error(), "Branch is required")
+}
+
+func TestDaemon_TaskComplete_FinalWaveTransitionsToReviewing(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	planFile := "wave-plan.md"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusImplementing,
+	}))
+
+	proc := loop.NewProcessor(loop.ProcessorConfig{Store: store, Project: project})
+	proc.RegisterOrchestrator(planFile, 1, []int{1})
+
+	d := &Daemon{
+		cfg:         &DaemonConfig{},
+		spawner:     NewTmuxSpawner(),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+	e := RepoEntry{
+		Path:      t.TempDir(),
+		Project:   project,
+		Store:     store,
+		Processor: proc,
+	}
+
+	actions := proc.ProcessTaskSignals([]taskfsm.TaskSignal{{
+		TaskFile:   planFile,
+		WaveNumber: 1,
+		TaskNumber: 1,
+	}})
+	require.Len(t, actions, 1)
+	taskAction, ok := actions[0].(loop.TaskCompleteAction)
+	require.True(t, ok)
+
+	err := d.executeAction(context.Background(), e, taskAction)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Branch is required")
+
+	entry, getErr := store.Get(project, planFile)
+	require.NoError(t, getErr)
+	assert.Equal(t, taskstore.StatusReviewing, entry.Status)
+	assert.Nil(t, proc.WaveOrchestrator(planFile), "orchestrator must be cleared after final wave completion")
+}
+
+func TestDaemon_TaskComplete_AutoAdvanceStartsNextWave(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	planFile := "multi-wave.md"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: planFile,
+		Status:   taskstore.StatusImplementing,
+	}))
+	require.NoError(t, store.SetContent(project, planFile, `# Feature Plan
+
+## Wave 1
+### Task 1: First Thing
+
+Do the first thing.
+
+## Wave 2
+### Task 2: Second Thing
+
+Do the second thing.
+`))
+
+	proc := loop.NewProcessor(loop.ProcessorConfig{Store: store, Project: project})
+	advance := proc.ProcessWaveSignals([]taskfsm.WaveSignal{{TaskFile: planFile, WaveNumber: 1}})
+	require.Len(t, advance, 1)
+	_, ok := advance[0].(loop.AdvanceWaveAction)
+	require.True(t, ok)
+
+	d := &Daemon{
+		cfg:         &DaemonConfig{AutoAdvanceWaves: true},
+		spawner:     NewTmuxSpawner(),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+	e := RepoEntry{
+		Path:      t.TempDir(),
+		Project:   project,
+		Store:     store,
+		Processor: proc,
+	}
+
+	actions := proc.ProcessTaskSignals([]taskfsm.TaskSignal{{
+		TaskFile:   planFile,
+		WaveNumber: 1,
+		TaskNumber: 1,
+	}})
+	require.Len(t, actions, 1)
+	taskAction, ok := actions[0].(loop.TaskCompleteAction)
+	require.True(t, ok)
+
+	err := d.executeAction(context.Background(), e, taskAction)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Branch is required")
+
+	orch := proc.WaveOrchestrator(planFile)
+	require.NotNil(t, orch)
+	assert.Equal(t, 2, orch.CurrentWaveNumber())
+	assert.Equal(t, orchestration.WaveStateRunning, orch.State())
 }
 
 func TestReapStuckSignals(t *testing.T) {

@@ -72,6 +72,48 @@ func TestTmuxSpawner_instanceKey(t *testing.T) {
 	assert.Equal(t, "/repo:plan.md:reviewer", instanceKey("/repo", "plan.md", "reviewer"))
 	// Two repos with the same plan filename must produce distinct keys.
 	assert.NotEqual(t, instanceKey("/repo-a", "task.md", "coder"), instanceKey("/repo-b", "task.md", "coder"))
+	assert.Equal(t, "/repo:plan.md:coder:w2:t3", instanceKeyForTask("/repo", "plan.md", "coder", 2, 3))
+}
+
+func TestTmuxSpawner_KillWaveAgents(t *testing.T) {
+	s := NewTmuxSpawner()
+	s.hasAttachedClients = func(_ cmd.Executor, _ string) bool { return false }
+	s.sleep = func(_ time.Duration) {}
+	killCalls := []string{}
+	s.kill = func(inst *session.Instance) error {
+		killCalls = append(killCalls, inst.Title)
+		return nil
+	}
+	s.cleanupGracePeriod = 0
+
+	const repoPath = "/tmp/repo"
+	const planFile = "wave-plan.md"
+
+	register := func(inst *session.Instance) {
+		key := instanceKeyForTask(repoPath, planFile, inst.AgentType, inst.WaveNumber, inst.TaskNumber)
+		s.mu.Lock()
+		s.instances[key] = inst
+		s.planFileByKey[key] = planFile
+		s.agentTypeByKey[key] = inst.AgentType
+		s.projectByKey[key] = "my-project"
+		s.mu.Unlock()
+	}
+
+	register(&session.Instance{Title: "wave-plan-W1-T1", Path: repoPath, TaskFile: planFile, AgentType: session.AgentTypeCoder, TaskNumber: 1, WaveNumber: 1})
+	register(&session.Instance{Title: "wave-plan-W1-T2", Path: repoPath, TaskFile: planFile, AgentType: session.AgentTypeCoder, TaskNumber: 2, WaveNumber: 1})
+	register(&session.Instance{Title: "wave-plan-W2-T3", Path: repoPath, TaskFile: planFile, AgentType: session.AgentTypeCoder, TaskNumber: 3, WaveNumber: 2})
+
+	err := s.KillWaveAgents(repoPath, planFile, 1)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"wave-plan-W1-T1", "wave-plan-W1-T2"}, killCalls)
+
+	s.mu.Lock()
+	remaining := make([]string, 0, len(s.instances))
+	for _, inst := range s.instances {
+		remaining = append(remaining, inst.Title)
+	}
+	s.mu.Unlock()
+	assert.Equal(t, []string{"wave-plan-W2-T3"}, remaining)
 }
 
 func TestTmuxSpawner_SpawnReviewer_MissingRepoPath(t *testing.T) {

@@ -17,9 +17,11 @@ import (
 
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
+	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/kastheco/kasmos/log"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 )
@@ -646,14 +648,9 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		})
 		return nil
 	case loop.AdvanceWaveAction:
-		d.logger.Info("wave advanced", "plan", a.PlanFile, "wave", a.Wave, "repo", e.Path)
-		d.broadcaster.Emit(api.Event{
-			Kind:     "wave_advanced",
-			Message:  fmt.Sprintf("wave %d started for %s", a.Wave, a.PlanFile),
-			Repo:     e.Path,
-			PlanFile: a.PlanFile,
-		})
-		return nil
+		return d.startWaveTasks(ctx, e, a.PlanFile)
+	case loop.TaskCompleteAction:
+		return d.handleWaveTaskComplete(ctx, e, a)
 	case loop.TransitionAction:
 		d.logger.Info("fsm transition", "plan", a.PlanFile, "event", a.Event, "repo", e.Path)
 		d.broadcaster.Emit(api.Event{
@@ -695,6 +692,135 @@ func (d *Daemon) executeAction(ctx context.Context, e RepoEntry, action loop.Act
 		d.logger.Debug("unhandled action", "kind", action.Kind(), "repo", e.Path)
 		return nil
 	}
+}
+
+func (d *Daemon) startWaveTasks(ctx context.Context, e RepoEntry, planFile string) error {
+	orch := e.Processor.WaveOrchestrator(planFile)
+	if orch == nil {
+		return fmt.Errorf("wave orchestrator not found for %s", planFile)
+	}
+	if e.Store == nil {
+		return fmt.Errorf("task store unavailable for %s", planFile)
+	}
+
+	entry, err := e.Store.Get(e.Project, planFile)
+	if err != nil {
+		return fmt.Errorf("load task entry for %s: %w", planFile, err)
+	}
+
+	tasks := orch.CurrentWaveTasks()
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	waveNum := orch.CurrentWaveNumber()
+	peerCount := len(tasks)
+	for _, task := range tasks {
+		prompt := orch.BuildTaskPrompt(task, peerCount)
+		opts := loop.SpawnOpts{
+			PlanFile: planFile,
+			RepoPath: e.Path,
+			Project:  e.Project,
+			Branch:   entry.Branch,
+			Wave:     waveNum,
+		}
+		if err := d.spawner.SpawnWaveTask(ctx, opts, task, prompt, peerCount); err != nil {
+			return err
+		}
+	}
+
+	planName := taskstate.DisplayName(planFile)
+	d.logger.Info("wave advanced", "plan", planFile, "wave", waveNum, "repo", e.Path)
+	d.broadcaster.Emit(api.Event{
+		Kind:     "wave_advanced",
+		Message:  fmt.Sprintf("%s: wave %d started", planName, waveNum),
+		Repo:     e.Path,
+		PlanFile: planFile,
+	})
+	return nil
+}
+
+func (d *Daemon) handleWaveTaskComplete(ctx context.Context, e RepoEntry, action loop.TaskCompleteAction) error {
+	orch := e.Processor.WaveOrchestrator(action.PlanFile)
+	if orch == nil {
+		return nil
+	}
+
+	planName := taskstate.DisplayName(action.PlanFile)
+	d.broadcaster.Emit(api.Event{
+		Kind:     "task_completed",
+		Message:  fmt.Sprintf("%s: task %d in wave %d completed", planName, action.TaskNumber, action.WaveNumber),
+		Repo:     e.Path,
+		PlanFile: action.PlanFile,
+	})
+
+	switch orch.State() {
+	case orchestration.WaveStateRunning:
+		return nil
+
+	case orchestration.WaveStateWaveComplete:
+		waveNum := orch.CurrentWaveNumber()
+		completed := orch.CompletedTaskCount()
+		failed := orch.FailedTaskCount()
+		total := completed + failed
+
+		if err := d.spawner.KillWaveAgents(e.Path, action.PlanFile, waveNum); err != nil {
+			return err
+		}
+
+		if failed > 0 {
+			e.Processor.ClearWaveOrchestrator(action.PlanFile)
+			d.broadcaster.Emit(api.Event{
+				Kind:     "wave_failed",
+				Message:  fmt.Sprintf("%s: wave %d finished with %d/%d failed tasks", planName, waveNum, failed, total),
+				Repo:     e.Path,
+				PlanFile: action.PlanFile,
+			})
+			return nil
+		}
+
+		d.broadcaster.Emit(api.Event{
+			Kind:     "wave_completed",
+			Message:  fmt.Sprintf("%s: wave %d complete (%d/%d)", planName, waveNum, completed, total),
+			Repo:     e.Path,
+			PlanFile: action.PlanFile,
+		})
+
+		autoAdvanceWaves := d.cfg != nil && d.cfg.AutoAdvanceWaves
+		if !autoAdvanceWaves {
+			e.Processor.ClearWaveOrchestrator(action.PlanFile)
+			return nil
+		}
+
+		tasks := orch.StartNextWave()
+		if len(tasks) == 0 {
+			e.Processor.ClearWaveOrchestrator(action.PlanFile)
+			return nil
+		}
+		return d.startWaveTasks(ctx, e, action.PlanFile)
+
+	case orchestration.WaveStateAllComplete:
+		waveNum := orch.CurrentWaveNumber()
+		if err := d.spawner.KillWaveAgents(e.Path, action.PlanFile, waveNum); err != nil {
+			return err
+		}
+		e.Processor.ClearWaveOrchestrator(action.PlanFile)
+
+		fsm := taskfsm.New(e.Store, e.Project, "")
+		if err := fsm.Transition(action.PlanFile, taskfsm.ImplementFinished); err != nil {
+			return err
+		}
+
+		d.broadcaster.Emit(api.Event{
+			Kind:     "wave_completed",
+			Message:  fmt.Sprintf("all waves complete for %s", planName),
+			Repo:     e.Path,
+			PlanFile: action.PlanFile,
+		})
+		return d.executeAction(ctx, e, loop.SpawnReviewerAction{PlanFile: action.PlanFile})
+	}
+
+	return nil
 }
 
 func (d *Daemon) pidLockPath() string {

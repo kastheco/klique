@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kastheco/kasmos/cmd"
+	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
@@ -258,6 +259,13 @@ func (s *TmuxSpawner) DiscoverOrphanSessions() []tmuxpkg.SessionInfo {
 // type. Including repoPath prevents key collisions when two registered repos
 // share the same plan filename.
 func instanceKey(repoPath, planFile, agentType string) string {
+	return instanceKeyForTask(repoPath, planFile, agentType, 0, 0)
+}
+
+func instanceKeyForTask(repoPath, planFile, agentType string, waveNumber, taskNumber int) string {
+	if waveNumber > 0 || taskNumber > 0 {
+		return fmt.Sprintf("%s:%s:%s:w%d:t%d", repoPath, planFile, agentType, waveNumber, taskNumber)
+	}
 	return repoPath + ":" + planFile + ":" + agentType
 }
 
@@ -363,6 +371,106 @@ func (s *TmuxSpawner) KillAgent(repoPath, planFile, agentType string) error {
 		s.mu.Unlock()
 	}
 	return err
+}
+
+// KillWaveAgents stops all tracked task agents for the given plan/wave. It is a
+// no-op when there are no matching task instances.
+func (s *TmuxSpawner) KillWaveAgents(repoPath, planFile string, waveNumber int) error {
+	s.logger.Info("kill wave agents", "repo", repoPath, "plan", planFile, "wave", waveNumber)
+
+	s.mu.Lock()
+	targets := make([]struct {
+		key  string
+		inst *session.Instance
+	}, 0)
+	for key, inst := range s.instances {
+		if inst == nil {
+			continue
+		}
+		if inst.Path != repoPath || inst.TaskFile != planFile {
+			continue
+		}
+		if inst.TaskNumber <= 0 || inst.WaveNumber != waveNumber {
+			continue
+		}
+		targets = append(targets, struct {
+			key  string
+			inst *session.Instance
+		}{key: key, inst: inst})
+	}
+	s.mu.Unlock()
+
+	var firstErr error
+	for _, target := range targets {
+		sessionName := tmuxpkg.ToKasTmuxNamePublic(target.inst.Title)
+		killed, err := s.gracefulKill(target.inst, sessionName)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if killed {
+			s.mu.Lock()
+			delete(s.instances, target.key)
+			delete(s.planFileByKey, target.key)
+			delete(s.agentTypeByKey, target.key)
+			delete(s.projectByKey, target.key)
+			s.mu.Unlock()
+		}
+	}
+
+	return firstErr
+}
+
+// SpawnWaveTask launches a coder instance for a specific task within a wave.
+func (s *TmuxSpawner) SpawnWaveTask(_ context.Context, opts loop.SpawnOpts, task taskparser.Task, prompt string, peerCount int) error {
+	if opts.RepoPath == "" {
+		return fmt.Errorf("TmuxSpawner.wave-task: RepoPath is required")
+	}
+	if opts.Branch == "" {
+		return fmt.Errorf("TmuxSpawner.wave-task: Branch is required")
+	}
+	if opts.Wave <= 0 {
+		return fmt.Errorf("TmuxSpawner.wave-task: Wave is required")
+	}
+
+	planName := taskstate.DisplayName(opts.PlanFile)
+	title := fmt.Sprintf("%s-W%d-T%d", planName, opts.Wave, task.Number)
+	program := opts.Program
+	if program == "" {
+		program = "opencode"
+	}
+
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:      title,
+		Path:       opts.RepoPath,
+		Program:    program,
+		AgentType:  session.AgentTypeCoder,
+		TaskFile:   opts.PlanFile,
+		TaskNumber: task.Number,
+		WaveNumber: opts.Wave,
+		PeerCount:  peerCount,
+	})
+	if err != nil {
+		return fmt.Errorf("TmuxSpawner.wave-task: create instance: %w", err)
+	}
+	inst.QueuedPrompt = prompt
+	inst.SetStatus(session.Loading)
+
+	shared := gitpkg.NewSharedTaskWorktree(opts.RepoPath, opts.Branch)
+	if err := shared.Setup(); err != nil {
+		return fmt.Errorf("TmuxSpawner.wave-task: setup shared worktree: %w", err)
+	}
+	if err := inst.StartInSharedWorktree(shared, opts.Branch); err != nil {
+		return fmt.Errorf("TmuxSpawner.wave-task: start in shared worktree: %w", err)
+	}
+
+	key := instanceKeyForTask(opts.RepoPath, opts.PlanFile, session.AgentTypeCoder, opts.Wave, task.Number)
+	s.mu.Lock()
+	s.instances[key] = inst
+	s.planFileByKey[key] = opts.PlanFile
+	s.agentTypeByKey[key] = session.AgentTypeCoder
+	s.projectByKey[key] = opts.Project
+	s.mu.Unlock()
+	return nil
 }
 
 // spawnInSharedWorktree creates an instance for the given agent type, sets up

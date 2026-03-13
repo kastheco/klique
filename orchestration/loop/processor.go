@@ -98,6 +98,14 @@ func (p *Processor) WaveOrchestrator(planFile string) *orchestration.WaveOrchest
 	return p.waveOrchestrators[planFile]
 }
 
+// ClearWaveOrchestrator removes all orchestration state for the given plan.
+// Use this once a wave flow is finished or when handoff should be recreated
+// from a fresh implement-wave signal.
+func (p *Processor) ClearWaveOrchestrator(planFile string) {
+	delete(p.waveOrchestrators, planFile)
+	delete(p.activeWaveOrchs, planFile)
+}
+
 // ProcessFSMSignals converts FSM sentinel signals into Action values.
 // It validates each signal against the plan state machine, suppresses
 // ImplementFinished when a wave orchestrator is active, and emits typed
