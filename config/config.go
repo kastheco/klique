@@ -234,6 +234,8 @@ func DefaultConfig() *Config {
 	trueVal := true
 	cfg := &Config{
 		AutoYes:              false,
+		AutoAdvanceWaves:     true,
+		AutoReviewFix:        true,
 		NotificationsEnabled: &trueVal,
 	}
 	applyConfigDefaults(cfg)
@@ -334,22 +336,22 @@ func parseCommandOutput(output string) string {
 // being silently dropped by an overlay-only approach.
 // applyConfigDefaults fills in any omitted fields afterwards.
 func configFromTOML(result *TOMLConfigResult) *Config {
-	cfg := &Config{}
+	cfg := DefaultConfig()
 	if result != nil {
-		cfg = &Config{
-			DefaultProgram:              result.DefaultProgram,
-			AutoYes:                     result.AutoYes,
-			DaemonPollInterval:          result.DaemonPollInterval,
-			BranchPrefix:                result.BranchPrefix,
-			NotificationsEnabled:        result.NotificationsEnabled,
-			Profiles:                    result.Profiles,
-			PhaseRoles:                  result.PhaseRoles,
-			AnimateBanner:               result.AnimateBanner,
-			AutoAdvanceWaves:            result.AutoAdvanceWaves,
-			TelemetryEnabled:            result.TelemetryEnabled,
-			DatabaseURL:                 result.DatabaseURL,
-			Hooks:                       result.Hooks,
-			BlueprintSkipThresholdValue: result.BlueprintSkipThreshold,
+		cfg.DefaultProgram = result.DefaultProgram
+		cfg.AutoYes = result.AutoYes
+		cfg.DaemonPollInterval = result.DaemonPollInterval
+		cfg.BranchPrefix = result.BranchPrefix
+		cfg.NotificationsEnabled = result.NotificationsEnabled
+		cfg.Profiles = result.Profiles
+		cfg.PhaseRoles = result.PhaseRoles
+		cfg.AnimateBanner = result.AnimateBanner
+		cfg.TelemetryEnabled = result.TelemetryEnabled
+		cfg.DatabaseURL = result.DatabaseURL
+		cfg.Hooks = result.Hooks
+		cfg.BlueprintSkipThresholdValue = result.BlueprintSkipThreshold
+		if result.AutoAdvanceWaves != nil {
+			cfg.AutoAdvanceWaves = *result.AutoAdvanceWaves
 		}
 		if result.AutoReviewFix != nil {
 			cfg.AutoReviewFix = *result.AutoReviewFix
@@ -390,8 +392,7 @@ func configToTOML(cfg *Config) *TOMLConfig {
 		Phases: phases,
 		Agents: agents,
 		UI: TOMLUIConfig{
-			AnimateBanner:    cfg.AnimateBanner,
-			AutoAdvanceWaves: cfg.AutoAdvanceWaves,
+			AnimateBanner: cfg.AnimateBanner,
 		},
 		Telemetry:            TOMLTelemetryConfig{Enabled: cfg.TelemetryEnabled},
 		Orchestration:        TOMLOrchestrationConfig{BlueprintSkipThreshold: cfg.BlueprintSkipThresholdValue},
@@ -404,6 +405,8 @@ func configToTOML(cfg *Config) *TOMLConfig {
 		Hooks:                cfg.Hooks,
 	}
 	autoReviewFix := cfg.AutoReviewFix
+	autoAdvanceWaves := cfg.AutoAdvanceWaves
+	out.UI.AutoAdvanceWaves = &autoAdvanceWaves
 	out.UI.AutoReviewFix = &autoReviewFix
 	maxReviewFixCycles := cfg.MaxReviewFixCycles
 	out.UI.MaxReviewFixCycles = &maxReviewFixCycles

@@ -224,7 +224,8 @@ auto_advance_waves = true
 		require.NoError(t, err)
 		tc, err := LoadTOMLConfigFrom(tomlPath)
 		require.NoError(t, err)
-		assert.True(t, tc.AutoAdvanceWaves)
+		require.NotNil(t, tc.AutoAdvanceWaves)
+		assert.True(t, *tc.AutoAdvanceWaves)
 	})
 }
 

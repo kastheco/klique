@@ -128,7 +128,7 @@ func (ReviewCycleLimitAction) Kind() string  { return "review_cycle_limit" }
 func (ReviewCycleLimitAction) sealedAction() {}
 
 // SpawnFixerAction instructs the caller to launch a fixer agent to address
-// reviewer feedback received from a pull request review comment.
+// reviewer feedback, whether it came from an in-app review loop or a PR review.
 type SpawnFixerAction struct {
 	PlanFile string
 	Feedback string

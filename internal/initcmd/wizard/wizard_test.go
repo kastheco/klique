@@ -46,6 +46,10 @@ func TestStateToTOMLConfig(t *testing.T) {
 	// Verify disabled agent
 	planner := tc.Agents["planner"]
 	assert.False(t, planner.Enabled)
+	require.NotNil(t, tc.UI.AutoAdvanceWaves)
+	require.NotNil(t, tc.UI.AutoReviewFix)
+	assert.True(t, *tc.UI.AutoAdvanceWaves)
+	assert.True(t, *tc.UI.AutoReviewFix)
 
 	// Verify nil temperature when empty
 	reviewer := tc.Agents["reviewer"]

@@ -106,22 +106,22 @@ func TestProcessor_ProcessFSMSignals_ReviewChangesRequested(t *testing.T) {
 	}
 
 	actions := p.ProcessFSMSignals(signals)
-	var foundReviewChanges, foundCoder, foundIncrement bool
+	var foundReviewChanges, foundFixer, foundIncrement bool
 	for _, a := range actions {
 		if rc, ok := a.(ReviewChangesAction); ok {
 			assert.Equal(t, feedback, rc.Feedback)
 			foundReviewChanges = true
 		}
-		if sc, ok := a.(SpawnCoderAction); ok {
-			assert.Equal(t, feedback, sc.Feedback)
-			foundCoder = true
+		if sf, ok := a.(SpawnFixerAction); ok {
+			assert.Equal(t, feedback, sf.Feedback)
+			foundFixer = true
 		}
 		if _, ok := a.(IncrementReviewCycleAction); ok {
 			foundIncrement = true
 		}
 	}
 	assert.True(t, foundReviewChanges, "expected ReviewChangesAction")
-	assert.True(t, foundCoder, "expected SpawnCoderAction")
+	assert.True(t, foundFixer, "expected SpawnFixerAction")
 	assert.True(t, foundIncrement, "expected IncrementReviewCycleAction")
 }
 
@@ -344,11 +344,11 @@ func TestProcessor_ProcessFSMSignals_ReviewCycleBelowLimit(t *testing.T) {
 
 	actions := p.ProcessFSMSignals(signals)
 
-	var foundCoder bool
+	var foundFixer bool
 	for _, a := range actions {
-		if _, ok := a.(SpawnCoderAction); ok {
-			foundCoder = true
+		if _, ok := a.(SpawnFixerAction); ok {
+			foundFixer = true
 		}
 	}
-	assert.True(t, foundCoder, "expected SpawnCoderAction when below cycle limit")
+	assert.True(t, foundFixer, "expected SpawnFixerAction when below cycle limit")
 }

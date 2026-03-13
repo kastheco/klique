@@ -173,12 +173,12 @@ func (p *Processor) ProcessFSMSignals(signals []taskfsm.Signal) []Action {
 							Cycle:    entry.ReviewCycle + 1,
 							Limit:    p.config.MaxReviewFixCycles,
 						})
-						break // don't spawn coder
+						break // don't spawn fixer
 					}
 				}
 			}
 			actions = append(actions, IncrementReviewCycleAction{PlanFile: sig.TaskFile})
-			actions = append(actions, SpawnCoderAction{
+			actions = append(actions, SpawnFixerAction{
 				PlanFile: sig.TaskFile,
 				Feedback: sig.Body,
 			})

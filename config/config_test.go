@@ -115,6 +115,8 @@ func TestDefaultConfig(t *testing.T) {
 		assert.NotNil(t, config)
 		assert.NotEmpty(t, config.DefaultProgram)
 		assert.False(t, config.AutoYes)
+		assert.True(t, config.AutoAdvanceWaves)
+		assert.True(t, config.AutoReviewFix)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.True(t, strings.HasSuffix(config.BranchPrefix, "/"))
@@ -260,6 +262,7 @@ func TestConfigFromTOML(t *testing.T) {
 	falseVal := false
 	zeroCycles := 0
 	threshold := 3
+	trueVal := true
 	result := &TOMLConfigResult{
 		DefaultProgram:         "test-cmd",
 		AutoYes:                true,
@@ -269,7 +272,7 @@ func TestConfigFromTOML(t *testing.T) {
 		Profiles:               map[string]AgentProfile{"coder": {Program: "opencode", Enabled: true}},
 		PhaseRoles:             map[string]string{"implementing": "coder"},
 		AnimateBanner:          true,
-		AutoAdvanceWaves:       true,
+		AutoAdvanceWaves:       &trueVal,
 		AutoReviewFix:          &falseVal,
 		MaxReviewFixCycles:     &zeroCycles,
 		TelemetryEnabled:       &falseVal,
@@ -307,6 +310,8 @@ func TestConfigFromTOML_Defaults(t *testing.T) {
 	assert.NotEmpty(t, cfg.DefaultProgram)
 	assert.Equal(t, 1000, cfg.DaemonPollInterval)
 	assert.NotEmpty(t, cfg.BranchPrefix)
+	assert.True(t, cfg.AutoAdvanceWaves)
+	assert.True(t, cfg.AutoReviewFix)
 	assert.True(t, cfg.AreNotificationsEnabled())
 }
 
@@ -321,6 +326,8 @@ func TestLoadConfig(t *testing.T) {
 		assert.NotNil(t, config)
 		assert.NotEmpty(t, config.DefaultProgram)
 		assert.False(t, config.AutoYes)
+		assert.True(t, config.AutoAdvanceWaves)
+		assert.True(t, config.AutoReviewFix)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.FileExists(t, filepath.Join(tempDir, ".kasmos", TOMLConfigFileName))
@@ -372,6 +379,8 @@ branch_prefix = "test/"
 		assert.NotNil(t, config)
 		assert.NotEmpty(t, config.DefaultProgram)
 		assert.False(t, config.AutoYes)
+		assert.True(t, config.AutoAdvanceWaves)
+		assert.True(t, config.AutoReviewFix)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 	})
 
@@ -385,6 +394,7 @@ branch_prefix = "test/"
 
 		tomlPath := filepath.Join(configDir, TOMLConfigFileName)
 		tomlContent := `[ui]
+	auto_advance_waves = false
 auto_review_fix = false
 max_review_fix_cycles = 0
 `
@@ -392,6 +402,7 @@ max_review_fix_cycles = 0
 
 		config := LoadConfig()
 		require.NotNil(t, config)
+		assert.False(t, config.AutoAdvanceWaves)
 		assert.False(t, config.AutoReviewFix)
 		assert.Equal(t, 0, config.MaxReviewFixCycles)
 	})

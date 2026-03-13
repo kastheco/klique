@@ -65,8 +65,8 @@ type tomlDaemonConfig struct {
 	PollIntervalSec    float64             `toml:"poll_interval_sec"`
 	Repos              []string            `toml:"repos"`
 	AutoAdvance        bool                `toml:"auto_advance"`
-	AutoAdvanceWaves   bool                `toml:"auto_advance_waves"`
-	AutoReviewFix      bool                `toml:"auto_review_fix"`
+	AutoAdvanceWaves   *bool               `toml:"auto_advance_waves"`
+	AutoReviewFix      *bool               `toml:"auto_review_fix"`
 	MaxReviewFixCycles int                 `toml:"max_review_fix_cycles"`
 	SocketPath         string              `toml:"socket_path"`
 	PRMonitor          tomlPRMonitorConfig `toml:"pr_monitor"`
@@ -77,7 +77,8 @@ func defaultDaemonConfig() *DaemonConfig {
 	return &DaemonConfig{
 		PollInterval:     2 * time.Second,
 		AutoAdvance:      false,
-		AutoAdvanceWaves: false,
+		AutoAdvanceWaves: true,
+		AutoReviewFix:    true,
 		PRMonitor: PRMonitorConfig{
 			Enabled:      false,
 			PollInterval: 60 * time.Second,
@@ -120,8 +121,12 @@ func LoadDaemonConfig(path string) (*DaemonConfig, error) {
 		cfg.Repos = tc.Repos
 	}
 	cfg.AutoAdvance = tc.AutoAdvance
-	cfg.AutoAdvanceWaves = tc.AutoAdvanceWaves
-	cfg.AutoReviewFix = tc.AutoReviewFix
+	if tc.AutoAdvanceWaves != nil {
+		cfg.AutoAdvanceWaves = *tc.AutoAdvanceWaves
+	}
+	if tc.AutoReviewFix != nil {
+		cfg.AutoReviewFix = *tc.AutoReviewFix
+	}
 	cfg.MaxReviewFixCycles = tc.MaxReviewFixCycles
 	cfg.SocketPath = tc.SocketPath
 

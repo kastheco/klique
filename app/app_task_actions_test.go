@@ -848,16 +848,16 @@ func TestEnsureProcessor_RefreshesReviewFixConfig(t *testing.T) {
 		Body:     "fix this",
 	}})
 
-	var foundCoder, foundIncrement bool
+	var foundFixer, foundIncrement bool
 	for _, action := range actions {
-		if _, ok := action.(loop.SpawnCoderAction); ok {
-			foundCoder = true
+		if _, ok := action.(loop.SpawnFixerAction); ok {
+			foundFixer = true
 		}
 		if _, ok := action.(loop.IncrementReviewCycleAction); ok {
 			foundIncrement = true
 		}
 	}
-	assert.True(t, foundCoder)
+	assert.True(t, foundFixer)
 	assert.True(t, foundIncrement)
 }
 
