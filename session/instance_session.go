@@ -30,20 +30,6 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	return i.executionSession.HasUpdated()
 }
 
-// NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected
-// to this instance's tmux PTY for zero-latency interactive focus mode.
-// Returns ErrInteractiveOnly for headless instances.
-func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {
-	if i.ExecutionMode == ExecutionModeHeadless {
-		return nil, ErrInteractiveOnly
-	}
-	if !i.started || i.executionSession == nil {
-		return nil, fmt.Errorf("instance not started")
-	}
-	sessionName := i.executionSession.GetSanitizedName()
-	return NewEmbeddedTerminal(sessionName, cols, rows)
-}
-
 // TapEnter sends an enter keypress to the pane when AutoYes is enabled.
 // No-op if the instance is not started or AutoYes is false.
 func (i *Instance) TapEnter() {
@@ -106,15 +92,6 @@ func (i *Instance) SendPrompt(prompt string) error {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
 	return nil
-}
-
-// PreviewFullHistory captures the complete pane output including the full scrollback buffer.
-// Returns an empty string if the instance is not started or is paused.
-func (i *Instance) PreviewFullHistory() (string, error) {
-	if !i.started || i.Status == Paused {
-		return "", nil
-	}
-	return i.executionSession.CapturePaneContentWithOptions("-", "-")
 }
 
 // SetTmuxSession replaces the tmux session handle. Intended for use in tests only.

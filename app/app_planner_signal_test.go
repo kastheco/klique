@@ -53,7 +53,6 @@ func plannerSignalHome(t *testing.T, planFile string) (*home, *taskstate.TaskSta
 		nav:                   list,
 		allInstances:          []*session.Instance{plannerInst},
 		menu:                  ui.NewMenu(),
-		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:          overlay.NewToastManager(&sp),
 		overlays:              overlay.NewManager(),
 		taskState:             ps,

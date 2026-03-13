@@ -58,10 +58,9 @@ func TestCreatePlanRecord(t *testing.T) {
 
 func TestHandleDefaultStateStartsDescriptionOverlay(t *testing.T) {
 	h := &home{
-		state:        stateDefault,
-		keySent:      true,
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
-		overlays:     overlay.NewManager(),
+		state:    stateDefault,
+		keySent:  true,
+		overlays: overlay.NewManager(),
 	}
 
 	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: 'n', Text: "n"})
@@ -254,7 +253,6 @@ func TestIsUserInOverlay(t *testing.T) {
 		{stateConfirm, true},
 		{statePrompt, true},
 		{stateSpawnAgent, true},
-		{stateFocusAgent, true},
 		{statePermission, true},
 	}
 	for _, tt := range tests {
@@ -291,7 +289,6 @@ func TestNewPlanOverlaySizePreservedOnSpuriousWindowSize(t *testing.T) {
 	s := spinner.New()
 	h := &home{
 		state:        stateNewPlan,
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		nav:          ui.NewNavigationPanel(&s),
 		menu:         ui.NewMenu(),
 		toastManager: overlay.NewToastManager(&s),

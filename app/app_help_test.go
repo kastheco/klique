@@ -17,14 +17,13 @@ func TestHandleMouseClick_HelpOverlay_OutsideClickTriggersOnDismiss(t *testing.T
 	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 
 	h := &home{
-		ctx:          context.Background(),
-		state:        stateDefault,
-		appConfig:    config.DefaultConfig(),
-		nav:          ui.NewNavigationPanel(&spin),
-		menu:         ui.NewMenu(),
-		overlays:     overlay.NewManager(),
-		appState:     &mockAppState{},
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+		nav:       ui.NewNavigationPanel(&spin),
+		menu:      ui.NewMenu(),
+		overlays:  overlay.NewManager(),
+		appState:  &mockAppState{},
 	}
 
 	to := overlay.NewTextOverlay("help")

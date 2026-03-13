@@ -111,11 +111,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
-			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; use the preview tab to review output", selected.Title))
-			return m, nil
-		}
-		return m, m.enterFocusMode()
+		// Interaction happens via the native tmux pane on the right.
+		return m, nil
 
 	case "copy_worktree_path":
 		selected := m.nav.GetSelectedInstance()
@@ -712,19 +709,17 @@ func (m *home) findTaskInstance() *session.Instance {
 // openContextMenu builds a context menu for the currently focused/selected item
 // (plan or instance) and positions it next to the selected item.
 func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
-	if m.focusSlot == slotNav {
-		// Nav panel focused — instance rows get the instance menu,
-		// plan headers get the plan menu, everything else is a no-op.
-		if inst := m.nav.GetSelectedInstance(); inst != nil {
-			// fall through to instance context menu below
-		} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
-			return m.openTaskContextMenu()
-		} else {
-			return m, nil
-		}
+	// Nav panel always has focus — instance rows get the instance menu,
+	// plan headers get the plan menu, everything else is a no-op.
+	if inst := m.nav.GetSelectedInstance(); inst != nil {
+		// fall through to instance context menu below
+	} else if planFile := m.nav.GetSelectedPlanFile(); planFile != "" {
+		return m.openTaskContextMenu()
+	} else {
+		return m, nil
 	}
 
-	// Build instance context menu (reached from nav or other slots)
+	// Build instance context menu
 	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		return m, nil
@@ -1210,4 +1205,43 @@ func isLocked(status taskstate.Status, stage string) bool {
 	default:
 		return true
 	}
+}
+
+// maybeSwapPane returns a tea.Cmd to swap the layout's right pane to the
+// selected instance's tmux session, or to restore the workspace shell when no
+// valid instance is selected.
+//
+// Returns nil when:
+//   - layoutSessionName is empty (kas is not running inside a tmux layout)
+//   - the selected instance is headless (no tmux session to swap to)
+//   - the selected instance is already showing in the right pane
+func (m *home) maybeSwapPane() tea.Cmd {
+	if m.layoutSessionName == "" {
+		return nil
+	}
+	selected := m.nav.GetSelectedInstance()
+
+	// No valid selection or the instance is not in a swappable state:
+	// restore the workspace shell pane.
+	if selected == nil ||
+		!selected.Started() ||
+		selected.Paused() ||
+		selected.Exited {
+		if m.swappedInstanceTitle != "" {
+			return restoreWorkspacePaneCmd(m.layoutSessionName)
+		}
+		return nil
+	}
+
+	// Headless instances run without tmux — there is no session to swap to.
+	if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
+		return nil
+	}
+
+	// Already showing this instance's session — avoid redundant tmux churn.
+	if selected.Title == m.swappedInstanceTitle {
+		return nil
+	}
+
+	return swapPaneCmd(m.layoutSessionName, selected.Title)
 }

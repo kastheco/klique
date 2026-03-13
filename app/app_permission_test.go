@@ -49,7 +49,6 @@ func newTestHomeWithCache(t *testing.T) *home {
 		appConfig:         config.DefaultConfig(),
 		nav:               ui.NewNavigationPanel(&spin),
 		menu:              ui.NewMenu(),
-		tabbedWindow:      ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:      overlay.NewToastManager(&spin),
 		overlays:          overlay.NewManager(),
 		activeRepoPath:    t.TempDir(),
@@ -386,16 +385,13 @@ func TestUpdate_PermissionAutoApprove_DescriptionOnly(t *testing.T) {
 	assert.Equal(t, stateDefault, m.state, "auto-approve should not change state")
 }
 
-// TestUpdate_PermissionPrompt_ExitsFocusModeAndShowsOverlay verifies that a
-// permission prompt interrupts focus/interactive mode immediately.
-func TestUpdate_PermissionPrompt_ExitsFocusModeAndShowsOverlay(t *testing.T) {
+// TestUpdate_PermissionPrompt_ShowsOverlay verifies that a permission prompt
+// triggers the permission overlay and transitions to statePermission.
+func TestUpdate_PermissionPrompt_ShowsOverlay(t *testing.T) {
 	m := newTestHomeWithCache(t)
 	inst := &session.Instance{Title: "test-agent", Program: "opencode"}
 	inst.MarkStartedForTest()
 	m.nav.AddInstance(inst)()
-
-	// Start in focus mode
-	m.state = stateFocusAgent
 
 	pp := &session.PermissionPrompt{Pattern: "/opt/*", Description: "Access /opt"}
 	msg := metadataResultMsg{
@@ -406,26 +402,22 @@ func TestUpdate_PermissionPrompt_ExitsFocusModeAndShowsOverlay(t *testing.T) {
 
 	_, _ = m.Update(msg)
 
-	assert.NotEqual(t, stateFocusAgent, m.state, "focus mode should be exited")
 	assert.Equal(t, statePermission, m.state, "should transition to statePermission")
 	require.NotNil(t, m.overlays.Current(), "permission overlay must be active")
 }
 
-// TestConfirmAction_ExitsFocusMode verifies that exitFocusModeForDialog exits focus
-// mode so that confirmAction can show a dialog.
-func TestConfirmAction_ExitsFocusMode(t *testing.T) {
+// TestConfirmAction_ShowsDialog verifies that confirmAction shows a dialog overlay.
+func TestConfirmAction_ShowsDialog(t *testing.T) {
 	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 	h := &home{
-		ctx:          context.Background(),
-		state:        stateFocusAgent,
-		appConfig:    config.DefaultConfig(),
-		nav:          ui.NewNavigationPanel(&spin),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
-		overlays:     overlay.NewManager(),
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+		nav:       ui.NewNavigationPanel(&spin),
+		menu:      ui.NewMenu(),
+		overlays:  overlay.NewManager(),
 	}
 
-	h.exitFocusModeForDialog()
 	h.confirmAction("test?", func() tea.Msg { return nil })
 
 	assert.Equal(t, stateConfirm, h.state)

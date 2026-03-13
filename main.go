@@ -21,6 +21,7 @@ import (
 	"github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -112,7 +113,24 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes, versionString())
+			// When already running inside the kasmos layout (left nav pane), run
+			// the TUI in nav-only mode so the right pane stays a native tmux pane.
+			if os.Getenv("KASMOS_LAYOUT") == "1" {
+				return app.Run(ctx, program, autoYes, versionString(), app.RunOptions{NavOnly: true})
+			}
+
+			// Not inside the layout yet — detect terminal size, then create or
+			// reattach to the two-pane tmux layout and attach this client to it.
+			cols, rows := 120, 40
+			if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+				cols, rows = w, h
+			}
+
+			layout, _, layoutErr := tmux.EnsureMainLayout(cmd2.MakeExecutor(), currentDir, "kas tui --nav-only", cols, rows)
+			if layoutErr != nil {
+				return layoutErr
+			}
+			return tmux.AttachMainLayout(cmd2.MakeExecutor(), layout.SessionName)
 		},
 	}
 
@@ -263,6 +281,11 @@ func init() {
 	rootCmd.AddCommand(cmd2.NewSignalCmd())
 	rootCmd.AddCommand(cmd2.NewDaemonCmd())
 	rootCmd.AddCommand(cmd2.NewMonitorCmd())
+	rootCmd.AddCommand(cmd2.NewTUICmd(versionString(), &programFlag, &autoYesFlag, func(ctx context.Context, program string, autoYes bool, version string, navOnly bool) error {
+		tuiCfg := config.LoadConfig()
+		session.NotificationsEnabled = tuiCfg.AreNotificationsEnabled()
+		return app.Run(ctx, program, autoYes, version, app.RunOptions{NavOnly: navOnly})
+	}))
 }
 
 func main() {
