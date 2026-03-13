@@ -1641,6 +1641,20 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						auditlog.WithAgent(inst.AgentType),
 						auditlog.WithPlan(inst.TaskFile),
 					)
+
+					// Pane fallback: if the dying agent was swapped into the
+					// layout's right pane, restore the workspace shell now.
+					// This runs in an async Cmd so no blocking subprocess
+					// happens in Update. The swapPaneResultMsg success handler
+					// (with empty instanceTitle) will clear swappedInstanceTitle.
+					//
+					// Edge case: multiple agents may exit in the same tick, but
+					// only one can hold swappedInstanceTitle, so at most one
+					// restore Cmd is queued per tick — no risk of double-clear.
+					if inst.Title == m.swappedInstanceTitle && m.layoutSessionName != "" {
+						log.WarningLog.Printf("agent %q exited while swapped in — restoring workspace pane", inst.Title)
+						asyncCmds = append(asyncCmds, restoreWorkspacePaneCmd(m.layoutSessionName))
+					}
 				}
 			}
 

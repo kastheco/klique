@@ -688,8 +688,27 @@ func (m *home) cleanupPausedDoneReviewers(selected *session.Instance) {
 	m.updateNavPanelStatus()
 }
 
+// isInstanceSwappable reports whether inst is eligible to be swapped into the
+// layout's right pane as the active agent view. Paused and exited instances
+// are never eligible — their tmux session is either suspended or gone, and
+// calling swapPaneCmd on them would leave the right pane in an undefined state.
+//
+// This is the authoritative check used by instanceChanged and maybeSwapPane
+// to ensure a paused/exited instance is never treated as the active swap target.
+func isInstanceSwappable(inst *session.Instance) bool {
+	if inst == nil {
+		return false
+	}
+	if inst.Exited || inst.Paused() {
+		return false
+	}
+	return inst.Started()
+}
+
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance.
 // It returns a tea.Cmd when an async operation is needed (terminal spawn).
+// Guarantee: paused and exited instances are never treated as swap targets —
+// maybeSwapPane() guards against this via isInstanceSwappable.
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.nav.GetSelectedInstance()

@@ -174,3 +174,86 @@ func TestSwapRightPaneToWorkspace_MissingEnv(t *testing.T) {
 	require.NoError(t, err, "missing env should return nil, not an error")
 	assert.False(t, swapCalled, "swap-pane should not be called when env is missing")
 }
+
+// TestActiveSwappedSession_WorkspaceShowing verifies that ("", nil) is returned
+// when the workspace pane ID matches the right pane at :0.1.
+func TestActiveSwappedSession_WorkspaceShowing(t *testing.T) {
+	ex := cmd_test.MockCmdExec{
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			arg := strings.Join(cmd.Args, " ")
+			if strings.Contains(arg, "show-environment") {
+				// KASMOS_WORKSPACE_PANE is set to %1
+				return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
+			}
+			// display-message for :0.1 returns same pane ID → workspace showing
+			return []byte("%1\n"), nil
+		},
+	}
+
+	name, err := ActiveSwappedSession(ex, "kas_outer")
+	require.NoError(t, err)
+	assert.Equal(t, "", name, "workspace pane at :0.1 should return empty session name")
+}
+
+// TestActiveSwappedSession_AgentShowing verifies that the agent session name is
+// returned when a non-workspace pane is at position :0.1.
+func TestActiveSwappedSession_AgentShowing(t *testing.T) {
+	ex := cmd_test.MockCmdExec{
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			arg := strings.Join(cmd.Args, " ")
+			switch {
+			case strings.Contains(arg, "show-environment"):
+				// Workspace pane is %1.
+				return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
+			case strings.Contains(arg, ":0.1") && strings.Contains(arg, "pane_id"):
+				// Current right pane is %99 (an agent pane).
+				return []byte("%99\n"), nil
+			case strings.Contains(arg, "%99"):
+				// session_name query for the agent pane.
+				return []byte("kas_my-agent-session\n"), nil
+			}
+			return []byte(""), nil
+		},
+	}
+
+	name, err := ActiveSwappedSession(ex, "kas_outer")
+	require.NoError(t, err)
+	assert.Equal(t, "kas_my-agent-session", name)
+}
+
+// TestActiveSwappedSession_NoEnvVar verifies ("", nil) when KASMOS_WORKSPACE_PANE
+// is not set — there is no workspace pane to compare against.
+func TestActiveSwappedSession_NoEnvVar(t *testing.T) {
+	ex := cmd_test.MockCmdExec{
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			// show-environment fails (env var not set)
+			return nil, &exec.ExitError{}
+		},
+	}
+
+	name, err := ActiveSwappedSession(ex, "kas_outer")
+	require.NoError(t, err)
+	assert.Equal(t, "", name, "missing env var should return empty name")
+}
+
+// TestActiveSwappedSession_NoRightPane verifies ("", nil) when the right pane
+// query fails (layout not yet initialised or :0.1 does not exist).
+func TestActiveSwappedSession_NoRightPane(t *testing.T) {
+	callCount := 0
+	ex := cmd_test.MockCmdExec{
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			callCount++
+			arg := strings.Join(cmd.Args, " ")
+			if strings.Contains(arg, "show-environment") {
+				// Env var is set.
+				return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
+			}
+			// display-message for :0.1 fails (pane does not exist)
+			return nil, &exec.ExitError{}
+		},
+	}
+
+	name, err := ActiveSwappedSession(ex, "kas_outer")
+	require.NoError(t, err)
+	assert.Equal(t, "", name, "missing right pane should return empty name")
+}
