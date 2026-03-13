@@ -257,3 +257,59 @@ func TestActiveSwappedSession_NoRightPane(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", name, "missing right pane should return empty name")
 }
+
+// TestSwapRightPaneToSession_MissingSessionReturnsFalse verifies that when the
+// target tmux session does not exist, `tmux has-session` returns an *exec.ExitError
+// and SessionExists converts that into (false, nil) — a recoverable "not found"
+// result rather than a hard error. Callers must guard swap calls with SessionExists
+// to avoid issuing swap-pane to a non-existent session.
+func TestSwapRightPaneToSession_MissingSessionReturnsFalse(t *testing.T) {
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			// has-session exits non-zero when the session is absent.
+			return &exec.ExitError{}
+		},
+	}
+
+	exists, err := SessionExists(ex, "kas_agent_missing")
+	// An *exec.ExitError from has-session must NOT be surfaced as an error.
+	require.NoError(t, err, "missing session must yield (false, nil), not a hard error")
+	assert.False(t, exists, "missing session must be reported as false")
+}
+
+// TestSwapRightPaneToWorkspace_Idempotent verifies that SwapRightPaneToWorkspace
+// is safe to call repeatedly: when the workspace pane is already at :0.1 (i.e.
+// the pane ID at that position matches KASMOS_WORKSPACE_PANE), calling the
+// function a second time is a no-op and no swap-pane command is issued.
+func TestSwapRightPaneToWorkspace_Idempotent(t *testing.T) {
+	// Both invocations will observe the same state: workspace pane %1 is already
+	// at position :0.1.
+	swapCount := 0
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(strings.Join(cmd.Args, " "), "swap-pane") {
+				swapCount++
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			arg := strings.Join(cmd.Args, " ")
+			if strings.Contains(arg, "show-environment") {
+				return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
+			}
+			// display-message for :0.1 always returns the workspace pane ID.
+			return []byte("%1\n"), nil
+		},
+	}
+
+	// First call — workspace already in place, no swap expected.
+	err := SwapRightPaneToWorkspace(ex, "kas_outer")
+	require.NoError(t, err)
+
+	// Second call — identical state, still no swap expected.
+	err = SwapRightPaneToWorkspace(ex, "kas_outer")
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, swapCount,
+		"swap-pane must never be called when workspace pane is already at :0.1")
+}

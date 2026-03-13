@@ -360,3 +360,46 @@ func TestRenderStatusBar_EmptyFields_NoStyleLeak(t *testing.T) {
 	defCount := strings.Count(result.Left, "#[default]")
 	assert.Equal(t, boldCount, defCount)
 }
+
+// TestRenderStatusBar_PrioritizesWaveAndPRState verifies the two most
+// important precedence rules simultaneously:
+//   - Wave glyphs + label take priority over plain plan status in the left segment
+//     (when TaskGlyphs is non-empty and WaveLabel is set, plan status is not shown).
+//   - PR state appears in the right segment regardless of what is in the left.
+//
+// This is the canonical "both signals present" regression guard: changing the
+// precedence logic in either tmuxLeftStatusGroup or tmuxRightSegment would fail
+// one of the sub-assertions below.
+func TestRenderStatusBar_PrioritizesWaveAndPRState(t *testing.T) {
+	result := RenderStatusBar(StatusBarData{
+		Version:    "v1.2.0",
+		PlanStatus: "implementing",
+		WaveLabel:  "wave 3/4",
+		TaskGlyphs: []TaskGlyph{TaskGlyphComplete, TaskGlyphRunning, TaskGlyphPending},
+		Branch:     "plan/auth-redesign",
+		PRState:    "approved",
+		PRChecks:   "passing",
+		ProjectDir: "kasmos",
+	})
+
+	// Left: wave info must be present.
+	assert.Contains(t, result.Left, "wave 3/4",
+		"wave label must appear in left segment when TaskGlyphs is non-empty")
+	assert.Contains(t, result.Left, "●", "running glyph must appear in left segment")
+
+	// Left: plan status must be suppressed when wave info is present.
+	assert.NotContains(t, result.Left, "implementing",
+		"plan status must be hidden when wave info is present (wave takes priority)")
+
+	// Right: PR state must be shown regardless of left segment content.
+	assert.Contains(t, result.Right, "✓ pr",
+		"approved PR indicator must appear in right segment")
+	assert.Contains(t, result.Right, tmuxColorFoam,
+		"approved PR colour must be used in right segment")
+
+	// Right: branch and project dir are also present.
+	assert.Contains(t, result.Right, "plan/auth-redesign",
+		"branch must appear in right segment")
+	assert.Contains(t, result.Right, "kasmos",
+		"project dir must appear in right segment")
+}

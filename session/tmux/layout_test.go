@@ -363,3 +363,118 @@ func TestShowSessionEnvVar_ParsesValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "%0", val)
 }
+
+// TestEnsureMainLayout_CreatesSessionAndStoresPaneEnv verifies that when
+// EnsureMainLayout creates a new session it stores the exact env var names
+// KASMOS_NAV_PANE and KASMOS_WORKSPACE_PANE via `tmux set-environment`.
+// This is the canonical check that the layout can be reconstructed after
+// a restart (AttachesExistingSession path depends on these vars).
+func TestEnsureMainLayout_CreatesSessionAndStoresPaneEnv(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	var envVarNames []string
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			s := strings.Join(cmd.Args, " ")
+			switch {
+			case strings.Contains(s, "has-session"):
+				return fmt.Errorf("no server running on /tmp/tmux") // session absent
+			case strings.Contains(s, "set-environment"):
+				// Record each env var name being persisted.
+				args := cmd.Args
+				if len(args) >= 5 {
+					envVarNames = append(envVarNames, args[len(args)-2])
+				}
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			s := strings.Join(cmd.Args, " ")
+			if strings.Contains(s, "new-session") {
+				return []byte("kas_main_myrepo|@0|%0\n"), nil
+			}
+			if strings.Contains(s, "split-window") {
+				return []byte("%1\n"), nil
+			}
+			return []byte(""), nil
+		},
+	}
+
+	layout, existed, err := EnsureMainLayout(ex, "/home/user/myrepo", "kas tui --nav-only", 120, 40)
+	require.NoError(t, err)
+	assert.False(t, existed)
+
+	// The two pane env vars must be stored under the exact canonical names.
+	assert.Contains(t, envVarNames, "KASMOS_NAV_PANE",
+		"KASMOS_NAV_PANE must be stored in the session environment")
+	assert.Contains(t, envVarNames, "KASMOS_WORKSPACE_PANE",
+		"KASMOS_WORKSPACE_PANE must be stored in the session environment")
+
+	// Returned layout must reflect the pane IDs emitted by new-session / split-window.
+	assert.Equal(t, "%0", layout.NavPaneID)
+	assert.Equal(t, "%1", layout.WorkspacePaneID)
+}
+
+// TestEnsureMainLayout_AttachesExistingSession verifies that when the kasmos
+// layout session already exists EnsureMainLayout reads the stored pane IDs from
+// KASMOS_NAV_PANE and KASMOS_WORKSPACE_PANE (no new-session or split-window
+// calls) and returns existed=true.
+func TestEnsureMainLayout_AttachesExistingSession(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+
+	repoRoot := "/home/user/myrepo"
+	sessionName := MainSessionName(repoRoot)
+
+	var newSessionCalled, splitWindowCalled bool
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			s := strings.Join(cmd.Args, " ")
+			if strings.Contains(s, "new-session") {
+				newSessionCalled = true
+			}
+			return nil // has-session succeeds → session exists
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			s := strings.Join(cmd.Args, " ")
+			if strings.Contains(s, "new-session") {
+				newSessionCalled = true
+				return []byte(sessionName + "|@0|%0\n"), nil
+			}
+			if strings.Contains(s, "split-window") {
+				splitWindowCalled = true
+				return []byte("%1\n"), nil
+			}
+			if strings.Contains(s, "show-environment") {
+				// Return the stored pane IDs from the session environment.
+				args := cmd.Args
+				varName := args[len(args)-1]
+				switch varName {
+				case "KASMOS_NAV_PANE":
+					return []byte("KASMOS_NAV_PANE=%0\n"), nil
+				case "KASMOS_WORKSPACE_PANE":
+					return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
+				}
+			}
+			return []byte(""), nil
+		},
+	}
+
+	layout, existed, err := EnsureMainLayout(ex, repoRoot, "kas tui --nav-only", 120, 40)
+	require.NoError(t, err)
+
+	// Must report that the session already existed.
+	assert.True(t, existed, "existed must be true when session is already running")
+
+	// Must not create a new session or split a window.
+	assert.False(t, newSessionCalled, "new-session must not be called for an existing session")
+	assert.False(t, splitWindowCalled, "split-window must not be called for an existing session")
+
+	// Must reconstruct pane IDs from the session environment.
+	assert.Equal(t, sessionName, layout.SessionName)
+	assert.Equal(t, "%0", layout.NavPaneID,
+		"NavPaneID must come from KASMOS_NAV_PANE env var")
+	assert.Equal(t, "%1", layout.WorkspacePaneID,
+		"WorkspacePaneID must come from KASMOS_WORKSPACE_PANE env var")
+}
