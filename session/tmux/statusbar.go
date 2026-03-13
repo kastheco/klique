@@ -36,7 +36,6 @@ type StatusBarData struct {
 	PlanStatus       string      // "ready", "planning", "implementing", "reviewing", "done"
 	WaveLabel        string      // "wave 2/4" or empty
 	TaskGlyphs       []TaskGlyph // per-task status for wave progress
-	FocusMode        bool
 	TmuxSessionCount int
 	ProjectDir       string // project directory name
 	PRState          string // approved, changes_requested, pending (empty = no PR)

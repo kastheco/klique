@@ -1307,7 +1307,10 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		ex := cmdpkg.MakeExecutor()
 		return m, tea.Batch(
 			func() tea.Msg {
-				sessionName := tmux.OuterSessionName()
+				sessionName, err := tmux.OuterSessionName(ex)
+				if err != nil {
+					return fmt.Errorf("focus workspace pane: %w", err)
+				}
 				if sessionName == "" {
 					// Not running inside a tmux layout session — silently no-op.
 					return nil
@@ -1578,9 +1581,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
-	case keys.KeyToggleSidebar:
-		m.sidebarHidden = !m.sidebarHidden
-		return m, tea.RequestWindowSize
 	case keys.KeyAuditToggle:
 		if m.auditPane != nil {
 			m.auditPane.ToggleVisible()

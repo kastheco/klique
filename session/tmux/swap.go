@@ -11,16 +11,15 @@ import (
 
 // OuterSessionName returns the name of the enclosing tmux session (the layout
 // session that kas tui runs inside), or "" if not inside tmux.
-// This is the exported counterpart of the package-private outerTmuxSession().
-func OuterSessionName() string {
+func OuterSessionName(ex cmd.Executor) (string, error) {
 	if os.Getenv("TMUX") == "" {
-		return ""
+		return "", nil
 	}
-	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	out, err := ex.Output(exec.Command("tmux", "display-message", "-p", "#{session_name}"))
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("tmux display-message session_name: %w", err)
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
 }
 
 // SessionExists reports whether the named tmux session exists.

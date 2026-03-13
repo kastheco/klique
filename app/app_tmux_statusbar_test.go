@@ -26,7 +26,6 @@ func TestUiToTmuxStatusBarData_FieldMapping(t *testing.T) {
 		PlanStatus:       "implementing",
 		WaveLabel:        "wave 2/4",
 		TaskGlyphs:       []ui.TaskGlyph{ui.TaskGlyphComplete, ui.TaskGlyphRunning, ui.TaskGlyphPending},
-		FocusMode:        true,
 		TmuxSessionCount: 3,
 		ProjectDir:       "kasmos",
 		PRState:          "approved",
@@ -40,7 +39,6 @@ func TestUiToTmuxStatusBarData_FieldMapping(t *testing.T) {
 	assert.Equal(t, src.PlanName, got.PlanName)
 	assert.Equal(t, src.PlanStatus, got.PlanStatus)
 	assert.Equal(t, src.WaveLabel, got.WaveLabel)
-	assert.Equal(t, src.FocusMode, got.FocusMode)
 	assert.Equal(t, src.TmuxSessionCount, got.TmuxSessionCount)
 	assert.Equal(t, src.ProjectDir, got.ProjectDir)
 	assert.Equal(t, src.PRState, got.PRState)

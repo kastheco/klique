@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -48,20 +49,15 @@ func MainSessionName(repoRoot string) string {
 //
 // When creating a new session:
 //   - The left nav pane runs: KASMOS_LAYOUT=1 <tuiCommand>
-//   - The right workspace pane runs the user's $SHELL (fallback: /bin/bash -l)
+//   - The right workspace pane runs the user's $SHELL (fallback: /bin/bash)
 //   - Session env vars are set: KASMOS_LAYOUT, KASMOS_NAV_PANE, KASMOS_WORKSPACE_PANE, KASMOS_REPO_ROOT
 //   - Tmux options configured: mouse on, escape-time 0, status on, status-position bottom
 func EnsureMainLayout(ex cmd.Executor, repoRoot, tuiCommand string, cols, rows int) (Layout, bool, error) {
-	// Fail fast if tmux is not available.
-	if _, err := exec.LookPath("tmux"); err != nil {
-		return Layout{}, false, fmt.Errorf("ensure main layout: tmux not found in PATH: %w", err)
-	}
-
 	sessionName := MainSessionName(repoRoot)
 
 	// Check if session already exists.
 	hasCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", sessionName))
-	if ex.Run(hasCmd) == nil {
+	if err := ex.Run(hasCmd); err == nil {
 		// Session exists — read env vars to reconstruct the Layout.
 		layout, err := readLayoutEnv(ex, sessionName)
 		if err != nil {
@@ -72,12 +68,14 @@ func EnsureMainLayout(ex cmd.Executor, repoRoot, tuiCommand string, cols, rows i
 			}, true, fmt.Errorf("ensure main layout: read existing layout env: %w", err)
 		}
 		return layout, true, nil
+	} else if errors.Is(err, exec.ErrNotFound) {
+		return Layout{}, false, fmt.Errorf("ensure main layout: tmux not found in PATH: %w", err)
 	}
 
 	// Determine workspace shell (right pane).
 	shell := os.Getenv("SHELL")
 	if shell == "" {
-		shell = "/bin/bash -l"
+		shell = "/bin/bash"
 	}
 
 	// Build the nav pane command: sets KASMOS_LAYOUT=1 so the root `kas` command

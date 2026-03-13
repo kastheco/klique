@@ -289,7 +289,6 @@ func uiToTmuxStatusBarData(d ui.StatusBarData) tmux.StatusBarData {
 		PlanStatus:       d.PlanStatus,
 		WaveLabel:        d.WaveLabel,
 		TaskGlyphs:       glyphs,
-		FocusMode:        d.FocusMode,
 		TmuxSessionCount: d.TmuxSessionCount,
 		ProjectDir:       d.ProjectDir,
 		PRState:          d.PRState,

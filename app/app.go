@@ -285,9 +285,6 @@ type home struct {
 	navWidth      int
 	contentHeight int
 
-	// sidebarHidden tracks whether the nav is collapsed (ctrl+s toggle)
-	sidebarHidden bool
-
 	// Terminal dimensions for the global background fill.
 	termWidth  int
 	termHeight int
@@ -461,7 +458,9 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 	// Detect the enclosing tmux layout session. When kas is launched inside tmux
 	// (e.g. by the launcher that creates the two-pane layout), this is the session
 	// name that owns the nav pane and the workspace/agent right pane.
-	h.layoutSessionName = tmux.OuterSessionName()
+	if sessionName, err := tmux.OuterSessionName(cmd2.MakeExecutor()); err == nil {
+		h.layoutSessionName = sessionName
+	}
 
 	// Always start an embedded task store server. This gives us a local SQLite
 	// DB as the single source of truth without requiring a separate process.
@@ -591,11 +590,6 @@ func (m *home) isUserInOverlay() bool {
 	}
 	return true
 }
-
-// exitFocusModeForDialog is a no-op retained for test compatibility.
-// Focus mode (stateFocusAgent) has been removed; the native tmux right pane
-// handles agent interaction directly so there is nothing to exit.
-func (m *home) exitFocusModeForDialog() {}
 
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.

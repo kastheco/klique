@@ -562,44 +562,6 @@ func TestFocusRing(t *testing.T) {
 		return homeModel
 	}
 
-	t.Run("s is no-op (sidebar focus shortcut removed)", func(t *testing.T) {
-		h := newTestHome()
-		h.sidebarHidden = false
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
-
-		assert.False(t, homeModel.sidebarHidden)
-	})
-
-	t.Run("s does not show hidden sidebar", func(t *testing.T) {
-		h := newTestHome()
-		h.sidebarHidden = true
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
-
-		assert.True(t, homeModel.sidebarHidden)
-	})
-
-	// --- Sidebar toggle (ctrl+s) ---
-
-	t.Run("ctrl+s hides sidebar", func(t *testing.T) {
-		h := newTestHome()
-		h.sidebarHidden = false
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
-
-		assert.True(t, homeModel.sidebarHidden)
-	})
-
-	t.Run("ctrl+s shows sidebar when hidden", func(t *testing.T) {
-		h := newTestHome()
-		h.sidebarHidden = true
-
-		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
-
-		assert.False(t, homeModel.sidebarHidden)
-	})
-
 	// --- Arrow key navigation ---
 
 	t.Run("← is no-op", func(t *testing.T) {
@@ -886,7 +848,7 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 
 func TestHandleKeyPress_CtrlSpaceFocusesWorkspacePane(t *testing.T) {
 	// Ctrl+Space issues an async tmux pane-focus command (the nav-only layout redesign).
-	// When TMUX is unset (as in tests), OuterSessionName() returns "" and the
+	// When TMUX is unset (as in tests), OuterSessionName(ex) returns "" and the
 	// goroutine is a silent no-op — state stays stateDefault, cmd is non-nil.
 	h := newTestHome()
 	inst, err := session.NewInstance(session.InstanceOptions{
