@@ -263,6 +263,15 @@ type home struct {
 	// cleared in handleHelpState once the user acknowledges the attach help screen.
 	pendingAttachInstance *session.Instance
 
+	// swappedInstanceTitle is the title of the instance whose tmux session is
+	// currently swapped into the layout's right pane. Empty string means the
+	// workspace shell is showing. Updated only in Update() from swapPaneResultMsg.
+	swappedInstanceTitle string
+	// layoutSessionName is the name of the outer tmux session that hosts the
+	// two-pane layout (left nav pane + right workspace/agent pane). Empty when
+	// kas is not running inside tmux. Populated once in newHome().
+	layoutSessionName string
+
 	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
 	tmuxSessionCount int
 	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
@@ -466,6 +475,11 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
 	}
+
+	// Detect the enclosing tmux layout session. When kas is launched inside tmux
+	// (e.g. by the launcher that creates the two-pane layout), this is the session
+	// name that owns the nav pane and the workspace/agent right pane.
+	h.layoutSessionName = tmux.OuterSessionName()
 
 	// Always start an embedded task store server. This gives us a local SQLite
 	// DB as the single source of truth without requiring a separate process.
@@ -1918,6 +1932,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewTerminal = msg.term
 		m.previewTerminalInstance = msg.instanceTitle
 		return m, nil
+	case swapPaneResultMsg:
+		if msg.err != nil {
+			// Log the error and surface a non-intrusive toast. The workspace
+			// shell remains visible so the user is not left with a blank pane.
+			log.WarningLog.Printf("swap-pane: %v", msg.err)
+			m.toastManager.Error("swap pane: " + msg.err.Error())
+			return m, m.toastTickCmd()
+		}
+		// Record the instance whose session is now showing in the right pane.
+		// Empty title means the workspace shell has been restored.
+		m.swappedInstanceTitle = msg.instanceTitle
+		return m, nil
 	case killInstanceMsg:
 		// Async pre-kill checks passed — pause instead of destroying (branch preserved).
 		for _, inst := range m.allInstances {
@@ -2392,6 +2418,51 @@ type previewTerminalReadyMsg struct {
 }
 
 type instanceChangedMsg struct{}
+
+// swapPaneResultMsg carries the result of an async swap-pane operation.
+// instanceTitle is empty when the workspace shell has been restored.
+type swapPaneResultMsg struct {
+	instanceTitle string
+	err           error
+}
+
+// swapPaneCmd returns a tea.Cmd that asynchronously swaps the layout's right
+// pane to show the tmux session for instanceTitle.
+// All blocking tmux subprocess calls happen inside the returned Cmd goroutine.
+func swapPaneCmd(layoutSession, instanceTitle string) tea.Cmd {
+	return func() tea.Msg {
+		ex := cmd2.MakeExecutor()
+		agentSession := tmux.ToKasTmuxNamePublic(instanceTitle)
+
+		ok, err := tmux.SessionExists(ex, agentSession)
+		if err != nil {
+			return swapPaneResultMsg{instanceTitle: instanceTitle, err: err}
+		}
+		if !ok {
+			return swapPaneResultMsg{
+				instanceTitle: instanceTitle,
+				err:           fmt.Errorf("agent session %s does not exist", agentSession),
+			}
+		}
+
+		if err := tmux.SwapRightPaneToSession(ex, layoutSession, agentSession); err != nil {
+			// Fall back: restore workspace so the user is not left with a blank pane.
+			_ = tmux.SwapRightPaneToWorkspace(ex, layoutSession)
+			return swapPaneResultMsg{instanceTitle: instanceTitle, err: err}
+		}
+		return swapPaneResultMsg{instanceTitle: instanceTitle}
+	}
+}
+
+// restoreWorkspacePaneCmd returns a tea.Cmd that asynchronously restores the
+// workspace shell pane to the layout's right position. Idempotent.
+func restoreWorkspacePaneCmd(layoutSession string) tea.Cmd {
+	return func() tea.Msg {
+		ex := cmd2.MakeExecutor()
+		_ = tmux.SwapRightPaneToWorkspace(ex, layoutSession)
+		return swapPaneResultMsg{} // empty title = workspace restored
+	}
+}
 
 // killInstanceMsg is sent after async pre-kill checks pass (worktree not checked out).
 // Model mutations (list.Kill, removeFromAllInstances) happen in Update, not in the goroutine.

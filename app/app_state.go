@@ -731,6 +731,12 @@ func (m *home) instanceChanged() tea.Cmd {
 		cmds = append(cmds, previewCmd)
 	}
 
+	// When running inside a tmux layout, swap the right pane to the selected
+	// instance's session (or restore the workspace shell when no valid instance).
+	if swapCmd := m.maybeSwapPane(); swapCmd != nil {
+		cmds = append(cmds, swapCmd)
+	}
+
 	if len(cmds) == 0 {
 		return nil
 	}
