@@ -76,8 +76,15 @@ func defaultDaemonSocketPath() string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
 }
 
+// RunOptions holds optional configuration for the Run entrypoint.
+// NavOnly causes the TUI to render only the navigation panel, deferring agent
+// output to a native tmux pane on the right (the new two-pane layout).
+type RunOptions struct {
+	NavOnly bool
+}
+
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool, version string) error {
+func Run(ctx context.Context, program string, autoYes bool, version string, opts RunOptions) error {
 	// Set the terminal's default background to the theme base color so every
 	// ANSI reset and unstyled cell falls back to #232136 instead of black.
 	restore := ui.SetTerminalBackground("#232136")
@@ -85,7 +92,7 @@ func Run(ctx context.Context, program string, autoYes bool, version string) erro
 	defer sentrypkg.RecoverPanic()
 
 	zone.NewGlobal()
-	h := newHome(ctx, program, autoYes, version)
+	h := newHome(ctx, program, autoYes, version, opts)
 	defer h.embeddedServer.Stop()
 	defer h.auditLogger.Close()
 	if h.permissionStore != nil {
@@ -165,6 +172,9 @@ type home struct {
 	program string
 	version string
 	autoYes bool
+	// navOnly is true when running as the left tmux pane in the two-pane layout.
+	// Later waves use this to suppress the embedded VT preview and status bar.
+	navOnly bool
 
 	// activeRepoPath is the currently active repository path for filtering and new instances
 	activeRepoPath string
@@ -408,7 +418,7 @@ type home struct {
 	permissionHandled map[*session.Instance]string
 }
 
-func newHome(ctx context.Context, program string, autoYes bool, version string) *home {
+func newHome(ctx context.Context, program string, autoYes bool, version string, opts RunOptions) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -441,6 +451,7 @@ func newHome(ctx context.Context, program string, autoYes bool, version string) 
 		program:               program,
 		version:               version,
 		autoYes:               autoYes,
+		navOnly:               opts.NavOnly,
 		state:                 stateDefault,
 		appState:              appState,
 		activeRepoPath:        activeRepoPath,
