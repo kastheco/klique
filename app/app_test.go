@@ -847,26 +847,38 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 }
 
 func TestHandleKeyPress_CtrlSpaceFocusesWorkspacePane(t *testing.T) {
-	// Ctrl+Space issues an async tmux pane-focus command (the nav-only layout redesign).
-	// When TMUX is unset (as in tests), OuterSessionName(ex) returns "" and the
-	// goroutine is a silent no-op — state stays stateDefault, cmd is non-nil.
-	h := newTestHome()
-	inst, err := session.NewInstance(session.InstanceOptions{
-		Title:   "test-focus-toggle",
-		Path:    os.TempDir(),
-		Program: "opencode",
-	})
-	require.NoError(t, err)
-	inst.MarkStartedForTest()
-	h.nav.AddInstance(inst)
-	h.nav.SelectInstance(inst)
-	h.keySent = true
+	// Both bindings issue the async tmux pane-focus command. When TMUX is unset
+	// (as in tests), OuterSessionName(ex) returns "" and the goroutine is a
+	// silent no-op — state stays stateDefault, cmd is non-nil.
+	tests := []struct {
+		name string
+		msg  tea.KeyPressMsg
+	}{
+		{name: "ctrl+space", msg: tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl}},
+		{name: "i", msg: tea.KeyPressMsg{Code: 'i', Text: "i"}},
+	}
 
-	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
-	updated := model.(*home)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHome()
+			inst, err := session.NewInstance(session.InstanceOptions{
+				Title:   "test-focus-toggle",
+				Path:    os.TempDir(),
+				Program: "opencode",
+			})
+			require.NoError(t, err)
+			inst.MarkStartedForTest()
+			h.nav.AddInstance(inst)
+			h.nav.SelectInstance(inst)
+			h.keySent = true
 
-	assert.Equal(t, stateDefault, updated.state)
-	assert.NotNil(t, cmd)
+			model, cmd := h.handleKeyPress(tc.msg)
+			updated := model.(*home)
+
+			assert.Equal(t, stateDefault, updated.state)
+			assert.NotNil(t, cmd)
+		})
+	}
 }
 
 func TestRestartInstance_AppearsInContextMenu(t *testing.T) {

@@ -269,8 +269,8 @@ func readLayoutEnv(ex cmd.Executor, sessionName string) (Layout, error) {
 // so unchanged values are effectively no-ops. The caller is responsible for
 // skipping unchanged renders to avoid unnecessary subprocess spawns.
 //
-// Errors from individual set-option calls are logged but do not abort the loop;
-// the first error encountered is returned so callers can toast it if desired.
+// Errors from individual set-option calls do not abort the loop; the first error
+// encountered is returned so callers can toast it if desired.
 func ApplyStatusBar(ex cmd.Executor, sessionName string, render StatusBarRender) error {
 	opts := []struct{ opt, val string }{
 		{"status-style", "bg=default,fg=default"},

@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// testDocumentLines builds a multi-line string with n numbered lines.
-// Used by tabbed_window_test.go to populate document-mode content.
+// testDocumentLines builds a multi-line string with n numbered lines for tests
+// that need scrollable document-style content.
 func testDocumentLines(n int) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {

@@ -292,7 +292,7 @@ func TestNavigationPanel_DetailSectionLines_NonZeroWhenVisible(t *testing.T) {
 	n.SetSize(60, 40)
 	n.detailVisible = true
 	lines := n.detailSectionLines()
-	assert.Greater(t, lines, 0)
+	assert.Equal(t, 16, lines)
 }
 
 func TestNavigationPanel_AvailRows_AccountsForDetail(t *testing.T) {
@@ -304,4 +304,5 @@ func TestNavigationPanel_AvailRows_AccountsForDetail(t *testing.T) {
 	withDetail := n.availRows()
 
 	assert.Less(t, withDetail, withoutDetail, "detail visible should reduce available nav rows")
+	assert.Equal(t, withoutDetail-n.detailSectionLines(), withDetail)
 }

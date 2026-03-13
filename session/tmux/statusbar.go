@@ -15,7 +15,7 @@ import (
 // or via a thin adapter in app/ where both packages are importable.
 //
 // Keep field names, types, and TaskGlyph constant values in sync with
-// ui/statusbar.go any time those types change.
+// ui/statusbar_data.go any time those types change.
 
 // TaskGlyph mirrors ui.TaskGlyph — the completion state of a single wave task.
 type TaskGlyph int

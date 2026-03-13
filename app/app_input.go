@@ -1304,24 +1304,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	// If not running inside a tmux layout session (TMUX unset, or session env vars
 	// missing), the call is silently discarded so plain-space is unaffected.
 	if msg.Code == tea.KeySpace && msg.Mod.Contains(tea.ModCtrl) {
-		ex := cmdpkg.MakeExecutor()
-		return m, tea.Batch(
-			func() tea.Msg {
-				sessionName, err := tmux.OuterSessionName(ex)
-				if err != nil {
-					return fmt.Errorf("focus workspace pane: %w", err)
-				}
-				if sessionName == "" {
-					// Not running inside a tmux layout session — silently no-op.
-					return nil
-				}
-				if err := tmux.FocusWorkspacePane(ex, sessionName); err != nil {
-					return fmt.Errorf("focus workspace pane: %w", err)
-				}
-				return nil
-			},
-			tea.RequestWindowSize,
-		)
+		return m, m.focusWorkspacePane()
 	}
 
 	// Handle quit commands first
@@ -1414,9 +1397,8 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 		return m.openContextMenu()
 	case keys.KeySendPrompt:
-		// Interaction with the agent happens via the native tmux pane on the right
-		// (use Ctrl+Space to focus it).
-		return m, tea.RequestWindowSize
+		// Interaction with the agent happens via the native tmux pane on the right.
+		return m, m.focusWorkspacePane()
 	case keys.KeySendYes:
 		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.PromptDetected {
@@ -1633,6 +1615,27 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	default:
 		return m, nil
 	}
+}
+
+func (m *home) focusWorkspacePane() tea.Cmd {
+	ex := cmdpkg.MakeExecutor()
+	return tea.Batch(
+		func() tea.Msg {
+			sessionName, err := tmux.OuterSessionName(ex)
+			if err != nil {
+				return fmt.Errorf("focus workspace pane: %w", err)
+			}
+			if sessionName == "" {
+				// Not running inside a tmux layout session — silently no-op.
+				return nil
+			}
+			if err := tmux.FocusWorkspacePane(ex, sessionName); err != nil {
+				return fmt.Errorf("focus workspace pane: %w", err)
+			}
+			return nil
+		},
+		tea.RequestWindowSize,
+	)
 }
 
 // keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.

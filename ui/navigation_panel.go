@@ -632,8 +632,7 @@ func (n *NavigationPanel) SetAuditView(view string, contentLines int) {
 }
 
 // SetDetailData replaces the current detail data and refreshes the viewport content.
-// The detail section is automatically made visible when the data corresponds to a
-// plan header or instance row; it is cleared (but retains visibility state) otherwise.
+// Callers control whether the detail section is visible.
 func (n *NavigationPanel) SetDetailData(data NavDetailData) {
 	n.detailData = data
 	n.refreshDetailViewport()
@@ -701,8 +700,8 @@ func (n *NavigationPanel) availRows() int {
 	return v
 }
 
-// detailSectionLines returns how many lines the detail section occupies when visible.
-// It is capped at 40% of the inner panel height and at least 1 line.
+// detailSectionLines returns how many lines the rendered detail section occupies
+// when visible, including its divider header.
 func (n *NavigationPanel) detailSectionLines() int {
 	if !n.detailVisible {
 		return 0
@@ -716,7 +715,7 @@ func (n *NavigationPanel) detailSectionLines() int {
 	if maxLines < 3 {
 		maxLines = 3
 	}
-	return maxLines
+	return maxLines + 1 // divider header + viewport body
 }
 
 // clampScroll ensures scrollOffset keeps selectedIdx visible.
@@ -1583,10 +1582,10 @@ func (n *NavigationPanel) String() string {
 	detailLines := 0
 	if n.detailVisible {
 		dLines := n.detailSectionLines()
-		if dLines > 0 {
+		if dLines > 1 {
 			// Resize the detail viewport to the allocated height and full inner width.
 			n.detailViewport.SetWidth(innerWidth)
-			n.detailViewport.SetHeight(dLines)
+			n.detailViewport.SetHeight(dLines - 1)
 			view := n.detailViewport.View()
 			if view != "" {
 				// Render a thin divider header above the detail content.

@@ -25,9 +25,6 @@ type NavDetailData struct {
 // on InfoPane state — they take explicit width and InfoData arguments so they
 // can be composed in NavigationPanel without importing InfoPane logic.
 
-// detailLabelWidth is the fixed width for the label column in detail rows.
-const detailLabelWidth = 20
-
 // detailRenderRow renders a single label+value row at the given width.
 func detailRenderRow(label, value string, width int) string {
 	valW := width - lipgloss.Width(infoLabelStyle.Render(label))
