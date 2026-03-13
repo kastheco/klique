@@ -1471,6 +1471,10 @@ func TestHandleKeyPress_CtrlEnterSubmitsAndExitsFocusMode(t *testing.T) {
 }
 
 func TestHandleKeyPress_CtrlSpaceTogglesIntoFocusMode(t *testing.T) {
+	// Ctrl+Space in stateDefault no longer enters stateFocusAgent; it now issues
+	// an async tmux pane-focus command (the nav-only layout redesign: Task 4).
+	// When TMUX is unset (as in tests), OuterSessionName() returns "" and the
+	// goroutine is a silent no-op — state stays stateDefault, cmd is non-nil.
 	h := newTestHome()
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   "test-focus-toggle",
@@ -1488,8 +1492,8 @@ func TestHandleKeyPress_CtrlSpaceTogglesIntoFocusMode(t *testing.T) {
 	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
 	updated := model.(*home)
 
-	assert.Equal(t, stateFocusAgent, updated.state)
-	assert.Nil(t, cmd)
+	assert.Equal(t, stateDefault, updated.state)
+	assert.NotNil(t, cmd)
 }
 
 func TestRestartInstance_AppearsInContextMenu(t *testing.T) {

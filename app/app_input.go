@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	cmdpkg "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/auditlog"
 	"github.com/kastheco/kasmos/config/taskstate"
@@ -1440,6 +1441,28 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 			m.tabbedWindow.HalfPageDown()
 		}
 		return m, nil
+	}
+
+	// Ctrl+Space: focus the workspace (right) tmux pane so the user can interact
+	// with the workspace shell or the active agent session directly.
+	// If not running inside a tmux layout session (TMUX unset, or session env vars
+	// missing), the call is silently discarded so plain-space is unaffected.
+	if msg.Code == tea.KeySpace && msg.Mod.Contains(tea.ModCtrl) {
+		ex := cmdpkg.MakeExecutor()
+		return m, tea.Batch(
+			func() tea.Msg {
+				sessionName := tmux.OuterSessionName()
+				if sessionName == "" {
+					// Not running inside a tmux layout session — silently no-op.
+					return nil
+				}
+				if err := tmux.FocusWorkspacePane(ex, sessionName); err != nil {
+					return fmt.Errorf("focus workspace pane: %w", err)
+				}
+				return nil
+			},
+			tea.RequestWindowSize,
+		)
 	}
 
 	// Handle quit commands first
