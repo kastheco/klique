@@ -15,6 +15,7 @@ import (
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
+	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	tea "charm.land/bubbletea/v2"
@@ -111,11 +112,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
-			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; use the preview tab to review output", selected.Title))
-			return m, nil
-		}
-		return m, m.enterFocusMode()
+		// Switch to the agent preview tab; interaction happens via the native tmux pane.
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		return m, nil
 
 	case "copy_worktree_path":
 		selected := m.nav.GetSelectedInstance()
