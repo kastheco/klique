@@ -12,7 +12,6 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/harmonica v0.2.0
 	github.com/charmbracelet/x/ansi v0.11.6
-	github.com/charmbracelet/x/vt v0.0.0-20260302105528-e9b285c73169
 	github.com/creack/pty v1.1.24
 	github.com/getsentry/sentry-go v0.43.0
 	github.com/go-git/go-git/v5 v5.14.0
@@ -91,6 +90,3 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-// x/vt uses uv.Buffer.Touched which was moved to uv.RenderBuffer upstream.
-// Local patch changes Screen.buf from uv.Buffer to *uv.RenderBuffer.
-replace github.com/charmbracelet/x/vt => ./_patches/vt
