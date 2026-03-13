@@ -53,8 +53,7 @@ const (
 	KeyFocusList     // Key for focusing the right sidebar / instance list
 	KeyViewPlan      // Key for viewing the selected plan's markdown
 	KeyToggleSidebar // Key for toggling sidebar visibility
-	KeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)
-	KeySubmitExit    // Key for submitting input and exiting focus/interactive mode (ctrl+enter)
+	KeyExitFocus     // Key retained for ui/menu.go compatibility; ctrl+space now handled as raw pane-focus toggle
 	KeySpaceExpand   // Space key with expand/collapse label (sidebar context)
 
 	KeyTmuxBrowser // t - browse orphaned tmux sessions
@@ -71,41 +70,41 @@ const (
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
-	"up":         KeyUp,
-	"down":       KeyDown,
-	"N":          KeyPrompt,
-	"enter":      KeyEnter,
-	"o":          KeyEnter,
-	"n":          KeyNewPlan,
-	"k":          KeyKill,
-	"K":          KeyAbort,
-	"q":          KeyQuit,
-	"tab":        KeyTab,
-	"c":          KeyCheckout,
-	"r":          KeyResume,
-	"?":          KeyHelp,
-	"S":          KeyNewSkipPermissions,
-	"/":          KeySearch,
-	"left":       KeyArrowLeft,
-	"right":      KeyArrowRight,
-	"P":          KeyCreatePR,
-	"i":          KeySendPrompt,
-	"y":          KeySendYes,
-	" ":          KeySpace,
-	"1":          KeyFilterAll,
-	"2":          KeyFilterActive,
-	"3":          KeyCycleSort,
-	"t":          KeyTmuxBrowser,
-	"s":          KeySpawnAgent,
-	"L":          KeyAuditToggle,
-	"A":          KeyAuditCursor,
-	"T":          KeyFocusList,
-	"p":          KeyViewPlan,
-	"ctrl+s":     KeyToggleSidebar,
-	"ctrl+space": KeyExitFocus,
-	"g":          KeyInfoTab,
-	"!":          KeyTabAgent,
-	"#":          KeyTabInfo,
+	"up":     KeyUp,
+	"down":   KeyDown,
+	"N":      KeyPrompt,
+	"enter":  KeyEnter,
+	"o":      KeyEnter,
+	"n":      KeyNewPlan,
+	"k":      KeyKill,
+	"K":      KeyAbort,
+	"q":      KeyQuit,
+	"tab":    KeyTab,
+	"c":      KeyCheckout,
+	"r":      KeyResume,
+	"?":      KeyHelp,
+	"S":      KeyNewSkipPermissions,
+	"/":      KeySearch,
+	"left":   KeyArrowLeft,
+	"right":  KeyArrowRight,
+	"P":      KeyCreatePR,
+	"i":      KeySendPrompt,
+	"y":      KeySendYes,
+	" ":      KeySpace,
+	"1":      KeyFilterAll,
+	"2":      KeyFilterActive,
+	"3":      KeyCycleSort,
+	"t":      KeyTmuxBrowser,
+	"s":      KeySpawnAgent,
+	"L":      KeyAuditToggle,
+	"A":      KeyAuditCursor,
+	"T":      KeyFocusList,
+	"p":      KeyViewPlan,
+	"ctrl+s": KeyToggleSidebar,
+	// ctrl+space is handled directly as a raw key event in app/app_input.go (pane focus toggle).
+	"g": KeyInfoTab,
+	"!": KeyTabAgent,
+	"#": KeyTabInfo,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -180,7 +179,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeySendPrompt: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "interactive"),
+		key.WithHelp("i", "send prompt"),
 	),
 	KeySendYes: key.NewBinding(
 		key.WithKeys("y"),
@@ -232,11 +231,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyExitFocus: key.NewBinding(
 		key.WithKeys("ctrl+space"),
-		key.WithHelp("ctrl+space", "exit focus"),
-	),
-	KeySubmitExit: key.NewBinding(
-		key.WithKeys("ctrl+enter"),
-		key.WithHelp("ctrl+↵", "submit + exit"),
+		key.WithHelp("ctrl+space", "focus pane"),
 	),
 
 	KeySpaceExpand: key.NewBinding(

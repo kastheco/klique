@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
+	"os"
+	"path/filepath"
+	"time"
 
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
@@ -25,14 +27,10 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
-	"os"
-	"path/filepath"
-	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
 
@@ -137,8 +135,6 @@ const (
 	stateRenameTopic
 	// stateSendPrompt is the state when the user is sending a prompt via text overlay.
 	stateSendPrompt
-	// stateFocusAgent is the state when the user is typing directly into the agent pane.
-	stateFocusAgent
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 	// stateChangeTopic is the state when the user is changing a plan's topic via picker.
@@ -300,14 +296,6 @@ type home struct {
 	// Terminal dimensions for the global background fill.
 	termWidth  int
 	termHeight int
-
-	// previewTerminal is the VT emulator for the selected instance's preview.
-	// Also used for focus mode — entering focus just forwards keys to this terminal.
-	previewTerminal         *session.EmbeddedTerminal
-	previewTerminalInstance string // title of the instance the terminal is attached to
-	previewRequested        bool   // true after the user explicitly selects the live agent pane
-	previewClipboardPending bool
-	previewClipboardTarget  byte
 
 	// taskState holds the parsed task state from the store for the active repo.
 	taskState *taskstate.TaskState
@@ -609,15 +597,10 @@ func (m *home) isUserInOverlay() bool {
 	return true
 }
 
-// exitFocusModeForDialog exits focus/interactive mode if active, so that an
-// incoming dialog (permission prompt, wave completion, planner-finished, etc.)
-// can be displayed immediately. Focus mode is not a real overlay — it just
-// forwards keys to the embedded PTY — so it is safe to interrupt.
-func (m *home) exitFocusModeForDialog() {
-	if m.state == stateFocusAgent {
-		m.exitFocusMode()
-	}
-}
+// exitFocusModeForDialog is a no-op retained for test compatibility.
+// Focus mode (stateFocusAgent) has been removed; the native tmux right pane
+// handles agent interaction directly so there is nothing to exit.
+func (m *home) exitFocusModeForDialog() {}
 
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
@@ -696,9 +679,6 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
-	if m.previewTerminal != nil {
-		m.previewTerminal.Resize(previewWidth, previewHeight)
-	}
 	if err := m.nav.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
 		log.ErrorLog.Print(err)
 	}
@@ -768,48 +748,26 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cachedPlanFile = msg.planFile
 		m.cachedPlanRendered = msg.rendered
-		m.previewRequested = false
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		m.tabbedWindow.SetDocumentContent(msg.rendered)
 		return m, nil
 	case previewTickMsg:
-		// If previewTerminal is active, render from it (zero-latency VT emulator).
-		if m.previewTerminal != nil && !m.tabbedWindow.IsDocumentMode() {
-			if content, changed := m.previewTerminal.Render(); changed {
-				m.tabbedWindow.SetPreviewContent(content)
-			}
-			if !m.previewClipboardPending {
-				if selection, ok := m.previewTerminal.PollClipboardRequest(); ok {
-					m.previewClipboardPending = true
-					m.previewClipboardTarget = selection
-					term := m.previewTerminal
-					return m, tea.Batch(nextPreviewTickCmd(term), readClipboardCmd(selection))
-				}
-			}
-		} else if m.previewTerminal == nil && !m.tabbedWindow.IsDocumentMode() {
-			// No terminal — show appropriate fallback state.
+		if !m.tabbedWindow.IsDocumentMode() {
+			// No embedded terminal — delegate to UpdatePreview which renders the
+			// correct fallback (banner, progress bar, or paused message).
 			selected := m.nav.GetSelectedInstance()
-			if m.shouldAttachPreviewTerminal(selected) {
-				// Instance is running but terminal hasn't attached yet — show connecting indicator.
-				m.tabbedWindow.SetConnectingState()
-			} else {
-				// nil, Loading, or Paused — delegate to UpdatePreview which renders the
-				// correct fallback (banner, progress bar, or paused message).
-				if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-					log.ErrorLog.Printf("preview update error: %v", err)
-				}
+			if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+				log.ErrorLog.Printf("preview update error: %v", err)
 			}
 		}
 		// Advance spring animation every tick (20fps)
 		m.tabbedWindow.TickSpring()
-		// Banner animation (only when no terminal is active / fallback showing).
+		// Banner animation.
 		m.previewTickCount++
 		if m.previewTickCount%20 == 0 {
 			m.tabbedWindow.TickBanner()
 		}
-		// Use event-driven wakeup when terminal is live, fall back to 50ms poll otherwise.
-		term := m.previewTerminal
-		return m, nextPreviewTickCmd(term)
+		return m, nextPreviewTickCmd()
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -1121,7 +1079,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if m.plannerPrompted[capturedPlanFile] {
 							continue
 						}
-						m.exitFocusModeForDialog()
 						if m.isUserInOverlay() {
 							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
 							continue
@@ -1255,7 +1212,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if m.plannerPrompted[capturedPlanFile] {
 							break
 						}
-						m.exitFocusModeForDialog()
 						if m.isUserInOverlay() {
 							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
 							break
@@ -1315,9 +1271,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Retry deferred PlannerFinished dialogs — show the first queued plan
 			// whose dialog was skipped because an overlay was active at signal time.
-			if len(m.deferredPlannerDialogs) > 0 {
-				m.exitFocusModeForDialog()
-			}
 			if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
 				planFile := m.deferredPlannerDialogs[0]
 				m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
@@ -1495,8 +1448,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Permission prompt detection for opencode.
-			if md.PermissionPrompt != nil && (m.state == stateDefault || m.state == stateFocusAgent) {
-				m.exitFocusModeForDialog()
+			if md.PermissionPrompt != nil && m.state == stateDefault {
 				pp := md.PermissionPrompt
 				cacheKey := config.CacheKey(pp.Pattern, pp.Description)
 				// Guard key: use cache key if available, else sentinel.
@@ -1611,7 +1563,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				// Focus the implementer instance so the user can see its output behind the overlay.
-				m.exitFocusModeForDialog()
 				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
 				}
@@ -1713,9 +1664,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Drain deferred all-complete prompts that were blocked by an overlay.
-			if len(m.pendingAllComplete) > 0 {
-				m.exitFocusModeForDialog()
-			}
 			if !m.isUserInOverlay() && len(m.pendingAllComplete) > 0 {
 				planFile := m.pendingAllComplete[0]
 				m.pendingAllComplete = m.pendingAllComplete[1:]
@@ -1804,7 +1752,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
-					m.exitFocusModeForDialog()
 					if !m.isUserInOverlay() {
 						// Focus a task instance so the user can see agent output behind the overlay.
 						if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
@@ -1827,9 +1774,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
 				// ResetConfirm on cancel allows the prompt to reappear next tick).
 				needsConfirm := orch.NeedsConfirm()
-				if needsConfirm {
-					m.exitFocusModeForDialog()
-				}
 				if !m.isUserInOverlay() && time.Since(m.waveConfirmDismissedAt) > 30*time.Second && needsConfirm {
 					waveNum := orch.CurrentWaveNumber()
 					completed := orch.CompletedTaskCount()
@@ -1937,15 +1881,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		m.updateNavPanelStatus()
 		return m, m.instanceChanged()
-	case previewTerminalReadyMsg:
-		// Discard stale attach if selection changed while spawning.
-		selected := m.nav.GetSelectedInstance()
-		if msg.err != nil || !m.shouldAttachPreviewTerminal(selected) || selected.Title != msg.instanceTitle {
-			return m, asyncClosePreviewTerminal(msg.term)
-		}
-		m.previewTerminal = msg.term
-		m.previewTerminalInstance = msg.instanceTitle
-		return m, nil
 	case swapPaneResultMsg:
 		if msg.err != nil {
 			// Log the error and surface a non-intrusive toast. The workspace
@@ -2223,75 +2158,21 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 	case tea.ClipboardMsg:
-		if m.previewClipboardPending {
-			selection := m.previewClipboardTarget
-			if selection == 0 {
-				selection = ansi.SystemClipboard
-			}
-			m.previewClipboardPending = false
-			m.previewClipboardTarget = 0
-			if m.previewTerminal != nil {
-				if err := m.previewTerminal.SendKey([]byte(ansi.SetClipboard(selection, msg.Content))); err != nil {
-					return m, m.handleError(err)
-				}
-			}
-			return m, nil
-		}
+		// No embedded terminal to forward clipboard to; ignore.
 	case tea.PasteMsg:
-		// Forward pasted text to the embedded PTY in focus mode.
-		if m.state == stateFocusAgent && m.previewTerminal != nil {
-			if content := msg.Content; content != "" {
-				// Wrap in bracketed paste so the program inside tmux sees it
-				// as a paste event rather than typed input.
-				data := []byte("\x1b[200~" + content + "\x1b[201~")
-				_ = m.previewTerminal.SendKey(data)
-			} else {
-				// Empty paste content means the clipboard holds non-text data
-				// (e.g. an image). Forward raw ctrl+v (0x16) so the embedded
-				// program can request clipboard contents via OSC 52 or its own
-				// native paste mechanism.
-				_ = m.previewTerminal.SendKey([]byte{0x16})
-			}
-			return m, nil
-		}
+		// No embedded PTY to forward paste events to; ignore.
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-	default:
-		// Forward unknown CSI sequences (kitty keyboard protocol, etc.) to the
-		// embedded PTY when in focus/interactive mode. Bubbletea emits these as
-		// an unexported []byte-based type; use reflect to extract raw bytes.
-		if m.state == stateFocusAgent && m.previewTerminal != nil {
-			v := reflect.ValueOf(msg)
-			if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
-				if data := v.Bytes(); len(data) > 0 {
-					_ = m.previewTerminal.SendKey(data)
-				}
-				return m, nil
-			}
-		}
 	}
 	return m, nil
 }
 
-func nextPreviewTickCmd(term *session.EmbeddedTerminal) tea.Cmd {
+func nextPreviewTickCmd() tea.Cmd {
 	return func() tea.Msg {
-		if term != nil {
-			term.WaitForRender(16 * time.Millisecond)
-		} else {
-			time.Sleep(50 * time.Millisecond)
-		}
+		time.Sleep(50 * time.Millisecond)
 		return previewTickMsg{}
-	}
-}
-
-func readClipboardCmd(selection byte) tea.Cmd {
-	return func() tea.Msg {
-		if selection == ansi.PrimaryClipboard {
-			return tea.ReadPrimaryClipboard()
-		}
-		return tea.ReadClipboard()
 	}
 }
 
@@ -2423,13 +2304,6 @@ type prErrorMsg struct {
 type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
-
-// previewTerminalReadyMsg signals that the async terminal attach completed.
-type previewTerminalReadyMsg struct {
-	term          *session.EmbeddedTerminal
-	instanceTitle string
-	err           error
-}
 
 type instanceChangedMsg struct{}
 

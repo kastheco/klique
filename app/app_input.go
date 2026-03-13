@@ -29,7 +29,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask || m.state == stateAuditCursor {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask || m.state == stateAuditCursor {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -82,18 +82,6 @@ func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.overlays.IsActive() {
 		return m.handleActiveOverlayMouse(msg)
-	}
-
-	// Focus/interactive mode: clicks outside the agent pane exit focus and
-	// fall through to normal click handling so the intended target is activated.
-	if m.state == stateFocusAgent {
-		if !zone.Get(ui.ZoneAgentPane).InBounds(msg) {
-			m.exitFocusMode()
-			// Fall through — stateDefault click handlers below will process the click.
-		} else {
-			// Click inside the agent pane — stay in focus mode, no-op.
-			return m, nil
-		}
 	}
 
 	if m.state != stateDefault {
@@ -860,54 +848,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	}
 
-	// Handle focus mode — forward keys directly to the agent's PTY
-	if m.state == stateFocusAgent {
-		// Ctrl+Space exits focus mode
-		if msg.Code == tea.KeySpace && msg.Mod.Contains(tea.ModCtrl) {
-			m.exitFocusMode()
-			return m, tea.RequestWindowSize
-		}
-
-		if msg.Code == tea.KeyEnter && msg.Mod.Contains(tea.ModCtrl) {
-			if m.previewTerminal == nil {
-				m.exitFocusMode()
-				return m, tea.RequestWindowSize
-			}
-			if err := m.previewTerminal.SendKey([]byte{0x0D}); err != nil {
-				return m, m.handleError(err)
-			}
-			m.exitFocusMode()
-			return m, tea.RequestWindowSize
-		}
-
-		// Ctrl+Up/Down: cycle through active instances (wrapping) while staying in focus mode
-		if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) || msg.Code == tea.KeyDown && msg.Mod.Contains(tea.ModCtrl) {
-			if msg.Code == tea.KeyUp && msg.Mod.Contains(tea.ModCtrl) {
-				m.nav.CyclePrevActive()
-			} else {
-				m.nav.CycleNextActive()
-			}
-			cmd := m.instanceChanged()
-			// Re-enter focus mode for the newly selected instance
-			focusCmd := m.enterFocusMode()
-			return m, tea.Batch(cmd, focusCmd)
-		}
-
-		// Preview tab focus: forward to embedded terminal
-		if m.previewTerminal == nil {
-			m.exitFocusMode()
-			return m, nil
-		}
-		data := keyToBytes(msg)
-		if data == nil {
-			return m, nil
-		}
-		if err := m.previewTerminal.SendKey(data); err != nil {
-			return m, m.handleError(err)
-		}
-		return m, nil
-	}
-
 	// Handle send prompt state
 	if m.state == stateSendPrompt {
 		if !m.overlays.IsActive() {
@@ -1579,28 +1519,11 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m.switchToTab(name)
 	case keys.KeyTabAgent:
 		return m.exclamationAutoFocus()
-	case keys.KeySendPrompt, keys.KeyExitFocus:
-		// Ensure the agent tab is visible when entering focus mode.
-		m.previewRequested = true
+	case keys.KeySendPrompt:
+		// Switch to the agent preview tab. Interaction with the agent happens
+		// via the native tmux pane on the right (use Ctrl+Space to focus it).
 		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		selected := m.nav.GetSelectedInstance()
-		// When a plan header is selected (no instance), find the best instance for that plan.
-		if selected == nil {
-			if pf := m.nav.GetSelectedPlanFile(); pf != "" {
-				if best := m.nav.FindPlanInstance(pf); best != nil {
-					m.nav.SelectInstance(best)
-					selected = best
-				}
-			}
-		}
-		if selected == nil || !selected.Started() || selected.Paused() {
-			return m, nil
-		}
-		if config.NormalizeExecutionMode(string(selected.ExecutionMode)) == config.ExecutionModeHeadless {
-			m.toastManager.Info(fmt.Sprintf("%s is running in headless mode; use the preview tab to review output", selected.Title))
-			return m, nil
-		}
-		return m, m.enterFocusMode()
+		return m, tea.RequestWindowSize
 	case keys.KeySendYes:
 		selected := m.nav.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.PromptDetected {
