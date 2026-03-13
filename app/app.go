@@ -312,9 +312,6 @@ type home struct {
 	// Falls back to NopLogger when planstore is HTTP-backed or unconfigured.
 	auditLogger auditlog.Logger
 
-	// previewTickCount counts preview ticks for throttled banner animation
-	previewTickCount int
-
 	// metadataTickCount counts metadata ticks for throttled PR state polling.
 	metadataTickCount int
 
@@ -667,10 +664,6 @@ func (m *home) Init() tea.Cmd {
 	// update the spinner, which sends a new spinner.TickMsg. I think this lasts forever lol.
 	return tea.Batch(
 		m.spinner.Tick,
-		func() tea.Msg {
-			time.Sleep(50 * time.Millisecond)
-			return previewTickMsg{}
-		},
 		tickUpdateMetadataCmd,
 		m.toastTickCmd(),
 		m.daemonStartupCheckCmd(),
@@ -726,9 +719,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update the nav panel's inline detail with the freshly rendered plan.
 		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData, RenderedPlan: msg.rendered})
 		return m, nil
-	case previewTickMsg:
-		// Preview tick is a no-op in the nav-only layout — no embedded terminal.
-		return m, nextPreviewTickCmd()
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -2134,13 +2124,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func nextPreviewTickCmd() tea.Cmd {
-	return func() tea.Msg {
-		time.Sleep(50 * time.Millisecond)
-		return previewTickMsg{}
-	}
-}
-
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	// Check if any instances are actively running or loading.
 	hasActive := false
@@ -2252,9 +2235,6 @@ type prErrorMsg struct {
 	id  string
 	err error
 }
-
-// previewTickMsg implements tea.Msg and triggers a preview update
-type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
 

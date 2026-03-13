@@ -1326,11 +1326,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m.handleQuit()
 	}
 
-	// Shift+Tab: no-op (tab cycling removed with tabbed window).
-	if msg.String() == "shift+tab" {
-		return m, nil
-	}
-
 	// Delete key: dismiss a finished (non-running) instance from the list.
 	if msg.Code == tea.KeyDelete || msg.Code == tea.KeyBackspace {
 		selected := m.nav.GetSelectedInstance()
@@ -1403,9 +1398,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	case keys.KeyDown:
 		m.nav.Down()
 		return m, m.instanceChanged()
-	case keys.KeyTab:
-		// Tab cycling removed with tabbed window — no-op.
-		return m, nil
 	case keys.KeySpace:
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch

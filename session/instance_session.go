@@ -94,15 +94,6 @@ func (i *Instance) SendPrompt(prompt string) error {
 	return nil
 }
 
-// PreviewFullHistory captures the complete pane output including the full scrollback buffer.
-// Returns an empty string if the instance is not started or is paused.
-func (i *Instance) PreviewFullHistory() (string, error) {
-	if !i.started || i.Status == Paused {
-		return "", nil
-	}
-	return i.executionSession.CapturePaneContentWithOptions("-", "-")
-}
-
 // SetTmuxSession replaces the tmux session handle. Intended for use in tests only.
 // The TmuxSession is wrapped in the internal tmuxExecutionSession adapter so that
 // the Instance can be used through the ExecutionSession interface.

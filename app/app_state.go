@@ -450,14 +450,6 @@ func (m *home) updateNavPanelStatus() {
 	m.nav.SetItems(nil, nil, 0, nil, nil, m.computePlanStatuses())
 }
 
-// setFocusSlot updates which pane has focus and syncs visual state.
-// With the tabbed window removed, only slotNav is meaningful; this method
-// is kept as a thin shim so call sites in app_input.go compile unchanged.
-func (m *home) setFocusSlot(_ int) {
-	m.nav.SetFocused(true)
-	m.menu.SetFocusSlot(0)
-}
-
 // saveAllInstances saves allInstances (all repos) to storage.
 // No-ops gracefully when storage is nil (e.g. in unit tests).
 func (m *home) saveAllInstances() error {
