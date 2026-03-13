@@ -884,7 +884,7 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	require.True(t, found, "task context menu must include 'create pr' action")
 }
 
-func TestHandleKeyPress_CtrlSpaceTogglesIntoFocusMode(t *testing.T) {
+func TestHandleKeyPress_CtrlSpaceFocusesWorkspacePane(t *testing.T) {
 	// Ctrl+Space issues an async tmux pane-focus command (the nav-only layout redesign).
 	// When TMUX is unset (as in tests), OuterSessionName() returns "" and the
 	// goroutine is a silent no-op — state stays stateDefault, cmd is non-nil.
