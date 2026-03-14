@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -176,11 +177,12 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	assert.Equal(t, "top", setOptValues["status-position"])
 	assert.Contains(t, splitWindowCmd, "-d")
 	assert.Contains(t, splitWindowCmd, "-l 68%")
-	assert.Contains(t, splitWindowCmd, "/bin/sh -lc")
-	assert.Contains(t, splitWindowCmd, "multi-agent orchestration IDE")
-	assert.Contains(t, bindKeys["C-n"], "popup new-plan")
-	assert.Contains(t, bindKeys["C-g"], "popup spawn-agent")
-	assert.Contains(t, bindKeys["C-n"], "KASMOS_EXECUTABLE")
+	assert.Contains(t, splitWindowCmd, "kasmos-workspace-banner-")
+	assert.Contains(t, bindKeys, "C-@")
+	assert.Contains(t, bindKeys["C-n"], "select-pane")
+	assert.Contains(t, bindKeys["C-n"], `"n"`)
+	assert.Contains(t, bindKeys["C-g"], "select-pane")
+	assert.Contains(t, bindKeys["C-g"], `"s"`)
 }
 
 func TestPopupExecutableFromTUICommand(t *testing.T) {
@@ -229,6 +231,54 @@ func TestEnsureMainLayout_NewSession_NavCmdHasLayoutEnv(t *testing.T) {
 	// recognises it is already inside the layout.
 	assert.Contains(t, newSessionCmd, "KASMOS_LAYOUT=1")
 	assert.Contains(t, newSessionCmd, "kas tui --nav-only")
+}
+
+func TestEnsureMainLayout_NewSession_UsesAnimatedWorkspaceCommand(t *testing.T) {
+	log.Initialize(false)
+	defer log.Close()
+	t.Setenv("SHELL", "/bin/bash")
+
+	var splitWindowCmd string
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") {
+				return fmt.Errorf("no session")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			if strings.Contains(cmd.String(), "new-session") {
+				return []byte("kas_main_testrepo|@0|%0\n"), nil
+			}
+			if strings.Contains(cmd.String(), "split-window") {
+				splitWindowCmd = cmd.Args[len(cmd.Args)-1]
+				return []byte("%1\n"), nil
+			}
+			return []byte(""), nil
+		},
+	}
+
+	_, _, err := EnsureMainLayout(ex, "/tmp/testrepo", "kas tui --nav-only", 120, 40)
+	require.NoError(t, err)
+
+	assert.Contains(t, splitWindowCmd, "kasmos-workspace-banner-")
+	assert.Less(t, len(splitWindowCmd), 512, "workspace pane command should stay tiny now that animation lives in a temp script")
+}
+
+func TestWriteWorkspaceBannerScript_PreservesGradientAnimation(t *testing.T) {
+	workspaceBannerScriptDir = t.TempDir
+	defer func() { workspaceBannerScriptDir = os.TempDir }()
+
+	path, err := writeWorkspaceBannerScript("/bin/bash")
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(content)
+	assert.Contains(t, text, "\\033[38;2;")
+	assert.Contains(t, text, "sleep 0.08")
+	assert.Contains(t, text, "exec \"/bin/bash\" -i")
+	assert.Contains(t, text, `rm -- "$0"`)
 }
 
 func TestEnsureMainLayout_MissingTmux(t *testing.T) {

@@ -13,7 +13,6 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
-	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -1406,9 +1405,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		if m.layoutSessionName != "" {
-			return m, m.openPopupCmd("send prompt", "popup", "send-prompt", selected.Title)
-		}
 		m.state = stateSendPrompt
 		tio := overlay.NewTextInputOverlay("enter prompt", "")
 		tio.SetSize(50, 5)
@@ -1605,9 +1601,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		m.nav.ToggleSelectedExpand()
 		return m, nil
 	case keys.KeyNewPlan:
-		if m.layoutSessionName != "" {
-			return m, m.openPopupCmd("new plan", "popup", "new-plan")
-		}
 		m.state = stateNewPlan
 		tio := overlay.NewTextInputOverlay("new plan", "")
 		tio.SetMultiline(true)
@@ -1619,9 +1612,6 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if m.tmuxSessionCount >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)", GlobalInstanceLimit, m.tmuxSessionCount))
-		}
-		if m.layoutSessionName != "" {
-			return m, m.openPopupCmd("spawn agent", "popup", "spawn-agent")
 		}
 		m.state = stateSpawnAgent
 		m.overlays.Show(overlay.NewSpawnFormOverlay("spawn agent", 60))
@@ -1661,22 +1651,6 @@ func (m *home) focusWorkspacePane() tea.Cmd {
 		},
 		tea.RequestWindowSize,
 	)
-}
-
-func (m *home) openPopupCmd(title string, popupArgs ...string) tea.Cmd {
-	repoRoot := m.activeRepoPath
-	return func() tea.Msg {
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		ex := cmdpkg.MakeExecutor()
-		args := append([]string{exe}, popupArgs...)
-		if err := tmux.OpenPopup(ex, repoRoot, title, args...); err != nil {
-			return err
-		}
-		return nil
-	}
 }
 
 // keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.

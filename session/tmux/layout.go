@@ -51,7 +51,7 @@ func MainSessionName(repoRoot string) string {
 //
 // When creating a new session:
 //   - The left nav pane runs: KASMOS_LAYOUT=1 <tuiCommand>
-//   - The right workspace pane runs the user's $SHELL (fallback: /bin/bash)
+//   - The right workspace pane plays the kasmos banner, then execs the user's $SHELL (fallback: /bin/bash)
 //   - Session env vars are set: KASMOS_LAYOUT, KASMOS_NAV_PANE, KASMOS_WORKSPACE_PANE, KASMOS_REPO_ROOT
 //   - Tmux options configured: mouse on, escape-time 0, status on, status-position top
 func EnsureMainLayout(ex cmd.Executor, repoRoot, tuiCommand string, cols, rows int) (Layout, bool, error) {
@@ -79,6 +79,10 @@ func EnsureMainLayout(ex cmd.Executor, repoRoot, tuiCommand string, cols, rows i
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/bash"
+	}
+	workspaceCmd, err := buildWorkspacePaneCommand(shell)
+	if err != nil {
+		return Layout{}, false, fmt.Errorf("ensure main layout: workspace command: %w", err)
 	}
 
 	// Build the nav pane command: sets KASMOS_LAYOUT=1 so the root `kas` command
@@ -113,13 +117,12 @@ func EnsureMainLayout(ex cmd.Executor, repoRoot, tuiCommand string, cols, rows i
 	windowTarget := sessionName + ":" + windowID
 
 	// Create the right workspace pane by splitting horizontally.
-	workspaceShellCmd := workspaceShellBootstrap(shell)
 	splitCmd := exec.Command("tmux",
 		"split-window", "-h", "-d",
 		"-t", windowTarget,
 		"-l", fmt.Sprintf("%d%%", workspacePaneWidthPercent),
 		"-P", "-F", "#{pane_id}",
-		workspaceShellCmd[0], workspaceShellCmd[1], workspaceShellCmd[2],
+		workspaceCmd,
 	)
 	splitOut, err := ex.Output(splitCmd)
 	if err != nil {
@@ -252,8 +255,8 @@ func FocusNavPane(ex cmd.Executor, sessionName string) error {
 
 // InstallFocusBindings installs the global tmux bindings for the outer kasmos layout.
 //
-// C-Space toggles focus between panes; C-f focuses the right pane; C-n opens the
-// new-plan popup; C-g opens the spawn-agent popup.
+// C-Space toggles focus between panes; C-f focuses the right pane; C-n focuses
+// the nav pane and opens new plan; C-g focuses the nav pane and opens spawn agent.
 func InstallFocusBindings(ex cmd.Executor, sessionName string) error {
 	toggleScript := fmt.Sprintf(
 		`cur=$(tmux display-message -p '#{pane_id}'); `+
@@ -261,21 +264,18 @@ func InstallFocusBindings(ex cmd.Executor, sessionName string) error {
 			`if [ "$cur" = "$rp" ]; then tmux select-pane -t '%[1]s:0.0'; else tmux select-pane -t '%[1]s:0.1'; fi`,
 		sessionName,
 	)
-	popupScript := func(title, subcmd string) string {
+	focusAndSendScript := func(key string) string {
 		return fmt.Sprintf(
-			`repo=$(tmux show-environment -t '%[1]s' KASMOS_REPO_ROOT 2>/dev/null | cut -d= -f2); `+
-				`exe=$(tmux show-environment -t '%[1]s' KASMOS_EXECUTABLE 2>/dev/null | cut -d= -f2); `+
-				`if [ -z "$repo" ]; then repo="$PWD"; fi; `+
-				`if [ -z "$exe" ]; then exe='kas'; fi; `+
-				`tmux display-popup -E -w 80%% -h 80%% -T '%[2]s' -d "$repo" "$exe popup %[3]s"`,
-			sessionName, title, subcmd,
+			`tmux select-pane -t '%[1]s:0.0'; tmux send-keys -t '%[1]s:0.0' %[2]s`,
+			sessionName, strconv.Quote(key),
 		)
 	}
 	bindings := [][]string{
 		{"bind-key", "-n", "C-Space", "run-shell", toggleScript},
+		{"bind-key", "-n", "C-@", "run-shell", toggleScript},
 		{"bind-key", "-n", "C-f", "select-pane", "-t", visibleRightPaneTarget(sessionName)},
-		{"bind-key", "-n", "C-n", "run-shell", popupScript("new plan", "new-plan")},
-		{"bind-key", "-n", "C-g", "run-shell", popupScript("spawn agent", "spawn-agent")},
+		{"bind-key", "-n", "C-n", "run-shell", focusAndSendScript("n")},
+		{"bind-key", "-n", "C-g", "run-shell", focusAndSendScript("s")},
 	}
 	for _, binding := range bindings {
 		if err := ex.Run(exec.Command("tmux", binding...)); err != nil {

@@ -34,7 +34,7 @@ const (
 	KeyCreatePR // Key for creating a pull request
 
 	KeySendPrompt        // Key for focusing the visible right pane from the nav UI
-	KeyInteractivePrompt // Key for opening an interactive prompt popup for the selected instance
+	KeyInteractivePrompt // Key for opening an interactive prompt for the selected instance
 	KeySendYes           // Key for sending yes to a waiting instance
 
 	KeySpace // Key for opening context menu on selected item

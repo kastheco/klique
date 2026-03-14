@@ -111,9 +111,6 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		if m.layoutSessionName != "" {
-			return m, m.openPopupCmd("send prompt", "popup", "send-prompt", selected.Title)
-		}
 		m.state = stateSendPrompt
 		tio := overlay.NewTextInputOverlay("enter prompt", "")
 		tio.SetSize(50, 5)
