@@ -458,6 +458,36 @@ func (m *home) saveAllInstances() error {
 	return m.storage.SaveInstances(m.allInstances)
 }
 
+func (m *home) syncExternalInstances() {
+	if m.storage == nil {
+		return
+	}
+	loaded, err := m.storage.LoadInstances()
+	if err != nil {
+		return
+	}
+	known := make(map[string]bool, len(m.allInstances))
+	for _, inst := range m.allInstances {
+		known[inst.Title] = true
+	}
+	added := false
+	for _, inst := range loaded {
+		if known[inst.Title] {
+			continue
+		}
+		known[inst.Title] = true
+		m.allInstances = append(m.allInstances, inst)
+		repoPath := inst.GetRepoPath()
+		if repoPath == "" || repoPath == m.activeRepoPath {
+			m.nav.AddInstance(inst)()
+		}
+		added = true
+	}
+	if added {
+		m.updateNavPanelStatus()
+	}
+}
+
 // removeFromAllInstances removes an instance from the master list by title.
 func (m *home) removeFromAllInstances(title string) {
 	for i, inst := range m.allInstances {

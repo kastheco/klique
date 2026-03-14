@@ -281,6 +281,7 @@ func init() {
 	rootCmd.AddCommand(cmd2.NewSignalCmd())
 	rootCmd.AddCommand(cmd2.NewDaemonCmd())
 	rootCmd.AddCommand(cmd2.NewMonitorCmd())
+	rootCmd.AddCommand(newPopupCmd())
 	rootCmd.AddCommand(cmd2.NewTUICmd(versionString(), &programFlag, &autoYesFlag, func(ctx context.Context, program string, autoYes bool, version string, navOnly bool) error {
 		tuiCfg := config.LoadConfig()
 		session.NotificationsEnabled = tuiCfg.AreNotificationsEnabled()

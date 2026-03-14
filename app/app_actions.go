@@ -111,7 +111,13 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		// Interaction happens via the native tmux pane on the right.
+		if m.layoutSessionName != "" {
+			return m, m.openPopupCmd("send prompt", "popup", "send-prompt", selected.Title)
+		}
+		m.state = stateSendPrompt
+		tio := overlay.NewTextInputOverlay("enter prompt", "")
+		tio.SetSize(50, 5)
+		m.overlays.Show(tio)
 		return m, nil
 
 	case "copy_worktree_path":
@@ -735,7 +741,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 		items = append(items, overlay.ContextMenuItem{Label: "pause", Action: "pause_instance"})
 	}
 	if selected.Started() && selected.Status != session.Paused {
-		items = append(items, overlay.ContextMenuItem{Label: "focus agent", Action: "send_prompt_instance"})
+		items = append(items, overlay.ContextMenuItem{Label: "send prompt", Action: "send_prompt_instance"})
 	}
 	items = append(items, overlay.ContextMenuItem{Label: "rename", Action: "rename_instance"})
 	items = append(items, overlay.ContextMenuItem{Label: "push branch", Action: "push_instance"})

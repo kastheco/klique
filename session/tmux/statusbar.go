@@ -93,8 +93,8 @@ func RenderStatusBar(data StatusBarData) StatusBarRender {
 
 // tmuxLeftSegment builds the status-left string.
 //
-// The app name is always bold. Version (if set) is appended with a plain space
-// matching the TUI layout. The status group (wave or plan) is preceded by " · ".
+// The app name is always bold. Version (if set) is appended with a plain space.
+// The status group (wave or plan) is preceded by a slightly wider separator for readability.
 func tmuxLeftSegment(data StatusBarData) string {
 	left := "#[bold]kasmos#[default]"
 
@@ -103,7 +103,7 @@ func tmuxLeftSegment(data StatusBarData) string {
 	}
 
 	if sg := tmuxLeftStatusGroup(data); sg != "" {
-		left += " · " + sg
+		left += "  · " + sg
 	}
 
 	return left

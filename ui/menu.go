@@ -190,7 +190,7 @@ func (m *Menu) addSidebarOptions(includeNewPlan bool) {
 // addInstanceOptions populates the option list when an instance is selected.
 func (m *Menu) addInstanceOptions() {
 	mgmt := []keys.KeyName{keys.KeyNewPlan, keys.KeyKill}
-	action := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace}
+	action := []keys.KeyName{keys.KeyEnter, keys.KeyInteractivePrompt, keys.KeySendPrompt, keys.KeySpace}
 	if m.instance.PromptDetected && m.instance.Status != session.Paused {
 		action = append(action, keys.KeySendYes)
 	}

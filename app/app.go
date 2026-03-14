@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -37,6 +38,8 @@ import (
 const GlobalInstanceLimit = 20
 
 const clickUpOpTimeout = 30 * time.Second
+
+var makeExecutor = cmd2.MakeExecutor
 
 var repoManagedByDaemon = func(repoPath string) bool {
 	if repoPath == "" {
@@ -768,6 +771,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlays.Show(overlay.NewPickerOverlay("select clickup task", items))
 		return m, nil
 	case tickUpdateMetadataMessage:
+		m.syncExternalInstances()
 		// Snapshot the instance list for the goroutine. The slice header is
 		// copied but the pointers are shared — CollectMetadata only reads
 		// instance fields that don't change between ticks (started, Status,
@@ -2131,7 +2135,15 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if hasActive {
 		quitAction := func() tea.Msg {
 			m.audit(auditlog.EventSessionStopped, "kasmos stopped")
-			_ = m.saveAllInstances()
+			if err := m.saveAllInstances(); err != nil {
+				return err
+			}
+			if m.navOnly && m.layoutSessionName != "" {
+				ex := makeExecutor()
+				if err := ex.Run(exec.Command("tmux", "kill-session", "-t", m.layoutSessionName)); err != nil {
+					return err
+				}
+			}
 			return tea.QuitMsg{}
 		}
 		return m, m.confirmAction("quit kasmos? active sessions will be preserved.", quitAction)
@@ -2140,6 +2152,16 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	m.audit(auditlog.EventSessionStopped, "kasmos stopped")
 	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
+	}
+	if m.navOnly && m.layoutSessionName != "" {
+		sessionName := m.layoutSessionName
+		return m, func() tea.Msg {
+			ex := makeExecutor()
+			if err := ex.Run(exec.Command("tmux", "kill-session", "-t", sessionName)); err != nil {
+				return err
+			}
+			return tea.QuitMsg{}
+		}
 	}
 	return m, tea.Quit
 }

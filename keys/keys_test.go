@@ -25,6 +25,15 @@ func TestFocusSidebarRemoved(t *testing.T) {
 	assert.Equal(t, KeySpawnAgent, GlobalKeyStringsMap["s"])
 }
 
+func TestFocusKeyUsesF(t *testing.T) {
+	name, ok := GlobalKeyStringsMap["f"]
+	assert.True(t, ok, "'f' must be in GlobalKeyStringsMap")
+	assert.Equal(t, KeySendPrompt, name)
+	name, ok = GlobalKeyStringsMap["i"]
+	assert.True(t, ok, "'i' must be in GlobalKeyStringsMap")
+	assert.Equal(t, KeyInteractivePrompt, name)
+}
+
 func TestGlobalKeyBindings_UpdatedStatusLineLabels(t *testing.T) {
 	if got := GlobalkeyBindings[KeyEnter].Help().Desc; got != "select" {
 		t.Fatalf("KeyEnter help desc = %q, want %q", got, "select")
@@ -34,6 +43,12 @@ func TestGlobalKeyBindings_UpdatedStatusLineLabels(t *testing.T) {
 	}
 	if got := GlobalkeyBindings[KeyViewPlan].Help().Desc; got != "preview" {
 		t.Fatalf("KeyViewPlan help desc = %q, want %q", got, "preview")
+	}
+	if got := GlobalkeyBindings[KeySendPrompt].Help().Desc; got != "focus" {
+		t.Fatalf("KeySendPrompt help desc = %q, want %q", got, "focus")
+	}
+	if got := GlobalkeyBindings[KeyInteractivePrompt].Help().Desc; got != "prompt" {
+		t.Fatalf("KeyInteractivePrompt help desc = %q, want %q", got, "prompt")
 	}
 }
 

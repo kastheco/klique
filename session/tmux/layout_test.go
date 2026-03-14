@@ -94,8 +94,11 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	sessionName := MainSessionName(repoRoot)
 
 	var ranNewSession, ranSplitWindow bool
+	var splitWindowCmd string
 	var setEnvCalls []string
 	var setOptCalls []string
+	setOptValues := make(map[string]string)
+	bindKeys := make(map[string]string)
 
 	ex := cmd_test.MockCmdExec{
 		RunFunc: func(cmd *exec.Cmd) error {
@@ -104,6 +107,10 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 			case strings.Contains(s, "has-session"):
 				// Session does not exist
 				return fmt.Errorf("no server running")
+			case strings.Contains(s, "bind-key"):
+				if len(cmd.Args) >= 5 {
+					bindKeys[cmd.Args[3]] = strings.Join(cmd.Args[4:], " ")
+				}
 			case strings.Contains(s, "set-environment"):
 				// Record the env var name being set
 				args := cmd.Args
@@ -114,6 +121,9 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 				args := cmd.Args
 				if len(args) >= 5 {
 					setOptCalls = append(setOptCalls, args[len(args)-2])
+					if len(args) >= 6 {
+						setOptValues[args[len(args)-2]] = args[len(args)-1]
+					}
 				}
 			case strings.Contains(s, "kill-session"):
 				// cleanup call — ok
@@ -129,6 +139,7 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 			}
 			if strings.Contains(s, "split-window") {
 				ranSplitWindow = true
+				splitWindowCmd = s
 				return []byte("%1\n"), nil
 			}
 			return []byte(""), nil
@@ -140,6 +151,10 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	assert.False(t, existed, "expected existed=false for new session")
 	assert.True(t, ranNewSession, "expected new-session to be called")
 	assert.True(t, ranSplitWindow, "expected split-window to be called")
+	assert.Contains(t, bindKeys, "C-Space")
+	assert.Contains(t, bindKeys, "C-f")
+	assert.Contains(t, bindKeys, "C-n")
+	assert.Contains(t, bindKeys, "C-g")
 
 	assert.Equal(t, sessionName, layout.SessionName)
 	assert.Equal(t, "%0", layout.NavPaneID)
@@ -150,6 +165,7 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	assert.Contains(t, setEnvCalls, "KASMOS_LAYOUT")
 	assert.Contains(t, setEnvCalls, "KASMOS_NAV_PANE")
 	assert.Contains(t, setEnvCalls, "KASMOS_WORKSPACE_PANE")
+	assert.Contains(t, setEnvCalls, "KASMOS_EXECUTABLE")
 	assert.Contains(t, setEnvCalls, "KASMOS_REPO_ROOT")
 
 	// Verify tmux options were configured
@@ -157,6 +173,29 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	assert.Contains(t, setOptCalls, "escape-time")
 	assert.Contains(t, setOptCalls, "status")
 	assert.Contains(t, setOptCalls, "status-position")
+	assert.Equal(t, "top", setOptValues["status-position"])
+	assert.Contains(t, splitWindowCmd, "-d")
+	assert.Contains(t, splitWindowCmd, "-l 68%")
+	assert.Contains(t, splitWindowCmd, "/bin/sh -lc")
+	assert.Contains(t, splitWindowCmd, "multi-agent orchestration IDE")
+	assert.Contains(t, bindKeys["C-n"], "popup new-plan")
+	assert.Contains(t, bindKeys["C-g"], "popup spawn-agent")
+	assert.Contains(t, bindKeys["C-n"], "KASMOS_EXECUTABLE")
+}
+
+func TestPopupExecutableFromTUICommand(t *testing.T) {
+	assert.Equal(t, "kas", popupExecutableFromTUICommand("kas tui --nav-only"))
+	assert.Equal(t, "/usr/local/bin/kas", popupExecutableFromTUICommand("/usr/local/bin/kas tui --nav-only"))
+	assert.Equal(t, "kas", popupExecutableFromTUICommand(""))
+}
+
+func TestWorkspaceShellBootstrap_PrintsBannerThenExecsShell(t *testing.T) {
+	cmd := workspaceShellBootstrap("/bin/zsh")
+	assert.Equal(t, "/bin/sh", cmd[0])
+	assert.Equal(t, "-lc", cmd[1])
+	assert.Contains(t, cmd[2], "multi-agent orchestration IDE")
+	assert.Contains(t, cmd[2], "█████╔╝")
+	assert.Contains(t, cmd[2], "exec \"/bin/zsh\" -i")
 }
 
 func TestEnsureMainLayout_NewSession_NavCmdHasLayoutEnv(t *testing.T) {
@@ -239,6 +278,38 @@ func TestFocusPane(t *testing.T) {
 	err := FocusPane(ex, "%42")
 	require.NoError(t, err)
 	assert.Equal(t, "%42", selectPaneTarget)
+}
+
+func TestFocusWorkspacePaneTargetsVisibleRightPane(t *testing.T) {
+	var selectPaneTarget string
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "select-pane") {
+				selectPaneTarget = cmd.Args[len(cmd.Args)-1]
+			}
+			return nil
+		},
+	}
+
+	err := FocusWorkspacePane(ex, "kas_main_testrepo")
+	require.NoError(t, err)
+	assert.Equal(t, "kas_main_testrepo:0.1", selectPaneTarget)
+}
+
+func TestFocusNavPaneTargetsVisibleLeftPane(t *testing.T) {
+	var selectPaneTarget string
+	ex := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "select-pane") {
+				selectPaneTarget = cmd.Args[len(cmd.Args)-1]
+			}
+			return nil
+		},
+	}
+
+	err := FocusNavPane(ex, "kas_main_testrepo")
+	require.NoError(t, err)
+	assert.Equal(t, "kas_main_testrepo:0.0", selectPaneTarget)
 }
 
 // --- ApplyStatusBar tests ---

@@ -57,19 +57,13 @@ func LayoutPaneID(ex cmd.Executor, sessionName, envName string) (string, error) 
 	return val, nil
 }
 
-// SwapRightPaneToSession swaps the workspace right pane to show the first pane
-// of sourceSession. The workspace pane ID is read from KASMOS_WORKSPACE_PANE
-// in the outer session's environment.
+// SwapRightPaneToSession swaps the visible right pane to show the first pane of
+// sourceSession.
 //
-// The swap uses `tmux swap-pane -d -t <workspace-pane-id> -s <agent-pane-id>`
-// so the workspace pane moves to wherever the agent pane was (the agent session)
-// and the agent pane appears in the outer layout where the workspace pane was.
+// The swap uses `tmux swap-pane -d -t <outer-session:0.1> -s <agent-pane-id>` so
+// repeated swaps keep updating the currently visible right side even after the
+// hidden workspace pane has moved into another session.
 func SwapRightPaneToSession(ex cmd.Executor, outerSession, sourceSession string) error {
-	workspacePaneID, err := LayoutPaneID(ex, outerSession, "KASMOS_WORKSPACE_PANE")
-	if err != nil {
-		return fmt.Errorf("get workspace pane: %w", err)
-	}
-
 	// Resolve the pane ID of the source session's first window, first pane.
 	c := exec.Command("tmux", "display-message", "-p", "-t",
 		sourceSession+":0.0", "#{pane_id}")
@@ -84,7 +78,7 @@ func SwapRightPaneToSession(ex cmd.Executor, outerSession, sourceSession string)
 
 	// Perform the swap. -d prevents detaching attached clients.
 	swapCmd := exec.Command("tmux", "swap-pane", "-d",
-		"-t", workspacePaneID,
+		"-t", visibleRightPaneTarget(outerSession),
 		"-s", agentPaneID)
 	if err := ex.Run(swapCmd); err != nil {
 		return fmt.Errorf("swap-pane to %s: %w", sourceSession, err)

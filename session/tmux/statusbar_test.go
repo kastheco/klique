@@ -151,7 +151,7 @@ func TestRenderStatusBar_VersionAndStatus_ExactShape(t *testing.T) {
 	})
 	want := "#[bold]kasmos#[default] " +
 		tmuxFG(tmuxColorMuted, "v1.0.0") +
-		" · " +
+		"  · " +
 		tmuxFG(tmuxColorMuted, "ready")
 	assert.Equal(t, want, result.Left)
 }
@@ -160,7 +160,7 @@ func TestRenderStatusBar_PlanStatus_Implementing(t *testing.T) {
 	result := RenderStatusBar(StatusBarData{PlanStatus: "implementing"})
 	assert.Contains(t, result.Left, "implementing")
 	assert.Contains(t, result.Left, tmuxColorFoam)
-	assert.Contains(t, result.Left, " · ")
+	assert.Contains(t, result.Left, "  · ")
 }
 
 func TestRenderStatusBar_PlanStatus_Reviewing(t *testing.T) {
@@ -239,7 +239,7 @@ func TestRenderStatusBar_WaveLabel_NoGlyphs_FallsBackToPlanStatus(t *testing.T) 
 
 func TestRenderStatusBar_NoDoubledSeparators_NoVersion(t *testing.T) {
 	result := RenderStatusBar(StatusBarData{PlanStatus: "implementing"})
-	assert.NotContains(t, result.Left, " ·  · ")
+	assert.LessOrEqual(t, strings.Count(result.Left, "·"), 1)
 }
 
 func TestRenderStatusBar_NoDoubledSeparators_NoStatus(t *testing.T) {

@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	cmd2 "github.com/kastheco/kasmos/cmd"
+	cmd_test "github.com/kastheco/kasmos/cmd/cmd_test"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
@@ -760,6 +763,33 @@ func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
 	assert.NotNil(t, h.pendingConfirmAction, "pending action must be set")
 }
 
+func TestHandleQuit_NavOnlyKillsOuterLayoutSession(t *testing.T) {
+	h := newTestHome()
+	h.toastManager = overlay.NewToastManager(&h.spinner)
+	h.navOnly = true
+	h.layoutSessionName = "kas_main_testrepo"
+
+	mockExec := cmd_test.NewMockExecutor()
+	var killTarget string
+	mockExec.RunFunc = func(cmd *exec.Cmd) error {
+		if len(cmd.Args) >= 4 && cmd.Args[1] == "kill-session" {
+			killTarget = cmd.Args[3]
+		}
+		return nil
+	}
+
+	oldMakeExecutor := makeExecutor
+	makeExecutor = func() cmd2.Executor { return mockExec }
+	defer func() { makeExecutor = oldMakeExecutor }()
+
+	_, cmd := h.handleQuit()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	require.True(t, ok, "nav-only quit should return tea.QuitMsg after killing the layout")
+	assert.Equal(t, "kas_main_testrepo", killTarget)
+}
+
 // setupPlanState sets up an in-memory plan state on h for test use.
 // It creates a temp directory, registers the plan, seeds the status, and
 // refreshes the nav panel so SelectByID works immediately afterward.
@@ -855,7 +885,7 @@ func TestHandleKeyPress_CtrlSpaceFocusesWorkspacePane(t *testing.T) {
 		msg  tea.KeyPressMsg
 	}{
 		{name: "ctrl+space", msg: tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl}},
-		{name: "i", msg: tea.KeyPressMsg{Code: 'i', Text: "i"}},
+		{name: "f", msg: tea.KeyPressMsg{Code: 'f', Text: "f"}},
 	}
 
 	for _, tc := range tests {

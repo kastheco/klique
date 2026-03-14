@@ -67,10 +67,7 @@ func TestSwapRightPaneToSession_Happy(t *testing.T) {
 		},
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
 			arg := strings.Join(cmd.Args, " ")
-			switch {
-			case strings.Contains(arg, "show-environment"):
-				return []byte("KASMOS_WORKSPACE_PANE=%1\n"), nil
-			case strings.Contains(arg, "display-message"):
+			if strings.Contains(arg, "display-message") {
 				return []byte("%99\n"), nil
 			}
 			return nil, nil
@@ -81,13 +78,13 @@ func TestSwapRightPaneToSession_Happy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ranCmds, 1)
 	assert.Contains(t, ranCmds[0], "swap-pane")
-	assert.Contains(t, ranCmds[0], "%1")
+	assert.Contains(t, ranCmds[0], "kas_outer:0.1")
 	assert.Contains(t, ranCmds[0], "%99")
 }
 
-// TestSwapRightPaneToSession_MissingEnv verifies that a missing KASMOS_WORKSPACE_PANE
-// env var causes SwapRightPaneToSession to return an error.
-func TestSwapRightPaneToSession_MissingEnv(t *testing.T) {
+// TestSwapRightPaneToSession_MissingSourcePane verifies that an invalid source
+// session still returns an error from the pane-id lookup.
+func TestSwapRightPaneToSession_MissingSourcePane(t *testing.T) {
 	ex := cmd_test.MockCmdExec{
 		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
 			return nil, &exec.ExitError{}

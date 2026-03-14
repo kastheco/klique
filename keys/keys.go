@@ -33,8 +33,9 @@ const (
 
 	KeyCreatePR // Key for creating a pull request
 
-	KeySendPrompt // Key for sending a prompt to a running instance
-	KeySendYes    // Key for sending yes to a waiting instance
+	KeySendPrompt        // Key for focusing the visible right pane from the nav UI
+	KeyInteractivePrompt // Key for opening an interactive prompt popup for the selected instance
+	KeySendYes           // Key for sending yes to a waiting instance
 
 	KeySpace // Key for opening context menu on selected item
 
@@ -73,7 +74,8 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"left":  KeyArrowLeft,
 	"right": KeyArrowRight,
 	"P":     KeyCreatePR,
-	"i":     KeySendPrompt,
+	"f":     KeySendPrompt,
+	"i":     KeyInteractivePrompt,
 	"y":     KeySendYes,
 	" ":     KeySpace,
 	"1":     KeyFilterAll,
@@ -158,8 +160,12 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("→", "right"),
 	),
 	KeySendPrompt: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "focus"),
+	),
+	KeyInteractivePrompt: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "send prompt"),
+		key.WithHelp("i", "prompt"),
 	),
 	KeySendYes: key.NewBinding(
 		key.WithKeys("y"),
