@@ -255,15 +255,9 @@ func FocusNavPane(ex cmd.Executor, sessionName string) error {
 
 // InstallFocusBindings installs the global tmux bindings for the outer kasmos layout.
 //
-// C-Space toggles focus between panes; C-f focuses the right pane; C-n focuses
+// C-Space toggles to the last pane; C-f focuses the right pane; C-n focuses
 // the nav pane and opens new plan; C-g focuses the nav pane and opens spawn agent.
 func InstallFocusBindings(ex cmd.Executor, sessionName string) error {
-	toggleScript := fmt.Sprintf(
-		`cur=$(tmux display-message -p '#{pane_id}'); `+
-			`rp=$(tmux display-message -p -t '%[1]s:0.1' '#{pane_id}' 2>/dev/null); `+
-			`if [ "$cur" = "$rp" ]; then tmux select-pane -t '%[1]s:0.0'; else tmux select-pane -t '%[1]s:0.1'; fi`,
-		sessionName,
-	)
 	focusAndSendScript := func(key string) string {
 		return fmt.Sprintf(
 			`tmux select-pane -t '%[1]s:0.0'; tmux send-keys -t '%[1]s:0.0' %[2]s`,
@@ -271,8 +265,8 @@ func InstallFocusBindings(ex cmd.Executor, sessionName string) error {
 		)
 	}
 	bindings := [][]string{
-		{"bind-key", "-n", "C-Space", "run-shell", toggleScript},
-		{"bind-key", "-n", "C-@", "run-shell", toggleScript},
+		{"bind-key", "-n", "C-Space", "last-pane"},
+		{"bind-key", "-n", "C-@", "last-pane"},
 		{"bind-key", "-n", "C-f", "select-pane", "-t", visibleRightPaneTarget(sessionName)},
 		{"bind-key", "-n", "C-n", "run-shell", focusAndSendScript("n")},
 		{"bind-key", "-n", "C-g", "run-shell", focusAndSendScript("s")},

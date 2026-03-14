@@ -179,6 +179,8 @@ func TestEnsureMainLayout_NewSession(t *testing.T) {
 	assert.Contains(t, splitWindowCmd, "-l 68%")
 	assert.Contains(t, splitWindowCmd, "kasmos-workspace-banner-")
 	assert.Contains(t, bindKeys, "C-@")
+	assert.Equal(t, "last-pane", bindKeys["C-Space"])
+	assert.Equal(t, "last-pane", bindKeys["C-@"])
 	assert.Contains(t, bindKeys["C-n"], "select-pane")
 	assert.Contains(t, bindKeys["C-n"], `"n"`)
 	assert.Contains(t, bindKeys["C-g"], "select-pane")
