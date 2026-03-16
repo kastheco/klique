@@ -32,6 +32,11 @@ func TestShouldTriggerFixer(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "changes_requested with empty body still triggers",
+			review: gitpkg.PRReview{State: "CHANGES_REQUESTED", Body: "   ", User: "dave"},
+			want:   true,
+		},
+		{
 			name:   "commented with body from human",
 			review: gitpkg.PRReview{State: "COMMENTED", Body: "please refactor this", User: "bob"},
 			want:   true,
@@ -42,8 +47,8 @@ func TestShouldTriggerFixer(t *testing.T) {
 			want:   false,
 		},
 		{
-			name:   "changes_requested but empty body",
-			review: gitpkg.PRReview{State: "CHANGES_REQUESTED", Body: "   ", User: "dave"},
+			name:   "commented but empty body",
+			review: gitpkg.PRReview{State: "COMMENTED", Body: "   ", User: "dave"},
 			want:   false,
 		},
 		{
@@ -586,6 +591,44 @@ func TestPRMonitor_NoInlineComments_StillDispatchesFixer(t *testing.T) {
 	require.Len(t, *f.actions, 1)
 	_, ok := (*f.actions)[0].(loop.SpawnFixerAction)
 	assert.True(t, ok, "expected SpawnFixerAction even with no inline comments; got %T", (*f.actions)[0])
+}
+
+func TestPRMonitor_ChangesRequested_EmptyBodyWithInlineComments_DispatchesFixer(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	repoPath := t.TempDir()
+	const prNum = 17
+
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "plan.md",
+		Status:   taskstore.StatusReviewing,
+		Branch:   "review/plan",
+		PRURL:    fmt.Sprintf("https://github.com/owner/repo/pull/%d", prNum),
+	}))
+
+	fakeReview := gitpkg.PRReview{
+		ID: 91, State: "CHANGES_REQUESTED", Body: "", User: "alice",
+	}
+
+	f := newMonitorFixture(t, project, repoPath, store, 0,
+		func(string, int) (bool, error) { return true, nil },
+		func(string, int) ([]gitpkg.PRReview, error) { return []gitpkg.PRReview{fakeReview}, nil },
+		func(string, int, int) ([]gitpkg.PRReviewComment, error) {
+			return []gitpkg.PRReviewComment{{ID: 701}}, nil
+		},
+		func(string, int, string) error { return nil },
+	)
+
+	f.m.pollOnce(context.Background())
+
+	require.Len(t, *f.actions, 1)
+	act, ok := (*f.actions)[0].(loop.SpawnFixerAction)
+	require.True(t, ok, "expected SpawnFixerAction, got %T", (*f.actions)[0])
+	assert.Equal(t, "plan.md", act.PlanFile)
+
+	pending, err := store.ListPendingReviews(project, "plan.md")
+	require.NoError(t, err)
+	assert.Empty(t, pending, "review must not remain pending after successful dispatch")
 }
 
 // ─── warn-once gh unavailability ─────────────────────────────────────────────

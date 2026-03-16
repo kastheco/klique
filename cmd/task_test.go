@@ -17,8 +17,7 @@ import (
 )
 
 // setupTestPlanState creates an in-memory SQLite store pre-populated with three
-// test plans (ready, implementing, and cancelled) and returns the store, the
-// repo root, and the project name.
+// test plans and returns the store, the repo root, and the project name.
 func setupTestPlanState(t *testing.T) (taskstore.Store, string, string) {
 	t.Helper()
 	store := taskstore.NewTestSQLiteStore(t)
@@ -718,13 +717,11 @@ func TestPlanList_WithStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Default (no filter): should show ready, hide cancelled.
 	output := executeTaskListWithStore(srv.URL, "test-project", "")
 	assert.Contains(t, output, "test.md")
 	assert.Contains(t, output, "ready")
 	assert.NotContains(t, output, "cancelled.md")
 
-	// Explicit --status cancelled: should show only cancelled.
 	output = executeTaskListWithStore(srv.URL, "test-project", "cancelled")
 	assert.Contains(t, output, "cancelled.md")
 	assert.NotContains(t, output, "test.md")

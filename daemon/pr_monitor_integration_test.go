@@ -274,6 +274,42 @@ func TestPRMonitorInt_ChangesRequested_DispatchesFixer(t *testing.T) {
 		"expected 'pr_review_detected' SSE event, got: %v", kinds)
 }
 
+func TestPRMonitorInt_ChangesRequested_EmptyBodyWithInlineComments_DispatchesFixer(t *testing.T) {
+	store := newIntTestStore(t)
+	repoDir := t.TempDir()
+	broadcaster := api.NewEventBroadcaster()
+	defer broadcaster.Close()
+
+	var actions []dispatchedAction
+	monitor := newIntTestMonitor(t, store, repoDir, &actions, broadcaster, 5)
+
+	mock := seqMock(t,
+		[]ghOutputFn{
+			staticOut(repoViewJSON),
+			staticOut(prOpenJSON(true)),
+			staticOut(repoViewJSON),
+			staticOut(reviewsJSON([]rawReview{makeRawReview(11, "CHANGES_REQUESTED", "", "alice")})),
+			staticOut(repoViewJSON),
+			staticOut(commentsJSON(111)),
+			staticOut(repoViewJSON),
+		},
+		[]ghRunFn{runOK},
+	)
+	t.Cleanup(gitpkg.SetGHExec(mock))
+
+	monitor.pollOnce(context.Background())
+
+	require.Len(t, actions, 1)
+	fa, ok := actions[0].action.(loop.SpawnFixerAction)
+	require.True(t, ok, "expected SpawnFixerAction, got %T", actions[0].action)
+	assert.Equal(t, intTestPlanFile, fa.PlanFile)
+	assert.True(t, store.IsReviewProcessed(intTestProject, intTestPlanFile, 11))
+
+	pending, err := store.ListPendingReviews(intTestProject, intTestPlanFile)
+	require.NoError(t, err)
+	assert.Empty(t, pending, "review must be fully processed after fixer dispatch")
+}
+
 // TestPRMonitorInt_Approved_RecordsRow verifies that an APPROVED review with
 // body text is recorded in the store but does NOT dispatch a fixer or post a
 // reaction. shouldTriggerFixer only fires for CHANGES_REQUESTED and COMMENTED.

@@ -336,7 +336,7 @@ func shouldTriggerFixer(review gitpkg.PRReview) bool {
 	if state != "CHANGES_REQUESTED" && state != "COMMENTED" {
 		return false
 	}
-	if strings.TrimSpace(review.Body) == "" {
+	if state == "COMMENTED" && strings.TrimSpace(review.Body) == "" {
 		return false
 	}
 	return !isBotLogin(review.User)
