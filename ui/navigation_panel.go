@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/kastheco/kasmos/config/taskstate"
@@ -133,12 +132,6 @@ type NavigationPanel struct {
 	auditView         string
 	auditContentLines int // actual rendered body lines (events + minute headers)
 
-	// Detail drill-down section rendered between the row list and the legend.
-	// Populated via SetDetailData; revealed by ToggleSelectedExpand on supporting rows.
-	detailData     NavDetailData
-	detailViewport viewport.Model
-	detailVisible  bool
-
 	width, height int
 	focused       bool
 }
@@ -153,7 +146,6 @@ func NewNavigationPanel(sp *spinner.Model) *NavigationPanel {
 		inspectedPlans: make(map[string]bool),
 		deadExpanded:   true,
 		focused:        true,
-		detailViewport: viewport.New(),
 	}
 }
 
@@ -622,41 +614,11 @@ func (n *NavigationPanel) isPlanCollapsed(planFile string, hasRunning, hasNotif 
 func (n *NavigationPanel) SetSize(width, height int) {
 	n.width, n.height = width, height
 	n.clampScroll()
-	// Refresh detail viewport content now that width may have changed.
-	n.refreshDetailViewport()
 }
 
 func (n *NavigationPanel) SetAuditView(view string, contentLines int) {
 	n.auditView = view
 	n.auditContentLines = contentLines
-}
-
-// SetDetailData replaces the current detail data and refreshes the viewport content.
-// Callers control whether the detail section is visible.
-func (n *NavigationPanel) SetDetailData(data NavDetailData) {
-	n.detailData = data
-	n.refreshDetailViewport()
-}
-
-// refreshDetailViewport re-renders detail content into the detail viewport.
-// Called after data or size changes.
-func (n *NavigationPanel) refreshDetailViewport() {
-	innerWidth := n.width - 4
-	if innerWidth < 8 {
-		innerWidth = 8
-	}
-	content := renderNavDetail(n.detailData, innerWidth)
-	n.detailViewport.SetContent(content)
-}
-
-// ScrollDetailUp moves the detail viewport one line toward the top.
-func (n *NavigationPanel) ScrollDetailUp() {
-	n.detailViewport.ScrollUp(1)
-}
-
-// ScrollDetailDown moves the detail viewport one line toward the bottom.
-func (n *NavigationPanel) ScrollDetailDown() {
-	n.detailViewport.ScrollDown(1)
 }
 
 func (n *NavigationPanel) SetFocused(focused bool)    { n.focused = focused }
@@ -668,8 +630,7 @@ func (n *NavigationPanel) SetClickUpAvailable(a bool) { n.clickUpAvail = a; n.re
 // legend (1), and gap above legend (1) = 8.  When the audit pane is
 // active, additional lines are reserved dynamically based on actual
 // content lines (events + minute headers) so the log height stays
-// stable regardless of window size.  When the detail section is visible
-// additional lines are reserved for it as well.
+// stable regardless of window size.
 func (n *NavigationPanel) availRows() int {
 	const (
 		baseOverhead = 8 // border(2) + search(3) + blank(1) + legend(1) + gap(1)
@@ -690,32 +651,11 @@ func (n *NavigationPanel) availRows() int {
 		}
 		overhead += auditReserve
 	}
-	if n.detailVisible {
-		overhead += n.detailSectionLines()
-	}
 	v := n.height - overhead
 	if v < 1 {
 		return 1
 	}
 	return v
-}
-
-// detailSectionLines returns how many lines the rendered detail section occupies
-// when visible, including its divider header.
-func (n *NavigationPanel) detailSectionLines() int {
-	if !n.detailVisible {
-		return 0
-	}
-	innerHeight := n.height - 2 // subtract border
-	if innerHeight < 4 {
-		return 0
-	}
-	// Allocate up to 40% of inner height for the detail section.
-	maxLines := innerHeight * 40 / 100
-	if maxLines < 3 {
-		maxLines = 3
-	}
-	return maxLines + 1 // divider header + viewport body
 }
 
 // clampScroll ensures scrollOffset keeps selectedIdx visible.
@@ -771,8 +711,7 @@ func (n *NavigationPanel) rowMatchesSearch(idx int) bool {
 // ---------- expand/collapse ----------
 
 // ToggleSelectedExpand toggles the expand/collapse state of the selected row.
-// For plan-header and instance rows it additionally reveals/hides the inline
-// detail section. Returns true if the row supports toggling.
+// Returns true if the row supports toggling.
 func (n *NavigationPanel) ToggleSelectedExpand() bool {
 	if n.selectedIdx < 0 || n.selectedIdx >= len(n.rows) {
 		return false
@@ -783,17 +722,7 @@ func (n *NavigationPanel) ToggleSelectedExpand() bool {
 		n.collapsed[row.TaskFile] = !row.Collapsed
 		n.userOverrides[row.TaskFile] = true
 		n.rebuildRows()
-		// Reveal the detail section for plan headers.
-		n.detailVisible = !n.detailVisible
-		n.refreshDetailViewport()
 		return true
-	case navRowInstance, navRowHistoryPlan, navRowCancelled, navRowDeadPlan:
-		// Detail-only rows: toggle the detail section visibility.
-		// The tree return value stays false (no tree node to expand/collapse)
-		// per the existing contract; the detail section is shown as a side-effect.
-		n.detailVisible = !n.detailVisible
-		n.refreshDetailViewport()
-		return false
 	case navRowTopicHeader:
 		n.collapsed[row.ID] = !row.Collapsed
 		n.rebuildRows()
@@ -1577,25 +1506,6 @@ func (n *NavigationPanel) String() string {
 	topLines := strings.Count(topContent, "\n") + 1
 	legendLines := strings.Count(legend, "\n") + 1
 
-	// Compute the optional detail section (between row list and legend).
-	detailSection := ""
-	detailLines := 0
-	if n.detailVisible {
-		dLines := n.detailSectionLines()
-		if dLines > 1 {
-			// Resize the detail viewport to the allocated height and full inner width.
-			n.detailViewport.SetWidth(innerWidth)
-			n.detailViewport.SetHeight(dLines - 1)
-			view := n.detailViewport.View()
-			if view != "" {
-				// Render a thin divider header above the detail content.
-				detailHeader := navHistoryDivStyle.Render(strings.Repeat("─", innerWidth))
-				detailSection = detailHeader + "\n" + view
-				detailLines = strings.Count(detailSection, "\n") + 1
-			}
-		}
-	}
-
 	// Compute optional audit section (bottom-pinned).
 	// Size audit FIRST based on actual content, then gaps absorb remainder.
 	// This prevents the audit height from changing by ±1 per terminal resize row.
@@ -1604,8 +1514,8 @@ func (n *NavigationPanel) String() string {
 	if n.auditView != "" && n.auditContentLines > 0 {
 		// Desired audit: 1 header + all content body lines.
 		desiredAudit := 1 + n.auditContentLines
-		// Available space: total height minus nav items, search, legend, detail, and minimum gaps (2).
-		availForAudit := innerHeight - topLines - legendLines - detailLines - 2
+		// Available space: total height minus nav items, search, legend, and minimum gaps (2).
+		availForAudit := innerHeight - topLines - legendLines - 2
 		// Cap at 50% of inner height so the task list isn't squished.
 		halfPanel := innerHeight / 2
 		if availForAudit > halfPanel {
@@ -1652,16 +1562,12 @@ func (n *NavigationPanel) String() string {
 	// Fixed 2-line gap below the legend (breathing room above the log header);
 	// all leftover space goes above to keep legend pinned near the bottom.
 	const legendGapBelow = 2
-	gapAbove := innerHeight - topLines - detailLines - legendLines - auditLines - legendGapBelow + 1
+	gapAbove := innerHeight - topLines - legendLines - auditLines - legendGapBelow + 1
 	if gapAbove < 1 {
 		gapAbove = 1
 	}
 
-	innerContent := topContent
-	if detailSection != "" {
-		innerContent += detailSection + "\n"
-	}
-	innerContent += strings.Repeat("\n", gapAbove) + legend
+	innerContent := topContent + strings.Repeat("\n", gapAbove) + legend
 	if auditSection != "" {
 		innerContent += strings.Repeat("\n", legendGapBelow) + auditSection
 	}

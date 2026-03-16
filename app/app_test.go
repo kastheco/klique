@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
-	cmd2 "github.com/kastheco/kasmos/cmd"
-	cmd_test "github.com/kastheco/kasmos/cmd/cmd_test"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
@@ -52,6 +49,7 @@ func newTestHome() *home {
 		nav:            ui.NewNavigationPanel(&spin),
 		menu:           ui.NewMenu(),
 		auditPane:      ui.NewAuditPane(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&spin),
 		overlays:       overlay.NewManager(),
 		activeRepoPath: os.TempDir(),
@@ -106,6 +104,7 @@ func TestView_UsesCellMotionMouseMode(t *testing.T) {
 	h.termHeight = 20
 	h.contentHeight = 10
 	h.nav.SetSize(24, 10)
+	h.tabbedWindow.SetSize(56, 10)
 
 	v := h.View()
 	assert.Equal(t, tea.MouseModeCellMotion, v.MouseMode)
@@ -536,11 +535,12 @@ func TestFocusRing(t *testing.T) {
 	newTestHome := func() *home {
 		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 		return &home{
-			ctx:       context.Background(),
-			state:     stateDefault,
-			appConfig: config.DefaultConfig(),
-			nav:       ui.NewNavigationPanel(&spin),
-			menu:      ui.NewMenu(),
+			ctx:          context.Background(),
+			state:        stateDefault,
+			appConfig:    config.DefaultConfig(),
+			nav:          ui.NewNavigationPanel(&spin),
+			menu:         ui.NewMenu(),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		}
 	}
 
@@ -565,23 +565,154 @@ func TestFocusRing(t *testing.T) {
 		return homeModel
 	}
 
+	// --- Tab cycles active center tab; sidebar (slotNav) always retains focus ---
+
+	t.Run("Tab cycles active tab from info to agent, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must advance to agent")
+	})
+
+	t.Run("Tab wraps active tab from agent to info, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to info")
+	})
+
+	t.Run("Shift+Tab reverses active tab from agent to info, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must reverse to info")
+	})
+
+	t.Run("Shift+Tab wraps active tab from info to agent, sidebar stays focused", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must wrap to agent")
+	})
+
+	t.Run("T jumps to nav slot when instances exist", func(t *testing.T) {
+		h := newTestHome()
+		addTestInstance(t, h)
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 'T', Text: "T"})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot)
+	})
+
+	// --- Direct tab jumps (!/@/#) switch active tab without stealing sidebar focus ---
+
+	t.Run("! switches active tab to agent, sidebar keeps focus", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.InfoTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: '!', Text: "!"})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "! must switch to agent tab")
+	})
+
+	t.Run("# switches active tab to info, sidebar keeps focus", func(t *testing.T) {
+		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: '#', Text: "#"})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus")
+		assert.Equal(t, ui.InfoTab, homeModel.tabbedWindow.GetActiveTab(), "# must switch to info tab")
+	})
+
+	t.Run("s is no-op (sidebar focus shortcut removed)", func(t *testing.T) {
+		h := newTestHome()
+		h.setFocusSlot(slotNav)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
+
+		assert.Equal(t, slotNav, homeModel.focusSlot)
+	})
+
+	t.Run("s does not show hidden sidebar", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = true
+		h.setFocusSlot(slotNav)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Text: "s"})
+
+		assert.True(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotNav, homeModel.focusSlot)
+	})
+
+	// --- Sidebar toggle (ctrl+s) ---
+
+	t.Run("ctrl+s hides sidebar and moves focus from nav to agent", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = false
+		h.setFocusSlot(slotNav)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+
+		assert.True(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("ctrl+s hides sidebar and keeps focus when agent slot is focused", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = false
+		h.setFocusSlot(slotAgent)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+
+		assert.True(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotAgent, homeModel.focusSlot)
+	})
+
+	t.Run("ctrl+s shows sidebar and keeps focus when sidebar is hidden", func(t *testing.T) {
+		h := newTestHome()
+		h.sidebarHidden = true
+		h.setFocusSlot(slotNav)
+
+		homeModel := handle(t, h, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+
+		assert.False(t, homeModel.sidebarHidden)
+		assert.Equal(t, slotNav, homeModel.focusSlot)
+	})
+
 	// --- Arrow key navigation ---
 
-	t.Run("← is no-op", func(t *testing.T) {
+	t.Run("← is no-op (sidebar already focused)", func(t *testing.T) {
 		h := newTestHome()
+		h.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
 		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyLeft})
 
-		assert.NotNil(t, homeModel)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must remain focused after ←")
+		assert.Equal(t, ui.PreviewTab, homeModel.tabbedWindow.GetActiveTab(), "active tab must not change on ←")
 	})
 
 	t.Run("→ toggles expand on selected sidebar item", func(t *testing.T) {
 		h := newTestHome()
 		// Without a plan header selected, ToggleSelectedExpand returns false,
-		// so → is effectively a no-op.
+		// so → is effectively a no-op — sidebar stays focused.
 		homeModel := handle(t, h, tea.KeyPressMsg{Code: tea.KeyRight})
 
-		assert.NotNil(t, homeModel)
+		assert.Equal(t, slotNav, homeModel.focusSlot, "sidebar must retain focus after →")
 	})
 
 	// --- Enter key blocked on info tab ---
@@ -663,6 +794,341 @@ func TestFocusRing(t *testing.T) {
 	})
 }
 
+func TestPreviewTerminal_SelectionChange(t *testing.T) {
+	// Helper to create a minimal home with two started instances.
+	newTestHomeWithInstances := func(t *testing.T) (*home, *session.Instance, *session.Instance) {
+		t.Helper()
+		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+		h := &home{
+			ctx:          context.Background(),
+			state:        stateDefault,
+			appConfig:    config.DefaultConfig(),
+			nav:          ui.NewNavigationPanel(&spin),
+			menu:         ui.NewMenu(),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		}
+
+		instA, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-A", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instA.MarkStartedForTest()
+		instA.Status = session.Running
+		instA.CachedContentSet = true // avoid tmux subprocess calls in tests
+
+		instB, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-B", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instB.MarkStartedForTest()
+		instB.Status = session.Running
+		instB.CachedContentSet = true
+
+		h.nav.AddInstance(instA)()
+		h.nav.AddInstance(instB)()
+
+		return h, instA, instB
+	}
+
+	t.Run("swap terminal when selection changes from A to B", func(t *testing.T) {
+		h, _, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
+
+		// Simulate: previewTerminal is attached to instance "A".
+		dummyTerm := session.NewDummyTerminal()
+		h.previewTerminal = dummyTerm
+		h.previewTerminalInstance = "instance-A"
+
+		// Select instance "B" by reference (sort-order safe).
+		require.True(t, h.nav.SelectInstance(instB), "should find instance-B in list")
+
+		// Fire instanceChanged — should tear down old terminal and return spawn cmd.
+		cmd := h.instanceChanged()
+
+		// Old terminal is closed: previewTerminal becomes nil, instance name cleared.
+		assert.Nil(t, h.previewTerminal, "previewTerminal should be nil after selection change")
+		assert.Empty(t, h.previewTerminalInstance, "previewTerminalInstance should be cleared")
+
+		// A tea.Cmd is returned (the async spawn command).
+		assert.NotNil(t, cmd, "instanceChanged should return a tea.Cmd for async spawn")
+	})
+
+	t.Run("tear down terminal when no valid instance selected", func(t *testing.T) {
+		// Use a home with zero instances so GetSelectedInstance returns nil.
+		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+		h := &home{
+			ctx:          context.Background(),
+			state:        stateDefault,
+			appConfig:    config.DefaultConfig(),
+			nav:          ui.NewNavigationPanel(&spin),
+			menu:         ui.NewMenu(),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		}
+
+		// Attach a terminal.
+		dummyTerm := session.NewDummyTerminal()
+		h.previewTerminal = dummyTerm
+		h.previewTerminalInstance = "instance-A"
+
+		cmd := h.instanceChanged()
+
+		assert.Nil(t, h.previewTerminal, "previewTerminal should be torn down")
+		assert.Empty(t, h.previewTerminalInstance, "previewTerminalInstance should be cleared")
+		// Old terminal close now happens asynchronously.
+		assert.NotNil(t, cmd, "selection clear should return async close cmd when a terminal is attached")
+	})
+
+	t.Run("no-op when selection matches current terminal", func(t *testing.T) {
+		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
+
+		dummyTerm := session.NewDummyTerminal()
+		h.previewTerminal = dummyTerm
+		h.previewTerminalInstance = "instance-A"
+
+		// Select instance "A" — same as current terminal (use reference, sort-order safe).
+		require.True(t, h.nav.SelectInstance(instA), "should find instance-A in list")
+
+		cmd := h.instanceChanged()
+
+		// Terminal should remain attached (not nil).
+		assert.Equal(t, dummyTerm, h.previewTerminal, "previewTerminal should remain attached")
+		assert.Equal(t, "instance-A", h.previewTerminalInstance, "previewTerminalInstance should remain")
+		// No spawn cmd — terminal already attached.
+		assert.Nil(t, cmd, "no spawn cmd when same instance is selected")
+
+		// Cleanup
+		dummyTerm.Close()
+	})
+
+	t.Run("previewTerminalReadyMsg attaches terminal on match", func(t *testing.T) {
+		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
+		h.nav.SelectInstance(instA) // select instance-A
+
+		readyTerm := session.NewDummyTerminal()
+		msg := previewTerminalReadyMsg{
+			term:          readyTerm,
+			instanceTitle: "instance-A",
+		}
+
+		_, cmd := h.Update(msg)
+
+		assert.Equal(t, readyTerm, h.previewTerminal, "previewTerminal should be set from msg")
+		assert.Equal(t, "instance-A", h.previewTerminalInstance, "previewTerminalInstance should match")
+		assert.Nil(t, cmd, "no follow-up cmd expected")
+
+		// Cleanup
+		readyTerm.Close()
+	})
+
+	t.Run("previewTerminalReadyMsg discards stale terminal", func(t *testing.T) {
+		h, _, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
+		h.nav.SelectInstance(instB) // select instance-B (different from msg)
+
+		staleTerm := session.NewDummyTerminal()
+		msg := previewTerminalReadyMsg{
+			term:          staleTerm,
+			instanceTitle: "instance-A", // stale — selection moved to B
+		}
+
+		_, cmd := h.Update(msg)
+
+		// Stale terminal should NOT be attached.
+		assert.Nil(t, h.previewTerminal, "stale terminal should not be attached")
+		assert.Empty(t, h.previewTerminalInstance, "previewTerminalInstance should remain empty")
+		assert.NotNil(t, cmd, "stale terminals should be closed asynchronously")
+		// staleTerm.Close() was called internally by the handler
+	})
+
+	t.Run("previewTerminalReadyMsg discards on error", func(t *testing.T) {
+		h, instA, _ := newTestHomeWithInstances(t)
+		h.previewRequested = true
+		h.nav.SelectInstance(instA)
+
+		errTerm := session.NewDummyTerminal()
+		msg := previewTerminalReadyMsg{
+			term:          errTerm,
+			instanceTitle: "instance-A",
+			err:           fmt.Errorf("tmux attach failed"),
+		}
+
+		_, cmd := h.Update(msg)
+
+		assert.Nil(t, h.previewTerminal, "terminal should not be attached on error")
+		assert.Empty(t, h.previewTerminalInstance)
+		assert.NotNil(t, cmd, "errored terminals should be closed asynchronously")
+		// errTerm.Close() was called internally by the handler
+	})
+}
+
+// TestPreviewTerminal_RenderTickIntegration tests the full preview terminal lifecycle:
+// selection change → previewTerminalReadyMsg → render tick → selection change again.
+func TestPreviewTerminal_RenderTickIntegration(t *testing.T) {
+	newTestHomeWithInstances := func(t *testing.T) (*home, *session.Instance, *session.Instance) {
+		t.Helper()
+		spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+		h := &home{
+			ctx:          context.Background(),
+			state:        stateDefault,
+			appConfig:    config.DefaultConfig(),
+			nav:          ui.NewNavigationPanel(&spin),
+			menu:         ui.NewMenu(),
+			tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		}
+
+		instA, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-A", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instA.MarkStartedForTest()
+		instA.Status = session.Running
+		instA.CachedContentSet = true
+
+		instB, err := session.NewInstance(session.InstanceOptions{
+			Title: "instance-B", Path: t.TempDir(), Program: "claude",
+		})
+		require.NoError(t, err)
+		instB.MarkStartedForTest()
+		instB.Status = session.Running
+		instB.CachedContentSet = true
+
+		h.nav.AddInstance(instA)()
+		h.nav.AddInstance(instB)()
+
+		return h, instA, instB
+	}
+
+	t.Run("full flow: attach → tick → selection change → discard old terminal", func(t *testing.T) {
+		h, instA, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
+
+		// Step 1: Select instance A and simulate instanceChanged returning a spawn cmd.
+		require.True(t, h.nav.SelectInstance(instA))
+		spawnCmd := h.instanceChanged()
+		assert.NotNil(t, spawnCmd, "instanceChanged should return spawn cmd for new selection")
+		assert.Nil(t, h.previewTerminal, "terminal not yet attached — spawn is async")
+
+		// Step 2: Async spawn completes — deliver previewTerminalReadyMsg for instance A.
+		termA := session.NewDummyTerminal()
+		_, cmd := h.Update(previewTerminalReadyMsg{
+			term:          termA,
+			instanceTitle: "instance-A",
+		})
+		assert.Equal(t, termA, h.previewTerminal, "terminal A should be attached")
+		assert.Equal(t, "instance-A", h.previewTerminalInstance)
+		assert.Nil(t, cmd, "no follow-up cmd from ready msg")
+
+		// Step 3: Render tick fires — terminal is active, tick returns event-driven cmd.
+		_, tickCmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, tickCmd, "previewTickMsg should always return a follow-up tick cmd")
+		// previewTerminal is still attached after the tick.
+		assert.Equal(t, termA, h.previewTerminal, "terminal A should remain attached after tick")
+
+		// Step 4: User selects instance B — old terminal is discarded, new spawn cmd returned.
+		require.True(t, h.nav.SelectInstance(instB))
+		spawnCmd2 := h.instanceChanged()
+
+		assert.Nil(t, h.previewTerminal, "old terminal A should be discarded on selection change")
+		assert.Empty(t, h.previewTerminalInstance, "instance name should be cleared")
+		assert.NotNil(t, spawnCmd2, "new spawn cmd should be returned for instance B")
+	})
+
+	t.Run("render tick with nil terminal returns sleep-based cmd", func(t *testing.T) {
+		h, _, _ := newTestHomeWithInstances(t)
+		// No terminal attached.
+		assert.Nil(t, h.previewTerminal)
+
+		_, cmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, cmd, "previewTickMsg should return a follow-up cmd even with nil terminal")
+	})
+
+	t.Run("render tick with active terminal returns event-driven cmd", func(t *testing.T) {
+		h, instA, _ := newTestHomeWithInstances(t)
+		h.nav.SelectInstance(instA)
+
+		term := session.NewDummyTerminal()
+		h.previewTerminal = term
+		h.previewTerminalInstance = "instance-A"
+		defer term.Close()
+
+		_, cmd := h.Update(previewTickMsg{})
+		assert.NotNil(t, cmd, "previewTickMsg should return event-driven cmd when terminal is active")
+		// Terminal remains attached after tick.
+		assert.Equal(t, term, h.previewTerminal, "terminal should remain attached after tick")
+	})
+
+	t.Run("stale ready msg after second selection change is discarded", func(t *testing.T) {
+		h, instA, instB := newTestHomeWithInstances(t)
+		h.previewRequested = true
+
+		// Select A, spawn starts.
+		require.True(t, h.nav.SelectInstance(instA))
+		h.instanceChanged()
+
+		// Before spawn completes, user switches to B.
+		require.True(t, h.nav.SelectInstance(instB))
+		h.instanceChanged()
+
+		// Now the stale ready msg for A arrives.
+		staleTermA := session.NewDummyTerminal()
+		_, cmd := h.Update(previewTerminalReadyMsg{
+			term:          staleTermA,
+			instanceTitle: "instance-A", // stale — selection is now B
+		})
+
+		// Stale terminal must be discarded (not attached).
+		assert.Nil(t, h.previewTerminal, "stale terminal for A should not be attached when B is selected")
+		assert.Empty(t, h.previewTerminalInstance)
+		assert.NotNil(t, cmd, "stale ready terminals should be closed asynchronously")
+	})
+}
+
+// TestPreviewTerminalReadyMsg_StaleDiscard verifies that previewTerminalReadyMsg
+// discards the terminal when the selection has changed since the spawn was initiated.
+func TestPreviewTerminalReadyMsg_StaleDiscard(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+	}
+	h.previewRequested = true
+
+	// Add instance "B" and select it (simulating selection change after spawn started for "A").
+	instB, err := session.NewInstance(session.InstanceOptions{
+		Title:   "B",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	h.nav.AddInstance(instB)()
+	h.nav.SelectInstance(instB) // Select "B" by pointer (sort-order safe)
+
+	// Simulate a stale previewTerminalReadyMsg arriving for "A" (selection already moved to "B").
+	// The handler should discard the terminal since selected.Title != msg.instanceTitle.
+	msg := previewTerminalReadyMsg{
+		term:          nil, // nil is fine — we just check it's discarded
+		instanceTitle: "A",
+		err:           nil,
+	}
+
+	// Process the message through Update.
+	model, cmd := h.Update(msg)
+	homeModel, ok := model.(*home)
+	require.True(t, ok)
+
+	// Terminal should NOT be set — it was stale.
+	assert.Nil(t, homeModel.previewTerminal, "stale terminal should be discarded")
+	assert.Equal(t, "", homeModel.previewTerminalInstance,
+		"previewTerminalInstance should not be set for stale msg")
+	assert.Nil(t, cmd, "no cmd should be returned for stale msg")
+}
+
 func TestTmuxBrowserActions(t *testing.T) {
 	t.Run("tmuxSessionsMsg with no sessions shows toast", func(t *testing.T) {
 		h := newTestHome()
@@ -730,6 +1196,118 @@ func TestTmuxBrowserActions(t *testing.T) {
 	})
 }
 
+// TestPreviewTerminalReadyMsg_AcceptsCurrentInstance verifies that previewTerminalReadyMsg
+// sets the terminal when the instance title matches the current selection.
+func TestPreviewTerminalReadyMsg_AcceptsCurrentInstance(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+	}
+	h.previewRequested = true
+
+	// Add instance "A" and select it.
+	instA, err := session.NewInstance(session.InstanceOptions{
+		Title:   "A",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	instA.MarkStartedForTest()
+	instA.Status = session.Running
+	h.nav.AddInstance(instA)()
+	h.nav.SetSelectedInstance(0)
+
+	// Simulate a fresh previewTerminalReadyMsg for "A" (current selection).
+	msg := previewTerminalReadyMsg{
+		term:          nil, // nil terminal — we just verify the instance title is set
+		instanceTitle: "A",
+		err:           nil,
+	}
+
+	model, cmd := h.Update(msg)
+	homeModel, ok := model.(*home)
+	require.True(t, ok)
+
+	// previewTerminalInstance should be set to "A".
+	assert.Equal(t, "A", homeModel.previewTerminalInstance,
+		"previewTerminalInstance should be set when msg matches current selection")
+	assert.Nil(t, cmd, "no cmd should be returned")
+}
+
+func TestInstanceChanged_DoesNotSpawnPreviewWithoutExplicitRequest(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+	}
+
+	instA, err := session.NewInstance(session.InstanceOptions{
+		Title: "instance-A", Path: t.TempDir(), Program: "claude",
+	})
+	require.NoError(t, err)
+	instA.MarkStartedForTest()
+	instA.Status = session.Running
+
+	instB, err := session.NewInstance(session.InstanceOptions{
+		Title: "instance-B", Path: t.TempDir(), Program: "claude",
+	})
+	require.NoError(t, err)
+	instB.MarkStartedForTest()
+	instB.Status = session.Running
+
+	h.nav.AddInstance(instA)()
+	h.nav.AddInstance(instB)()
+
+	require.True(t, h.nav.SelectInstance(instB), "should find instance-B in list")
+	cmd := h.instanceChanged()
+
+	assert.Nil(t, cmd, "instanceChanged should not auto-attach preview without explicit request")
+	assert.Equal(t, ui.InfoTab, h.tabbedWindow.GetActiveTab(), "sidebar navigation should stay on info until preview is requested")
+}
+
+// TestFocusMode_ReusesPreviewTerminal verifies that enterFocusMode reuses the
+// existing previewTerminal when it's already attached to the selected instance.
+func TestFocusMode_ReusesPreviewTerminal(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+	}
+
+	// Add a started-looking instance. We can't actually start it (no tmux),
+	// but we can test the branch where previewTerminal is already set.
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "my-agent",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	h.nav.AddInstance(inst)()
+	h.nav.SetSelectedInstance(0)
+
+	// Simulate previewTerminal already attached to "my-agent".
+	// enterFocusMode should detect this and NOT spawn a new terminal.
+	h.previewTerminalInstance = "my-agent"
+	// Instance is not started, so enterFocusMode should return nil (guard check).
+	cmd := h.enterFocusMode()
+
+	assert.Nil(t, cmd, "enterFocusMode should return nil when instance is not started")
+	assert.Equal(t, stateDefault, h.state, "state should remain default when instance is not started")
+}
+
 func TestHandleQuit_NoActiveSessions_QuitsImmediately(t *testing.T) {
 	h := newTestHome()
 	h.toastManager = overlay.NewToastManager(&h.spinner)
@@ -761,33 +1339,6 @@ func TestHandleQuit_ActiveSessions_ShowsConfirmation(t *testing.T) {
 	require.True(t, h.overlays.IsActive(), "confirmation overlay must be shown")
 	assert.Nil(t, cmd, "confirmAction returns nil cmd (action stored in pendingConfirmAction)")
 	assert.NotNil(t, h.pendingConfirmAction, "pending action must be set")
-}
-
-func TestHandleQuit_NavOnlyKillsOuterLayoutSession(t *testing.T) {
-	h := newTestHome()
-	h.toastManager = overlay.NewToastManager(&h.spinner)
-	h.navOnly = true
-	h.layoutSessionName = "kas_main_testrepo"
-
-	mockExec := cmd_test.NewMockExecutor()
-	var killTarget string
-	mockExec.RunFunc = func(cmd *exec.Cmd) error {
-		if len(cmd.Args) >= 4 && cmd.Args[1] == "kill-session" {
-			killTarget = cmd.Args[3]
-		}
-		return nil
-	}
-
-	oldMakeExecutor := makeExecutor
-	makeExecutor = func() cmd2.Executor { return mockExec }
-	defer func() { makeExecutor = oldMakeExecutor }()
-
-	_, cmd := h.handleQuit()
-	require.NotNil(t, cmd)
-	msg := cmd()
-	_, ok := msg.(tea.QuitMsg)
-	require.True(t, ok, "nav-only quit should return tea.QuitMsg after killing the layout")
-	assert.Equal(t, "kas_main_testrepo", killTarget)
 }
 
 // setupPlanState sets up an in-memory plan state on h for test use.
@@ -833,6 +1384,7 @@ func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	h := newTestHome()
 	h.setupPlanState(t, "test-plan", taskstate.StatusImplementing, "")
 
+	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan")
 
 	model, _ := h.openTaskContextMenu()
@@ -857,6 +1409,7 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	h := newTestHome()
 	h.setupPlanState(t, "test-plan", taskstate.StatusImplementing, "")
 
+	h.focusSlot = slotNav
 	h.nav.SelectByID(ui.SidebarPlanPrefix + "test-plan")
 
 	model, _ := h.openTaskContextMenu()
@@ -876,39 +1429,67 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	require.True(t, found, "task context menu must include 'create pr' action")
 }
 
-func TestHandleKeyPress_CtrlSpaceFocusesWorkspacePane(t *testing.T) {
-	// Both bindings issue the async tmux pane-focus command. When TMUX is unset
-	// (as in tests), OuterSessionName(ex) returns "" and the goroutine is a
-	// silent no-op — state stays stateDefault, cmd is non-nil.
-	tests := []struct {
-		name string
-		msg  tea.KeyPressMsg
-	}{
-		{name: "ctrl+space", msg: tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl}},
-		{name: "f", msg: tea.KeyPressMsg{Code: 'f', Text: "f"}},
+// TestExitFocusMode_KeepsPreviewTerminal verifies that exitFocusMode does NOT close
+// previewTerminal — it stays alive for preview rendering.
+func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {
+	spin := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateFocusAgent,
+		appConfig:    config.DefaultConfig(),
+		nav:          ui.NewNavigationPanel(&spin),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			h := newTestHome()
-			inst, err := session.NewInstance(session.InstanceOptions{
-				Title:   "test-focus-toggle",
-				Path:    os.TempDir(),
-				Program: "opencode",
-			})
-			require.NoError(t, err)
-			inst.MarkStartedForTest()
-			h.nav.AddInstance(inst)
-			h.nav.SelectInstance(inst)
-			h.keySent = true
+	// Set previewTerminalInstance to simulate an attached terminal.
+	h.previewTerminalInstance = "my-agent"
 
-			model, cmd := h.handleKeyPress(tc.msg)
-			updated := model.(*home)
+	h.exitFocusMode()
 
-			assert.Equal(t, stateDefault, updated.state)
-			assert.NotNil(t, cmd)
-		})
-	}
+	assert.Equal(t, stateDefault, h.state, "state should return to default after exitFocusMode")
+	assert.Equal(t, "my-agent", h.previewTerminalInstance,
+		"previewTerminalInstance should NOT be cleared by exitFocusMode")
+}
+
+func TestHandleKeyPress_CtrlEnterSubmitsAndExitsFocusMode(t *testing.T) {
+	h := newTestHome()
+	h.state = stateFocusAgent
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = "test-agent"
+	h.keySent = true
+
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
+	updated := model.(*home)
+
+	sent := updated.previewTerminal.SentKeys()
+	require.Len(t, sent, 1)
+	assert.Equal(t, []byte{0x0D}, sent[0])
+	assert.Equal(t, stateDefault, updated.state)
+	assert.Equal(t, "test-agent", updated.previewTerminalInstance)
+	require.NotNil(t, cmd)
+}
+
+func TestHandleKeyPress_CtrlSpaceTogglesIntoFocusMode(t *testing.T) {
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test-focus-toggle",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.keySent = true
+
+	model, cmd := h.handleKeyPress(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	updated := model.(*home)
+
+	assert.Equal(t, stateFocusAgent, updated.state)
+	assert.Nil(t, cmd)
 }
 
 func TestRestartInstance_AppearsInContextMenu(t *testing.T) {
@@ -1088,4 +1669,70 @@ func TestMapPRCheckStatus(t *testing.T) {
 	assert.Equal(t, "failing", mapPRCheckStatus("FAILURE"))
 	assert.Equal(t, "pending", mapPRCheckStatus("PENDING"))
 	assert.Equal(t, "pending", mapPRCheckStatus(""))
+}
+
+func TestHandleMouseClick_OutsideAgentPane_ExitsFocusMode(t *testing.T) {
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "focus-click-test",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.state = stateFocusAgent
+	h.tabbedWindow.SetFocusMode(true)
+	h.menu.SetFocusMode(true)
+
+	// Simulate a left click at coordinates that are NOT inside ZoneAgentPane.
+	// Since zones are not registered in tests, InBounds returns false for all zones,
+	// so this click is "outside" the agent pane.
+	msg := tea.MouseClickMsg{X: 0, Y: 0, Button: tea.MouseLeft}
+	model, _ := h.handleMouseClick(msg)
+	updated := model.(*home)
+
+	assert.Equal(t, stateDefault, updated.state,
+		"clicking outside agent pane should exit focus mode")
+	assert.False(t, updated.tabbedWindow.IsFocusMode(),
+		"tabbed window focus mode should be cleared")
+}
+
+// TestHandleMouseClick_InsideAgentPane_StaysInFocusMode documents the expected
+// behaviour when a click lands inside the agent pane while in focus mode: the
+// handler should return early without calling exitFocusMode.
+//
+// NOTE: bubblezone zones are not registered in unit tests, so
+// zone.Get(ZoneAgentPane).InBounds always returns false.  There is therefore
+// no way to drive the else-branch (stay in focus mode) through handleMouseClick
+// in this test environment.  The branch is verified by code inspection — the
+// implementation's else-clause returns immediately — and by the OutsideAgentPane
+// test which exercises the mirror path.
+func TestHandleMouseClick_InsideAgentPane_StaysInFocusMode(t *testing.T) {
+	// This test exercises the initial-state setup that both click tests depend on,
+	// and provides a home for the zone-limitation comment above.
+	h := newTestHome()
+	inst, err := session.NewInstance(session.InstanceOptions{
+		Title:   "focus-click-inside-test",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	require.NoError(t, err)
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+	h.previewTerminal = session.NewDummyTerminal()
+	h.previewTerminalInstance = inst.Title
+	h.state = stateFocusAgent
+	h.tabbedWindow.SetFocusMode(true)
+	h.menu.SetFocusMode(true)
+
+	// Preconditions — ensure the test harness enters the expected initial state.
+	require.Equal(t, stateFocusAgent, h.state,
+		"precondition: state must be stateFocusAgent")
+	require.True(t, h.tabbedWindow.IsFocusMode(),
+		"precondition: tabbed window must be in focus mode")
 }

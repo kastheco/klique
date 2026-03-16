@@ -33,9 +33,8 @@ const (
 
 	KeyCreatePR // Key for creating a pull request
 
-	KeySendPrompt        // Key for focusing the visible right pane from the nav UI
-	KeyInteractivePrompt // Key for opening an interactive prompt for the selected instance
-	KeySendYes           // Key for sending yes to a waiting instance
+	KeySendPrompt // Key for sending a prompt to a running instance
+	KeySendYes    // Key for sending yes to a waiting instance
 
 	KeySpace // Key for opening context menu on selected item
 
@@ -44,9 +43,19 @@ const (
 	KeyFilterActive // Key for showing only active instances
 	KeyCycleSort    // Key for cycling sort mode
 
-	KeySpawnAgent  // s - spawn ad-hoc agent session
-	KeyViewPlan    // Key for viewing the selected plan's markdown
-	KeySpaceExpand // Space key with expand/collapse label (sidebar context)
+	KeyInfoTab // Key for jumping directly to info tab
+
+	// Tab switching keybindings (Shift+1/2 = !/#)
+	KeyTabAgent
+	KeyTabInfo
+
+	KeySpawnAgent    // s - spawn ad-hoc agent session
+	KeyFocusList     // Key for focusing the right sidebar / instance list
+	KeyViewPlan      // Key for viewing the selected plan's markdown
+	KeyToggleSidebar // Key for toggling sidebar visibility
+	KeyExitFocus     // Key for exiting focus/interactive mode (ctrl+space)
+	KeySubmitExit    // Key for submitting input and exiting focus/interactive mode (ctrl+enter)
+	KeySpaceExpand   // Space key with expand/collapse label (sidebar context)
 
 	KeyTmuxBrowser // t - browse orphaned tmux sessions
 
@@ -54,39 +63,49 @@ const (
 	KeyAuditCursor // A - enter audit log cursor mode (navigate log lines)
 )
 
+// Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.
+const (
+	KeyGitTab = KeyInfoTab
+	KeyTabGit = KeyTabInfo
+)
+
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
-	"up":    KeyUp,
-	"down":  KeyDown,
-	"N":     KeyPrompt,
-	"enter": KeyEnter,
-	"o":     KeyEnter,
-	"n":     KeyNewPlan,
-	"k":     KeyKill,
-	"K":     KeyAbort,
-	"q":     KeyQuit,
-	"tab":   KeyTab,
-	"c":     KeyCheckout,
-	"r":     KeyResume,
-	"?":     KeyHelp,
-	"S":     KeyNewSkipPermissions,
-	"/":     KeySearch,
-	"left":  KeyArrowLeft,
-	"right": KeyArrowRight,
-	"P":     KeyCreatePR,
-	"f":     KeySendPrompt,
-	"i":     KeyInteractivePrompt,
-	"y":     KeySendYes,
-	" ":     KeySpace,
-	"1":     KeyFilterAll,
-	"2":     KeyFilterActive,
-	"3":     KeyCycleSort,
-	"t":     KeyTmuxBrowser,
-	"s":     KeySpawnAgent,
-	"L":     KeyAuditToggle,
-	"A":     KeyAuditCursor,
-	"p":     KeyViewPlan,
-	// ctrl+space is handled directly as a raw key event in app/app_input.go (pane focus toggle).
+	"up":         KeyUp,
+	"down":       KeyDown,
+	"N":          KeyPrompt,
+	"enter":      KeyEnter,
+	"o":          KeyEnter,
+	"n":          KeyNewPlan,
+	"k":          KeyKill,
+	"K":          KeyAbort,
+	"q":          KeyQuit,
+	"tab":        KeyTab,
+	"c":          KeyCheckout,
+	"r":          KeyResume,
+	"?":          KeyHelp,
+	"S":          KeyNewSkipPermissions,
+	"/":          KeySearch,
+	"left":       KeyArrowLeft,
+	"right":      KeyArrowRight,
+	"P":          KeyCreatePR,
+	"i":          KeySendPrompt,
+	"y":          KeySendYes,
+	" ":          KeySpace,
+	"1":          KeyFilterAll,
+	"2":          KeyFilterActive,
+	"3":          KeyCycleSort,
+	"t":          KeyTmuxBrowser,
+	"s":          KeySpawnAgent,
+	"L":          KeyAuditToggle,
+	"A":          KeyAuditCursor,
+	"T":          KeyFocusList,
+	"p":          KeyViewPlan,
+	"ctrl+s":     KeyToggleSidebar,
+	"ctrl+space": KeyExitFocus,
+	"g":          KeyInfoTab,
+	"!":          KeyTabAgent,
+	"#":          KeyTabInfo,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -160,12 +179,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("→", "right"),
 	),
 	KeySendPrompt: key.NewBinding(
-		key.WithKeys("f"),
-		key.WithHelp("f", "focus"),
-	),
-	KeyInteractivePrompt: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "prompt"),
+		key.WithHelp("i", "interactive"),
 	),
 	KeySendYes: key.NewBinding(
 		key.WithKeys("y"),
@@ -191,10 +206,39 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("s"),
 		key.WithHelp("s", "spawn agent"),
 	),
+	KeyFocusList: key.NewBinding(
+		key.WithKeys("T"),
+		key.WithHelp("T", "right sidebar"),
+	),
 	KeyViewPlan: key.NewBinding(
 		key.WithKeys("p"),
 		key.WithHelp("p", "preview"),
 	),
+	KeyToggleSidebar: key.NewBinding(
+		key.WithKeys("ctrl+s"),
+		key.WithHelp("ctrl+s", "toggle sidebar"),
+	),
+	KeyInfoTab: key.NewBinding(
+		key.WithKeys("g"),
+		key.WithHelp("g", "info tab"),
+	),
+	KeyTabAgent: key.NewBinding(
+		key.WithKeys("!"),
+		key.WithHelp("!/#", "switch tab"),
+	),
+	KeyTabInfo: key.NewBinding(
+		key.WithKeys("#"),
+		key.WithHelp("#", "info tab"),
+	),
+	KeyExitFocus: key.NewBinding(
+		key.WithKeys("ctrl+space"),
+		key.WithHelp("ctrl+space", "exit focus"),
+	),
+	KeySubmitExit: key.NewBinding(
+		key.WithKeys("ctrl+enter"),
+		key.WithHelp("ctrl+↵", "submit + exit"),
+	),
+
 	KeySpaceExpand: key.NewBinding(
 		key.WithKeys(" "),
 		key.WithHelp("space", "toggle"),

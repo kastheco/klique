@@ -691,6 +691,7 @@ func TestExecuteContextAction_SetStatusForceOverridesWithoutFSM(t *testing.T) {
 		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
 		overlays:       overlay.NewManager(),
 		activeRepoPath: dir,
@@ -724,6 +725,7 @@ func TestExecuteTaskStage_BlocksWhenDaemonUnavailable(t *testing.T) {
 		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
 		overlays:       overlay.NewManager(),
 		activeRepoPath: dir,
@@ -757,6 +759,7 @@ func TestSpawnAdHocAgent_BlocksWhenDaemonUnavailable(t *testing.T) {
 		nav:            ui.NewNavigationPanel(&spin),
 		menu:           ui.NewMenu(),
 		auditPane:      ui.NewAuditPane(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&spin),
 		overlays:       overlay.NewManager(),
 		activeRepoPath: t.TempDir(),
@@ -882,6 +885,7 @@ func TestViewSelectedPlan_ReadsFromStore(t *testing.T) {
 		taskStoreProject: "proj",
 		taskStateDir:     t.TempDir(),
 		nav:              nav,
+		tabbedWindow:     ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 	}
 
 	_, cmd := h.viewSelectedPlan()
@@ -933,6 +937,7 @@ func TestImplementActionReadsFromStore(t *testing.T) {
 		fsm:                fsm,
 		nav:                ui.NewNavigationPanel(&sp),
 		menu:               ui.NewMenu(),
+		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:       overlay.NewToastManager(&sp),
 		waveOrchestrators:  make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers: make(map[*session.Instance]func()),
@@ -987,6 +992,7 @@ func TestSoloActionChecksStoreNotDisk(t *testing.T) {
 		fsm:                fsm,
 		nav:                ui.NewNavigationPanel(&sp),
 		menu:               ui.NewMenu(),
+		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:       overlay.NewToastManager(&sp),
 		waveOrchestrators:  make(map[string]*orchestration.WaveOrchestrator),
 		instanceFinalizers: make(map[*session.Instance]func()),
@@ -1027,6 +1033,7 @@ func TestExecuteContextAction_MarkPlanDoneFromReadyTransitionsToDone(t *testing.
 		fsm:            newFSMForTest(t, plansDir).TaskStateMachine,
 		nav:            ui.NewNavigationPanel(&sp),
 		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager:   overlay.NewToastManager(&sp),
 		activeRepoPath: dir,
 	}

@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"time"
+	"reflect"
 
 	cmd2 "github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config"
@@ -28,18 +25,20 @@ import (
 	"github.com/kastheco/kasmos/session/tmux"
 	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
+	"os"
+	"path/filepath"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 const GlobalInstanceLimit = 20
 
 const clickUpOpTimeout = 30 * time.Second
-
-var makeExecutor = cmd2.MakeExecutor
 
 var repoManagedByDaemon = func(repoPath string) bool {
 	if repoPath == "" {
@@ -77,15 +76,8 @@ func defaultDaemonSocketPath() string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("kasmos-%d", os.Getuid()), "kas.sock")
 }
 
-// RunOptions holds optional configuration for the Run entrypoint.
-// NavOnly causes the TUI to render only the navigation panel, deferring agent
-// output to a native tmux pane on the right (the new two-pane layout).
-type RunOptions struct {
-	NavOnly bool
-}
-
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool, version string, opts RunOptions) error {
+func Run(ctx context.Context, program string, autoYes bool, version string) error {
 	// Set the terminal's default background to the theme base color so every
 	// ANSI reset and unstyled cell falls back to #232136 instead of black.
 	restore := ui.SetTerminalBackground("#232136")
@@ -93,7 +85,7 @@ func Run(ctx context.Context, program string, autoYes bool, version string, opts
 	defer sentrypkg.RecoverPanic()
 
 	zone.NewGlobal()
-	h := newHome(ctx, program, autoYes, version, opts)
+	h := newHome(ctx, program, autoYes, version)
 	defer h.embeddedServer.Stop()
 	defer h.auditLogger.Close()
 	if h.permissionStore != nil {
@@ -138,6 +130,8 @@ const (
 	stateRenameTopic
 	// stateSendPrompt is the state when the user is sending a prompt via text overlay.
 	stateSendPrompt
+	// stateFocusAgent is the state when the user is typing directly into the agent pane.
+	stateFocusAgent
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 	// stateChangeTopic is the state when the user is changing a plan's topic via picker.
@@ -171,9 +165,6 @@ type home struct {
 	program string
 	version string
 	autoYes bool
-	// navOnly is true when running as the left tmux pane in the two-pane layout.
-	// Later waves use this to suppress the embedded VT preview and status bar.
-	navOnly bool
 
 	// activeRepoPath is the currently active repository path for filtering and new instances
 	activeRepoPath string
@@ -220,6 +211,10 @@ type home struct {
 	auditBootstrapped bool // true after first audit query on boot
 	// menu displays the bottom menu
 	menu *ui.Menu
+	// statusBar displays the top contextual status bar
+	statusBar *ui.StatusBar
+	// tabbedWindow displays the tabbed window with preview and info panes
+	tabbedWindow *ui.TabbedWindow
 	// toastManager manages toast notifications
 	toastManager *overlay.ToastManager
 	// global spinner instance. we plumb this down to where it's needed
@@ -229,6 +224,10 @@ type home struct {
 	// pendingConfirmAction stores the tea.Cmd to run asynchronously when confirmed
 	pendingConfirmAction tea.Cmd
 
+	// nav handles unified navigation state
+	// focusSlot tracks which pane has keyboard focus in the Tab ring:
+	// 0=nav, 1=info tab, 2=agent tab
+	focusSlot int
 	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
 	// pendingPlanDesc stores the plan description during the two-step plan creation flow
@@ -254,19 +253,6 @@ type home struct {
 	// cleared in handleHelpState once the user acknowledges the attach help screen.
 	pendingAttachInstance *session.Instance
 
-	// swappedInstanceTitle is the title of the instance whose tmux session is
-	// currently swapped into the layout's right pane. Empty string means the
-	// workspace shell is showing. Updated only in Update() from swapPaneResultMsg.
-	swappedInstanceTitle string
-	// layoutSessionName is the name of the outer tmux session that hosts the
-	// two-pane layout (left nav pane + right workspace/agent pane). Empty when
-	// kas is not running inside tmux. Populated once in newHome().
-	layoutSessionName string
-	// lastTmuxStatusLeft and lastTmuxStatusRight cache the last applied tmux
-	// status bar strings so unchanged metadata ticks skip redundant subprocess calls.
-	lastTmuxStatusLeft  string
-	lastTmuxStatusRight string
-
 	// tmuxSessionCount is the latest count of kas_-prefixed tmux sessions.
 	tmuxSessionCount int
 	// clickUpConfig stores the detected ClickUp MCP server config (nil if not detected)
@@ -286,11 +272,23 @@ type home struct {
 
 	// Layout dimensions for mouse hit-testing
 	navWidth      int
+	tabsWidth     int
 	contentHeight int
+
+	// sidebarHidden tracks whether the nav is collapsed (ctrl+s toggle)
+	sidebarHidden bool
 
 	// Terminal dimensions for the global background fill.
 	termWidth  int
 	termHeight int
+
+	// previewTerminal is the VT emulator for the selected instance's preview.
+	// Also used for focus mode — entering focus just forwards keys to this terminal.
+	previewTerminal         *session.EmbeddedTerminal
+	previewTerminalInstance string // title of the instance the terminal is attached to
+	previewRequested        bool   // true after the user explicitly selects the live agent pane
+	previewClipboardPending bool
+	previewClipboardTarget  byte
 
 	// taskState holds the parsed task state from the store for the active repo.
 	taskState *taskstate.TaskState
@@ -312,6 +310,9 @@ type home struct {
 	// Falls back to NopLogger when planstore is HTTP-backed or unconfigured.
 	auditLogger auditlog.Logger
 
+	// previewTickCount counts preview ticks for throttled banner animation
+	previewTickCount int
+
 	// metadataTickCount counts metadata ticks for throttled PR state polling.
 	metadataTickCount int
 
@@ -319,10 +320,6 @@ type home struct {
 	cachedPlanFile string
 	// cachedPlanRendered is the glamour-rendered markdown of cachedPlanFile.
 	cachedPlanRendered string
-	// currentDetailData holds the last InfoData pushed to the nav panel's inline
-	// detail drill-down. Used to preserve subtask data across ticks and to
-	// supply the rendered plan when a new plan render arrives.
-	currentDetailData ui.InfoData
 
 	// waveOrchestrators tracks active wave orchestrations by plan filename.
 	waveOrchestrators map[string]*orchestration.WaveOrchestrator
@@ -411,7 +408,7 @@ type home struct {
 	permissionHandled map[*session.Instance]string
 }
 
-func newHome(ctx context.Context, program string, autoYes bool, version string, opts RunOptions) *home {
+func newHome(ctx context.Context, program string, autoYes bool, version string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -437,12 +434,13 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 		spinner:               spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:                  ui.NewMenu(),
 		auditPane:             ui.NewAuditPane(),
+		statusBar:             ui.NewStatusBar(),
+		tabbedWindow:          ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		storage:               storage,
 		appConfig:             appConfig,
 		program:               program,
 		version:               version,
 		autoYes:               autoYes,
-		navOnly:               opts.NavOnly,
 		state:                 stateDefault,
 		appState:              appState,
 		activeRepoPath:        activeRepoPath,
@@ -456,13 +454,6 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 		plannerPrompted:       make(map[string]bool),
 		coderPushPrompted:     make(map[string]bool),
 		pendingReviewFeedback: make(map[string]string),
-	}
-
-	// Detect the enclosing tmux layout session. When kas is launched inside tmux
-	// (e.g. by the launcher that creates the two-pane layout), this is the session
-	// name that owns the nav pane and the workspace/agent right pane.
-	if sessionName, err := tmux.OuterSessionName(cmd2.MakeExecutor()); err == nil {
-		h.layoutSessionName = sessionName
 	}
 
 	// Always start an embedded task store server. This gives us a local SQLite
@@ -543,9 +534,8 @@ func newHome(ctx context.Context, program string, autoYes bool, version string, 
 	}
 	h.permissionHandled = make(map[*session.Instance]string)
 
-	// The nav is always the active Bubble Tea widget; right-side focus belongs
-	// to tmux and is handled by the two-pane layout launcher (Task 4).
-	h.nav.SetFocused(true)
+	h.tabbedWindow.SetAnimateBanner(appConfig.AnimateBanner)
+	h.setFocusSlot(slotNav)
 	h.loadTaskState()
 
 	// Load saved instances
@@ -594,19 +584,38 @@ func (m *home) isUserInOverlay() bool {
 	return true
 }
 
+// exitFocusModeForDialog exits focus/interactive mode if active, so that an
+// incoming dialog (permission prompt, wave completion, planner-finished, etc.)
+// can be displayed immediately. Focus mode is not a real overlay — it just
+// forwards keys to the embedded PTY — so it is safe to interrupt.
+func (m *home) exitFocusModeForDialog() {
+	if m.state == stateFocusAgent {
+		m.exitFocusMode()
+	}
+}
+
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// Nav-only layout: the nav fills the full terminal width.
-	// The right side is owned by a native tmux pane outside this process.
-	navWidth := msg.Width
+	// Two-column layout: nav + preview
+	var navWidth int
+	if m.sidebarHidden {
+		navWidth = 0
+	} else {
+		navWidth = msg.Width * 30 / 100
+		if navWidth < 25 {
+			navWidth = 25
+		}
+	}
+	tabsWidth := msg.Width - navWidth
 
-	// Keep the keybind rail compact and give the saved rows to the nav.
+	// Keep the keybind rail compact and give the saved rows to the three columns.
 	menuHeight := 1
 	if msg.Height < 2 {
 		menuHeight = 0
 	}
-	contentHeight := msg.Height - menuHeight
+	statusBarHeight := 1
+	contentHeight := msg.Height - menuHeight - statusBarHeight
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -616,10 +625,15 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	m.termWidth = msg.Width
 	m.termHeight = msg.Height
 	m.toastManager.SetSize(msg.Width, msg.Height)
+	if m.statusBar != nil {
+		m.statusBar.SetSize(msg.Width)
+	}
+
+	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 
 	// Nav panel gets full content height — audit pane is rendered inside its border.
 	m.nav.SetSize(navWidth, contentHeight)
-	if m.auditPane != nil && m.auditPane.Visible() {
+	if m.auditPane != nil && m.auditPane.Visible() && navWidth > 0 {
 		// Size audit pane for the nav panel's inner content area.
 		// border (2) + border padding (2) + item padding (2) = 6
 		auditInnerW := navWidth - 6
@@ -641,7 +655,12 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	// Store for mouse hit-testing
 	m.navWidth = navWidth
+	m.tabsWidth = tabsWidth
 	m.contentHeight = contentHeight
+
+	if navWidth == 0 && m.focusSlot == slotNav {
+		m.setFocusSlot(slotAgent)
+	}
 
 	// Only resize overlays when the terminal dimensions actually changed.
 	// Many handlers emit tea.RequestWindowSize as a batched side-effect (e.g.
@@ -651,6 +670,13 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 		m.overlays.SetSize(msg.Width, msg.Height)
 	}
 
+	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
+	if m.previewTerminal != nil {
+		m.previewTerminal.Resize(previewWidth, previewHeight)
+	}
+	if err := m.nav.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
+		log.ErrorLog.Print(err)
+	}
 	m.menu.SetSize(msg.Width, menuHeight)
 }
 
@@ -661,6 +687,10 @@ func (m *home) Init() tea.Cmd {
 	// update the spinner, which sends a new spinner.TickMsg. I think this lasts forever lol.
 	return tea.Batch(
 		m.spinner.Tick,
+		func() tea.Msg {
+			time.Sleep(50 * time.Millisecond)
+			return previewTickMsg{}
+		},
 		tickUpdateMetadataCmd,
 		m.toastTickCmd(),
 		m.daemonStartupCheckCmd(),
@@ -713,9 +743,48 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cachedPlanFile = msg.planFile
 		m.cachedPlanRendered = msg.rendered
-		// Update the nav panel's inline detail with the freshly rendered plan.
-		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData, RenderedPlan: msg.rendered})
+		m.previewRequested = false
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		m.tabbedWindow.SetDocumentContent(msg.rendered)
 		return m, nil
+	case previewTickMsg:
+		// If previewTerminal is active, render from it (zero-latency VT emulator).
+		if m.previewTerminal != nil && !m.tabbedWindow.IsDocumentMode() {
+			if content, changed := m.previewTerminal.Render(); changed {
+				m.tabbedWindow.SetPreviewContent(content)
+			}
+			if !m.previewClipboardPending {
+				if selection, ok := m.previewTerminal.PollClipboardRequest(); ok {
+					m.previewClipboardPending = true
+					m.previewClipboardTarget = selection
+					term := m.previewTerminal
+					return m, tea.Batch(nextPreviewTickCmd(term), readClipboardCmd(selection))
+				}
+			}
+		} else if m.previewTerminal == nil && !m.tabbedWindow.IsDocumentMode() {
+			// No terminal — show appropriate fallback state.
+			selected := m.nav.GetSelectedInstance()
+			if m.shouldAttachPreviewTerminal(selected) {
+				// Instance is running but terminal hasn't attached yet — show connecting indicator.
+				m.tabbedWindow.SetConnectingState()
+			} else {
+				// nil, Loading, or Paused — delegate to UpdatePreview which renders the
+				// correct fallback (banner, progress bar, or paused message).
+				if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+					log.ErrorLog.Printf("preview update error: %v", err)
+				}
+			}
+		}
+		// Advance spring animation every tick (20fps)
+		m.tabbedWindow.TickSpring()
+		// Banner animation (only when no terminal is active / fallback showing).
+		m.previewTickCount++
+		if m.previewTickCount%20 == 0 {
+			m.tabbedWindow.TickBanner()
+		}
+		// Use event-driven wakeup when terminal is live, fall back to 50ms poll otherwise.
+		term := m.previewTerminal
+		return m, nextPreviewTickCmd(term)
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -771,7 +840,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlays.Show(overlay.NewPickerOverlay("select clickup task", items))
 		return m, nil
 	case tickUpdateMetadataMessage:
-		m.syncExternalInstances()
 		// Snapshot the instance list for the goroutine. The slice header is
 		// copied but the pointers are shared — CollectMetadata only reads
 		// instance fields that don't change between ticks (started, Status,
@@ -1028,6 +1096,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if m.plannerPrompted[capturedPlanFile] {
 							continue
 						}
+						m.exitFocusModeForDialog()
 						if m.isUserInOverlay() {
 							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
 							continue
@@ -1161,6 +1230,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if m.plannerPrompted[capturedPlanFile] {
 							break
 						}
+						m.exitFocusModeForDialog()
 						if m.isUserInOverlay() {
 							m.deferredPlannerDialogs = append(m.deferredPlannerDialogs, capturedPlanFile)
 							break
@@ -1220,6 +1290,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Retry deferred PlannerFinished dialogs — show the first queued plan
 			// whose dialog was skipped because an overlay was active at signal time.
+			if len(m.deferredPlannerDialogs) > 0 {
+				m.exitFocusModeForDialog()
+			}
 			if len(m.deferredPlannerDialogs) > 0 && !m.isUserInOverlay() {
 				planFile := m.deferredPlannerDialogs[0]
 				m.deferredPlannerDialogs = m.deferredPlannerDialogs[1:]
@@ -1397,7 +1470,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Permission prompt detection for opencode.
-			if md.PermissionPrompt != nil && m.state == stateDefault {
+			if md.PermissionPrompt != nil && (m.state == stateDefault || m.state == stateFocusAgent) {
+				m.exitFocusModeForDialog()
 				pp := md.PermissionPrompt
 				cacheKey := config.CacheKey(pp.Pattern, pp.Description)
 				// Guard key: use cache key if available, else sentinel.
@@ -1512,6 +1586,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					continue
 				}
 				// Focus the implementer instance so the user can see its output behind the overlay.
+				m.exitFocusModeForDialog()
 				if cmd := m.focusInstanceForOverlay(inst); cmd != nil {
 					asyncCmds = append(asyncCmds, cmd)
 				}
@@ -1541,20 +1616,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						auditlog.WithAgent(inst.AgentType),
 						auditlog.WithPlan(inst.TaskFile),
 					)
-
-					// Pane fallback: if the dying agent was swapped into the
-					// layout's right pane, restore the workspace shell now.
-					// This runs in an async Cmd so no blocking subprocess
-					// happens in Update. The swapPaneResultMsg success handler
-					// (with empty instanceTitle) will clear swappedInstanceTitle.
-					//
-					// Edge case: multiple agents may exit in the same tick, but
-					// only one can hold swappedInstanceTitle, so at most one
-					// restore Cmd is queued per tick — no risk of double-clear.
-					if inst.Title == m.swappedInstanceTitle && m.layoutSessionName != "" {
-						log.WarningLog.Printf("agent %q exited while swapped in — restoring workspace pane", inst.Title)
-						asyncCmds = append(asyncCmds, restoreWorkspacePaneCmd(m.layoutSessionName))
-					}
 				}
 			}
 
@@ -1613,6 +1674,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Drain deferred all-complete prompts that were blocked by an overlay.
+			if len(m.pendingAllComplete) > 0 {
+				m.exitFocusModeForDialog()
+			}
 			if !m.isUserInOverlay() && len(m.pendingAllComplete) > 0 {
 				planFile := m.pendingAllComplete[0]
 				m.pendingAllComplete = m.pendingAllComplete[1:]
@@ -1701,6 +1765,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
+					m.exitFocusModeForDialog()
 					if !m.isUserInOverlay() {
 						// Focus a task instance so the user can see agent output behind the overlay.
 						if cmd := m.focusPlanInstanceForOverlay(capturedPlanFile); cmd != nil {
@@ -1723,6 +1788,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Show wave decision confirm once per wave (NeedsConfirm is one-shot;
 				// ResetConfirm on cancel allows the prompt to reappear next tick).
 				needsConfirm := orch.NeedsConfirm()
+				if needsConfirm {
+					m.exitFocusModeForDialog()
+				}
 				if !m.isUserInOverlay() && time.Since(m.waveConfirmDismissedAt) > 30*time.Second && needsConfirm {
 					waveNum := orch.CurrentWaveNumber()
 					completed := orch.CompletedTaskCount()
@@ -1805,10 +1873,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.updateSidebarTasks()
 		m.updateInfoPane()
-		// Push current state to the tmux status bar (no-op when not in layout).
-		if statusCmd := m.updateTmuxStatusBarCmd(m.computeStatusBarData()); statusCmd != nil {
-			asyncCmds = append(asyncCmds, statusCmd)
-		}
 		completionCmd := m.checkPlanCompletion()
 		asyncCmds = append(asyncCmds, signalCmds...)
 		asyncCmds = append(asyncCmds, tickUpdateMetadataCmd, completionCmd)
@@ -1834,17 +1898,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		m.updateNavPanelStatus()
 		return m, m.instanceChanged()
-	case swapPaneResultMsg:
-		if msg.err != nil {
-			// Log the error and surface a non-intrusive toast. The workspace
-			// shell remains visible so the user is not left with a blank pane.
-			log.WarningLog.Printf("swap-pane: %v", msg.err)
-			m.toastManager.Error("swap pane: " + msg.err.Error())
-			return m, m.toastTickCmd()
+	case previewTerminalReadyMsg:
+		// Discard stale attach if selection changed while spawning.
+		selected := m.nav.GetSelectedInstance()
+		if msg.err != nil || !m.shouldAttachPreviewTerminal(selected) || selected.Title != msg.instanceTitle {
+			return m, asyncClosePreviewTerminal(msg.term)
 		}
-		// Record the instance whose session is now showing in the right pane.
-		// Empty title means the workspace shell has been restored.
-		m.swappedInstanceTitle = msg.instanceTitle
+		m.previewTerminal = msg.term
+		m.previewTerminalInstance = msg.instanceTitle
 		return m, nil
 	case killInstanceMsg:
 		// Async pre-kill checks passed — pause instead of destroying (branch preserved).
@@ -2111,15 +2172,76 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 	case tea.ClipboardMsg:
-		// No embedded terminal to forward clipboard to; ignore.
+		if m.previewClipboardPending {
+			selection := m.previewClipboardTarget
+			if selection == 0 {
+				selection = ansi.SystemClipboard
+			}
+			m.previewClipboardPending = false
+			m.previewClipboardTarget = 0
+			if m.previewTerminal != nil {
+				if err := m.previewTerminal.SendKey([]byte(ansi.SetClipboard(selection, msg.Content))); err != nil {
+					return m, m.handleError(err)
+				}
+			}
+			return m, nil
+		}
 	case tea.PasteMsg:
-		// No embedded PTY to forward paste events to; ignore.
+		// Forward pasted text to the embedded PTY in focus mode.
+		if m.state == stateFocusAgent && m.previewTerminal != nil {
+			if content := msg.Content; content != "" {
+				// Wrap in bracketed paste so the program inside tmux sees it
+				// as a paste event rather than typed input.
+				data := []byte("\x1b[200~" + content + "\x1b[201~")
+				_ = m.previewTerminal.SendKey(data)
+			} else {
+				// Empty paste content means the clipboard holds non-text data
+				// (e.g. an image). Forward raw ctrl+v (0x16) so the embedded
+				// program can request clipboard contents via OSC 52 or its own
+				// native paste mechanism.
+				_ = m.previewTerminal.SendKey([]byte{0x16})
+			}
+			return m, nil
+		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	default:
+		// Forward unknown CSI sequences (kitty keyboard protocol, etc.) to the
+		// embedded PTY when in focus/interactive mode. Bubbletea emits these as
+		// an unexported []byte-based type; use reflect to extract raw bytes.
+		if m.state == stateFocusAgent && m.previewTerminal != nil {
+			v := reflect.ValueOf(msg)
+			if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
+				if data := v.Bytes(); len(data) > 0 {
+					_ = m.previewTerminal.SendKey(data)
+				}
+				return m, nil
+			}
+		}
 	}
 	return m, nil
+}
+
+func nextPreviewTickCmd(term *session.EmbeddedTerminal) tea.Cmd {
+	return func() tea.Msg {
+		if term != nil {
+			term.WaitForRender(16 * time.Millisecond)
+		} else {
+			time.Sleep(50 * time.Millisecond)
+		}
+		return previewTickMsg{}
+	}
+}
+
+func readClipboardCmd(selection byte) tea.Cmd {
+	return func() tea.Msg {
+		if selection == ansi.PrimaryClipboard {
+			return tea.ReadPrimaryClipboard()
+		}
+		return tea.ReadClipboard()
+	}
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
@@ -2135,15 +2257,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if hasActive {
 		quitAction := func() tea.Msg {
 			m.audit(auditlog.EventSessionStopped, "kasmos stopped")
-			if err := m.saveAllInstances(); err != nil {
-				return err
-			}
-			if m.navOnly && m.layoutSessionName != "" {
-				ex := makeExecutor()
-				if err := ex.Run(exec.Command("tmux", "kill-session", "-t", m.layoutSessionName)); err != nil {
-					return err
-				}
-			}
+			_ = m.saveAllInstances()
 			return tea.QuitMsg{}
 		}
 		return m, m.confirmAction("quit kasmos? active sessions will be preserved.", quitAction)
@@ -2153,32 +2267,34 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
 	}
-	if m.navOnly && m.layoutSessionName != "" {
-		sessionName := m.layoutSessionName
-		return m, func() tea.Msg {
-			ex := makeExecutor()
-			if err := ex.Run(exec.Command("tmux", "kill-session", "-t", sessionName)); err != nil {
-				return err
-			}
-			return tea.QuitMsg{}
-		}
-	}
 	return m, tea.Quit
 }
 
 func (m *home) View() tea.View {
-	// Nav-only layout: the right side is a native tmux pane owned by the
-	// two-pane layout launcher.  We render the nav panel at full terminal
-	// width and the bottom menu row; nothing else.
+	// All columns use identical padding and height for uniform alignment.
 	colStyle := lipgloss.NewStyle().Height(m.contentHeight)
+	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
 
+	// Layout: nav | preview/tabs
+	var cols []string
+	if !m.sidebarHidden {
+		cols = append(cols, colStyle.Render(m.nav.String()))
+	}
+	cols = append(cols, previewWithPadding)
+	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+	statusBarView := ""
+	if m.statusBar != nil {
+		m.statusBar.SetData(m.computeStatusBarData())
+		statusBarView = m.statusBar.String()
+	}
 	if m.menu != nil && m.nav != nil {
 		m.menu.SetSidebarSpaceAction(m.nav.SelectedSpaceAction())
 	}
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
-		colStyle.Render(m.nav.String()),
+		statusBarView,
+		listAndPreview,
 		m.menu.String(),
 	)
 
@@ -2252,54 +2368,19 @@ type prErrorMsg struct {
 	err error
 }
 
+// previewTickMsg implements tea.Msg and triggers a preview update
+type previewTickMsg struct{}
+
 type tickUpdateMetadataMessage struct{}
 
-type instanceChangedMsg struct{}
-
-// swapPaneResultMsg carries the result of an async swap-pane operation.
-// instanceTitle is empty when the workspace shell has been restored.
-type swapPaneResultMsg struct {
+// previewTerminalReadyMsg signals that the async terminal attach completed.
+type previewTerminalReadyMsg struct {
+	term          *session.EmbeddedTerminal
 	instanceTitle string
 	err           error
 }
 
-// swapPaneCmd returns a tea.Cmd that asynchronously swaps the layout's right
-// pane to show the tmux session for instanceTitle.
-// All blocking tmux subprocess calls happen inside the returned Cmd goroutine.
-func swapPaneCmd(layoutSession, instanceTitle string) tea.Cmd {
-	return func() tea.Msg {
-		ex := cmd2.MakeExecutor()
-		agentSession := tmux.ToKasTmuxNamePublic(instanceTitle)
-
-		ok, err := tmux.SessionExists(ex, agentSession)
-		if err != nil {
-			return swapPaneResultMsg{instanceTitle: instanceTitle, err: err}
-		}
-		if !ok {
-			return swapPaneResultMsg{
-				instanceTitle: instanceTitle,
-				err:           fmt.Errorf("agent session %s does not exist", agentSession),
-			}
-		}
-
-		if err := tmux.SwapRightPaneToSession(ex, layoutSession, agentSession); err != nil {
-			// Fall back: restore workspace so the user is not left with a blank pane.
-			_ = tmux.SwapRightPaneToWorkspace(ex, layoutSession)
-			return swapPaneResultMsg{instanceTitle: instanceTitle, err: err}
-		}
-		return swapPaneResultMsg{instanceTitle: instanceTitle}
-	}
-}
-
-// restoreWorkspacePaneCmd returns a tea.Cmd that asynchronously restores the
-// workspace shell pane to the layout's right position. Idempotent.
-func restoreWorkspacePaneCmd(layoutSession string) tea.Cmd {
-	return func() tea.Msg {
-		ex := cmd2.MakeExecutor()
-		_ = tmux.SwapRightPaneToWorkspace(ex, layoutSession)
-		return swapPaneResultMsg{} // empty title = workspace restored
-	}
-}
+type instanceChangedMsg struct{}
 
 // killInstanceMsg is sent after async pre-kill checks pass (worktree not checked out).
 // Model mutations (list.Kill, removeFromAllInstances) happen in Update, not in the goroutine.

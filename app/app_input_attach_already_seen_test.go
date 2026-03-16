@@ -72,6 +72,7 @@ func TestEnterKey_AttachHelpAlreadySeen_ExecsDirectly(t *testing.T) {
 		appConfig:    config.DefaultConfig(),
 		nav:          ui.NewNavigationPanel(&spin),
 		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
 		toastManager: overlay.NewToastManager(&spin),
 		overlays:     overlay.NewManager(),
 		appState:     state,

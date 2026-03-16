@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/kastheco/kasmos/keys"
@@ -47,6 +48,7 @@ type Menu struct {
 	width              int
 	state              MenuState
 	instance           *session.Instance
+	isFocusMode        bool
 	focusSlot          int
 	sidebarSpaceAction string
 	keyDown            keys.KeyName
@@ -69,6 +71,15 @@ const (
 	defaultSystemGroupSize = 4
 	emptySystemGroupSize   = 3
 )
+
+// Focus mode animation frames (braille spinner characters).
+var focusModeFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// Styles specific to focus / interactive mode overlay.
+var focusDotStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)
+var focusLabelStyle = lipgloss.NewStyle().Foreground(ColorLove).Bold(true)
+var focusHintKeyStyle = lipgloss.NewStyle().Foreground(ColorSubtle)
+var focusHintDescStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 
 // NewMenu constructs a Menu in the StateEmpty state with sensible defaults.
 func NewMenu() *Menu {
@@ -116,6 +127,12 @@ func (m *Menu) SetInstance(inst *session.Instance) {
 	m.updateOptions()
 }
 
+// SetFocusMode toggles the interactive/focus overlay mode.
+func (m *Menu) SetFocusMode(focused bool) {
+	m.isFocusMode = focused
+	m.updateOptions()
+}
+
 // SetFocusSlot records which panel currently holds keyboard focus.
 func (m *Menu) SetFocusSlot(slot int) {
 	m.focusSlot = slot
@@ -141,6 +158,11 @@ func (m *Menu) SetSize(width, height int) {
 
 // updateOptions rebuilds the option slice whenever any relevant field changes.
 func (m *Menu) updateOptions() {
+	if m.isFocusMode {
+		m.options = []keys.KeyName{keys.KeyExitFocus}
+		m.systemGroupSize = 0
+		return
+	}
 	switch m.state {
 	case StateEmpty:
 		if m.focusSlot == MenuSlotSidebar {
@@ -190,14 +212,14 @@ func (m *Menu) addSidebarOptions(includeNewPlan bool) {
 // addInstanceOptions populates the option list when an instance is selected.
 func (m *Menu) addInstanceOptions() {
 	mgmt := []keys.KeyName{keys.KeyNewPlan, keys.KeyKill}
-	action := []keys.KeyName{keys.KeyEnter, keys.KeyInteractivePrompt, keys.KeySendPrompt, keys.KeySpace}
+	action := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace}
 	if m.instance.PromptDetected && m.instance.Status != session.Paused {
 		action = append(action, keys.KeySendYes)
 	}
 	if m.instance.Status == session.Paused {
 		action = append(action, keys.KeyResume)
 	}
-	sys := []keys.KeyName{keys.KeySearch, keys.KeyHelp, keys.KeyQuit}
+	sys := []keys.KeyName{keys.KeySearch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
 	total := len(mgmt) + len(action) + len(sys)
 	opts := make([]keys.KeyName, 0, total)
@@ -245,6 +267,28 @@ func (m *Menu) placeLine(
 		sb.WriteString(strings.Repeat(" ", m.width-pos))
 	}
 	return sb.String()
+}
+
+// renderFocusMode produces the interactive-mode status row.
+func (m *Menu) renderFocusMode() string {
+	frame := focusModeFrames[int(time.Now().UnixMilli()/100)%len(focusModeFrames)]
+	badge := focusLabelStyle.Render("interactive") + " " + focusDotStyle.Render(frame)
+	hint := focusHintKeyStyle.Render("ctrl+space") + " " + focusHintDescStyle.Render("exit")
+	content := badge + "  " + hint
+
+	cw := lipgloss.Width(content)
+	cs := (m.width - cw) / 2
+	if cs < 0 {
+		cs = 0
+	}
+
+	tr, tw := m.tmuxCountRendered()
+	rs := m.width - tw - 1
+	if rs < cs+cw {
+		rs = cs + cw
+	}
+
+	return m.placeLine(cs, cw, content, rs, tw, tr)
 }
 
 // buildOptionText assembles the raw option text (before wrapping in menuStyle).
@@ -337,6 +381,10 @@ func (m *Menu) buildOptionText() string {
 
 // String renders the full bottom bar row as a string.
 func (m *Menu) String() string {
+	if m.isFocusMode {
+		return m.renderFocusMode()
+	}
+
 	optText := m.buildOptionText()
 	rendered := menuStyle.Render(optText)
 	rw := lipgloss.Width(rendered)

@@ -21,6 +21,7 @@ import (
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
+	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/log"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
@@ -274,64 +275,10 @@ func mergePlanStatus(status ui.TopicStatus, inst *session.Instance, started bool
 	return status
 }
 
-// uiToTmuxStatusBarData adapts a ui.StatusBarData to the tmux-package mirror type.
-// Direct integer cast for TaskGlyph is safe — both packages use iota in the same
-// order (Complete=0, Running=1, Failed=2, Pending=3).
-func uiToTmuxStatusBarData(d ui.StatusBarData) tmux.StatusBarData {
-	glyphs := make([]tmux.TaskGlyph, len(d.TaskGlyphs))
-	for i, g := range d.TaskGlyphs {
-		glyphs[i] = tmux.TaskGlyph(g)
-	}
-	return tmux.StatusBarData{
-		Branch:           d.Branch,
-		Version:          d.Version,
-		PlanName:         d.PlanName,
-		PlanStatus:       d.PlanStatus,
-		WaveLabel:        d.WaveLabel,
-		TaskGlyphs:       glyphs,
-		TmuxSessionCount: d.TmuxSessionCount,
-		ProjectDir:       d.ProjectDir,
-		PRState:          d.PRState,
-		PRChecks:         d.PRChecks,
-	}
-}
-
-// updateTmuxStatusBarCmd returns a tea.Cmd that asynchronously applies the
-// rendered status bar strings to the outer tmux layout session.
-//
-// Guards:
-//   - Returns nil when layoutSessionName is empty (not inside the two-pane layout).
-//   - Returns nil when KASMOS_LAYOUT env var is not "1".
-//   - Returns nil when the rendered strings are identical to the last applied
-//     values (m.lastTmuxStatusLeft / m.lastTmuxStatusRight), avoiding redundant
-//     subprocess calls on every metadata tick.
-//
-// On error the cmd logs the failure and returns nil so the metadata loop continues.
-func (m *home) updateTmuxStatusBarCmd(data ui.StatusBarData) tea.Cmd {
-	if m.layoutSessionName == "" || os.Getenv("KASMOS_LAYOUT") != "1" {
-		return nil
-	}
-	render := tmux.RenderStatusBar(uiToTmuxStatusBarData(data))
-	if render.Left == m.lastTmuxStatusLeft && render.Right == m.lastTmuxStatusRight {
-		return nil // no-op: nothing changed
-	}
-	// Update the cache before spawning the cmd so a second tick that fires
-	// before the first cmd completes does not send a duplicate request.
-	m.lastTmuxStatusLeft = render.Left
-	m.lastTmuxStatusRight = render.Right
-	sessionName := m.layoutSessionName
-	return func() tea.Msg {
-		ex := cmd2.MakeExecutor()
-		if err := tmux.ApplyStatusBar(ex, sessionName, render); err != nil {
-			log.WarningLog.Printf("updateTmuxStatusBarCmd: %v", err)
-		}
-		return nil
-	}
-}
-
 // computeStatusBarData builds the StatusBarData from the current app state.
 func (m *home) computeStatusBarData() ui.StatusBarData {
 	data := ui.StatusBarData{
+		FocusMode:        m.state == stateFocusAgent,
 		Version:          m.version,
 		TmuxSessionCount: m.tmuxSessionCount,
 		ProjectDir:       filepath.Base(m.activeRepoPath),
@@ -449,6 +396,237 @@ func (m *home) updateNavPanelStatus() {
 	m.nav.SetItems(nil, nil, 0, nil, nil, m.computePlanStatuses())
 }
 
+// focusSlot constants for readability.
+// Order matches tab layout: info (first), agent (second).
+const (
+	slotNav   = 0
+	slotInfo  = 1
+	slotAgent = 2
+	slotCount = 3
+)
+
+// setFocusSlot updates which pane has focus and syncs visual state.
+func (m *home) setFocusSlot(slot int) {
+	m.focusSlot = slot
+	m.nav.SetFocused(slot == slotNav)
+	m.menu.SetFocusSlot(slot)
+
+	// Center pane is focused when any of the 2 center tabs is active.
+	centerFocused := slot >= slotInfo && slot <= slotAgent
+	m.tabbedWindow.SetFocused(centerFocused)
+
+	// When focusing a center tab, switch the visible tab to match and track which tab is focused.
+	if centerFocused {
+		m.tabbedWindow.SetActiveTab(slot - slotInfo) // slotInfo=1 → InfoTab=0, etc.
+		m.previewRequested = slot == slotAgent
+	}
+	// focusedTab always tracks activeTab so the gradient header is visible
+	// regardless of which pane has keyboard focus.
+}
+
+// nextFocusSlot cycles the visible center tab forward (info ↔ agent).
+// The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
+// displayed tab changes. This is called by Tab and →.
+func (m *home) nextFocusSlot() tea.Cmd {
+	switch m.tabbedWindow.GetActiveTab() {
+	case ui.InfoTab:
+		return m.activateLivePreviewTab()
+	default: // ui.PreviewTab — wraps to info
+		return m.activateInfoTab()
+	}
+}
+
+// prevFocusSlot cycles the visible center tab backward (agent ↔ info).
+// The sidebar always retains keyboard focus (focusSlot stays slotNav).
+func (m *home) prevFocusSlot() tea.Cmd {
+	switch m.tabbedWindow.GetActiveTab() {
+	case ui.PreviewTab:
+		return m.activateInfoTab()
+	default: // ui.InfoTab — wraps to agent
+		return m.activateLivePreviewTab()
+	}
+}
+
+func asyncClosePreviewTerminal(term *session.EmbeddedTerminal) tea.Cmd {
+	if term == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		term.Close()
+		return nil
+	}
+}
+
+func (m *home) shouldAttachPreviewTerminal(selected *session.Instance) bool {
+	return m.previewRequested &&
+		selected != nil &&
+		selected.Started() &&
+		selected.Status != session.Paused &&
+		selected.Status != session.Loading &&
+		!selected.Exited
+}
+
+func (m *home) spawnPreviewTerminal(selected *session.Instance) tea.Cmd {
+	if selected == nil {
+		return nil
+	}
+	cols, rows := m.tabbedWindow.GetPreviewSize()
+	if cols < 10 {
+		cols = 80
+	}
+	if rows < 5 {
+		rows = 24
+	}
+	capturedTitle := selected.Title
+	capturedInstance := selected
+	return func() tea.Msg {
+		term, err := capturedInstance.NewEmbeddedTerminalForInstance(cols, rows)
+		return previewTerminalReadyMsg{term: term, instanceTitle: capturedTitle, err: err}
+	}
+}
+
+func (m *home) syncPreviewTerminal() tea.Cmd {
+	selected := m.nav.GetSelectedInstance()
+	needsPreview := m.shouldAttachPreviewTerminal(selected)
+	currentMatches := needsPreview && m.previewTerminal != nil && m.previewTerminalInstance == selected.Title
+
+	var cmds []tea.Cmd
+	if m.previewTerminal != nil && !currentMatches {
+		oldTerm := m.previewTerminal
+		m.previewTerminal = nil
+		m.previewTerminalInstance = ""
+		m.previewClipboardPending = false
+		m.previewClipboardTarget = 0
+		cmds = append(cmds, asyncClosePreviewTerminal(oldTerm))
+	}
+
+	if needsPreview && !currentMatches {
+		cmds = append(cmds, m.spawnPreviewTerminal(selected))
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+	if len(cmds) == 1 {
+		return cmds[0]
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *home) activateInfoTab() tea.Cmd {
+	m.previewRequested = false
+	m.tabbedWindow.SetActiveTab(ui.InfoTab)
+	return m.syncPreviewTerminal()
+}
+
+func (m *home) activateLivePreviewTab() tea.Cmd {
+	m.previewRequested = true
+	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+	return m.syncPreviewTerminal()
+}
+
+// enterFocusMode enters focus/insert mode and starts the fast preview ticker.
+// enterFocusMode reuses the existing previewTerminal if it is already attached to
+// the selected instance — entering focus just toggles key forwarding to the same
+// terminal. Only spawns a new terminal if none is attached yet (rare fallback).
+func (m *home) enterFocusMode() tea.Cmd {
+	m.tabbedWindow.ClearDocumentMode()
+	m.previewRequested = true
+	selected := m.nav.GetSelectedInstance()
+	if selected == nil || !selected.Started() || selected.Status == session.Paused {
+		return nil
+	}
+
+	// If previewTerminal is already attached to this instance, just enter focus mode.
+	if m.previewTerminal != nil && m.previewTerminalInstance == selected.Title {
+		m.state = stateFocusAgent
+		m.tabbedWindow.SetFocusMode(true)
+		m.menu.SetFocusMode(true)
+		return nil
+	}
+
+	// No terminal yet — attach asynchronously so focus transitions don't block.
+	cmd := m.syncPreviewTerminal()
+	m.state = stateFocusAgent
+	m.tabbedWindow.SetFocusMode(true)
+	m.menu.SetFocusMode(true)
+
+	return cmd
+}
+
+// exclamationAutoFocus handles the `!` key in stateDefault: it switches to the
+// agent preview tab, enters interactive/focus mode, and sends '!' to the harness
+// terminal so the agent's shell mode is activated in one keystroke.
+//
+// No-ops gracefully when no selected/running instance exists.
+func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
+	// Switch to agent tab first (same as KeySendPrompt convention).
+	m.previewRequested = true
+	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+
+	// Resolve selected instance (mirrors KeySendPrompt logic).
+	selected := m.nav.GetSelectedInstance()
+	if selected == nil {
+		if pf := m.nav.GetSelectedPlanFile(); pf != "" {
+			if best := m.nav.FindPlanInstance(pf); best != nil {
+				m.nav.SelectInstance(best)
+				selected = best
+			}
+		}
+	}
+
+	// Guard: no valid target — leave tab switched but don't enter focus mode.
+	if selected == nil || !selected.Started() || selected.Paused() {
+		return m, nil
+	}
+
+	// Enter focus mode using the existing API.
+	cmd := m.enterFocusMode()
+
+	// Only send '!' if focus mode was actually entered and the tmux session is live.
+	// This prevents nil-PTY panics on DummyTerminal (tests) and stale terminals.
+	if m.state != stateFocusAgent {
+		return m, cmd
+	}
+	if m.previewTerminal != nil && selected.TmuxAlive() {
+		if err := m.previewTerminal.SendKey([]byte("!")); err != nil {
+			return m, m.handleError(err)
+		}
+	}
+
+	return m, cmd
+}
+
+// exitFocusMode resets focus state. previewTerminal stays alive — it continues
+// rendering in normal preview mode after the user exits focus/insert mode.
+func (m *home) exitFocusMode() {
+	// previewTerminal stays alive — it continues rendering in normal preview mode.
+	m.state = stateDefault
+	m.tabbedWindow.SetFocusMode(false)
+	m.menu.SetFocusMode(false)
+}
+
+// switchToTab changes the visible center tab without stealing focus from the sidebar.
+// The sidebar (slotNav) always retains keyboard focus.
+func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
+	var targetTab int
+	switch name {
+	case keys.KeyTabInfo:
+		targetTab = ui.InfoTab
+	default:
+		return m, nil
+	}
+
+	if m.tabbedWindow.GetActiveTab() == targetTab {
+		return m, nil
+	}
+
+	if targetTab == ui.InfoTab {
+		return m, m.activateInfoTab()
+	}
+	return m, m.activateLivePreviewTab()
+}
+
 // saveAllInstances saves allInstances (all repos) to storage.
 // No-ops gracefully when storage is nil (e.g. in unit tests).
 func (m *home) saveAllInstances() error {
@@ -456,36 +634,6 @@ func (m *home) saveAllInstances() error {
 		return nil
 	}
 	return m.storage.SaveInstances(m.allInstances)
-}
-
-func (m *home) syncExternalInstances() {
-	if m.storage == nil {
-		return
-	}
-	loaded, err := m.storage.LoadInstances()
-	if err != nil {
-		return
-	}
-	known := make(map[string]bool, len(m.allInstances))
-	for _, inst := range m.allInstances {
-		known[inst.Title] = true
-	}
-	added := false
-	for _, inst := range loaded {
-		if known[inst.Title] {
-			continue
-		}
-		known[inst.Title] = true
-		m.allInstances = append(m.allInstances, inst)
-		repoPath := inst.GetRepoPath()
-		if repoPath == "" || repoPath == m.activeRepoPath {
-			m.nav.AddInstance(inst)()
-		}
-		added = true
-	}
-	if added {
-		m.updateNavPanelStatus()
-	}
 }
 
 // removeFromAllInstances removes an instance from the master list by title.
@@ -540,27 +688,8 @@ func (m *home) cleanupPausedDoneReviewers(selected *session.Instance) {
 	m.updateNavPanelStatus()
 }
 
-// isInstanceSwappable reports whether inst is eligible to be swapped into the
-// layout's right pane as the active agent view. Paused and exited instances
-// are never eligible — their tmux session is either suspended or gone, and
-// calling swapPaneCmd on them would leave the right pane in an undefined state.
-//
-// This is the authoritative check used by instanceChanged and maybeSwapPane
-// to ensure a paused/exited instance is never treated as the active swap target.
-func isInstanceSwappable(inst *session.Instance) bool {
-	if inst == nil {
-		return false
-	}
-	if inst.Exited || inst.Paused() {
-		return false
-	}
-	return inst.Started()
-}
-
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance.
 // It returns a tea.Cmd when an async operation is needed (terminal spawn).
-// Guarantee: paused and exited instances are never treated as swap targets —
-// maybeSwapPane() guards against this via isInstanceSwappable.
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.nav.GetSelectedInstance()
@@ -579,17 +708,27 @@ func (m *home) instanceChanged() tea.Cmd {
 		m.seenNotified = selected
 	}
 
+	previewCmd := m.syncPreviewTerminal()
+
+	m.tabbedWindow.SetInstance(selected)
 	m.updateInfoPane()
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
+	// Auto-switch tab based on selection type: plan header → info tab, instance → agent tab.
+	// Only auto-switch when the nav panel is focused to avoid hijacking explicit tab selection.
+	if m.focusSlot == slotNav {
+		if selected != nil && m.previewRequested {
+			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		} else {
+			m.tabbedWindow.SetActiveTab(ui.InfoTab)
+		}
+	}
+
 	// Collect async commands.
 	var cmds []tea.Cmd
-
-	// When running inside a tmux layout, swap the right pane to the selected
-	// instance's session (or restore the workspace shell when no valid instance).
-	if swapCmd := m.maybeSwapPane(); swapCmd != nil {
-		cmds = append(cmds, swapCmd)
+	if previewCmd != nil {
+		cmds = append(cmds, previewCmd)
 	}
 
 	if len(cmds) == 0 {
@@ -730,14 +869,12 @@ func statusString(s session.Status) string {
 func (m *home) updateInfoPaneForPlanHeader() {
 	planFile := m.nav.GetSelectedPlanFile()
 	if planFile == "" || m.taskState == nil {
-		m.currentDetailData = ui.InfoData{IsPlanHeaderSelected: true}
-		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData})
+		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
 		return
 	}
 	entry, ok := m.taskState.Entry(planFile)
 	if !ok {
-		m.currentDetailData = ui.InfoData{IsPlanHeaderSelected: true}
-		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData})
+		m.tabbedWindow.SetInfoData(ui.InfoData{IsPlanHeaderSelected: true})
 		return
 	}
 	data := ui.InfoData{
@@ -810,8 +947,7 @@ func (m *home) updateInfoPaneForPlanHeader() {
 		data.MaxReviewFixCycles = m.appConfig.MaxReviewFixCycles
 	}
 
-	m.currentDetailData = data
-	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
+	m.tabbedWindow.SetInfoData(data)
 }
 
 // updateInfoPane refreshes the info tab data from the selected instance or plan header.
@@ -823,8 +959,7 @@ func (m *home) updateInfoPane() {
 			m.updateInfoPaneForPlanHeader()
 			return
 		}
-		m.currentDetailData = ui.InfoData{HasInstance: false}
-		m.nav.SetDetailData(ui.NavDetailData{InfoData: ui.InfoData{HasInstance: false}})
+		m.tabbedWindow.SetInfoData(ui.InfoData{HasInstance: false})
 		return
 	}
 
@@ -844,8 +979,8 @@ func (m *home) updateInfoPane() {
 		data.Created = selected.CreatedAt.Format("2006-01-02 15:04")
 	}
 
-	// Capture prior subtask data so we can preserve it on error.
-	prior := m.currentDetailData
+	// Capture prior subtask data from the current pane so we can preserve it on error.
+	prior := m.tabbedWindow.GetInfoData()
 
 	if selected.TaskFile != "" {
 		var orch *orchestration.WaveOrchestrator
@@ -905,8 +1040,7 @@ func (m *home) updateInfoPane() {
 				prior.CompletedTasks, prior.TotalSubtasks, prior.AllWaveSubtasks)
 	}
 
-	m.currentDetailData = data
-	m.nav.SetDetailData(ui.NavDetailData{InfoData: data, RenderedPlan: m.cachedPlanRendered})
+	m.tabbedWindow.SetInfoData(data)
 }
 
 // loadTaskState reads plan state from the store for the active repo.
@@ -1346,6 +1480,16 @@ func (m *home) killExistingPlanAgent(planFile, agentType string) {
 	for _, title := range titles {
 		inst := m.nav.RemoveByTitle(title)
 		m.removeFromAllInstances(title)
+		// Invalidate the preview terminal cache so that a replacement instance
+		// with the same title (e.g. a new "applying fixes" fixer) gets a fresh
+		// terminal instead of showing stale output from the killed session.
+		if title == m.previewTerminalInstance {
+			if m.previewTerminal != nil {
+				m.previewTerminal.Close()
+			}
+			m.previewTerminal = nil
+			m.previewTerminalInstance = ""
+		}
 		if inst != nil {
 			if err := inst.Kill(); err != nil {
 				log.WarningLog.Printf("could not kill old %s for %q: %v", agentType, planFile, err)
@@ -1562,12 +1706,18 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 
 	// Cache hit — reuse previously rendered content (instant).
 	if planFile == m.cachedPlanFile && m.cachedPlanRendered != "" {
-		m.nav.SetDetailData(ui.NavDetailData{InfoData: m.currentDetailData, RenderedPlan: m.cachedPlanRendered})
+		m.previewRequested = false
+		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+		m.tabbedWindow.SetDocumentContent(m.cachedPlanRendered)
 		return m, nil
 	}
 
 	// Cache miss — render async so the UI doesn't freeze.
-	const wordWrap = 80
+	previewWidth, _ := m.tabbedWindow.GetPreviewSize()
+	wordWrap := previewWidth - 4
+	if wordWrap < 40 {
+		wordWrap = 40
+	}
 
 	return m, func() tea.Msg {
 		data, err := m.taskStore.GetContent(m.taskStoreProject, planFile)
