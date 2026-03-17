@@ -13,6 +13,8 @@ import (
 	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
+	"github.com/kastheco/kasmos/session"
+	tmuxpkg "github.com/kastheco/kasmos/session/tmux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -156,6 +158,86 @@ func TestDaemon_RecoverOnRestart(t *testing.T) {
 	recovered, err := d.RecoverSessions()
 	assert.NoError(t, err)
 	assert.Equal(t, 0, recovered)
+}
+
+
+func TestDaemon_RecoverSessions_AdoptsTrackedInstances(t *testing.T) {
+	project := "proj"
+	store := taskstore.NewTestStore(t)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "feature.md",
+		Status:   taskstore.StatusImplementing,
+		Branch:   "plan/feature",
+	}))
+
+	d := &Daemon{
+		repos:       NewRepoManager(),
+		spawner:     NewTmuxSpawner(),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+	d.repos.repos = []RepoEntry{{
+		Path:    "/tmp/proj",
+		Project: project,
+		Store:   store,
+	}}
+	d.spawner.discoverOrphans = func(_ []string) ([]tmuxpkg.SessionInfo, error) {
+		return []tmuxpkg.SessionInfo{{Title: "feature.md-coder"}}, nil
+	}
+	d.spawner.restoreInstance = func(data session.InstanceData) (*session.Instance, error) {
+		return &session.Instance{
+			Title:     data.Title,
+			Path:      data.Path,
+			TaskFile:  data.TaskFile,
+			AgentType: data.AgentType,
+		}, nil
+	}
+
+	recovered, err := d.RecoverSessions()
+	require.NoError(t, err)
+	assert.Equal(t, 1, recovered)
+
+	running := d.spawner.RunningInstances()
+	require.Len(t, running, 1)
+	assert.Equal(t, "feature.md", running[0].PlanFile)
+	assert.Equal(t, session.AgentTypeCoder, running[0].AgentType)
+	assert.Equal(t, project, running[0].Project)
+}
+
+func TestDaemon_AutoAdvanceCompletedImplementer_TransitionsToReviewing(t *testing.T) {
+	project := "proj"
+	store := taskstore.NewTestStore(t)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "feature.md",
+		Status:   taskstore.StatusImplementing,
+		Branch:   "plan/feature",
+	}))
+
+	pushCalled := false
+	d := &Daemon{
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+		pushBranch: func(*session.Instance) error {
+			pushCalled = true
+			return nil
+		},
+	}
+	e := RepoEntry{Project: project, Store: store}
+	inst := &session.Instance{
+		Title:          "feature-fixer",
+		TaskFile:       "feature.md",
+		AgentType:      session.AgentTypeFixer,
+		PromptDetected: true,
+	}
+
+	advanced, err := d.autoAdvanceCompletedImplementer(e, inst, true)
+	require.NoError(t, err)
+	assert.True(t, advanced)
+	assert.True(t, pushCalled)
+
+	entry, err := store.Get(project, "feature.md")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusReviewing, entry.Status)
 }
 
 func TestDaemon_TickScansSharedWorktreeSignals(t *testing.T) {

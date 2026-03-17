@@ -24,6 +24,7 @@ import (
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
+	gitpkg "github.com/kastheco/kasmos/session/git"
 )
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,7 @@ type Daemon struct {
 	pidLock     *PIDLock
 	broadcaster *api.EventBroadcaster
 	prMonitor   *PRMonitor
+	pushBranch  func(*session.Instance) error
 	mu          sync.RWMutex
 	startedAt   time.Time
 }
@@ -266,6 +268,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.logger.Info("recovered in-flight signals", "dir", sd, "count", n)
 			}
 		}
+	}
+
+	if recovered, recErr := d.RecoverSessions(); recErr != nil {
+		d.logger.Warn("recover sessions failed", "err", recErr)
+	} else if recovered > 0 {
+		d.logger.Info("recovered orphan sessions", "count", recovered)
 	}
 
 	// Remove any stale socket file before listening.
@@ -500,6 +508,7 @@ func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
 				d.logger.Error("execute action failed", "kind", action.Kind(), "repo", e.Path, "err", err)
 			}
 		}
+		d.monitorRunningInstances(ctx, e)
 		return
 	}
 
@@ -527,6 +536,105 @@ func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
 	for _, id := range ids {
 		if err := e.SignalGateway.MarkProcessed(id, taskstore.SignalDone, ""); err != nil {
 			d.logger.Error("mark processed failed", "repo", e.Path, "id", id, "err", err)
+		}
+	}
+
+	d.monitorRunningInstances(ctx, e)
+}
+
+func shouldAutoAdvanceImplementer(entry taskstore.TaskEntry, inst *session.Instance, tmuxAlive bool) bool {
+	if inst == nil || inst.TaskFile == "" {
+		return false
+	}
+	if inst.AgentType != session.AgentTypeCoder && inst.AgentType != session.AgentTypeFixer {
+		return false
+	}
+	if inst.SoloAgent || inst.TaskNumber > 0 {
+		return false
+	}
+	if entry.Status != taskstore.StatusImplementing {
+		return false
+	}
+	if !tmuxAlive {
+		return true
+	}
+	if inst.PromptDetected && !inst.AwaitingWork {
+		return true
+	}
+	return false
+}
+
+func (d *Daemon) pushInstanceBranch(inst *session.Instance) error {
+	if d.pushBranch != nil {
+		return d.pushBranch(inst)
+	}
+	worktree, err := inst.GetGitWorktree()
+	if err != nil {
+		return err
+	}
+	return worktree.Push(false)
+}
+
+func (d *Daemon) autoAdvanceCompletedImplementer(e RepoEntry, inst *session.Instance, tmuxAlive bool) (bool, error) {
+	if e.Store == nil || inst == nil || inst.TaskFile == "" {
+		return false, nil
+	}
+
+	entry, err := e.Store.Get(e.Project, inst.TaskFile)
+	if err != nil {
+		return false, fmt.Errorf("load task entry for %s: %w", inst.TaskFile, err)
+	}
+	if !shouldAutoAdvanceImplementer(entry, inst, tmuxAlive) {
+		return false, nil
+	}
+
+	if err := d.pushInstanceBranch(inst); err != nil {
+		return false, fmt.Errorf("push branch for %s: %w", inst.Title, err)
+	}
+
+	fsm := taskfsm.New(e.Store, e.Project, "")
+	if err := fsm.Transition(inst.TaskFile, taskfsm.ImplementFinished); err != nil {
+		return false, fmt.Errorf("transition %s to reviewing: %w", inst.TaskFile, err)
+	}
+
+	return true, nil
+}
+
+func (d *Daemon) monitorRunningInstances(ctx context.Context, e RepoEntry) {
+	for _, inst := range d.spawner.InstancesForRepo(e.Path) {
+		if inst == nil || inst.Paused() || !inst.Started() {
+			continue
+		}
+
+		md := inst.CollectMetadata()
+		if md.ContentCaptured {
+			if md.Updated {
+				inst.SetStatus(session.Running)
+				inst.PromptDetected = false
+			} else if md.HasPrompt {
+				inst.PromptDetected = true
+				inst.TapEnter()
+			} else {
+				inst.SetStatus(session.Ready)
+			}
+		}
+
+		advanced, err := d.autoAdvanceCompletedImplementer(e, inst, md.TmuxAlive)
+		if err != nil {
+			d.logger.Warn("auto-advance implementer failed", "repo", e.Path, "plan", inst.TaskFile, "instance", inst.Title, "err", err)
+			continue
+		}
+		if !advanced {
+			continue
+		}
+
+		d.logger.Info("implementer completed; starting review", "repo", e.Path, "plan", inst.TaskFile, "instance", inst.Title, "agent", inst.AgentType)
+		if err := d.spawner.KillAgent(e.Path, inst.TaskFile, inst.AgentType); err != nil {
+			d.logger.Warn("kill completed implementer failed", "repo", e.Path, "plan", inst.TaskFile, "agent", inst.AgentType, "err", err)
+		}
+		_ = d.executeAction(ctx, e, loop.TransitionAction{PlanFile: inst.TaskFile, Event: taskfsm.ImplementFinished})
+		if err := d.executeAction(ctx, e, loop.SpawnReviewerAction{PlanFile: inst.TaskFile}); err != nil {
+			d.logger.Error("spawn reviewer after implementer completion failed", "repo", e.Path, "plan", inst.TaskFile, "err", err)
 		}
 	}
 }
@@ -876,9 +984,9 @@ func (d *Daemon) RecoverSessions() (int, error) {
 	d.logger.Info("discovered orphaned sessions", "count", len(orphans))
 
 	// Build a set of orphan session titles (without the kas_ prefix) for lookup.
-	orphanTitles := make(map[string]bool, len(orphans))
+	orphanTitles := make(map[string]struct{}, len(orphans))
 	for _, o := range orphans {
-		orphanTitles[o.Title] = true
+		orphanTitles[o.Title] = struct{}{}
 	}
 
 	recovered := 0
@@ -894,17 +1002,54 @@ func (d *Daemon) RecoverSessions() (int, error) {
 			d.logger.Warn("recover sessions: list tasks failed", "repo", e.Path, "err", err)
 			continue
 		}
-		// Agent types to check for each task.
-		agentSuffixes := []string{"coder", "reviewer", "elaborator"}
 		for _, task := range tasks {
-			planName := task.Filename
-			for _, suffix := range agentSuffixes {
-				title := planName + "-" + suffix
-				if orphanTitles[title] {
-					d.logger.Info("re-adopting orphan session",
-						"session", title, "repo", e.Path, "plan", planName)
-					recovered++
+			planName := taskstate.DisplayName(task.Filename)
+			candidates := []struct {
+				title     string
+				agentType string
+				branch    string
+			}{
+				{title: fmt.Sprintf("%s-coder", planName), agentType: session.AgentTypeCoder, branch: task.Branch},
+				{title: fmt.Sprintf("%s-fixer", planName), agentType: session.AgentTypeFixer, branch: task.Branch},
+				{title: fmt.Sprintf("%s-reviewer", planName), agentType: session.AgentTypeReviewer, branch: task.Branch},
+				{title: fmt.Sprintf("%s-elaborator", planName), agentType: session.AgentTypeElaborator},
+			}
+
+			for _, candidate := range candidates {
+				if _, ok := orphanTitles[candidate.title]; !ok {
+					continue
 				}
+
+				data := session.InstanceData{
+					Title:         candidate.title,
+					Path:          e.Path,
+					Branch:        candidate.branch,
+					Status:        session.Running,
+					Program:       "opencode",
+					ExecutionMode: session.ExecutionModeTmux,
+					AutoYes:       true,
+					TaskFile:      task.Filename,
+					AgentType:     candidate.agentType,
+				}
+				if candidate.branch != "" {
+					shared := gitpkg.NewSharedTaskWorktree(e.Path, candidate.branch)
+					data.Worktree = session.GitWorktreeData{
+						RepoPath:     shared.GetRepoPath(),
+						WorktreePath: shared.GetWorktreePath(),
+						SessionName:  candidate.title,
+						BranchName:   candidate.branch,
+					}
+				}
+
+				if err := d.spawner.RestoreTrackedInstance(e.Path, e.Project, task.Filename, candidate.agentType, data); err != nil {
+					d.logger.Warn("recover sessions: restore instance failed",
+						"session", candidate.title, "repo", e.Path, "plan", task.Filename, "err", err)
+					continue
+				}
+
+				d.logger.Info("re-adopted orphan session",
+					"session", candidate.title, "repo", e.Path, "plan", task.Filename, "agent", candidate.agentType)
+				recovered++
 			}
 		}
 	}

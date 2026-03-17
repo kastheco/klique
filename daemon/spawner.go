@@ -60,6 +60,8 @@ type TmuxSpawner struct {
 	sleep              func(time.Duration)
 	kill               func(*session.Instance) error
 	cmdExec            cmd.Executor
+	discoverOrphans    func([]string) ([]tmuxpkg.SessionInfo, error)
+	restoreInstance    func(session.InstanceData) (*session.Instance, error)
 	cleanupGracePeriod time.Duration
 }
 
@@ -100,6 +102,10 @@ func newTmuxSpawnerWithConfig(logger *slog.Logger, drainTimeout time.Duration) *
 		sleep:              time.Sleep,
 		kill:               func(inst *session.Instance) error { return inst.Kill() },
 		cmdExec:            cmd.MakeExecutor(),
+		discoverOrphans: func(known []string) ([]tmuxpkg.SessionInfo, error) {
+			return tmuxpkg.DiscoverAll(cmd.MakeExecutor(), known)
+		},
+		restoreInstance:    session.FromInstanceData,
 		cleanupGracePeriod: 30 * time.Second,
 	}
 }
@@ -237,7 +243,14 @@ func (s *TmuxSpawner) DiscoverOrphanSessions() []tmuxpkg.SessionInfo {
 	}
 	s.mu.Unlock()
 
-	all, err := tmuxpkg.DiscoverAll(cmd.MakeExecutor(), known)
+	discover := s.discoverOrphans
+	if discover == nil {
+		discover = func(known []string) ([]tmuxpkg.SessionInfo, error) {
+			return tmuxpkg.DiscoverAll(cmd.MakeExecutor(), known)
+		}
+	}
+
+	all, err := discover(known)
 	if err != nil {
 		s.logger.Warn("discover tmux sessions failed", "err", err)
 		return []tmuxpkg.SessionInfo{}
@@ -253,6 +266,44 @@ func (s *TmuxSpawner) DiscoverOrphanSessions() []tmuxpkg.SessionInfo {
 		}
 	}
 	return orphans
+}
+
+// RestoreTrackedInstance re-adopts a previously running agent instance into the
+// spawner's tracking maps.
+func (s *TmuxSpawner) RestoreTrackedInstance(repoPath, project, planFile, agentType string, data session.InstanceData) error {
+	restore := s.restoreInstance
+	if restore == nil {
+		restore = session.FromInstanceData
+	}
+
+	inst, err := restore(data)
+	if err != nil {
+		return err
+	}
+
+	key := instanceKey(repoPath, planFile, agentType)
+	s.mu.Lock()
+	s.instances[key] = inst
+	s.planFileByKey[key] = planFile
+	s.agentTypeByKey[key] = agentType
+	s.projectByKey[key] = project
+	s.mu.Unlock()
+	return nil
+}
+
+// InstancesForRepo returns a snapshot of tracked instances for the given repo.
+func (s *TmuxSpawner) InstancesForRepo(repoPath string) []*session.Instance {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]*session.Instance, 0, len(s.instances))
+	for _, inst := range s.instances {
+		if inst == nil || inst.Path != repoPath {
+			continue
+		}
+		out = append(out, inst)
+	}
+	return out
 }
 
 // instanceKey returns the map key for the given repo path, plan file, and agent
