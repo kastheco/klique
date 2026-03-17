@@ -215,10 +215,32 @@ func tmuxBrowserMouseTarget(t *testing.T, view, needle string) (int, int) {
 	return 0, 0
 }
 
-func TestTmuxBrowserOverlay_HandleMouse_TruncatedTitleMatchesRenderedRow(t *testing.T) {
-	items := []TmuxBrowserItem{{Name: "sess", Title: "this-is-a-very-long-session-title-that-truncates", Created: time.Now()}}
+func TestTmuxBrowserOverlay_HandleMouse_TitleFitsWithinMaxWidth(t *testing.T) {
+	// Title is 48 chars — well under tmuxBrowserMaxTitleWidth (60), so it should
+	// be displayed in full (no truncation) and remain clickable.
+	title := "this-is-a-very-long-session-title-that-truncates"
+	items := []TmuxBrowserItem{{Name: "sess", Title: title, Created: time.Now()}}
 	b := NewTmuxBrowserOverlay(items)
-	renderedTitle := truncateStr(items[0].Title, 28)
+
+	// The full title must appear because titleColWidth == len(title) here.
+	assert.Equal(t, len([]rune(title)), b.titleColWidth)
+	renderedTitle := truncateStr(title, b.titleColWidth) // no-op truncation
+	x, y := tmuxBrowserMouseTarget(t, b.View(), renderedTitle)
+
+	result := b.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "attach", result.Action)
+}
+
+func TestTmuxBrowserOverlay_HandleMouse_TitleTruncatedAtMaxWidth(t *testing.T) {
+	// Title exceeds tmuxBrowserMaxTitleWidth — should be truncated at the cap.
+	title := strings.Repeat("x", tmuxBrowserMaxTitleWidth+10)
+	items := []TmuxBrowserItem{{Name: "sess", Title: title, Created: time.Now()}}
+	b := NewTmuxBrowserOverlay(items)
+
+	assert.Equal(t, tmuxBrowserMaxTitleWidth, b.titleColWidth)
+	renderedTitle := truncateStr(title, tmuxBrowserMaxTitleWidth)
 	x, y := tmuxBrowserMouseTarget(t, b.View(), renderedTitle)
 
 	result := b.HandleMouse(x, y, tea.MouseLeft)
@@ -240,4 +262,81 @@ func TestTmuxBrowserOverlay_HandleMouse_PrefixMatchUsesClickedRow(t *testing.T) 
 	assert.True(t, result.Dismissed)
 	assert.Equal(t, "attach", result.Action)
 	assert.Equal(t, 1, b.selectedIdx)
+}
+
+func TestTmuxBrowserOverlay_AutoWidthExpandsForLongTitle(t *testing.T) {
+	// "short" (5 chars) uses tmuxBrowserMinTitleWidth (20) and hits the
+	// minInnerWidth floor, so its modal is narrow.
+	// The long title (34 chars) pushes titleColWidth+fixedRowCost above the
+	// floor, making the modal measurably wider.
+	shortItems := []TmuxBrowserItem{
+		{Name: "kas_short", Title: "short", Created: time.Now()},
+	}
+	// 34 chars — long enough that titleColWidth(34)+fixedRowCost(21)=55 > minInnerWidth(54).
+	longTitle := "api-response-logging-review-long-1"
+	longItems := []TmuxBrowserItem{
+		{Name: "kas_long", Title: longTitle, Created: time.Now()},
+	}
+
+	bShort := NewTmuxBrowserOverlay(shortItems)
+	bLong := NewTmuxBrowserOverlay(longItems)
+
+	assert.Greater(t, bLong.width, bShort.width,
+		"modal should be wider when session names are longer")
+	assert.Contains(t, stripANSI(bLong.View()), longTitle,
+		"full session title must be visible without truncation")
+}
+
+func TestTmuxBrowserOverlay_AutoWidthMinimumForShortTitles(t *testing.T) {
+	items := []TmuxBrowserItem{
+		{Name: "kas_a", Title: "short", Created: time.Now()},
+	}
+	b := NewTmuxBrowserOverlay(items)
+
+	// Even with a short title the modal must be at least wide enough for the hint.
+	innerWidth := b.width - tmuxBrowserBorderCost
+	assert.GreaterOrEqual(t, innerWidth, tmuxBrowserMinInnerWidth,
+		"inner width must accommodate the hint line")
+}
+
+func TestTmuxBrowserOverlay_BadgeWidthIncludedInAutoWidth(t *testing.T) {
+	// Use a title long enough that the row cost exceeds the minInnerWidth floor
+	// both with and without a badge, so the badge actually widens the modal.
+	// 34 chars: titleColWidth(34)+fixedRowCost(21)=55 (no badge), +badgeWidth(11)=66 (badge).
+	longTitle := "api-response-logging-review-long-1"
+	plain := []TmuxBrowserItem{
+		{Name: "kas_plain", Title: longTitle, Created: time.Now(), Managed: false},
+	}
+	managed := []TmuxBrowserItem{
+		{Name: "kas_managed", Title: longTitle, Created: time.Now(), Managed: true, AgentType: "reviewer"},
+	}
+
+	bPlain := NewTmuxBrowserOverlay(plain)
+	bManaged := NewTmuxBrowserOverlay(managed)
+
+	assert.Greater(t, bManaged.width, bPlain.width,
+		"modal must be wider when badges are present")
+}
+
+func TestTmuxBrowserOverlay_SetSizeCapsWidth(t *testing.T) {
+	// Create an overlay with a long title that would prefer a wide modal.
+	items := []TmuxBrowserItem{
+		{Name: "kas_long", Title: "api-response-logging-review-1", Created: time.Now()},
+	}
+	b := NewTmuxBrowserOverlay(items)
+	preferredWidth := b.width
+
+	// Simulate a narrow terminal — width must be capped.
+	narrowTerminal := preferredWidth - 5
+	if narrowTerminal < 10 {
+		narrowTerminal = 10
+	}
+	b.SetSize(narrowTerminal, 40)
+	assert.LessOrEqual(t, b.width, narrowTerminal,
+		"overlay must not exceed the terminal width")
+
+	// A wide terminal must not shrink the computed preferred width.
+	b.SetSize(preferredWidth+50, 40)
+	assert.Equal(t, preferredWidth, b.width,
+		"wide terminal must preserve content-derived width")
 }

@@ -23,23 +23,79 @@ type TmuxBrowserItem struct {
 	Status    string // "running"/"ready"/"loading"/"paused" (managed only)
 }
 
+const (
+	// tmuxBrowserMinTitleWidth is the minimum column width reserved for the session title.
+	tmuxBrowserMinTitleWidth = 20
+	// tmuxBrowserMaxTitleWidth caps the title column so the modal stays readable.
+	tmuxBrowserMaxTitleWidth = 60
+	// tmuxBrowserFixedRowCost is the number of columns in a session row besides the
+	// title column: "▸ " prefix (2) + " " (1) + age-field (8) + " " (1) +
+	// attached-indicator (2) + max-dims "999×999" (7) = 21.
+	tmuxBrowserFixedRowCost = 21
+	// tmuxBrowserMaxBadgeWidth is the rendered width of the widest badge " [reviewer]".
+	tmuxBrowserMaxBadgeWidth = 11
+	// tmuxBrowserMinInnerWidth ensures the hint line fits without wrapping.
+	// Longest hint: "↑↓ navigate · k kill · a adopt · o attach · esc close" = 54 cells.
+	tmuxBrowserMinInnerWidth = 54
+	// tmuxBrowserBorderCost is the extra columns added by the FloatingBorder style.
+	tmuxBrowserBorderCost = 6
+)
+
 // TmuxBrowserOverlay shows orphaned tmux sessions with kill/adopt/attach actions.
 type TmuxBrowserOverlay struct {
-	sessions    []TmuxBrowserItem
-	filtered    []int // indices into sessions
-	selectedIdx int
-	searchQuery string
-	width       int
+	sessions      []TmuxBrowserItem
+	filtered      []int // indices into sessions
+	selectedIdx   int
+	searchQuery   string
+	width         int // actual overlay outer width (incl. border)
+	titleColWidth int // computed title column width for current sessions
+	termWidth     int // terminal width from SetSize; 0 = unset
 }
 
 // NewTmuxBrowserOverlay creates a browser overlay from discovered orphan sessions.
+// The overlay width auto-sizes to fit the longest session title.
 func NewTmuxBrowserOverlay(items []TmuxBrowserItem) *TmuxBrowserOverlay {
 	b := &TmuxBrowserOverlay{
 		sessions: items,
-		width:    56,
 	}
+	b.computeDimensions()
 	b.applyFilter()
 	return b
+}
+
+// computeDimensions derives titleColWidth and width from the current sessions.
+// It should be called after sessions change or when the terminal width updates.
+func (b *TmuxBrowserOverlay) computeDimensions() {
+	titleColWidth := tmuxBrowserMinTitleWidth
+	hasBadge := false
+	for _, item := range b.sessions {
+		l := len([]rune(item.Title))
+		if l > titleColWidth {
+			titleColWidth = l
+		}
+		if item.Managed {
+			hasBadge = true
+		}
+	}
+	if titleColWidth > tmuxBrowserMaxTitleWidth {
+		titleColWidth = tmuxBrowserMaxTitleWidth
+	}
+	b.titleColWidth = titleColWidth
+
+	innerWidth := titleColWidth + tmuxBrowserFixedRowCost
+	if hasBadge {
+		innerWidth += tmuxBrowserMaxBadgeWidth
+	}
+	if innerWidth < tmuxBrowserMinInnerWidth {
+		innerWidth = tmuxBrowserMinInnerWidth
+	}
+
+	preferred := innerWidth + tmuxBrowserBorderCost
+	if b.termWidth > 0 && preferred > b.termWidth {
+		b.width = b.termWidth
+	} else {
+		b.width = preferred
+	}
 }
 
 func (b *TmuxBrowserOverlay) applyFilter() {
@@ -127,8 +183,8 @@ func (b *TmuxBrowserOverlay) render() string {
 				badge = st.Muted.Render(" [" + badgeText + "]")
 			}
 
-			label := fmt.Sprintf("%-28s %8s %s%s",
-				truncateStr(item.Title, 28), age, attachedIndicator, dims) + badge
+			label := fmt.Sprintf("%-*s %8s %s%s",
+				b.titleColWidth, truncateStr(item.Title, b.titleColWidth), age, attachedIndicator, dims) + badge
 
 			if i == b.selectedIdx {
 				s.WriteString(st.SelectedItem.Width(innerWidth).Render("▸ " + label))
@@ -148,9 +204,11 @@ func (b *TmuxBrowserOverlay) render() string {
 	return st.FloatingBorder.Width(b.width).Render(s.String())
 }
 
-// SetSize updates the overlay width.
+// SetSize stores the terminal dimensions and recomputes the overlay width,
+// using the terminal width as an upper cap on the content-derived preferred width.
 func (b *TmuxBrowserOverlay) SetSize(width, height int) {
-	b.width = width
+	b.termWidth = width
+	b.computeDimensions()
 }
 
 // HandleKey implements Overlay. Processes a key event and returns a Result.
@@ -239,7 +297,7 @@ func (b *TmuxBrowserOverlay) HandleMouse(relX, relY int, button tea.MouseButton)
 	line := stripANSI(lines[relY])
 	for i, idx := range b.filtered {
 		item := b.sessions[idx]
-		titleField := fmt.Sprintf("%-28s", truncateStr(item.Title, 28))
+		titleField := fmt.Sprintf("%-*s", b.titleColWidth, truncateStr(item.Title, b.titleColWidth))
 		if lineContainsTextBoundary(line, titleField) {
 			b.selectedIdx = i
 			return Result{Dismissed: true, Action: "attach"}
