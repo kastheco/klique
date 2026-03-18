@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -59,8 +60,12 @@ func TestExecuteStatus_HappyPath(t *testing.T) {
 	// orphan section
 	assert.Contains(t, output, "orphan tmux sessions:")
 	assert.Contains(t, output, "kas_orphan-sess")
-	// hints section
+	// hints: ready task → implement hint, paused instance → resume hint, orphan → tmux hints
 	assert.Contains(t, output, "hints:")
+	assert.Contains(t, output, "kas task implement <task-name>")
+	assert.Contains(t, output, "kas instance resume <title>")
+	assert.Contains(t, output, "kas tmux adopt <session> <title>")
+	assert.Contains(t, output, "kas tmux kill <session>")
 }
 
 func TestExecuteStatus_Empty(t *testing.T) {
@@ -69,7 +74,7 @@ func TestExecuteStatus_Empty(t *testing.T) {
 	state := newTestStateFromRaw(t, []instanceTestData{})
 	ex := cmd_test.NewMockExecutor()
 	ex.OutputFunc = func(_ *exec.Cmd) ([]byte, error) {
-		return nil, &exec.ExitError{}
+		return nil, errors.New("no tmux")
 	}
 
 	output := executeStatus(state, store, project, ex, "text")
@@ -92,7 +97,7 @@ func TestExecuteStatus_JSON(t *testing.T) {
 	})
 	ex := cmd_test.NewMockExecutor()
 	ex.OutputFunc = func(_ *exec.Cmd) ([]byte, error) {
-		return nil, &exec.ExitError{}
+		return nil, errors.New("no tmux")
 	}
 
 	output := executeStatus(state, store, project, ex, "json")
@@ -110,7 +115,7 @@ func TestExecuteStatus_NilStore(t *testing.T) {
 	})
 	ex := cmd_test.NewMockExecutor()
 	ex.OutputFunc = func(_ *exec.Cmd) ([]byte, error) {
-		return nil, &exec.ExitError{}
+		return nil, errors.New("no tmux")
 	}
 
 	output := executeStatus(state, nil, "test-project", ex, "text")

@@ -74,9 +74,11 @@ func executeStatus(state config.StateManager, store taskstore.Store, project str
 	}
 
 	// 2. Instances section.
+	// Load records once; reuse them for orphan detection below to avoid a
+	// second deserialisation inside buildKnownNames.
 	instances := make([]statusInstance, 0)
-	records, err := loadInstanceRecords(state)
-	if err == nil {
+	records, recordsErr := loadInstanceRecords(state)
+	if recordsErr == nil {
 		for _, r := range records {
 			agentType := r.AgentType
 			if agentType == "" && (r.SoloAgent || r.TaskFile == "") {
@@ -93,9 +95,14 @@ func executeStatus(state config.StateManager, store taskstore.Store, project str
 	}
 
 	// 3. Orphan sessions section.
+	// Build known names from the already-loaded records instead of calling
+	// buildKnownNames (which would deserialise the state a second time).
 	orphans := make([]statusOrphan, 0)
-	known, knownErr := buildKnownNames(state)
-	if knownErr == nil {
+	if recordsErr == nil {
+		known := make(map[string]struct{}, len(records))
+		for _, r := range records {
+			known[kasTmuxName(r.Title)] = struct{}{}
+		}
 		rows, discErr := discoverKasSessions(ex, known)
 		if discErr == nil {
 			now := time.Now()
