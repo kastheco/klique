@@ -17,6 +17,7 @@ require (
 	github.com/getsentry/sentry-go v0.43.0
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0
+	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mattn/go-runewidth v0.0.20
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
@@ -67,7 +68,6 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mark3labs/mcp-go v0.45.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
