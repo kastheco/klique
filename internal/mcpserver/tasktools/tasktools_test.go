@@ -392,3 +392,187 @@ func TestTaskCreate_StoreNotConfigured(t *testing.T) {
 	assert.True(t, result.IsError, "task_create must error when store is nil")
 	assert.Equal(t, "task store not configured", resultText(t, result))
 }
+
+// setupServerWithGateway creates an in-memory test store and signal gateway,
+// builds an mcpserver.Server, and registers tasktools. Both the store and
+// gateway are automatically closed when the test ends.
+func setupServerWithGateway(t *testing.T) *mcpserver.Server {
+	t.Helper()
+	store := taskstore.NewTestStore(t)
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+	srv := mcpserver.NewServer("0.1.0", store, gw, testProject)
+	tasktools.Register(srv)
+	return srv
+}
+
+// taskTransitionResult is the JSON payload returned by the task_transition tool.
+type taskTransitionResult struct {
+	Filename  string `json:"filename"`
+	NewStatus string `json:"new_status"`
+}
+
+// signalCreateResult is the JSON payload returned by the signal_create tool.
+type signalCreateResult struct {
+	PlanFile   string `json:"plan_file"`
+	SignalType string `json:"signal_type"`
+}
+
+// TestTaskTransition_AppliesEvent verifies that task_transition applies a valid
+// FSM event and returns the new status in JSON.
+func TestTaskTransition_AppliesEvent(t *testing.T) {
+	srv := setupServerWithGateway(t)
+	seedTask(t, srv, "my-task", "# My Task")
+
+	result := callTool(t, srv, "task_transition", map[string]any{
+		"filename": "my-task",
+		"event":    "plan_start",
+	})
+	assert.False(t, result.IsError, "task_transition should not return an error for valid event")
+
+	text := resultText(t, result)
+	var resp taskTransitionResult
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "my-task", resp.Filename)
+	assert.Equal(t, "planning", resp.NewStatus)
+}
+
+// TestTaskTransition_InvalidEvent verifies that task_transition returns an error
+// result when an unknown event name is given.
+func TestTaskTransition_InvalidEvent(t *testing.T) {
+	srv := setupServerWithGateway(t)
+	seedTask(t, srv, "my-task", "# My Task")
+
+	result := callTool(t, srv, "task_transition", map[string]any{
+		"filename": "my-task",
+		"event":    "not_a_real_event",
+	})
+	assert.True(t, result.IsError, "task_transition must error for unknown event")
+	assert.Contains(t, resultText(t, result), "not_a_real_event")
+}
+
+// TestTaskTransition_InvalidTransition verifies that task_transition returns an
+// error result when the event is known but invalid for the current state.
+func TestTaskTransition_InvalidTransition(t *testing.T) {
+	srv := setupServerWithGateway(t)
+	// Task is in "ready" status; review_approved is only valid from "reviewing".
+	seedTask(t, srv, "my-task", "# My Task")
+
+	result := callTool(t, srv, "task_transition", map[string]any{
+		"filename": "my-task",
+		"event":    "review_approved",
+	})
+	assert.True(t, result.IsError, "task_transition must error for invalid FSM transition")
+}
+
+// TestTaskTransition_NotFound verifies that task_transition returns an error
+// result when the task does not exist in the store.
+func TestTaskTransition_NotFound(t *testing.T) {
+	srv := setupServerWithGateway(t)
+
+	result := callTool(t, srv, "task_transition", map[string]any{
+		"filename": "no-such-task",
+		"event":    "plan_start",
+	})
+	assert.True(t, result.IsError, "task_transition must error for missing task")
+	assert.Contains(t, resultText(t, result), "no-such-task")
+}
+
+// TestTaskTransition_StoreNotConfigured verifies that task_transition returns a
+// clear error when the server was constructed without a store.
+func TestTaskTransition_StoreNotConfigured(t *testing.T) {
+	srv := mcpserver.NewServer("0.1.0", nil, nil, testProject)
+	tasktools.Register(srv)
+
+	result := callTool(t, srv, "task_transition", map[string]any{
+		"filename": "anything",
+		"event":    "plan_start",
+	})
+	assert.True(t, result.IsError, "task_transition must error when store is nil")
+	assert.Equal(t, "task store not configured", resultText(t, result))
+}
+
+// TestSignalCreate_EmitsSignal verifies that signal_create inserts a pending
+// signal into the gateway.
+func TestSignalCreate_EmitsSignal(t *testing.T) {
+	srv := setupServerWithGateway(t)
+
+	result := callTool(t, srv, "signal_create", map[string]any{
+		"signal_type": "planner_finished",
+		"plan_file":   "my-plan",
+	})
+	assert.False(t, result.IsError, "signal_create should not return an error")
+
+	text := resultText(t, result)
+	var resp signalCreateResult
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "my-plan", resp.PlanFile)
+	assert.Equal(t, "planner_finished", resp.SignalType)
+
+	// Verify the signal was actually inserted into the gateway.
+	signals, err := srv.Gateway().List(testProject, taskstore.SignalPending)
+	require.NoError(t, err)
+	require.Len(t, signals, 1)
+	assert.Equal(t, "my-plan", signals[0].PlanFile)
+	assert.Equal(t, "planner_finished", signals[0].SignalType)
+}
+
+// TestSignalCreate_WithPayload verifies that signal_create correctly stores a
+// structured payload for implement_task_finished.
+func TestSignalCreate_WithPayload(t *testing.T) {
+	srv := setupServerWithGateway(t)
+	payload := `{"wave_number":2,"task_number":3}`
+
+	result := callTool(t, srv, "signal_create", map[string]any{
+		"signal_type": "implement_task_finished",
+		"plan_file":   "my-plan",
+		"payload":     payload,
+	})
+	assert.False(t, result.IsError, "signal_create should not return an error with valid payload")
+
+	signals, err := srv.Gateway().List(testProject, taskstore.SignalPending)
+	require.NoError(t, err)
+	require.Len(t, signals, 1)
+	assert.Equal(t, payload, signals[0].Payload)
+}
+
+// TestSignalCreate_InvalidType verifies that signal_create returns an error
+// result for an unknown signal type.
+func TestSignalCreate_InvalidType(t *testing.T) {
+	srv := setupServerWithGateway(t)
+
+	result := callTool(t, srv, "signal_create", map[string]any{
+		"signal_type": "not_a_real_signal",
+		"plan_file":   "my-plan",
+	})
+	assert.True(t, result.IsError, "signal_create must error for unknown signal type")
+	assert.Contains(t, resultText(t, result), "not_a_real_signal")
+}
+
+// TestSignalCreate_InvalidPayload verifies that signal_create returns an error
+// result when the payload is invalid for the given signal type.
+func TestSignalCreate_InvalidPayload(t *testing.T) {
+	srv := setupServerWithGateway(t)
+
+	// elaborator_finished does not accept a payload.
+	result := callTool(t, srv, "signal_create", map[string]any{
+		"signal_type": "elaborator_finished",
+		"plan_file":   "my-plan",
+		"payload":     "unexpected payload",
+	})
+	assert.True(t, result.IsError, "signal_create must error for invalid payload")
+}
+
+// TestSignalCreate_NilGateway verifies that signal_create returns a clear error
+// when the server was constructed without a signal gateway.
+func TestSignalCreate_NilGateway(t *testing.T) {
+	srv := setupServer(t) // store-only, no gateway
+
+	result := callTool(t, srv, "signal_create", map[string]any{
+		"signal_type": "planner_finished",
+		"plan_file":   "my-plan",
+	})
+	assert.True(t, result.IsError, "signal_create must error when gateway is nil")
+	assert.Equal(t, "signal gateway not configured", resultText(t, result))
+}
