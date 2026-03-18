@@ -341,3 +341,168 @@ func TestContextMenu_LeftAtRootIsNoop(t *testing.T) {
 	require.Len(t, current, 1)
 	assert.Equal(t, "kill", current[0].Label)
 }
+
+// --- View / rendering tests added in Task 2 ---
+
+// TestContextMenu_View_ParentShowsArrow verifies that items with Children are rendered
+// with a "→" suffix to indicate drill-in navigation, while leaf items are not.
+func TestContextMenu_View_ParentShowsArrow(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+	view := cm.View()
+
+	var sessionLine, killLine string
+	for _, l := range strings.Split(view, "\n") {
+		clean := stripANSI(l)
+		if strings.Contains(clean, "1 session") {
+			sessionLine = clean
+		}
+		if strings.Contains(clean, "2 kill") {
+			killLine = clean
+		}
+	}
+	require.NotEmpty(t, sessionLine, "should find session item line")
+	require.NotEmpty(t, killLine, "should find kill item line")
+	assert.Contains(t, sessionLine, "→", "parent item must have → suffix")
+	assert.NotContains(t, killLine, "→", "leaf item must not have → suffix")
+}
+
+// TestContextMenu_View_SubMenuShowsTitle verifies that navigating into a sub-menu
+// renders a "← title" header line, and that the root view does not show a header.
+func TestContextMenu_View_SubMenuShowsTitle(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+
+	// Root view must not show a sub-menu header.
+	viewBefore := cm.View()
+	for _, line := range strings.Split(viewBefore, "\n") {
+		assert.NotContains(t, stripANSI(line), "← session",
+			"root view must not show sub-menu header")
+	}
+
+	// After drilling in the header must appear.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	viewAfter := cm.View()
+
+	var found bool
+	for _, line := range strings.Split(viewAfter, "\n") {
+		if strings.Contains(stripANSI(line), "← session") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "sub-menu view must contain ← session header")
+}
+
+// TestContextMenu_View_SubMenuHintShowsBack verifies that the hint inside a sub-menu
+// includes "← back" and uses "space select" (matching the root hint wording).
+func TestContextMenu_View_SubMenuHintShowsBack(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}) // drill in
+
+	allText := stripANSI(strings.Join(strings.Split(cm.View(), "\n"), " "))
+	assert.Contains(t, allText, "← back", "sub-menu hint must include ← back")
+	assert.Contains(t, allText, "space select",
+		"sub-menu hint must say 'space select' (not 'enter select')")
+}
+
+// TestContextMenu_HandleMouse_DrillInOnParent verifies that left-clicking a parent item
+// (one that has Children) drills into the sub-menu without dismissing the overlay.
+func TestContextMenu_HandleMouse_DrillInOnParent(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	// The rendered row includes the "→" suffix; use it as the needle so we confirm
+	// the view actually shows the parent indicator.
+	view := cm.View()
+	x, y := contextMenuMouseTarget(t, view, "1 session →")
+
+	result := cm.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.Equal(t, Result{}, result, "clicking a parent item must not dismiss the overlay")
+	current := cm.CurrentItems()
+	require.Len(t, current, 1)
+	assert.Equal(t, "attach", current[0].Label)
+}
+
+// TestContextMenu_HandleMouse_SelectInSubMenu verifies that clicking a leaf item
+// inside a sub-menu dismisses the overlay and returns the correct action.
+func TestContextMenu_HandleMouse_SelectInSubMenu(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+				{Label: "detach", Action: "detach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill into the sub-menu first.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Len(t, cm.CurrentItems(), 2)
+
+	view := cm.View()
+	x, y := contextMenuMouseTarget(t, view, "2 detach")
+
+	result := cm.HandleMouse(x, y, tea.MouseLeft)
+
+	assert.True(t, result.Dismissed, "clicking a leaf in a sub-menu must dismiss the overlay")
+	assert.Equal(t, "detach", result.Action)
+}
+
+// TestContextMenu_CalculateWidth_IncludesChildren verifies that the menu width is
+// determined by the widest label anywhere in the full item tree, including child items.
+// Drilling into a sub-menu must not shrink the border.
+func TestContextMenu_CalculateWidth_IncludesChildren(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label: "cat",
+			Children: []ContextMenuItem{
+				// This long label must drive the menu width even before drilling in.
+				{Label: "a very long child label wider than the parent", Action: "long"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+	widthBefore := cm.width
+
+	// Drill in — width must remain the same because it was computed from the full tree.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	widthAfter := cm.width
+
+	assert.Equal(t, widthBefore, widthAfter,
+		"width must be stable after drill-in; set by the widest label in the full tree")
+}

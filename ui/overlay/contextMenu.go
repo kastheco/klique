@@ -64,17 +64,40 @@ func NewContextMenu(items []ContextMenuItem) *ContextMenu {
 	return c
 }
 
+// displayLabel returns the canonical display text for a menu item: 1-based index
+// number, a space, the item label, and (for parent items) a " →" suffix.
+// Using this helper in calculateWidth, HandleMouse, and View keeps measured,
+// matched, and rendered strings consistent.
+func (c *ContextMenu) displayLabel(index int, item ContextMenuItem) string {
+	label := fmt.Sprintf("%d %s", index, item.Label)
+	if len(item.Children) > 0 {
+		label += " →"
+	}
+	return label
+}
+
 func (c *ContextMenu) calculateWidth() {
 	maxWidth := 0
-	for i, item := range c.items {
-		label := fmt.Sprintf("%d %s", i+1, item.Label)
-		if len(item.Children) > 0 {
-			label += " →"
-		}
-		if w := runewidth.StringWidth(label); w > maxWidth {
-			maxWidth = w
+	// Recurse over rootItems so width is stable across all drill levels.
+	var measureItems func(items []ContextMenuItem)
+	measureItems = func(items []ContextMenuItem) {
+		for i, item := range items {
+			label := fmt.Sprintf("%d %s", i+1, item.Label)
+			if len(item.Children) > 0 {
+				label += " →"
+				// Account for the "← Label" header shown when inside this sub-menu.
+				headerW := runewidth.StringWidth("← " + item.Label)
+				if headerW > maxWidth {
+					maxWidth = headerW
+				}
+				measureItems(item.Children)
+			}
+			if w := runewidth.StringWidth(label); w > maxWidth {
+				maxWidth = w
+			}
 		}
 	}
+	measureItems(c.rootItems)
 	placeholder := "\uf002 Type to filter..."
 	if w := runewidth.StringWidth(placeholder); w > maxWidth {
 		maxWidth = w
@@ -275,8 +298,11 @@ func (c *ContextMenu) HandleMouse(relX, relY int, button tea.MouseButton) Result
 
 	line := stripANSI(lines[relY])
 	for i, fi := range c.filtered {
-		itemText := fmt.Sprintf("%d %s", fi.origIdx, fi.item.Label)
-		if strings.Contains(line, itemText) {
+		// Use displayLabel so the matched text always equals what is rendered
+		// (including the " →" suffix for parent items). lineContainsTextBoundary
+		// prevents false matches on shared prefixes (e.g. "1 x" inside "1 xy").
+		itemText := c.displayLabel(fi.origIdx, fi.item)
+		if lineContainsTextBoundary(line, itemText) {
 			c.selectedIdx = i
 			if fi.item.Disabled {
 				return Result{}
@@ -305,9 +331,9 @@ func (c *ContextMenu) View() string {
 		innerW = 6
 	}
 
-	// Show a back-navigation header when inside a sub-menu.
+	// Show a muted back-navigation header when inside a sub-menu.
 	if c.title != "" {
-		b.WriteString(st.Title.Render("← " + c.title))
+		b.WriteString(st.Muted.Render("← " + c.title))
 		b.WriteString("\n")
 	}
 
@@ -322,22 +348,21 @@ func (c *ContextMenu) View() string {
 		b.WriteString(st.DisabledItem.Width(innerW).Render("No matches"))
 	} else {
 		for i, fi := range c.filtered {
-			label := fi.item.Label
-			if len(fi.item.Children) > 0 {
-				label += " →"
-			}
-			numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
-			labelStr := fmt.Sprintf(" %s", label)
+			fullLabel := c.displayLabel(fi.origIdx, fi.item)
 
 			var line string
 			if fi.item.Disabled {
-				line = st.DisabledItem.Width(innerW).Render(
-					fmt.Sprintf("%d %s", fi.origIdx, label))
+				line = st.DisabledItem.Width(innerW).Render(fullLabel)
 			} else if i == c.selectedIdx {
-				line = st.SelectedItem.Width(innerW).Render(
-					fmt.Sprintf("%d %s", fi.origIdx, label))
+				line = st.SelectedItem.Width(innerW).Render(fullLabel)
 			} else {
-				line = st.Item.Width(innerW).Render(numPrefix + labelStr)
+				numPrefix := st.NumberPrefix.Render(fmt.Sprintf("%d", fi.origIdx))
+				itemLabel := " " + fi.item.Label
+				if len(fi.item.Children) > 0 {
+					// Render the arrow suffix in muted colour for normal (unselected) items.
+					itemLabel += " " + st.Muted.Render("→")
+				}
+				line = st.Item.Width(innerW).Render(numPrefix + itemLabel)
 			}
 			b.WriteString(line)
 			if i < len(c.filtered)-1 {
@@ -348,7 +373,7 @@ func (c *ContextMenu) View() string {
 
 	b.WriteString("\n")
 	if len(c.stack) > 0 {
-		b.WriteString(st.Hint.Render("↑↓ nav • enter select • ← back • esc close"))
+		b.WriteString(st.Hint.Render("← back • ↑↓ nav • space select • esc close"))
 	} else {
 		b.WriteString(st.Hint.Render("↑↓ nav • space select • esc close"))
 	}
