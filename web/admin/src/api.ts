@@ -112,3 +112,23 @@ export async function listAuditEvents(project: string): Promise<AuditEvent[]> {
   );
   return raw.map(normalizeAuditEvent);
 }
+
+export type AuditEventFilter = {
+  kind?: string;
+  task?: string;
+  limit?: number;
+};
+
+export async function fetchAuditEvents(
+  project: string,
+  filter?: AuditEventFilter,
+): Promise<AuditEvent[]> {
+  const params = new URLSearchParams();
+  if (filter?.kind) params.append("kind", filter.kind);
+  if (filter?.task) params.set("task", filter.task);
+  if (filter?.limit != null) params.set("limit", String(filter.limit));
+  const qs = params.toString();
+  const url = `/v1/projects/${project}/audit-events${qs ? `?${qs}` : ""}`;
+  const raw = await requestJSON<AuditEventResponse[]>(url);
+  return raw.map(normalizeAuditEvent);
+}

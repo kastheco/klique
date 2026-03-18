@@ -1,0 +1,272 @@
+/* ─── Page layout ─────────────────────────────────────────── */
+
+.page {
+  max-width: 100%;
+}
+
+.heading {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--foreground);
+  margin-bottom: 24px;
+  text-transform: lowercase;
+}
+
+/* ─── Filter bar ──────────────────────────────────────────── */
+
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.filterSelect,
+.filterInput {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filterSelect:focus,
+.filterInput:focus {
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 0 2px var(--glow-amber);
+}
+
+.filterSelect option {
+  background: #1a1b26;
+}
+
+.filterInput {
+  min-width: 200px;
+}
+
+/* ─── Status messages ─────────────────────────────────────── */
+
+.loading {
+  color: var(--foreground-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 4px 0;
+}
+
+.errorMsg {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: 6px;
+}
+
+/* ─── Table wrapper (mobile overflow) ────────────────────── */
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Table ───────────────────────────────────────────────── */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+
+.table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--background);
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--foreground-secondary);
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--card-border);
+  text-transform: lowercase;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: middle;
+}
+
+/* ─── Row states ──────────────────────────────────────────── */
+
+.row {
+  transition: background 0.15s;
+}
+
+.row:last-child td {
+  border-bottom: none;
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.expandable {
+  cursor: pointer;
+}
+
+.expandable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.expanded {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ─── Detail row ──────────────────────────────────────────── */
+
+.detailRow td {
+  background: rgba(255, 255, 255, 0.015);
+  border-left: 3px solid var(--accent-teal);
+  border-bottom: 1px solid var(--card-border);
+  padding: 14px 14px 14px 20px;
+}
+
+.detailPre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ─── Empty cell ──────────────────────────────────────────── */
+
+.emptyCell {
+  text-align: center;
+  color: var(--foreground-tertiary);
+  padding: 32px 14px;
+  font-size: 13px;
+}
+
+/* ─── Timestamp column ────────────────────────────────────── */
+
+.timestamp {
+  color: var(--foreground-tertiary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ─── Level badges ────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.levelInfo {
+  background: rgba(126, 200, 216, 0.12);
+  color: var(--accent-teal);
+}
+
+.levelWarn {
+  background: rgba(240, 168, 104, 0.12);
+  color: var(--accent-amber);
+}
+
+.levelError {
+  background: rgba(255, 107, 107, 0.12);
+  color: #ff6b6b;
+}
+
+/* ─── Kind badges ─────────────────────────────────────────── */
+
+.kindBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.toneLifecycle {
+  background: rgba(126, 200, 216, 0.1);
+  color: var(--accent-teal);
+}
+
+.tonePlan {
+  background: rgba(240, 168, 104, 0.1);
+  color: var(--accent-amber);
+}
+
+.toneWave {
+  background: rgba(180, 150, 255, 0.1);
+  color: #b496ff;
+}
+
+.toneOps {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--foreground-secondary);
+}
+
+.toneError {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+}
+
+/* ─── Message column ──────────────────────────────────────── */
+
+.message {
+  color: var(--foreground);
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Task file links ─────────────────────────────────────── */
+
+.taskLink {
+  color: var(--accent-teal);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s, color 0.15s;
+}
+
+.taskLink:hover {
+  text-decoration-color: var(--accent-teal);
+}
+
+/* ─── Inline empty dash ───────────────────────────────────── */
+
+.empty {
+  color: var(--foreground-tertiary);
+}
