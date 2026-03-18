@@ -1,0 +1,51 @@
+# prerequisites
+
+Before installing kasmos, make sure you have the required tools and at least one supported AI agent CLI.
+
+## required
+
+| tool | purpose | install |
+|------|---------|---------|
+| **tmux** | session management for agent instances | [tmux wiki](https://github.com/tmux/tmux/wiki/Installing) |
+| **gh** | GitHub CLI for PR creation and auth | [cli.github.com](https://cli.github.com/) |
+
+Both are required — kasmos will not function correctly without them.
+
+## supported AI harnesses
+
+kasmos auto-detects installed AI CLIs during `kas setup`. The setup wizard currently probes for three harnesses natively:
+
+| harness | CLI | detection |
+|---------|-----|-----------|
+| **opencode** | `opencode` | auto-detected |
+| **claude** | `claude` | auto-detected |
+| **codex** | `codex` | auto-detected |
+
+The following CLIs are supported at runtime (kasmos can spawn them) but are not auto-detected by the wizard's built-in registry:
+
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) — `gemini`
+- [Amp](https://ampcode.com) — `amp`
+- [Aider](https://aider.chat) — `aider`
+
+You need **at least one** AI harness installed. Having multiple harnesses allows you to assign different roles (planner, coder, reviewer) to different CLIs.
+
+## unsupported or custom harnesses
+
+If you use a harness that the wizard doesn't detect, you can still wire it up manually:
+
+1. Run `kas setup` and select a supported harness as a placeholder
+2. Edit `<repo-root>/.kasmos/config.toml` after the wizard completes
+3. Set `program` to the exact command string (including any flags) for your CLI
+
+```toml
+[agents.coder]
+enabled = true
+program = "aider --model gpt-4o"
+execution_mode = "headless"
+```
+
+See [setup wizard](./setup-wizard) for the full config schema.
+
+## Go version
+
+If you are building from source or using `go install`, Go 1.24 or later is required.

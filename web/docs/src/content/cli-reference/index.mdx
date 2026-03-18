@@ -1,0 +1,42 @@
+# cli reference
+
+The kasmos CLI is invoked as `kas`. It must be run from within a git repository for most commands (the binary exits with an error otherwise).
+
+## root command
+
+```
+kas [flags]
+```
+
+Running `kas` with no subcommand launches the interactive terminal UI (Bubble Tea). The following root-level flags are available:
+
+| flag | default | description |
+|------|---------|-------------|
+| `-p, --program` | from config | AI program to run in new instances (e.g. `claude`, `opencode`) |
+| `-y, --autoyes` | false | automatically accept prompts in all instances |
+
+## registered subcommands
+
+| command | alias | description |
+|---------|-------|-------------|
+| `kas setup` | `init` | interactive wizard — configure harnesses, write config, scaffold project files |
+| `kas task` | `t` | manage task lifecycle (list, register, implement, transition, push, pr, merge) |
+| `kas serve` | — | start the task store HTTP server with REST API and optional MCP server |
+| `kas instance` | `i` | manage agent instances (list, kill, pause, resume, send) |
+| `kas audit` | `au` | query audit events from the local SQLite log |
+| `kas tmux` | `tx` | manage orphan tmux sessions not tracked by kasmos |
+| `kas signal` | `sig` | inspect and process agent lifecycle signals |
+| `kas daemon` | `d` | manage the multi-repo background orchestration daemon |
+| `kas monitor` | `mon` | monitor the daemon event stream (SSE) |
+| `kas status` | `st` | show overview of tasks, instances, and orphan tmux sessions |
+| `kas reset` | — | reset all stored instances, clean tmux sessions and worktrees |
+| `kas debug` | — | print config paths and current configuration as JSON |
+| `kas version` | — | print the version number |
+| `kas check` | — | audit skill sync health across all harnesses |
+
+## global behavior
+
+- `kas` requires a git repository in the working directory or any parent directory. If no repository is found, the interactive TUI exits immediately with an error.
+- Most subcommands resolve the project name from the basename of the repository root (e.g. `/home/user/myproject` → project `myproject`).
+- Task store queries fall back to a local SQLite file at `~/.kasmos/taskstore.db` (or `<repo-root>/.kasmos/taskstore.db`) when no remote store is configured.
+- Filenames passed to `kas task` subcommands are normalized: a trailing `.md` extension is stripped automatically.

@@ -1,0 +1,126 @@
+# kas signal
+
+Inspect and process agent lifecycle signals. Signals are the primary mechanism by which agents notify kasmos that a lifecycle phase is complete.
+
+```
+kas signal <subcommand> [flags]
+```
+
+Alias: `kas sig`
+
+## signal types
+
+| signal type | payload | description |
+|-------------|---------|-------------|
+| `planner_finished` | optional JSON or text | planner agent finished writing the plan |
+| `implement_finished` | optional JSON or text | all coder agents finished implementation |
+| `review_approved` | optional JSON or text | reviewer approved the implementation |
+| `review_changes_requested` | optional JSON or text | reviewer requested changes |
+| `implement_task_finished` | `{"wave_number": N, "task_number": N}` | a single coder task in a wave finished |
+| `implement_wave` | `{"wave_number": N}` | a full wave finished |
+| `elaborator_finished` | _(none)_ | elaborator agent finished enriching the plan |
+
+### payload rules
+
+- **FSM signals** (`planner_finished`, `implement_finished`, `review_approved`, `review_changes_requested`): payload is optional. If provided and valid JSON, it is stored verbatim. Plain text is wrapped as `{"body": "..."}`.
+- **`implement_task_finished`**: payload is **required** and must be JSON containing integer fields `wave_number` and `task_number`.
+- **`implement_wave`**: payload is **required** and must be JSON containing an integer `wave_number`.
+- **`elaborator_finished`**: payload must be **empty**.
+
+## subcommands
+
+### list
+
+List all pending signals in the `.kasmos/signals/` directory.
+
+```
+kas signal list
+```
+
+```sh
+kas signal list
+# planner_finished              my-feature
+# implement_wave                my-feature  (wave 2)
+```
+
+Scans three signal categories:
+- FSM event signals (e.g. `implement-finished-my-feature`)
+- Wave signals (e.g. `implement-wave-2-my-feature`)
+- Elaboration signals (e.g. `elaborator-finished-my-feature`)
+
+Prints `no pending signals` when the directory is empty or missing.
+
+---
+
+### process
+
+Process pending signals and apply FSM transitions.
+
+```
+kas signal process [--once]
+```
+
+```sh
+# continuous polling loop (every 5 seconds, ctrl-c to stop)
+kas signal process
+
+# process one batch and exit
+kas signal process --once
+```
+
+| flag | description |
+|------|-------------|
+| `--once` | process a single batch of signals and exit instead of running the polling loop |
+
+**Processing behavior:**
+- Each signal is moved to a `processing/` subdirectory atomically before the FSM transition is applied (prevents double-processing after crashes).
+- If the plan file is not found in the task store, the signal is dead-lettered into `failed/` with a `.reason` file.
+- If the FSM transition fails (e.g. wrong state), the signal is also dead-lettered.
+- Wave and elaboration signals are consumed atomically without FSM transitions (they are handled by the TUI orchestrator and daemon).
+- In-flight signals from a previous crashed run are recovered automatically from `processing/` on startup.
+
+---
+
+### emit
+
+Emit a signal into the gateway database. This is the primary mechanism for agents to signal completion of a lifecycle phase.
+
+```
+kas signal emit <signal-type> <plan-file> [--payload <json>]
+```
+
+```sh
+# signal that planning finished
+kas signal emit planner_finished my-feature
+
+# signal that a single task in a wave finished
+kas signal emit implement_task_finished my-feature \
+  --payload '{"wave_number": 2, "task_number": 3}'
+
+# signal that an entire wave finished
+kas signal emit implement_wave my-feature \
+  --payload '{"wave_number": 2}'
+
+# signal implementation complete
+kas signal emit implement_finished my-feature
+```
+
+| flag | description |
+|------|-------------|
+| `--payload` | optional JSON payload (required for `implement_task_finished` and `implement_wave`) |
+
+The signal is inserted as a `pending` row in the SQLite gateway database (`signals` table). The daemon or `kas signal process` picks it up and applies the corresponding FSM transition.
+
+## legacy filesystem signals
+
+In addition to the database-backed gateway, kasmos also reads sentinel files from `.kasmos/signals/` for backward compatibility. The daemon bridges filesystem sentinels into the database gateway automatically. You can also create them manually as a fallback:
+
+```sh
+# fallback: touch a signal file directly
+touch .kasmos/signals/implement-finished-my-feature
+```
+
+File naming conventions:
+- FSM signals: `<event>-<plan-file>` (hyphens replace underscores in event names)
+- Wave signals: `implement-wave-<N>-<plan-file>`
+- Elaboration signals: `elaborator-finished-<plan-file>`

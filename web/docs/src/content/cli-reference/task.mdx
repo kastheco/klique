@@ -1,0 +1,290 @@
+# kas task
+
+Manage the full lifecycle of kasmos tasks — from registration through planning, implementation, review, and merge.
+
+```
+kas task <subcommand> [flags]
+```
+
+Alias: `kas t`
+
+## filename normalization
+
+All subcommands that accept a `<plan-file>` argument automatically strip a trailing `.md` suffix. The stored identifier is always the extensionless slug (e.g. `my-feature`, not `my-feature.md`). This normalization also applies when ingesting content and when the SQLite store runs its migration.
+
+## subcommands
+
+### list
+
+List all tasks with their status and branch.
+
+```
+kas task list [--status <status>]
+```
+
+```sh
+# show all non-cancelled tasks
+kas task list
+
+# show only tasks in implementing state
+kas task list --status implementing
+```
+
+| flag | description |
+|------|-------------|
+| `--status` | filter by status: `ready`, `planning`, `implementing`, `reviewing`, `done`, `cancelled` |
+
+When `--status` is omitted, `cancelled` tasks are hidden from the output.
+
+---
+
+### register
+
+Register a task file (markdown) into the task store and set its initial status to `ready`.
+
+```
+kas task register <plan-file> [--branch <branch>] [--topic <topic>] [--description <desc>]
+```
+
+```sh
+# register with defaults — branch defaults to plan/<slug>
+kas task register tasks/my-feature.md
+
+# register with an explicit branch and topic
+kas task register tasks/my-feature.md --branch feature/my-feature --topic backend
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--branch` | `plan/<slug>` | git branch name for the task |
+| `--topic` | — | topic group (auto-created if needed) |
+| `--description` | first `# heading` in file | human-readable task description |
+
+The filename is resolved relative to the working directory. The stored key is `strings.TrimSuffix(filepath.Base(filePath), ".md")`.
+
+---
+
+### create
+
+Create a new task entry directly in the store without requiring a file on disk.
+
+```
+kas task create <name> [--description <desc>] [--branch <branch>] [--topic <topic>] [--content <markdown>]
+```
+
+```sh
+# minimal creation
+kas task create my-feature
+
+# with description and topic
+kas task create my-feature --description "Add feature X" --topic frontend
+
+# with inline content
+kas task create my-feature --content "# my-feature\n\n## Wave 1\n### Task 1: implement X"
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--description` | — | task description |
+| `--branch` | `plan/<name>` | git branch name |
+| `--topic` | — | topic group |
+| `--content` | — | initial markdown content |
+
+---
+
+### show
+
+Print the full plan content stored in the task store.
+
+```
+kas task show <plan-file>
+```
+
+```sh
+kas task show my-feature
+```
+
+Returns an error if the task has no stored content.
+
+---
+
+### update-content
+
+Replace the plan content in the task store by reading from stdin.
+
+```
+kas task update-content <plan-file>
+```
+
+```sh
+cat updated-plan.md | kas task update-content my-feature
+```
+
+Content must be piped via stdin — the command errors if stdin is a tty. The filename argument is normalized with `strings.TrimSuffix(filename, ".md")`. If content parse warnings occur (e.g. no wave headers), the content is still stored and a warning is printed to stderr but the command exits 0.
+
+---
+
+### set-status
+
+Force-override a task's status, bypassing the FSM transition rules.
+
+```
+kas task set-status <plan-file> <status> --force
+```
+
+```sh
+kas task set-status my-feature ready --force
+```
+
+| flag | description |
+|------|-------------|
+| `--force` | required; confirms intent to bypass FSM (safety guard) |
+
+Valid statuses: `ready`, `planning`, `implementing`, `reviewing`, `done`, `cancelled`.
+
+---
+
+### transition
+
+Apply a named FSM event to a task, advancing or reversing its lifecycle state.
+
+```
+kas task transition <plan-file> <event>
+```
+
+```sh
+kas task transition my-feature implement_start
+```
+
+| event | description |
+|-------|-------------|
+| `plan_start` | move from `ready` to `planning` |
+| `planner_finished` | move from `planning` to `ready` |
+| `implement_start` | move from `ready` to `implementing` |
+| `implement_finished` | move from `implementing` to `reviewing` |
+| `request_review` | request a review (within `implementing`) |
+| `review_approved` | move from `reviewing` to `done` |
+| `review_changes` | move from `reviewing` back to `implementing` |
+| `start_over` | reset from `done` back to `planning` |
+| `reimplement` | re-enter `implementing` from `reviewing` |
+| `cancel` | cancel the task |
+| `reopen` | reopen a cancelled task |
+
+---
+
+### implement
+
+Transition a task to `implementing` state and write a wave signal file for the TUI orchestrator.
+
+```
+kas task implement <plan-file> [--wave <n>]
+```
+
+```sh
+kas task implement my-feature --wave 1
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--wave` | `1` | wave number to trigger (must be ≥ 1) |
+
+If the task is still in `planning`, the command first applies `planner_finished` (→ `ready`) then `implement_start`. The wave signal file is written to `.kasmos/signals/implement-wave-<n>-<plan-file>`.
+
+---
+
+### start
+
+Transition a task to `implementing` and set up the git branch and worktree.
+
+```
+kas task start <plan-file>
+```
+
+```sh
+kas task start my-feature
+```
+
+Walks `planning → ready → implementing` via the FSM if needed, then calls `git worktree add` using the stored branch name (defaulting to `plan/<slug>`). Prints the worktree path on success.
+
+---
+
+### push
+
+Commit any dirty changes in the task worktree and push to origin.
+
+```
+kas task push <plan-file> [--message <msg>]
+```
+
+```sh
+kas task push my-feature --message "wip: implement first pass"
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--message` | `"update from kas"` | commit message for dirty changes |
+
+---
+
+### pr
+
+Push the task branch and create (or reopen) a GitHub pull request.
+
+```
+kas task pr <plan-file> [--title <title>]
+```
+
+```sh
+kas task pr my-feature
+kas task pr my-feature --title "feat: implement feature X"
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--title` | task description | PR title |
+
+The PR body is generated from the plan content (goal, architecture, tech stack) and git log (commits, changed files, diff stats) using `gh pr create`.
+
+---
+
+### merge
+
+Merge the task branch into `main` and transition the task to `done`.
+
+```
+kas task merge <plan-file>
+```
+
+```sh
+kas task merge my-feature
+```
+
+Runs `git merge` in the repo root, then applies `review_approved` via the FSM. If the task is not already in `reviewing`, it is advanced through `implement_finished` first.
+
+---
+
+### start-over
+
+Remove the task worktree, reset the branch from HEAD, and transition back to `planning`.
+
+```
+kas task start-over <plan-file>
+```
+
+```sh
+kas task start-over my-feature
+```
+
+---
+
+### link-clickup
+
+Scan all tasks in the project and backfill ClickUp task IDs by parsing `**Source:** ClickUp <ID>` lines from plan content.
+
+```
+kas task link-clickup [--project <project>]
+```
+
+| flag | description |
+|------|-------------|
+| `--project` | override project name (default: derived from current directory) |

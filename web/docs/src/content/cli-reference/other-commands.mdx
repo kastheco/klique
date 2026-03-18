@@ -1,0 +1,364 @@
+# other commands
+
+Documentation for `kas monitor`, `kas instance`, `kas audit`, `kas tmux`, `kas status`, `kas reset`, `kas debug`, `kas version`, and `kas check`.
+
+---
+
+## kas monitor
+
+Monitor the kasmos daemon event stream in real time via Server-Sent Events (SSE).
+
+```
+kas monitor [--socket <path>] [--repo <path>] [--plan <slug>] [--json]
+```
+
+Alias: `kas mon`
+
+```sh
+# stream all daemon events
+kas monitor
+
+# filter to a specific repo
+kas monitor --repo /home/user/myproject
+
+# filter to a specific plan slug
+kas monitor --plan my-feature
+
+# pipe raw JSON to jq
+kas monitor --json | jq .
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--socket` | auto-detected | path to the daemon unix domain socket |
+| `--repo` | — | filter events to a specific repo path |
+| `--plan` | — | filter events to a specific plan slug |
+| `--json` | false | output raw JSON (disables ANSI color formatting) |
+
+By default, events are formatted with ANSI color codes. `ctrl-c` stops the stream.
+
+### monitor status
+
+Show a one-shot snapshot of daemon state: registered repos and active agents.
+
+```
+kas monitor status [--socket <path>]
+```
+
+```sh
+kas monitor status
+```
+
+---
+
+## kas instance
+
+Manage agent instances tracked by kasmos.
+
+```
+kas instance <subcommand> [flags]
+```
+
+Alias: `kas i`
+
+### instance list
+
+List all tracked agent instances.
+
+```
+kas instance list [--format text|json] [--status <status>]
+```
+
+```sh
+# text table (default)
+kas instance list
+
+# JSON output for scripting
+kas instance list --format json
+
+# only running instances
+kas instance list --status running
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--format` | `text` | output format: `text` or `json` |
+| `--status` | — | filter by status: `running`, `ready`, `loading`, `paused` |
+
+### instance kill
+
+Pause an agent instance (safe kill): kills the tmux session and removes the worktree but preserves the branch. The instance is marked `paused` in state.
+
+```
+kas instance kill <title>
+```
+
+```sh
+kas instance kill "my-agent"
+```
+
+Requires a clean worktree (no uncommitted changes). Use an exact or unique substring match for the title.
+
+### instance pause
+
+Pause an agent instance: same as `kill` but more explicit. Kills the tmux session and removes the worktree while preserving the branch.
+
+```
+kas instance pause <title>
+```
+
+### instance resume
+
+Resume a paused agent instance by recreating the worktree and starting a new tmux session.
+
+```
+kas instance resume <title>
+```
+
+```sh
+kas instance resume "my-agent"
+```
+
+Re-adds the git worktree from the stored branch name, reconstructs the original program command (including env vars like `KASMOS_MANAGED=1`, `KASMOS_TASK`, `KASMOS_WAVE`, `KASMOS_PEERS`), and starts a new `kas_`-prefixed tmux session.
+
+### instance send
+
+Send a prompt to a running agent instance via `tmux send-keys`.
+
+```
+kas instance send <title> <prompt>
+```
+
+```sh
+kas instance send "my-agent" "please implement the feature"
+```
+
+The instance must not be in `paused` state.
+
+### instance status
+
+Show a summary of instance counts by status bucket.
+
+```
+kas instance status
+```
+
+```sh
+kas instance status
+# STATE    COUNT
+# running  2
+# ready    1
+# paused   0
+# killed   0
+```
+
+---
+
+## kas audit
+
+Query audit events recorded by the kasmos audit logger.
+
+```
+kas audit <subcommand> [flags]
+```
+
+Alias: `kas au`
+
+### audit list
+
+List recent audit events from the local SQLite audit log.
+
+```
+kas audit list [--limit <n>] [--event <kind>]
+```
+
+```sh
+# show last 50 events (default)
+kas audit list
+
+# show last 100 events
+kas audit list --limit 100
+
+# filter to a specific event kind
+kas audit list --event task_status_changed
+```
+
+| flag | default | description |
+|------|---------|-------------|
+| `--limit` | `50` | maximum number of rows to return |
+| `--event` | — | filter by event kind |
+
+---
+
+## kas tmux
+
+Manage orphan `kas_`-prefixed tmux sessions that are not tracked by kasmos.
+
+```
+kas tmux <subcommand>
+```
+
+Alias: `kas tx`
+
+### tmux list
+
+List orphan tmux sessions (sessions with a `kas_` prefix that are not in the kasmos instance state).
+
+```
+kas tmux list
+```
+
+```sh
+kas tmux list
+# NAME              TITLE    WINDOWS  ATTACHED  AGE
+# kas_old-feature   old-feature  1    false     2h ago
+```
+
+### tmux adopt
+
+Adopt an orphan tmux session as a managed kasmos instance.
+
+```
+kas tmux adopt <session> <title>
+```
+
+```sh
+kas tmux adopt kas_old-feature "old-feature"
+```
+
+The session must be a `kas_`-prefixed orphan (not already tracked). Creates a new instance record with status `ready`.
+
+### tmux kill
+
+Kill an orphan tmux session.
+
+```
+kas tmux kill <session>
+```
+
+```sh
+kas tmux kill kas_old-feature
+```
+
+The session must be an orphan (not tracked by kasmos). Use `kas tmux list` to see eligible sessions.
+
+---
+
+## kas status
+
+Show a unified overview of active tasks, agent instances, and orphan tmux sessions.
+
+```
+kas status [--json]
+```
+
+Alias: `kas st`
+
+```sh
+# human-readable text (default)
+kas status
+
+# machine-readable JSON
+kas status --json
+```
+
+| flag | description |
+|------|-------------|
+| `--json` | output as JSON (`{tasks, instances, orphan_sessions}`) |
+
+The text output includes a `hints:` section with suggested follow-up commands when relevant (e.g. `kas task implement` for ready tasks, `kas instance resume` for paused instances).
+
+---
+
+## kas reset
+
+Reset all stored instances, clean up tmux sessions and git worktrees, and stop the daemon.
+
+```
+kas reset
+```
+
+```sh
+kas reset
+# Storage has been reset successfully
+# Tmux sessions have been cleaned up
+# Worktrees have been cleaned up
+# daemon has been stopped
+```
+
+This command is destructive — all instance state is deleted and all `kas_`-prefixed tmux sessions are killed. Use it to start fresh.
+
+---
+
+## kas debug
+
+Print config paths and the current configuration as JSON.
+
+```
+kas debug
+```
+
+```sh
+kas debug
+# Config: /home/user/.config/kasmos/config.toml
+# {
+#   "defaultProgram": "claude",
+#   ...
+# }
+```
+
+---
+
+## kas version
+
+Print the kasmos version number.
+
+```
+kas version
+```
+
+```sh
+kas version
+# kas version v2.0.0-alpha
+# https://github.com/kastheco/kasmos/releases/tag/v2.0.0-alpha
+```
+
+---
+
+## kas check
+
+Audit skill sync health across all configured harnesses.
+
+```
+kas check [-v]
+```
+
+```sh
+# summary view
+kas check
+
+# verbose: show per-skill status for each harness
+kas check -v
+```
+
+| flag | description |
+|------|-------------|
+| `-v, --verbose` | show per-skill detail for each harness |
+
+Checks two skill layers:
+
+1. **Global skills** — `~/.agents/skills/` → harness global directories (e.g. `~/.claude/skills/`)
+2. **Project skills** — `.agents/skills/` → harness project directories
+
+Each skill is reported as one of: `synced` (✓), `skipped` (⊘), `missing` (✗), `orphan` (✗), `broken` (✗), or `copy` (≈).
+
+The command exits with code 0 when all checks pass (100% health) and code 1 otherwise. Remediation hints are printed when issues are found.
+
+```sh
+# typical healthy output
+# Global skills (~/.agents/skills):
+#   claude       3 synced  0 skipped  0 missing  0 orphan
+#   opencode     3 synced  0 skipped  0 missing  0 orphan
+#
+# Health: 6/6 OK (100%)
+```

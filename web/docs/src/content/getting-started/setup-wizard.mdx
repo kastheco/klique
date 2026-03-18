@@ -1,0 +1,146 @@
+# setup wizard
+
+`kas setup` runs an interactive Bubble Tea wizard that configures your agent harnesses, assigns roles, and scaffolds the project files kasmos needs.
+
+## running setup
+
+```bash
+kas setup
+```
+
+From inside your git repository. Common flags:
+
+| flag | effect |
+|------|--------|
+| `--force` | allow scaffold overwrites (existing files are replaced) |
+| `--clean` | ignore existing config and start with factory defaults |
+
+`--clean` causes the wizard to skip loading your current `config.toml` before rendering defaults. `--force` allows the scaffolder to overwrite files that already exist in `.claude/`, `.opencode/`, `.codex/`, and `.agents/skills/`. Hook installation failures are non-fatal — setup succeeds even if one harness hook fails to install.
+
+## the 3-step wizard
+
+The wizard is a 3-step Bubble Tea flow:
+
+```
+● ── ○ ── ○
+harness   agents   done
+```
+
+### step 1 — harness
+
+kasmos probes for installed AI CLIs and shows detection results:
+
+- **opencode** — detected if `opencode` is found in `PATH`
+- **claude** — detected if `claude` is found in `PATH`
+- **codex** — detected if `codex` is found in `PATH`
+
+Select which harnesses you want to configure. You can select multiple to assign different CLIs to different roles.
+
+### step 2 — agents
+
+For each selected harness, configure the agent roles:
+
+- **model** — the model string passed to the CLI (e.g. `claude-opus-4-5`, `o3`)
+- **temperature** — sampling temperature, if the harness supports it
+- **effort** — reasoning effort level, if the harness supports it (e.g. `high`, `medium`, `low`)
+- **execution mode** — `tmux` (attachable) or `headless` (automated)
+- **enabled** — whether this agent is active
+
+### step 3 — done / review
+
+Displays a summary of what will be written, then applies the configuration.
+
+## phase mapping
+
+The wizard pre-seeds a fixed phase → role mapping in code. You do **not** configure this in the wizard UI — it is written directly to `config.toml` as the `[phases]` table:
+
+```toml
+[phases]
+implementing   = "coder"
+elaborating    = "architect"
+spec_review    = "reviewer"
+quality_review = "reviewer"
+planning       = "planner"
+fixer          = "fixer"
+master_review  = "master"
+```
+
+These map each lifecycle phase to an agent role. The role name determines which `[agents.*]` block kasmos uses when spawning an agent for that phase.
+
+## scaffold output
+
+After the wizard completes, kasmos writes:
+
+| path | description |
+|------|-------------|
+| `.kasmos/config.toml` | main agent and phase config |
+| `.kasmos/signals/` | signal sentinel directory |
+| `.kasmos/cache/` | runtime cache directory |
+| `.worktrees/` | git worktree root |
+| `.agents/skills/` | shared skill definitions (symlink source) |
+| `.claude/agents/` | per-role Claude prompts (e.g. `coder.md`) |
+| `.opencode/agents/` | per-role opencode prompts |
+| `.opencode/opencode.jsonc` | opencode model/temperature config |
+| `.codex/AGENTS.md` | codex agent instructions |
+
+Skill sync runs after the wizard: `~/.agents/skills/` (personal) and `.agents/skills/` (project) are synced into per-harness directories (`.claude/skills/`, `.opencode/skills/`, `.codex/skills/`) as symlinks. Enforcement hooks are installed for each selected harness.
+
+## config.toml schema
+
+The generated `config.toml` uses these fields (all from `config/toml.go`):
+
+```toml
+# phase → role mapping
+[phases]
+implementing   = "coder"
+planning       = "planner"
+spec_review    = "reviewer"
+quality_review = "reviewer"
+elaborating    = "architect"
+fixer          = "fixer"
+master_review  = "master"
+
+# per-role agent configuration
+[agents.coder]
+enabled        = true
+program        = "opencode"      # CLI command or full program string
+model          = "o3"            # model name passed to the CLI
+temperature    = 0.2             # omit to use harness default
+effort         = "high"          # omit if harness does not support effort levels
+execution_mode = "headless"      # "tmux" or "headless"
+
+[agents.planner]
+enabled        = true
+program        = "claude"
+model          = "claude-opus-4-5"
+execution_mode = "tmux"
+
+[agents.reviewer]
+enabled        = true
+program        = "claude"
+model          = "claude-sonnet-4-5"
+execution_mode = "headless"
+```
+
+Additional top-level fields:
+
+```toml
+database_url         = "http://your-server:7433"  # remote task store (optional)
+default_program      = "opencode"                  # fallback program for ad-hoc instances
+auto_yes             = false                        # auto-accept all agent prompts
+branch_prefix        = "kas/"                       # prefix for worktree branch names
+daemon_poll_interval = 5                            # daemon poll interval in seconds
+notifications_enabled = true
+```
+
+## re-running setup
+
+You can re-run `kas setup` at any time:
+
+```bash
+kas setup           # re-run wizard; existing files are skipped by default
+kas setup --force   # overwrite scaffold files with latest templates
+kas setup --clean   # re-run with factory defaults, ignoring current config
+```
+
+After setup, run `kas check -v` to audit skill sync across all harness directories.
