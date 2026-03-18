@@ -20,12 +20,15 @@ type Server struct {
 	handler http.Handler
 	store   taskstore.Store
 	gateway taskstore.SignalGateway
+	project string
 }
 
 // NewServer constructs a Server with Streamable HTTP transport mounted at /mcp.
 // version is advertised in the initialize response (e.g. "0.1.0"). store and
 // gateway may be nil; they are stored as-is for future tool handlers to use.
-func NewServer(version string, store taskstore.Store, gateway taskstore.SignalGateway) *Server {
+// project is the project name used when scoping task-store queries; pass an
+// empty string if no project context is available.
+func NewServer(version string, store taskstore.Store, gateway taskstore.SignalGateway, project string) *Server {
 	mcpSrv := server.NewMCPServer(
 		"kasmos",
 		version,
@@ -43,6 +46,7 @@ func NewServer(version string, store taskstore.Store, gateway taskstore.SignalGa
 		handler: httpTransport,
 		store:   store,
 		gateway: gateway,
+		project: project,
 	}
 }
 
@@ -68,4 +72,11 @@ func (s *Server) Store() taskstore.Store {
 // gateway was provided at construction time.
 func (s *Server) Gateway() taskstore.SignalGateway {
 	return s.gateway
+}
+
+// Project returns the project name associated with this server instance.
+// It is used by tool handlers to scope task-store queries to the correct project.
+// Returns an empty string if no project was set at construction time.
+func (s *Server) Project() string {
+	return s.project
 }

@@ -38,20 +38,30 @@ func decodePayload(t *testing.T, rec *httptest.ResponseRecorder, out any) {
 }
 
 func TestNewServer_ReturnsNonNil(t *testing.T) {
-	s := mcpserver.NewServer("0.1.0", nil, nil)
+	s := mcpserver.NewServer("0.1.0", nil, nil, "")
 	require.NotNil(t, s)
 	assert.Nil(t, s.Store())
 	assert.Nil(t, s.Gateway())
 }
 
+func TestServer_Project_ReturnsValue(t *testing.T) {
+	s := mcpserver.NewServer("0.1.0", nil, nil, "my-project")
+	assert.Equal(t, "my-project", s.Project())
+}
+
+func TestServer_Project_EmptyString(t *testing.T) {
+	s := mcpserver.NewServer("0.1.0", nil, nil, "")
+	assert.Equal(t, "", s.Project())
+}
+
 func TestServer_Handler_ReturnsHTTPHandler(t *testing.T) {
-	s := mcpserver.NewServer("0.1.0", nil, nil)
+	s := mcpserver.NewServer("0.1.0", nil, nil, "")
 	require.NotNil(t, s.Handler())
 	require.NotNil(t, s.MCPServer())
 }
 
 func TestServer_Handler_RespondsToInitialize(t *testing.T) {
-	s := mcpserver.NewServer("0.1.0", nil, nil)
+	s := mcpserver.NewServer("0.1.0", nil, nil, "")
 	h := s.Handler()
 
 	body, err := json.Marshal(map[string]any{
@@ -101,7 +111,7 @@ func TestServer_Handler_RespondsToInitialize(t *testing.T) {
 }
 
 func TestServer_Handler_ToolsListReturnsEmpty(t *testing.T) {
-	s := mcpserver.NewServer("0.1.0", nil, nil)
+	s := mcpserver.NewServer("0.1.0", nil, nil, "")
 	h := s.Handler()
 
 	// First: initialize to obtain the Mcp-Session-Id the server assigns.

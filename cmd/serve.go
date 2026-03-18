@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/mcpserver"
+	"github.com/kastheco/kasmos/internal/mcpserver/tasktools"
 	"github.com/spf13/cobra"
 )
 
@@ -71,7 +73,18 @@ func NewServeCmd() *cobra.Command {
 
 			var mcpHTTP *http.Server
 			if mcpEnabled {
-				mcpSrv := mcpserver.NewServer(MCPVersion, store, gw)
+				// Resolve the project name from the repository root; fall back to
+				// the working-directory basename if we are outside a git repo.
+				_, project, projErr := resolveRepoInfo()
+				if projErr != nil {
+					cwd, cwdErr := os.Getwd()
+					if cwdErr != nil {
+						return cwdErr
+					}
+					project = filepath.Base(cwd)
+				}
+				mcpSrv := mcpserver.NewServer(MCPVersion, store, gw, project)
+				tasktools.Register(mcpSrv)
 				mcpAddr := fmt.Sprintf("%s:%d", bind, mcpPort)
 				mcpHTTP = &http.Server{Addr: mcpAddr, Handler: mcpSrv.Handler()}
 				fmt.Printf("mcp server listening on http://%s/mcp\n", mcpAddr)

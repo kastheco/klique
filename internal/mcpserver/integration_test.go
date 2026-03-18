@@ -28,7 +28,7 @@ func startMCPTestServer(t *testing.T, version string) string {
 	require.NoError(t, err, "failed to bind loopback listener")
 
 	srv := &http.Server{
-		Handler: mcpserver.NewServer(version, nil, nil).Handler(),
+		Handler: mcpserver.NewServer(version, nil, nil, "").Handler(),
 	}
 
 	go func() {
