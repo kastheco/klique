@@ -54,5 +54,6 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewSignalCmd())
 	root.AddCommand(NewDaemonCmd())
 	root.AddCommand(NewMonitorCmd())
+	root.AddCommand(NewStatusCmd())
 	return root
 }
