@@ -1,0 +1,160 @@
+.page {
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--foreground-secondary);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.filterBtn:hover {
+  border-color: var(--card-border-hover);
+  color: var(--foreground);
+}
+
+.filterActive {
+  background: rgba(240, 168, 104, 0.1);
+  border-color: rgba(240, 168, 104, 0.4);
+  color: var(--accent-amber);
+}
+
+.filterActive:hover {
+  background: rgba(240, 168, 104, 0.15);
+  border-color: rgba(240, 168, 104, 0.6);
+  color: var(--accent-amber);
+}
+
+.error {
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: rgba(220, 80, 80, 0.1);
+  border: 1px solid rgba(220, 80, 80, 0.3);
+  color: #dc5050;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.loading {
+  color: var(--foreground-tertiary);
+  font-size: 14px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.empty {
+  color: var(--foreground-tertiary);
+  font-size: 14px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+/* Horizontal scroll wrapper so narrow screens still work */
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+
+/* Sticky header row */
+.table thead tr {
+  position: sticky;
+  top: 0;
+  background: rgba(10, 11, 20, 0.95);
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+
+.table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--foreground-tertiary);
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 16px;
+  color: var(--foreground-secondary);
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Alternating row backgrounds */
+.row:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Hover highlight */
+.row:hover td {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.taskLink {
+  color: var(--accent-teal);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.taskLink:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+}
+
+.goalCell {
+  max-width: 300px;
+  color: var(--foreground);
+}
+
+/* Monospace font for branch column only */
+.branchCell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
