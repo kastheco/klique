@@ -1742,6 +1742,8 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	case keys.KeyViewPlan:
 		return m.viewSelectedPlan()
+	case keys.KeyBrowser:
+		return m.openPlanBrowserForSelection()
 	case keys.KeyToggleSidebar:
 		if m.sidebarHidden {
 			// Show sidebar, keep current focus

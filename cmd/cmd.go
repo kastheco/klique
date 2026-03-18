@@ -48,6 +48,7 @@ func NewRootCmd() *cobra.Command {
 	}
 	root.AddCommand(NewTaskCmd())
 	root.AddCommand(NewServeCmd())
+	root.AddCommand(NewBrowserCmd())
 	root.AddCommand(NewInstanceCmd())
 	root.AddCommand(NewAuditCmd())
 	root.AddCommand(NewTmuxCmd())

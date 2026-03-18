@@ -232,6 +232,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "view_plan":
 		return m.viewSelectedPlan()
 
+	case "open_plan_browser":
+		return m.openPlanBrowserForSelection()
+
 	case "rename_plan":
 		planFile := m.nav.GetSelectedPlanFile()
 		if planFile == "" {
@@ -750,6 +753,9 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	items = append(items, overlay.ContextMenuItem{Label: "rename", Action: "rename_instance"})
 	items = append(items, overlay.ContextMenuItem{Label: "push branch", Action: "push_instance"})
 	items = append(items, overlay.ContextMenuItem{Label: "create pr", Action: "create_pr_instance"})
+	if selected.TaskFile != "" {
+		items = append(items, overlay.ContextMenuItem{Label: "open in browser", Action: "open_plan_browser"})
+	}
 	// Wave task: offer manual completion
 	if selected.TaskNumber > 0 {
 		if orch, ok := m.waveOrchestrators[selected.TaskFile]; ok && orch.IsTaskRunning(selected.TaskNumber) {
@@ -821,6 +827,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 	items = append(items,
 		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
 		overlay.ContextMenuItem{Label: "view task", Action: "view_plan"},
+		overlay.ContextMenuItem{Label: "open in browser", Action: "open_plan_browser"},
 		overlay.ContextMenuItem{Label: "rename task", Action: "rename_plan"},
 		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
 		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},

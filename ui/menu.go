@@ -198,7 +198,7 @@ func (m *Menu) addSidebarOptions(includeNewPlan bool) {
 		opts = append(opts, keys.KeyNewPlan)
 	}
 	actionGroup := []keys.KeyName{
-		keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan, keys.KeyAuditToggle,
+		keys.KeyEnter, keys.KeySpaceExpand, keys.KeyViewPlan, keys.KeyBrowser, keys.KeyAuditToggle,
 	}
 	systemGroup := []keys.KeyName{
 		keys.KeySearch, keys.KeyHelp, keys.KeyQuit,
@@ -212,7 +212,7 @@ func (m *Menu) addSidebarOptions(includeNewPlan bool) {
 // addInstanceOptions populates the option list when an instance is selected.
 func (m *Menu) addInstanceOptions() {
 	mgmt := []keys.KeyName{keys.KeyNewPlan, keys.KeyKill}
-	action := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace}
+	action := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace, keys.KeyBrowser}
 	if m.instance.PromptDetected && m.instance.Status != session.Paused {
 		action = append(action, keys.KeySendYes)
 	}

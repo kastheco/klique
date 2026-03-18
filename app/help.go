@@ -65,6 +65,7 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("space")+descStyle.Render("         - toggle plan, topic, or history"),
 		keyStyle.Render("↵/o")+descStyle.Render("           - select (context menu or run stage)"),
 		keyStyle.Render("v/p")+descStyle.Render("           - preview selected plan"),
+		keyStyle.Render("b")+descStyle.Render("             - open plan browser"),
 		"",
 		headerStyle.Render("navigation:"),
 		keyStyle.Render("t")+descStyle.Render("             - focus instance list"),
