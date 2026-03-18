@@ -1,0 +1,110 @@
+# lifecycle
+
+Every task in kasmos moves through a finite state machine (FSM) defined in `config/taskfsm/fsm.go`. The FSM validates all transitions, writes new status to the task store, and records phase timestamps.
+
+## statuses
+
+| status | meaning |
+|--------|---------|
+| `ready` | task is registered and waiting to start |
+| `planning` | a planner agent is writing the plan content |
+| `implementing` | coder agents are working on the task |
+| `reviewing` | a reviewer agent is checking the implementation |
+| `done` | the task is complete and merged (or ready to merge) |
+| `cancelled` | explicitly stopped; can be reopened |
+
+## events
+
+Events trigger transitions. Some events are **user-only** (can only be fired from the TUI) and cannot be emitted by agent sentinel files.
+
+| event | user-only | description |
+|-------|-----------|-------------|
+| `plan_start` | no | start or restart a planner agent |
+| `planner_finished` | no | planner agent signalled completion |
+| `implement_start` | no | start coder agents |
+| `implement_finished` | no | all coders signalled completion |
+| `request_review` | **yes** | manually trigger a reviewer |
+| `review_approved` | no | reviewer approved the implementation |
+| `review_changes_requested` | no | reviewer requested changes |
+| `start_over` | **yes** | reset to planning from done |
+| `reimplement` | **yes** | resume implementation from done without resetting branch |
+| `cancel` | **yes** | cancel the task from any active status |
+| `reopen` | **yes** | reopen a cancelled task back to planning |
+
+## transition table
+
+```
+ready
+  ├─ plan_start          → planning
+  ├─ implement_start     → implementing
+  └─ cancel              → cancelled
+
+planning
+  ├─ plan_start          → planning   (restart after crash)
+  ├─ planner_finished    → ready
+  └─ cancel              → cancelled
+
+implementing
+  ├─ implement_finished  → reviewing
+  └─ cancel              → cancelled
+
+reviewing
+  ├─ review_approved     → done
+  ├─ review_changes_requested → implementing
+  └─ cancel              → cancelled
+
+done
+  ├─ start_over          → planning
+  ├─ reimplement         → implementing
+  ├─ request_review      → reviewing
+  └─ cancel              → cancelled
+
+cancelled
+  └─ reopen              → planning
+```
+
+## phase timestamps
+
+When the FSM writes a new status, it also records a timestamp for that phase in the task store. These power the timeline view in the TUI's info pane:
+
+| status reached | timestamp field |
+|----------------|-----------------|
+| `planning` | `planning_at` |
+| `implementing` | `implementing_at` |
+| `reviewing` | `reviewing_at` |
+| `done` | `done_at` |
+
+## triggering transitions
+
+### from the TUI
+
+Select a task and press `↵` (enter) to open the context menu. Available actions depend on the current status (e.g. "start planner", "implement", "review", "cancel").
+
+### from the CLI
+
+```bash
+kas task transition <task-file> <event>
+```
+
+Examples:
+
+```bash
+kas task transition my-feature plan_start
+kas task transition my-feature implement_start
+kas task transition my-feature cancel
+kas task transition my-feature reopen
+```
+
+### from agents (signals)
+
+Agents emit signals by creating files under `.kasmos/signals/` or by writing to the SQLite-backed signal gateway. The orchestration loop (`orchestration/loop`) scans for these signals and calls `Transition()` on the FSM.
+
+## forcing a status
+
+For recovery when signals fail or the FSM gets stuck:
+
+```bash
+kas task set-status <task-file> <status> --force
+```
+
+This bypasses transition validation and writes directly to the store.

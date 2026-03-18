@@ -1,0 +1,91 @@
+# plans and tasks
+
+kasmos uses the terms **task** and **plan** interchangeably across the codebase (older code paths say "plan"; the CLI and task store say "task"). A task is a markdown document that the parser in `config/taskparser/taskparser.go` reads to extract waves, tasks, and header metadata.
+
+## required header fields
+
+Every task document must contain these bold key-value fields near the top:
+
+```markdown
+**Goal:** one-line description of what this work achieves
+**Architecture:** high-level design approach
+**Tech Stack:** languages, frameworks, and tools involved
+```
+
+The parser extracts them with:
+- `**Goal:**` → `Plan.Goal`
+- `**Architecture:**` → `Plan.Architecture`
+- `**Tech Stack:**` → `Plan.TechStack`
+
+These fields are injected into every agent prompt via `Plan.HeaderContext()`, giving all coder agents full context about the overall goal.
+
+## wave headers
+
+Waves partition tasks into sequential groups. The parser accepts both level-2 and level-3 headers:
+
+```markdown
+## Wave 1
+## Wave 2
+### Wave 3
+```
+
+At least one wave header is required. Without it, `taskparser.Parse` returns an error:
+
+```
+no wave headers found in plan; add ## Wave N sections before implementing
+```
+
+## task headers
+
+Tasks live inside wave sections. The parser accepts level-3 and level-4 headers, with any of these separators after the task number: `:`, `—` (em-dash), `–` (en-dash), or `-` (hyphen):
+
+```markdown
+### Task 1: short title
+### Task 2 — another title
+#### Task 3 – yet another
+#### Task 4 - hyphen style
+```
+
+Elaborator agents sometimes rewrite `Task N:` to `Task N —`; both forms parse identically.
+
+## full example skeleton
+
+```markdown
+**Goal:** implement user authentication
+**Architecture:** JWT-based stateless auth with refresh tokens
+**Tech Stack:** Go 1.24, chi router, modernc.org/sqlite
+
+## Wave 1
+
+### Task 1: create user model and migration
+
+Implement the User struct and the SQL migration...
+
+### Task 2: implement JWT helpers
+
+Write sign, verify, and refresh functions...
+
+## Wave 2
+
+### Task 3: wire auth middleware
+
+Attach the middleware to protected routes...
+```
+
+## the task store is the source of truth
+
+The markdown file on disk holds the task **content**. Status, branch, topic, timestamps, and subtask state live in the task store (a SQLite database at `<repo-root>/.kasmos/taskstore.db`).
+
+| operation | command |
+|-----------|---------|
+| register a task file | `kas task register <file>` |
+| view a task's current state | `kas task show <file>` |
+| update task content from stdin | `kas task update-content <file>` |
+| force a lifecycle transition | `kas task transition <file> <event>` |
+| force a specific status | `kas task set-status <file> <status> --force` |
+
+The store normalizes filenames: a trailing `.md` suffix is stripped, so `my-feature.md` and `my-feature` refer to the same task.
+
+## wave orchestration skipping
+
+For very small tasks (configurable via `blueprint_skip_threshold` in `kasmos.toml`), kasmos skips wave orchestration entirely and hands the whole task to a single coder agent. See [waves](/docs/concepts/waves) for details.
