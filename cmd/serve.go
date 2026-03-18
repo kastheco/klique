@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/mcpserver"
+	"github.com/kastheco/kasmos/internal/mcpserver/fstools"
 	"github.com/spf13/cobra"
 )
 
@@ -72,6 +74,15 @@ func NewServeCmd() *cobra.Command {
 			var mcpHTTP *http.Server
 			if mcpEnabled {
 				mcpSrv := mcpserver.NewServer(MCPVersion, store, gw)
+				cwd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
+				}
+				allowedDirs := []string{cwd}
+				if root, rootErr := config.ResolveRepoRoot(cwd); rootErr == nil && root != "" && root != cwd {
+					allowedDirs = append(allowedDirs, root)
+				}
+				fstools.RegisterTools(mcpSrv.MCPServer(), allowedDirs)
 				mcpAddr := fmt.Sprintf("%s:%d", bind, mcpPort)
 				mcpHTTP = &http.Server{Addr: mcpAddr, Handler: mcpSrv.Handler()}
 				fmt.Printf("mcp server listening on http://%s/mcp\n", mcpAddr)
