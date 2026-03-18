@@ -92,6 +92,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"i":          KeySendPrompt,
 	"y":          KeySendYes,
 	" ":          KeySpace,
+	"space":      KeySpace, // msg.String() returns "space" for tea.KeySpace with Text=" "
 	"1":          KeyFilterAll,
 	"2":          KeyFilterActive,
 	"3":          KeyCycleSort,

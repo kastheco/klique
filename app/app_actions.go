@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/kastheco/kasmos/config"
@@ -11,10 +12,12 @@ import (
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
+	"github.com/kastheco/kasmos/keys"
 	"github.com/kastheco/kasmos/orchestration"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
 	"github.com/kastheco/kasmos/session/tmux"
+	"github.com/kastheco/kasmos/ui"
 	"github.com/kastheco/kasmos/ui/overlay"
 
 	tea "charm.land/bubbletea/v2"
@@ -1259,4 +1262,234 @@ func isLocked(status taskstate.Status, stage string) bool {
 	default:
 		return true
 	}
+}
+
+// openCommandLauncher builds and shows the global command launcher overlay.
+func (m *home) openCommandLauncher() (tea.Model, tea.Cmd) {
+	items := []overlay.LauncherItem{
+		{Label: "view keybinds", Hint: "?", Action: "view_keybinds"},
+		{Label: "new plan", Hint: "n", Action: "new_plan"},
+		{Label: "new instance", Hint: "N", Action: "new_instance"},
+		{Label: "spawn agent", Hint: "s", Action: "spawn_agent"},
+		{Label: "search", Hint: "/", Action: "search"},
+		{Label: "interactive mode", Hint: "i", Action: "interactive"},
+		{Label: "send yes", Hint: "y", Action: "send_yes"},
+		{Label: "kill session", Hint: "k", Action: "kill"},
+		{Label: "stop session", Hint: "K", Action: "abort"},
+		{Label: "resume session", Hint: "r", Action: "resume"},
+		{Label: "checkout branch", Hint: "c", Action: "checkout"},
+		{Label: "create pull request", Hint: "P", Action: "create_pr"},
+		{Label: "preview plan", Hint: "p", Action: "preview"},
+		{Label: "context menu", Hint: "→", Action: "context_menu"},
+		{Label: "tmux sessions", Hint: "t", Action: "tmux_browser"},
+		{Label: "toggle sidebar", Hint: "ctrl+s", Action: "toggle_sidebar"},
+		{Label: "toggle audit log", Hint: "L", Action: "toggle_audit"},
+		{Label: "audit log actions", Hint: "A", Action: "audit_cursor"},
+		{Label: "info tab", Hint: "g", Action: "info_tab"},
+		{Label: "quit", Hint: "q", Action: "quit"},
+	}
+	launcher := overlay.NewCommandLauncherOverlay("commands", items)
+	m.overlays.Show(launcher)
+	m.state = stateLauncher
+	return m, nil
+}
+
+// openKeybindBrowser builds and shows a read-only keybind browser overlay
+// using all configured keybinds from the keys package.
+func (m *home) openKeybindBrowser() (tea.Model, tea.Cmd) {
+	items := buildKeybindBrowserItems()
+	browser := overlay.NewCommandLauncherOverlay("keybinds", items)
+	m.overlays.Show(browser)
+	m.state = stateKeybindBrowser
+	return m, nil
+}
+
+// buildKeybindBrowserItems creates a sorted list of all global keybinds for
+// the keybind browser. Uses keys.GlobalkeyBindings to get label and key text.
+func buildKeybindBrowserItems() []overlay.LauncherItem {
+	var items []overlay.LauncherItem
+	for _, binding := range keys.GlobalkeyBindings {
+		help := binding.Help()
+		if help.Key == "" || help.Desc == "" {
+			continue
+		}
+		items = append(items, overlay.LauncherItem{
+			Label: help.Desc,
+			Hint:  help.Key,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Label < items[j].Label
+	})
+	return items
+}
+
+// executeLauncherAction dispatches a command launcher action to the appropriate
+// app method. Each case mirrors the inline handler for the corresponding key
+// in handleKeyPress.
+func (m *home) executeLauncherAction(action string) (tea.Model, tea.Cmd) {
+	switch action {
+	case "view_keybinds":
+		return m.openKeybindBrowser()
+	case "new_plan":
+		m.state = stateNewPlan
+		tio := overlay.NewTextInputOverlay("new plan", "")
+		tio.SetMultiline(true)
+		tio.SetPlaceholder("describe what you want to work on...")
+		tio.SetSize(70, 8)
+		m.overlays.Show(tio)
+		return m, nil
+	case "new_instance":
+		if m.tmuxSessionCount >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)",
+					GlobalInstanceLimit, m.tmuxSessionCount))
+		}
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   "",
+			Path:    m.activeRepoPath,
+			Program: m.programForAgent(""),
+		})
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		m.addInstanceFinalizer(instance, m.nav.AddInstance(instance))
+		m.newInstance = instance
+		m.nav.SetSelectedInstance(m.nav.NumInstances() - 1)
+		m.state = stateNew
+		m.menu.SetState(ui.StateNewInstance)
+		m.promptAfterName = true
+		return m, nil
+	case "spawn_agent":
+		if m.tmuxSessionCount >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances (%d tmux sessions active)",
+					GlobalInstanceLimit, m.tmuxSessionCount))
+		}
+		m.state = stateSpawnAgent
+		m.overlays.Show(overlay.NewSpawnFormOverlay("spawn agent", 60))
+		return m, nil
+	case "search":
+		m.nav.ActivateSearch()
+		m.nav.SelectFirst()
+		m.state = stateSearch
+		m.setFocusSlot(slotNav)
+		return m, nil
+	case "interactive":
+		m.previewRequested = true
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			if pf := m.nav.GetSelectedPlanFile(); pf != "" {
+				if best := m.nav.FindPlanInstance(pf); best != nil {
+					m.nav.SelectInstance(best)
+					selected = best
+				}
+			}
+		}
+		if selected == nil || !selected.Started() || selected.Paused() {
+			return m, nil
+		}
+		return m, m.enterFocusMode()
+	case "send_yes":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() || !selected.PromptDetected {
+			return m, nil
+		}
+		selected.QueuedPrompt = "yes"
+		selected.AwaitingWork = true
+		return m, nil
+	case "kill":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() || selected.Exited {
+			return m, nil
+		}
+		inst := selected
+		return m, func() tea.Msg {
+			inst.StopTmux()
+			inst.SetStatus(session.Ready)
+			return instanceChangedMsg{}
+		}
+	case "abort":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		title := selected.Title
+		killAction := func() tea.Msg {
+			worktree, err := selected.GetGitWorktree()
+			if err != nil {
+				return err
+			}
+			checkedOut, err := worktree.IsBranchCheckedOut()
+			if err != nil {
+				return err
+			}
+			if checkedOut {
+				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+			}
+			return killInstanceMsg{title: title}
+		}
+		message := fmt.Sprintf("stop session '%s'? branch will be preserved.", selected.Title)
+		return m, m.confirmAction(message, killAction)
+	case "resume":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		if err := selected.Resume(); err != nil {
+			return m, m.handleError(err)
+		}
+		return m, tea.RequestWindowSize
+	case "checkout":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.showHelpScreen(helpTypeInstanceCheckout{}, func() {
+			if err := selected.Pause(); err != nil {
+				m.handleError(err)
+			}
+			m.instanceChanged()
+		})
+		return m, nil
+	case "create_pr":
+		selected := m.nav.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = statePRTitle
+		tio := overlay.NewTextInputOverlay("pr title", selected.Title)
+		tio.SetSize(60, 3)
+		m.overlays.Show(tio)
+		return m, nil
+	case "preview":
+		return m.viewSelectedPlan()
+	case "context_menu":
+		return m.openContextMenu()
+	case "tmux_browser":
+		return m, m.discoverTmuxSessions()
+	case "toggle_sidebar":
+		if m.sidebarHidden {
+			m.sidebarHidden = false
+		} else {
+			m.sidebarHidden = true
+			if m.focusSlot == slotNav {
+				m.setFocusSlot(slotAgent)
+			}
+		}
+		return m, tea.RequestWindowSize
+	case "toggle_audit":
+		if m.auditPane != nil {
+			m.auditPane.ToggleVisible()
+		}
+		return m, tea.RequestWindowSize
+	case "audit_cursor":
+		return m.enterAuditCursorMode()
+	case "info_tab":
+		m.tabbedWindow.SetShowInfo(!m.tabbedWindow.IsShowingInfo())
+		return m, nil
+	case "quit":
+		return m.handleQuit()
+	}
+	return m, nil
 }
