@@ -28,7 +28,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask || m.state == stateAuditCursor {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewPlan || m.state == stateNewPlanDeriving || m.state == stateNewPlanTopic || m.state == stateSpawnAgent || m.state == stateSearch || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTask || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateChangeTopic || m.state == stateSetStatus || m.state == stateClickUpSearch || m.state == stateClickUpPicker || m.state == stateClickUpFetching || m.state == stateClickUpWorkspacePicker || m.state == statePermission || m.state == stateTmuxBrowser || m.state == stateChatAboutTask || m.state == stateAuditCursor || m.state == stateLauncher || m.state == stateKeybindBrowser {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -1348,6 +1348,37 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		return m, nil
 	}
 
+	// Handle command launcher state
+	if m.state == stateLauncher {
+		if !m.overlays.IsActive() {
+			m.state = stateDefault
+			return m, nil
+		}
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			m.state = stateDefault
+			if result.Action != "" {
+				return m.executeLauncherAction(result.Action)
+			}
+			return m, tea.RequestWindowSize
+		}
+		return m, nil
+	}
+
+	// Handle keybind browser state
+	if m.state == stateKeybindBrowser {
+		if !m.overlays.IsActive() {
+			m.state = stateDefault
+			return m, nil
+		}
+		result := m.overlays.HandleKey(msg)
+		if result.Dismissed {
+			m.state = stateDefault
+			return m, tea.RequestWindowSize
+		}
+		return m, nil
+	}
+
 	// Handle search state — allows typing to filter AND arrow keys to navigate
 	if m.state == stateSearch {
 		switch {
@@ -1470,7 +1501,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 
 	switch name {
 	case keys.KeyHelp:
-		return m.showHelpScreen(helpTypeGeneral{}, nil)
+		return m.openKeybindBrowser()
 	case keys.KeyPrompt:
 		if m.tmuxSessionCount >= GlobalInstanceLimit {
 			return m, m.handleError(
@@ -1542,7 +1573,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		if m.focusSlot == slotNav && m.nav.ToggleSelectedExpand() {
 			return m, nil
 		}
-		return m.openContextMenu()
+		return m.openCommandLauncher()
 	case keys.KeyInfoTab:
 		// Toggle the compact info header without stealing sidebar focus or changing the instance tab.
 		m.tabbedWindow.SetShowInfo(!m.tabbedWindow.IsShowingInfo())

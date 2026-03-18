@@ -155,6 +155,10 @@ const (
 	// stateAuditCursor is the state when the user is navigating log lines in the
 	// audit pane to open per-line context menus.
 	stateAuditCursor
+	// stateLauncher is the state when the global command launcher overlay is shown.
+	stateLauncher
+	// stateKeybindBrowser is the state when the keybind browser overlay is shown.
+	stateKeybindBrowser
 )
 
 type home struct {
