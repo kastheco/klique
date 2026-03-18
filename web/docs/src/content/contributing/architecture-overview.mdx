@@ -1,0 +1,113 @@
+# architecture overview
+
+kasmos is a Go application with several surfaces that work together: an interactive terminal UI, a Cobra CLI, a background daemon, a SQLite/HTTP task store, and a web front-end.
+
+## high-level directory map
+
+| path | what lives here |
+|------|----------------|
+| `main.go` | app entrypoint, Cobra root wiring, TUI startup, `setup` / `reset` / `debug` / `version` |
+| `check.go` | `kas check` — audits skill sync across agent harnesses |
+| `cmd/` | CLI subcommands: `task`, `daemon`, `monitor`, `signal`, `tmux`, `instance`, `audit`, `serve` |
+| `app/` | main Bubble Tea model, TUI state machine, orchestration glue |
+| `ui/` | rendering components: nav, status bar, info pane, overlays |
+| `session/` | instance lifecycle, execution backends (tmux / headless), notifications, git worktrees |
+| `session/git/` | worktree checkout, resume, orphan adoption |
+| `session/tmux/` | tmux session/window/pane management |
+| `session/headless/` | non-interactive agent execution |
+| `orchestration/` | prompt builders, wave/task orchestration |
+| `orchestration/loop/` | signal gateway scanner, wave driver loop |
+| `config/` | TOML/JSON config loading, task parser, FSM, state, store |
+| `config/taskparser/` | markdown plan parser |
+| `config/taskfsm/` | task lifecycle finite state machine |
+| `config/taskstate/` | in-process task state wrapper |
+| `config/taskstore/` | SQLite + HTTP task store and signal gateway |
+| `daemon/` | multi-repo background orchestrator, Unix-socket control API |
+| `internal/initcmd/` | `kas setup` wizard and scaffold templates |
+| `web/` | Next.js App Router marketing site |
+| `web/docs/` | Nextra docs site (this site) |
+| `web/admin/` | Vite-based SPA for the task store browser UI |
+| `.agents/`, `.claude/`, `.Claude/` | scaffolded agent harness configs and skills |
+| `contrib/` | systemd service files for daemon and task-store deployment |
+
+## request flow
+
+Here is how a typical action flows through the system from the user's perspective:
+
+```
+TUI / CLI action
+      │
+      ▼
+  task store / FSM
+  (config/taskstore, config/taskfsm)
+      │  status transition recorded in SQLite
+      ▼
+  agent session
+  (session/ + session/tmux/ or session/headless/)
+      │  spawns agent in tmux pane or headless process
+      ▼
+  agent emits signal
+  (kas signal emit ... or sentinel file in .kasmos/signals/)
+      │
+      ▼
+  signal gateway scanner
+  (orchestration/loop/gateway_scanner.go)
+      │  claims signal atomically, marks "processing"
+      ▼
+  orchestrator / daemon
+  (orchestration/ + daemon/)
+      │  drives next lifecycle stage (next wave, reviewer, etc.)
+      ▼
+  next lifecycle stage
+  (another task transition, another session launch, or done)
+```
+
+### key notes on the flow
+
+- **Signals** have two paths: legacy filesystem sentinels under `.kasmos/signals/` and a newer DB-backed `signals` table. The gateway scanner bridges both.
+- **Worktrees**: each agent works in an isolated `git worktree` under `<repo-root>/.worktrees/`. The main repo root is always resolved by `config.ResolveRepoRoot()` even when running inside a worktree.
+- **Config is anchored to the main repo root**: `.kasmos/` always lives at the top-level repo, never inside a worktree.
+- **Topic collision gate**: only one task per topic can be `implementing` at a time. The store enforces this before spawning a coder session.
+
+## subsystem details
+
+### TUI (Bubble Tea / Lip Gloss)
+
+The interactive app is built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [Lip Gloss v2](https://github.com/charmbracelet/lipgloss). The `app/` package holds the root model and state machine; `ui/` holds individual rendering components (nav, status bar, tabs, overlays).
+
+Key conventions:
+- All blocking I/O happens inside `tea.Cmd` goroutines and results are returned as `tea.Msg` — never block in `Update`.
+- Overlays use arrow-key navigation (`↑`/`↓`), not `j`/`k`.
+- User-visible labels are lowercase.
+
+### task store
+
+The task store (`config/taskstore/`) is backed by SQLite via `modernc.org/sqlite` and also exposes an HTTP API (`kas serve`). It stores task content, lifecycle status, signals, and metadata. The admin SPA (`web/admin/`) talks to this HTTP API.
+
+The store is always opened against the main repo's `.kasmos/taskstore.db`. File paths inside the store have `.md` suffixes stripped (there is a migration for older records).
+
+### scaffold-managed files
+
+`kas setup` scaffolds agent harness configuration from templates in `internal/initcmd/scaffold/templates/` into three locations:
+
+- `.agents/` — generic agent config
+- `.claude/` — claude-code harness config
+- `.Claude/` — Claude skills
+
+If you edit the templates, you must also update the live copies (or vice-versa), then run `kas check -v` to confirm they are in sync.
+
+### web surfaces
+
+| surface | framework | output | path |
+|---------|-----------|--------|------|
+| marketing site | Next.js App Router | `web/out/` | `/kasmos` |
+| docs site | Nextra 4 | `web/docs/out/` | `/kasmos/docs` |
+| admin SPA | Vite | `web/admin/dist/` | served by `kas serve` |
+
+The marketing site and docs site both use `output: "export"` with `basePath: "/kasmos"` for static GitHub Pages deployment. The admin SPA is a separate Vite app that is not exported to Pages — it runs as a dev tool or embedded in the daemon server.
+
+## the `kas` command
+
+Although `go build` produces a binary named `kasmos`, `just install` creates `kas` and `kms` symlinks in `$GOPATH/bin`. The CLI surface is always referred to as `kas` in documentation and code.
+
+Current top-level subcommands: `setup`, `check`, `task`, `serve`, `instance`, `audit`, `tmux`, `signal`, `daemon`, `monitor`, `reset`, `debug`, `version`.
