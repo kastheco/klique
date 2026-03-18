@@ -199,7 +199,10 @@ func (p *Processor) ProcessTaskSignals(signals []taskfsm.TaskSignal) []Action {
 	for _, ts := range signals {
 		orch, exists := p.waveOrchestrators[ts.TaskFile]
 		if !exists {
-			continue
+			orch = p.restoreOrchestratorForTaskSignal(ts.TaskFile, ts.WaveNumber)
+			if orch == nil {
+				continue
+			}
 		}
 		if ts.WaveNumber != orch.CurrentWaveNumber() {
 			continue
@@ -215,6 +218,75 @@ func (p *Processor) ProcessTaskSignals(signals []taskfsm.TaskSignal) []Action {
 		})
 	}
 	return actions
+}
+
+func (p *Processor) restoreOrchestratorForTaskSignal(planFile string, waveNumber int) *orchestration.WaveOrchestrator {
+	if p.config.Store == nil || waveNumber < 1 {
+		return nil
+	}
+
+	content, err := p.config.Store.GetContent(p.config.Project, planFile)
+	if err != nil {
+		return nil
+	}
+	plan, err := taskparser.Parse(content)
+	if err != nil {
+		return nil
+	}
+	if waveNumber > len(plan.Waves) {
+		return nil
+	}
+
+	subtasks, err := p.config.Store.GetSubtasks(p.config.Project, planFile)
+	if err != nil || len(subtasks) == 0 {
+		return nil
+	}
+
+	taskToWave := make(map[int]int)
+	for _, wave := range plan.Waves {
+		for _, task := range wave.Tasks {
+			taskToWave[task.Number] = wave.Number
+		}
+	}
+
+	completed := make([]int, 0)
+	failed := make([]int, 0)
+	hasActiveState := false
+	for _, subtask := range subtasks {
+		if taskToWave[subtask.TaskNumber] != waveNumber {
+			continue
+		}
+
+		switch subtask.Status {
+		case taskstore.SubtaskStatusRunning,
+			taskstore.SubtaskStatusComplete,
+			taskstore.SubtaskStatusDone,
+			taskstore.SubtaskStatusClosed,
+			taskstore.SubtaskStatusFailed:
+			hasActiveState = true
+		}
+
+		switch subtask.Status {
+		case taskstore.SubtaskStatusComplete, taskstore.SubtaskStatusDone, taskstore.SubtaskStatusClosed:
+			completed = append(completed, subtask.TaskNumber)
+		case taskstore.SubtaskStatusFailed:
+			failed = append(failed, subtask.TaskNumber)
+		}
+	}
+	if !hasActiveState {
+		return nil
+	}
+
+	orch := orchestration.NewWaveOrchestrator(planFile, plan)
+	orch.SetStore(p.config.Store, p.config.Project)
+	orch.RestoreToWave(waveNumber, completed)
+	for _, taskNumber := range failed {
+		orch.MarkTaskFailed(taskNumber)
+	}
+
+	p.waveOrchestrators[planFile] = orch
+	p.activeWaveOrchs[planFile] = true
+	return orch
 }
 
 // ProcessWaveSignals converts implement-wave sentinel signals into

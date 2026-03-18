@@ -18,6 +18,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
+	daemonpkg "github.com/kastheco/kasmos/daemon"
 	"github.com/kastheco/kasmos/internal/clickup"
 	"github.com/kastheco/kasmos/internal/initcmd/harness"
 	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
@@ -33,6 +34,44 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 )
+
+var spawnPlannerWithDaemon = func(repoPath, project, planFile, title, prompt, program string) (*session.Instance, error) {
+	client := daemonpkg.NewSocketClient(defaultDaemonSocketPath())
+	if err := client.StartPlan(project, planFile, prompt, program); err != nil {
+		return nil, err
+	}
+
+	data := session.InstanceData{
+		Title:         title,
+		Path:          repoPath,
+		Status:        session.Running,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		Program:       program,
+		ExecutionMode: session.ExecutionModeTmux,
+		TaskFile:      planFile,
+		AgentType:     session.AgentTypePlanner,
+	}
+
+	var lastErr error
+	for range 20 {
+		inst, err := session.FromInstanceData(data)
+		if err == nil {
+			return inst, nil
+		}
+		lastErr = err
+		time.Sleep(50 * time.Millisecond)
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("planner session did not appear")
+}
+
+type daemonPlannerStartedMsg struct {
+	instance *session.Instance
+	err      error
+}
 
 // shouldCreatePR returns true when a plan entry is eligible for automatic PR creation:
 // the plan is done, has a branch, and does not already have a PR URL.
@@ -2216,13 +2255,28 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 	inst.LoadingMessage = "Preparing session..."
 
 	var startCmd tea.Cmd
+	deferAddInstance := true
 	if action == "plan" || action == "solo" {
 		// Planner and solo agent run on main branch — no worktree created.
 		if err := scaffold.PatchWorktreeConfig(m.activeRepoPath, m.opencodeAgentConfigs()); err != nil {
 			return m, m.handleError(err)
 		}
-		startCmd = func() tea.Msg {
-			return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
+		if action == "plan" && repoManagedByDaemon(m.activeRepoPath) {
+			deferAddInstance = false
+			capturedRepoPath := m.activeRepoPath
+			capturedProject := m.taskStoreProject
+			capturedPlanFile := planFile
+			capturedTitle := title
+			capturedPrompt := prompt
+			capturedProgram := m.programForAgent(agentType)
+			startCmd = func() tea.Msg {
+				inst, err := spawnPlannerWithDaemon(capturedRepoPath, capturedProject, capturedPlanFile, capturedTitle, capturedPrompt, capturedProgram)
+				return daemonPlannerStartedMsg{instance: inst, err: err}
+			}
+		} else {
+			startCmd = func() tea.Msg {
+				return instanceStartedMsg{instance: inst, err: inst.StartOnMainBranch()}
+			}
 		}
 	} else {
 		// Backfill branch name for plans created before the branch field was introduced.
@@ -2253,8 +2307,10 @@ func (m *home) spawnTaskAgent(planFile, action, prompt string) (tea.Model, tea.C
 		auditlog.WithAgent(agentType),
 	)
 
-	m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
-	m.nav.SelectInstance(inst)
+	if deferAddInstance {
+		m.addInstanceFinalizer(inst, m.nav.AddInstance(inst))
+		m.nav.SelectInstance(inst)
+	}
 	return m, tea.Batch(tea.RequestWindowSize, startCmd)
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/kastheco/kasmos/config"
 	daemonpkg "github.com/kastheco/kasmos/daemon"
 	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/kastheco/kasmos/ui/overlay"
@@ -26,7 +27,21 @@ type daemonRepoRegisteredMsg struct {
 	path string
 }
 
+func canonicalRepoPath(repoPath string) string {
+	if repoPath == "" {
+		return ""
+	}
+	if root, err := config.ResolveRepoRoot(repoPath); err == nil && root != "" {
+		repoPath = root
+	}
+	if realPath, err := filepath.EvalSymlinks(repoPath); err == nil && realPath != "" {
+		repoPath = realPath
+	}
+	return filepath.Clean(repoPath)
+}
+
 func checkDaemonStatus(repoPath string) daemonStatusMsg {
+	repoPath = canonicalRepoPath(repoPath)
 	socketPath := daemonpkg.DefaultSocketPath()
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -67,9 +82,9 @@ func checkDaemonStatus(repoPath string) daemonStatusMsg {
 		}
 	}
 
-	cleanRepoPath := filepath.Clean(repoPath)
+	cleanRepoPath := canonicalRepoPath(repoPath)
 	for _, repo := range status.Repos {
-		if filepath.Clean(repo.Path) == cleanRepoPath {
+		if canonicalRepoPath(repo.Path) == cleanRepoPath {
 			return daemonStatusMsg{ready: true}
 		}
 	}
@@ -84,7 +99,7 @@ func checkDaemonStatus(repoPath string) daemonStatusMsg {
 }
 
 func registerRepoWithDaemon(repoPath string) error {
-	return daemonpkg.NewSocketClient(daemonpkg.DefaultSocketPath()).AddRepo(repoPath)
+	return daemonpkg.NewSocketClient(daemonpkg.DefaultSocketPath()).AddRepo(canonicalRepoPath(repoPath))
 }
 
 func (m *home) daemonStartupCheckCmd() tea.Cmd {

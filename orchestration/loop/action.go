@@ -187,6 +187,8 @@ type SpawnOpts struct {
 // AgentSpawner abstracts tmux session management so the daemon and TUI can
 // share the same SignalProcessor logic while using different backends.
 type AgentSpawner interface {
+	// SpawnPlanner launches a planner agent for the given plan on the main branch.
+	SpawnPlanner(ctx context.Context, opts SpawnOpts) error
 	// SpawnReviewer launches a reviewer agent for the given plan.
 	SpawnReviewer(ctx context.Context, opts SpawnOpts) error
 	// SpawnCoder launches a coder agent for the given plan.

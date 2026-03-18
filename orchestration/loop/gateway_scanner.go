@@ -49,7 +49,7 @@ func ScanGateway(gw taskstore.SignalGateway, project, claimedBy string) (ScanRes
 			break
 		}
 
-		if convertErr := convertSignalEntry(entry, &result); convertErr != nil {
+		if convertErr := ConvertSignalEntry(entry, &result); convertErr != nil {
 			// Mark the bad row as failed immediately so it does not cycle through
 			// the reaper and block older valid signals from progressing.
 			if markErr := gw.MarkProcessed(entry.ID, taskstore.SignalFailed, convertErr.Error()); markErr != nil {
@@ -64,8 +64,8 @@ func ScanGateway(gw taskstore.SignalGateway, project, claimedBy string) (ScanRes
 	return result, ids, nil
 }
 
-// convertSignalEntry decodes a single SignalEntry and appends it to result.
-func convertSignalEntry(entry *taskstore.SignalEntry, result *ScanResult) error {
+// ConvertSignalEntry decodes a single SignalEntry and appends it to result.
+func ConvertSignalEntry(entry *taskstore.SignalEntry, result *ScanResult) error {
 	switch entry.SignalType {
 	case "planner_finished":
 		body, err := decodeBody(entry.Payload)

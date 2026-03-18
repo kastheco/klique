@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTmuxSpawner_ImplementsInterface(t *testing.T) {
@@ -208,6 +211,17 @@ func TestTmuxSpawner_SpawnFixer_KillsExistingAgents(t *testing.T) {
 
 	// Both the fixer and coder must have been killed (kill called for each).
 	assert.Len(t, killCalls, 2, "expected kill calls for fixer and coder")
+}
+
+func TestEnsureWorktreeScaffold_WritesFixerAgentFiles(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+
+	err := ensureWorktreeScaffold(dir, "opencode", session.AgentTypeFixer)
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(dir, ".opencode", "opencode.jsonc"))
+	assert.FileExists(t, filepath.Join(dir, ".opencode", "agents", "fixer.md"))
+	assert.FileExists(t, filepath.Join(dir, ".agents", "skills", "kasmos-fixer", "SKILL.md"))
 }
 
 func TestShouldSkipCleanup_AttachedClient(t *testing.T) {

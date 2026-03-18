@@ -1500,6 +1500,30 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	require.True(t, found, "task context menu must include 'create pr' action")
 }
 
+func TestStartFixer_AppearsInTaskContextMenu(t *testing.T) {
+	h := newTestHome()
+	h.setupPlanState(t, "review-plan", taskstate.StatusReviewing, "")
+
+	h.focusSlot = slotNav
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "review-plan")
+
+	model, _ := h.openTaskContextMenu()
+	updated := model.(*home)
+
+	require.Equal(t, stateContextMenu, updated.state)
+	cm, ok := updated.overlays.Current().(*overlay.ContextMenu)
+	require.True(t, ok, "current overlay must be a ContextMenu")
+
+	found := false
+	for _, item := range cm.Items() {
+		if item.Action == "start_fixer" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "task context menu must include 'start fixer' action")
+}
+
 // TestExitFocusMode_KeepsPreviewTerminal verifies that exitFocusMode does NOT close
 // previewTerminal — it stays alive for preview rendering.
 func TestExitFocusMode_KeepsPreviewTerminal(t *testing.T) {

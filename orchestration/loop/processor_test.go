@@ -5,6 +5,7 @@ import (
 
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/kastheco/kasmos/orchestration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -226,6 +227,38 @@ func TestProcessor_ProcessTaskSignals(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected TaskCompleteAction")
+}
+
+func TestProcessor_ProcessTaskSignals_RestoresOrchestratorFromStore(t *testing.T) {
+	store := taskstore.NewTestStore(t)
+	require.NoError(t, store.Create("test", taskstore.TaskEntry{
+		Filename: "my-plan.md",
+		Status:   taskstore.StatusImplementing,
+		Branch:   "plan/my-plan",
+	}))
+	require.NoError(t, store.SetContent("test", "my-plan.md", "# Plan\n\n**Goal:** test\n\n**Architecture:** test\n\n**Tech Stack:** go\n\n**Size:** Small\n\n---\n\n## Wave 1\n\n### Task 1: First\n\nDo the first thing.\n\n### Task 2: Second\n\nDo the second thing."))
+	require.NoError(t, store.SetSubtasks("test", "my-plan.md", []taskstore.SubtaskEntry{
+		{TaskNumber: 1, Title: "First", Status: taskstore.SubtaskStatusComplete},
+		{TaskNumber: 2, Title: "Second", Status: taskstore.SubtaskStatusRunning},
+	}))
+
+	p := NewProcessor(ProcessorConfig{Store: store, Project: "test"})
+	actions := p.ProcessTaskSignals([]taskfsm.TaskSignal{{
+		TaskFile:   "my-plan.md",
+		TaskNumber: 2,
+		WaveNumber: 1,
+	}})
+
+	require.Len(t, actions, 1)
+	taskAction, ok := actions[0].(TaskCompleteAction)
+	require.True(t, ok)
+	assert.Equal(t, 2, taskAction.TaskNumber)
+
+	orch := p.WaveOrchestrator("my-plan.md")
+	require.NotNil(t, orch)
+	assert.Equal(t, orchestration.WaveStateAllComplete, orch.State())
+	assert.True(t, orch.IsTaskComplete(1))
+	assert.True(t, orch.IsTaskComplete(2))
 }
 
 func TestProcessor_ProcessWaveSignals(t *testing.T) {

@@ -160,7 +160,6 @@ func TestDaemon_RecoverOnRestart(t *testing.T) {
 	assert.Equal(t, 0, recovered)
 }
 
-
 func TestDaemon_RecoverSessions_AdoptsTrackedInstances(t *testing.T) {
 	project := "proj"
 	store := taskstore.NewTestStore(t)
@@ -202,6 +201,59 @@ func TestDaemon_RecoverSessions_AdoptsTrackedInstances(t *testing.T) {
 	assert.Equal(t, "feature.md", running[0].PlanFile)
 	assert.Equal(t, session.AgentTypeCoder, running[0].AgentType)
 	assert.Equal(t, project, running[0].Project)
+}
+
+func TestDaemon_StartPlan_ReturnsBeforeSpawnCompletes(t *testing.T) {
+	project := "proj"
+	store := taskstore.NewTestStore(t)
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{
+		Filename: "feature.md",
+		Status:   taskstore.StatusPlanning,
+	}))
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	d := &Daemon{
+		repos:       NewRepoManager(),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+		killAgent: func(repoPath, planFile, agentType string) error {
+			return nil
+		},
+		spawnPlanner: func(_ context.Context, opts loop.SpawnOpts) error {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+			return nil
+		},
+	}
+	d.repos.repos = []RepoEntry{{
+		Path:    "/tmp/proj",
+		Project: project,
+		Store:   store,
+	}}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.StartPlan(project, "feature.md", "plan prompt", "opencode")
+	}()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("StartPlan should return before async spawn completes")
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background planner spawn did not start")
+	}
+
+	close(release)
 }
 
 func TestDaemon_AutoAdvanceCompletedImplementer_TransitionsToReviewing(t *testing.T) {
@@ -417,6 +469,105 @@ func TestDaemon_TickRepoUsesGateway(t *testing.T) {
 	updated, err := store.Get("test-project", "gw-plan")
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusReady, updated.Status)
+}
+
+func TestDaemon_TickRepoGateway_TaskSignalRestoresOrchestrator(t *testing.T) {
+	dir := t.TempDir()
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	planFile := "gw-wave-plan"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: planFile, Status: taskstore.StatusImplementing}))
+	require.NoError(t, store.SetContent(project, planFile, "# Plan\n\n**Goal:** test\n\n**Architecture:** test\n\n**Tech Stack:** go\n\n**Size:** Small\n\n---\n\n## Wave 1\n\n### Task 1: First\n\nDo first.\n\n### Task 2: Second\n\nDo second."))
+	require.NoError(t, store.SetSubtasks(project, planFile, []taskstore.SubtaskEntry{
+		{TaskNumber: 1, Title: "First", Status: taskstore.SubtaskStatusRunning},
+		{TaskNumber: 2, Title: "Second", Status: taskstore.SubtaskStatusRunning},
+	}))
+
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+	require.NoError(t, gw.Create(project, taskstore.SignalEntry{
+		PlanFile:   planFile,
+		SignalType: "implement_task_finished",
+		Payload:    `{"wave_number":1,"task_number":1}`,
+	}))
+
+	entry := RepoEntry{
+		Path:          dir,
+		Project:       project,
+		Store:         store,
+		Processor:     loop.NewProcessor(loop.ProcessorConfig{Store: store, Project: project}),
+		SignalGateway: gw,
+	}
+	d := &Daemon{
+		cfg:         &DaemonConfig{PollInterval: time.Second},
+		repos:       NewRepoManager(),
+		spawner:     newTmuxSpawner(slog.Default()),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+
+	d.tickRepo(context.Background(), entry)
+
+	done, err := gw.List(project, taskstore.SignalDone)
+	require.NoError(t, err)
+	assert.Len(t, done, 1)
+	assert.Equal(t, "", done[0].Result)
+
+	subtasks, err := store.GetSubtasks(project, planFile)
+	require.NoError(t, err)
+	require.Len(t, subtasks, 2)
+	assert.Equal(t, taskstore.SubtaskStatusComplete, subtasks[0].Status)
+	assert.Equal(t, taskstore.SubtaskStatusRunning, subtasks[1].Status)
+
+	orch := entry.Processor.WaveOrchestrator(planFile)
+	require.NotNil(t, orch)
+	assert.Equal(t, 1, orch.CurrentWaveNumber())
+	assert.True(t, orch.IsTaskComplete(1))
+	assert.True(t, orch.IsTaskRunning(2))
+}
+
+func TestDaemon_TickRepoGateway_InvalidTaskSignalMarkedFailed(t *testing.T) {
+	dir := t.TempDir()
+	store := taskstore.NewTestStore(t)
+	project := "test-project"
+	planFile := "gw-bad-task"
+	require.NoError(t, store.Create(project, taskstore.TaskEntry{Filename: planFile, Status: taskstore.StatusImplementing}))
+
+	gw, err := taskstore.NewSQLiteSignalGateway(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = gw.Close() })
+	require.NoError(t, gw.Create(project, taskstore.SignalEntry{
+		PlanFile:   planFile,
+		SignalType: "implement_task_finished",
+		Payload:    `{"wave_number":1,"task_number":1}`,
+	}))
+
+	entry := RepoEntry{
+		Path:          dir,
+		Project:       project,
+		Store:         store,
+		Processor:     loop.NewProcessor(loop.ProcessorConfig{Store: store, Project: project}),
+		SignalGateway: gw,
+	}
+	d := &Daemon{
+		cfg:         &DaemonConfig{PollInterval: time.Second},
+		repos:       NewRepoManager(),
+		spawner:     newTmuxSpawner(slog.Default()),
+		logger:      slog.Default(),
+		broadcaster: api.NewEventBroadcaster(),
+	}
+
+	d.tickRepo(context.Background(), entry)
+
+	failed, err := gw.List(project, taskstore.SignalFailed)
+	require.NoError(t, err)
+	require.Len(t, failed, 1)
+	assert.Equal(t, "no active orchestrator / wrong wave / already-finished task", failed[0].Result)
+
+	done, err := gw.List(project, taskstore.SignalDone)
+	require.NoError(t, err)
+	assert.Empty(t, done)
 }
 
 func TestDaemon_ExecuteAction_ReviewCycleLimit(t *testing.T) {

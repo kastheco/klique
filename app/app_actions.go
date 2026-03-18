@@ -222,6 +222,49 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m.triggerTaskStage(planFile, "review")
 
+	case "start_fixer":
+		planFile := m.nav.GetSelectedPlanFile()
+		if planFile == "" || m.taskState == nil {
+			return m, nil
+		}
+		entry, ok := m.taskState.Entry(planFile)
+		if !ok {
+			return m, m.handleError(fmt.Errorf("task not found: %s", planFile))
+		}
+
+		feedback := m.pendingReviewFeedback[planFile]
+		var cmds []tea.Cmd
+		if cmd := m.handleReviewChangesRequested(planFile, feedback); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		if entry.Status == taskstate.StatusReviewing {
+			if m.appConfig != nil && m.appConfig.MaxReviewFixCycles > 0 {
+				if cycle, err := m.taskState.ReviewCycle(planFile); err == nil && cycle+1 > m.appConfig.MaxReviewFixCycles {
+					planName := taskstate.DisplayName(planFile)
+					m.toastManager.Error(fmt.Sprintf(
+						"review-fix loop stopped: cycle limit reached (%d/%d) for %s",
+						cycle+1, m.appConfig.MaxReviewFixCycles, planName))
+					return m, m.toastTickCmd()
+				}
+			}
+			if err := m.fsm.Transition(planFile, taskfsm.ReviewChangesRequested); err != nil {
+				return m, m.handleError(err)
+			}
+			if err := m.taskState.IncrementReviewCycle(planFile); err != nil {
+				return m, m.handleError(err)
+			}
+			m.audit(auditlog.EventPlanTransition, "reviewing → implementing (manual fixer)",
+				auditlog.WithPlan(planFile))
+			m.loadTaskState()
+			m.updateSidebarTasks()
+		}
+
+		if cmd := m.spawnFixerWithFeedback(planFile, feedback); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
+
 	case "inspect_plan":
 		planFile := m.nav.GetSelectedPlanFile()
 		if planFile != "" {
@@ -794,6 +837,7 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 			case taskstate.StatusReviewing:
 				items = append(items,
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
+					overlay.ContextMenuItem{Label: "start fixer", Action: "start_fixer"},
 					overlay.ContextMenuItem{Label: "mark finished", Action: "mark_plan_done"},
 				)
 			case taskstate.StatusDone:

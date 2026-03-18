@@ -80,6 +80,15 @@ func (c *SocketClient) RemoveRepo(project string) error {
 	return nil
 }
 
+// StartPlan requests that the daemon spawn a planner for the given plan.
+func (c *SocketClient) StartPlan(project, filename, prompt, program string) error {
+	body := struct {
+		Prompt  string `json:"prompt"`
+		Program string `json:"program"`
+	}{Prompt: prompt, Program: program}
+	return c.post("/v1/repos/"+project+"/plans/"+filename+"/plan", body, nil)
+}
+
 // url returns the full HTTP URL for the given path, routed through the Unix socket.
 // The host component is a placeholder since actual routing goes through the socket.
 func (c *SocketClient) url(path string) string {

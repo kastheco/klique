@@ -18,6 +18,7 @@ func newScaffoldCmd() *cobra.Command {
 		Short: "Manage project scaffold files",
 	}
 	cmd.AddCommand(newScaffoldSyncCmd())
+	cmd.AddCommand(newScaffoldWorktreeCmd())
 	return cmd
 }
 
@@ -30,6 +31,17 @@ enforcement hooks from the current binary. Uses existing TOML config for agent
 settings — does not re-run the interactive wizard or modify config.`,
 		SilenceUsage: true,
 		RunE:         runScaffoldSync,
+	}
+}
+
+func newScaffoldWorktreeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:          "worktree [path]",
+		Short:        "Re-sync scaffold files into one existing worktree",
+		Long:         "Repairs harness scaffold files inside an existing worktree using the current repo's configured agent profiles.",
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE:         runScaffoldWorktree,
 	}
 }
 
@@ -115,17 +127,9 @@ func profilesToAgentConfigs(profiles map[string]config.AgentProfile) []harness.A
 func runScaffoldSync(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
-	tomlCfg, err := config.LoadTOMLConfig()
+	agents, err := loadConfiguredAgentConfigs()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-	if tomlCfg == nil {
-		return fmt.Errorf("no config found — run 'kas setup' first to create .kasmos/config.toml")
-	}
-
-	agents := profilesToAgentConfigs(tomlCfg.Profiles)
-	if len(agents) == 0 {
-		return fmt.Errorf("config has no enabled agents — run 'kas setup' to configure agents")
+		return err
 	}
 
 	cwd, err := os.Getwd()
@@ -218,6 +222,66 @@ func resolveCheckoutRoot(dir string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+func loadConfiguredAgentConfigs() ([]harness.AgentConfig, error) {
+	tomlCfg, err := config.LoadTOMLConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if tomlCfg == nil {
+		return nil, fmt.Errorf("no config found — run 'kas setup' first to create .kasmos/config.toml")
+	}
+
+	agents := profilesToAgentConfigs(tomlCfg.Profiles)
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("config has no enabled agents — run 'kas setup' to configure agents")
+	}
+	return agents, nil
+}
+
+func runScaffoldWorktree(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	agents, err := loadConfiguredAgentConfigs()
+	if err != nil {
+		return err
+	}
+
+	target := "."
+	if len(args) == 1 {
+		target = args[0]
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolve worktree path: %w", err)
+	}
+	worktreeDir, err := resolveCheckoutRoot(absTarget)
+	if err != nil {
+		return fmt.Errorf("resolve worktree root: %w", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(worktreeDir, ".git")); err != nil {
+		return fmt.Errorf("worktree root missing .git entry: %s", worktreeDir)
+	}
+
+	fmt.Fprintf(out, "Syncing worktree scaffold: %s\n", worktreeDir)
+	results, err := scaffold.SyncScaffold(worktreeDir, agents)
+	if err != nil {
+		return fmt.Errorf("sync worktree scaffold: %w", err)
+	}
+
+	updated := 0
+	unchanged := 0
+	for _, r := range results {
+		if r.Created {
+			fmt.Fprintf(out, "  %-40s updated\n", r.Path)
+			updated++
+		} else {
+			unchanged++
+		}
+	}
+	fmt.Fprintf(out, "\ndone. %d files updated, %d unchanged.\n", updated, unchanged)
+	return nil
 }
 
 func init() {

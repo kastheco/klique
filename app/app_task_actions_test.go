@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/kastheco/kasmos/config"
 	"github.com/kastheco/kasmos/config/taskfsm"
 	"github.com/kastheco/kasmos/config/taskparser"
@@ -307,6 +308,85 @@ func TestSpawnTaskAgent_PatchesSharedWorktreeOpencodeConfig(t *testing.T) {
 	assert.Equal(t, "anthropic/claude-opus-4-6", coderCfg["model"], "worktree opencode.jsonc must have patched model")
 	assert.InDelta(t, coderTemp, coderCfg["temperature"].(float64), 0.0001, "worktree opencode.jsonc must have patched temperature")
 	assert.Equal(t, "high", coderCfg["reasoningEffort"], "worktree opencode.jsonc must have patched reasoningEffort")
+}
+
+func TestSpawnTaskAgent_PlanUsesDaemonWhenRepoManaged(t *testing.T) {
+	oldManaged := repoManagedByDaemon
+	oldSpawner := spawnPlannerWithDaemon
+	t.Cleanup(func() {
+		repoManagedByDaemon = oldManaged
+		spawnPlannerWithDaemon = oldSpawner
+	})
+	repoManagedByDaemon = func(string) bool { return true }
+
+	dir := t.TempDir()
+	plansDir := filepath.Join(dir, "docs", "plans")
+	require.NoError(t, os.MkdirAll(plansDir, 0o755))
+	ps, err := newTestPlanState(t, plansDir)
+	require.NoError(t, err)
+	planFile := "daemon-planner.md"
+	require.NoError(t, ps.Register(planFile, "daemon planner test", "plan/daemon-planner", time.Now()))
+
+	fakeInst, err := session.NewInstance(session.InstanceOptions{
+		Title:     "daemon-planner-plan",
+		Path:      dir,
+		Program:   "opencode",
+		AgentType: session.AgentTypePlanner,
+		TaskFile:  planFile,
+	})
+	require.NoError(t, err)
+	fakeInst.MarkStartedForTest()
+	fakeInst.SetStatus(session.Running)
+
+	called := false
+	spawnPlannerWithDaemon = func(repoPath, project, file, title, prompt, program string) (*session.Instance, error) {
+		called = true
+		assert.Equal(t, dir, repoPath)
+		assert.Equal(t, filepath.Base(dir), project)
+		assert.Equal(t, planFile, file)
+		assert.Equal(t, taskstate.DisplayName(planFile)+"-plan", title)
+		assert.Equal(t, "plan prompt", prompt)
+		assert.Equal(t, "opencode", program)
+		return fakeInst, nil
+	}
+
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	h := &home{
+		taskState:          ps,
+		activeRepoPath:     dir,
+		taskStoreProject:   filepath.Base(dir),
+		program:            "opencode",
+		nav:                ui.NewNavigationPanel(&sp),
+		menu:               ui.NewMenu(),
+		tabbedWindow:       ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewInfoPane()),
+		toastManager:       overlay.NewToastManager(&sp),
+		instanceFinalizers: make(map[*session.Instance]func()),
+	}
+
+	_, cmd := h.spawnTaskAgent(planFile, "plan", "plan prompt")
+	require.NotNil(t, cmd)
+	msg := cmd()
+	var started daemonPlannerStartedMsg
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, sub := range batch {
+			if dm, ok := sub().(daemonPlannerStartedMsg); ok {
+				started = dm
+				break
+			}
+		}
+	} else if dm, ok := msg.(daemonPlannerStartedMsg); ok {
+		started = dm
+	}
+	require.NotNil(t, started.instance)
+
+	updatedModel, _ := h.Update(started)
+	updated := updatedModel.(*home)
+	require.True(t, called)
+	instances := updated.nav.GetInstances()
+	require.Len(t, instances, 1)
+	assert.Equal(t, session.AgentTypePlanner, instances[0].AgentType)
+	assert.Equal(t, planFile, instances[0].TaskFile)
+	assert.Equal(t, fakeInst.Title, instances[0].Title)
 }
 
 func TestSpawnWaveTasks_HeadlessCoderUsesHeadlessExecution(t *testing.T) {
