@@ -45,15 +45,9 @@ func makeFindHandler(sb *Sandbox, runner CmdRunner) server.ToolHandlerFunc {
 		}
 
 		args := []string{"--color", "never", "--type", "f", "--glob", pattern, validPath}
-		out, err := runner.Output(ctx, "fd", args...)
-		if err != nil {
-			// fd exits non-zero on some errors but also when there are no matches
-			// in some configurations; treat non-empty stderr as an actual error.
-			// Empty output with non-zero exit is treated as zero matches.
-			if len(out) == 0 {
-				out = []byte{}
-			}
-		}
+		// Errors (including non-zero exit when fd finds no matches) are treated as
+		// zero results; parseFdOutput handles empty or nil output gracefully.
+		out, _ := runner.Output(ctx, "fd", args...)
 
 		files := parseFdOutput(out)
 
