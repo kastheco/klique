@@ -57,6 +57,12 @@ type Tab struct {
 	Render func(width int, height int) string
 }
 
+// InstanceTab describes a single session tab in the dynamic tab bar.
+type InstanceTab struct {
+	Title string // short label shown in the tab header
+	Key   string // stable lookup key; use instance title for now
+}
+
 // TabbedWindow composes two content panes (info, preview) behind a tab bar.
 // It tracks which tab is active, manages focus state, and delegates rendering
 // and scroll operations to the appropriate child pane.
@@ -79,6 +85,11 @@ type TabbedWindow struct {
 	// showWelcome is true on startup. While true the info tab shows the
 	// animated banner instead of plan metadata so the logo animation plays.
 	showWelcome bool
+
+	// instanceTabs is the dynamic list of per-session tabs.
+	instanceTabs []InstanceTab
+	// showInfo controls whether the compact info summary is visible above the tab bar.
+	showInfo bool
 }
 
 // NewTabbedWindow creates a TabbedWindow wiring the two child panes together.
@@ -94,6 +105,7 @@ func NewTabbedWindow(preview *PreviewPane, info *InfoPane) *TabbedWindow {
 		info:        info,
 		focusedTab:  -1,
 		showWelcome: true,
+		showInfo:    true,
 	}
 }
 
@@ -174,6 +186,63 @@ func (w *TabbedWindow) GetActiveTab() int { return w.activeTab }
 
 // IsInInfoTab reports whether the info tab is currently active.
 func (w *TabbedWindow) IsInInfoTab() bool { return w.activeTab == InfoTab }
+
+// ── Dynamic instance tab API ──────────────────────────────────────────────────
+
+// SetTabs replaces the dynamic instance tab list. The incoming slice is copied
+// so callers cannot mutate it afterward. When the current activeTab index is
+// out of range after the update, it is clamped to the last valid index (or 0
+// when the new list is empty). Does not clear showWelcome; use SetActiveTab for that.
+func (w *TabbedWindow) SetTabs(tabs []InstanceTab) {
+	w.instanceTabs = append([]InstanceTab(nil), tabs...)
+	if len(w.instanceTabs) == 0 {
+		w.activeTab = 0
+		w.focusedTab = -1
+		return
+	}
+	if w.activeTab >= len(w.instanceTabs) {
+		w.activeTab = len(w.instanceTabs) - 1
+	}
+	if w.focusedTab >= len(w.instanceTabs) {
+		w.focusedTab = len(w.instanceTabs) - 1
+	}
+}
+
+// TabCount returns the number of dynamic instance tabs.
+func (w *TabbedWindow) TabCount() int { return len(w.instanceTabs) }
+
+// ActiveTabKey returns the Key of the currently active dynamic tab, or ""
+// when there are no dynamic tabs or the active index is out of range.
+func (w *TabbedWindow) ActiveTabKey() string {
+	if len(w.instanceTabs) == 0 || w.activeTab < 0 || w.activeTab >= len(w.instanceTabs) {
+		return ""
+	}
+	return w.instanceTabs[w.activeTab].Key
+}
+
+// NextTab advances to the next dynamic instance tab, wrapping around at the end.
+// No-op when there are no dynamic tabs.
+func (w *TabbedWindow) NextTab() {
+	if len(w.instanceTabs) == 0 {
+		return
+	}
+	w.activeTab = (w.activeTab + 1) % len(w.instanceTabs)
+}
+
+// PrevTab moves to the previous dynamic instance tab, wrapping around at the start.
+// No-op when there are no dynamic tabs.
+func (w *TabbedWindow) PrevTab() {
+	if len(w.instanceTabs) == 0 {
+		return
+	}
+	w.activeTab = (w.activeTab - 1 + len(w.instanceTabs)) % len(w.instanceTabs)
+}
+
+// SetShowInfo enables or disables the compact info summary above the tab bar.
+func (w *TabbedWindow) SetShowInfo(show bool) { w.showInfo = show }
+
+// IsShowingInfo reports whether the compact info summary is currently visible.
+func (w *TabbedWindow) IsShowingInfo() bool { return w.showInfo }
 
 // ── Preview pane delegation ───────────────────────────────────────────────────
 

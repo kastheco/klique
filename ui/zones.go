@@ -21,3 +21,8 @@ var TabZoneIDs = [2]string{ZoneTabInfo, ZoneTabAgent}
 func NavRowZoneID(idx int) string {
 	return fmt.Sprintf("zone-nav-row-%d", idx)
 }
+
+// InstanceTabZoneID returns the zone ID for a dynamic instance tab at the given index.
+func InstanceTabZoneID(idx int) string {
+	return fmt.Sprintf("zone-instance-tab-%d", idx)
+}

@@ -115,3 +115,48 @@ func TestViewportUpdate_DelegatesOnlyForPreviewTab(t *testing.T) {
 	assert.Nil(t, cmd)
 	assert.Equal(t, beforeInfo, afterInfo)
 }
+
+func TestSetTabs_PopulatesAndClampsActiveTab(t *testing.T) {
+	tw := NewTabbedWindow(NewPreviewPane(), NewInfoPane())
+	tabs := []InstanceTab{
+		{Title: "planner", Key: "plan-planner"},
+		{Title: "coder-1", Key: "plan-coder-1"},
+	}
+	tw.SetTabs(tabs)
+	assert.Equal(t, 2, tw.TabCount())
+	assert.Equal(t, "plan-planner", tw.ActiveTabKey())
+
+	// Setting fewer tabs clamps activeTab
+	tw.SetActiveTab(1)   // select coder-1
+	tw.SetTabs(tabs[:1]) // only planner remains
+	assert.Equal(t, 0, tw.GetActiveTab())
+	assert.Equal(t, "plan-planner", tw.ActiveTabKey())
+}
+
+func TestNextPrevTab_CyclesWithWrapping(t *testing.T) {
+	tw := NewTabbedWindow(NewPreviewPane(), NewInfoPane())
+	tw.SetTabs([]InstanceTab{
+		{Title: "a", Key: "inst-a"},
+		{Title: "b", Key: "inst-b"},
+		{Title: "c", Key: "inst-c"},
+	})
+	assert.Equal(t, "inst-a", tw.ActiveTabKey())
+
+	tw.NextTab()
+	assert.Equal(t, "inst-b", tw.ActiveTabKey())
+	tw.NextTab()
+	assert.Equal(t, "inst-c", tw.ActiveTabKey())
+	tw.NextTab() // wraps
+	assert.Equal(t, "inst-a", tw.ActiveTabKey())
+
+	tw.PrevTab() // wraps backward
+	assert.Equal(t, "inst-c", tw.ActiveTabKey())
+	tw.PrevTab()
+	assert.Equal(t, "inst-b", tw.ActiveTabKey())
+}
+
+func TestActiveTabKey_EmptyTabs(t *testing.T) {
+	tw := NewTabbedWindow(NewPreviewPane(), NewInfoPane())
+	assert.Equal(t, "", tw.ActiveTabKey())
+	assert.Equal(t, 0, tw.TabCount())
+}
