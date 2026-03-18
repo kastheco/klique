@@ -394,15 +394,15 @@ func (m *home) computePlanStatuses() map[string]ui.TopicStatus {
 // skip this — updateSidebarTasks already includes plan statuses in its rebuild.
 func (m *home) updateNavPanelStatus() {
 	m.nav.SetItems(nil, nil, 0, nil, nil, m.computePlanStatuses())
+	m.populateInstanceTabs()
 }
 
 // focusSlot constants for readability.
-// Order matches tab layout: info (first), agent (second).
+// 0=nav, 1=tabs (center pane).
 const (
 	slotNav   = 0
-	slotInfo  = 1
-	slotAgent = 2
-	slotCount = 3
+	slotAgent = 1
+	slotCount = 2
 )
 
 // setFocusSlot updates which pane has focus and syncs visual state.
@@ -410,41 +410,22 @@ func (m *home) setFocusSlot(slot int) {
 	m.focusSlot = slot
 	m.nav.SetFocused(slot == slotNav)
 	m.menu.SetFocusSlot(slot)
-
-	// Center pane is focused when any of the 2 center tabs is active.
-	centerFocused := slot >= slotInfo && slot <= slotAgent
-	m.tabbedWindow.SetFocused(centerFocused)
-
-	// When focusing a center tab, switch the visible tab to match and track which tab is focused.
-	if centerFocused {
-		m.tabbedWindow.SetActiveTab(slot - slotInfo) // slotInfo=1 → InfoTab=0, etc.
-		m.previewRequested = slot == slotAgent
-	}
-	// focusedTab always tracks activeTab so the gradient header is visible
-	// regardless of which pane has keyboard focus.
+	m.tabbedWindow.SetFocused(slot == slotAgent)
 }
 
-// nextFocusSlot cycles the visible center tab forward (info ↔ agent).
+// nextFocusSlot cycles forward through dynamic instance tabs.
 // The sidebar always retains keyboard focus (focusSlot stays slotNav); only the
-// displayed tab changes. This is called by Tab and →.
+// displayed tab changes. This is called by Tab.
 func (m *home) nextFocusSlot() tea.Cmd {
-	switch m.tabbedWindow.GetActiveTab() {
-	case ui.InfoTab:
-		return m.activateLivePreviewTab()
-	default: // ui.PreviewTab — wraps to info
-		return m.activateInfoTab()
-	}
+	m.tabbedWindow.NextTab()
+	return m.tabSwitched()
 }
 
-// prevFocusSlot cycles the visible center tab backward (agent ↔ info).
+// prevFocusSlot cycles backward through dynamic instance tabs.
 // The sidebar always retains keyboard focus (focusSlot stays slotNav).
 func (m *home) prevFocusSlot() tea.Cmd {
-	switch m.tabbedWindow.GetActiveTab() {
-	case ui.PreviewTab:
-		return m.activateInfoTab()
-	default: // ui.InfoTab — wraps to agent
-		return m.activateLivePreviewTab()
-	}
+	m.tabbedWindow.PrevTab()
+	return m.tabSwitched()
 }
 
 func asyncClosePreviewTerminal(term *session.EmbeddedTerminal) tea.Cmd {
@@ -513,15 +494,82 @@ func (m *home) syncPreviewTerminal() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *home) activateInfoTab() tea.Cmd {
-	m.previewRequested = false
-	m.tabbedWindow.SetActiveTab(ui.InfoTab)
+// populateInstanceTabs rebuilds the dynamic instance tab list based on the
+// currently selected nav item. When a plan header is selected, it includes
+// all instances whose TaskFile matches that plan. When a solo instance is
+// selected, it shows exactly one tab for that instance.
+func (m *home) populateInstanceTabs() {
+	prevKey := m.tabbedWindow.ActiveTabKey()
+
+	var tabs []ui.InstanceTab
+	planFile := m.nav.GetSelectedPlanFile()
+
+	if planFile != "" {
+		// Plan header selected — show all instances belonging to this plan.
+		for _, inst := range m.nav.GetInstances() {
+			if inst.TaskFile == planFile {
+				tabs = append(tabs, ui.InstanceTab{Title: inst.Title, Key: inst.Title})
+			}
+		}
+	} else if selected := m.nav.GetSelectedInstance(); selected != nil {
+		// Solo instance selected — show just this one.
+		tabs = []ui.InstanceTab{{Title: selected.Title, Key: selected.Title}}
+	}
+
+	m.tabbedWindow.SetTabs(tabs)
+
+	// Prefer the currently selected instance's tab.
+	if selected := m.nav.GetSelectedInstance(); selected != nil {
+		for i, tab := range tabs {
+			if tab.Key == selected.Title {
+				m.tabbedWindow.SetActiveTab(i)
+				return
+			}
+		}
+	}
+
+	// Otherwise restore prevKey if still present.
+	if prevKey != "" {
+		for i, tab := range tabs {
+			if tab.Key == prevKey {
+				m.tabbedWindow.SetActiveTab(i)
+				return
+			}
+		}
+	}
+	// Otherwise leave at index 0 (default).
+}
+
+// tabSwitched syncs the preview terminal and info pane after the active
+// instance tab has changed. It should be called immediately after any
+// NextTab / PrevTab / SetActiveTab call that the user triggered.
+func (m *home) tabSwitched() tea.Cmd {
+	m.previewRequested = true
+	m.tabbedWindow.ClearDocumentMode()
+
+	key := m.tabbedWindow.ActiveTabKey()
+	if key != "" {
+		for _, inst := range m.nav.GetInstances() {
+			if inst.Title == key {
+				m.nav.SelectInstance(inst)
+				m.tabbedWindow.SetInstance(inst)
+				m.updateInfoPane()
+				m.menu.SetInstance(inst)
+				break
+			}
+		}
+	}
+
 	return m.syncPreviewTerminal()
+}
+
+func (m *home) activateInfoTab() tea.Cmd {
+	m.tabbedWindow.SetShowInfo(true)
+	return nil
 }
 
 func (m *home) activateLivePreviewTab() tea.Cmd {
 	m.previewRequested = true
-	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 	return m.syncPreviewTerminal()
 }
 
@@ -554,17 +602,15 @@ func (m *home) enterFocusMode() tea.Cmd {
 	return cmd
 }
 
-// exclamationAutoFocus handles the `!` key in stateDefault: it switches to the
-// agent preview tab, enters interactive/focus mode, and sends '!' to the harness
-// terminal so the agent's shell mode is activated in one keystroke.
+// exclamationAutoFocus handles the `!` key in stateDefault: it enters
+// interactive/focus mode and sends '!' to the harness terminal so the agent's
+// shell mode is activated in one keystroke.
 //
 // No-ops gracefully when no selected/running instance exists.
 func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
-	// Switch to agent tab first (same as KeySendPrompt convention).
 	m.previewRequested = true
-	m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 
-	// Resolve selected instance (mirrors KeySendPrompt logic).
+	// Resolve selected instance.
 	selected := m.nav.GetSelectedInstance()
 	if selected == nil {
 		if pf := m.nav.GetSelectedPlanFile(); pf != "" {
@@ -575,7 +621,7 @@ func (m *home) exclamationAutoFocus() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Guard: no valid target — leave tab switched but don't enter focus mode.
+	// Guard: no valid target — don't enter focus mode.
 	if selected == nil || !selected.Started() || selected.Paused() {
 		return m, nil
 	}
@@ -606,25 +652,14 @@ func (m *home) exitFocusMode() {
 	m.menu.SetFocusMode(false)
 }
 
-// switchToTab changes the visible center tab without stealing focus from the sidebar.
+// switchToTab toggles the compact info header without stealing focus from the sidebar.
 // The sidebar (slotNav) always retains keyboard focus.
 func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
-	var targetTab int
 	switch name {
 	case keys.KeyTabInfo:
-		targetTab = ui.InfoTab
-	default:
-		return m, nil
+		m.tabbedWindow.SetShowInfo(!m.tabbedWindow.IsShowingInfo())
 	}
-
-	if m.tabbedWindow.GetActiveTab() == targetTab {
-		return m, nil
-	}
-
-	if targetTab == ui.InfoTab {
-		return m, m.activateInfoTab()
-	}
-	return m, m.activateLivePreviewTab()
+	return m, nil
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
@@ -712,18 +747,11 @@ func (m *home) instanceChanged() tea.Cmd {
 
 	m.tabbedWindow.SetInstance(selected)
 	m.updateInfoPane()
-	// Update menu with current instance
+	// Update menu with current instance.
 	m.menu.SetInstance(selected)
 
-	// Auto-switch tab based on selection type: plan header → info tab, instance → agent tab.
-	// Only auto-switch when the nav panel is focused to avoid hijacking explicit tab selection.
-	if m.focusSlot == slotNav {
-		if selected != nil && m.previewRequested {
-			m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-		} else {
-			m.tabbedWindow.SetActiveTab(ui.InfoTab)
-		}
-	}
+	// Rebuild the dynamic instance tab list for the new selection.
+	m.populateInstanceTabs()
 
 	// Collect async commands.
 	var cmds []tea.Cmd
@@ -1707,7 +1735,6 @@ func (m *home) viewSelectedPlan() (tea.Model, tea.Cmd) {
 	// Cache hit — reuse previously rendered content (instant).
 	if planFile == m.cachedPlanFile && m.cachedPlanRendered != "" {
 		m.previewRequested = false
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		m.tabbedWindow.SetDocumentContent(m.cachedPlanRendered)
 		return m, nil
 	}

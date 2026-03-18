@@ -18,7 +18,7 @@ import (
 func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 	// Up/Down always refocus the sidebar and navigate it, regardless of which
 	// pane was previously focused (when no document/scroll mode is active).
-	for _, slot := range []int{slotInfo, slotAgent} {
+	for _, slot := range []int{slotAgent} {
 		t.Run(fmt.Sprintf("from slot %d", slot), func(t *testing.T) {
 			spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 			h := &home{
@@ -41,7 +41,7 @@ func TestHandleKeyPress_DownKeyAlwaysFocusesNav(t *testing.T) {
 }
 
 func TestHandleKeyPress_UpKeyAlwaysFocusesNav(t *testing.T) {
-	for _, slot := range []int{slotInfo, slotAgent} {
+	for _, slot := range []int{slotAgent} {
 		t.Run(fmt.Sprintf("from slot %d", slot), func(t *testing.T) {
 			spin := spinner.New(spinner.WithSpinner(spinner.Dot))
 			h := &home{

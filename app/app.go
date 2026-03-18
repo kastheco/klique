@@ -226,7 +226,7 @@ type home struct {
 
 	// nav handles unified navigation state
 	// focusSlot tracks which pane has keyboard focus in the Tab ring:
-	// 0=nav, 1=info tab, 2=agent tab
+	// 0=nav, 1=tabs (center pane)
 	focusSlot int
 	// pendingPlanName stores the plan name during the two-step plan creation flow
 	pendingPlanName string
@@ -744,7 +744,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cachedPlanFile = msg.planFile
 		m.cachedPlanRendered = msg.rendered
 		m.previewRequested = false
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		m.tabbedWindow.SetDocumentContent(msg.rendered)
 		return m, nil
 	case previewTickMsg:

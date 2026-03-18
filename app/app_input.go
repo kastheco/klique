@@ -55,7 +55,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnE
 
 // handleMouseWheel processes mouse wheel events for scrolling.
 func (m *home) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
-	if m.tabbedWindow.IsDocumentMode() && m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
+	if m.tabbedWindow.IsDocumentMode() {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.tabbedWindow.ContentScrollUp()
@@ -117,13 +117,11 @@ func (m *home) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Zone-based click: tab headers — switch visible tab without stealing sidebar focus.
-	for i, zoneID := range ui.TabZoneIDs {
-		if zone.Get(zoneID).InBounds(msg) {
-			if i == ui.PreviewTab {
-				return m, m.activateLivePreviewTab()
-			}
-			return m, m.activateInfoTab()
+	// Zone-based click: dynamic instance tab headers — switch without stealing sidebar focus.
+	for i := 0; i < m.tabbedWindow.TabCount(); i++ {
+		if zone.Get(ui.InstanceTabZoneID(i)).InBounds(msg) {
+			m.tabbedWindow.SetActiveTab(i)
+			return m, m.tabSwitched()
 		}
 	}
 
@@ -1406,8 +1404,7 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 
 	// Forward key events to the viewport when in document or scroll mode.
 	// This enables viewport native keys like PgUp/PgDn and arrow keys.
-	if (m.tabbedWindow.IsDocumentMode() || m.tabbedWindow.IsPreviewInScrollMode()) &&
-		m.tabbedWindow.GetActiveTab() == ui.PreviewTab {
+	if m.tabbedWindow.IsDocumentMode() || m.tabbedWindow.IsPreviewInScrollMode() {
 		cmd := m.tabbedWindow.ViewportUpdate(msg)
 
 		// Keep existing shift+up/down behavior as fallback handlers.
@@ -1547,19 +1544,16 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 		}
 		return m.openContextMenu()
 	case keys.KeyInfoTab:
-		// Switch visible tab to info without stealing sidebar focus.
-		if m.tabbedWindow.IsInInfoTab() {
-			return m, nil
-		}
-		return m, m.activateInfoTab()
+		// Toggle the compact info header without stealing sidebar focus or changing the instance tab.
+		m.tabbedWindow.SetShowInfo(!m.tabbedWindow.IsShowingInfo())
+		return m, nil
 	case keys.KeyTabInfo:
 		return m.switchToTab(name)
 	case keys.KeyTabAgent:
 		return m.exclamationAutoFocus()
 	case keys.KeySendPrompt, keys.KeyExitFocus:
-		// Ensure the agent tab is visible when entering focus mode.
+		// Ensure the preview terminal is ready when entering focus mode.
 		m.previewRequested = true
-		m.tabbedWindow.SetActiveTab(ui.PreviewTab)
 		selected := m.nav.GetSelectedInstance()
 		// When a plan header is selected (no instance), find the best instance for that plan.
 		if selected == nil {
@@ -1769,10 +1763,20 @@ func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) 
 	case keys.KeyAuditCursor:
 		return m.enterAuditCursorMode()
 	case keys.KeyArrowLeft:
-		// Sidebar always has focus — no-op.
+		// With multiple instance tabs, navigate to the previous tab.
+		if m.tabbedWindow.TabCount() > 1 {
+			m.tabbedWindow.PrevTab()
+			return m, m.tabSwitched()
+		}
+		// Otherwise no-op (sidebar already focused).
 		return m, nil
 	case keys.KeyArrowRight:
-		// Toggle expand/collapse on the selected sidebar item (same as space's expand behavior).
+		// With multiple instance tabs, navigate to the next tab.
+		if m.tabbedWindow.TabCount() > 1 {
+			m.tabbedWindow.NextTab()
+			return m, m.tabSwitched()
+		}
+		// Otherwise: preserve existing expand/menu/ClickUp behavior.
 		if m.nav.GetSelectedID() == ui.SidebarImportClickUp {
 			m.state = stateClickUpSearch
 			tio := overlay.NewTextInputOverlay("enter clickup id or url", "")
