@@ -191,3 +191,204 @@ func TestTaskList_StoreNotConfigured(t *testing.T) {
 	assert.True(t, result.IsError, "task_list must error when store is nil")
 	assert.Equal(t, "task store not configured", resultText(t, result))
 }
+
+// TestTaskUpdateContent_StoresContent verifies that task_update_content replaces
+// the stored content and returns a success response with the filename.
+func TestTaskUpdateContent_StoresContent(t *testing.T) {
+	srv := setupServer(t)
+	seedTask(t, srv, "my-task", "# My Task\n\nOriginal content.")
+
+	newContent := "# My Task\n\n## Wave 1\n\n### Task 1: Do Something\n\n**Goal:** Updated goal."
+	result := callTool(t, srv, "task_update_content", map[string]any{
+		"filename": "my-task",
+		"content":  newContent,
+	})
+	assert.False(t, result.IsError, "task_update_content should not return an error")
+
+	text := resultText(t, result)
+	var resp struct {
+		Filename string `json:"filename"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "my-task", resp.Filename)
+
+	// Verify the content was actually updated in the store.
+	ps, err := taskstate.Load(srv.Store(), testProject, "")
+	require.NoError(t, err)
+	stored, err := ps.GetContent("my-task")
+	require.NoError(t, err)
+	assert.Equal(t, newContent, stored)
+}
+
+// TestTaskUpdateContent_WarningOnBadStructure verifies that task_update_content
+// returns IsError=false with a non-empty warning field when the content is
+// stored but the plan structure (wave headers) cannot be parsed.
+func TestTaskUpdateContent_WarningOnBadStructure(t *testing.T) {
+	srv := setupServer(t)
+	// Seed a task without content so IngestContent can find it.
+	ps, err := taskstate.Load(srv.Store(), testProject, "")
+	require.NoError(t, err)
+	require.NoError(t, ps.Create("my-task", "my-task", "", "", time.Now()))
+
+	// Content is valid text but has no Wave sections — parse will warn.
+	badContent := "# Plan\n\n**Goal:** parsed but no waves"
+	result := callTool(t, srv, "task_update_content", map[string]any{
+		"filename": "my-task",
+		"content":  badContent,
+	})
+	assert.False(t, result.IsError, "task_update_content must not return IsError for a parse warning")
+
+	text := resultText(t, result)
+	var resp struct {
+		Filename string `json:"filename"`
+		Warning  string `json:"warning"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "my-task", resp.Filename)
+	assert.NotEmpty(t, resp.Warning, "warning field must be non-empty for bad structure")
+}
+
+// TestTaskUpdateContent_EmptyContent verifies that task_update_content returns
+// an error result when content is empty or only whitespace.
+func TestTaskUpdateContent_EmptyContent(t *testing.T) {
+	srv := setupServer(t)
+	seedTask(t, srv, "my-task", "# My Task\n\nSome content.")
+
+	result := callTool(t, srv, "task_update_content", map[string]any{
+		"filename": "my-task",
+		"content":  "   ",
+	})
+	assert.True(t, result.IsError, "task_update_content must error on empty content")
+	assert.Contains(t, resultText(t, result), "no content provided")
+}
+
+// TestTaskUpdateContent_NotFound verifies that task_update_content returns an
+// error result when the task does not exist in the store.
+func TestTaskUpdateContent_NotFound(t *testing.T) {
+	srv := setupServer(t)
+
+	result := callTool(t, srv, "task_update_content", map[string]any{
+		"filename": "no-such-task",
+		"content":  "# Some Content",
+	})
+	assert.True(t, result.IsError, "task_update_content must error for missing task")
+	assert.Contains(t, resultText(t, result), "no-such-task")
+}
+
+// TestTaskUpdateContent_StoreNotConfigured verifies that task_update_content
+// returns a clear error when the server was constructed without a store.
+func TestTaskUpdateContent_StoreNotConfigured(t *testing.T) {
+	srv := mcpserver.NewServer("0.1.0", nil, nil, testProject)
+	tasktools.Register(srv)
+
+	result := callTool(t, srv, "task_update_content", map[string]any{
+		"filename": "anything",
+		"content":  "# Content",
+	})
+	assert.True(t, result.IsError, "task_update_content must error when store is nil")
+	assert.Equal(t, "task store not configured", resultText(t, result))
+}
+
+// TestTaskCreate_CreatesEntry verifies that task_create creates a new task entry
+// and returns the expected JSON with filename, status=ready, and branch=plan/<name>.
+func TestTaskCreate_CreatesEntry(t *testing.T) {
+	srv := setupServer(t)
+
+	result := callTool(t, srv, "task_create", map[string]any{
+		"name": "new-task",
+	})
+	assert.False(t, result.IsError, "task_create should not return an error")
+
+	text := resultText(t, result)
+	var resp struct {
+		Filename string `json:"filename"`
+		Status   string `json:"status"`
+		Branch   string `json:"branch"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "new-task", resp.Filename)
+	assert.Equal(t, "ready", resp.Status)
+	assert.Equal(t, "plan/new-task", resp.Branch)
+
+	// Verify entry in the store.
+	ps, err := taskstate.Load(srv.Store(), testProject, "")
+	require.NoError(t, err)
+	entry, ok := ps.Entry("new-task")
+	assert.True(t, ok, "task entry must exist in store")
+	assert.Equal(t, taskstate.StatusReady, entry.Status)
+}
+
+// TestTaskCreate_WithContent verifies that task_create stores the given content
+// when the optional content argument is provided.
+func TestTaskCreate_WithContent(t *testing.T) {
+	srv := setupServer(t)
+	content := "# My Task\n\nSome plan content."
+
+	result := callTool(t, srv, "task_create", map[string]any{
+		"name":    "content-task",
+		"content": content,
+	})
+	assert.False(t, result.IsError, "task_create should not error when content is provided")
+
+	// Only assert that content was stored; do not assert parsed goal/subtasks.
+	ps, err := taskstate.Load(srv.Store(), testProject, "")
+	require.NoError(t, err)
+	stored, err := ps.GetContent("content-task")
+	require.NoError(t, err)
+	assert.Equal(t, content, stored)
+}
+
+// TestTaskCreate_WithBranchAndTopic verifies that custom branch and topic values
+// are stored and reflected in the response.
+func TestTaskCreate_WithBranchAndTopic(t *testing.T) {
+	srv := setupServer(t)
+
+	result := callTool(t, srv, "task_create", map[string]any{
+		"name":   "branched-task",
+		"branch": "feat/custom",
+		"topic":  "my-topic",
+	})
+	assert.False(t, result.IsError, "task_create should not error with branch and topic")
+
+	text := resultText(t, result)
+	var resp struct {
+		Filename string `json:"filename"`
+		Branch   string `json:"branch"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+	assert.Equal(t, "branched-task", resp.Filename)
+	assert.Equal(t, "feat/custom", resp.Branch)
+
+	// Verify branch and topic in store.
+	ps, err := taskstate.Load(srv.Store(), testProject, "")
+	require.NoError(t, err)
+	entry, ok := ps.Entry("branched-task")
+	require.True(t, ok)
+	assert.Equal(t, "feat/custom", entry.Branch)
+	assert.Equal(t, "my-topic", entry.Topic)
+}
+
+// TestTaskCreate_Duplicate verifies that creating a task with an already-used
+// name returns an error result.
+func TestTaskCreate_Duplicate(t *testing.T) {
+	srv := setupServer(t)
+	seedTask(t, srv, "existing-task", "# Existing Task")
+
+	result := callTool(t, srv, "task_create", map[string]any{
+		"name": "existing-task",
+	})
+	assert.True(t, result.IsError, "task_create must error on duplicate name")
+}
+
+// TestTaskCreate_StoreNotConfigured verifies that task_create returns a clear
+// error when the server was constructed without a store.
+func TestTaskCreate_StoreNotConfigured(t *testing.T) {
+	srv := mcpserver.NewServer("0.1.0", nil, nil, testProject)
+	tasktools.Register(srv)
+
+	result := callTool(t, srv, "task_create", map[string]any{
+		"name": "anything",
+	})
+	assert.True(t, result.IsError, "task_create must error when store is nil")
+	assert.Equal(t, "task store not configured", resultText(t, result))
+}
