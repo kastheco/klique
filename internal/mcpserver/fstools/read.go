@@ -98,6 +98,14 @@ func makeReadFileHandler(sb *Sandbox) server.ToolHandlerFunc {
 
 		from := req.GetInt("from", 1)
 		lines := req.GetInt("lines", DefaultReadLines)
+		// Clamp lines to the same bounds readFileLines applies internally so
+		// that the header range matches the number of lines actually returned.
+		if lines <= 0 {
+			lines = DefaultReadLines
+		}
+		if lines > MaxReadLines {
+			lines = MaxReadLines
+		}
 
 		body, total, err := readFileLines(validatedPath, from, lines)
 		if err != nil {
