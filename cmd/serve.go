@@ -15,6 +15,7 @@ import (
 	"github.com/kastheco/kasmos/config/taskstore"
 	"github.com/kastheco/kasmos/internal/mcpserver"
 	"github.com/kastheco/kasmos/internal/mcpserver/fstools"
+	webassets "github.com/kastheco/kasmos/web"
 	"github.com/spf13/cobra"
 )
 
@@ -82,14 +83,12 @@ func NewServeCmd() *cobra.Command {
 				}
 				adminFS = http.Dir(adminDir)
 			} else {
-				adminFS = getEmbeddedAdminFS()
+				adminFS = webassets.AdminFS()
 			}
 
-			if adminFS != nil {
-				rootMux.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
-				rootMux.Handle("/admin/", http.StripPrefix("/admin", adminFallbackHandler(adminFS)))
-				fmt.Println("admin UI available at /admin/")
-			}
+			rootMux.Handle("/admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
+			rootMux.Handle("/admin/", http.StripPrefix("/admin", adminFallbackHandler(adminFS)))
+			fmt.Println("admin UI available at /admin/")
 
 			addr := fmt.Sprintf("%s:%d", bind, port)
 

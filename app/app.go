@@ -388,6 +388,9 @@ type home struct {
 	// daemonRepoRegistrar registers the active repo with the daemon on demand.
 	// Nil disables in-app repo registration, which keeps narrow unit tests lightweight.
 	daemonRepoRegistrar func(string) error
+	// planBrowserOpener starts or reuses kas serve and opens the admin plan browser.
+	// Injected for testability.
+	planBrowserOpener func(repoRoot, project, planFile string) (string, bool, error)
 
 	// pendingReviewFeedback holds review feedback from sentinel files, keyed by
 	// plan filename, to be injected as context for the next coder session.
@@ -456,6 +459,7 @@ func newHome(ctx context.Context, program string, autoYes bool, version string) 
 		taskStoreProject:      project,
 		daemonStatusChecker:   checkDaemonStatus,
 		daemonRepoRegistrar:   registerRepoWithDaemon,
+		planBrowserOpener:     cmd2.OpenPlanBrowser,
 		instanceFinalizers:    make(map[*session.Instance]func()),
 		waveOrchestrators:     make(map[string]*orchestration.WaveOrchestrator),
 		plannerPrompted:       make(map[string]bool),
@@ -727,6 +731,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case daemonRepoRegisteredMsg:
 		m.toastManager.Success(fmt.Sprintf("registered repo with daemon: %s", msg.path))
+		return m, m.toastTickCmd()
+	case planBrowserOpenedMsg:
+		if msg.startedServer {
+			m.toastManager.Success("started plan browser server")
+		} else {
+			m.toastManager.Success("opened plan browser")
+		}
 		return m, m.toastTickCmd()
 	case prErrorMsg:
 		log.ErrorLog.Printf("%v", msg.err)

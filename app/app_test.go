@@ -58,6 +58,9 @@ func newTestHome() *home {
 			return daemonStatusMsg{ready: true}
 		},
 		daemonRepoRegistrar: func(string) error { return nil },
+		planBrowserOpener: func(repoRoot, project, planFile string) (string, bool, error) {
+			return "http://127.0.0.1:7433/admin/?project=" + project, false, nil
+		},
 	}
 }
 

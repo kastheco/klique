@@ -61,6 +61,7 @@ const (
 
 	KeyAuditToggle // L - toggle audit log pane visibility
 	KeyAuditCursor // A - enter audit log cursor mode (navigate log lines)
+	KeyBrowser     // b - open the admin plan browser
 )
 
 // Backward-compatible aliases; prefer KeyInfoTab/KeyTabInfo.
@@ -100,6 +101,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"s":          KeySpawnAgent,
 	"L":          KeyAuditToggle,
 	"A":          KeyAuditCursor,
+	"b":          KeyBrowser,
 	"T":          KeyFocusList,
 	"p":          KeyViewPlan,
 	"ctrl+s":     KeyToggleSidebar,
@@ -258,6 +260,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyAuditCursor: key.NewBinding(
 		key.WithKeys("A"),
 		key.WithHelp("A", "log actions"),
+	),
+
+	KeyBrowser: key.NewBinding(
+		key.WithKeys("b"),
+		key.WithHelp("b", "browser"),
 	),
 
 	// -- Special keybindings --
