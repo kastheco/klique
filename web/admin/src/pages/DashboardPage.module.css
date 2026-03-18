@@ -1,0 +1,206 @@
+.page {
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ededed;
+  margin: 0 0 32px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888888;
+  margin: 0 0 16px;
+}
+
+/* Status summary cards grid */
+
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.statusCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 20px 18px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+}
+
+.statusCard:hover {
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
+}
+
+.statusCardLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: lowercase;
+  color: #888888;
+  margin: 0 0 10px;
+  letter-spacing: 0.02em;
+}
+
+.statusCardCount {
+  font-size: 34px;
+  font-weight: 700;
+  color: #ededed;
+  line-height: 1;
+}
+
+/* Status-specific left border colors — match StatusBadge */
+
+.ready {
+  border-left-color: #7ec8d8;
+}
+
+.planning {
+  border-left-color: #f0a868;
+}
+
+.implementing {
+  border-left-color: #88cc88;
+}
+
+.reviewing {
+  border-left-color: #b478dc;
+}
+
+.done {
+  border-left-color: #50b450;
+}
+
+.cancelled {
+  border-left-color: #888888;
+}
+
+/* Recent activity section */
+
+.activitySection {
+  margin-top: 8px;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activityItem {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 16px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.activityItem:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.02);
+}
+
+.activityKind {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f0a868;
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(240, 168, 104, 0.1);
+  border: 1px solid rgba(240, 168, 104, 0.2);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.activityMessage {
+  font-size: 13px;
+  color: #aaaaaa;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activityTime {
+  font-size: 11px;
+  color: #555555;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.emptyActivity {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  color: #555555;
+  font-size: 13px;
+  backdrop-filter: blur(12px);
+}
+
+/* Error panel */
+
+.error {
+  background: rgba(220, 80, 80, 0.08);
+  border: 1px solid rgba(220, 80, 80, 0.25);
+  border-radius: 10px;
+  padding: 16px 20px;
+  color: #dc5050;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+/* Loading state */
+
+.loadingText {
+  color: #555555;
+  font-size: 14px;
+  padding: 16px 0;
+  margin: 0;
+}
+
+/* Responsive: single column activity list on mobile */
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .activityItem {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .activityMessage {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    order: 2;
+    width: 100%;
+  }
+
+  .activityTime {
+    order: 3;
+    width: 100%;
+    margin-top: 2px;
+  }
+}
