@@ -1,0 +1,131 @@
+# pr monitor
+
+The PR monitor is an optional goroutine that runs alongside the daemon's signal poll loop. It periodically polls open GitHub pull requests linked to tasks, acknowledges new review comments with an emoji reaction, and automatically dispatches a fixer agent to address reviewer feedback.
+
+## how it works
+
+The monitor follows this flow on each poll cycle:
+
+1. Iterate all registered repos with an open task store.
+2. For each repo, list tasks in `reviewing` or `done` status that have both a `pr_url` and a `branch`.
+3. For each task, verify the PR is still open via `gh pr view`.
+4. Fetch reviews via `gh pr reviews`.
+5. For each review, call `handleReview`:
+   - Insert the review into `pr_reviews` using `INSERT OR IGNORE` (idempotent).
+   - If the review qualifies as actionable (`CHANGES_REQUESTED` or `COMMENTED` with a non-empty body from a non-bot user), react to its first inline comment.
+   - Check whether the review-fix cycle limit has been reached.
+   - Dispatch a fixer agent via the daemon's `executeAction` callback.
+   - Mark the review as `fixer_dispatched = 1` so subsequent polls skip it.
+
+## enabling the monitor
+
+Set `pr_monitor.enabled = true` in `~/.config/kasmos/daemon.toml`:
+
+```toml
+[pr_monitor]
+enabled          = true
+poll_interval_sec = 60.0
+reactions        = ["eyes"]
+```
+
+The daemon creates a `PRMonitor` only when `enabled` is true. Changing this setting requires a daemon restart.
+
+## configuration fields
+
+All PR monitor fields live under the `[pr_monitor]` table in `daemon.toml`:
+
+| field | type | default | description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | whether the PR monitor goroutine starts at all |
+| `poll_interval_sec` | float | `60.0` | how often (in seconds) to poll open PRs across all repos |
+| `reactions` | string array | `["eyes"]` | GitHub reactions to add to the first inline comment of each unprocessed review |
+
+The daemon-level `max_review_fix_cycles` (not under `[pr_monitor]`) caps how many review→fix cycles the monitor will trigger per task. Set to `0` for unlimited.
+
+```toml
+max_review_fix_cycles = 3    # at the top level, not under [pr_monitor]
+
+[pr_monitor]
+enabled           = true
+poll_interval_sec = 120.0
+reactions         = ["eyes", "+1"]
+```
+
+## review qualification
+
+Not every PR review spawns a fixer. The `shouldTriggerFixer` predicate applies these rules (from `daemon/pr_monitor.go`):
+
+1. **Review state** — only `CHANGES_REQUESTED` and `COMMENTED` qualify. `APPROVED`, `DISMISSED`, and `PENDING` are ignored.
+2. **Non-empty body** — reviews with a blank body are skipped.
+3. **Non-bot reviewer** — logins ending in `[bot]` or `-bot`, and the login `dependabot`, are excluded.
+
+## idempotency and the `pr_reviews` table
+
+Every review is recorded in the `pr_reviews` SQLite table with `INSERT OR IGNORE`, keyed on `(project, plan_file, review_id)`. This means:
+
+- Repeated polls of the same review are safe — no duplicate fixer dispatches.
+- The `fixer_dispatched` column tracks whether the action was already taken. The monitor skips reviews where `fixer_dispatched = 1`.
+- The `reaction_posted` column tracks whether the emoji reaction was already posted. This allows the monitor to retry reaction posting without re-dispatching the fixer if the first attempt partially failed.
+
+## reactions (best-effort)
+
+Reactions are added to the **first inline comment** of the review using the GitHub CLI (`gh api`). This step is best-effort:
+
+- If `gh` is not installed or not authenticated, the monitor logs a single warning and skips the rest of the poll cycle without spamming the log on subsequent cycles.
+- If the reaction call fails, `fixer_dispatched` is left at `0`, and the monitor retries on the next poll (including re-attempting the reaction).
+- If a review has no inline comments, the fixer is still dispatched — reactions are skipped silently.
+
+## review-fix cycle cap
+
+The `max_review_fix_cycles` setting prevents runaway review→fixer loops. Enforcement is identical to the signal processor path:
+
+```
+if currentEntry.ReviewCycle + 1 > maxReviewFixCycles:
+    dispatch ReviewCycleLimitAction   # emits "review_cycle_limit" SSE event
+    return                            # no fixer spawned
+```
+
+When the limit is reached the daemon emits a `review_cycle_limit` SSE event and stops spawning fixers for that task. The task stays in `reviewing` state for human intervention.
+
+Set `max_review_fix_cycles = 0` to disable the cap (unlimited retries).
+
+## prerequisites
+
+The PR monitor uses the `gh` CLI:
+
+- `gh` must be installed and available in `$PATH`.
+- The CLI must be authenticated (`gh auth login` or a `GITHUB_TOKEN` environment variable).
+- The repo must have an active GitHub remote.
+
+The monitor detects unavailability by checking error strings for `executable file not found`, `not found in $PATH`, `exit status 127`, `not logged in`, `not authenticated`, `authentication token`, and `GITHUB_TOKEN`. On the first match it logs a structured warning; subsequent cycles are silent (warn-once behaviour).
+
+## SSE events emitted by the monitor
+
+| event kind | when |
+|------------|------|
+| `pr_review_detected` | a qualifying review is found before any side effects |
+| `pr_reaction_posted` | the emoji reaction was successfully added |
+| `agent_spawned` | the fixer agent was spawned (from the shared `executeAction` path) |
+| `review_cycle_limit` | the cycle cap was reached; no fixer spawned |
+
+These events are visible in the TUI's status stream and via `GET /v1/events` on the daemon socket.
+
+## debugging
+
+```sh
+# check if the monitor is running
+kas daemon status
+
+# watch live events from the daemon (includes pr_review_detected etc.)
+curl --unix-socket "$XDG_RUNTIME_DIR/kasmos/kas.sock" http://kas/v1/events
+
+# view daemon logs (includes pr_monitor: prefixed entries)
+journalctl --user -u kasmos -f
+```
+
+Inspect the `pr_reviews` table directly:
+
+```sh
+sqlite3 /path/to/project/.kasmos/taskstore.db \
+    "SELECT plan_file, review_id, state, fixer_dispatched, reaction_posted FROM pr_reviews;"
+```

@@ -1,0 +1,63 @@
+# configuration
+
+kasmos uses two primary configuration files. Both are TOML-formatted and are created automatically on first boot — you rarely need to edit them by hand, but understanding their structure is essential when tuning agent behavior, enabling automation, or operating the background daemon.
+
+## primary files
+
+### project-local: `<repo>/.kasmos/config.toml`
+
+Every git repository managed by kasmos gets its own `.kasmos/` directory anchored to the **main repository root** (not a worktree). The authoritative config file is:
+
+```
+<repo-root>/.kasmos/config.toml
+```
+
+The path is resolved by `config.GetConfigDir()`, which calls `config.ResolveRepoRoot()` to locate the main repo root even when invoked from inside a git worktree. This means all worktrees of the same repo share one configuration.
+
+kasmos writes this file on first boot (`kas setup` or first interactive launch). If neither `config.toml` nor the legacy `config.json` exists, a default `config.toml` is created. If only a `config.json` exists, it is migrated to `config.toml` and renamed to `config.json.migrated`.
+
+See [config.toml reference](/docs/configuration/config-toml) for all fields.
+
+### user-level: `~/.config/kasmos/daemon.toml`
+
+The background daemon reads a second TOML file for user-level, cross-repo configuration:
+
+```
+~/.config/kasmos/daemon.toml
+```
+
+The path is resolved by `daemon.LoadDaemonConfig()`. If the file is absent, daemon defaults apply (2 s poll interval, PR monitor disabled, etc.). This file is **not** written automatically — create it only when you want to tune daemon behavior.
+
+See [daemon.toml reference](/docs/configuration/daemon-toml) for all fields.
+
+## legacy migration
+
+On first invocation in a project, `config.GetConfigDir()` performs a **one-time, best-effort copy** from these legacy paths (in order) if `.kasmos/config.toml` does not already exist:
+
+| legacy path | tool |
+|-------------|------|
+| `~/.config/kasmos/` | early kasmos |
+| `~/.klique/` | klique (predecessor) |
+| `~/.hivemind/` | hivemind (predecessor) |
+
+The migration is a **copy, not a move** — the legacy location is preserved. Files copied: `config.json`, `config.toml`, `state.json`, `taskstore.db`. Any migration error is silently ignored so startup is never blocked.
+
+## inspecting resolved paths
+
+To see which files kasmos is actually loading, use:
+
+```sh
+kas debug
+```
+
+This prints the resolved config directory, config file path, and database path alongside the full parsed config as JSON. It is the recommended first step when troubleshooting unexpected behavior.
+
+## configuration priority
+
+Fields are resolved as follows:
+
+1. **Parsed `config.toml`** (project-local) — authoritative for most fields.
+2. **Defaults** applied by `config.applyConfigDefaults()` for any zero-value fields.
+3. `daemon.toml` fields override project config for daemon-specific behavior when the daemon is running headlessly.
+
+There is no environment-variable override layer — use `kas debug` to confirm what kasmos sees.

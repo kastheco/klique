@@ -1,0 +1,120 @@
+# task store
+
+The task store is the authoritative database for all kasmos task state. It tracks task status, content, subtasks, phase timestamps, PR state, review cycles, and signals. kasmos supports two backends:
+
+1. **local SQLite** (default) — a single file on disk, no server required.
+2. **remote HTTP store** — a kasmos server instance, used for team or CI environments.
+
+## local SQLite
+
+**Default path:** `<repo-root>/.kasmos/taskstore.db`
+
+The path is resolved by `taskstore.ResolvedDBPath()`, which delegates to `config.GetConfigDir()` to anchor the database to the main repository root (the same directory as `config.toml`). This means all git worktrees of the same repository share one task store.
+
+```sh
+# inspect the resolved DB path
+kas debug
+```
+
+The SQLite database is shared with the audit log (`config/auditlog`). Both subsystems use separate tables in the same file.
+
+### SQLite characteristics
+
+- **No configuration required** — kasmos creates the file on first use.
+- **Migrations run automatically** on startup via `taskstore.MigrateDB()`.
+- **Concurrent access** from multiple agents is safe because kasmos uses WAL mode and per-operation transactions.
+- **Worktree-safe** — `taskstore.ResolvedDBPath()` always returns the main repo root path, never the worktree path.
+
+## remote HTTP store
+
+To share task state across machines or use a central server in CI, set `database_url` in `config.toml`:
+
+```toml
+database_url = "http://host:7433"
+```
+
+When `database_url` is non-empty, kasmos routes all task store operations to the HTTP API instead of the local SQLite file. Start the server with:
+
+```sh
+kas serve --port 7433 --db /path/to/shared/taskstore.db
+```
+
+The HTTP client is initialized lazily — the URL is validated syntactically at startup, but no network connection is made until the first store operation.
+
+## REST API
+
+The HTTP store exposes the following endpoints (implemented in `config/taskstore/server.go`):
+
+### health
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/ping` | check store availability |
+
+### tasks
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/tasks` | list all tasks; filter with `?status=` or `?topic=` |
+| `POST` | `/v1/projects/{project}/tasks` | create a task |
+| `GET` | `/v1/projects/{project}/tasks/{filename}` | get a single task |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}` | update task metadata |
+
+### task content and subtasks
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/tasks/{filename}/content` | get task markdown content |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/content` | replace task markdown content |
+| `GET` | `/v1/projects/{project}/tasks/{filename}/subtasks` | list subtasks |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/subtasks` | replace subtask list |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status` | update a single subtask status |
+
+### task metadata
+
+| method | path | description |
+|--------|------|-------------|
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/phase-timestamp` | record a phase transition timestamp |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/goal` | set the plan goal text |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/clickup-task-id` | associate a ClickUp task ID |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/rename` | rename (reslug) a task |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/increment-review-cycle` | increment the review cycle counter |
+
+### PR state
+
+| method | path | description |
+|--------|------|-------------|
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/pr-url` | store the PR URL |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/pr-state` | update PR review decision and check status |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/pr-reviews` | record a PR review (idempotent by review ID) |
+| `GET` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/pending` | list reviews awaiting fixer dispatch |
+| `GET` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/processed` | check if a review has been processed |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/reacted` | mark a reaction as posted |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/fixer-dispatched` | mark fixer agent as dispatched |
+
+### topics
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/topics` | list all topics |
+| `POST` | `/v1/projects/{project}/topics` | create a topic |
+
+## project name
+
+The `{project}` path segment is the project identifier — typically the repository directory name (e.g. `kasmos` for `/home/alice/projects/kasmos`). kasmos derives this from the resolved repo root and passes it to all store operations. When using the HTTP store, all projects on the server are namespaced by this identifier.
+
+## filename normalization
+
+Task filenames in the store are always stored without a `.md` suffix. The CLI (`kas task register`, `kas task update-content`) strips `.md` automatically. A SQLite migration runs on startup to strip any `.md` suffixes from existing rows.
+
+## signals
+
+The task store also provides a SQLite-backed signal table for daemon coordination. Signals can be in states `pending`, `processing`, `done`, or `failed`. The daemon bridges filesystem sentinel files (`.kasmos/signals/`) into the DB-backed gateway atomically. See [signals](/docs/cli-reference/signal) for details.
+
+## backing up
+
+The local SQLite file can be backed up with any standard file copy while kasmos is not running. To create a safe online backup:
+
+```sh
+sqlite3 .kasmos/taskstore.db ".backup backup.db"
+```

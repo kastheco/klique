@@ -1,0 +1,39 @@
+# daemon
+
+The kasmos daemon (`kasmosd`) is a multi-repo background orchestrator that runs alongside your development environment. It watches registered repositories for agent lifecycle signals and automatically drives FSM transitions — spawning planners, coders, reviewers, and fixer agents without manual intervention.
+
+## what the daemon does
+
+At its core the daemon is a poll loop with four concerns:
+
+1. **Signal scanning** — on every tick it reads `.kasmos/signals/` in each registered repo (and any shared worktrees under `.worktrees/`) and bridges newly written filesystem sentinel files into the SQLite-backed signal gateway.
+2. **Signal claiming** — it atomically claims pending signals from the gateway so that concurrent or restarted instances never double-process.
+3. **Action dispatch** — it feeds each claimed signal through a per-repo `loop.Processor` which produces typed `Action` values (spawn coder, spawn reviewer, advance wave, etc.), then executes those actions via the `TmuxSpawner`.
+4. **Lifecycle advance** — it monitors running tmux sessions for completion, automatically pushes branches, transitions the FSM, and spawns the next agent role.
+
+The daemon exposes a Unix domain socket control API so `kas daemon status`, `add`, and `remove` can reach it without restart.
+
+## when do you need the daemon?
+
+**Interactive TUI usage** — you don't need the daemon. The TUI drives agent spawn/kill directly.
+
+**Headless / CI / server environments** — the daemon is the primary driver. You register repos via `kas daemon add` or the config file, and it handles everything autonomously.
+
+**Wave-based plans** — wave advancement, elaboration, and multi-task concurrent execution all run through the daemon's action pipeline.
+
+**PR review automation** — the optional PR monitor goroutine polls open pull requests for reviewer feedback and dispatches fixer agents automatically.
+
+## edge cases
+
+- **No daemon** — signals emitted into the DB (via `kas signal emit`) remain `pending` indefinitely. Nothing processes them until the daemon starts.
+- **Startup recovery** — on startup, the daemon calls `taskfsm.RecoverInFlight` to move any files left in `processing/` back to the signals root, preventing permanent loss after a crash.
+- **Unavailable store** — repos whose `.kasmos/taskstore.db` cannot be opened are registered with a `nil` store. The daemon skips them on each tick rather than crashing the whole poll cycle.
+- **Duplicate basenames** — two repos with the same directory name (e.g. `/work/foo` and `/archive/foo`) cannot be registered simultaneously. The daemon rejects the second registration with an error.
+
+## quick links
+
+- [architecture](/docs/daemon/architecture) — core types and the event loop in detail
+- [setup](/docs/daemon/setup) — systemd user services and Just recipes
+- [signals](/docs/daemon/signals) — filesystem and DB-backed signal paths
+- [multi-repo](/docs/daemon/multi-repo) — repo registration rules
+- [pr monitor](/docs/daemon/pr-monitor) — automated PR review handling

@@ -1,0 +1,105 @@
+# daemon.toml
+
+**Path:** `~/.config/kasmos/daemon.toml`
+
+This is the user-level daemon configuration file. It controls how the background daemon polls for signals, which repositories it manages, and whether it should automatically advance task lifecycle states without interactive confirmation.
+
+Unlike `config.toml`, this file is **not created automatically**. Create it only when you want to customize daemon behavior beyond the defaults.
+
+The file is loaded by `daemon.LoadDaemonConfig()`. If the file is absent, all defaults apply and the daemon starts in a conservative, non-auto-advancing mode.
+
+## top-level fields
+
+| field | type | default | description |
+|-------|------|---------|-------------|
+| `poll_interval_sec` | float | `2.0` | how often (in seconds) the daemon scans for signals |
+| `repos` | []string | `[]` | list of absolute repo root paths to manage on daemon startup |
+| `auto_advance` | bool | `false` | when `true`, the daemon automatically transitions a task from `planning` to `implementing` after the planner finishes |
+| `auto_advance_waves` | bool | `true` | when `true`, the daemon automatically starts the next wave after all tasks in the current wave complete |
+| `auto_review_fix` | bool | `true` | when `true`, the daemon automatically dispatches a fixer agent when a review comes back with change requests |
+| `max_review_fix_cycles` | int | `0` (unlimited) | cap on automatic review→fix iterations; `0` means no cap |
+| `socket_path` | string | `~/.config/kasmos/daemon.sock` | Unix domain socket path for the control API |
+
+## `[pr_monitor]` — pull request monitoring
+
+The PR monitor subsystem polls open pull requests on GitHub and automatically records review comments so kasmos can dispatch fixer agents without requiring the user to be present.
+
+| field | type | default | description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | enable the PR monitor goroutine |
+| `poll_interval_sec` | float | `60.0` | how often (in seconds) to poll open PRs |
+| `reactions` | []string | `["eyes"]` | GitHub reactions to add to unprocessed review comments |
+
+The `reactions` list uses GitHub reaction identifiers: `+1`, `-1`, `laugh`, `confused`, `heart`, `hooray`, `rocket`, `eyes`.
+
+```toml
+[pr_monitor]
+enabled          = true
+poll_interval_sec = 30.0
+reactions        = ["eyes", "rocket"]
+```
+
+## examples
+
+### minimal — enable auto-advance and PR monitor
+
+```toml
+# ~/.config/kasmos/daemon.toml
+
+auto_advance       = true
+auto_advance_waves = true
+auto_review_fix    = true
+max_review_fix_cycles = 5
+
+[pr_monitor]
+enabled = true
+```
+
+### multi-repo setup
+
+```toml
+# ~/.config/kasmos/daemon.toml
+
+poll_interval_sec = 2.0
+repos = [
+  "/home/alice/projects/backend",
+  "/home/alice/projects/frontend",
+  "/home/alice/projects/infra",
+]
+
+auto_advance       = false
+auto_advance_waves = true
+auto_review_fix    = true
+
+[pr_monitor]
+enabled           = true
+poll_interval_sec = 60.0
+reactions         = ["eyes"]
+```
+
+### custom socket path
+
+```toml
+socket_path = "/tmp/kasmos-dev.sock"
+```
+
+This is useful when running multiple daemon instances for different environments. The CLI commands (`kas daemon status`, `kas monitor`) must be pointed at the same socket path.
+
+## relationship to `config.toml`
+
+The `daemon.toml` fields `auto_advance_waves`, `auto_review_fix`, and `max_review_fix_cycles` overlap with the `[ui]` section of `config.toml`. When the daemon is running in headless mode, it uses `daemon.toml` values directly. The project-local `config.toml` values influence the interactive TUI. Keep them in sync if you expect consistent behavior in both modes.
+
+## starting the daemon
+
+```sh
+# foreground (for debugging)
+kas daemon start --foreground
+
+# check status
+kas daemon status
+
+# stop
+kas daemon stop
+```
+
+The daemon reads `~/.config/kasmos/daemon.toml` on startup. Reload it by restarting the daemon.

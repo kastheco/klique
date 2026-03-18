@@ -6,6 +6,7 @@ const meta: MetaRecord = {
   concepts: "concepts",
   guides: "guides",
   "cli-reference": "cli reference",
+  configuration: "configuration",
 };
 
 export default meta;
