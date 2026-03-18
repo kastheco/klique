@@ -42,9 +42,10 @@ func NewDaemonCmd() *cobra.Command {
 	var socketPath string
 
 	cmd := &cobra.Command{
-		Use:   "daemon",
-		Short: "manage the kasmos background daemon",
-		Long:  "control the kasmos multi-repo background daemon that manages plan lifecycles.",
+		Use:     "daemon",
+		Aliases: []string{"d"},
+		Short:   "manage the kasmos background daemon",
+		Long:    "control the kasmos multi-repo background daemon that manages plan lifecycles.",
 	}
 
 	cmd.PersistentFlags().StringVar(&socketPath, "socket", daemonSocketPath(), "path to the daemon unix domain socket")

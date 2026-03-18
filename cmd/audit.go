@@ -12,7 +12,7 @@ import (
 
 // NewAuditCmd builds the `kas audit` cobra command tree.
 func NewAuditCmd() *cobra.Command {
-	auditCmd := &cobra.Command{Use: "audit", Short: "query audit events"}
+	auditCmd := &cobra.Command{Use: "audit", Aliases: []string{"au"}, Short: "query audit events"}
 	var limit int
 	var event string
 	listCmd := &cobra.Command{

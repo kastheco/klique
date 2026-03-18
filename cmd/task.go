@@ -552,8 +552,9 @@ func buildCLIPRMetadata(
 // NewTaskCmd builds the `kq plan` cobra command tree.
 func NewTaskCmd() *cobra.Command {
 	planCmd := &cobra.Command{
-		Use:   "task",
-		Short: "manage task lifecycle (list, set-status, transition, implement)",
+		Use:     "task",
+		Aliases: []string{"t"},
+		Short:   "manage task lifecycle (list, set-status, transition, implement)",
 	}
 
 	// kq plan list

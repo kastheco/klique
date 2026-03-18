@@ -255,8 +255,9 @@ func executeTmuxKill(state config.StateManager, sessionName string, ex Executor)
 // NewTmuxCmd builds the `kas tmux` cobra command tree.
 func NewTmuxCmd() *cobra.Command {
 	tmuxCmd := &cobra.Command{
-		Use:   "tmux",
-		Short: "manage orphan tmux sessions",
+		Use:     "tmux",
+		Aliases: []string{"tx"},
+		Short:   "manage orphan tmux sessions",
 	}
 
 	listCmd := &cobra.Command{

@@ -263,6 +263,7 @@ func init() {
 	rootCmd.AddCommand(cmd2.NewSignalCmd())
 	rootCmd.AddCommand(cmd2.NewDaemonCmd())
 	rootCmd.AddCommand(cmd2.NewMonitorCmd())
+	rootCmd.AddCommand(cmd2.NewStatusCmd())
 }
 
 func main() {
