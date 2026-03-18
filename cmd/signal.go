@@ -40,8 +40,9 @@ type signalProcessOptions struct {
 // NewSignalCmd returns the "kas signal" cobra command with subcommands.
 func NewSignalCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "signal",
-		Short: "inspect and process agent lifecycle signals",
+		Use:     "signal",
+		Aliases: []string{"sig"},
+		Short:   "inspect and process agent lifecycle signals",
 	}
 	cmd.AddCommand(newSignalListCmd())
 	cmd.AddCommand(newSignalProcessCmd())

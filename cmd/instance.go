@@ -448,8 +448,9 @@ func executeInstanceStatus(state config.StateManager) (string, error) {
 // NewInstanceCmd builds the `kas instance` cobra command tree.
 func NewInstanceCmd() *cobra.Command {
 	instanceCmd := &cobra.Command{
-		Use:   "instance",
-		Short: "manage agent instances (list, kill, pause, resume, send)",
+		Use:     "instance",
+		Aliases: []string{"i"},
+		Short:   "manage agent instances (list, kill, pause, resume, send)",
 	}
 
 	// kas instance list

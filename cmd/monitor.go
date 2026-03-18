@@ -22,8 +22,9 @@ func NewMonitorCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "monitor",
-		Short: "monitor the kasmos daemon event stream",
+		Use:     "monitor",
+		Aliases: []string{"mon"},
+		Short:   "monitor the kasmos daemon event stream",
 		Long: `monitor connects to the running kasmos daemon and streams real-time
 orchestration events. by default it outputs colored ANSI text; use --json for
 raw JSON suitable for piping to jq.`,
