@@ -100,3 +100,244 @@ func TestContextMenu_HandleMouse_DisabledIgnored(t *testing.T) {
 
 	assert.Equal(t, Result{}, result)
 }
+
+// --- Drill-down navigation tests ---
+
+// TestContextMenu_FlatItemsStillWork verifies backward compatibility: menus without
+// Children still select and dismiss normally.
+func TestContextMenu_FlatItemsStillWork(t *testing.T) {
+	items := []ContextMenuItem{
+		{Label: "kill", Action: "kill"},
+		{Label: "rename", Action: "rename"},
+	}
+	cm := NewContextMenu(items)
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "kill", result.Action)
+}
+
+// TestContextMenu_DrillIn_EnterOnParent verifies that pressing enter on an item that
+// has Children drills into the sub-menu instead of dismissing the overlay.
+func TestContextMenu_DrillIn_EnterOnParent(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+				{Label: "detach", Action: "detach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	// Enter on parent should NOT dismiss; it should drill in.
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.False(t, result.Dismissed, "drilling into a parent must not dismiss the overlay")
+	assert.Empty(t, result.Action, "drilling into a parent must not return an action")
+
+	// After drilling in, CurrentItems should show only the sub-menu items.
+	current := cm.CurrentItems()
+	require.Len(t, current, 2)
+	assert.Equal(t, "attach", current[0].Label)
+	assert.Equal(t, "detach", current[1].Label)
+}
+
+// TestContextMenu_DrillBack_Left verifies that pressing left pops back one level.
+func TestContextMenu_DrillBack_Left(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill in.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Len(t, cm.CurrentItems(), 1, "should be in sub-menu")
+
+	// Left should pop back.
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	assert.False(t, result.Dismissed, "left at sub-menu level must not dismiss")
+
+	current := cm.CurrentItems()
+	require.Len(t, current, 2, "should be back at root level")
+	assert.Equal(t, "session", current[0].Label)
+}
+
+// TestContextMenu_DrillBack_BackspaceWhenSearchEmpty verifies that pressing backspace
+// when the search query is empty pops back one level (not dismissing).
+func TestContextMenu_DrillBack_BackspaceWhenSearchEmpty(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill in.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Len(t, cm.CurrentItems(), 1)
+
+	// Backspace with empty search → pop back.
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	assert.False(t, result.Dismissed)
+	assert.Len(t, cm.CurrentItems(), 1, "root has one item (session)")
+}
+
+// TestContextMenu_AllItems_RecursiveFlattening verifies that AllItems() returns every
+// item in the tree (root + all descendants), not just the current level.
+func TestContextMenu_AllItems_RecursiveFlattening(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+				{Label: "detach", Action: "detach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	all := cm.AllItems()
+	// Expected: session, attach, detach, kill — 4 items total (parents + children).
+	require.Len(t, all, 4)
+	labels := make([]string, len(all))
+	for i, item := range all {
+		labels[i] = item.Label
+	}
+	assert.Contains(t, labels, "session")
+	assert.Contains(t, labels, "attach")
+	assert.Contains(t, labels, "detach")
+	assert.Contains(t, labels, "kill")
+}
+
+// TestContextMenu_AllItems_AfterDrillIn verifies that AllItems() still returns the
+// full root tree even after drilling into a sub-menu.
+func TestContextMenu_AllItems_AfterDrillIn(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill in — AllItems must still cover the whole tree.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	all := cm.AllItems()
+	require.Len(t, all, 3, "session + attach + kill")
+
+	current := cm.CurrentItems()
+	require.Len(t, current, 1, "only sub-menu items at current level")
+	assert.Equal(t, "attach", current[0].Label)
+}
+
+// TestContextMenu_EscAlwaysDismisses verifies that esc dismisses regardless of depth.
+func TestContextMenu_EscAlwaysDismisses(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill in first.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Len(t, cm.CurrentItems(), 1)
+
+	// Esc should always dismiss.
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	assert.True(t, result.Dismissed)
+}
+
+// TestContextMenu_SelectInSubMenu verifies that selecting a leaf item inside a
+// sub-menu dismisses the overlay and returns the correct action.
+func TestContextMenu_SelectInSubMenu(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+				{Label: "detach", Action: "detach"},
+			},
+		},
+	}
+	cm := NewContextMenu(items)
+
+	// Drill in.
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	// Navigate down and select "detach".
+	cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.True(t, result.Dismissed)
+	assert.Equal(t, "detach", result.Action)
+}
+
+// TestContextMenu_NumberShortcut_DrillsIntoParent verifies that a numeric shortcut
+// on a parent item drills into the sub-menu (zero Result) instead of returning an action.
+func TestContextMenu_NumberShortcut_DrillsIntoParent(t *testing.T) {
+	items := []ContextMenuItem{
+		{
+			Label:  "session",
+			Action: "session",
+			Children: []ContextMenuItem{
+				{Label: "attach", Action: "attach"},
+			},
+		},
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	// "1" corresponds to "session" which has children → should drill, not dismiss.
+	result := cm.HandleKey(tea.KeyPressMsg{Code: '1', Text: "1"})
+	assert.False(t, result.Dismissed, "numeric shortcut on parent must not dismiss")
+	assert.Empty(t, result.Action)
+
+	// We should now be inside the sub-menu.
+	current := cm.CurrentItems()
+	require.Len(t, current, 1)
+	assert.Equal(t, "attach", current[0].Label)
+}
+
+// TestContextMenu_LeftAtRootIsNoop verifies that pressing left at the root level
+// does nothing (no dismiss, no state change).
+func TestContextMenu_LeftAtRootIsNoop(t *testing.T) {
+	items := []ContextMenuItem{
+		{Label: "kill", Action: "kill"},
+	}
+	cm := NewContextMenu(items)
+
+	result := cm.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	assert.False(t, result.Dismissed, "left at root must not dismiss")
+	assert.Empty(t, result.Action)
+
+	// Still at root.
+	current := cm.CurrentItems()
+	require.Len(t, current, 1)
+	assert.Equal(t, "kill", current[0].Label)
+}
