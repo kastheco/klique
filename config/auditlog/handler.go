@@ -33,11 +33,12 @@ func NewHandler(logger Logger) http.Handler {
 		// Optional limit override.
 		if limitStr := q.Get("limit"); limitStr != "" {
 			n, err := strconv.Atoi(limitStr)
-			if err != nil || n <= 0 {
-				if err == nil {
-					err = strconv.ErrRange
-				}
+			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid limit: "+err.Error())
+				return
+			}
+			if n <= 0 {
+				writeError(w, http.StatusBadRequest, "limit must be a positive integer")
 				return
 			}
 			if n > 500 {

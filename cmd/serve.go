@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -67,10 +68,15 @@ func NewServeCmd() *cobra.Command {
 			rootMux.Handle("/v1/projects/", taskAPI)
 
 			// Resolve the admin filesystem: --admin-dir flag overrides embedded assets.
+			// Require the directory to contain index.html so users aren't accidentally
+			// served a source tree (e.g. web/admin/) instead of the built output (dist/).
 			var adminFS http.FileSystem
 			if adminDir != "" {
 				if _, err := os.Stat(adminDir); err != nil {
 					return fmt.Errorf("stat admin dir: %w", err)
+				}
+				if _, err := os.Stat(filepath.Join(adminDir, "index.html")); err != nil {
+					return fmt.Errorf("admin dir must contain index.html (point --admin-dir at the dist/ directory): %w", err)
 				}
 				adminFS = http.Dir(adminDir)
 			} else {
@@ -140,7 +146,7 @@ func NewServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&bind, "bind", "0.0.0.0", "address to bind to")
 	cmd.Flags().BoolVar(&mcpEnabled, "mcp", true, "enable the MCP server (Streamable HTTP on --mcp-port)")
 	cmd.Flags().IntVar(&mcpPort, "mcp-port", 7434, "port for the MCP server")
-	cmd.Flags().StringVar(&adminDir, "admin-dir", "", "path to the admin SPA directory (overrides embedded assets)")
+	cmd.Flags().StringVar(&adminDir, "admin-dir", "", "path to the built admin SPA dist/ directory (overrides embedded assets)")
 
 	return cmd
 }
