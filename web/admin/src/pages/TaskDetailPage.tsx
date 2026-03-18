@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router";
 import ReactMarkdown from "react-markdown";
 import type { TaskEntry, SubtaskEntry } from "../types";
 import { getTask, getTaskContent, getSubtasks, resolveProjectName } from "../api";
@@ -12,6 +12,9 @@ export default function TaskDetailPage() {
   const { filename: rawFilename } = useParams<{ filename: string }>();
   const filename = rawFilename ? decodeURIComponent(rawFilename) : undefined;
 
+  const { search } = useLocation();
+  const project = useMemo(() => resolveProjectName(search), [search]);
+
   const [task, setTask] = useState<TaskEntry | null>(null);
   const [content, setContent] = useState<string>("");
   const [subtasks, setSubtasks] = useState<SubtaskEntry[]>([]);
@@ -22,7 +25,6 @@ export default function TaskDetailPage() {
     if (!filename) return;
 
     let cancelled = false;
-    const project = resolveProjectName(window.location.search);
 
     setLoading(true);
     setError(null);
@@ -48,7 +50,7 @@ export default function TaskDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [filename]);
+  }, [filename, project]);
 
   if (!filename) {
     return (

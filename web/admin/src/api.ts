@@ -72,7 +72,9 @@ export function resolveProjectName(
 }
 
 export async function listTasks(project: string): Promise<TaskEntry[]> {
-  return requestJSON<TaskEntry[]>(`/v1/projects/${project}/tasks`);
+  return requestJSON<TaskEntry[]>(
+    `/v1/projects/${encodeURIComponent(project)}/tasks`,
+  );
 }
 
 export async function getTask(
@@ -80,7 +82,7 @@ export async function getTask(
   filename: string,
 ): Promise<TaskEntry> {
   return requestJSON<TaskEntry>(
-    `/v1/projects/${project}/tasks/${encodeURIComponent(filename)}`,
+    `/v1/projects/${encodeURIComponent(project)}/tasks/${encodeURIComponent(filename)}`,
   );
 }
 
@@ -89,7 +91,7 @@ export async function getTaskContent(
   filename: string,
 ): Promise<string> {
   return requestText(
-    `/v1/projects/${project}/tasks/${encodeURIComponent(filename)}/content`,
+    `/v1/projects/${encodeURIComponent(project)}/tasks/${encodeURIComponent(filename)}/content`,
   );
 }
 
@@ -98,17 +100,19 @@ export async function getSubtasks(
   filename: string,
 ): Promise<SubtaskEntry[]> {
   return requestJSON<SubtaskEntry[]>(
-    `/v1/projects/${project}/tasks/${encodeURIComponent(filename)}/subtasks`,
+    `/v1/projects/${encodeURIComponent(project)}/tasks/${encodeURIComponent(filename)}/subtasks`,
   );
 }
 
 export async function listTopics(project: string): Promise<TopicEntry[]> {
-  return requestJSON<TopicEntry[]>(`/v1/projects/${project}/topics`);
+  return requestJSON<TopicEntry[]>(
+    `/v1/projects/${encodeURIComponent(project)}/topics`,
+  );
 }
 
 export async function listAuditEvents(project: string): Promise<AuditEvent[]> {
   const raw = await requestJSON<AuditEventResponse[]>(
-    `/v1/projects/${project}/audit-events`,
+    `/v1/projects/${encodeURIComponent(project)}/audit-events`,
   );
   return raw.map(normalizeAuditEvent);
 }
@@ -128,7 +132,7 @@ export async function fetchAuditEvents(
   if (filter?.task) params.set("task", filter.task);
   if (filter?.limit != null) params.set("limit", String(filter.limit));
   const qs = params.toString();
-  const url = `/v1/projects/${project}/audit-events${qs ? `?${qs}` : ""}`;
+  const url = `/v1/projects/${encodeURIComponent(project)}/audit-events${qs ? `?${qs}` : ""}`;
   const raw = await requestJSON<AuditEventResponse[]>(url);
   return raw.map(normalizeAuditEvent);
 }

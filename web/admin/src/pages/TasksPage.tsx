@@ -39,21 +39,30 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
+
     listTasks(project)
       .then((data) => {
+        if (cancelled) return;
         const sorted = [...data].sort(
           (a, b) =>
             new Date(b.created_at ?? 0).getTime() -
             new Date(a.created_at ?? 0).getTime(),
         );
         setAllTasks(sorted);
+        setLoading(false);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "unknown error");
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [project]);
 
   const tasks =

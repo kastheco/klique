@@ -114,21 +114,29 @@ export default function AuditPage() {
 
   // Fetch events whenever project, kind, taskFile, or limit changes
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
+
     fetchAuditEvents(project, {
       kind: kind || undefined,
       task: taskFile || undefined,
       limit,
     })
       .then((data) => {
+        if (cancelled) return;
         setEvents(data);
         setLoading(false);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "unknown error");
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [project, kind, taskFile, limit]);
 
   function toggleRow(event: AuditEvent) {
@@ -148,7 +156,24 @@ export default function AuditPage() {
       .join(" ");
 
     const mainRow = (
-      <tr key={event.id} className={rowClasses} onClick={() => toggleRow(event)}>
+      <tr
+        key={event.id}
+        className={rowClasses}
+        onClick={() => toggleRow(event)}
+        tabIndex={hasDetail ? 0 : undefined}
+        role={hasDetail ? "button" : undefined}
+        aria-expanded={hasDetail ? isExpanded : undefined}
+        onKeyDown={
+          hasDetail
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleRow(event);
+                }
+              }
+            : undefined
+        }
+      >
         <td className={styles.timestamp}>{formatDateTime(event.timestamp)}</td>
         <td>
           <span className={`${styles.badge} ${levelClass(event.level)}`}>

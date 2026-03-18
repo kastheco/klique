@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -60,13 +59,12 @@ func NewServeCmd() *cobra.Command {
 
 			rootMux := http.NewServeMux()
 			rootMux.Handle("/v1/ping", taskAPI)
-			rootMux.Handle("/v1/projects/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if strings.HasSuffix(r.URL.Path, "/audit-events") {
-					auditAPI.ServeHTTP(w, r)
-					return
-				}
-				taskAPI.ServeHTTP(w, r)
-			}))
+			// Route audit-events exactly, then fall through to the task API for everything else.
+			// Go 1.22+ mux gives the more-specific method+path pattern precedence over the
+			// plain prefix, so GET audit-events is handled by auditAPI and all other
+			// /v1/projects/* requests continue to taskAPI.
+			rootMux.Handle("GET /v1/projects/{project}/audit-events", auditAPI)
+			rootMux.Handle("/v1/projects/", taskAPI)
 
 			// Resolve the admin filesystem: --admin-dir flag overrides embedded assets.
 			var adminFS http.FileSystem

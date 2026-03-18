@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router";
 import { listTasks, listAuditEvents, resolveProjectName } from "../api";
 import type { AuditEvent, Status, TaskEntry } from "../types";
 import styles from "./DashboardPage.module.css";
@@ -61,10 +62,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const project = useMemo(
-    () => resolveProjectName(window.location.search),
-    [],
-  );
+  const { search } = useLocation();
+  const project = useMemo(() => resolveProjectName(search), [search]);
 
   useEffect(() => {
     let cancelled = false;
