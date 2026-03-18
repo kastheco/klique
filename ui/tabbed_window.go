@@ -47,8 +47,14 @@ var (
 
 // Tab index constants.
 const (
-	InfoTab    int = iota // 0 — plan / metadata pane
-	PreviewTab            // 1 — live agent session pane
+	// Deprecated: InfoTab is kept as a compile-time shim until task 4 removes all
+	// app-layer references. Internal use in TabbedWindow has been replaced with
+	// dynamic instanceTabs indexing.
+	InfoTab int = iota // 0 — legacy info tab index
+	// Deprecated: PreviewTab is kept as a compile-time shim until task 4 removes
+	// all app-layer references. Internal use in TabbedWindow has been replaced with
+	// dynamic instanceTabs indexing.
+	PreviewTab // 1 — legacy agent session tab index
 )
 
 // Tab describes a single tab entry (kept for API compatibility).
@@ -67,9 +73,6 @@ type InstanceTab struct {
 // It tracks which tab is active, manages focus state, and delegates rendering
 // and scroll operations to the appropriate child pane.
 type TabbedWindow struct {
-	// tabs holds the icon+label string for each tab header.
-	tabs []string
-
 	activeTab  int // currently visible tab index
 	focusedTab int // tab that has keyboard-ring focus (-1 = none)
 	height     int // total allocated height (post AdjustPreviewWidth)
@@ -82,8 +85,8 @@ type TabbedWindow struct {
 	focused   bool // true when this panel owns keyboard focus
 	focusMode bool // true when user is typing directly into the agent pane
 
-	// showWelcome is true on startup. While true the info tab shows the
-	// animated banner instead of plan metadata so the logo animation plays.
+	// showWelcome is true on startup. While true the preview pane shows the
+	// animated banner until the user navigates for the first time.
 	showWelcome bool
 
 	// instanceTabs is the dynamic list of per-session tabs.
@@ -93,14 +96,10 @@ type TabbedWindow struct {
 }
 
 // NewTabbedWindow creates a TabbedWindow wiring the two child panes together.
-// The info tab is active by default and the welcome banner is shown.
+// The welcome banner is shown on startup until the user navigates.
 func NewTabbedWindow(preview *PreviewPane, info *InfoPane) *TabbedWindow {
 	return &TabbedWindow{
-		tabs: []string{
-			"\uea74 info",
-			"\uea85 agent",
-		},
-		// activeTab defaults to InfoTab (0) via zero value.
+		// activeTab defaults to 0 via zero value.
 		preview:     preview,
 		info:        info,
 		focusedTab:  -1,
@@ -133,17 +132,44 @@ func (w *TabbedWindow) SetInstance(instance *session.Instance) { w.instance = in
 // needed for borders (width - 2).
 func AdjustPreviewWidth(width int) int { return width - 2 }
 
+// compactInfo renders the compact info header and returns its content and
+// rendered height. Returns ("", 0) when showInfo is false, width is
+// non-positive, or the info pane has no compact content to show.
+func (w *TabbedWindow) compactInfo(width int) (string, int) {
+	if !w.showInfo || width <= 0 {
+		return "", 0
+	}
+	compact := w.info.RenderCompact(width)
+	if compact == "" {
+		return "", 0
+	}
+	return compact, lipgloss.Height(compact)
+}
+
 // SetSize allocates space to the window and propagates the resulting content
-// dimensions to all three child panes.
+// dimensions to the preview and info child panes.
 func (w *TabbedWindow) SetSize(width, height int) {
 	w.width = AdjustPreviewWidth(width)
 	w.height = height
 
-	// Height consumed by the tab row (border frame + one character row).
-	tabH := activeTabStyle.GetVerticalFrameSize() + 1
-	// Remaining content dimensions after window border and tab row.
-	contentH := height - tabH - windowStyle.GetVerticalFrameSize()
+	// Height consumed by the compact info header (may be 0).
+	_, compactH := w.compactInfo(w.width)
+
+	// Height consumed by the tab row (0 when there are no instance tabs).
+	tabH := 0
+	if len(w.instanceTabs) > 0 {
+		tabH = activeTabStyle.GetVerticalFrameSize() + 1
+	}
+
+	// Remaining content dimensions after compact header, tab row, and window border.
+	contentH := height - compactH - tabH - windowStyle.GetVerticalFrameSize()
+	if contentH < 0 {
+		contentH = 0
+	}
 	contentW := w.width - windowStyle.GetHorizontalFrameSize()
+	if contentW < 0 {
+		contentW = 0
+	}
 
 	w.preview.SetSize(contentW, contentH)
 	w.info.SetSize(contentW, contentH)
@@ -156,24 +182,36 @@ func (w *TabbedWindow) GetPreviewSize() (int, int) {
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
-// Toggle advances to the next tab, wrapping from agent back to info.
+// Toggle advances to the next dynamic instance tab, wrapping around at the end.
+// No-op when there are no dynamic instance tabs.
 func (w *TabbedWindow) Toggle() {
-	w.activeTab = (w.activeTab + 1) % len(w.tabs)
+	if len(w.instanceTabs) == 0 {
+		return
+	}
+	w.activeTab = (w.activeTab + 1) % len(w.instanceTabs)
 }
 
-// ToggleWithReset resets the preview pane to normal mode first, then toggles.
+// ToggleWithReset resets the preview pane to normal mode first, then advances
+// to the next dynamic instance tab. No-op when there are no instance tabs.
 func (w *TabbedWindow) ToggleWithReset(instance *session.Instance) error {
 	if err := w.preview.ResetToNormalMode(instance); err != nil {
 		return err
 	}
-	w.activeTab = (w.activeTab + 1) % len(w.tabs)
+	if len(w.instanceTabs) == 0 {
+		return nil
+	}
+	w.activeTab = (w.activeTab + 1) % len(w.instanceTabs)
 	return nil
 }
 
 // SetActiveTab selects the tab at the given index. Clears the welcome banner
-// so that the info pane shows real plan content on the next render.
+// so that the preview pane shows live content on the next render.
+// When instanceTabs is non-empty, the index must be in [0, len(instanceTabs)).
 func (w *TabbedWindow) SetActiveTab(tab int) {
-	if tab < 0 || tab >= len(w.tabs) {
+	if tab < 0 {
+		return
+	}
+	if len(w.instanceTabs) > 0 && tab >= len(w.instanceTabs) {
 		return
 	}
 	w.activeTab = tab
@@ -184,7 +222,8 @@ func (w *TabbedWindow) SetActiveTab(tab int) {
 // GetActiveTab returns the currently active tab index.
 func (w *TabbedWindow) GetActiveTab() int { return w.activeTab }
 
-// IsInInfoTab reports whether the info tab is currently active.
+// IsInInfoTab reports whether the active tab index matches the legacy InfoTab
+// constant (0). Retained for compatibility until task 4 updates the app layer.
 func (w *TabbedWindow) IsInInfoTab() bool { return w.activeTab == InfoTab }
 
 // ── Dynamic instance tab API ──────────────────────────────────────────────────
@@ -247,10 +286,9 @@ func (w *TabbedWindow) IsShowingInfo() bool { return w.showInfo }
 // ── Preview pane delegation ───────────────────────────────────────────────────
 
 // UpdatePreview refreshes the preview pane content from the given instance.
-// No-op when focus mode is active (the embedded terminal owns the pane) or
-// when the preview tab is not currently visible.
+// No-op when focus mode is active (the embedded terminal owns the pane).
 func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
-	if w.activeTab != PreviewTab || w.focusMode {
+	if w.focusMode {
 		return nil
 	}
 	return w.preview.UpdateContent(instance)
@@ -280,19 +318,14 @@ func (w *TabbedWindow) ClearDocumentMode() { w.preview.ClearDocumentMode() }
 func (w *TabbedWindow) IsDocumentMode() bool { return w.preview.IsDocumentMode() }
 
 // ViewportUpdate forwards a tea.Msg to the preview viewport for native key
-// handling (PgUp/PgDn, Home/End, etc.) when the preview tab is active.
+// handling (PgUp/PgDn, Home/End, etc.) regardless of active tab.
 func (w *TabbedWindow) ViewportUpdate(msg tea.Msg) tea.Cmd {
-	if w.activeTab != PreviewTab {
-		return nil
-	}
 	return w.preview.ViewportUpdate(msg)
 }
 
-// ViewportHandlesKey reports whether the preview viewport keymap handles msg.
+// ViewportHandlesKey reports whether the preview viewport keymap handles msg,
+// regardless of active tab.
 func (w *TabbedWindow) ViewportHandlesKey(msg tea.KeyMsg) bool {
-	if w.activeTab != PreviewTab {
-		return false
-	}
 	return w.preview.ViewportHandlesKey(msg)
 }
 
@@ -314,27 +347,17 @@ func (w *TabbedWindow) GetInfoData() InfoData { return w.info.data }
 
 // ── Scroll / pagination ───────────────────────────────────────────────────────
 
-// ScrollUp scrolls the active pane upward.
+// ScrollUp scrolls the preview pane upward, regardless of active tab.
 func (w *TabbedWindow) ScrollUp() {
-	switch w.activeTab {
-	case PreviewTab:
-		if err := w.preview.ScrollUp(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
-		}
-	case InfoTab:
-		w.info.ScrollUp()
+	if err := w.preview.ScrollUp(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
 	}
 }
 
-// ScrollDown scrolls the active pane downward.
+// ScrollDown scrolls the preview pane downward, regardless of active tab.
 func (w *TabbedWindow) ScrollDown() {
-	switch w.activeTab {
-	case PreviewTab:
-		if err := w.preview.ScrollDown(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
-		}
-	case InfoTab:
-		w.info.ScrollDown()
+	if err := w.preview.ScrollDown(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
 	}
 }
 
@@ -354,29 +377,19 @@ func (w *TabbedWindow) HalfPageDown() {
 	}
 }
 
-// ContentScrollUp scrolls the active pane upward without file navigation.
-// Intended for mouse-wheel events.
+// ContentScrollUp scrolls the preview pane upward without file navigation,
+// regardless of active tab. Intended for mouse-wheel events.
 func (w *TabbedWindow) ContentScrollUp() {
-	switch w.activeTab {
-	case PreviewTab:
-		if err := w.preview.ScrollUp(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to content scroll up: %v", err)
-		}
-	case InfoTab:
-		w.info.ScrollUp()
+	if err := w.preview.ScrollUp(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to content scroll up: %v", err)
 	}
 }
 
-// ContentScrollDown scrolls the active pane downward without file navigation.
-// Intended for mouse-wheel events.
+// ContentScrollDown scrolls the preview pane downward without file navigation,
+// regardless of active tab. Intended for mouse-wheel events.
 func (w *TabbedWindow) ContentScrollDown() {
-	switch w.activeTab {
-	case PreviewTab:
-		if err := w.preview.ScrollDown(w.instance); err != nil {
-			log.InfoLog.Printf("tabbed window failed to content scroll down: %v", err)
-		}
-	case InfoTab:
-		w.info.ScrollDown()
+	if err := w.preview.ScrollDown(w.instance); err != nil {
+		log.InfoLog.Printf("tabbed window failed to content scroll down: %v", err)
 	}
 }
 
@@ -393,20 +406,12 @@ func (w *TabbedWindow) SetAnimateBanner(enabled bool) { w.preview.SetAnimateBann
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-// String renders the tab bar and content window as a single string.
-// Returns an empty string when no size has been allocated.
+// String renders the compact info header, tab bar, and content window as a
+// single string. Returns an empty string when no size has been allocated.
 func (w *TabbedWindow) String() string {
 	if w.width == 0 || w.height == 0 {
 		return ""
 	}
-
-	// ── Tab row ──────────────────────────────────────────────────────────────
-
-	// Divide available width evenly across tabs; last tab absorbs the remainder.
-	tabW := w.width / len(w.tabs)
-	lastTabW := w.width - tabW*(len(w.tabs)-1)
-	// Height consumed by the tab row (used later for content sizing).
-	tabH := activeTabStyle.GetVerticalFrameSize() + 1
 
 	// Choose border accent based on focus state.
 	var borderColor color.Color
@@ -419,84 +424,102 @@ func (w *TabbedWindow) String() string {
 		borderColor = ColorOverlay
 	}
 
-	renderedTabs := make([]string, 0, len(w.tabs))
-	for i, label := range w.tabs {
-		width := tabW
-		if i == len(w.tabs)-1 {
-			width = lastTabW
+	// ── Compact info header ───────────────────────────────────────────────────
+
+	compact, compactH := w.compactInfo(w.width)
+
+	// ── Tab row ───────────────────────────────────────────────────────────────
+
+	var row string
+	tabH := 0
+	if len(w.instanceTabs) > 0 {
+		// Height consumed by the tab row.
+		tabH = activeTabStyle.GetVerticalFrameSize() + 1
+
+		// Divide available width evenly across tabs; last tab absorbs the remainder.
+		tabW := w.width / len(w.instanceTabs)
+		lastTabW := w.width - tabW*(len(w.instanceTabs)-1)
+
+		renderedTabs := make([]string, 0, len(w.instanceTabs))
+		for i, tab := range w.instanceTabs {
+			width := tabW
+			if i == len(w.instanceTabs)-1 {
+				width = lastTabW
+			}
+
+			isFirst := i == 0
+			isLast := i == len(w.instanceTabs)-1
+			isActive := i == w.activeTab
+
+			var style lipgloss.Style
+			if isActive {
+				style = activeTabStyle
+			} else {
+				style = inactiveTabStyle
+			}
+			style = style.BorderForeground(borderColor)
+
+			// Adjust the bottom corner characters so the tab bar merges cleanly
+			// with the window border below it.
+			border, _, _, _, _ := style.GetBorder()
+			switch {
+			case isFirst && isActive:
+				border.BottomLeft = "│"
+			case isFirst:
+				border.BottomLeft = "├"
+			case isLast && isActive:
+				border.BottomRight = "│"
+			case isLast:
+				border.BottomRight = "┤"
+			}
+			style = style.Border(border)
+			// In lipgloss v2, Width is the total outer dimension (including border).
+			style = style.Width(width)
+
+			label := tab.Title
+			var cell string
+			switch {
+			case isActive && i == w.focusedTab && !w.focusMode:
+				// Active tab with keyboard-ring focus: foam→iris gradient text.
+				cell = style.Render(GradientText(label, GradientStart, GradientEnd))
+			case isActive:
+				// Active but not ring-focused: normal text color.
+				cell = style.Render(lipgloss.NewStyle().Foreground(ColorText).Render(label))
+			default:
+				// Inactive tab: muted text.
+				cell = style.Render(lipgloss.NewStyle().Foreground(ColorMuted).Render(label))
+			}
+
+			renderedTabs = append(renderedTabs, zone.Mark(InstanceTabZoneID(i), cell))
 		}
 
-		isFirst := i == 0
-		isLast := i == len(w.tabs)-1
-		isActive := i == w.activeTab
-
-		var style lipgloss.Style
-		if isActive {
-			style = activeTabStyle
-		} else {
-			style = inactiveTabStyle
-		}
-		style = style.BorderForeground(borderColor)
-
-		// Adjust the bottom corner characters so the tab bar merges cleanly
-		// with the window border below it.
-		border, _, _, _, _ := style.GetBorder()
-		switch {
-		case isFirst && isActive:
-			border.BottomLeft = "│"
-		case isFirst:
-			border.BottomLeft = "├"
-		case isLast && isActive:
-			border.BottomRight = "│"
-		case isLast:
-			border.BottomRight = "┤"
-		}
-		style = style.Border(border)
-		// In lipgloss v2, Width is the total outer dimension (including border).
-		style = style.Width(width)
-
-		var cell string
-		switch {
-		case isActive && i == w.focusedTab && !w.focusMode:
-			// Active tab with keyboard-ring focus: foam→iris gradient text.
-			cell = style.Render(GradientText(label, GradientStart, GradientEnd))
-		case isActive:
-			// Active but not ring-focused: normal text color.
-			cell = style.Render(lipgloss.NewStyle().Foreground(ColorText).Render(label))
-		default:
-			// Inactive tab: muted text.
-			cell = style.Render(lipgloss.NewStyle().Foreground(ColorMuted).Render(label))
-		}
-
-		renderedTabs = append(renderedTabs, zone.Mark(TabZoneIDs[i], cell))
+		row = lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	}
-
-	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 
 	// ── Content window ────────────────────────────────────────────────────────
 
-	var content string
-	switch {
-	case w.activeTab == InfoTab && w.showWelcome:
-		// Show the animated welcome banner on the info tab until the user
-		// navigates in the sidebar for the first time.
-		content = w.preview.String()
-	case w.activeTab == PreviewTab:
-		content = w.preview.String()
-	case w.activeTab == InfoTab:
-		content = w.info.String()
-	}
+	// Every tab renders preview content; the old info pane full-content path is
+	// replaced by the compact header above the tab bar.
+	content := w.preview.String()
 
 	ws := windowStyle.BorderForeground(borderColor)
 	innerW := w.width - ws.GetHorizontalFrameSize()
-	innerH := w.height - ws.GetVerticalFrameSize() - tabH
+	innerH := w.height - ws.GetVerticalFrameSize() - tabH - compactH
 
 	window := ws.Render(lipgloss.Place(innerW, innerH, lipgloss.Left, lipgloss.Top, content))
-
 	// Wrap the preview content in a zone so mouse clicks are detected.
-	if w.activeTab == PreviewTab {
-		window = zone.Mark(ZoneAgentPane, window)
-	}
+	window = zone.Mark(ZoneAgentPane, window)
 
-	return lipgloss.JoinVertical(lipgloss.Left, row, window)
+	// ── Assemble ──────────────────────────────────────────────────────────────
+
+	parts := make([]string, 0, 3)
+	if compact != "" {
+		parts = append(parts, compact)
+	}
+	if row != "" {
+		parts = append(parts, row)
+	}
+	parts = append(parts, window)
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
