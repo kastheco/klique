@@ -783,31 +783,49 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	if selected == nil {
 		return m, nil
 	}
-	items := []overlay.ContextMenuItem{
+
+	// session group: attach/lifecycle controls
+	sessionItems := []overlay.ContextMenuItem{
 		{Label: "open", Action: "open_instance"},
 		{Label: "kill", Action: "kill_instance"},
 		{Label: "restart", Action: "restart_instance"},
 	}
 	if selected.Status == session.Paused {
-		items = append(items, overlay.ContextMenuItem{Label: "resume", Action: "resume_instance"})
+		sessionItems = append(sessionItems, overlay.ContextMenuItem{Label: "resume", Action: "resume_instance"})
 	} else {
-		items = append(items, overlay.ContextMenuItem{Label: "pause", Action: "pause_instance"})
+		sessionItems = append(sessionItems, overlay.ContextMenuItem{Label: "pause", Action: "pause_instance"})
 	}
 	if selected.Started() && selected.Status != session.Paused {
-		items = append(items, overlay.ContextMenuItem{Label: "focus agent", Action: "send_prompt_instance"})
+		sessionItems = append(sessionItems, overlay.ContextMenuItem{Label: "focus agent", Action: "send_prompt_instance"})
 	}
-	items = append(items, overlay.ContextMenuItem{Label: "rename", Action: "rename_instance"})
-	items = append(items, overlay.ContextMenuItem{Label: "push branch", Action: "push_instance"})
-	items = append(items, overlay.ContextMenuItem{Label: "create pr", Action: "create_pr_instance"})
+
+	// sync group: branch and PR operations
+	syncItems := []overlay.ContextMenuItem{
+		{Label: "push branch", Action: "push_instance"},
+		{Label: "create pr", Action: "create_pr_instance"},
+	}
 	if selected.TaskFile != "" {
-		items = append(items, overlay.ContextMenuItem{Label: "open in browser", Action: "open_plan_browser"})
+		syncItems = append(syncItems, overlay.ContextMenuItem{Label: "open in browser", Action: "open_plan_browser"})
 	}
-	// Wave task: offer manual completion
+
+	// manage group: rename and wave task completion
+	manageItems := []overlay.ContextMenuItem{
+		{Label: "rename", Action: "rename_instance"},
+	}
 	if selected.TaskNumber > 0 {
 		if orch, ok := m.waveOrchestrators[selected.TaskFile]; ok && orch.IsTaskRunning(selected.TaskNumber) {
-			items = append(items, overlay.ContextMenuItem{Label: "mark complete", Action: "mark_task_complete"})
+			manageItems = append(manageItems, overlay.ContextMenuItem{Label: "mark complete", Action: "mark_task_complete"})
 		}
 	}
+
+	// Assemble top-level category items; omit empty groups.
+	var items []overlay.ContextMenuItem
+	items = append(items, overlay.ContextMenuItem{Label: "session", Children: sessionItems})
+	items = append(items, overlay.ContextMenuItem{Label: "sync", Children: syncItems})
+	if len(manageItems) > 0 {
+		items = append(items, overlay.ContextMenuItem{Label: "manage", Children: manageItems})
+	}
+
 	// Position at the left edge of the instance list (middle column)
 	x := m.navWidth
 	y := 1 + 4 + m.nav.GetSelectedIdx() // PaddingTop(1) + header rows + item offset
@@ -822,14 +840,15 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	var items []overlay.ContextMenuItem
+	// start group: forward lifecycle agent-launch actions, gated by current status.
+	var startItems []overlay.ContextMenuItem
 	if m.taskState != nil {
 		if entry, ok := m.taskState.Plans[planFile]; ok {
 			// Offer every forward lifecycle stage from the current state so the
 			// user can manually advance through plan → implement → review → done.
 			switch entry.Status {
 			case taskstate.StatusReady, taskstate.StatusPlanning:
-				items = append(items,
+				startItems = append(startItems,
 					overlay.ContextMenuItem{Label: "start planning", Action: "start_plan"},
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
 					overlay.ContextMenuItem{Label: "implement directly", Action: "start_implement_direct"},
@@ -837,32 +856,45 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
 			case taskstate.StatusImplementing:
-				items = append(items,
+				startItems = append(startItems,
 					overlay.ContextMenuItem{Label: "start implement", Action: "start_implement"},
 					overlay.ContextMenuItem{Label: "implement directly", Action: "start_implement_direct"},
 					overlay.ContextMenuItem{Label: "start solo agent", Action: "start_solo"},
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 				)
 			case taskstate.StatusReviewing:
-				items = append(items,
+				startItems = append(startItems,
 					overlay.ContextMenuItem{Label: "start review", Action: "start_review"},
 					overlay.ContextMenuItem{Label: "start fixer", Action: "start_fixer"},
 					overlay.ContextMenuItem{Label: "mark finished", Action: "mark_plan_done"},
 				)
 			case taskstate.StatusDone:
-				items = append(items,
+				startItems = append(startItems,
 					overlay.ContextMenuItem{Label: "request review", Action: "request_review"},
 					overlay.ContextMenuItem{Label: "resume implement", Action: "resume_implement"},
 				)
 			}
 		}
 	}
+
+	// view group: read-only inspection and browsing.
+	viewItems := []overlay.ContextMenuItem{
+		{Label: "chat about this", Action: "chat_about_plan"},
+		{Label: "view task", Action: "view_plan"},
+		{Label: "open in browser", Action: "open_plan_browser"},
+	}
 	// History plans get an "inspect task" option to move them to the dead section.
 	if m.nav.IsSelectedHistoryPlan() {
-		items = append(items,
-			overlay.ContextMenuItem{Label: "inspect task", Action: "inspect_plan"},
-		)
+		viewItems = append(viewItems, overlay.ContextMenuItem{Label: "inspect task", Action: "inspect_plan"})
 	}
+
+	// sync group: branch and PR operations.
+	syncItems := []overlay.ContextMenuItem{
+		{Label: "create pr", Action: "create_plan_pr"},
+		{Label: "merge to main", Action: "merge_plan"},
+	}
+
+	// config group: task metadata and toggle options.
 	autoAdvanceLabel := "auto-advance waves: off"
 	if m.appConfig != nil && m.appConfig.AutoAdvanceWaves {
 		autoAdvanceLabel = "auto-advance waves: on"
@@ -871,20 +903,31 @@ func (m *home) openTaskContextMenu() (tea.Model, tea.Cmd) {
 	if m.appConfig != nil && m.appConfig.AutoReviewFix {
 		autoReviewFixLabel = "auto review-fix loop: on"
 	}
+	configItems := []overlay.ContextMenuItem{
+		{Label: "rename task", Action: "rename_plan"},
+		{Label: "set topic", Action: "change_topic"},
+		{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
+		{Label: autoReviewFixLabel, Action: "toggle_auto_review_fix"},
+		{Label: "set status", Action: "set_status"},
+	}
+
+	// lifecycle group: destructive or terminal task transitions.
+	lifecycleItems := []overlay.ContextMenuItem{
+		{Label: "mark done", Action: "mark_plan_done"},
+		{Label: "start over", Action: "start_over_plan"},
+		{Label: "cancel task", Action: "cancel_plan"},
+	}
+
+	// Assemble top-level category items; only include 'start' when non-empty.
+	var items []overlay.ContextMenuItem
+	if len(startItems) > 0 {
+		items = append(items, overlay.ContextMenuItem{Label: "start", Children: startItems})
+	}
 	items = append(items,
-		overlay.ContextMenuItem{Label: "chat about this", Action: "chat_about_plan"},
-		overlay.ContextMenuItem{Label: "view task", Action: "view_plan"},
-		overlay.ContextMenuItem{Label: "open in browser", Action: "open_plan_browser"},
-		overlay.ContextMenuItem{Label: "rename task", Action: "rename_plan"},
-		overlay.ContextMenuItem{Label: "set topic", Action: "change_topic"},
-		overlay.ContextMenuItem{Label: autoAdvanceLabel, Action: "toggle_auto_advance"},
-		overlay.ContextMenuItem{Label: autoReviewFixLabel, Action: "toggle_auto_review_fix"},
-		overlay.ContextMenuItem{Label: "set status", Action: "set_status"},
-		overlay.ContextMenuItem{Label: "create pr", Action: "create_plan_pr"},
-		overlay.ContextMenuItem{Label: "merge to main", Action: "merge_plan"},
-		overlay.ContextMenuItem{Label: "mark done", Action: "mark_plan_done"},
-		overlay.ContextMenuItem{Label: "start over", Action: "start_over_plan"},
-		overlay.ContextMenuItem{Label: "cancel task", Action: "cancel_plan"},
+		overlay.ContextMenuItem{Label: "view", Children: viewItems},
+		overlay.ContextMenuItem{Label: "sync", Children: syncItems},
+		overlay.ContextMenuItem{Label: "config", Children: configItems},
+		overlay.ContextMenuItem{Label: "lifecycle", Children: lifecycleItems},
 	)
 
 	x := m.navWidth

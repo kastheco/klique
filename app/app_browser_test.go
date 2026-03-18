@@ -90,5 +90,14 @@ func TestOpenTaskContextMenu_IncludesBrowserAction(t *testing.T) {
 	updated := model.(*home)
 	menu, ok := updated.overlays.Current().(*overlay.ContextMenu)
 	require.True(t, ok)
-	assert.Contains(t, menu.View(), "open in browser")
+	// Use AllItems() so the check is resilient to rendering changes and works
+	// regardless of whether the action lives in a nested sub-menu group.
+	found := false
+	for _, item := range menu.AllItems() {
+		if item.Action == "open_plan_browser" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "task context menu must contain open_plan_browser action")
 }

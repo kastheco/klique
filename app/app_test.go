@@ -1468,9 +1468,9 @@ func TestChatAboutPlan_AppearsInContextMenu(t *testing.T) {
 	cm1, ok1 := updated.overlays.Current().(*overlay.ContextMenu)
 	require.True(t, ok1, "current overlay must be a ContextMenu")
 
-	// Verify "chat about this" appears in the menu items
+	// Verify "chat about this" appears in the menu items (use AllItems to search nested groups)
 	found := false
-	for _, item := range cm1.Items() {
+	for _, item := range cm1.AllItems() {
 		if item.Action == "chat_about_plan" {
 			found = true
 			break
@@ -1494,7 +1494,7 @@ func TestCreatePlanPR_AppearsInTaskContextMenu(t *testing.T) {
 	require.True(t, ok, "current overlay must be a ContextMenu")
 
 	found := false
-	for _, item := range cm.Items() {
+	for _, item := range cm.AllItems() {
 		if item.Action == "create_plan_pr" {
 			found = true
 			break
@@ -1518,7 +1518,7 @@ func TestStartFixer_AppearsInTaskContextMenu(t *testing.T) {
 	require.True(t, ok, "current overlay must be a ContextMenu")
 
 	found := false
-	for _, item := range cm.Items() {
+	for _, item := range cm.AllItems() {
 		if item.Action == "start_fixer" {
 			found = true
 			break
@@ -1607,7 +1607,7 @@ func TestRestartInstance_AppearsInContextMenu(t *testing.T) {
 	require.True(t, ok2, "current overlay must be a ContextMenu")
 
 	found := false
-	for _, item := range cm2.Items() {
+	for _, item := range cm2.AllItems() {
 		if item.Action == "restart_instance" {
 			found = true
 			break
@@ -1833,4 +1833,108 @@ func TestHandleMouseClick_InsideAgentPane_StaysInFocusMode(t *testing.T) {
 		"precondition: state must be stateFocusAgent")
 	require.True(t, h.tabbedWindow.IsFocusMode(),
 		"precondition: tabbed window must be in focus mode")
+}
+
+// TestInstanceContextMenu_HasGroupedSubMenus verifies that the instance context menu
+// exposes top-level category groups (session, sync, manage) rather than a flat list,
+// and that nested actions remain discoverable via AllItems().
+func TestInstanceContextMenu_HasGroupedSubMenus(t *testing.T) {
+	h := newTestHome()
+	inst, _ := session.NewInstance(session.InstanceOptions{
+		Title:   "test-grouped-instance",
+		Path:    os.TempDir(),
+		Program: "opencode",
+	})
+	inst.MarkStartedForTest()
+	h.nav.AddInstance(inst)
+	h.nav.SelectInstance(inst)
+
+	model, _ := h.openContextMenu()
+	updated := model.(*home)
+	cm, ok := updated.overlays.Current().(*overlay.ContextMenu)
+	require.True(t, ok, "current overlay must be a ContextMenu")
+
+	// Top-level items must be the category groups, not individual actions.
+	topLabels := make([]string, 0, len(cm.Items()))
+	for _, item := range cm.Items() {
+		topLabels = append(topLabels, item.Label)
+	}
+	assert.Contains(t, topLabels, "session", "instance menu must have 'session' group at top level")
+	assert.Contains(t, topLabels, "sync", "instance menu must have 'sync' group at top level")
+	assert.Contains(t, topLabels, "manage", "instance menu must have 'manage' group at top level")
+
+	// Nested actions must still be discoverable via AllItems().
+	allActions := make([]string, 0)
+	for _, item := range cm.AllItems() {
+		allActions = append(allActions, item.Action)
+	}
+	assert.Contains(t, allActions, "restart_instance", "restart_instance must be discoverable in AllItems")
+}
+
+// TestTaskContextMenu_HasGroupedSubMenus verifies that the task context menu exposes
+// top-level category groups (start, view, sync, config, lifecycle) and that nested
+// actions remain discoverable via AllItems().
+func TestTaskContextMenu_HasGroupedSubMenus(t *testing.T) {
+	h := newTestHome()
+	h.setupPlanState(t, "review-task", taskstate.StatusReviewing, "")
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "review-task")
+
+	model, _ := h.openTaskContextMenu()
+	updated := model.(*home)
+	cm, ok := updated.overlays.Current().(*overlay.ContextMenu)
+	require.True(t, ok, "current overlay must be a ContextMenu")
+
+	// Top-level items must be the category groups, not individual actions.
+	topLabels := make([]string, 0, len(cm.Items()))
+	for _, item := range cm.Items() {
+		topLabels = append(topLabels, item.Label)
+	}
+	assert.Contains(t, topLabels, "start", "task menu must have 'start' group at top level")
+	assert.Contains(t, topLabels, "view", "task menu must have 'view' group at top level")
+	assert.Contains(t, topLabels, "sync", "task menu must have 'sync' group at top level")
+	assert.Contains(t, topLabels, "config", "task menu must have 'config' group at top level")
+	assert.Contains(t, topLabels, "lifecycle", "task menu must have 'lifecycle' group at top level")
+
+	// Nested actions must still be discoverable via AllItems().
+	allActions := make([]string, 0)
+	for _, item := range cm.AllItems() {
+		allActions = append(allActions, item.Action)
+	}
+	assert.Contains(t, allActions, "create_plan_pr", "create_plan_pr must be discoverable in AllItems")
+	assert.Contains(t, allActions, "start_fixer", "start_fixer must be discoverable in AllItems for reviewing status")
+}
+
+// TestTaskContextMenu_ReadyStatus_StartGroupHasAllOptions verifies that when a task
+// is in the ready state, the 'start' sub-menu group contains all the expected options.
+func TestTaskContextMenu_ReadyStatus_StartGroupHasAllOptions(t *testing.T) {
+	h := newTestHome()
+	h.setupPlanState(t, "ready-task", taskstate.StatusReady, "")
+	h.nav.SelectByID(ui.SidebarPlanPrefix + "ready-task")
+
+	model, _ := h.openTaskContextMenu()
+	updated := model.(*home)
+	cm, ok := updated.overlays.Current().(*overlay.ContextMenu)
+	require.True(t, ok, "current overlay must be a ContextMenu")
+
+	// Find the "start" group in the top-level items.
+	var startGroup *overlay.ContextMenuItem
+	for _, item := range cm.Items() {
+		if item.Label == "start" {
+			itemCopy := item
+			startGroup = &itemCopy
+			break
+		}
+	}
+	require.NotNil(t, startGroup, "task menu for ready status must have a 'start' group")
+
+	// All ready-status start actions must be present as children.
+	startActions := make([]string, 0, len(startGroup.Children))
+	for _, child := range startGroup.Children {
+		startActions = append(startActions, child.Action)
+	}
+	assert.Contains(t, startActions, "start_plan", "start group must contain start_plan for ready status")
+	assert.Contains(t, startActions, "start_implement", "start group must contain start_implement for ready status")
+	assert.Contains(t, startActions, "start_implement_direct", "start group must contain start_implement_direct for ready status")
+	assert.Contains(t, startActions, "start_solo", "start group must contain start_solo for ready status")
+	assert.Contains(t, startActions, "start_review", "start group must contain start_review for ready status")
 }
