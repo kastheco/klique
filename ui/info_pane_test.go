@@ -5,6 +5,7 @@ import (
 
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -244,4 +245,41 @@ func TestInfoPane_NoReviewSectionWhenOutcomeEmpty(t *testing.T) {
 	output := pane.String()
 	// Review section must not appear when ReviewOutcome is empty.
 	assert.NotContains(t, output, "approved")
+}
+
+func TestRenderCompact_ShowsPlanMetadata(t *testing.T) {
+	p := NewInfoPane()
+	p.SetSize(80, 24)
+	p.SetData(InfoData{
+		HasPlan:    true,
+		PlanName:   "my-feature",
+		PlanStatus: "implementing",
+		PlanBranch: "plan/my-feature",
+	})
+
+	compact := p.RenderCompact(80)
+	assert.NotEmpty(t, compact)
+	assert.True(t, lipgloss.Width(compact) > 0)
+}
+
+func TestRenderCompact_EmptyWhenNoData(t *testing.T) {
+	p := NewInfoPane()
+	p.SetSize(80, 24)
+	p.SetData(InfoData{})
+
+	compact := p.RenderCompact(80)
+	assert.Empty(t, compact)
+}
+
+func TestRenderCompact_ShowsInstanceTitle(t *testing.T) {
+	p := NewInfoPane()
+	p.SetSize(80, 24)
+	p.SetData(InfoData{
+		HasInstance: true,
+		Title:       "my-plan-coder-1",
+		Status:      "running",
+	})
+
+	compact := p.RenderCompact(80)
+	assert.NotEmpty(t, compact)
 }

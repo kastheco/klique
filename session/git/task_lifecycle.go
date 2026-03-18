@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/kastheco/kasmos/config/taskstate"
@@ -87,6 +88,97 @@ func MergeTaskBranch(repoPath, branch string) error {
 	}
 
 	return nil
+}
+
+// PreflightMergeTaskBranch checks whether the current branch can safely merge
+// the task branch without clobbering local uncommitted changes in the repo
+// worktree. It only blocks when dirty paths overlap files changed by the
+// incoming branch.
+func PreflightMergeTaskBranch(repoPath, branch string) error {
+	gt := &GitWorktree{repoPath: repoPath, worktreePath: repoPath}
+
+	statusOut, err := gt.runGitCommand(repoPath, "status", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("preflight merge %s: check worktree status: %w", branch, err)
+	}
+
+	dirtyPaths := dirtyPathsFromPorcelain(statusOut)
+	if len(dirtyPaths) == 0 {
+		return nil
+	}
+
+	changedOut, err := gt.runGitCommand(repoPath, "diff", "--name-only", "HEAD..."+branch)
+	if err != nil {
+		return fmt.Errorf("preflight merge %s: list changed files: %w", branch, err)
+	}
+
+	changedPaths := pathSetFromLines(changedOut)
+	if len(changedPaths) == 0 {
+		return nil
+	}
+
+	overlap := intersectPathSets(dirtyPaths, changedPaths)
+	if len(overlap) == 0 {
+		return nil
+	}
+
+	preview := overlap
+	if len(preview) > 5 {
+		preview = preview[:5]
+	}
+	suffix := ""
+	if len(overlap) > len(preview) {
+		suffix = fmt.Sprintf(" (+%d more)", len(overlap)-len(preview))
+	}
+
+	return fmt.Errorf(
+		"cannot merge %s: uncommitted changes overlap with incoming branch (%s%s); commit or stash first",
+		branch,
+		strings.Join(preview, ", "),
+		suffix,
+	)
+}
+
+func dirtyPathsFromPorcelain(statusOut string) map[string]struct{} {
+	paths := make(map[string]struct{})
+	for _, line := range strings.Split(statusOut, "\n") {
+		if line == "" {
+			continue
+		}
+		if len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if arrow := strings.Index(path, " -> "); arrow >= 0 {
+			path = path[arrow+4:]
+		}
+		if path != "" {
+			paths[path] = struct{}{}
+		}
+	}
+	return paths
+}
+
+func pathSetFromLines(out string) map[string]struct{} {
+	paths := make(map[string]struct{})
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			paths[line] = struct{}{}
+		}
+	}
+	return paths
+}
+
+func intersectPathSets(a, b map[string]struct{}) []string {
+	var overlap []string
+	for path := range a {
+		if _, ok := b[path]; ok {
+			overlap = append(overlap, path)
+		}
+	}
+	sort.Strings(overlap)
+	return overlap
 }
 
 // ResetTaskBranch removes the plan worktree (if any), deletes the branch, and
