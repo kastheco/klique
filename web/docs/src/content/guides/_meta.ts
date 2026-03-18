@@ -7,6 +7,11 @@ const meta: MetaRecord = {
   "running-implementations": "running implementations",
   "reviewing-and-merging": "reviewing and merging",
   "managing-instances": "managing instances",
+  recipes: "recipes",
+  "remote-task-store": "remote task store",
+  "systemd-services": "systemd services",
+  skills: "skills",
+  "agent-harnesses": "agent harnesses",
 };
 
 export default meta;

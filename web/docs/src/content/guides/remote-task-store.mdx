@@ -1,0 +1,160 @@
+# remote task store
+
+By default, kasmos uses an embedded SQLite database at `<repo-root>/.kasmos/taskstore.db`. For multi-machine setups — such as agents running on a remote server while you monitor from a laptop — you can run the task store as a standalone HTTP server and point kasmos at it.
+
+## starting the server
+
+```bash
+kas serve --port 7433 --db /path/to/kasmos.db
+```
+
+This starts an HTTP server backed by SQLite. All task state is persisted to the database file you specify.
+
+Default values:
+
+| flag | default |
+|------|---------|
+| `--port` | `7433` |
+| `--db` | `<repo-root>/.kasmos/taskstore.db` |
+| `--bind` | `0.0.0.0` |
+
+The server also exposes an admin UI at `/admin/` for browsing task state in a browser.
+
+## connecting clients
+
+Point kasmos at the remote server by adding one line to `<repo-root>/.kasmos/config.toml`:
+
+```toml
+database_url = "http://your-server:7433"
+```
+
+All kasmos instances that read this config — the TUI, CLI commands, and agent subprocesses — will use the remote store instead of the local SQLite file.
+
+Verify the connection:
+
+```bash
+curl http://your-server:7433/v1/ping
+```
+
+## REST API
+
+The server exposes a REST API at `/v1/projects/{project}/tasks`. The `{project}` segment is the repository name as registered in the store (matching the `project` field in the task store entries).
+
+### health check
+
+```bash
+GET /v1/ping
+```
+
+Returns `200 OK` if the store is reachable, `503` if the underlying SQLite connection is unhealthy.
+
+### tasks
+
+```bash
+# list all tasks
+GET /v1/projects/{project}/tasks
+
+# filter by status
+GET /v1/projects/{project}/tasks?status=implementing
+GET /v1/projects/{project}/tasks?status=ready&status=planning
+
+# filter by topic
+GET /v1/projects/{project}/tasks?topic=auth
+
+# get a single task
+GET /v1/projects/{project}/tasks/{filename}
+
+# create a task
+POST /v1/projects/{project}/tasks
+Content-Type: application/json
+{"filename": "my-feature", "status": "ready", ...}
+
+# update a task
+PUT /v1/projects/{project}/tasks/{filename}
+
+# get task content (the plan markdown)
+GET /v1/projects/{project}/tasks/{filename}/content
+
+# replace task content
+PUT /v1/projects/{project}/tasks/{filename}/content
+Content-Type: text/markdown
+<plan body>
+
+# get subtasks (wave tasks)
+GET /v1/projects/{project}/tasks/{filename}/subtasks
+
+# replace subtasks
+PUT /v1/projects/{project}/tasks/{filename}/subtasks
+
+# rename a task
+POST /v1/projects/{project}/tasks/{filename}/rename
+Content-Type: application/json
+{"new_filename": "better-name"}
+```
+
+### audit events
+
+```bash
+# list audit events for a project
+GET /v1/projects/{project}/audit-events
+```
+
+### topics
+
+```bash
+# list topics
+GET /v1/projects/{project}/topics
+
+# create a topic
+POST /v1/projects/{project}/topics
+Content-Type: application/json
+{"name": "auth"}
+```
+
+## curl examples
+
+```bash
+# list all tasks in project "kasmos"
+curl http://localhost:7433/v1/projects/kasmos/tasks
+
+# get tasks in reviewing status
+curl 'http://localhost:7433/v1/projects/kasmos/tasks?status=reviewing'
+
+# read plan content
+curl http://localhost:7433/v1/projects/kasmos/tasks/add-jwt-auth/content
+
+# push updated plan content
+curl -X PUT http://localhost:7433/v1/projects/kasmos/tasks/add-jwt-auth/content \
+  -H 'Content-Type: text/markdown' \
+  --data-binary @my-plan.md
+```
+
+## MCP server
+
+`kas serve` also exposes an optional MCP (Model Context Protocol) server on a second port for agent-side tooling:
+
+```bash
+kas serve --mcp --mcp-port 7434
+```
+
+The MCP server is enabled by default. It exposes task store operations and filesystem tools to MCP-aware clients running as subprocesses of kasmos.
+
+## security considerations
+
+The HTTP server has no built-in authentication. For remote access:
+
+- run it behind a reverse proxy (nginx, caddy) with TLS and basic auth
+- restrict access at the network level (firewall rules, Tailscale, WireGuard)
+- bind to localhost and use SSH port forwarding for occasional remote access:
+
+```bash
+ssh -L 7433:localhost:7433 your-server
+# then in config.toml:
+# database_url = "http://localhost:7433"
+```
+
+## related
+
+- [systemd services](./systemd-services) — run `kas serve` as a persistent user service
+- [configuration](/docs/configuration) — full `config.toml` reference
+- [cli reference](/docs/cli-reference) — `kas serve` flags

@@ -1,0 +1,164 @@
+# recipes
+
+Common operational recipes for day-to-day kasmos usage. Each snippet is backed by actual CLI commands or TUI actions.
+
+## restart a plan from scratch
+
+When a plan's implementation went sideways and you want to re-plan from the beginning:
+
+```bash
+kas task transition <task-file> start_over
+```
+
+This moves a `done` plan back to `planning` status. The plan content is preserved; the next planner agent run will rewrite it.
+
+To restart a cancelled plan instead:
+
+```bash
+kas task transition <task-file> reopen
+```
+
+## re-run implementation without re-planning
+
+Resume implementation on an existing plan without running the planner again:
+
+```bash
+kas task transition <task-file> reimplement
+```
+
+Moves a `done` plan to `implementing`, skipping the planning phase.
+
+## implement a specific wave only
+
+Run coder agents for a single wave rather than the full sequence:
+
+```bash
+kas task implement <task-file> --wave 2
+```
+
+Useful when a wave failed partway through and you want to retry it in isolation.
+
+## force-override task status
+
+Bypass the FSM and set any status directly. Use this only for cleanup or recovery:
+
+```bash
+kas task set-status <task-file> ready --force
+kas task set-status <task-file> implementing --force
+kas task set-status <task-file> done --force
+```
+
+Without `--force` the command refuses to run, preventing accidental misuse.
+
+## list tasks filtered by status
+
+```bash
+kas task list                            # all non-cancelled tasks
+kas task list --status implementing      # tasks currently being coded
+kas task list --status reviewing         # tasks awaiting review
+kas task list --status done              # completed tasks
+```
+
+## inspect task content
+
+```bash
+kas task show <task-file>
+```
+
+Prints the raw plan markdown stored in the task store — useful when you want to inspect what the planner wrote without opening the TUI viewer.
+
+## update plan content from stdin
+
+Pipe new plan content directly into the store without touching a file on disk:
+
+```bash
+cat my-revised-plan.md | kas task update-content <task-file>
+echo "# my plan\n## Wave 1\n### Task 1: do something" | kas task update-content <task-file>
+```
+
+## start the daemon in the foreground
+
+For debugging or one-shot orchestration runs, start the daemon directly:
+
+```bash
+kas daemon start --foreground
+```
+
+The daemon claims pending signals from the database and advances plan lifecycle state. Without a running daemon, signals emitted by agents stay `pending` and plans do not advance automatically.
+
+## emit a signal manually
+
+Trigger a plan lifecycle event from the shell (e.g. after a headless agent finishes):
+
+```bash
+kas signal emit implement_task_finished <task-file> --payload '{"wave_number":1,"task_number":3}'
+kas signal emit planner_finished <task-file>
+```
+
+## spawn an agent from the TUI
+
+All TUI instance operations require a plan to be selected in the sidebar:
+
+| action | key |
+|--------|-----|
+| spawn agent for selected plan | `s` |
+| open context menu (all actions) | `↵` on plan header |
+| implement directly (blueprint skip) | context menu → implement directly |
+| start planning | context menu → start planning |
+| start review | context menu → start review |
+
+## attach to and detach from an agent
+
+| action | key |
+|--------|-----|
+| attach fullscreen | `↵` or `o` |
+| detach | `ctrl+space` or `ctrl-q` |
+| enter interactive mode | `i` |
+| submit + exit interactive | `ctrl+enter` |
+
+## pause, resume, and hand off a branch
+
+```
+c    →  pause session + copy branch name to clipboard
+r    →  resume a paused session
+P    →  create a pull request for the selected instance's branch
+```
+
+After pressing `c`, run:
+
+```bash
+git checkout <paste-branch-name>
+# inspect, test, make manual edits
+```
+
+Then return to kasmos and press `r` to resume the agent.
+
+## search and filter the sidebar
+
+| action | key |
+|--------|-----|
+| search plans and instances | `/` |
+| show all instances | `1` |
+| show active only | `2` |
+| cycle sort mode | `3` |
+
+## create a PR from the CLI
+
+```bash
+gh pr create --base main --head <instance-branch>
+```
+
+Or use the TUI shortcut `P` which runs `gh pr create` against the selected instance's branch and stores the PR URL in the task store.
+
+## register a hand-written plan file
+
+```bash
+kas task register my-feature.md
+kas task update-content my-feature < my-feature.md
+```
+
+The store strips the `.md` suffix, so `my-feature.md` and `my-feature` refer to the same task. Register creates the record; `update-content` writes the markdown body.
+
+## view all available keybinds
+
+Press `?` in the TUI to open the keybind browser, or `ctrl+p` to open the command launcher and search for any action by name.

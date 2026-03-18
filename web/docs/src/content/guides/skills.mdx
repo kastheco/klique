@@ -1,0 +1,174 @@
+# skills
+
+Skills are named collections of instructions, reference files, and scripts that kasmos injects into agent context. They extend the base prompt with domain-specific knowledge without cluttering the project's AGENTS.md.
+
+## skill locations
+
+kasmos recognises two skill layers:
+
+| layer | directory | scope |
+|-------|-----------|-------|
+| personal | `~/.agents/skills/` | available in every project |
+| project | `.agents/skills/` | available only in this repository |
+
+Each skill is a directory containing at minimum a `SKILL.md` file. Additional reference files (scripts, examples, templates) can sit alongside it.
+
+```
+.agents/skills/
+  kasmos-coder/
+    SKILL.md
+  cli-tools/
+    SKILL.md
+  tui-design/
+    SKILL.md
+    color-palette.md
+```
+
+## built-in project skills
+
+`kas setup` scaffolds the following skills into `.agents/skills/` from embedded templates:
+
+| skill | purpose |
+|-------|---------|
+| `kasmos-planner` | instructs the planner agent on plan format and wave structure |
+| `kasmos-coder` | guides coder agents through TDD, debugging, and shared worktree safety |
+| `kasmos-reviewer` | reviewer agent workflow: spec compliance, correctness, blocking issues |
+| `kasmos-architect` | decomposes planner specs into waves and coder-ready tasks |
+| `kasmos-elaborator` | enriches terse task descriptions with implementation guidance |
+| `kasmos-fixer` | debugging, failure investigation, and stuck task recovery |
+| `kasmos-master` | holistic final review across merged implementation and plan |
+| `kasmos-lifecycle` | orientation on plan lifecycle, signal mechanics, and mode detection |
+| `kasmos-cli` | exact `kas` command syntax, flags, and lifecycle transitions |
+| `cli-tools` | code search and refactoring: `rg`, `sd`, `fd`, `difft`, `comby`, `scc` |
+| `tui-design` | design-first workflow for Charm TUI applications (bubbletea, lipgloss) |
+
+These are the directories under `.agents/skills/` and `.opencode/skills/` that exist in this repository.
+
+## how harnesses load skills
+
+Each AI harness reads skills from a harness-specific directory:
+
+| harness | personal skills dir | project skills dir |
+|---------|--------------------|--------------------|
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` |
+| OpenCode | `~/.config/opencode/skills/` | `.opencode/skills/` |
+| Codex | `~/.agents/skills/` (native) | `.agents/skills/` (native) |
+
+**Codex reads skill directories directly** — no sync step is needed. Claude and OpenCode require symlinks pointing back to the canonical directories.
+
+`kas setup` creates those symlinks automatically. For ongoing updates, use `kas skills sync`.
+
+## syncing skills
+
+After installing new personal skills or changing which harnesses are configured, run:
+
+```bash
+kas skills sync
+```
+
+This reads `~/.agents/skills/` and creates symlinks in each detected harness's global skill directory. Project-level skills are also synced if you run the command from inside a project that has `.agents/skills/`.
+
+Output example:
+
+```
+  claude       OK
+  opencode     OK
+  codex        SKIP (not installed)
+
+Project skills:
+  claude       OK
+  opencode     OK
+```
+
+## listing installed skills
+
+```bash
+kas skills list
+```
+
+Lists personal skills from `~/.agents/skills/` and project skills from `.agents/skills/` in the current directory.
+
+## auditing sync health
+
+```bash
+kas check
+kas check -v   # verbose: show per-skill status per harness
+```
+
+`kas check` audits two layers:
+
+1. **Global skills** — `~/.agents/skills/` → harness global dirs
+2. **Project skills** — `.agents/skills/` → harness project dirs
+
+Output shows counts of `synced`, `missing`, `orphan`, and `broken` entries per harness. Exit code is `0` when 100% healthy, `1` otherwise.
+
+```
+Global skills (~/.agents/skills):
+  claude       5 synced  0 skipped  0 missing  0 orphan
+  opencode     5 synced  0 skipped  0 missing  0 orphan
+  codex        0 synced  5 skipped  0 missing  0 orphan
+
+Project skills (.agents/skills):
+  ✓ cli-tools                claude ✓  opencode ✓
+  ✓ kasmos-coder             claude ✓  opencode ✓
+  ✓ tui-design               claude ✓  opencode ✓
+
+Health: 3/3 OK (100%)
+```
+
+Common remediation hints:
+
+```
+• run `kas skills sync` to create missing skill links
+• add SKILL.md to skills missing documentation (e.g. .agents/skills/<name>/SKILL.md)
+```
+
+## installing a personal skill
+
+To install a skill from an external source (e.g. one packaged by a third party):
+
+```bash
+# option 1: clone into personal skills dir
+git clone https://example.com/my-skill ~/.agents/skills/my-skill
+
+# option 2: symlink an externally managed skill
+ln -s /path/to/my-skill ~/.agents/skills/my-skill
+```
+
+Then run `kas skills sync` to propagate to the harness directories.
+
+kasmos skips syncing entries in `~/.agents/skills/` that are themselves symlinks — these are treated as externally managed and are not forwarded to harness dirs.
+
+## writing a skill
+
+A minimal skill needs only `SKILL.md`:
+
+```
+~/.agents/skills/my-skill/
+  SKILL.md          # the instructions injected into agent context
+```
+
+The `SKILL.md` file should be written in markdown and describe:
+- when the agent should activate this skill
+- what the skill provides (tools, constraints, examples)
+- any important caveats or rules
+
+Reference files, scripts, and examples can live alongside `SKILL.md` in the same directory. Some harnesses (like OpenCode) load the entire skill directory.
+
+## project skills vs personal skills
+
+Use **project skills** when the instructions are specific to this codebase — e.g. architecture conventions, domain models, or project-specific coding patterns.
+
+Use **personal skills** for portable expertise you want in every project — e.g. language-specific idioms, tool preferences, or general workflows.
+
+Project skills take precedence when a harness finds both layers, but the exact merge behavior depends on the harness.
+
+## scaffold-managed files
+
+The skills under `.agents/skills/` are synced from the embedded templates in `internal/initcmd/scaffold/templates/skills/` each time `kas setup --force` or `kas skills sync` is run. Edits to those files will be overwritten on the next sync. To customise a built-in skill, copy it to `~/.agents/skills/` under the same name — your personal copy takes precedence for skill lookup.
+
+## related
+
+- [agent harnesses](./agent-harnesses) — how harness dirs are structured and how skills are loaded
+- [kas check](/docs/cli-reference) — audit command reference
+- [kas skills sync](/docs/cli-reference) — sync command reference
