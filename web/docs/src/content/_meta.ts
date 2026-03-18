@@ -7,6 +7,8 @@ const meta: MetaRecord = {
   guides: "guides",
   "cli-reference": "cli reference",
   configuration: "configuration",
+  contributing: "contributing",
+  faq: "faq",
 };
 
 export default meta;
