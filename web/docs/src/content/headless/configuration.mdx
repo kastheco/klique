@@ -1,0 +1,111 @@
+# configuring headless execution
+
+Headless mode is configured per agent role in `.kasmos/config.toml` using the `execution_mode` field.
+
+## the execution_mode field
+
+Each `[agents.<role>]` block in `config.toml` accepts an optional `execution_mode` key:
+
+```toml
+[agents.coder]
+enabled         = true
+program         = "claude"
+flags           = ["--dangerously-skip-permissions"]
+execution_mode  = "headless"
+```
+
+Accepted values:
+
+| value | behavior |
+|-------|---------|
+| `"headless"` | runs the agent as a direct child process via `exec.Cmd` |
+| `"tmux"` | (default) runs the agent inside a tmux session |
+| `""` (empty) | falls back to `"tmux"` |
+| any other string | falls back to `"tmux"` |
+
+The fallback behavior is implemented by `config.NormalizeExecutionMode`:
+
+```go
+// config/profile.go
+func NormalizeExecutionMode(mode string) string {
+    switch strings.TrimSpace(mode) {
+    case "", ExecutionModeTmux:
+        return ExecutionModeTmux
+    case ExecutionModeHeadless:
+        return ExecutionModeHeadless
+    default:
+        return ExecutionModeTmux
+    }
+}
+```
+
+Unknown values — including typos like `"Headless"` or `"HEADLESS"` — silently fall back to `"tmux"`. The comparison is case-sensitive.
+
+## full agent block example
+
+```toml
+[agents.coder]
+enabled         = true
+program         = "claude"
+model           = "claude-opus-4-5"
+flags           = ["--dangerously-skip-permissions"]
+execution_mode  = "headless"
+
+[agents.reviewer]
+enabled         = true
+program         = "claude"
+execution_mode  = "tmux"
+```
+
+This configuration runs the coder agent headlessly (no tmux required) while keeping the reviewer in tmux for interactive attach capability.
+
+## per-phase role mapping
+
+The `[phases]` table maps lifecycle phases to agent roles. The execution mode is resolved by looking up the role's profile:
+
+```toml
+[phases]
+implementing = "coder"
+reviewing    = "reviewer"
+```
+
+When kasmos starts an implementing session, it reads `agents.coder.execution_mode` and creates the appropriate backend. The resolution path is:
+
+1. `phases.implementing` → `"coder"`
+2. `agents.coder.execution_mode` → `"headless"`
+3. `NormalizeExecutionMode("headless")` → `ExecutionModeHeadless`
+4. `session.NewExecutionSession(ExecutionModeHeadless, ...)` → `headless.New(...)`
+
+## the default_program fallback
+
+If a phase has no role mapping, or the role's profile is disabled or has an empty program, kasmos falls back to `default_program` with tmux mode:
+
+```go
+// config/profile.go
+func (c *Config) ResolveProfile(phase string, defaultProgram string) AgentProfile {
+    // ...
+    if profile.Program == "" || !profile.Enabled {
+        return AgentProfile{Program: defaultProgram, ExecutionMode: ExecutionModeTmux}
+    }
+    profile.ExecutionMode = NormalizeExecutionMode(profile.ExecutionMode)
+    return profile
+}
+```
+
+The fallback always uses `ExecutionModeTmux` — there is no way to make the default fallback use headless mode without an explicit `[agents.*]` block.
+
+## setting execution mode from the setup wizard
+
+`kas setup` writes the initial `config.toml`. To use headless mode, edit the generated file manually or re-run `kas setup` and choose it when prompted.
+
+You can inspect the resolved configuration at any time:
+
+```bash
+kas debug config
+```
+
+This prints the fully resolved `Config` struct as JSON, including the normalized `execution_mode` for each agent profile.
+
+## environment-level override
+
+There is currently no environment variable override for `execution_mode`. The only configuration path is `config.toml`.
