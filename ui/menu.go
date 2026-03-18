@@ -219,7 +219,7 @@ func (m *Menu) addInstanceOptions() {
 	if m.instance.Status == session.Paused {
 		action = append(action, keys.KeyResume)
 	}
-	sys := []keys.KeyName{keys.KeySearch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
+	sys := []keys.KeyName{keys.KeySearch, keys.KeyArrowLeft, keys.KeyArrowRight, keys.KeyHelp, keys.KeyQuit}
 
 	total := len(mgmt) + len(action) + len(sys)
 	opts := make([]keys.KeyName, 0, total)

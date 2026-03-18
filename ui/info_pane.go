@@ -480,6 +480,76 @@ func (p *InfoPane) renderWaveSection() string {
 	return strings.Join(rows, "\n")
 }
 
+// RenderCompact returns a 1-2 line summary suitable for display above the tab
+// bar. Returns empty string when no meaningful data is present.
+func (p *InfoPane) RenderCompact(width int) string {
+	if width <= 0 {
+		return ""
+	}
+	d := p.data
+	var lines []string
+
+	// Choose plan summary first, else instance summary.
+	if d.PlanName != "" || d.IsPlanHeaderSelected {
+		if d.PlanName != "" {
+			nameStyle := lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)
+			statusStyle := lipgloss.NewStyle().Foreground(statusColor(d.PlanStatus))
+			line1 := nameStyle.Render(d.PlanName)
+			if d.PlanStatus != "" {
+				line1 += "  " + statusStyle.Render(d.PlanStatus)
+			}
+			lines = append(lines, line1)
+
+			// Build line 2 from branch + wave/task counters.
+			var parts []string
+			branch := d.PlanBranch
+			if branch == "" {
+				branch = d.Branch
+			}
+			if branch != "" {
+				parts = append(parts, lipgloss.NewStyle().Foreground(ColorMuted).Render(branch))
+			}
+			if d.WaveNumber > 0 && d.TotalWaves > 0 {
+				parts = append(parts, fmt.Sprintf("wave %d/%d", d.WaveNumber, d.TotalWaves))
+			}
+			if d.TaskNumber > 0 && d.TotalTasks > 0 {
+				parts = append(parts, fmt.Sprintf("task %d/%d", d.TaskNumber, d.TotalTasks))
+			}
+			if len(parts) > 0 {
+				lines = append(lines, strings.Join(parts, "  "))
+			}
+		}
+	} else if d.HasInstance && d.Title != "" {
+		nameStyle := lipgloss.NewStyle().Foreground(ColorFoam).Bold(true)
+		statusStyle := lipgloss.NewStyle().Foreground(statusColor(d.Status))
+		line1 := nameStyle.Render(d.Title)
+		if d.Status != "" {
+			line1 += "  " + statusStyle.Render(d.Status)
+		}
+		lines = append(lines, line1)
+
+		// Build line 2 from branch + wave/task counters.
+		var parts []string
+		if d.Branch != "" {
+			parts = append(parts, lipgloss.NewStyle().Foreground(ColorMuted).Render(d.Branch))
+		}
+		if d.WaveNumber > 0 && d.TotalWaves > 0 {
+			parts = append(parts, fmt.Sprintf("wave %d/%d", d.WaveNumber, d.TotalWaves))
+		}
+		if d.TaskNumber > 0 && d.TotalTasks > 0 {
+			parts = append(parts, fmt.Sprintf("task %d/%d", d.TaskNumber, d.TotalTasks))
+		}
+		if len(parts) > 0 {
+			lines = append(lines, strings.Join(parts, "  "))
+		}
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	return lipgloss.NewStyle().Width(width).Padding(0, 1).Render(strings.Join(lines, "\n"))
+}
+
 // render assembles the full content string placed into the viewport.
 func (p *InfoPane) render() string {
 	if !p.data.HasInstance && !p.data.IsPlanHeaderSelected {
