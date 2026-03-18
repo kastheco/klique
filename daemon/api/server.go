@@ -47,6 +47,11 @@ type addRepoRequest struct {
 	Path string `json:"path"`
 }
 
+type startPlanRequest struct {
+	Prompt  string `json:"prompt"`
+	Program string `json:"program"`
+}
+
 // ---------------------------------------------------------------------------
 // StateProvider interface
 // ---------------------------------------------------------------------------
@@ -61,6 +66,7 @@ type StateProvider interface {
 	RemoveRepo(project string) error
 	ListPlans(project string) ([]taskstore.TaskEntry, error)
 	ListInstances(project string) []InstanceStatus
+	StartPlan(project, filename, prompt, program string) error
 	EventStream() <-chan Event
 }
 
@@ -134,6 +140,11 @@ func (s *DaemonState) ListInstances(_ string) []InstanceStatus {
 	return nil
 }
 
+// StartPlan implements StateProvider.
+func (s *DaemonState) StartPlan(_, _, _, _ string) error {
+	return nil
+}
+
 // EventStream implements StateProvider. Returns a channel that is never written
 // to (suitable for testing).
 func (s *DaemonState) EventStream() <-chan Event {
@@ -190,6 +201,7 @@ func (h *Handler) registerRoutes() {
 
 	h.mux.HandleFunc("GET /v1/repos/{project}/plans", h.handleListPlans)
 	h.mux.HandleFunc("GET /v1/repos/{project}/instances", h.handleListInstances)
+	h.mux.HandleFunc("POST /v1/repos/{project}/plans/{filename}/plan", h.handleStartPlan)
 	h.mux.HandleFunc("POST /v1/repos/{project}/plans/{filename}/implement", h.handleImplementPlan)
 
 	h.mux.HandleFunc("GET /v1/events", h.handleEvents)
@@ -269,6 +281,26 @@ func (h *Handler) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		instances = []InstanceStatus{}
 	}
 	writeJSON(w, http.StatusOK, instances)
+}
+
+// handleImplementPlan serves POST /v1/repos/{project}/plans/{filename}/implement.
+func (h *Handler) handleStartPlan(w http.ResponseWriter, r *http.Request) {
+	project := r.PathValue("project")
+	filename := r.PathValue("filename")
+	var req startPlanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if err := h.state.StartPlan(project, filename, req.Prompt, req.Program); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status":   "accepted",
+		"project":  project,
+		"filename": filename,
+	})
 }
 
 // handleImplementPlan serves POST /v1/repos/{project}/plans/{filename}/implement.

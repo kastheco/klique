@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/kastheco/kasmos/cmd"
 	"github.com/kastheco/kasmos/config/taskparser"
 	"github.com/kastheco/kasmos/config/taskstate"
+	"github.com/kastheco/kasmos/internal/initcmd/harness"
+	"github.com/kastheco/kasmos/internal/initcmd/scaffold"
 	"github.com/kastheco/kasmos/orchestration/loop"
 	"github.com/kastheco/kasmos/session"
 	gitpkg "github.com/kastheco/kasmos/session/git"
@@ -326,6 +330,12 @@ func (s *TmuxSpawner) SpawnReviewer(ctx context.Context, opts loop.SpawnOpts) er
 	return s.spawnInSharedWorktree(ctx, opts, session.AgentTypeReviewer)
 }
 
+// SpawnPlanner launches a planner agent on the main branch (no worktree).
+func (s *TmuxSpawner) SpawnPlanner(ctx context.Context, opts loop.SpawnOpts) error {
+	s.logger.Info("spawn planner", "plan", opts.PlanFile)
+	return s.spawnOnMainBranch(ctx, opts, session.AgentTypePlanner, "plan")
+}
+
 // SpawnCoder launches a coder agent in the plan's shared worktree.
 func (s *TmuxSpawner) SpawnCoder(ctx context.Context, opts loop.SpawnOpts) error {
 	s.logger.Info("spawn coder", "plan", opts.PlanFile, "wave", opts.Wave)
@@ -351,13 +361,16 @@ func (s *TmuxSpawner) SpawnFixer(ctx context.Context, opts loop.SpawnOpts) error
 // does not need an isolated worktree.
 func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) error {
 	s.logger.Info("spawn elaborator", "plan", opts.PlanFile)
+	return s.spawnOnMainBranch(ctx, opts, session.AgentTypeElaborator, "elaborator")
+}
 
+func (s *TmuxSpawner) spawnOnMainBranch(_ context.Context, opts loop.SpawnOpts, agentType, titleSuffix string) error {
 	if opts.RepoPath == "" {
-		return fmt.Errorf("TmuxSpawner.SpawnElaborator: RepoPath is required")
+		return fmt.Errorf("TmuxSpawner.%s: RepoPath is required", agentType)
 	}
 
 	planName := taskstate.DisplayName(opts.PlanFile)
-	title := fmt.Sprintf("%s-elaborator", planName)
+	title := fmt.Sprintf("%s-%s", planName, titleSuffix)
 	program := opts.Program
 	if program == "" {
 		program = "opencode"
@@ -367,24 +380,24 @@ func (s *TmuxSpawner) SpawnElaborator(ctx context.Context, opts loop.SpawnOpts) 
 		Title:     title,
 		Path:      opts.RepoPath,
 		Program:   program,
-		AgentType: session.AgentTypeElaborator,
+		AgentType: agentType,
 		TaskFile:  opts.PlanFile,
 	})
 	if err != nil {
-		return fmt.Errorf("TmuxSpawner.SpawnElaborator: create instance: %w", err)
+		return fmt.Errorf("TmuxSpawner.%s: create instance: %w", agentType, err)
 	}
 	inst.QueuedPrompt = opts.Prompt
 	inst.SetStatus(session.Loading)
 
 	if err := inst.StartOnMainBranch(); err != nil {
-		return fmt.Errorf("TmuxSpawner.SpawnElaborator: start: %w", err)
+		return fmt.Errorf("TmuxSpawner.%s: start: %w", agentType, err)
 	}
 
-	key := instanceKey(opts.RepoPath, opts.PlanFile, session.AgentTypeElaborator)
+	key := instanceKey(opts.RepoPath, opts.PlanFile, agentType)
 	s.mu.Lock()
 	s.instances[key] = inst
 	s.planFileByKey[key] = opts.PlanFile
-	s.agentTypeByKey[key] = session.AgentTypeElaborator
+	s.agentTypeByKey[key] = agentType
 	s.projectByKey[key] = opts.Project
 	s.mu.Unlock()
 	return nil
@@ -510,6 +523,9 @@ func (s *TmuxSpawner) SpawnWaveTask(_ context.Context, opts loop.SpawnOpts, task
 	if err := shared.Setup(); err != nil {
 		return fmt.Errorf("TmuxSpawner.wave-task: setup shared worktree: %w", err)
 	}
+	if err := ensureWorktreeScaffold(shared.GetWorktreePath(), program, session.AgentTypeCoder); err != nil {
+		return fmt.Errorf("TmuxSpawner.wave-task: sync scaffold: %w", err)
+	}
 	if err := inst.StartInSharedWorktree(shared, opts.Branch); err != nil {
 		return fmt.Errorf("TmuxSpawner.wave-task: start in shared worktree: %w", err)
 	}
@@ -558,6 +574,9 @@ func (s *TmuxSpawner) spawnInSharedWorktree(_ context.Context, opts loop.SpawnOp
 	if err := shared.Setup(); err != nil {
 		return fmt.Errorf("TmuxSpawner.%s: setup shared worktree: %w", agentType, err)
 	}
+	if err := ensureWorktreeScaffold(shared.GetWorktreePath(), program, agentType); err != nil {
+		return fmt.Errorf("TmuxSpawner.%s: sync scaffold: %w", agentType, err)
+	}
 	if err := inst.StartInSharedWorktree(shared, opts.Branch); err != nil {
 		return fmt.Errorf("TmuxSpawner.%s: start in shared worktree: %w", agentType, err)
 	}
@@ -570,4 +589,24 @@ func (s *TmuxSpawner) spawnInSharedWorktree(_ context.Context, opts loop.SpawnOp
 	s.projectByKey[key] = opts.Project
 	s.mu.Unlock()
 	return nil
+}
+
+func ensureWorktreeScaffold(worktreePath, program, role string) error {
+	fields := strings.Fields(program)
+	if len(fields) == 0 {
+		return nil
+	}
+
+	harnessName := filepath.Base(fields[0])
+	switch harnessName {
+	case "opencode", "claude", "codex":
+		_, err := scaffold.SyncScaffold(worktreePath, []harness.AgentConfig{{
+			Role:    role,
+			Harness: harnessName,
+			Enabled: true,
+		}})
+		return err
+	default:
+		return nil
+	}
 }

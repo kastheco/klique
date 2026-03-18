@@ -60,9 +60,9 @@ var repoManagedByDaemon = func(repoPath string) bool {
 		return false
 	}
 
-	cleanRepoPath := filepath.Clean(repoPath)
+	cleanRepoPath := canonicalRepoPath(repoPath)
 	for _, repo := range repos {
-		if filepath.Clean(repo.Path) == cleanRepoPath {
+		if canonicalRepoPath(repo.Path) == cleanRepoPath {
 			return true
 		}
 	}
@@ -427,8 +427,11 @@ func newHome(ctx context.Context, program string, autoYes bool, version string) 
 		fmt.Printf("Failed to get current directory: %v\n", err)
 		os.Exit(1)
 	}
+	if repoRoot, repoErr := config.ResolveRepoRoot(activeRepoPath); repoErr == nil && repoRoot != "" {
+		activeRepoPath = repoRoot
+	}
 
-	project := filepath.Base(activeRepoPath)
+	project := resolveTaskStoreProject(activeRepoPath)
 	h := &home{
 		ctx:                   ctx,
 		spinner:               spinner.New(spinner.WithSpinner(spinner.Dot)),
@@ -2147,6 +2150,27 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPlannerTaskFile = ""
 		m.updateNavPanelStatus()
 		return m.triggerTaskStage(msg.planFile, "implement")
+	case daemonPlannerStartedMsg:
+		if msg.err != nil {
+			return m, m.handleError(msg.err)
+		}
+		if msg.instance == nil {
+			return m, m.handleError(fmt.Errorf("daemon planner start returned no instance"))
+		}
+		m.addInstanceFinalizer(msg.instance, m.nav.AddInstance(msg.instance))
+		m.allInstances = append(m.allInstances, msg.instance)
+		if err := m.saveAllInstances(); err != nil {
+			return m, m.handleError(err)
+		}
+		m.updateNavPanelStatus()
+		if fn, ok := m.instanceFinalizers[msg.instance]; ok {
+			fn()
+			delete(m.instanceFinalizers, msg.instance)
+		}
+		if m.autoYes {
+			msg.instance.AutoYes = true
+		}
+		return m, tea.Batch(tea.RequestWindowSize, m.instanceChanged())
 	case instanceStartedMsg:
 		if msg.err != nil {
 			// Remove the specific instance that failed — not the currently selected one.

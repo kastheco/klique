@@ -35,16 +35,18 @@ import (
 // repositories for signal files and executes the resulting actions via the
 // configured AgentSpawner.
 type Daemon struct {
-	cfg         *DaemonConfig
-	repos       *RepoManager
-	spawner     *TmuxSpawner
-	logger      *slog.Logger
-	pidLock     *PIDLock
-	broadcaster *api.EventBroadcaster
-	prMonitor   *PRMonitor
-	pushBranch  func(*session.Instance) error
-	mu          sync.RWMutex
-	startedAt   time.Time
+	cfg          *DaemonConfig
+	repos        *RepoManager
+	spawner      *TmuxSpawner
+	logger       *slog.Logger
+	pidLock      *PIDLock
+	broadcaster  *api.EventBroadcaster
+	prMonitor    *PRMonitor
+	pushBranch   func(*session.Instance) error
+	killAgent    func(repoPath, planFile, agentType string) error
+	spawnPlanner func(context.Context, loop.SpawnOpts) error
+	mu           sync.RWMutex
+	startedAt    time.Time
 }
 
 // daemonStateAdapter adapts the Daemon to the api.StateProvider interface.
@@ -143,6 +145,10 @@ func (a *daemonStateAdapter) ListInstances(project string) []api.InstanceStatus 
 	return out
 }
 
+func (a *daemonStateAdapter) StartPlan(project, filename, prompt, program string) error {
+	return a.d.StartPlan(project, filename, prompt, program)
+}
+
 func (a *daemonStateAdapter) EventStream() <-chan api.Event {
 	if a.d.broadcaster != nil {
 		return a.d.broadcaster.Subscribe()
@@ -212,6 +218,65 @@ func DefaultSocketPath() string {
 // polled on the next tick. Safe to call concurrently.
 func (d *Daemon) AddRepo(root string) error {
 	return d.repos.Add(root)
+}
+
+// StartPlan asks the daemon to spawn a planner session for the given plan.
+func (d *Daemon) StartPlan(project, planFile, prompt, program string) error {
+	var entry RepoEntry
+	var found bool
+	for _, repo := range d.repos.List() {
+		if repo.Project == project {
+			entry = repo
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("project not found: %s", project)
+	}
+	if entry.Store == nil {
+		return fmt.Errorf("task store unavailable for project %s", project)
+	}
+	if _, err := entry.Store.Get(project, planFile); err != nil {
+		return fmt.Errorf("load task entry for %s: %w", planFile, err)
+	}
+	go d.startPlanAsync(entry, planFile, prompt, program)
+	return nil
+}
+
+func (d *Daemon) startPlanAsync(entry RepoEntry, planFile, prompt, program string) {
+	killAgent := d.killAgent
+	if killAgent == nil {
+		killAgent = d.spawner.KillAgent
+	}
+	spawnPlanner := d.spawnPlanner
+	if spawnPlanner == nil {
+		spawnPlanner = d.spawner.SpawnPlanner
+	}
+
+	if err := killAgent(entry.Path, planFile, session.AgentTypePlanner); err != nil {
+		d.logger.Error("kill existing planner failed", "project", entry.Project, "plan", planFile, "err", err)
+		return
+	}
+	if err := spawnPlanner(context.Background(), loop.SpawnOpts{
+		PlanFile: planFile,
+		RepoPath: entry.Path,
+		Project:  entry.Project,
+		Prompt:   prompt,
+		Program:  program,
+	}); err != nil {
+		d.logger.Error("spawn planner failed", "project", entry.Project, "plan", planFile, "err", err)
+		return
+	}
+	if d.broadcaster != nil {
+		d.broadcaster.Emit(api.Event{
+			Kind:      "agent_spawned",
+			Message:   "planner spawned for " + planFile,
+			Repo:      entry.Path,
+			PlanFile:  planFile,
+			AgentType: session.AgentTypePlanner,
+		})
+	}
 }
 
 // ListRepos returns the current list of registered repo root paths.
@@ -520,22 +585,41 @@ func (d *Daemon) tickRepo(ctx context.Context, e RepoEntry) {
 		return
 	}
 
-	scan, ids, err := loop.ScanGateway(e.SignalGateway, e.Project, workerID)
-	if err != nil {
-		d.logger.Error("scan gateway failed", "repo", e.Path, "err", err)
-		return
-	}
-
-	actions := e.Processor.Tick(scan)
-	for _, action := range actions {
-		if err := d.executeAction(ctx, e, action); err != nil {
-			d.logger.Error("execute action failed", "kind", action.Kind(), "repo", e.Path, "err", err)
+	for {
+		entry, err := e.SignalGateway.Claim(e.Project, workerID)
+		if err != nil {
+			d.logger.Error("claim gateway signal failed", "repo", e.Path, "err", err)
+			return
 		}
-	}
+		if entry == nil {
+			break
+		}
 
-	for _, id := range ids {
-		if err := e.SignalGateway.MarkProcessed(id, taskstore.SignalDone, ""); err != nil {
-			d.logger.Error("mark processed failed", "repo", e.Path, "id", id, "err", err)
+		var scan loop.ScanResult
+		if err := loop.ConvertSignalEntry(entry, &scan); err != nil {
+			if markErr := e.SignalGateway.MarkProcessed(entry.ID, taskstore.SignalFailed, err.Error()); markErr != nil {
+				d.logger.Error("mark failed signal failed", "repo", e.Path, "id", entry.ID, "err", markErr)
+			}
+			continue
+		}
+
+		actions := e.Processor.Tick(scan)
+		if len(actions) == 0 {
+			status, result := gatewayNoopOutcome(entry)
+			if err := e.SignalGateway.MarkProcessed(entry.ID, status, result); err != nil {
+				d.logger.Error("mark noop signal failed", "repo", e.Path, "id", entry.ID, "err", err)
+			}
+			continue
+		}
+
+		for _, action := range actions {
+			if err := d.executeAction(ctx, e, action); err != nil {
+				d.logger.Error("execute action failed", "kind", action.Kind(), "repo", e.Path, "err", err)
+			}
+		}
+
+		if err := e.SignalGateway.MarkProcessed(entry.ID, taskstore.SignalDone, ""); err != nil {
+			d.logger.Error("mark processed failed", "repo", e.Path, "id", entry.ID, "err", err)
 		}
 	}
 
@@ -636,6 +720,21 @@ func (d *Daemon) monitorRunningInstances(ctx context.Context, e RepoEntry) {
 		if err := d.executeAction(ctx, e, loop.SpawnReviewerAction{PlanFile: inst.TaskFile}); err != nil {
 			d.logger.Error("spawn reviewer after implementer completion failed", "repo", e.Path, "plan", inst.TaskFile, "err", err)
 		}
+	}
+}
+
+func gatewayNoopOutcome(entry *taskstore.SignalEntry) (taskstore.SignalStatus, string) {
+	switch entry.SignalType {
+	case "implement_finished":
+		return taskstore.SignalDone, "suppressed implement-finished signal"
+	case "implement_task_finished":
+		return taskstore.SignalFailed, "no active orchestrator / wrong wave / already-finished task"
+	case "implement_wave":
+		return taskstore.SignalFailed, "processor could not start the requested wave"
+	case "elaborator_finished":
+		return taskstore.SignalFailed, "no active elaboration state to resume"
+	default:
+		return taskstore.SignalFailed, "signal rejected by processor"
 	}
 }
 

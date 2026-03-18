@@ -19,6 +19,9 @@ func TestNewScaffoldCmd_HasSyncSubcommand(t *testing.T) {
 	sub, _, err := cmd.Find([]string{"sync"})
 	require.NoError(t, err)
 	assert.Equal(t, "sync", sub.Use)
+	worktreeSub, _, err := cmd.Find([]string{"worktree"})
+	require.NoError(t, err)
+	assert.Equal(t, "worktree [path]", worktreeSub.Use)
 }
 
 func TestProfilesToAgentConfigs(t *testing.T) {
@@ -161,4 +164,41 @@ func TestScaffoldSync_RequiresTomlConfig(t *testing.T) {
 	err := cmd.RunE(cmd, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "config")
+}
+
+func TestScaffoldWorktree_WritesMissingAgentFiles(t *testing.T) {
+	mainRepo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".kasmos"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(mainRepo, ".kasmos", "config.toml"), []byte(`
+[agents]
+  [agents.fixer]
+    enabled = true
+    program = "opencode"
+    model = "openai/gpt-5.4"
+
+[phases]
+  fixer = "fixer"
+`), 0o644))
+
+	worktree := filepath.Join(mainRepo, ".worktrees", "plan-test")
+	require.NoError(t, os.MkdirAll(worktree, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: /tmp/fake\n"), 0o644))
+
+	oldCwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(mainRepo))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(oldCwd)) })
+
+	var buf bytes.Buffer
+	cmd := newScaffoldWorktreeCmd()
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	err = cmd.RunE(cmd, []string{worktree})
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(worktree, ".opencode", "opencode.jsonc"))
+	assert.FileExists(t, filepath.Join(worktree, ".opencode", "agents", "fixer.md"))
+	assert.FileExists(t, filepath.Join(worktree, ".agents", "skills", "kasmos-fixer", "SKILL.md"))
+	assert.Contains(t, buf.String(), "Syncing worktree scaffold")
 }

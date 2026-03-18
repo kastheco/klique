@@ -954,7 +954,7 @@ func resolveRepoInfo() (repoRoot, project string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("cannot resolve repo root: %w", err)
 	}
-	return root, filepath.Base(root), nil
+	return root, resolveTaskProject(root), nil
 }
 
 // resolveRepoRoot delegates to the shared config-level resolver so task

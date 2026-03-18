@@ -12,6 +12,7 @@ import (
 
 	"github.com/kastheco/kasmos/config/taskstate"
 	"github.com/kastheco/kasmos/config/taskstore"
+	"github.com/kastheco/kasmos/daemon/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -309,6 +310,29 @@ func TestResolveRepoRoot_MainRepo(t *testing.T) {
 	root, err := resolveRepoRoot(mainRepo)
 	require.NoError(t, err)
 	assert.Equal(t, mainRepo, root)
+}
+
+func TestResolveRepoInfo_PrefersDaemonRegisteredProject(t *testing.T) {
+	mainRepo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(mainRepo, ".git"), 0o755))
+
+	oldCwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(mainRepo))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(oldCwd)) })
+
+	old := listDaemonRepoStatuses
+	listDaemonRepoStatuses = func() ([]api.RepoStatus, error) {
+		return []api.RepoStatus{{Path: mainRepo, Project: "cms"}}, nil
+	}
+	t.Cleanup(func() {
+		listDaemonRepoStatuses = old
+	})
+
+	repoRoot, project, err := resolveRepoInfo()
+	require.NoError(t, err)
+	assert.Equal(t, mainRepo, repoRoot)
+	assert.Equal(t, "cms", project)
 }
 
 func TestPlanCLI_FromWorktreeContext(t *testing.T) {
