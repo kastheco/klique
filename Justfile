@@ -162,6 +162,14 @@ release v:
     echo "==> Pushed ${TAG}. CI will build and publish the release."
     echo "    https://github.com/kastheco/kasmos/releases/tag/${TAG}"
 
+# Build the admin SPA (outputs to web/admin/dist/)
+admin-build:
+    cd web/admin && npm ci && npm run build
+
+# Start admin SPA dev server with proxy to kas serve
+admin-dev:
+    cd web/admin && npm run dev
+
 # Clean build artifacts
 clean:
     rm -f kasmos
