@@ -1,0 +1,94 @@
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.ready {
+  background: rgba(126, 200, 216, 0.1);
+  border-color: rgba(126, 200, 216, 0.3);
+  color: #7EC8D8;
+}
+
+.planning {
+  background: rgba(240, 168, 104, 0.1);
+  border-color: rgba(240, 168, 104, 0.3);
+  color: #F0A868;
+}
+
+.implementing {
+  background: rgba(100, 200, 100, 0.1);
+  border-color: rgba(100, 200, 100, 0.3);
+  color: #88cc88;
+}
+
+.reviewing {
+  background: rgba(180, 120, 220, 0.1);
+  border-color: rgba(180, 120, 220, 0.3);
+  color: #b478dc;
+}
+
+.done {
+  background: rgba(80, 180, 80, 0.1);
+  border-color: rgba(80, 180, 80, 0.3);
+  color: #50b450;
+}
+
+.cancelled {
+  background: rgba(150, 150, 150, 0.1);
+  border-color: rgba(150, 150, 150, 0.3);
+  color: #888888;
+}
+
+.pending {
+  background: rgba(126, 200, 216, 0.08);
+  border-color: rgba(126, 200, 216, 0.2);
+  color: #7EC8D8;
+}
+
+.running {
+  background: rgba(240, 168, 104, 0.1);
+  border-color: rgba(240, 168, 104, 0.3);
+  color: #F0A868;
+}
+
+.complete {
+  background: rgba(80, 180, 80, 0.1);
+  border-color: rgba(80, 180, 80, 0.3);
+  color: #50b450;
+}
+
+.failed {
+  background: rgba(220, 80, 80, 0.1);
+  border-color: rgba(220, 80, 80, 0.3);
+  color: #dc5050;
+}
+
+.closed {
+  background: rgba(150, 150, 150, 0.1);
+  border-color: rgba(150, 150, 150, 0.3);
+  color: #888888;
+}
+
+.blocked {
+  background: rgba(220, 80, 80, 0.08);
+  border-color: rgba(220, 80, 80, 0.2);
+  color: #dc5050;
+}
+
+.inReview {
+  background: rgba(180, 120, 220, 0.08);
+  border-color: rgba(180, 120, 220, 0.2);
+  color: #b478dc;
+}
+
+.unknown {
+  background: rgba(150, 150, 150, 0.1);
+  border-color: rgba(150, 150, 150, 0.3);
+  color: #888888;
+}

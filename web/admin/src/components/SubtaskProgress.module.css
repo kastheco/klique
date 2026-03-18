@@ -1,0 +1,162 @@
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.heading {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--foreground-secondary);
+  margin-bottom: 14px;
+}
+
+.summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.count {
+  font-size: 13px;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.percent {
+  font-size: 11px;
+  color: var(--foreground-tertiary);
+}
+
+.progressTrack {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-teal);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--foreground-tertiary);
+  font-style: italic;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.taskNum {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--foreground-tertiary);
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  color: var(--foreground-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  text-transform: lowercase;
+}
+
+/* Status colours — dot and badge share the same modifier class */
+.statusComplete {
+  background: rgba(80, 180, 80, 0.12);
+  border: 1px solid rgba(80, 180, 80, 0.3);
+  color: #50b450;
+}
+
+.statusDone {
+  background: rgba(80, 180, 80, 0.1);
+  border: 1px solid rgba(80, 180, 80, 0.25);
+  color: #50b450;
+}
+
+.statusClosed {
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(150, 150, 150, 0.25);
+  color: #888888;
+}
+
+.statusRunning {
+  background: rgba(240, 168, 104, 0.12);
+  border: 1px solid rgba(240, 168, 104, 0.3);
+  color: #F0A868;
+}
+
+.statusFailed {
+  background: rgba(220, 80, 80, 0.12);
+  border: 1px solid rgba(220, 80, 80, 0.3);
+  color: #dc5050;
+}
+
+.statusBlocked {
+  background: rgba(220, 80, 80, 0.08);
+  border: 1px solid rgba(220, 80, 80, 0.2);
+  color: #dc5050;
+}
+
+.statusInReview {
+  background: rgba(180, 120, 220, 0.1);
+  border: 1px solid rgba(180, 120, 220, 0.25);
+  color: #b478dc;
+}
+
+.statusPending {
+  background: rgba(126, 200, 216, 0.08);
+  border: 1px solid rgba(126, 200, 216, 0.18);
+  color: #7EC8D8;
+}
+
+.statusUnknown {
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(150, 150, 150, 0.25);
+  color: #888888;
+}
+
+/* The dot element should use only the background colour — override border/color */
+.item .dot {
+  border: none;
+  color: transparent;
+}
