@@ -1,0 +1,107 @@
+/* ============================
+   kasmos docs — custom theme
+   Matches kasmos amber/teal palette from web/src/app/globals.css.
+   Selectors are kept shallow (:root, html, body, pre, code, a) so
+   Nextra upgrades stay easy. Nextra handles dark-mode toggling via a
+   .dark class on <html>; we do NOT hard-lock to dark-only styles.
+   ============================ */
+
+/* --- Palette tokens (always available) --- */
+:root {
+  --kas-bg: #0a0b14;
+  --kas-accent-amber: #f0a868;
+  --kas-accent-teal: #7ec8d8;
+  --kas-glow-amber: rgba(240, 168, 104, 0.12);
+  --kas-glow-teal: rgba(126, 200, 216, 0.12);
+}
+
+/* --- Smooth text rendering --- */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   DARK MODE
+   Nextra's next-themes package adds .dark to <html>.
+   ============================================================ */
+
+/* Subtle ambient gradient behind the docs shell — mirrors the
+   landing page's radial-gradient orb effect for visual continuity. */
+html.dark body {
+  background-color: var(--kas-bg);
+  background-image:
+    radial-gradient(ellipse at 15% 20%, var(--kas-glow-amber) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, var(--kas-glow-teal) 0%, transparent 55%);
+}
+
+/* Links — amber primary, teal on hover */
+html.dark a {
+  color: var(--kas-accent-amber);
+}
+
+html.dark a:hover {
+  color: var(--kas-accent-teal);
+}
+
+/* Fenced code blocks: add a subtle dark surface so they remain
+   readable on the gradient background. The !important is
+   necessary to override Nextra/rehype-pretty-code inline styles. */
+html.dark pre {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Inline code (dark mode) */
+html.dark code:not(pre code) {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-size: 0.875em;
+}
+
+/* ============================================================
+   LIGHT MODE
+   Amber/teal must be darkened for sufficient contrast on white.
+   ============================================================ */
+
+/* Links — darkened amber for readability on light background */
+html:not(.dark) a {
+  color: #b87030;
+}
+
+html:not(.dark) a:hover {
+  color: #2a7080;
+}
+
+/* Fenced code blocks (light mode) */
+html:not(.dark) pre {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Inline code (light mode) */
+html:not(.dark) code:not(pre code) {
+  background-color: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-size: 0.875em;
+}
+
+/* ============================================================
+   SHARED — both modes
+   ============================================================ */
+
+/* High-contrast focus outline on the darker shell */
+:focus-visible {
+  outline: 2px solid var(--kas-accent-amber);
+  outline-offset: 2px;
+}
+
+/* Selection highlight */
+::selection {
+  background: rgba(240, 168, 104, 0.35);
+  color: #fff;
+}
