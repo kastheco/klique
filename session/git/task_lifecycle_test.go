@@ -57,6 +57,51 @@ func TestSetupFromExistingBranch_SetsBaseCommitSHA(t *testing.T) {
 	assert.NotEmpty(t, gt.GetBaseCommitSHA(), "baseCommitSHA should be set after Setup")
 }
 
+func TestPreflightMergeTaskBranch_BlocksOverlappingDirtyPaths(t *testing.T) {
+	repo := initTestRepo(t)
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+	}
+
+	runGit("checkout", "-b", "plan/test-merge")
+	readmePath := filepath.Join(repo, "README.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte("branch change\n"), 0o644))
+	runGit("add", "README.md")
+	runGit("commit", "-m", "branch change")
+	runGit("checkout", "-")
+	require.NoError(t, os.WriteFile(readmePath, []byte("local dirty change\n"), 0o644))
+
+	err := PreflightMergeTaskBranch(repo, "plan/test-merge")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "uncommitted changes overlap")
+	assert.ErrorContains(t, err, "README.md")
+}
+
+func TestPreflightMergeTaskBranch_AllowsUnrelatedDirtyPaths(t *testing.T) {
+	repo := initTestRepo(t)
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+	}
+
+	runGit("checkout", "-b", "plan/test-merge")
+	readmePath := filepath.Join(repo, "README.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte("branch change\n"), 0o644))
+	runGit("add", "README.md")
+	runGit("commit", "-m", "branch change")
+	runGit("checkout", "-")
+
+	notesPath := filepath.Join(repo, "notes.txt")
+	require.NoError(t, os.WriteFile(notesPath, []byte("local dirty note\n"), 0o644))
+
+	require.NoError(t, PreflightMergeTaskBranch(repo, "plan/test-merge"))
+}
+
 func initTestRepo(t *testing.T) string {
 	t.Helper()
 

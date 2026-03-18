@@ -324,10 +324,15 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		planName := taskstate.DisplayName(planFile)
 		mergeAction := func() tea.Msg {
+			if err := gitpkg.PreflightMergeTaskBranch(m.activeRepoPath, entry.Branch); err != nil {
+				return err
+			}
 			// Kill all instances bound to this plan.
 			for i := len(m.allInstances) - 1; i >= 0; i-- {
 				if m.allInstances[i].TaskFile == planFile {
-					_ = m.allInstances[i].Kill()
+					if err := m.allInstances[i].Kill(); err != nil {
+						return err
+					}
 					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
 				}
 			}
