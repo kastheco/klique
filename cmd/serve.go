@@ -16,6 +16,7 @@ import (
 	"github.com/kastheco/kasmos/internal/mcpserver"
 	"github.com/kastheco/kasmos/internal/mcpserver/fstools"
 	"github.com/kastheco/kasmos/internal/mcpserver/gittools"
+	"github.com/kastheco/kasmos/internal/mcpserver/instancetools"
 	webassets "github.com/kastheco/kasmos/web"
 	"github.com/spf13/cobra"
 )
@@ -126,6 +127,12 @@ func NewServeCmd() *cobra.Command {
 				}
 				fstools.RegisterTools(mcpSrv.MCPServer(), allowedDirs)
 				gittools.RegisterTools(mcpSrv.MCPServer(), allowedDirs)
+				instancetools.RegisterTools(
+					mcpSrv.MCPServer(),
+					func() config.StateManager { return config.LoadState() },
+					nil,
+					daemonSocketPath(),
+				)
 				mcpAddr := fmt.Sprintf("%s:%d", bind, mcpPort)
 				mcpHTTP = &http.Server{Addr: mcpAddr, Handler: mcpSrv.Handler()}
 				fmt.Printf("mcp server listening on http://%s/mcp\n", mcpAddr)
