@@ -52,7 +52,7 @@ const navbar = (
 );
 
 const footer = (
-  <Footer>MIT {new Date().getFullYear()} © kastheco.</Footer>
+  <Footer>BSL 1.1 {new Date().getFullYear()} © kastheco.</Footer>
 );
 
 export default async function RootLayout({
