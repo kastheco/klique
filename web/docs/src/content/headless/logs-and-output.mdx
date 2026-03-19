@@ -1,0 +1,144 @@
+# logs and output
+
+headless sessions capture all child process output in two places simultaneously: an in-memory buffer for real-time polling, and a structured log file for persistence.
+
+## the in-memory buffer
+
+All stdout and stderr from the child process is written into a `bytes.Buffer` protected by a `sync.Mutex`. The buffer grows continuously — it is never truncated or rotated.
+
+Four methods expose this buffer to callers:
+
+### CapturePaneContent
+
+```go
+func (s *Session) CapturePaneContent() (string, error)
+```
+
+Returns the full accumulated output as a string. Equivalent to reading the entire in-memory buffer from the beginning. This is the method the TUI calls when rendering the preview pane for a headless instance.
+
+### CapturePaneContentWithOptions
+
+```go
+func (s *Session) CapturePaneContentWithOptions(_, _ string) (string, error)
+```
+
+For tmux sessions, `start` and `end` select a scrollback range. For headless sessions, both arguments are **ignored** — the method delegates to `CapturePaneContent` and always returns the full buffer contents.
+
+### HasUpdated
+
+```go
+func (s *Session) HasUpdated() (updated bool, hasPrompt bool)
+```
+
+Reports whether new output has been written since the last call. `hasPrompt` is always `false` for headless sessions — headless output never contains tmux permission prompts.
+
+The check compares the current buffer contents against a `lastContent` snapshot:
+
+```go
+updated = content != s.lastContent
+s.lastContent = content
+```
+
+### HasUpdatedWithContent
+
+```go
+func (s *Session) HasUpdatedWithContent() (updated bool, hasPrompt bool, content string, captured bool)
+```
+
+The full-detail variant used by the instance polling loop (`CollectMetadata`). Returns:
+
+- `updated` — whether content changed since the last call
+- `hasPrompt` — always `false` for headless
+- `content` — the full buffer contents
+- `captured` — always `true` for headless (the buffer read always succeeds)
+
+## the TUI preview path
+
+The TUI's preview pane calls `instance.Preview()`, which delegates to `CapturePaneContent()`. This works identically for both tmux and headless instances — the preview pane shows the latest buffered output without any special-casing:
+
+```go
+// session/instance_session.go
+func (i *Instance) Preview() (string, error) {
+    if !i.started || i.Status == Paused {
+        return "", nil
+    }
+    return i.executionSession.CapturePaneContent()
+}
+```
+
+The `CollectMetadata` poll loop also uses `HasUpdatedWithContent` for all instances uniformly. **The TUI preview path works for headless instances.**
+
+## what does not work
+
+Interactive operations require a live PTY — they are not available in headless mode:
+
+- `Attach()` → `ErrInteractiveOnly` — you cannot attach to a headless session.
+- `NewEmbeddedTerminalForInstance()` → `ErrInteractiveOnly` — the embedded terminal requires a tmux PTY.
+
+```go
+// session/instance_session.go
+func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {
+    if i.ExecutionMode == ExecutionModeHeadless {
+        return nil, ErrInteractiveOnly
+    }
+    // ...
+}
+```
+
+## the log file
+
+In addition to the in-memory buffer, all output is appended to a log file:
+
+```
+<workDir>/.kasmos/logs/<sanitizedName>.log
+```
+
+The log file is opened in append mode at `Start()` time and closed when the child process exits (by the reaper goroutine). The file is flushed incrementally as the child writes — you can `tail -f` it during a run.
+
+### log file naming
+
+The sanitized name strips whitespace and replaces dots with underscores:
+
+```
+"coder agent 1"   → "coderagent1.log"
+"task 3.coder"    → "task3_coder.log"
+"my-agent"        → "my-agent.log"
+```
+
+### reading logs after a run
+
+```bash
+# follow a running headless session
+tail -f .kasmos/logs/<sanitized-name>.log
+
+# list all session logs for the current project
+ls -lh .kasmos/logs/
+
+# search across all logs
+rg "error" .kasmos/logs/
+```
+
+### log rotation
+
+kasmos does not rotate log files. Each `Start()` call appends to the existing file (if the file already exists from a prior run of the same session name). For long-running automated pipelines, manage rotation externally with `logrotate` or similar tools.
+
+## inspecting output programmatically
+
+To inspect a headless session's output from Go code, call `CapturePaneContent()` on the session handle. The buffer is safe to read from multiple goroutines:
+
+```go
+content, err := sess.CapturePaneContent()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(content)
+```
+
+To efficiently poll for changes without re-processing the full buffer each time, use `HasUpdatedWithContent()`:
+
+```go
+updated, _, content, _ := sess.HasUpdatedWithContent()
+if updated {
+    // process new content
+}
+```

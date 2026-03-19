@@ -1,0 +1,76 @@
+# installation
+
+kasmos is distributed as a single binary. pick the method that suits your workflow.
+
+## homebrew (macOS / Linux)
+
+```bash
+brew install kastheco/tap/kasmos
+```
+
+This installs the `kasmos` binary. The `kas` command is the Cobra root — create a symlink or use the binary name directly, depending on how your `PATH` is configured.
+
+## go install
+
+```bash
+go install github.com/kastheco/kasmos@latest
+```
+
+Installs `kasmos` to `$(go env GOPATH)/bin`. Requires Go 1.24 or later.
+
+To also create `kas` and `kms` aliases:
+
+```bash
+go install github.com/kastheco/kasmos@latest
+ln -sf "$(go env GOPATH)/bin/kasmos" "$(go env GOPATH)/bin/kas"
+ln -sf "$(go env GOPATH)/bin/kasmos" "$(go env GOPATH)/bin/kms"
+```
+
+`just install` does all three steps automatically when building from source.
+
+## install script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kastheco/kasmos/main/install.sh | bash
+```
+
+Installs the `kasmos` binary to `~/.local/bin`. To install under a custom name:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kastheco/kasmos/main/install.sh | bash -s -- --name kas
+```
+
+Make sure `~/.local/bin` is in your `PATH`.
+
+## github releases
+
+Pre-built binaries for macOS (arm64/amd64) and Linux (arm64/amd64) are available on the [releases page](https://github.com/kastheco/kasmos/releases/latest).
+
+Download the archive for your platform, extract it, and place the binary somewhere on your `PATH`.
+
+## build from source
+
+```bash
+git clone https://github.com/kastheco/kasmos.git
+cd kasmos
+just install   # build + install to GOPATH/bin + create kas/kms symlinks
+```
+
+Or using `make`:
+
+```bash
+make build     # produces ./kasmos
+```
+
+## verify installation
+
+```bash
+kas version
+kas --help
+```
+
+The Cobra root command is `kas`, even though the build artifact is named `kasmos`. After `just install` or manually symlinking, `kas` and `kas --help` are the canonical entry points.
+
+## next steps
+
+Once installed, check the [prerequisites](./prerequisites) then follow the [first run](./first-run) guide.

@@ -1,0 +1,103 @@
+# kas serve
+
+Start an HTTP server that exposes the kasmos task store over a REST API backed by SQLite. Optionally starts a second MCP server on a separate port.
+
+```
+kas serve [flags]
+```
+
+## flags
+
+| flag | default | description |
+|------|---------|-------------|
+| `--port` | `7433` | port for the REST API |
+| `--bind` | `0.0.0.0` | address to bind to |
+| `--db` | `<repo-root>/.kasmos/taskstore.db` | path to the SQLite database file |
+| `--mcp` | `true` | enable the MCP server (Streamable HTTP) |
+| `--mcp-port` | `7434` | port for the MCP server |
+| `--admin-dir` | embedded | path to the built admin SPA `dist/` directory |
+
+## examples
+
+```sh
+# start with defaults (port 7433, embedded admin UI)
+kas serve
+
+# use a custom port and database
+kas serve --port 8080 --db /data/kasmos/tasks.db
+
+# bind to localhost only, disable MCP
+kas serve --bind 127.0.0.1 --mcp=false
+
+# use a separately built admin UI
+kas serve --admin-dir /opt/kasmos/admin/dist
+```
+
+## rest api
+
+All task endpoints use the project-scoped URL prefix `/v1/projects/{project}/tasks`.
+
+### health
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/ping` | health check — returns 200 if the store is reachable |
+
+### tasks
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/tasks` | list tasks; accepts `?status=<s>` and `?topic=<t>` query params |
+| `POST` | `/v1/projects/{project}/tasks` | create a task (JSON body: `TaskEntry`) |
+| `GET` | `/v1/projects/{project}/tasks/{filename}` | get a single task |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}` | update task metadata |
+
+### task content
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/tasks/{filename}/content` | retrieve plan content (returns `text/markdown`) |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/content` | replace plan content (raw markdown body) |
+
+### subtasks
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/tasks/{filename}/subtasks` | list subtask entries |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/subtasks` | replace subtask list (JSON array) |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/subtasks/{taskNumber}/status` | update a single subtask status |
+
+### task metadata
+
+| method | path | description |
+|--------|------|-------------|
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/goal` | set task goal text |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/phase-timestamp` | record a phase timestamp |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/clickup-task-id` | set ClickUp task ID |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/increment-review-cycle` | increment review cycle counter |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/pr-url` | store the PR URL |
+| `PUT` | `/v1/projects/{project}/tasks/{filename}/pr-state` | update PR review decision and check status |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/rename` | rename the task (changes stored filename) |
+
+### pr reviews
+
+| method | path | description |
+|--------|------|-------------|
+| `POST` | `/v1/projects/{project}/tasks/{filename}/pr-reviews` | record a PR review (idempotent by review ID) |
+| `GET` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/pending` | list reviews not yet dispatched to a fixer |
+| `GET` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/processed` | check if a review has been processed |
+| `POST` | `/v1/projects/{project}/tasks/{filename}/pr-reviews/{reviewID}/reacted` | mark that a reaction was posted to a review |
+
+### audit events
+
+| method | path | description |
+|--------|------|-------------|
+| `GET` | `/v1/projects/{project}/audit-events` | query audit log entries |
+
+## admin ui
+
+A built-in web admin UI is served at `/admin/`. To use an externally built admin SPA, pass `--admin-dir` pointing to the `dist/` directory (must contain `index.html`).
+
+## mcp server
+
+When `--mcp` is `true` (the default), a Streamable HTTP MCP server starts on `--mcp-port` (default `7434`). The MCP endpoint is at `http://<bind>:<mcp-port>/mcp`. It exposes the task store and signal gateway as MCP tools, plus filesystem tools scoped to the current working directory and repo root.

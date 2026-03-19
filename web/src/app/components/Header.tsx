@@ -29,9 +29,9 @@ export default function Header() {
           GitHub
         </a>
         <a
-          href="https://github.com/kastheco/kasmos#readme"
-          target="_blank"
-          rel="noopener noreferrer"
+          href={
+            process.env.NODE_ENV === "production" ? "/kasmos/docs" : "/docs"
+          }
           className={styles.navLink}
         >
           Docs

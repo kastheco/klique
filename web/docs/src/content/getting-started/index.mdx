@@ -1,0 +1,29 @@
+# getting started
+
+kasmos turns your terminal into a multi-agent orchestration IDE — managing concurrent AI agent sessions in isolated git worktrees with a unified TUI for plans, topics, and lifecycle stages.
+
+## in this section
+
+- [prerequisites](./prerequisites) — what you need before installing: `tmux`, `gh`, and at least one supported AI CLI
+- [installation](./installation) — Homebrew, `go install`, the install script, and GitHub Releases
+- [first run](./first-run) — git-repo requirement, project config directory, and the TUI keybindings reference
+- [setup wizard](./setup-wizard) — the 3-step Bubble Tea wizard, harness detection, agent role assignment, and the scaffold it writes
+
+## quick start
+
+From inside any git repository, run:
+
+```bash
+kas setup       # configure harnesses and scaffold project files
+kas             # launch the TUI
+```
+
+`kas` (the Cobra root command) is the interactive entry point. The binary built by `make build` or `just build` is named `kasmos`, but `just install` also creates `kas` and `kms` symlinks under `$(go env GOPATH)/bin`.
+
+## what kasmos manages
+
+1. **tasks** — stored in a SQLite database under `<repo-root>/.kasmos/`; use `kas task list` to inspect
+2. **topics** — group related plans; only one plan per topic can be implementing at a time
+3. **waves** — plans are split into phases (`## Wave N` headers); tasks within a wave run in parallel
+4. **agents** — spawned in tmux sessions or headless mode with dedicated git worktrees; live output is visible in the TUI preview pane
+5. **review** — a reviewer agent validates the implementation before kasmos prompts for merge approval

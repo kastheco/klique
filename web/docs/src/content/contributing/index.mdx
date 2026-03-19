@@ -1,0 +1,25 @@
+# contributing
+
+Thank you for considering contributing to kasmos! This guide covers everything you need to get your environment set up, run the test suite, and understand the codebase before opening a pull request.
+
+## where to start
+
+- **new contributor?** Start with [development setup](/docs/contributing/development-setup) to get the project building locally.
+- **writing a fix or feature?** Read [testing](/docs/contributing/testing) to understand how the test suite is structured and what CI checks.
+- **unfamiliar with the codebase?** The [architecture overview](/docs/contributing/architecture-overview) maps out the key directories and explains how the major subsystems connect.
+
+## pull request expectations
+
+- Keep changes focused and scoped to one concern per PR.
+- All Go code must pass `go vet ./...` and `gofmt -l .` before CI will accept it.
+- New behaviour needs tests. Prefer table-driven tests with `testify` assertions.
+- Do not rely on real tmux, git processes, or network in tests — use fakes or `t.TempDir()` instead.
+- If you touch scaffold-managed files under `.agents/`, `.claude/`, or `.Claude/`, keep them in sync with their source in `internal/initcmd/scaffold/templates/`. Run `kas check -v` to verify.
+
+## code of conduct
+
+Be constructive, specific, and kind in code review and issue discussions.
+
+## questions?
+
+Open an issue for questions about contributing or project direction.

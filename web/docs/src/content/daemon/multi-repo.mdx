@@ -1,0 +1,140 @@
+# multi-repo
+
+The kasmos daemon can manage any number of repositories simultaneously. Each repo runs its own poll loop with fully isolated state — signal directories, task store, and wave orchestrator are never shared.
+
+## registration
+
+### at startup
+
+Repos listed in `~/.config/kasmos/daemon.toml` are registered before the daemon enters its poll loop:
+
+```toml
+repos = [
+    "/home/user/project-a",
+    "/home/user/project-b",
+    "/home/user/project-c",
+]
+```
+
+### at runtime
+
+Use `kas daemon add` while the daemon is running:
+
+```sh
+kas daemon add /home/user/new-project
+```
+
+This sends `POST /v1/repos` to the control socket. The repo is registered immediately and included in the next tick.
+
+To remove a repo:
+
+```sh
+kas daemon remove /home/user/old-project
+```
+
+This sends `DELETE /v1/repos/<project>` and closes the repo's task store.
+
+## project naming
+
+The project name is always `filepath.Base(path)` — the last component of the absolute path.
+
+```
+/home/user/kasmos  →  project: "kasmos"
+/work/my-lib       →  project: "my-lib"
+```
+
+**Duplicate basename rejection** — if you try to add `/work/foo` when `/archive/foo` is already registered, the daemon rejects it:
+
+```
+repo with basename "foo" already registered (path: /archive/foo);
+rename one of the directories or use distinct names
+```
+
+This constraint exists because the project name is the primary key for signal routing, task store queries, and the control API. Two repos with the same basename would cause signal misrouting.
+
+## per-repo resources
+
+When a repo is registered, `RepoManager.Add` sets up three isolated resources:
+
+| resource | path | purpose |
+|----------|------|---------|
+| task store | `<repo>/.kasmos/taskstore.db` | SQLite task/subtask/signal storage |
+| signal gateway | same DB file | atomic signal claim/mark-processed |
+| signals directory | `<repo>/.kasmos/signals/` | filesystem sentinel files |
+
+Opening the task store can fail (e.g. the `.kasmos/` directory does not exist yet, or the DB is locked). This is **non-fatal** — the repo is registered with `Store: nil` and `SignalGateway: nil`. The daemon logs a warning and skips the repo on each tick rather than crashing.
+
+A repo with a nil store becomes fully functional as soon as the DB is created and the daemon restarts or the repo is removed and re-added.
+
+## per-repo processor
+
+Each repo also gets a dedicated `loop.Processor` instance:
+
+```go
+proc := loop.NewProcessor(loop.ProcessorConfig{
+    AutoReviewFix:      m.autoReviewFix,
+    Store:              store,
+    Project:            project,
+    MaxReviewFixCycles: m.maxReviewFixCycles,
+    Hooks:              hooks,
+})
+```
+
+The processor is **created once** and reused across all tick cycles. This is important because `loop.Processor` holds in-memory `WaveOrchestrator` state for active wave plans — if the processor were recreated on each tick, in-progress wave progress would be lost.
+
+## shared worktrees
+
+The daemon scans for signal files not only in `<repo>/.kasmos/signals/` but also in all directories under `<repo>/.worktrees/`:
+
+```
+<repo>/.worktrees/
+├── plan-feature-x/
+│   └── .kasmos/signals/    ← also scanned
+└── plan-bugfix-y/
+    └── .kasmos/signals/    ← also scanned
+```
+
+This allows wave task agents running in isolated worktrees to emit signals that the daemon can pick up from the main repo's tick. The bridge function `loop.BridgeFilesystemSignals` handles all worktree paths in a single call.
+
+## hooks
+
+When a repo is registered, `config.LoadHooksForRepo(path)` reads its `kasmos.toml` for any `[[hooks]]` entries:
+
+```toml
+[[hooks]]
+type    = "webhook"
+url     = "https://example.com/notify"
+events  = ["review_approved", "implement_finished"]
+```
+
+Hooks fire after FSM transitions and are scoped to the repo where they are configured. Each repo has its own `taskfsm.HookRegistry` — hooks from one repo never fire for another.
+
+## viewing registered repos
+
+```sh
+kas daemon status
+```
+
+This prints all registered repos, their project names, and the count of currently active plans per project:
+
+```
+daemon running (uptime: 3h14m22s)
+repos (2):
+  kasmos          /home/user/kasmos           active: 1
+  my-lib          /home/user/my-lib           active: 0
+```
+
+## example: two-project setup
+
+```toml
+# ~/.config/kasmos/daemon.toml
+repos = [
+    "/home/user/backend",
+    "/home/user/frontend",
+]
+auto_advance_waves = true
+auto_review_fix = true
+max_review_fix_cycles = 2
+```
+
+Each project (`backend`, `frontend`) gets its own task store at `<project>/.kasmos/taskstore.db`, its own signal directory, and its own `loop.Processor`. Plans, waves, and agents from one project never interfere with the other.

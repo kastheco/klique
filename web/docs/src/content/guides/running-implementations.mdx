@@ -1,0 +1,106 @@
+# running implementations
+
+Once a plan has content with `## Wave N` headers and at least one `### Task N: title` section, you can start the implementation phase. kasmos offers two paths depending on the size and complexity of the plan.
+
+## starting an implementation
+
+With the plan selected in the sidebar, press `↵` to open the context menu and choose **start implement**. kasmos transitions the plan to `implementing` and begins the chosen path.
+
+## the normal path — elaboration then waves
+
+For plans with more tasks than the blueprint-skip threshold (see below), kasmos runs a full multi-agent wave workflow:
+
+```
+implement
+    │
+    ▼
+elaborating  ──► architect agent enriches each task body
+    │
+    ▼
+wave 1 starts
+    │  task 1 ─► coder agent (isolated worktree)
+    │  task 2 ─► coder agent (isolated worktree)
+    │  task N ─► coder agent (isolated worktree)
+    │
+    ▼
+wave complete dialog  ──► confirm to advance
+    │
+    ▼
+wave 2 starts  (repeat...)
+    │
+    ▼
+all waves complete  ──► implementation finished
+```
+
+### elaboration phase
+
+Before wave 1 starts, kasmos spawns an **architect** agent (`elaborating` profile) to expand terse task descriptions into coder-ready instructions. The orchestrator enters `WaveStateElaborating` while this runs. No coder tasks launch until elaboration finishes.
+
+If an elaborator already ran for this plan before (e.g. after a TUI restart), kasmos detects the existing instance and skips re-elaboration, jumping straight to wave 1.
+
+### skipping elaboration
+
+Choose **implement directly** in the context menu to bypass elaboration and go straight to wave 1. This is useful when you've already written detailed task bodies and don't want an architect agent to modify them.
+
+### wave advance confirmation
+
+When all tasks in a wave complete, kasmos shows a confirmation dialog. Review the agent output in the center pane before confirming. If something went wrong, you can cancel and retry failed tasks:
+
+- failed tasks do not block the wave from finishing — other tasks continue
+- retry failed tasks from the audit log (select a failed log line → **retry wave**)
+- mark a task manually complete from its instance context menu if the agent finished but didn't signal correctly
+
+If **auto-advance waves** is enabled (toggle from the plan context menu), the dialog is skipped and waves advance automatically.
+
+## the blueprint-skip path — single agent
+
+For small plans, wave orchestration adds unnecessary overhead. When the total number of tasks across all waves is at or below the configured threshold, kasmos skips elaboration and wave orchestration entirely and hands the whole plan to a single coder agent.
+
+```toml
+# kasmos.toml
+[orchestration]
+blueprint_skip_threshold = 3   # default: 3
+```
+
+With blueprint skip active:
+
+```
+implement
+    │
+    ▼
+single coder agent runs on the full plan
+    │
+    ▼
+implementation finished
+```
+
+No wave confirmation dialogs appear. The single agent works directly on the plan's worktree.
+
+### detecting blueprint skip
+
+In the TUI status bar, the wave label (`wave 1/2`) does not appear for blueprint-skip plans. The info tab shows a single agent instance rather than per-wave task glyphs.
+
+## the solo path — no orchestration at all
+
+The **start solo agent** option in the context menu bypasses both elaboration and wave orchestration regardless of plan size. Use this when you want a single agent to work through the entire task without any automated structure.
+
+## watching progress
+
+While implementation runs:
+
+- **preview tab** — live output from the selected agent's terminal (tmux) or process (headless)
+- **info tab** (`#` or `g`) — wave progress, per-task status glyphs, and subtask completion counts
+- **status bar** — wave label (`wave 1/3`) and glyph strip showing each task's state
+- **audit log** (`L`) — timestamped events for every agent spawn, wave transition, and signal
+
+## pausing and resuming
+
+Press `K` to stop a running instance (pauses and preserves the branch). Press `r` to resume.
+
+If a coder agent is in the middle of a wave when you stop it, kasmos will re-read the wave's subtask states from the store when you restart, so completed tasks don't re-run.
+
+## related concepts
+
+- [waves](/docs/concepts/waves) — how wave orchestration works internally
+- [worktrees](/docs/concepts/worktrees) — how each task gets an isolated git branch
+- [agents and roles](/docs/concepts/agents-and-roles) — elaborator, coder, and solo agent profiles

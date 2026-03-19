@@ -1,0 +1,143 @@
+# agent profiles
+
+An **agent profile** (`config.AgentProfile` in `config/profile.go`) defines how kasmos launches an AI agent for a specific role. Profiles are configured in `config.toml` under `[agents.<role>]` and mapped to lifecycle phases via `[phases]`.
+
+## fields
+
+| field | type | default | description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | the role is active and can be dispatched; disabled profiles fall back to `default_program` |
+| `program` | string | — | executable name or path (e.g. `claude`, `opencode`, `/usr/local/bin/codex`) |
+| `flags` | []string | `[]` | extra CLI flags appended after the prompt argument |
+| `model` | string | — | model identifier passed to the agent (e.g. `claude-sonnet-4-5`) |
+| `temperature` | float? | — | sampling temperature, if the agent supports it |
+| `effort` | string | — | effort level (e.g. `low`, `medium`, `high`), if the agent supports it |
+| `execution_mode` | string | `"tmux"` | how the agent process is launched: `"tmux"` or `"headless"` |
+
+### `execution_mode`
+
+- **`tmux`** (default): kasmos creates a new tmux window, runs the agent inside it, and monitors the window for completion. This mode lets you watch the agent in real time.
+- **`headless`**: kasmos spawns the agent as a background process (no tmux window). Use this for unattended or CI-style execution.
+
+The mode is normalized by `config.NormalizeExecutionMode()`: any unrecognized value (including empty string) falls back to `"tmux"`.
+
+### `BuildCommand()`
+
+`AgentProfile.BuildCommand()` constructs the full command string for logging and display:
+
+```go
+strings.Join(append([]string{p.Program}, p.Flags...), " ")
+```
+
+For example, a profile with `program = "claude"` and `flags = ["--dangerously-skip-permissions"]` produces:
+
+```
+claude --dangerously-skip-permissions
+```
+
+The model and other flags that kasmos injects into the prompt are not part of `BuildCommand()` — they are handled separately by the orchestration layer.
+
+## profile resolution
+
+kasmos resolves a profile for a given lifecycle phase via `config.Config.ResolveProfile(phase, defaultProgram)`:
+
+1. Look up `phases[phase]` → role name.
+2. Look up `agents[role]` → `AgentProfile`.
+3. If the profile has a non-empty `Program` and `Enabled = true`, use it.
+4. Otherwise fall back to `AgentProfile{Program: defaultProgram, ExecutionMode: "tmux"}`.
+
+This means you can disable a role without removing it from the config — just set `enabled = false`.
+
+## examples
+
+### claude (tmux, interactive)
+
+```toml
+[agents.coder]
+enabled        = true
+program        = "claude"
+model          = "claude-sonnet-4-5"
+execution_mode = "tmux"
+flags          = ["--dangerously-skip-permissions"]
+```
+
+Launches `claude --dangerously-skip-permissions` in a new tmux window. The `-p <prompt>` and `--model` flags are injected by kasmos before appending `flags`.
+
+### opencode (headless, high-effort planner)
+
+```toml
+[agents.planner]
+enabled        = true
+program        = "opencode"
+execution_mode = "headless"
+effort         = "high"
+```
+
+Runs `opencode` as a background process with `effort = "high"`. opencode interprets the `effort` field to choose model tiers and thinking budgets.
+
+### codex (headless with custom model)
+
+```toml
+[agents.reviewer]
+enabled        = true
+program        = "codex"
+model          = "o3"
+execution_mode = "headless"
+flags          = ["--approval-mode", "full-auto"]
+```
+
+Runs `codex --approval-mode full-auto` headlessly with `model = "o3"`.
+
+### mixed setup (different agents per role)
+
+```toml
+[phases]
+planning     = "planner"
+elaborating  = "architect"
+implementing = "coder"
+reviewing    = "reviewer"
+
+[agents.planner]
+enabled        = true
+program        = "opencode"
+execution_mode = "headless"
+effort         = "high"
+
+[agents.architect]
+enabled        = true
+program        = "claude"
+model          = "claude-sonnet-4-5"
+execution_mode = "headless"
+
+[agents.coder]
+enabled        = true
+program        = "claude"
+model          = "claude-sonnet-4-5"
+execution_mode = "tmux"
+flags          = ["--dangerously-skip-permissions"]
+
+[agents.reviewer]
+enabled        = true
+program        = "claude"
+model          = "claude-opus-4-5"
+execution_mode = "headless"
+```
+
+## disabling a role
+
+```toml
+[agents.architect]
+enabled = false
+program = "claude"
+```
+
+When `enabled = false`, kasmos falls back to `default_program` for that phase. The `program` field is still required but is not used.
+
+## default program detection
+
+When `default_program` is not set in `config.toml`, kasmos calls `config.GetDefaultCommand()` which tries executables in order:
+
+1. `opencode` (preferred)
+2. `claude`
+
+It sources your shell's rc file (`~/.zshrc` or `~/.bashrc`) so shell aliases are visible. If neither is found via the shell, `exec.LookPath` is used as a fallback.

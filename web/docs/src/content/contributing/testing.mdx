@@ -1,0 +1,119 @@
+# testing
+
+## running the test suite
+
+```bash
+# run all Go tests
+go test ./...
+
+# verbose output (what CI uses)
+go test -v ./...
+
+# run a single package
+go test ./config/taskparser/...
+
+# run a specific test by name
+go test ./config/taskfsm/... -run TestTransitionEvents -v
+```
+
+Via `just`:
+
+```bash
+just test    # go test ./...
+```
+
+## CI test matrix
+
+The [build workflow](https://github.com/kastheco/kasmos/blob/main/.github/workflows/build.yml) runs on every push and pull request that touches Go files:
+
+1. **unit tests** — `go test -v ./...` on `ubuntu-latest`
+2. **cross-compilation** — `go build` for `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`
+
+The [lint workflow](https://github.com/kastheco/kasmos/blob/main/.github/workflows/lint.yml) adds:
+
+3. **golangci-lint** — runs via `golangci/golangci-lint-action@v6` (version `v1.64.6`, fast mode, only new issues)
+4. **gofmt check** — fails if `gofmt -l .` produces any output
+
+Always run `gofmt -w <your-files>` before pushing. The CI formatting check is strict.
+
+## test patterns
+
+### table-driven tests
+
+Most packages follow Go's standard table-driven style with `testify`:
+
+```go
+import (
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestSomeBehavior(t *testing.T) {
+    cases := []struct {
+        name    string
+        input   string
+        want    string
+        wantErr bool
+    }{
+        {"happy path", "foo", "bar", false},
+        {"error case", "", "", true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            got, err := doSomething(tc.input)
+            if tc.wantErr {
+                require.Error(t, err)
+                return
+            }
+            require.NoError(t, err)
+            assert.Equal(t, tc.want, got)
+        })
+    }
+}
+```
+
+### isolation helpers
+
+Use the standard library helpers to keep tests hermetic:
+
+| helper | use for |
+|--------|---------|
+| `t.TempDir()` | temporary directories that are cleaned up automatically |
+| `t.Setenv(k, v)` | environment variables scoped to the test |
+| fake/stub executors | replacing external processes like tmux, git, or network calls |
+
+### no real external processes
+
+**Do not** invoke real `tmux`, `git` commands, or make network requests in unit tests. The test suite must pass in an isolated CI environment. Use fake executors or in-memory implementations. Examples:
+
+- `session/tmux/` tests use a `cmd.Executor` interface with a stub implementation.
+- `config/taskstore/` tests use an in-memory SQLite database via `t.TempDir()`.
+- Filesystem-based signal tests write to `t.TempDir()` rather than the real `.kasmos/` directory.
+
+### testing the task FSM
+
+The FSM in `config/taskfsm/fsm.go` is a pure state machine — test it without any store or real I/O:
+
+```go
+fsm := taskfsm.New(taskfsm.StatusReady)
+err := fsm.Transition(taskfsm.EventImplement)
+require.NoError(t, err)
+assert.Equal(t, taskfsm.StatusImplementing, fsm.Status())
+```
+
+### web / frontend
+
+The marketing site (`web/`) and docs site (`web/docs/`) do not currently have JavaScript unit tests. CI validates them through `npm run build`. If you add new MDX pages, verify the build passes:
+
+```bash
+cd web/docs && npm ci && npm run build
+```
+
+## writing new tests
+
+- Place test files adjacent to the package they test (`foo_test.go` next to `foo.go`).
+- Name test functions `TestXxx` (unit) or `BenchmarkXxx` (benchmarks).
+- Prefer `require` for assertions that should abort the test on failure, `assert` for non-fatal checks.
+- Add a `TestMain` if the package needs global setup (e.g., logging initialization). See `app/app_test.go` for an example.
+- For new CLI subcommands, add tests in `cmd/` that use a fake executor and capture command output.

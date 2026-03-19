@@ -1,0 +1,162 @@
+# how headless execution works
+
+This page describes the internal mechanics of `session/headless/session.go` — process construction, output capture, environment variables, and process lifecycle tracking.
+
+## constructing a session
+
+```go
+// session/headless/session.go
+func New(name, program string, skipPermissions bool) *Session {
+    return &Session{
+        name:            name,
+        sanitizedName:   sanitizeName(name),
+        program:         program,
+        skipPermissions: skipPermissions,
+    }
+}
+```
+
+`New` returns an unstarted `*Session`. The `name` is the human-readable label shown in the TUI; `sanitizedName` strips whitespace and replaces dots with underscores — it is used as the log file stem. `program` is the full command string including arguments (e.g. `"claude --dangerously-skip-permissions"`).
+
+Before calling `Start`, the caller may configure the session with builder methods:
+
+| method | purpose |
+|--------|---------|
+| `SetAgentType(string)` | informational; not forwarded to the CLI |
+| `SetInitialPrompt(string)` | stored but not used by headless |
+| `SetTaskEnv(task, wave, peers int)` | sets task metadata forwarded as env vars |
+| `SetSessionTitle(string)` | stored but no-op for headless |
+| `SetTitleFunc(fn)` | stored but no-op for headless |
+
+## starting the process
+
+```go
+func (s *Session) Start(workDir string) error
+```
+
+`Start` is the only method that mutates the session's core state (under `mu`). It performs these steps in order:
+
+1. **guard against double-start** — if `s.cmd != nil`, returns `"headless session already started"` immediately.
+2. **create the log directory** — `os.MkdirAll(<workDir>/.kasmos/logs, 0755)`.
+3. **parse the program string** — `strings.Fields(s.program)` splits on whitespace into `argv`. Returns `"empty program"` if the result is empty.
+4. **build the child environment** — copies `os.Environ()` then appends kasmos-specific vars (see below).
+5. **open the log file** — `<workDir>/.kasmos/logs/<sanitizedName>.log` in append mode (`O_CREATE|O_WRONLY|O_APPEND`).
+6. **wire stdout+stderr** — `io.MultiWriter(s, lf)` where `s` implements `io.Writer` by appending to `s.buf`.
+7. **start the child** — `cmd.Start()`. On failure, the log file is closed and the error is returned.
+8. **initialize the done channel** — `s.done = make(chan struct{})`.
+9. **launch the reaper goroutine** — calls `cmd.Wait()` in the background; closes `s.done` and the log file on exit.
+
+### double-start error
+
+```go
+if s.cmd != nil {
+    return fmt.Errorf("headless session already started")
+}
+```
+
+Calling `Start` a second time on the same session always returns this error. Create a new `*Session` if you need to restart.
+
+### empty program error
+
+```go
+parts := strings.Fields(s.program)
+if len(parts) == 0 {
+    return fmt.Errorf("empty program")
+}
+```
+
+An empty or whitespace-only program string is rejected before any subprocess is created.
+
+## environment variables
+
+The child process inherits the parent's environment plus these additions:
+
+| variable | always set? | value |
+|----------|------------|-------|
+| `KASMOS_MANAGED` | yes | `"1"` |
+| `KASMOS_TASK` | when `taskNumber > 0` | task number as decimal string |
+| `KASMOS_WAVE` | when `taskNumber > 0` | wave number as decimal string |
+| `KASMOS_PEERS` | when `taskNumber > 0` | peer count as decimal string |
+
+```go
+env := os.Environ()
+env = append(env, "KASMOS_MANAGED=1")
+if s.taskNumber > 0 {
+    env = append(env,
+        fmt.Sprintf("KASMOS_TASK=%d", s.taskNumber),
+        fmt.Sprintf("KASMOS_WAVE=%d", s.waveNumber),
+        fmt.Sprintf("KASMOS_PEERS=%d", s.peerCount),
+    )
+}
+cmd.Env = env
+```
+
+`KASMOS_MANAGED=1` signals to agent programs that they are running inside kasmos. `KASMOS_TASK`, `KASMOS_WAVE`, and `KASMOS_PEERS` are set by `SetTaskEnv` and enable agents to identify themselves and coordinate in multi-agent wave execution.
+
+## the done channel
+
+```go
+s.done = make(chan struct{})
+
+go func() {
+    defer close(s.done)
+    _ = cmd.Wait()
+    lf.Close()
+}()
+```
+
+`s.done` is closed exactly once — when the child process exits. All callers that need to know whether the process is still running select on this channel:
+
+```go
+// DoesSessionExist
+select {
+case <-done:
+    return false   // process exited
+default:
+    return true    // process still running
+}
+```
+
+`Close()` uses the same pattern to skip `Kill()` if the process already exited naturally.
+
+## output capture
+
+The session implements `io.Writer` directly:
+
+```go
+func (s *Session) Write(p []byte) (int, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    return s.buf.Write(p)
+}
+```
+
+Combined stdout and stderr are written through `io.MultiWriter(s, lf)`, so every byte the child writes ends up in both the in-memory `bytes.Buffer` and the on-disk log file simultaneously.
+
+The buffer is never cleared. `CapturePaneContent()` returns the full accumulated output for the lifetime of the process. `HasUpdatedWithContent()` snapshots `lastContent` each call to detect new output since the previous poll.
+
+## log file path
+
+```
+<workDir>/.kasmos/logs/<sanitizedName>.log
+```
+
+`sanitizedName` is computed from the session `name`:
+- all whitespace is removed
+- dots are replaced with underscores
+
+Example: a session named `"task 3.coder"` → sanitized name `"task3_coder"` → log path `.kasmos/logs/task3_coder.log`.
+
+## close and idempotency
+
+```go
+func (s *Session) Close() error
+```
+
+`Close` is safe to call multiple times:
+
+- if `s.cmd` is nil (never started), returns `nil` immediately.
+- if `s.done` is already closed (process exited), returns `nil` immediately.
+- otherwise calls `cmd.Process.Kill()`.
+
+The log file is closed by the reaper goroutine when `cmd.Wait()` returns, not by `Close()`. This means the log file is always properly flushed on natural process exit.

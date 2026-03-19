@@ -1,0 +1,154 @@
+# setup
+
+kasmos ships two systemd user service units in `contrib/` and a set of Just recipes for managing them. This page covers both.
+
+## prerequisites
+
+- `kasmos` binary installed in `~/go/bin/` (via `just install` or `go install .`)
+- `kas` symlink created (the install recipe does this automatically)
+- systemd user session available (`loginctl enable-linger` on headless servers)
+
+## just recipes
+
+All daemon management is available through the `Justfile` at the repo root.
+
+### install and enable
+
+```sh
+# install the orchestration daemon (kasmos.service) and enable it now
+just kasmosd-enable
+
+# install the plan store service (kasmosdb.service) and enable it now
+just db-service-enable
+
+# enable both services in one step
+just services-enable
+```
+
+`kasmosd-enable` runs in three stages:
+
+1. Calls `just install` — builds and installs the binary, creates `kas` / `kms` symlinks.
+2. Copies `contrib/kasmos.service` to `~/.config/systemd/user/` and reloads the daemon.
+3. Runs `systemctl --user enable --now kasmos`.
+
+`db-service-enable` does the same for `contrib/kasmosdb.service`, which runs `kas serve` as a background HTTP task store.
+
+### direct daemon start/stop
+
+```sh
+# start the daemon in the foreground (useful for debugging or systemd override)
+just kasmosd-start    # runs: kas daemon start
+
+# stop the daemon by PID
+just kasmosd-stop     # runs: kas daemon stop
+
+# check daemon status
+just kasmosd-status   # runs: kas daemon status
+```
+
+### diagnose installation
+
+```sh
+just doctord
+```
+
+`doctord` prints a structured report:
+
+- whether the `kas` binary is on `$PATH`
+- install and active state of `kasmos.service` and `kasmosdb.service`
+- whether the daemon socket is present at the expected path
+- a "next steps" block listing the relevant `just` recipes
+
+## systemd service units
+
+### `contrib/kasmos.service` — orchestration daemon
+
+```ini
+[Unit]
+Description=kasmos orchestration daemon
+Documentation=https://github.com/kastheco/kasmos
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/kas daemon start --foreground
+ExecStop=%h/go/bin/kas daemon stop
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kasmos
+
+[Install]
+WantedBy=default.target
+```
+
+`%h` expands to the user's home directory. Logs go to the journal (`journalctl --user -u kasmos -f`).
+
+### `contrib/kasmosdb.service` — plan store server
+
+```ini
+[Unit]
+Description=kasmos plan store server
+Documentation=https://github.com/kastheco/kasmos
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/kas serve
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target
+```
+
+`kas serve` starts an HTTP server that exposes the task store for remote inspection and the TUI. The default port is 7433 (configurable with `--port`).
+
+## daemon config file
+
+The daemon reads `~/.config/kasmos/daemon.toml` on startup. Create it manually or let the daemon create an empty one on first run. See the [CLI reference](/docs/cli-reference/daemon#configuration-file) for the full field list.
+
+Minimal example to auto-watch two repos and enable PR monitoring:
+
+```toml
+repos = ["/home/user/project-a", "/home/user/project-b"]
+auto_advance_waves = true
+auto_review_fix = true
+max_review_fix_cycles = 3
+
+[pr_monitor]
+enabled = true
+poll_interval_sec = 60.0
+reactions = ["eyes"]
+```
+
+## verifying the daemon is running
+
+```sh
+# check socket presence (fastest check)
+kas daemon status
+
+# view live logs
+journalctl --user -u kasmos -f
+
+# run the diagnostic script
+just doctord
+```
+
+The socket lives at:
+
+- `$XDG_RUNTIME_DIR/kasmos/kas.sock` (when `XDG_RUNTIME_DIR` is set — typical on systemd desktop sessions)
+- `/tmp/kasmos-<uid>/kas.sock` (fallback)
+
+## manual foreground run
+
+Useful when iterating on daemon config or debugging signal flow:
+
+```sh
+kas daemon start --foreground --config /tmp/test-daemon.toml
+```
+
+Ctrl-C sends SIGTERM and triggers the 35-second graceful drain.

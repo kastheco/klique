@@ -1,0 +1,202 @@
+# agent harnesses
+
+A **harness** is kasmos's adapter for a specific AI CLI. It tells kasmos how to detect the tool, which model flags to pass, what enforcement hooks to install, and how to build the invocation command that spawns each agent.
+
+## wizard-detected harnesses
+
+`kas setup` runs a detection step that probes your `PATH` for supported CLIs. The following three harnesses have full wizard support — kasmos can list their models, configure effort levels, and install enforcement hooks automatically:
+
+### opencode
+
+Detected by: `opencode` in PATH.
+
+kasmos scaffolds:
+- `.opencode/agents/<role>.md` — per-role prompt files
+- `.opencode/opencode.jsonc` — model, temperature, and effort per role
+- `.opencode/skills/` — symlinks to `.agents/skills/`
+- `~/.config/opencode/plugins/enforce-cli-tools.js` — tool enforcement plugin
+
+OpenCode reads skills from `.opencode/skills/` and personal skills from `~/.config/opencode/skills/`. Model names are in `provider/model` format (e.g. `anthropic/claude-sonnet-4-6`). Temperature and effort are configurable per role.
+
+The enforcement plugin blocks banned CLI tools (`grep`, `sed`, `awk`, standalone `diff`, `wc -l`) and suggests modern replacements (`rg`, `sd`, `comby`, `difft`, `scc`).
+
+### claude
+
+Detected by: `claude` in PATH.
+
+kasmos scaffolds:
+- `.claude/agents/<role>.md` — per-role prompt files
+- `.claude/skills/` — symlinks to `.agents/skills/`
+- `~/.claude/hooks/enforce-cli-tools.sh` — PreToolUse shell hook
+- `~/.claude/settings.json` — hook registration (`hooks.PreToolUse` entry)
+
+Claude Code reads skills from `.claude/skills/` and personal skills from `~/.claude/skills/`. Model names are bare (e.g. `claude-sonnet-4-6`). Effort levels are configurable (`low`, `medium`, `high`, `max`); temperature is not supported via flags.
+
+The enforcement hook is a bash script invoked as a Claude `PreToolUse` hook. It inspects the `Bash` tool's `command` argument and exits `2` (blocking the tool call) if a banned pattern is found.
+
+Available models (as of the current release):
+
+```
+claude-sonnet-4-6
+claude-opus-4-6
+claude-sonnet-4-5
+claude-haiku-4-5
+```
+
+### codex
+
+Detected by: `codex` in PATH.
+
+kasmos scaffolds:
+- `.codex/AGENTS.md` — shared prompt file (all roles use the same file)
+
+Codex reads `.agents/skills/` **natively** — no symlink sync is needed. Personal skills at `~/.agents/skills/` are also read directly. No enforcement hook is installed for Codex.
+
+Model names are free-text (e.g. `gpt-5.3-codex`). Effort levels follow the Codex scale: `low`, `medium`, `high`, `xhigh`. Temperature is also configurable.
+
+## runtime-supported CLI workflows
+
+The following tools work with kasmos at runtime (spawned as agent processes) but do not have a wizard adapter — kasmos cannot list their models or install enforcement hooks automatically. Configure them manually in `config.toml` under `[agents.*]`.
+
+### gemini
+
+```toml
+[agents.coder]
+program       = "gemini"
+execution_mode = "tmux"
+enabled       = true
+```
+
+### amp
+
+```toml
+[agents.coder]
+program       = "amp"
+execution_mode = "tmux"
+enabled       = true
+```
+
+### aider
+
+```toml
+[agents.coder]
+program       = "aider"
+flags         = ["--model", "gpt-4o", "--yes-always"]
+execution_mode = "tmux"
+enabled       = true
+```
+
+### custom programs
+
+Any executable that accepts a prompt via stdin or arguments can be used. Pass extra flags via the `flags` array:
+
+```toml
+[agents.coder]
+program       = "/usr/local/bin/my-ai-tool"
+flags         = ["--context-files", "AGENTS.md"]
+execution_mode = "headless"
+enabled       = true
+```
+
+## execution modes
+
+Every harness can run in one of two execution modes:
+
+| mode | description |
+|------|-------------|
+| `tmux` | agent runs in a tmux session; you can attach fullscreen with `↵` and detach with `ctrl+space` |
+| `headless` | agent runs as a background process; output streams to the preview tab and audit log |
+
+Set the mode per agent profile in `config.toml`:
+
+```toml
+[agents.coder]
+program        = "opencode"
+execution_mode = "tmux"
+
+[agents.reviewer]
+program        = "claude"
+execution_mode = "headless"
+```
+
+Headless is preferred for automated wave work where human supervision is not needed. Tmux is better for interactive sessions where you want to watch the agent work or type commands directly.
+
+## enforcement hooks
+
+kasmos can install enforcement hooks that block banned CLI tools during agent runs. The hooks enforce the `cli-tools` skill policy:
+
+| banned | replacement | reason |
+|--------|-------------|--------|
+| `grep` | `rg` (ripgrep) | faster, `.gitignore`-aware, better defaults |
+| `sed` | `sd` or `comby` | simpler syntax, structural rewrites |
+| `awk` | `yq`/`jq`, `sd`, or `comby` | structured data, text transforms |
+| `diff` (standalone) | `difft` (difftastic) | syntax-aware structural diffs |
+| `wc -l` | `scc` | language-aware line counts |
+
+Enforcement is installed per-harness during `kas setup`. The hook mechanism differs by harness:
+
+| harness | mechanism | location |
+|---------|-----------|----------|
+| claude | shell script invoked as `PreToolUse` hook | `~/.claude/hooks/enforce-cli-tools.sh` + `~/.claude/settings.json` |
+| opencode | JS plugin via `tool.execute.before` | `~/.config/opencode/plugins/enforce-cli-tools.js` |
+| codex | none (no hook API) | — |
+
+Re-run `kas setup` to reinstall hooks after upgrading kasmos.
+
+## harness directory structure
+
+After `kas setup`, a project using claude and opencode looks like:
+
+```
+<project>/
+  .claude/
+    agents/
+      coder.md
+      reviewer.md
+      planner.md
+    skills/              ← symlinks to .agents/skills/*
+      kasmos-coder/  →  ../../.agents/skills/kasmos-coder
+      cli-tools/     →  ../../.agents/skills/cli-tools
+  .opencode/
+    agents/
+      coder.md
+      reviewer.md
+    opencode.jsonc
+    skills/              ← symlinks to .agents/skills/*
+      kasmos-coder/  →  ../../.agents/skills/kasmos-coder
+  .codex/
+    AGENTS.md
+  .agents/
+    skills/              ← canonical project skill directories
+      kasmos-coder/
+        SKILL.md
+      cli-tools/
+        SKILL.md
+```
+
+Personal skills follow the same pattern rooted at `~`:
+
+```
+~/
+  .agents/skills/        ← canonical personal skills
+    my-skill/SKILL.md
+  .claude/skills/        ← symlinks to ~/.agents/skills/*
+    my-skill/  →  ../../.agents/skills/my-skill
+  .config/opencode/skills/
+    my-skill/  →  ../../../.agents/skills/my-skill
+```
+
+## checking harness health
+
+```bash
+kas check
+kas check -v
+```
+
+Reports skill sync status across all detected harnesses at both the global (`~/.agents/skills/`) and project (`.agents/skills/`) layers. See [skills](./skills) for details.
+
+## related
+
+- [skills](./skills) — skill directories, sync, and audit
+- [getting started](/docs/getting-started) — `kas setup` wizard walkthrough
+- [configuration](/docs/configuration) — full `config.toml` reference

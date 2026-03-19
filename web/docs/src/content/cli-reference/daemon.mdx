@@ -1,0 +1,171 @@
+# kas daemon
+
+Manage the kasmos multi-repo background orchestration daemon. The daemon watches registered repositories for agent lifecycle signals and drives FSM transitions automatically.
+
+```
+kas daemon <subcommand> [flags]
+```
+
+Alias: `kas d`
+
+## persistent flags
+
+| flag | default | description |
+|------|---------|-------------|
+| `--socket` | see below | path to the daemon unix domain socket |
+
+**Default socket path** — the daemon uses a Unix domain socket whose location is determined at startup:
+
+1. `$XDG_RUNTIME_DIR/kasmos/kas.sock` (preferred, when `$XDG_RUNTIME_DIR` is set)
+2. `/tmp/kasmos-<uid>/kas.sock` (fallback)
+
+The `kas daemon status`, `add`, and `remove` subcommands connect to this socket to communicate with the running daemon.
+
+## subcommands
+
+### start
+
+Start the kasmos daemon.
+
+```
+kas daemon start [--foreground] [--config <path>]
+```
+
+```sh
+# daemonize (default) — forks, detaches, writes PID to ~/.config/kasmos/daemon.pid
+kas daemon start
+
+# foreground mode — useful for systemd or direct supervision
+kas daemon start --foreground
+
+# use a custom config file
+kas daemon start --foreground --config /etc/kasmos/daemon.toml
+```
+
+| flag | description |
+|------|-------------|
+| `--foreground` | run in foreground instead of daemonizing (suitable for systemd `Type=simple`) |
+| `--config` | path to daemon TOML config file (default: `~/.config/kasmos/daemon.toml`) |
+
+When daemonizing, the PID is written to `~/.config/kasmos/daemon.pid`.
+
+---
+
+### stop
+
+Stop the running daemon by sending `SIGTERM` to the PID recorded in `~/.config/kasmos/daemon.pid`.
+
+```
+kas daemon stop
+```
+
+---
+
+### status
+
+Show the current daemon status: registered repos, active plans per repo.
+
+```
+kas daemon status [--socket <path>]
+```
+
+```sh
+kas daemon status
+```
+
+Connects to the daemon control socket and calls `GET /v1/status`. Prints `daemon not running` if the socket is unreachable.
+
+---
+
+### add
+
+Register a repository with the running daemon so it is included in signal scans.
+
+```
+kas daemon add <repo-path> [--socket <path>]
+```
+
+```sh
+kas daemon add /home/user/myproject
+```
+
+Sends `POST /v1/repos` with the resolved absolute path. Returns an error if the daemon is not running.
+
+---
+
+### remove
+
+Unregister a repository from the running daemon.
+
+```
+kas daemon remove <repo-path> [--socket <path>]
+```
+
+```sh
+kas daemon remove /home/user/myproject
+```
+
+Derives the project name from the basename of the path and sends `DELETE /v1/repos/<project>`.
+
+---
+
+### reload
+
+Reload the daemon configuration by sending `SIGHUP` to the daemon process.
+
+```
+kas daemon reload
+```
+
+Reads the PID from `~/.config/kasmos/daemon.pid` and sends `SIGHUP`.
+
+## configuration file
+
+The daemon reads `~/.config/kasmos/daemon.toml` on startup. All fields are optional — missing keys use the defaults shown below.
+
+```toml
+# how often the daemon scans for signals (seconds)
+poll_interval_sec = 2.0
+
+# repositories to manage on daemon startup
+repos = ["/home/user/project-a", "/home/user/project-b"]
+
+# automatically transition planning→ready after planner_finished signal
+auto_advance = false
+
+# automatically advance between waves when all tasks in a wave complete
+auto_advance_waves = true
+
+# automatically start a fixer after review_changes_requested
+auto_review_fix = true
+
+# maximum review-fix loop iterations (0 = unlimited)
+max_review_fix_cycles = 0
+
+# unix socket path (overrides XDG_RUNTIME_DIR-based default)
+socket_path = ""
+
+[pr_monitor]
+# enable GitHub PR polling
+enabled = false
+# how often to poll open PRs (seconds)
+poll_interval_sec = 60.0
+# GitHub reactions to add to unprocessed review comments
+reactions = ["eyes"]
+```
+
+## systemd service example
+
+```ini
+[Unit]
+Description=kasmos daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/kasmos daemon start --foreground
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```

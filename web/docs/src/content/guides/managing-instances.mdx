@@ -1,0 +1,119 @@
+# managing instances
+
+An **instance** is a running (or paused) AI agent session. It has a title, an isolated git branch, an execution mode (tmux or headless), and a lifecycle status. The sidebar lists all instances grouped by their associated plan.
+
+## starting an instance
+
+kasmos starts instances automatically when you trigger a lifecycle stage (plan, implement, review). You can also start a standalone instance:
+
+- press `n` for a new plan, then `s` to spawn an agent for it
+- or open the command launcher and choose **new instance** or **spawn agent**
+
+Each instance gets a fresh git worktree on a new branch named after the instance title. The worktree is isolated from main and from other instances, so concurrent agents cannot conflict at the git level.
+
+## attaching to a tmux session
+
+Tmux instances are **attachable**. Press `↵` or `o` with the instance selected to attach fullscreen:
+
+```
+TUI  ──► enter  ──►  tmux session (fullscreen)
+          │
+          ▼
+    ctrl+space or ctrl-q  ──►  detach  ──►  back to TUI
+```
+
+A one-time help overlay reminds you of the detach keys when you first attach. Press any key to dismiss it and proceed to the session.
+
+Headless instances are **not attachable** — they run as background processes. Their output streams to the preview tab in the center pane. Use `tab` to switch to the agent tab and watch it live.
+
+## interactive mode
+
+Press `i` to enter interactive mode without going fullscreen. In this mode your keystrokes are forwarded to the agent's pane, letting you type commands or reply to prompts without leaving the TUI layout. Exit with `ctrl+space` (or send the current input with `ctrl+enter`).
+
+Press `!` as a shortcut that enters interactive mode and immediately sends `!` to the agent, activating the harness's shell mode in one keystroke.
+
+## stopping and killing
+
+| key | effect |
+|-----|--------|
+| `k` | **kill** — terminates the tmux session; the instance entry stays in the list with status `ready` |
+| `K` | **stop** — pauses the instance and preserves the branch; use `r` to resume |
+
+Kill is reversible: the branch survives. Stop is also reversible: `r` resumes from where the agent left off.
+
+Both actions are also available in the instance context menu (`↵` on an instance row).
+
+## pausing, resuming, and checkout
+
+**Pause** (`K`) stops the tmux session and records the instance status as `paused`. The worktree and branch are untouched.
+
+**Checkout** (`c`) pauses the session and copies the branch name to your clipboard so you can check it out locally:
+
+```
+c
+ └─► session paused
+ └─► branch name copied to clipboard
+ └─► help overlay shows the git commands
+
+git checkout <branch-name>   # inspect the worktree locally
+```
+
+**Important:** `checkout` requires a clean worktree on main. Commit or stash any local changes on main before pausing, then `r` to resume when you're done. Resume continues the agent exactly where it stopped.
+
+**Resume** (`r`) restarts a paused tmux session. The agent reconnects to the existing worktree and continues from its last state.
+
+## headless instance output
+
+Headless instances run as background processes managed by the daemon. They appear in the sidebar with the same controls as tmux instances except:
+
+- attach (`↵`) is disabled — a toast informs you that the instance is in headless mode
+- interactive mode (`i`) is disabled for the same reason
+- all output is visible in the **preview tab** and the **audit log**
+
+Use the info tab (`#`) to see the instance's current status, wave number, and task number.
+
+## orphaned tmux session browser
+
+If a tmux session exists but has no corresponding kasmos instance (e.g. it was started manually or kasmos crashed while a session was running), the session is **orphaned**.
+
+Press `T` to open the tmux browser overlay. It lists all tmux sessions. From there you can:
+
+| action | effect |
+|--------|--------|
+| `↵` | adopt the session — creates a kasmos instance for it and adds it to the list |
+| `a` | attach to the session directly without adopting |
+| `k` | kill the orphaned session |
+
+Adopted sessions appear in the sidebar like any other instance. You can then attach, pause, or manage them normally.
+
+## instance context menu
+
+Press `↵` on an instance row (not a plan header) to open the instance context menu:
+
+| item | effect |
+|------|--------|
+| open | attach fullscreen |
+| kill | kill tmux session |
+| restart | kill and restart the agent |
+| pause / resume | pause or resume the session |
+| focus agent | enter interactive mode |
+| rename | rename the instance |
+| push branch | push the instance's branch to origin |
+| create pr | open the PR title input for this instance |
+| open in browser | open the associated plan in the plan browser |
+| mark complete | manually mark this task complete in the wave orchestrator |
+
+## filtering and sorting
+
+| key | effect |
+|-----|--------|
+| `1` | show all instances (default) |
+| `2` | show active instances only (running, loading) |
+| `3` | cycle sort mode (by status, by name, by creation time) |
+| `/` | activate search — type to filter by instance title or plan name |
+
+## related concepts
+
+- [agents and roles](/docs/concepts/agents-and-roles) — execution modes, headless vs tmux
+- [worktrees](/docs/concepts/worktrees) — how isolated branches are managed
+- [tui overview](./tui-overview) — full keymap reference

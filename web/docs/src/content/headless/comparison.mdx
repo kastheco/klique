@@ -1,0 +1,111 @@
+# headless vs tmux
+
+Both backends implement the `session.ExecutionSession` interface. This page documents where their behavior diverges.
+
+## interface method comparison
+
+| method | tmux | headless |
+|--------|------|----------|
+| `Start(workDir string) error` | creates a tmux session and runs the program inside it | spawns the program directly via `exec.Cmd`; creates `.kasmos/logs/` |
+| `Restore() error` | reconnects to an existing detached tmux session | no-op — always returns `nil` |
+| `Close() error` | kills the tmux session | kills the child process; idempotent, safe to call multiple times |
+| `DoesSessionExist() bool` | calls `tmux has-session` | reads `s.done` channel; `false` once the process exits |
+| `CapturePaneContent() (string, error)` | runs `tmux capture-pane` | reads in-memory `bytes.Buffer` |
+| `CapturePaneContentWithOptions(start, end string) (string, error)` | captures a scrollback range | ignores `start`/`end`; returns full buffer |
+| `HasUpdated() (bool, bool)` | checks content hash; detects tmux prompts | compares buffer snapshot; `hasPrompt` always `false` |
+| `HasUpdatedWithContent() (bool, bool, string, bool)` | full poll with content and prompt detection | full poll; `hasPrompt` always `false`, `captured` always `true` |
+| `GetPanePID() (int, error)` | returns the tmux pane PID | returns `cmd.Process.Pid` |
+| `GetSanitizedName() string` | returns sanitized tmux session name | returns sanitized log file stem |
+| `SetAgentType(string)` | stored and used for tmux session title | stored only; not used |
+| `SetInitialPrompt(string)` | sent to the pane after start | stored only; not forwarded to the program |
+| `SetTaskEnv(task, wave, peers int)` | sets env vars injected at Start | sets env vars injected at Start (identical behavior) |
+| `SetSessionTitle(string)` | updates tmux window title | stored but no-op |
+| `SetTitleFunc(fn)` | callback invoked on session start | stored but no-op |
+
+## interactive operations
+
+The following operations require a live PTY. Headless sessions return `ErrInteractiveOnly` for all of them:
+
+```go
+// ErrInteractiveOnly = errors.New("interactive operation requires tmux execution")
+
+func (s *Session) Attach() (chan struct{}, error) {
+    return nil, ErrInteractiveOnly
+}
+
+func (s *Session) SendKeys(_ string) error { return ErrInteractiveOnly }
+
+func (s *Session) TapEnter() error { return ErrInteractiveOnly }
+
+func (s *Session) SendPermissionResponse(_ tmux.PermissionChoice) error {
+    return ErrInteractiveOnly
+}
+
+func (s *Session) SetDetachedSize(_, _ int) error { return ErrInteractiveOnly }
+```
+
+| operation | tmux behavior | headless behavior |
+|-----------|--------------|-------------------|
+| `Attach()` | attaches the caller's terminal to the tmux session; returns a channel that closes on detach | **`ErrInteractiveOnly`** |
+| `SendKeys(keys string)` | sends key sequence to the pane | **`ErrInteractiveOnly`** |
+| `TapEnter()` | sends a carriage return to the pane | **`ErrInteractiveOnly`** |
+| `SendPermissionResponse(choice)` | sends the permission dialog response key | **`ErrInteractiveOnly`** |
+| `SetDetachedSize(width, height int)` | resizes the detached pane | **`ErrInteractiveOnly`** |
+
+## no-ops vs errors
+
+Not all headless limitations are errors. Some operations are silently accepted as no-ops because they have no meaningful equivalent but do not indicate a broken state:
+
+| operation | headless behavior | rationale |
+|-----------|------------------|-----------|
+| `Restore()` | returns `nil` | no persistent session to reconnect to |
+| `DetachSafely()` | returns `nil` | nothing to detach from; the process keeps running |
+| `SetSessionTitle(string)` | stores value; no effect | no tmux window to rename |
+| `SetTitleFunc(fn)` | stores callback; never called | no title lifecycle events |
+
+## permission prompts
+
+tmux sessions detect permission prompts by scanning pane output for known patterns. headless sessions cannot do this — `hasPrompt` is always `false` in both `HasUpdated()` and `HasUpdatedWithContent()`. The `ParsePermissionPrompt` path in `CollectMetadata` still runs (it checks the content string), but `SendPermissionResponse` cannot be called to respond.
+
+**consequence:** if your agent program pauses waiting for a permission confirmation, a headless session will stall indefinitely. Use `--dangerously-skip-permissions` (or equivalent flags) for programs that would otherwise prompt, or use tmux mode so kasmos can detect and respond to prompts automatically.
+
+## embedded terminal
+
+The TUI's embedded terminal feature (`NewEmbeddedTerminalForInstance`) requires a tmux PTY:
+
+```go
+// session/instance_session.go
+func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {
+    if i.ExecutionMode == ExecutionModeHeadless {
+        return nil, ErrInteractiveOnly
+    }
+    // ...
+}
+```
+
+Headless instances display as read-only log output in the preview pane. Focus mode (the embedded interactive terminal) is only available for tmux-backed instances.
+
+## choosing the right backend
+
+```
+need to attach interactively?       → tmux
+agent may request permissions?      → tmux (unless --dangerously-skip-permissions)
+running in a headless CI pipeline?  → headless
+running parallel wave agents?       → headless (lower overhead)
+need kas monitor live attach?       → tmux
+```
+
+You can mix modes within a single plan — for example, run coders headlessly and the reviewer in tmux:
+
+```toml
+[agents.coder]
+enabled        = true
+program        = "claude"
+flags          = ["--dangerously-skip-permissions"]
+execution_mode = "headless"
+
+[agents.reviewer]
+enabled        = true
+program        = "claude"
+execution_mode = "tmux"
+```

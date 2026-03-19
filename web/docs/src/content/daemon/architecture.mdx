@@ -1,0 +1,131 @@
+# architecture
+
+The daemon is composed of a small set of types with well-defined responsibilities. Understanding them makes it easier to debug signal flow, extend the daemon, or read the source.
+
+## core types
+
+### `Daemon`
+
+Defined in `daemon/daemon.go`. The top-level struct that owns everything:
+
+| field | type | role |
+|-------|------|------|
+| `cfg` | `*DaemonConfig` | poll interval, repo list, auto-advance flags, socket path |
+| `repos` | `*RepoManager` | thread-safe list of registered repositories |
+| `spawner` | `*TmuxSpawner` | creates and tracks tmux sessions for each agent role |
+| `broadcaster` | `*api.EventBroadcaster` | fan-out SSE event stream served by the control socket |
+| `prMonitor` | `*PRMonitor` | optional goroutine that polls GitHub PRs for review comments |
+| `pidLock` | `*PIDLock` | advisory lock (`<socket>.pid`) preventing duplicate daemon processes |
+
+`Daemon.Run(ctx)` is the blocking entry point. It acquires the PID lock, opens the Unix socket, starts the HTTP control server, and then enters the select loop.
+
+### `RepoManager`
+
+Defined in `daemon/repo.go`. A `sync.RWMutex`-protected slice of `RepoEntry` values. Repos are added with `Add(path)` and removed with `Remove(path)` or `RemoveByProject(project)`. All mutations are safe to call from the control API goroutine while the poll loop runs.
+
+### `RepoEntry`
+
+Each registered repo is represented as a `RepoEntry`:
+
+| field | type | role |
+|-------|------|------|
+| `Path` | `string` | absolute filesystem path |
+| `Project` | `string` | `filepath.Base(path)` — the repo's canonical name |
+| `Store` | `taskstore.Store` | SQLite task store at `<path>/.kasmos/taskstore.db` (may be nil) |
+| `SignalGateway` | `taskstore.SignalGateway` | DB-backed signal gateway opened on the same DB (may be nil) |
+| `SignalsDir` | `string` | `<path>/.kasmos/signals/` |
+| `Processor` | `*loop.Processor` | per-repo signal processor that persists wave orchestrator state between ticks |
+
+`Processor` is created once per `Add` call and reused on every tick. This keeps `WaveOrchestrator` state alive across poll cycles without re-reading from disk.
+
+### `loop.Processor`
+
+Defined in `orchestration/loop/`. Receives scanned signals and returns typed `Action` values:
+
+- `SpawnCoderAction`, `SpawnReviewerAction`, `SpawnFixerAction`, `SpawnElaboratorAction`
+- `AdvanceWaveAction`, `TaskCompleteAction`
+- `TransitionAction`, `ReviewApprovedAction`, `ReviewCycleLimitAction`
+- `PausePlanAgentAction`, `CreatePRAction`
+
+The processor is stateful — it holds a `WaveOrchestrator` per active plan so that inter-tick wave state is not lost.
+
+### `TmuxSpawner`
+
+Defined in `daemon/spawner.go`. Creates named tmux sessions for each agent role using a consistent naming convention (`<plan-name>-<role>`). Tracks running instances in memory so the daemon can monitor prompt state, detect completion, and kill agents when needed.
+
+Key methods:
+
+- `SpawnCoder`, `SpawnReviewer`, `SpawnFixer`, `SpawnElaborator`, `SpawnPlanner` — create sessions
+- `SpawnWaveTask` — creates a coder session with wave/peer-count metadata injected into the prompt
+- `KillAgent(repoPath, planFile, agentType)` — sends SIGTERM to the named session
+- `KillWaveAgents(repoPath, planFile, wave)` — kills all coder sessions for a completed wave
+- `RunningInstances()` / `InstancesForRepo(path)` — read current tracking state
+- `DiscoverOrphanSessions()` — lists `kas_*` tmux sessions not tracked by this spawner (used during recovery)
+- `RestoreTrackedInstance(…)` — re-adopts an orphan session into the tracking map
+- `DrainAll(ctx)` — waits for all running sessions to exit before shutdown
+
+### `api.EventBroadcaster`
+
+Defined in `daemon/api/`. Maintains a fan-out channel to all active SSE connections on the control socket. The daemon calls `broadcaster.Emit(event)` after every significant action. Clients streaming `GET /v1/events` receive these events in real time. `Close()` signals EOF to all subscribers when the daemon shuts down.
+
+### `PRMonitor`
+
+Defined in `daemon/pr_monitor.go`. Runs as a separate goroutine started by `Daemon.Run` when `cfg.PRMonitor.Enabled` is true. Polls open PRs at `cfg.PRMonitor.PollInterval` (default 60 s) and dispatches fixer agents for unprocessed `CHANGES_REQUESTED` or `COMMENTED` reviews from non-bot users.
+
+## the event loop
+
+`Daemon.Run` after setup:
+
+```
+ticker := time.NewTicker(cfg.PollInterval)   // default 2 s
+
+for {
+    select {
+    case <-ctx.Done():
+        drain → shutdown HTTP → release lock → close broadcaster → return
+
+    case <-ticker.C:
+        for each RepoEntry:
+            tickRepo(ctx, entry)
+    }
+}
+```
+
+`tickRepo` chooses between two signal processing paths:
+
+**DB-backed path** (when `entry.SignalGateway != nil`):
+1. `loop.BridgeFilesystemSignals` — scans `<repo>/.kasmos/signals/` and all shared worktrees; inserts any new signal files as `pending` rows in the `signals` table.
+2. `gateway.Claim(project, workerID)` — atomically transitions one `pending` row to `processing` and returns it.
+3. `loop.ConvertSignalEntry(entry, &scan)` — decodes the DB row into a typed `ScanResult`.
+4. `processor.Tick(scan)` → `[]Action` — feeds the scan to the processor.
+5. `executeAction(ctx, entry, action)` for each action.
+6. `gateway.MarkProcessed(id, status, result)` — marks the row `done` or `failed`.
+7. Repeat from step 2 until no pending signals remain.
+
+**Legacy filesystem path** (when `SignalGateway` is nil):
+- Reads signals directly from `staging/`, `processing/`, and `failed/` subdirs under `.kasmos/signals/`.
+- Each signal is moved to `processing/` before handling, then deleted (`CompleteProcessing`) or dead-lettered to `failed/` (`FailProcessing`).
+
+## reaper goroutine
+
+A secondary goroutine runs every 30 seconds and calls `gateway.ResetStuck(60s)` across all registered repos. Signals that have been in the `processing` status for more than 60 seconds are reset to `pending` so a new daemon instance (or the next tick) can reclaim them. This guards against crashes between claim and mark-processed.
+
+## session monitoring
+
+After processing signals for a repo, the daemon calls `monitorRunningInstances`. This method:
+
+1. Calls `spawner.InstancesForRepo(path)` to enumerate tracked sessions.
+2. Calls `inst.CollectMetadata()` to capture the current tmux pane content.
+3. Detects completion (prompt visible and no pending work, or tmux session gone).
+4. Calls `autoAdvanceCompletedImplementer` — pushes the branch and transitions the FSM to `reviewing` automatically.
+5. Kills the completed implementer session and spawns a reviewer.
+
+## shutdown sequence
+
+When `ctx` is cancelled (SIGTERM/SIGINT):
+
+1. `spawner.DrainAll(ctx)` — waits up to 35 seconds for all tracked sessions to exit naturally.
+2. `srv.Shutdown(context.Background())` — closes the control socket; in-flight HTTP requests finish.
+3. `wg.Wait()` — waits for the reaper and PR monitor goroutines.
+4. `pidLock.Release()` — removes the PID lock file.
+5. `broadcaster.Close()` — sends EOF to all SSE subscribers.

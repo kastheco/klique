@@ -1,0 +1,128 @@
+# signals
+
+Signals are the messaging layer between agent processes and the daemon. An agent (planner, coder, reviewer, etc.) writes a signal file when it completes a lifecycle phase; the daemon picks it up and drives the next FSM transition.
+
+kasmos supports two signal paths: a **filesystem path** for direct writes from agents, and a **DB-backed path** for atomic, auditable processing. Both paths coexist — the daemon bridges filesystem signals into the DB on every tick.
+
+## filesystem path
+
+The filesystem path is implemented in `config/taskfsm/signalfs.go`. Signals are plain files written atomically to the repo's signals directory.
+
+### directory layout
+
+```
+<repo>/.kasmos/signals/
+├── staging/           # atomic write staging area
+├── processing/        # signals currently being processed by the daemon
+├── failed/            # dead-lettered signals
+│   └── *.reason       # companion file with ISO-8601 timestamp + failure reason
+└── <signal-file>      # pending signals ready for pickup
+```
+
+- **`staging/`** — agents write here first, then atomically rename to the parent dir via `AtomicWrite`. This prevents the daemon from picking up a partially written file.
+- **`processing/`** — the daemon moves a file here via `BeginProcessing` before dispatching. If the daemon crashes between pick-up and completion, the file stays in `processing/`.
+- **`failed/`** — `FailProcessing` moves rejected signals here and writes a `.reason` file. Inspect these to debug signal routing failures.
+
+### startup recovery
+
+On daemon startup, before the first poll tick, `taskfsm.RecoverInFlight(signalsDir)` scans `processing/` and moves any leftover files back to the signals root so they can be re-dispatched. If a newer signal with the same name already exists in the root (written after the crash), the stale in-flight copy is discarded to avoid overwriting newer state.
+
+### writing a signal
+
+Agents write signals using `kas signal emit`:
+
+```sh
+kas signal emit implement_finished my-plan --payload '{}'
+```
+
+This calls `taskfsm.AtomicWrite`, which:
+
+1. Creates `staging/`, `processing/`, and `failed/` if they do not exist.
+2. Writes the payload to `signals/staging/<filename>`.
+3. Renames `staging/<filename>` → `signals/<filename>` atomically.
+
+### signal types (filesystem)
+
+| signal type | emitted by | triggers |
+|-------------|------------|---------|
+| `implement_finished` | coder / fixer | FSM transition → `reviewing`, spawn reviewer |
+| `implement_task_finished` | wave task agent | wave task complete, possible wave advance |
+| `implement_wave` | daemon / TUI | start next wave |
+| `elaborator_finished` | elaborator | update plan content, begin wave 1 |
+| `review_approved` | reviewer | FSM transition → `done` |
+| `review_changes_requested` | reviewer | FSM transition → `implementing`, spawn fixer |
+| `planner_finished` | planner | FSM transition → `ready` |
+
+## DB-backed path
+
+The DB-backed signal gateway is implemented in `config/taskstore/signal_sqlite.go`. Signals are rows in the `signals` SQLite table inside each repo's `taskstore.db`.
+
+### schema
+
+```sql
+CREATE TABLE IF NOT EXISTS signals (
+    id           INTEGER PRIMARY KEY,
+    project      TEXT    NOT NULL DEFAULT '',
+    plan_file    TEXT    NOT NULL DEFAULT '',
+    signal_type  TEXT    NOT NULL DEFAULT '',
+    payload      TEXT    NOT NULL DEFAULT '',
+    status       TEXT    NOT NULL DEFAULT 'pending',
+    created_at   TEXT    NOT NULL DEFAULT '',
+    claimed_by   TEXT    NOT NULL DEFAULT '',
+    claimed_at   TEXT    NOT NULL DEFAULT '',
+    processed_at TEXT    NOT NULL DEFAULT '',
+    result       TEXT    NOT NULL DEFAULT ''
+);
+```
+
+An index on `(project, status, created_at, id)` ensures efficient ordered claim queries.
+
+### signal statuses
+
+| status | meaning |
+|--------|---------|
+| `pending` | created, waiting to be claimed |
+| `processing` | claimed by a daemon worker, being dispatched |
+| `done` | successfully processed |
+| `failed` | processing failed or signal was rejected |
+
+### lifecycle of a DB signal
+
+```
+pending
+  └─ Claim(project, workerID) ──► processing
+                                    ├─ success ──► done
+                                    └─ error   ──► failed
+```
+
+`Claim` is a serializable transaction: it updates the row to `processing` in a single `UPDATE … WHERE id = (SELECT … LIMIT 1)` and then re-fetches the claimed row. Concurrent daemon instances or restarted processes cannot claim the same signal twice.
+
+### writing a DB signal
+
+```sh
+kas signal emit implement_task_finished my-plan --payload '{"wave_number":2,"task_number":3}'
+```
+
+This calls `gateway.Create(project, entry)` which inserts a row with `status = 'pending'`.
+
+### stuck signal reaper
+
+The daemon runs a reaper goroutine every 30 seconds. It calls `gateway.ResetStuck(60s)` to find signals that have been in `processing` for more than 60 seconds and reset them to `pending`. This handles daemon crashes between claim and mark-processed.
+
+## bridging the two paths
+
+On each tick, `loop.BridgeFilesystemSignals` scans the repo's filesystem signals directory (and all shared worktrees under `.worktrees/`) and inserts any signal files it finds as `pending` rows in the DB. The filesystem files are then consumed (deleted) by the bridge so they are not re-inserted on the next tick.
+
+This means agents can write to the filesystem path without knowing whether a gateway is present — the daemon transparently upgrades them to the DB-backed flow when a gateway is available.
+
+## inspecting signals
+
+```sh
+# list pending signals for a project
+kas signal list my-project
+
+# emit a signal manually (useful for testing or resuming a stuck task)
+kas signal emit implement_finished my-plan
+```
+
+Failed filesystem signals accumulate in `.kasmos/signals/failed/`. Examine the companion `.reason` files to understand why a signal was rejected, fix the root cause, and re-emit.

@@ -1,0 +1,62 @@
+# topics
+
+A **topic** is an optional label you attach to a task when registering it. Topics group related tasks and act as a scheduling fence: kasmos enforces that only one task per topic is actively implementing at any time.
+
+## why topics exist
+
+Multiple tasks in the same codebase area can create merge conflicts or race conditions if they run concurrently. Topics give you a lightweight way to express "these tasks touch the same subsystem" without needing to express detailed file-level dependencies.
+
+## the collision gate
+
+The collision gate is implemented in `config/taskstate/taskstate.go`:
+
+```go
+// HasRunningCoderInTopic checks if any plan in the given topic (other than
+// excludePlan) has status StatusImplementing. Returns the conflicting plan filename.
+func (ps *TaskState) HasRunningCoderInTopic(topic, excludePlan string) (bool, string) {
+    if topic == "" {
+        return false, ""
+    }
+    for filename, entry := range ps.Plans {
+        if filename == excludePlan {
+            continue
+        }
+        if entry.Topic == topic && entry.Status == StatusImplementing {
+            return true, filename
+        }
+    }
+    return false, ""
+}
+```
+
+When `HasRunningCoderInTopic` returns `true`, `app/app_actions.go` shows a warning overlay naming the conflicting task. You can:
+
+- **cancel** and wait for the existing task to finish
+- **confirm** to proceed anyway (you take responsibility for merge conflicts)
+
+The gate only applies to the `implementing` status. Planning, reviewing, and done tasks in the same topic do not block a new coder from starting.
+
+## tasks without a topic
+
+Tasks with an empty topic (`topic == ""`) bypass the gate entirely. `HasRunningCoderInTopic` returns `false` immediately when the topic string is empty. This is the default for tasks created without an explicit topic assignment.
+
+## setting a topic
+
+Topics are set when registering a task or updated later via the task store. In the TUI you can assign a topic from the task context menu. With the CLI:
+
+```bash
+kas task register my-feature.md
+# then in the TUI: select task → context menu → assign topic
+```
+
+## topic entries
+
+The task store keeps a `TopicEntry` for each unique topic name, recording when it was first created:
+
+```go
+type TopicEntry struct {
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+Topics are listed in the TUI sidebar as collapsible groups. Expanding a topic shows all tasks assigned to it, their statuses, and any running agents.

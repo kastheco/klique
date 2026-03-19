@@ -1,0 +1,109 @@
+# first run
+
+## git repository requirement
+
+`kas` must be run from within a git repository. On startup, the main entry point checks for a git root and exits with an error if none is found:
+
+```
+kas must be run from within a git repository
+```
+
+This applies both to the interactive TUI (`kas`) and most subcommands. The project-local config directory is anchored to the repository root, so every project gets its own isolated kasmos state.
+
+## project config directory
+
+kasmos stores all project state under `<repo-root>/.kasmos/`. This directory is created automatically on first run or after `kas setup`:
+
+| path | purpose |
+|------|---------|
+| `.kasmos/config.toml` | agent and phase configuration |
+| `.kasmos/taskstore.db` | SQLite task store (plans, signals, task state) |
+| `.kasmos/signals/` | legacy filesystem signal sentinels |
+| `.kasmos/cache/` | runtime cache |
+| `.worktrees/` | git worktrees created for each agent instance |
+
+Use `kas debug` to print the resolved config directory path for the current repository.
+
+## launching the TUI
+
+From inside your git repository, run:
+
+```bash
+kas
+```
+
+On first launch you will see the general help overlay. Press any key to dismiss it.
+
+## TUI layout
+
+The interface is divided into three main areas:
+
+- **sidebar** — topics and plan groups, toggled with `ctrl+s`
+- **instance list** — active agent sessions for the selected plan
+- **preview pane** — live agent output; tabs switch between the agent view, info, diff, and git history
+
+## keybindings reference
+
+### sessions
+
+| key | action |
+|-----|--------|
+| `↵` / `o` | attach to tmux session fullscreen |
+| `s` | spawn agent |
+| `i` | interactive mode (type in pane) |
+| `ctrl+space` | exit fullscreen or interactive mode |
+| `ctrl+enter` | submit + exit interactive mode |
+| `k` | kill tmux session (keeps instance) |
+| `K` | stop session (branch preserved) |
+| `r` | resume paused session |
+| `c` | checkout branch (pause + copy branch name) |
+| `P` | create pull request |
+| `T` | browse orphaned tmux sessions |
+| `1` / `2` | filter: all / active only |
+| `3` | cycle sort mode |
+
+### plans
+
+| key | action |
+|-----|--------|
+| `n` | new plan |
+| `space` | toggle plan, topic, or history |
+| `↵` / `o` | select (context menu or run stage) |
+| `v` / `p` | preview selected plan |
+| `b` | open plan browser |
+
+### navigation
+
+| key | action |
+|-----|--------|
+| `t` | focus instance list |
+| `tab` / `shift+tab` | cycle tabs (info ↔ agent) |
+| `!` | interactive + shell mode |
+| `#` / `g` | info tab |
+| `↑` / `↓` | navigate within focused pane |
+| `←` / `→` | move between panes |
+| `ctrl+s` | toggle sidebar visibility |
+| `L` | toggle audit log pane |
+| `/` | search plans and instances |
+| `?` | show help overlay |
+| `q` | quit |
+
+## execution modes
+
+When you spawn an agent (`s`), kasmos creates an isolated git worktree and starts the agent in one of two execution modes:
+
+- **tmux** — session is attachable (`↵`/`o`); use interactive mode (`i`) to type directly into the agent pane. Best for exploratory work.
+- **headless** — session runs in the background; output is streamed to the preview pane and logs. Best for automated wave work.
+
+The execution mode is set per agent role in `config.toml` via the `execution_mode` field. See [setup wizard](./setup-wizard) for configuration details.
+
+## first task
+
+Once the TUI is running:
+
+1. Press `n` to create a new plan
+2. Enter a name and description
+3. Press `space` to open the plan context menu
+4. Select an action to start the planning or implementing phase
+
+If you haven't run `kas setup` yet, do that first — see [setup wizard](./setup-wizard).

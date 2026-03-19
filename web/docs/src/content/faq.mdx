@@ -1,0 +1,94 @@
+# frequently asked questions
+
+## what's the difference between kasmos and kas?
+
+`kas` is the CLI command name — it's what you type in your terminal. `kasmos` is the binary artifact name produced by the build (e.g. `go build -o kasmos .` in `main.go`). After installation, `just install` symlinks both `kas` and `kms` to the same binary. In source code and docs you'll see both names; they refer to the same program.
+
+## is kasmos open source?
+
+not today. kasmos is licensed under the **Business Source License 1.1 (BSL 1.1)**:
+
+- **licensor:** kastheco
+- **licensed work:** kasmos (copyright 2025–2026 kastheco)
+- **additional use grant:** non-production use is permitted; production use requires a commercial license from the licensor
+- **change date:** 2030-03-10
+- **change license:** Apache License, Version 2.0
+
+the BSL is explicitly not an open-source license. however, on 2030-03-10 (or four years after a specific version is first publicly distributed, whichever comes first) each version automatically relicenses to Apache 2.0. you can use kasmos freely for non-production work today — personal projects, local experiments, CI that doesn't drive production systems. for production use, contact kastheco for a commercial license.
+
+see `LICENSE.md` in the repository root for the full license text.
+
+## what does "plan" mean? i see both "plan" and "task" in the codebase
+
+the codebase is mid-transition from "plan" to "task" terminology:
+
+- the **current CLI** uses `task`: `kas task list`, `kas task create`, `kas task transition`, etc.
+- **older comments, docs, variable names, and some internal packages** still use `plan`: `TaskState.Plans`, `planFile`, `config/taskparser`, `config/taskfsm`, etc.
+- the two words refer to the same concept: a unit of implementation work tracked through the lifecycle `ready → planning → implementing → reviewing → done`.
+
+when in doubt, follow the CLI (`kas task ...`) and package names (`taskstate`, `taskstore`, `taskfsm`).
+
+## what are the task lifecycle states?
+
+tasks move through a finite state machine defined in `config/taskfsm/fsm.go`:
+
+| status | description |
+|--------|-------------|
+| `ready` | registered and waiting to be started |
+| `planning` | a planner agent is writing the implementation plan |
+| `implementing` | a coder agent is working on the task |
+| `reviewing` | a reviewer agent is checking the implementation |
+| `done` | approved and complete |
+| `cancelled` | explicitly cancelled |
+
+transitions are driven by CLI events (`kas task transition <plan> <event>`) or by agent signals. you can recover a stuck task with `kas task set-status <plan> <status> --force`.
+
+## can i run multiple coder agents on the same topic at the same time?
+
+no. `taskstate.HasRunningCoderInTopic` prevents launching a second `implementing` task within the same topic. only one task per topic may have `StatusImplementing` at a time. this is enforced as a scheduling constraint — topics are intended as serialization boundaries to avoid conflicting changes on the same area of the codebase.
+
+if you need parallelism, use separate topics or structure the work as separate waves.
+
+## what's the difference between headless and tmux execution?
+
+| mode | how it runs | interactive? |
+|------|-------------|--------------|
+| **tmux** | agent runs inside a tmux pane | yes — you can attach, type, and send keys |
+| **headless** | agent runs as a direct child process (`exec.Cmd`) without tmux | no — `Attach`, `SendKeys`, and permission responses return `ErrInteractiveOnly` |
+
+headless mode captures output to an in-memory buffer and appends it to a log file under `<workDir>/.kasmos/logs/`. it's well suited for automated wave-based coder agents that don't need interactive input.
+
+**important:** headless coders do not remove the need for tmux overall. planner sessions, reviewer sessions, and any workflow where you need to read agent output in real time or send interactive keystrokes still rely on tmux today. headless is an optimization for the coder leg of automated waves, not a replacement for the full tmux stack.
+
+## what happens if the daemon isn't running when an agent emits a signal?
+
+signals are durable. agents emit signals via `kas signal emit` which writes a sentinel record to the SQLite-backed signals table (or a legacy filesystem file under `.kasmos/signals/`). the daemon picks them up when it's running — it scans pending signals, claims them atomically, and drives FSM transitions.
+
+if the daemon is not running:
+- signals accumulate in the store in `pending` state
+- no FSM transitions happen automatically
+- you can manually process pending signals with `kas signal process` once the daemon is back
+
+to start the daemon: `kas daemon start` (runs in background) or `kas daemon start --foreground` for the foreground mode. check status with `kas daemon status`.
+
+## why does `kas` refuse to start from outside a git repository?
+
+kasmos anchors all project state to the git repository root. config, the task store db (`.kasmos/taskstore.db`), logs, signals, and git worktrees for agent sessions all live relative to the repo root. `main.go` calls `git.IsGitRepo(currentDir)` on startup and returns an error if it's not inside a repo:
+
+```
+error: kas must be run from within a git repository
+```
+
+run `kas` from any directory inside your project's git working tree.
+
+## how does kas find the task store when running inside a worktree?
+
+`config.GetConfigDir()` walks up the directory tree and resolves the **main** repository root even when you're inside a `git worktree`. the default task store path is always `<main-repo-root>/.kasmos/taskstore.db`. this means all worktrees share a single task store, which is how the daemon and multiple concurrent agents coordinate.
+
+## what is `kas check` for?
+
+`kas check` audits that agent harness skills are in sync across all registered harness directories (`.agents/skills`, `.claude/`, `.Claude/`, etc.). it's useful after you've edited skills under `~/.agents/skills` or the project `.agents/skills` to verify the scaffolded copies in each harness directory reflect the latest version. run `kas check -v` for verbose output.
+
+## can i use kasmos with agents other than claude code?
+
+yes. the `--program` flag (or `defaultProgram` in config) selects which agent binary to invoke. kasmos has been used with claude code, aider, codex, gemini, opencode, and amp. the root command help string reads: "Manage multiple AI agents like Claude Code, Aider, Codex, and Amp." (see `main.go`). each agent profile can choose tmux or headless execution independently.

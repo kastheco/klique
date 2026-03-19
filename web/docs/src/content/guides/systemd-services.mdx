@@ -1,0 +1,196 @@
+# systemd services
+
+kasmos ships two systemd user service units in `contrib/`. They let you keep the orchestration daemon and the remote task store running persistently across reboots without requiring a dedicated server process in your shell.
+
+## service units
+
+| unit | binary | purpose |
+|------|--------|---------|
+| `kasmos.service` | `kas daemon start --foreground` | orchestration daemon — claims signals and advances plan lifecycle |
+| `kasmosdb.service` | `kas serve` | remote task store HTTP server on port `7433` |
+
+Both units run under your user account (`systemctl --user`) and depend on the `kas` binary being on `$PATH` at `~/go/bin/kas`.
+
+## installation and enabling
+
+### orchestration daemon only
+
+```bash
+just kasmosd-enable
+```
+
+This copies `contrib/kasmos.service` to `~/.config/systemd/user/`, runs `systemctl --user daemon-reload`, and enables + starts the unit.
+
+### task store server only
+
+```bash
+just db-service-enable
+```
+
+This copies `contrib/kasmosdb.service` to `~/.config/systemd/user/`, reloads systemd, and enables + starts the unit.
+
+### both at once
+
+```bash
+just services-enable
+```
+
+Equivalent to running both commands above in sequence.
+
+## manual installation (without just)
+
+If you do not have `just` installed:
+
+```bash
+mkdir -p ~/.config/systemd/user
+
+# orchestration daemon
+cp contrib/kasmos.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now kasmos
+
+# task store
+cp contrib/kasmosdb.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now kasmosdb
+```
+
+## checking service status
+
+```bash
+systemctl --user status kasmos
+systemctl --user status kasmosdb
+```
+
+## reading logs
+
+```bash
+journalctl --user -u kasmos          # orchestration daemon logs
+journalctl --user -u kasmosdb        # task store logs
+journalctl --user -u kasmos -f       # follow live output
+journalctl --user -u kasmos --since "1 hour ago"
+```
+
+## stopping and disabling
+
+```bash
+systemctl --user stop kasmos
+systemctl --user disable kasmos
+
+systemctl --user stop kasmosdb
+systemctl --user disable kasmosdb
+```
+
+## running the daemon directly (without systemd)
+
+For debugging or one-shot runs, start the daemon in the foreground:
+
+```bash
+kas daemon start --foreground
+```
+
+Or use just:
+
+```bash
+just kasmosd-start
+```
+
+Check running daemon status:
+
+```bash
+kas daemon status
+```
+
+Stop the daemon:
+
+```bash
+kas daemon stop
+# or:
+just kasmosd-stop
+```
+
+## diagnosing installation
+
+Use the built-in doctor command to verify the daemon and task store are installed and responding:
+
+```bash
+just doctord
+```
+
+Output example:
+
+```
+== kasmos daemon doctor ==
+
+binary:
+/home/user/go/bin/kas
+
+user units:
+- kasmos.service: installed, enabled=enabled, active=active
+- kasmosdb.service: installed, enabled=enabled, active=active
+
+daemon api:
+daemon socket present: /run/user/1000/kasmos/kas.sock
+
+next steps:
+- just kasmosd-enable      # install + enable orchestration daemon
+- just db-service-enable   # install + enable plan store service
+- just services-enable     # enable both services
+- just kasmosd-start       # direct foreground/background daemon start
+```
+
+## service file contents
+
+`contrib/kasmos.service`:
+
+```ini
+[Unit]
+Description=kasmos orchestration daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/kas daemon start --foreground
+ExecStop=%h/go/bin/kas daemon stop
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kasmos
+
+[Install]
+WantedBy=default.target
+```
+
+`contrib/kasmosdb.service`:
+
+```ini
+[Unit]
+Description=kasmos plan store server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/kas serve
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target
+```
+
+`%h` expands to your home directory. Both units use `Restart=on-failure` so they recover from crashes without manual intervention.
+
+## why the daemon matters for signals
+
+When an agent emits a `kas signal emit ...` command, the signal is written as a pending row in the task store database. The orchestration daemon is what actually claims that row and advances the plan's lifecycle state (e.g. from `implementing` → `reviewing`).
+
+If you emit signals without a running daemon, signals accumulate as `pending` rows but plans do not advance. Start the daemon — either via systemd or `kas daemon start --foreground` — before running headless agent workflows that rely on signal-driven orchestration.
+
+## related
+
+- [remote task store](./remote-task-store) — `kas serve` configuration and REST API
+- [daemon](/docs/daemon) — orchestration daemon internals
+- [cli reference](/docs/cli-reference) — `kas daemon` and `kas serve` flags

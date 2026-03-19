@@ -1,0 +1,71 @@
+# tui overview
+
+kasmos is a terminal UI that manages concurrent AI agent sessions. The interface is split into three areas:
+
+- **sidebar** (left) — instance list grouped by plan; use `←→` to move focus between panes
+- **center pane** — tabbed view: live agent preview, info tab, or plan document viewer
+- **status bar** (bottom) — current branch, plan status, wave progress, and PR state
+
+Press `?` at any time to open the keybind browser, or `q` to quit.
+
+## sessions
+
+These keys act on the **currently selected instance** in the sidebar.
+
+| key | action |
+|-----|--------|
+| `↵` / `o` | attach to the selected tmux session fullscreen |
+| `s` | spawn a new agent for the selected plan |
+| `i` | enter interactive mode — type directly into the agent's pane |
+| `ctrl+space` | exit fullscreen or interactive mode and return to the TUI |
+| `ctrl+enter` | submit current input and exit interactive mode |
+| `k` | kill the tmux session (instance remains in the list, branch preserved) |
+| `K` | stop the session — pauses the instance and preserves the branch |
+| `r` | resume a paused session |
+| `c` | checkout: pause the session and copy the branch name to clipboard |
+| `P` | create a pull request for the selected instance's branch |
+| `T` | open the orphaned tmux session browser |
+| `1` / `2` | filter instance list: all / active only |
+| `3` | cycle sort mode |
+
+Headless instances run as background processes and are **not attachable**. Their output is visible in the preview tab and in the audit log. Tmux instances can be attached with `↵` and detached with `ctrl+space` or `ctrl-q`.
+
+## plans
+
+These keys act on the **currently selected plan** in the sidebar.
+
+| key | action |
+|-----|--------|
+| `n` | create a new plan — opens a multiline text input for the description |
+| `space` | toggle expand/collapse the selected plan, topic, or history group |
+| `↵` / `o` | open context menu (plan header) or run the next lifecycle stage |
+| `v` / `p` | open the plan viewer / preview the plan document |
+| `b` | open the plan browser for the selected plan |
+
+The **context menu** (opened with `↵` on a plan header) lists all available lifecycle actions for the current status: start planning, implement, implement directly, start solo agent, start review, create PR, merge to main, rename, change topic, set status, and cancel. Available actions vary by status — see [lifecycle](/docs/concepts/lifecycle) for the full state machine.
+
+## navigation
+
+| key | action |
+|-----|--------|
+| `tab` / `shift+tab` | cycle tabs in the center pane (info ↔ agent preview) |
+| `!` | enter interactive + shell mode (sends `!` to the harness terminal) |
+| `#` / `g` | jump to the info tab |
+| `↑` / `↓` | navigate within the focused pane |
+| `←` / `→` | move focus between the sidebar and center pane |
+| `ctrl+s` | toggle sidebar visibility |
+| `L` | toggle the audit log pane |
+| `/` | activate search — type to filter plans and instances |
+| `?` | open the keybind browser |
+| `q` | quit |
+
+## the command launcher
+
+Press `ctrl+p` or the assigned key to open the global command launcher overlay. Start typing to filter available commands. The launcher mirrors every keyboard shortcut above plus less-common actions like toggling auto-advance waves, toggling the auto review-fix loop, and sending `yes` to a waiting agent.
+
+## layout tips
+
+- The sidebar always retains keyboard focus; tab/shift+tab change which center-pane tab is displayed without moving focus to the center.
+- `ctrl+s` hides the sidebar and gives the center pane more room when reviewing long agent output.
+- When a plan is selected, all instances belonging to that plan appear as tabs in the center pane. Select a solo instance to narrow to one tab.
+- The status bar shows wave progress glyphs (`■ □ ✓ ✗`) for the current wave while implementation is running.

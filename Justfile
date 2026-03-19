@@ -170,6 +170,18 @@ admin-build:
 admin-dev:
     cd web/admin && npm run dev
 
+# Install docs site dependencies
+docs-install:
+    cd web/docs && npm ci
+
+# Start docs site dev server
+docs-dev:
+    cd web/docs && npm run dev
+
+# Build docs site for production
+docs-build:
+    cd web/docs && npm ci && npm run build
+
 # Clean build artifacts
 clean:
     rm -f kasmos

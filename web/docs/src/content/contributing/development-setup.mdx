@@ -1,0 +1,123 @@
+# development setup
+
+## prerequisites
+
+- **Go 1.24+** — check with `go version`
+- **Node 20+** — used for the marketing site and admin SPA
+- **[just](https://github.com/casey/just)** — the project's task runner (optional but recommended)
+- A Unix shell (macOS or Linux; WSL works on Windows)
+
+## clone and bootstrap
+
+```bash
+git clone https://github.com/kastheco/kasmos.git
+cd kasmos
+git remote add upstream https://github.com/kastheco/kasmos.git
+go mod download
+```
+
+## building and running
+
+The `Justfile` at the repo root provides the main developer commands:
+
+| command | what it does |
+|---------|--------------|
+| `just build` | compiles `kasmos` binary |
+| `just install` | `go install .` and creates `kas` / `kms` symlinks in `$GOPATH/bin` |
+| `just run <args>` | `go run . <args>` — no pre-build needed |
+| `just test` | `go test ./...` |
+| `just lint` | `go vet ./...` |
+| `just setup` | runs `kas setup --force` to scaffold agent harness config |
+| `just clean` | removes the built binary and `dist/` |
+
+If you prefer plain `go` commands without `just`:
+
+```bash
+go build -o kasmos .          # build
+go test ./...                  # test
+go vet ./...                   # vet
+gofmt -w .                     # format (CI enforces this)
+```
+
+## first run
+
+After building, confirm the binary works:
+
+```bash
+./kasmos version
+# or, after just install:
+kas version
+```
+
+`kasmos` requires the current directory to be inside a git repository when launching the interactive TUI. Running it from the repo root is the simplest path.
+
+## web: marketing site
+
+The landing page at `web/` is a Next.js App Router project:
+
+```bash
+cd web
+npm ci
+npm run dev       # starts at http://localhost:3000
+npm run build     # static export to web/out/
+```
+
+## web: docs site
+
+The documentation site at `web/docs/` is a standalone Nextra project:
+
+```bash
+cd web/docs
+npm ci
+npm run dev       # starts at http://localhost:3001 (or next available port)
+npm run build     # static export to web/docs/out/
+```
+
+## web: admin SPA
+
+The `web/admin/` directory contains a separate Vite-based single-page app that provides a browser UI for the task store. It is built and served independently:
+
+```bash
+cd web/admin
+npm ci
+npm run dev       # dev server with proxy to kas serve
+npm run build     # outputs to web/admin/dist/
+```
+
+Or via `just`:
+
+```bash
+just admin-dev    # starts the admin dev server
+just admin-build  # builds the SPA for production
+```
+
+The admin SPA talks to `kas serve` — start that in a separate terminal:
+
+```bash
+kas serve --port 7433
+```
+
+## systemd daemon (optional)
+
+For contributors working on orchestration or daemon features, you can install and run the background daemon as a user systemd service:
+
+```bash
+just kasmosd-enable     # install + enable orchestration daemon
+just db-service-enable  # install + enable task-store service
+# or both at once:
+just services-enable
+```
+
+Diagnose daemon status:
+
+```bash
+just doctord
+```
+
+## scaffold sync
+
+kasmos scaffolds agent harness configuration into `.agents/`, `.claude/`, and `.Claude/` from templates in `internal/initcmd/scaffold/templates/`. If you edit those template files, keep the live copies in sync and verify with:
+
+```bash
+kas check -v
+```

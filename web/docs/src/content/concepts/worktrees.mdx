@@ -1,0 +1,97 @@
+# worktrees
+
+kasmos runs each agent instance in an isolated **git worktree** — a separate working directory checked out from the same repository. This lets many agents work concurrently on different branches without stepping on each other.
+
+## why worktrees
+
+If multiple agents worked in the same directory, they would conflict at the filesystem level: editing the same files, running tests that race, or committing to the same branch. Worktrees give each agent its own isolated workspace while sharing the full git history.
+
+## worktree location
+
+All worktrees live under the main repository root in a `.worktrees/` directory:
+
+```
+<repo-root>/
+├── .git/             ← main repository
+├── .kasmos/          ← kasmos config and taskstore
+├── .worktrees/
+│   ├── kas/feature-a_1718000000000000/   ← agent 1
+│   └── kas/feature-b_1718000000000001/   ← agent 2
+└── ...
+```
+
+The path is constructed in `session/git/worktree.go`:
+
+```go
+func getWorktreeDirectory(repoPath string) (string, error) {
+    if repoPath == "" {
+        return "", fmt.Errorf("repo path is required for worktree directory")
+    }
+    return filepath.Join(repoPath, ".worktrees"), nil
+}
+```
+
+Each worktree directory name is `<branch-prefix><session-name>_<unix-nano>` to avoid collisions when agents are restarted.
+
+## config anchoring
+
+kasmos configuration always lives in the **main repo root**, not in individual worktrees. `config.ResolveRepoRoot()` handles both cases:
+
+**regular repo**: `.git` is a directory → the current directory is the repo root.
+
+**git worktree**: `.git` is a file containing `gitdir: <path>` → kasmos reads the `commondir` pointer inside that path to locate the main repository's `.git` directory, then takes its parent.
+
+```go
+// ResolveRepoRoot returns the main repository root for dir.
+// It supports both normal repos and git worktrees.
+func ResolveRepoRoot(dir string) (string, error) {
+    // ... reads .git file, follows commondir pointer ...
+    return filepath.Dir(mainGitDir), nil
+}
+```
+
+This means `<repo-root>/.kasmos/taskstore.db` is always the same database no matter which worktree an agent is running in.
+
+## creating a worktree
+
+When an agent is launched, `session/git/worktree.go` creates the worktree:
+
+1. `NewGitWorktree(repoPath, sessionName)` generates a branch name from `config.BranchPrefix` + session name, sanitizes it, and picks a unique path under `.worktrees/`.
+2. `GitWorktree.Setup()` runs `git worktree add -b <branch> <path>` to create the worktree.
+3. The instance stores `worktreePath` and `branchName` so it can be restored later.
+
+To use an existing branch, `NewGitWorktreeOnBranch(repoPath, sessionName, branch)` skips branch name generation.
+
+## checkout flow
+
+When you press `c` in the TUI on a running instance:
+
+1. The instance is paused (agent process killed; branch preserved).
+2. The branch name is copied to the clipboard.
+3. kasmos shows a help screen (`helpTypeInstanceCheckout`) explaining how to check out the branch in your main working tree.
+
+You can then `git checkout <branch>` or open the branch in your editor to inspect and continue the work.
+
+## resume flow
+
+When you resume a paused instance:
+
+1. `instance.Resume()` in `session/instance_lifecycle.go` calls `Start()` again.
+2. The execution session (tmux or headless) is recreated from the stored `ExecutionMode`, `Program`, and `worktreePath`.
+3. The agent restarts inside the same worktree, with the same branch, and can pick up where it left off.
+
+## orphan adoption
+
+Tmux sessions that existed before kasmos was started — or whose kasmos instances were lost — are called **orphaned sessions**. Press `T` in the TUI to browse them. kasmos shows which tmux pane names look like agent sessions and lets you adopt them as tracked instances.
+
+Orphan adoption reconstructs a minimal `Instance` from the tmux session metadata so kasmos can track its status, pause it cleanly, and associate it with a task file.
+
+## shared worktree safety (for agents)
+
+When `KASMOS_TASK` or `KASMOS_PEERS` is set, multiple agents are working in the same worktree tree (wave parallelism). Each agent is assigned non-overlapping files by the architect metadata. Key rules:
+
+- Never `git add .` or `git add -A` — only add your assigned files
+- Never run formatters across the whole project
+- Never `git stash`, `git reset`, or `git checkout -- <file>` on files you didn't create
+
+These constraints are injected into the agent's prompt by the orchestration layer.

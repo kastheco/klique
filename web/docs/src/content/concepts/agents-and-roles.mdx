@@ -1,0 +1,108 @@
+# agents and roles
+
+An **agent** in kasmos is a running AI assistant process (claude, opencode, codex, or any CLI tool) that executes a task or lifecycle phase. A **role** defines what an agent does and which lifecycle phase it is responsible for.
+
+## default roles
+
+`wizard.DefaultAgentRoles()` in `internal/initcmd/wizard/wizard.go` returns the seven built-in roles in order:
+
+```go
+func DefaultAgentRoles() []string {
+    return []string{"coder", "architect", "reviewer", "planner", "chat", "fixer", "master"}
+}
+```
+
+| role | phase | description |
+|------|-------|-------------|
+| `coder` | `implementing` | implements tasks; writes and edits code, runs tests |
+| `architect` | `elaborating` | decomposes plans into coder-ready task bodies with metadata |
+| `reviewer` | `spec_review`, `quality_review` | checks correctness, style, and architecture |
+| `planner` | `planning` | breaks features into structured implementation plans |
+| `chat` | (ad-hoc) | general-purpose assistant; available in all phases |
+| `fixer` | `fixer` | debugger and investigator; fixes stuck states and failures |
+| `master` | `master_review` | final holistic reviewer; checks the full implementation against the plan spec |
+
+## agent profile
+
+Each role is configured as an `AgentProfile` (defined in `config/profile.go`):
+
+```go
+type AgentProfile struct {
+    Program       string   // CLI program: "claude", "opencode", "codex", etc.
+    Flags         []string // extra CLI flags
+    Model         string   // model identifier, e.g. "anthropic/claude-opus-4-6"
+    Temperature   *float64 // optional temperature (0.0–1.0)
+    Effort        string   // "low", "medium", "high" (passed as --effort)
+    ExecutionMode string   // "tmux" or "headless"
+    Enabled       bool     // whether this role is active
+}
+```
+
+`BuildCommand()` returns the full command string:
+
+```go
+func (p AgentProfile) BuildCommand() string {
+    return strings.Join(append([]string{p.Program}, p.Flags...), " ")
+}
+```
+
+## execution modes
+
+| mode | behavior |
+|------|----------|
+| `tmux` | agent runs in a tmux pane; you can attach with `↵`/`o` |
+| `headless` | agent runs as a background process; view output in the preview tab and logs |
+
+Headless mode is preferred for automated wave work (many concurrent tasks). Tmux mode is better when you want to observe or interact with a single agent.
+
+`config.NormalizeExecutionMode()` normalizes any unknown value to `tmux`.
+
+## phase-to-role mapping
+
+kasmos maps lifecycle phases to role names in `kasmos.toml` under `[phase_roles]`. When you run `kas setup`, the wizard writes defaults based on which harnesses you select:
+
+```toml
+[phase_roles]
+planning = "planner"
+elaborating = "architect"
+implementing = "coder"
+reviewing = "reviewer"
+master_review = "master"
+fixer = "fixer"
+
+[profiles.coder]
+program = "claude"
+model = "anthropic/claude-sonnet-4-6"
+effort = "low"
+execution_mode = "headless"
+enabled = true
+
+[profiles.planner]
+program = "claude"
+model = "anthropic/claude-opus-4-6"
+effort = "high"
+execution_mode = "tmux"
+enabled = true
+```
+
+`config.ResolveProfile(phase, defaultProgram)` looks up the role for a phase and returns the corresponding profile, falling back to `defaultProgram` if any link in the chain is missing or disabled.
+
+## harnesses
+
+A **harness** is a specific AI CLI tool. The setup wizard supports three built-in harnesses:
+
+| harness | description |
+|---------|-------------|
+| `claude` | Anthropic Claude Code — effort levels, MCP plugins |
+| `opencode` | Multi-provider agent — temperature, effort, 50+ models |
+| `codex` | OpenAI Codex CLI — temperature, effort, reasoning config |
+
+One harness is configured per role profile. Multiple roles can use the same harness with different models or effort settings.
+
+## spawning agents
+
+kasmos spawns agents in two ways:
+- **daemon-managed**: the daemon starts the agent as a subprocess (headless) or inside a tmux window
+- **TUI-launched**: the TUI sends a `StartPlan` request to the daemon socket, which then spawns the agent
+
+The spawned process inherits `KASMOS_TASK`, `KASMOS_WAVE`, and `KASMOS_PEERS` environment variables that inject orchestration context into the agent session.

@@ -1,0 +1,57 @@
+# headless execution
+
+headless mode runs agent programs directly as child processes — no tmux session, no terminal multiplexer, no manual attachment required.
+
+## what is headless mode?
+
+In kasmos, every agent instance is backed by an `ExecutionSession`. The default backend is `ExecutionModeTmux`; the alternative is `ExecutionModeHeadless`. Both implement the same `session.ExecutionSession` interface, so the rest of the system — the TUI, the wave orchestrator, the instance lifecycle — is unaware of which backend is in use.
+
+Headless mode is created by `session.NewExecutionSession` when the resolved execution mode is `"headless"`:
+
+```go
+// session/execution.go
+func NewExecutionSession(mode ExecutionMode, name, program string, skipPermissions bool) ExecutionSession {
+    switch NormalizeExecutionMode(mode) {
+    case ExecutionModeHeadless:
+        return headless.New(name, program, skipPermissions)
+    default:
+        return newTmuxExecutionSession(name, program, skipPermissions)
+    }
+}
+```
+
+The concrete type is `*headless.Session` from `session/headless/session.go`.
+
+## why does it exist?
+
+Headless mode was built for **automated wave execution** — running multiple coder agents concurrently without requiring a tmux server or any human at a terminal.
+
+Key advantages over tmux:
+
+- **no tmux dependency** — works anywhere `exec.Cmd` works, including headless CI environments.
+- **lower resource overhead** — no PTY allocation, no tmux session multiplexer.
+- **predictable output capture** — all stdout/stderr is stored in an in-memory `bytes.Buffer` and simultaneously appended to a structured log file.
+- **concurrent-safe by design** — a `sync.Mutex` serializes all buffer access, so multiple goroutines can poll output safely.
+
+## trade-offs
+
+Headless mode intentionally does not support interactive operations. `Attach`, `SendKeys`, `TapEnter`, `SendPermissionResponse`, and `SetDetachedSize` all return `ErrInteractiveOnly`. If your agent workflow requires user interaction — for example, responding to permission prompts mid-run — use tmux mode instead.
+
+See [headless vs tmux](./comparison) for a full comparison.
+
+## when to choose headless
+
+| scenario | recommended mode |
+|----------|-----------------|
+| fully automated CI pipeline | `headless` |
+| agents that never prompt for permissions | `headless` |
+| local development with live terminal attachment | `tmux` |
+| agents that respond to permission prompts | `tmux` |
+| interactive `kas monitor` debugging | `tmux` |
+
+## next steps
+
+- [how it works](./how-it-works) — internals: process lifecycle, env vars, the done channel
+- [configuration](./configuration) — setting `execution_mode = "headless"` in `config.toml`
+- [logs and output](./logs-and-output) — reading captured output from the buffer and log files
+- [headless vs tmux](./comparison) — full interface comparison

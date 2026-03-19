@@ -1,0 +1,110 @@
+# reviewing and merging
+
+After implementation finishes, kasmos transitions the plan to `reviewing` and spawns a reviewer agent to check the implementation before it is merged.
+
+## the review transition
+
+When all coder agents signal completion, the orchestration loop fires the `implement_finished` event:
+
+```
+implementing  ──► implement_finished ──►  reviewing
+```
+
+kasmos then:
+1. pauses the coder instance (sets `ImplementationComplete = true`)
+2. spawns a reviewer agent on the same implementation branch (via a shared worktree)
+3. shows a toast: `implementation complete → review started for <plan>`
+
+The reviewer agent runs in a tmux session by default (reviewer sessions always use tmux for visibility). It reads the plan content and compares it against the implementation on the branch.
+
+## manual review trigger
+
+You can start a review at any time from the plan context menu:
+
+- open the context menu (`↵` on the plan header) → **start review**
+- or from the CLI: `kas task transition <task-file> request_review`
+
+This transitions the plan to `reviewing` and spawns a fresh reviewer even if implementation hasn't formally finished.
+
+## reviewer outcomes
+
+The reviewer agent emits one of two signals when it finishes:
+
+| signal | transition | result |
+|--------|-----------|--------|
+| `review_approved` | `reviewing` → `done` | plan is marked done; PR/merge become available |
+| `review_changes_requested` | `reviewing` → `implementing` | feedback is stored; a fixer agent is spawned |
+
+### approval path
+
+When the reviewer approves, the plan moves to `done`. kasmos can optionally auto-create a GitHub PR at this point (configure `auto_create_pr = true` in `kasmos.toml`).
+
+You can also create a PR manually:
+- press `P` with the plan or instance selected
+- open the context menu → **create pr**
+- `kas task pr <task-file>` (if available as a CLI command)
+
+kasmos builds the PR title and body from the plan's goal, architecture, tech stack, git diff stats, and reviewer summary.
+
+### changes-requested path
+
+When the reviewer requests changes, the plan reverts to `implementing` and kasmos spawns a **fixer** agent with the reviewer's feedback injected into the prompt:
+
+```
+reviewing  ──► review_changes_requested ──►  implementing
+                        │
+                        ▼
+              fixer agent spawned with
+              reviewer feedback in prompt
+```
+
+The fixer applies the requested changes on the same branch. When it finishes, the `implement_finished` signal fires again and the cycle repeats.
+
+### auto review-fix loop
+
+Enable automatic cycling from the plan context menu (**auto review-fix loop: on**) or in `kasmos.toml`:
+
+```toml
+auto_review_fix = true
+max_review_fix_cycles = 3   # stop after N rounds; 0 = unlimited
+```
+
+When `max_review_fix_cycles` is reached, kasmos shows an error toast and stops the loop rather than spinning indefinitely.
+
+You can also trigger a manual fixer run at any time: open the plan context menu → **start fixer**. This uses the last stored reviewer feedback.
+
+## merging to main
+
+Once the plan is `done`, merge the implementation branch into main:
+
+- open the context menu → **merge to main** — kasmos shows a confirmation dialog, kills any running instances for the plan, runs a git preflight check, merges the branch, and transitions the plan to `done` (if not already there)
+- `kas task merge <task-file>` from the CLI (if available)
+
+The merge preflight checks that the branch exists, is not currently checked out on main, and has no unresolved conflicts before proceeding.
+
+## checking merge status manually
+
+```bash
+kas task show <task-file>     # view current status, branch, PR URL
+kas task list                  # list all tasks and statuses
+```
+
+## marking done without merging
+
+If you already merged via git/GitHub directly, use **mark done** in the context menu to advance the FSM:
+
+```bash
+kas task transition <task-file> review_approved
+```
+
+Or force the status directly:
+
+```bash
+kas task set-status <task-file> done --force
+```
+
+## related concepts
+
+- [lifecycle](/docs/concepts/lifecycle) — full FSM transition table
+- [agents and roles](/docs/concepts/agents-and-roles) — reviewer and fixer profiles
+- [cli reference: kas task](/docs/cli-reference/task) — task subcommands
